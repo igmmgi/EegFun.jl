@@ -6,6 +6,7 @@ using GLMakie
 using JLD2
 using ScatteredInterpolation
 using StatsBase
+using MAT
 
 
 function polar2cartXY(layout::DataFrame)
@@ -445,25 +446,21 @@ function data_interpolation_topo(dat, points; radius=2.5, grid_scale=300)
   return dat
 end
 
-function head_shape(f, ax, layout; radius=2.5, linewidth=2)
+function head_shape(f, ax, layout; radius=2.5, linewidth=2, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
   # head shape
-  arc!(ax, Point2f(0), radius, -π, π, color=:black, linewidth=linewidth)
-  nose = (Point2f[(-0.05, 0.5), (0.0, 0.55), (0.05, 0.5)] .* radius * 2)
-  ear_right = (Point2f[
-    (0.497, 0.0555), (0.51, 0.0775), (0.518, 0.0783),
-    (0.5299, 0.0746), (0.5419, 0.0555), (0.54, -0.0055),
-    (0.547, -0.0932), (0.532, -0.1313), (0.51, -0.1384),
-    (0.489, -0.1199)] .* radius * 2)
-  ear_left = ear_right .* Point2f(-1, 1)
-  lines!(ax, nose, color=:black, linewidth=linewidth)
-  lines!(ax, ear_right, color=:black, linewidth=linewidth)
-  lines!(ax, ear_left, color=:black, linewidth=linewidth)
+  arc!(ax, Point2f(0), radius, -π, π, color=:black, linewidth=linewidth) # head
+  arc!(Point2f(radius, 0), radius / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
+  arc!(Point2f(-radius, 0), -radius / 7, π / 2, -π / 2, color=:black, linewidth=linewidth) # ear left
+  lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 2, color=:black, linewidth=linewidth) # nose
 
-  # points/labels
-  scatter!(ax, layout[!, :Dx], layout[!, :Dy], marker=:circle, markersize=10, color=:black)
-  xoffset = 0
-  yoffset = 0
-  foreach(i -> text!(ax, position=(layout[!, :Dx][i] + xoffset, layout[!, :Dy][i] + yoffset), layout.label[i]), 1:nrow(layout))
+  # points
+  if plot_points
+    scatter!(ax, layout[!, :X2], layout[!, :Y2], marker=:circle, markersize=10, color=:black)
+  end
+
+  if plot_labels
+    foreach(i -> text!(ax, position=(layout[!, :X2][i] + label_x_offset, layout[!, :Y2][i] + label_y_offset), layout.label[i]), 1:nrow(layout))
+  end
 
   # hide some plot stuff
   hidexdecorations!(ax; label=true, ticklabels=true, ticks=true, grid=true, minorgrid=true, minorticks=true)
@@ -480,14 +477,8 @@ function head_shape(layout; radius=2.5, linewidth=2)
   head_shape(f, ax, layout, radius=radius, linewidth=linewidth)
 end
 
-head_shape(dat.layout, radius=2, linewidth=5)
 
-
-
-
-
-
-function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300)
+function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
 
   points = Matrix(dat.layout[!, [:X2, :Y2]])'
   data = data_interpolation_topo(Vector(dat.data[1000, 3:end]), points)
@@ -503,7 +494,7 @@ function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300)
   Colorbar(f[1, 2], co)
 
   # head shape
-  head_shape(f, ax, dat.layout)
+  head_shape(f, ax, dat.layout, plot_points=plot_points, plot_labels=plot_labels, label_x_offset=label_x_offset, label_y_offset=label_y_offset)
 
   return f
 end
@@ -554,6 +545,231 @@ erp = average_epochs(epoched_data);
 # plot some erp data
 plot_erp(erp, [:Fp1, :Fp2])
 
+
+
+function read_mat_file(filename)
+  file = matopen(filename)
+  dat = read(file)
+  close(file)
+  return dat
+end
+
+
+struct InfoICA
+  topo
+  unmixing
+  label
+end
+
+
+
+
+function pca_reduction!(dat, n)
+  PCdat2 = dat'           # transpose data
+  PCn = size(PCdat2, 1) # now p chans, n time points
+  PCdat2 = PCdat2 / PCn
+  PCout = dat * PCdat2
+  PCD, PCV = eigen(PCout, sortby=x -> -abs(x))
+  dat = PCV[:, 1:ncomps]' * dat
+  return dat, PCV
+end
+
+
+function infoica(dat; extended=true)
+
+  # define some default values
+  l_rate = 0.001 # initial learning rate
+  max_iter = 200 # maximum number of iterations
+  w_change = 1e-12 # change to stop iteration
+  use_bias = true
+  anneal_deg = 60.0 # angle at which learning rate reduced
+  anneal_step = 0.9 # factor by which learning rate reduced
+  blowup = 1e4 # max difference allowed between two successive estimations of unmixing matrix
+  blowup_fac = 0.5 # factor by which learning rate will be reduced if "blowup"
+  n_small_angle = 20
+  max_weight = 1e8     # larger than this have "blowup"
+  restart_factor = 0.9 # if weights blowup, restart with lrate
+  degconst = 180 ./ pi
+
+  # for extended Infomax
+  ext_blocks = 1
+  n_subgauss = 1
+  extmomentum = 0.5
+  signsbias = 0.02
+  signcount_threshold = 25
+  signcount_step = 2
+  kurt_size = 6000
+
+  # check data shape and get block sizes
+  n_features, n_samples = size(dat)
+  n_features_square = n_features^2
+  block = trunc(Int, sqrt(n_samples / 3.0))
+  nblock = div(n_samples, block)
+  lastt = (nblock - 1) * block + 1
+
+  # start ICA
+  @printf "Computing Infomax ICA\n"
+
+  # initialize training
+  weights = Matrix{Float64}(I, n_features, n_features) # identity matrix
+  BI = block * Matrix{Float64}(I, n_features, n_features)
+  bias = zeros(n_features, 1)
+  onesrow = ones((1, block))
+  startweights = copy(weights)
+  oldweights = copy(startweights)
+  step = 0
+  count_small_angle = 0
+  wts_blowup = false
+  blockno = 0
+  signcount = 0
+  initial_ext_blocks = ext_blocks  # save the initial value in case of reset
+
+  if extended
+    signs = ones(n_features)
+    for k in 1:n_subgauss
+      signs[k] = -1
+    end
+    kurt_size = min(kurt_size, n_samples)
+    old_kurt = zeros(n_features)
+    oldsigns = zeros(n_features)
+  end
+
+  # trainings loop
+  olddelta = 1.0
+  oldchange = 0.0
+  while step < max_iter
+
+    permute = shuffle(1:n_samples)
+
+    for t = 1:block:lastt
+
+      u = *(dat[:, permute[t:t+block-1]]', weights) + *(bias, onesrow)'
+
+      if extended
+        # extended ICA update
+        y = tanh.(u)
+        weights += l_rate * *(weights, BI .- signs[:]' * *(u', y) - *(u', u))
+        if use_bias
+          bias += (l_rate .* sum(y, dims=1) .* -2.0)'
+        end
+      else
+        y = 1 ./ (1 .+ exp.(-u))
+        weights += l_rate * *(weights, BI + *(u', (1.0 .- 2.0 .* y)))
+        if use_bias
+          bias += (l_rate .* sum((1.0 .- 2.0 .* y), dims=1))'
+        end
+      end
+
+      # check change limit
+      if maximum(abs.(weights)) > max_weight
+        wts_blowup = true
+        break
+      end
+
+      blockno += 1
+      # ICA kurtosis estimation
+      if extended
+        if ext_blocks > 0 & blockno % ext_blocks == 0
+          if kurt_size < n_samples
+            rp = trunc.(Int, (rand(kurt_size) .* (n_samples - 1))) .+ 1
+            tpartact = *(dat[:, rp]', weights)'
+          else
+            tpartact = *(dat', weights)'
+          end
+          # estimate kurtosis
+          kurt = kurtosis.(eachrow(tpartact))
+          if extmomentum != 0
+            kurt = extmomentum .* old_kurt .+ (1.0 .- extmomentum) .* kurt
+            old_kurt = kurt
+          end
+          # estimate weighted signs
+          signs = sign.(kurt .+ signsbias)
+          ndiff = sum(signs .- oldsigns .!= 0)
+          ndiff == 0 ? signcount += 1 : signcount = 0
+          oldsigns = signs
+          if signcount >= signcount_threshold
+            ext_blocks = trunc.(ext_blocks .* signcount_step)
+            signcount = 0
+          end
+        end
+      end
+
+    end
+
+    if !wts_blowup
+      oldwtchange = weights .- oldweights
+      step += 1
+      angledelta = 0.0
+      delta = oldwtchange[:]
+      change = sum(delta .* delta)
+      if step > 2
+        angledelta = acos(sum(delta .* olddelta) / sqrt(change * oldchange))
+        angledelta *= degconst
+      end
+
+      @printf "step %d: lrate %5f, wchange %8.8f, angledelta %4.1f\n" step l_rate change angledelta
+
+      # anneal learning rate
+      oldweights = copy(weights)
+      if angledelta > anneal_deg
+        l_rate *= anneal_step  # anneal learning rate
+        # accumulate angledelta until anneal_deg reaches l_rate
+        olddelta = delta
+        oldchange = change
+        count_small_angle = 0  # reset count when angledelta is large
+      else
+        if step == 1  # on first step only
+          olddelta = delta  # initialize
+          oldchange = change
+        end
+        if !isnothing(n_small_angle)
+          count_small_angle += 1
+          if count_small_angle > n_small_angle
+            max_iter = step
+          end
+        end
+      end
+
+      # apply stopping rule
+      if step > 2 && change < w_change
+        step = max_iter
+      elseif change > blowup
+        l_rate *= blowup_fac
+      end
+
+      # restart if weights blow up (for lowering l_rate)
+    else
+      step = 0  # start again
+      wts_blowup = false  # re-initialize variables
+      blockno = 1
+      l_rate *= restart_factor  # with lower learning rate
+      weights = copy(startweights)
+      oldweights = copy(startweights)
+      olddelta = zeros((1, n_features_square))
+      bias = zeros((n_features, 1))
+
+      ext_blocks = initial_ext_blocks
+
+      # for extended Infomax
+      if extended
+        signs = ones(n_features)
+        for k in 1:n_subgauss
+          signs[k] = -1
+        end
+        oldsigns = zeros(n_features)
+      end
+
+      @printf "lowering learning rate to %g ... re-starting ...\n" l_rate
+
+    end
+  end
+
+  return weights
+
+end
+
+dat = read_mat_file("../dat.mat")["dat"]
+@time weights = infoica(dat)
 
 
 
