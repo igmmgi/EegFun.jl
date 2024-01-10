@@ -391,29 +391,7 @@ mapcols(x -> filtfilt(filter, x), dat.data[:, 3:end])
 mapcols!(x -> filtfilt(filter, x), dat.data[:, 3:end])
 
 
-function shrink_coordinates(x, y, limit)
-  while sum(sqrt.((x .^ 2) + (y .^ 2)) .> limit) != 0
-    x *= 0.99
-    y *= 0.99
-  end
-  return (x, y)
-end
 
-function circle_shape(radius=1, xpos=0, ypos=0)
-  pos = range(0, stop=2 * pi, length=180)
-  return Shape((cos.(pos) .* radius) .+ xpos, (sin.(pos) * radius) .+ ypos)
-end
 
-function circle_mask!(dat, grid_scale)
-  for col in 1:size(dat)[1]
-    for row in 1:size(dat)[2]
-      xcentre = (grid_scale / 2) - col
-      ycenter = (grid_scale / 2) - row
-      if sqrt((xcentre^2 + ycenter^2)) > (grid_scale / 2)
-        dat[col, row] = NaN
-      end
-    end
-  end
-end
 
 
