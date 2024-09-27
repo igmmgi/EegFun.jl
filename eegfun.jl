@@ -7,6 +7,9 @@ using JLD2
 using ScatteredInterpolation
 using StatsBase
 using MAT
+using Printf
+using LinearAlgebra
+using Random
 
 
 function polar2cartXY(layout::DataFrame)
@@ -23,8 +26,8 @@ mutable struct ContinuousData
 end
 
 function Base.show(io::IO, dat::ContinuousData)
-  println(io, "Timepoints ($(nrow(dat.data))) x Channels ($(ncol(dat.data))) ")
-  println(io, "Channel Labels: ", join(names(dat.data), ", "))
+  println(io, "Data: Rows ($(nrow(dat.data))) x Columns ($(ncol(dat.data))) ")
+  println(io, "Labels: ", join(names(dat.data), ", "))
   println(io, "Sample Rate: ", dat.sample_rate)
 end
 
@@ -41,6 +44,8 @@ function Base.show(io::IO, dat::EpochData)
   println(io, "Sample Rate: ", dat.sample_rate)
 end
 
+
+
 mutable struct ErpData
   data::DataFrame
   layout::DataFrame
@@ -48,8 +53,8 @@ mutable struct ErpData
 end
 
 function Base.show(io::IO, dat::ErpData)
-  println(io, "Timepoints ($(nrow(dat.data))) x Channels ($(ncol(dat.data))) ")
-  println(io, "Channel Labels: ", join(names(dat.data), ", "))
+  println(io, "Data: Rows ($(nrow(dat.data))) x Columns ($(ncol(dat.data))) ")
+  println(io, "Labels: ", join(names(dat.data), ", "))
   println(io, "Sample Rate: ", dat.sample_rate)
 end
 
@@ -57,10 +62,7 @@ end
 ########################################################################
 
 function create_dataframe(data::BioSemiBDF.BioSemiData)
-  df1 = DataFrame(time=data.time, events=data.triggers.raw)
-  df2 = DataFrame(data.data, :auto)
-  rename!(df2, data.header.channel_labels[1:end-1])
-  return hcat(df1, df2)
+  return hcat(DataFrame(time=data.time, events=data.triggers.raw), DataFrame(data.data, Symbol.(data.header.channel_labels[1:end-1])))
 end
 
 function eeg_data(dat::BioSemiBDF.BioSemiData, layout_file_name::String)
@@ -102,25 +104,32 @@ end
 search_sequence(array, sequence::Int) = findall(array .== sequence)
 
 
-find_idx_range(time, t1, t2) = findmin(abs.(time .- t1))[2]:findmin(abs.(time .- t2))[2]
+find_idx_range(time, start_time, end_time) = findmin(abs.(time .- start_time))[2]:findmin(abs.(time .- end_time))[2]
 find_idx_range(time, limits) = find_idx_range(time, limits[1], limits[end])
-find_idx_start_end(time, t1, t2) = findmin(abs.(time .- t1))[2], findmin(abs.(time .- t2))[2]
+find_idx_start_end(time, start_time, end_time) = findmin(abs.(time .- start_time))[2], findmin(abs.(time .- end_time))[2]
 find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
 
 
 function extract_epochs(dat::ContinuousData, trigger_sequence, start_time, end_time; zero_position=1)
 
+  # find t==0 positions
   zero_idx = search_sequence(dat.data.events, trigger_sequence) .+ (zero_position - 1)
   isempty(zero_idx) && error("Trigger sequence not found!")
 
+  # keep original sample index
+  insertcols!(dat.data, 3, :sample => 1:nrow(dat.data))
+
+  # find number of samples pre/post epoch t = 0 position
   n_pre, n_post = find_idx_start_end(dat.data.time, abs(start_time), abs(end_time))
-  pre_idx = zero_idx .- n_pre .- 1
+  pre_idx = zero_idx .- n_pre .+ 1
   post_idx = zero_idx .+ n_post .- 1
 
+  # extract and create array of dataframes
   epochs = []
-  for (pre, zero, post) in zip(pre_idx, zero_idx, post_idx)
+  for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
     df = DataFrame(dat.data[pre:post, :])
     df.time = df.time .- dat.data.time[zero]
+    insertcols!(df, 3, :epoch => epoch)
     push!(epochs, df)
   end
 
@@ -129,7 +138,7 @@ function extract_epochs(dat::ContinuousData, trigger_sequence, start_time, end_t
 end
 
 function average_epochs(dat::EpochData)
-  erp = combine(groupby(reduce(vcat, dat.data), :time), Not([:time, :events]) .=> mean .=> Not([:time, :events]))
+  erp = combine(groupby(reduce(vcat, dat.data), :time), Not([:time, :events, :epoch, :sample]) .=> mean .=> Not([:time, :events, :epoch, :sample]))
   return ErpData(erp, dat.layout, dat.sample_rate)
 end
 
@@ -139,78 +148,77 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 erp = average_epochs(epochs)
 
 
-# Filter functions
-function highpass_filter!(dat::ContinuousData, freq, order)
-  filter = digitalfilter(Highpass(freq, fs=dat.sample_rate), Butterworth(order))
-  for col in names(dat.data)[3:end]
-    dat.data[:, col] .= filtfilt(filter, dat.data[:, col])
+# Filter functions (high-pass)
+function highpass_filter!(dat::DataFrame, columns, freq, order, sample_rate)
+  filter = digitalfilter(Highpass(freq, fs=sample_rate), Butterworth(order))
+  for col in names(dat)
+    if col in columns
+      dat[:, col] .= filtfilt(filter, dat[:, col])
+    end
   end
 end
 
-function highpass_filter(dat::ContinuousData, freq, order)
+function highpass_filter(dat::DataFrame, columns, freq, order, sample_rate)
   dat_out = deepcopy(dat)
-  highpass_filter!(dat_out, freq, order)
+  highpass_filter!(dat_out, columns, freq, order, sample_rate)
   return dat_out
 end
 
-# Filter functions
-function highpass_filter!(dat::ContinuousData, freq, order)
-  filter = digitalfilter(Highpass(freq, fs=dat.sample_rate), Butterworth(order))
-  for col in names(dat.data)[3:end]
-    dat.data[:, col] .= filtfilt(filter, dat.data[:, col])
-  end
+function highpass_filter!(dat::Union{ContinuousData,ErpData}, freq, order)
+  highpass_filter!(dat.data, dat.layout.label, freq, order, dat.sample_rate)
+end
+
+function highpass_filter(dat::Union{ContinuousData,ErpData}, freq, order)
+  return highpass_filter(dat.data, dat.layout.label, freq, order, dat.sample_rate)
 end
 
 function highpass_filter!(dat::EpochData, freq, order)
-  filter = digitalfilter(Highpass(freq, fs=dat.sample_rate), Butterworth(order))
   for epoch in eachindex(dat.data)
-    for col in names(dat.data[epoch])[3:end]
-      dat.data[epoch][:, col] .= filtfilt(filter, dat.data[epoch][:, col])
+    highpass_filter!(dat.data[epoch], dat.layout.label, freq, order, dat.sample_rate)
+  end
+end
+
+function highpass_filter(dat::EpochData, freq, order)
+  dat_out = deepcopy(dat)
+  return highpass_filter!(dat_out, freq, order)
+end
+
+
+# Filter functions (low-pass)
+function lowpass_filter!(dat::DataFrame, columns, freq, order, sample_rate)
+  filter = digitalfilter(Lowpass(freq, fs=sample_rate), Butterworth(order))
+  for col in names(dat)
+    if col in columns
+      dat[:, col] .= filtfilt(filter, dat[:, col])
     end
   end
 end
 
-function highass_filter(dat::EpochData, freq, order)
+function lowpass_filter(dat::DataFrame, columns, freq, order, sample_rate)
   dat_out = deepcopy(dat)
-  highpass_filter!(dat_out, freq, order)
+  lowpass_filter!(dat_out, columns, freq, order, sample_rate)
   return dat_out
 end
 
-function lowpass_filter!(dat::ContinuousData, freq, order)
-  filter = digitalfilter(Lowpass(freq, fs=dat.sample_rate), Butterworth(order))
-  for col in names(dat.data)[3:end]
-    dat.data[:, col] .= filtfilt(filter, dat.data[:, col])
-  end
+function lowpass_filter!(dat::Union{ContinuousData,ErpData}, freq, order)
+  lowpass_filter!(dat.data, dat.layout.label, freq, order, dat.sample_rate)
 end
 
-function lowpass_filter(dat::ContinuousData, freq, order)
-  dat_out = deepcopy(dat)
-  lowpass_filter!(dat_out, freq, order)
-  return dat_out
+function lowpass_filter(dat::Union{ContinuousData,ErpData}, freq, order)
+  return lowpass_filter(dat.data, dat.layout.label, freq, order, dat.sample_rate)
 end
 
 function lowpass_filter!(dat::EpochData, freq, order)
-  filter = digitalfilter(Lowpass(freq, fs=dat.sample_rate), Butterworth(order))
   for epoch in eachindex(dat.data)
-    for col in names(dat.data[epoch])[3:end]
-      dat.data[epoch][:, col] .= filtfilt(filter, dat.data[epoch][:, col])
-    end
+    lowpass_filter!(dat.data[epoch], dat.layout.label, freq, order, dat.sample_rate)
   end
 end
 
-
-
-
 function lowpass_filter(dat::EpochData, freq, order)
   dat_out = deepcopy(dat)
-  lowpass_filter!(dat_out, freq, order)
-  return dat_out
+  return lowpass_filter!(dat_out, freq, order)
 end
 
-dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-epochs = extract_epochs(dat, 1, -0.5, 2)
-erp = average_epochs(epochs)
 
 
 
@@ -234,8 +242,8 @@ rereference(dat::ContinuousData, reference_channel::Symbol) = rereference(dat, [
 rereference(dat::ContinuousData, reference_channel::Vector{UnitRange{Int64}}) = rereference(dat, reference_channel[1])
 
 
-dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 
 
 
@@ -246,7 +254,6 @@ function rereference(dat::ContinuousData, reference_channel)
   return dat_out
 end
 rereference(dat::ContinuousData, reference_channel::Symbol) = rereference(dat, String(reference_channel))
-
 
 
 
@@ -267,10 +274,24 @@ function baseline!(dat::EpochData)
   end
 end
 
-# baseline!(dat)
-# plot_databrowser(dat)
-# baseline!(epochs)
-# plot_databrowser(epochs)
+baseline!(dat)
+plot_databrowser(dat)
+baseline!(epochs)
+plot_databrowser(epochs)
+
+
+fig = Figure()
+ax = GLMakie.Axis(fig[1, 1])  # plot layout
+xrange = GLMakie.Observable(1:4000) # default xrange
+yrange = GLMakie.Observable(-1500:1500) # default yrange
+xlims!(ax, d.time[xrange.val[1]], d.time[xrange.val[end]])
+ylims!(ax, yrange.val[1], yrange.val[end])
+ax.xlabel = "Time (ms)"
+ax.ylabel = "Amplitude (mV)"
+for i = 3:(ncol(d)) # for all channels
+  lines!(ax, @lift(d.time[$xrange]), @lift(d[$xrange, i]))
+end
+
 
 
 function plot_databrowser(dat::ContinuousData)
@@ -389,7 +410,7 @@ function plot_databrowser(dat::EpochData)
   display(fig)
 
 end
-plot_databrowser(epochs)
+# plot_databrowser(epochs)
 
 
 
@@ -501,7 +522,7 @@ end
 
 
 
-plot_topoplot(dat, ylim=(-100, 100))
+# plot_topoplot(dat, ylim=(-100, 100))
 
 function circle_mask!(dat, grid_scale)
   for col in 1:size(dat)[1]
@@ -525,25 +546,25 @@ end
 
 
 # average reference
-rereference!(eeg, 1:72);
-
-# high-pass/low-pass filter
-highpass_filter!(eeg, 0.1, 2);
-lowpass_filter!(eeg, 30, 6);
-
-# extract epochs and baseline
-epoched_data = extract_epochs(eeg, 1, -0.5, 2);
-baseline!(epoched_data, 0, 0)
-
-# plot some epoched data
-plot_epoch(epoched_data, 1, [:PO7, :PO8]) # single trial/multiple eleectrodes
-plot_epoch(epoched_data, collect(1:10), [:PO7])   # multiple trials/single electrode
-
-# average epochs
-erp = average_epochs(epoched_data);
-
-# plot some erp data
-plot_erp(erp, [:Fp1, :Fp2])
+# rereference!(eeg, 1:72);
+# 
+# # high-pass/low-pass filter
+# highpass_filter!(eeg, 0.1, 2);
+# lowpass_filter!(eeg, 30, 6);
+# 
+# # extract epochs and baseline
+# epoched_data = extract_epochs(eeg, 1, -0.5, 2);
+# baseline!(epoched_data, 0, 0)
+# 
+# # plot some epoched data
+# plot_epoch(epoched_data, 1, [:PO7, :PO8]) # single trial/multiple eleectrodes
+# plot_epoch(epoched_data, collect(1:10), [:PO7])   # multiple trials/single electrode
+# 
+# # average epochs
+# erp = average_epochs(epoched_data);
+# 
+# # plot some erp data
+# plot_erp(erp, [:Fp1, :Fp2])
 
 
 
@@ -562,20 +583,7 @@ struct InfoICA
 end
 
 
-
-
-function pca_reduction!(dat, n)
-  PCdat2 = dat'           # transpose data
-  PCn = size(PCdat2, 1) # now p chans, n time points
-  PCdat2 = PCdat2 / PCn
-  PCout = dat * PCdat2
-  PCD, PCV = eigen(PCout, sortby=x -> -abs(x))
-  dat = PCV[:, 1:ncomps]' * dat
-  return dat, PCV
-end
-
-
-function infoica(dat; extended=true)
+function infomax_ica(dat; extended=true)
 
   # define some default values
   l_rate = 0.001 # initial learning rate
@@ -626,9 +634,7 @@ function infoica(dat; extended=true)
 
   if extended
     signs = ones(n_features)
-    for k in 1:n_subgauss
-      signs[k] = -1
-    end
+    signs[1:n_subgauss] .= -1
     kurt_size = min(kurt_size, n_samples)
     old_kurt = zeros(n_features)
     oldsigns = zeros(n_features)
@@ -640,17 +646,18 @@ function infoica(dat; extended=true)
   while step < max_iter
 
     permute = shuffle(1:n_samples)
+    permute = 1:n_samples
 
     for t = 1:block:lastt
 
-      u = *(dat[:, permute[t:t+block-1]]', weights) + *(bias, onesrow)'
+      u = *(weights, dat[:, permute[t:t+block-1]]) .+ *(bias, onesrow)
 
       if extended
         # extended ICA update
         y = tanh.(u)
-        weights += l_rate * *(weights, BI .- signs[:]' * *(u', y) - *(u', u))
+        weights += l_rate * *(weights, BI .- signs[:] .* *(y, u') - *(u, u'))
         if use_bias
-          bias += (l_rate .* sum(y, dims=1) .* -2.0)'
+          bias += (l_rate .* sum(y, dims=2) .* -2.0)
         end
       else
         y = 1 ./ (1 .+ exp.(-u))
@@ -672,12 +679,12 @@ function infoica(dat; extended=true)
         if ext_blocks > 0 & blockno % ext_blocks == 0
           if kurt_size < n_samples
             rp = trunc.(Int, (rand(kurt_size) .* (n_samples - 1))) .+ 1
-            tpartact = *(dat[:, rp]', weights)'
+            tpartact = *(weights, dat[:, rp])'
           else
-            tpartact = *(dat', weights)'
+            tpartact = *(weights, dat)'
           end
           # estimate kurtosis
-          kurt = kurtosis.(eachrow(tpartact))
+          kurt = kurtosis.(eachcol(tpartact))
           if extmomentum != 0
             kurt = extmomentum .* old_kurt .+ (1.0 .- extmomentum) .* kurt
             old_kurt = kurt
@@ -753,9 +760,7 @@ function infoica(dat; extended=true)
       # for extended Infomax
       if extended
         signs = ones(n_features)
-        for k in 1:n_subgauss
-          signs[k] = -1
-        end
+        signs[1:n_subgauss] .= -1
         oldsigns = zeros(n_features)
       end
 
@@ -768,17 +773,86 @@ function infoica(dat; extended=true)
 
 end
 
-dat = read_mat_file("../dat.mat")["dat"]
-@time weights = infoica(dat)
+
+
+
+
+function pre_whiten(dat)
+  return dat ./ std(dat)
+end
+
+
+# pca
+function pca_reduction(dat)
+  dat = copy(dat)
+  dat .-= mean(dat, dims=1)
+
+  U, S, V = LinearAlgebra.svd(dat, full=false)
+  max_abs_cols = argmax(abs.(U), dims=1)
+  signs = sign.(U[max_abs_cols])
+  U .*= signs
+  V .*= signs
+
+  explained_variance = (S .^ 2) ./ (size(dat)[1] - 1)
+  # total_var = sum(explained_variance)
+  # explained_variance_ratio_ = explained_variance / total_var
+
+  U .*= sqrt(size(dat)[1] - 1)
+
+  return U, explained_variance, V
+
+end
 
 
 
 
 
+dat = read_bdf("../Flank_C_3.bdf")
+dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 
+# highpass_filter!(dat, 1, 2)
 
+dat = Matrix(dat.data[:, 3:end])
 
+dat = pre_whiten(dat)
 
+dat = read_mat_file("../dat_ica.mat")
+dat = dat["dat_ica"]
+dat = dat'
 
+dat, explained_variance = pca_reduction(dat)
+
+unmixing_matrix = infomax_ica(dat[1:20000, 1:68]', extended=true)
+unmixing_matrix = infomax_ica(dat)
+
+# f = Figure()
+# ax = GLMakie.Axis(f[1, 1])
+# for i in 1:71
+#   GLMakie.lines!(unmixing_matrix[:, i])
+# end
+
+stable = explained_variance ./ explained_variance[1] .> 1e-6
+norms = explained_variance[1:10]
+norms = sqrt.(norms)
+norms[norms.==0] .= 1.0
+
+unmixing_matrix ./= norms
+
+mixing_matrix = LinearAlgebra.pinv(unmixing_matrix)
+
+# sort
+source_data = dat[1:20000, 1:10]
+var = sum(mixing_matrix^2, dims=1) .* sum(source_data .^ 2, dims=1) / (10 * 20000 - 1)
+var ./= sum(var)
+
+order = sortperm(var, dims=2, rev=true)
+var[order]
+
+unmixing_matrix = unmixing_matrix[order[:], :]
+mixing_matrix = mixing_matrix[order[:], :]
+
+lines(mixing_matrix[1, :])
+
+unmixing_matrix = unmixing_matrix * eye(69, 69) * eigen(:)
 
 
