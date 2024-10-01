@@ -4,20 +4,13 @@ using DSP
 using DataFrames
 using GLMakie
 using JLD2
-using ScatteredInterpolation
-using StatsBase
+using LinearAlgebra
 using MAT
 using Printf
-using LinearAlgebra
 using Random
+using ScatteredInterpolation
+using StatsBase
 
-
-function polar2cartXY(layout::DataFrame)
-  inc = layout[!, :inc] .* (pi / 180)
-  azi = layout[!, :azi] .* (pi / 180)
-  layout[!, "X2"] = inc .* cos.(azi)
-  layout[!, "Y2"] = inc .* sin.(azi)
-end
 
 mutable struct ContinuousData
   data::DataFrame
@@ -44,8 +37,6 @@ function Base.show(io::IO, dat::EpochData)
   println(io, "Sample Rate: ", dat.sample_rate)
 end
 
-
-
 mutable struct ErpData
   data::DataFrame
   layout::DataFrame
@@ -58,8 +49,9 @@ function Base.show(io::IO, dat::ErpData)
   println(io, "Sample Rate: ", dat.sample_rate)
 end
 
-
 ########################################################################
+
+
 
 function create_dataframe(data::BioSemiBDF.BioSemiData)
   return hcat(DataFrame(time=data.time, events=data.triggers.raw), DataFrame(data.data, Symbol.(data.header.channel_labels[1:end-1])))
@@ -142,162 +134,210 @@ function average_epochs(dat::EpochData)
   return ErpData(erp, dat.layout, dat.sample_rate)
 end
 
+
+function channel_number_to_channel_label(channel_labels, channel_numbers::Int64)
+  return [channel_labels[channel_numbers]]
+end
+
+function channel_number_to_channel_label(channel_labels, channel_numbers::Vector{Int64})
+  return channel_labels[channel_numbers]
+end
+
+function polar2cartXY(layout::DataFrame)
+  inc = layout[!, :inc] .* (pi / 180)
+  azi = layout[!, :azi] .* (pi / 180)
+  layout[!, "X2"] = inc .* cos.(azi)
+  layout[!, "Y2"] = inc .* sin.(azi)
+end
+
+
+###############################################################
+# Filter functions 
+function _apply_filter!(dat::DataFrame, columns, filter)
+  for col in names(dat)
+    if col in columns
+      dat[:, col] .= filtfilt(filter, dat[:, col])
+    end
+  end
+end
+
+function filter!(dat::DataFrame, columns, filter_type, freq, order, sample_rate)
+  if filter_type == "hp"
+    filter = digitalfilter(Highpass(freq, fs=sample_rate), Butterworth(order))
+  elseif filter_type == "lp"
+    filter = digitalfilter(Lowpass(freq, fs=sample_rate), Butterworth(order))
+  end
+  _apply_filter!(dat, columns, filter)
+end
+
+function filter(dat::DataFrame, columns, type, freq, order, sample_rate)
+  dat_out = deepcopy(dat)
+  filter!(dat_out, columns, type, freq, order, sample_rate)
+  return dat_out
+end
+
+function filter!(dat::Union{ContinuousData,ErpData}, type, freq, order)
+  filter!(dat.data, dat.layout.label, type, freq, order, dat.sample_rate)
+end
+
+function filter(dat::Union{ContinuousData,ErpData}, type, freq, order)
+  return filter(dat.data, dat.layout.label, type, freq, order, dat.sample_rate)
+end
+
+function filter!(dat::EpochData, type, freq, order)
+  for epoch in eachindex(dat.data)
+    filter!(dat.data[epoch], dat.layout.label, type, freq, order, dat.sample_rate)
+  end
+end
+
+function filter(dat::EpochData, type, freq, order)
+  dat_out = deepcopy(dat)
+  filter!(dat_out, type, freq, order)
+  return dat_out
+end
+
+
+
+
+###############################################################
+# re-rereference
+function _apply_rereference!(dat::DataFrame, channel_labels, reference)
+  for col in names(dat)
+    if col in channel_labels
+      dat[:, col] .-= reference
+    end
+  end
+end
+
+function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{Int64,Vector{Int64}})
+  reference_channel = channel_number_to_channel_label(channel_labels, reference_channel)
+  reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
+  _apply_rereference!(dat, channel_labels, reference)
+end
+
+function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Int64,Vector{Int64}})
+  dat_out = deepcopy(dat)
+  rereference!(dat_out, channel_labels, reference_channel)
+  return dat_out
+end
+
+function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{AbstractString,Symbol})
+  reference_channel = [reference_channel]
+  _apply_rereference!(dat, channel_labels, reference_channel)
+end
+
+function rereference(dat::DataFrame, channel_labels, reference_channel::Union{AbstractString,Symbol})
+  dat_out = deepcopy(dat)
+  reference_channel = [reference_channel]
+  _apply_rereference!(dat_out, channel_labels, reference_channel)
+  return dat_out
+end
+
+
+function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{Vector{AbstractString},Vector{Symbol}})
+  reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
+  _apply_rereference!(dat, channel_labels, reference)
+end
+
+function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Vector{AbstractString},Vector{Symbol}})
+  dat_out = deepcopy(dat)
+  reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
+  _apply_rereference!(dat_out, channel_labels, reference)
+  return dat_out
+end
+
+function rereference!(dat::Union{ContinuousData,ErpData}, channel_labels, reference_channel)
+  rereference!(dat.data, channel_labels, reference_channel)
+end
+
+function rereference(dat::Union{ContinuousData,ErpData}, channel_labels, reference_channel)
+  dat_out = deepcopy(dat)
+  rereference!(dat_out.data, channel_labels, reference_channel)
+  return dat_out
+end
+
+function rereference!(dat::EpochData, channel_labels, reference_channel)
+  for epoch in eachindex(dat.data)
+    rereference!(dat.data[epoch], channel_labels, reference_channel)
+  end
+end
+
+function rereference!(dat::EpochData, channel_labels, reference_channel)
+  dat_out = deepcopy(dat)
+  rereference!(dat_out, channel_labels, reference_channel)
+  return dat_out
+end
+
+
+
+
+
+
+
+
+###############################################################
+function _apply_baseline!(dat::DataFrame, channel_labels, baseline_interval)
+  for col in names(dat)
+    if col in channel_labels
+      dat[:, col] .-= mean(dat[baseline_interval[1]:baseline_interval[2], col])
+    end
+  end
+end
+
+function baseline!(dat::DataFrame, channel_labels, baseline_interval)
+  if isempty(baseline_interval)
+    baseline_interval = [dat.time[1], dat.time[end]]
+  end
+  baseline_interval = find_idx_start_end(dat.time, baseline_interval[1], baseline_interval[2])
+  _apply_baseline!(dat, channel_labels, baseline_interval)
+end
+
+function baseline(dat::DataFrame, channel_labels, baseline_interval)
+  dat_out = deepcopy(dat)
+  baseline!(dat_out, channel_labels, baseline_interval)
+  return dat_out
+end
+
+
+function baseline!(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_interval)
+  baseline!(dat.data, channel_labels, baseline_interval)
+end
+
+function baseline(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_interval)
+  dat_out = deepcopy(dat)
+  baseline!(dat_out.data, channel_labels, baseline_interval)
+  return dat_out
+end
+
+function baseline!(dat::EpochData, channel_labels, baseline_interval)
+  for epoch in eachindex(dat.data)
+    baseline!(dat.data[epoch], channel_labels, baseline_interval)
+  end
+end
+
+function baseline!(dat::EpochData, channel_labels, baseline_interval)
+  dat_out = deepcopy(dat)
+  baseline!(dat_out, channel_labels, baseline_interval)
+  return dat_out
+end
+
+
+
+
 dat = read_bdf("../Flank_C_3.bdf")
 dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 epochs = extract_epochs(dat, 1, -0.5, 2)
 erp = average_epochs(epochs)
 
 
-# Filter functions (high-pass)
-function highpass_filter!(dat::DataFrame, columns, freq, order, sample_rate)
-  filter = digitalfilter(Highpass(freq, fs=sample_rate), Butterworth(order))
-  for col in names(dat)
-    if col in columns
-      dat[:, col] .= filtfilt(filter, dat[:, col])
-    end
-  end
-end
-
-function highpass_filter(dat::DataFrame, columns, freq, order, sample_rate)
-  dat_out = deepcopy(dat)
-  highpass_filter!(dat_out, columns, freq, order, sample_rate)
-  return dat_out
-end
-
-function highpass_filter!(dat::Union{ContinuousData,ErpData}, freq, order)
-  highpass_filter!(dat.data, dat.layout.label, freq, order, dat.sample_rate)
-end
-
-function highpass_filter(dat::Union{ContinuousData,ErpData}, freq, order)
-  return highpass_filter(dat.data, dat.layout.label, freq, order, dat.sample_rate)
-end
-
-function highpass_filter!(dat::EpochData, freq, order)
-  for epoch in eachindex(dat.data)
-    highpass_filter!(dat.data[epoch], dat.layout.label, freq, order, dat.sample_rate)
-  end
-end
-
-function highpass_filter(dat::EpochData, freq, order)
-  dat_out = deepcopy(dat)
-  return highpass_filter!(dat_out, freq, order)
-end
-
-
-# Filter functions (low-pass)
-function lowpass_filter!(dat::DataFrame, columns, freq, order, sample_rate)
-  filter = digitalfilter(Lowpass(freq, fs=sample_rate), Butterworth(order))
-  for col in names(dat)
-    if col in columns
-      dat[:, col] .= filtfilt(filter, dat[:, col])
-    end
-  end
-end
-
-function lowpass_filter(dat::DataFrame, columns, freq, order, sample_rate)
-  dat_out = deepcopy(dat)
-  lowpass_filter!(dat_out, columns, freq, order, sample_rate)
-  return dat_out
-end
-
-function lowpass_filter!(dat::Union{ContinuousData,ErpData}, freq, order)
-  lowpass_filter!(dat.data, dat.layout.label, freq, order, dat.sample_rate)
-end
-
-function lowpass_filter(dat::Union{ContinuousData,ErpData}, freq, order)
-  return lowpass_filter(dat.data, dat.layout.label, freq, order, dat.sample_rate)
-end
-
-function lowpass_filter!(dat::EpochData, freq, order)
-  for epoch in eachindex(dat.data)
-    lowpass_filter!(dat.data[epoch], dat.layout.label, freq, order, dat.sample_rate)
-  end
-end
-
-function lowpass_filter(dat::EpochData, freq, order)
-  dat_out = deepcopy(dat)
-  return lowpass_filter!(dat_out, freq, order)
-end
-
-
-
-
-
-# re-reference functions
-function rereference!(dat::ContinuousData, reference_channel)
-  reference = reduce(+, eachcol(dat.data[:, reference_channel])) ./ length(reference_channel)
-  for col in names(dat.data)[3:end]
-    dat.data[:, col] .-= reference
-  end
-end
-rereference!(dat::ContinuousData, reference_channel::Symbol) = rereference!(dat, [reference_channel])
-rereference!(dat::ContinuousData, reference_channel::Vector{UnitRange{Int64}}) = rereference!(dat, reference_channel[1])
-
-function rereference(dat::ContinuousData, reference_channel)
-  dat_out = deepcopy(dat)
-  rereference!(dat_out, reference_channel)
-  return dat_out
-end
-rereference(dat::ContinuousData, reference_channel::Symbol) = rereference(dat, [reference_channel])
-rereference(dat::ContinuousData, reference_channel::Vector{UnitRange{Int64}}) = rereference(dat, reference_channel[1])
-
-
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-
-
-
-
-function rereference(dat::ContinuousData, reference_channel)
-  dat_out = deepcopy(dat)
-  rereference!(dat_out, reference_channel)
-  return dat_out
-end
-rereference(dat::ContinuousData, reference_channel::Symbol) = rereference(dat, String(reference_channel))
-
-
-
-
-
-# baseline functions
-function baseline!(dat::ContinuousData)
-  for col in names(dat.data)[3:end]
-    dat.data[:, col] .-= mean(dat.data[:, col])
-  end
-end
-
-function baseline!(dat::EpochData)
-  for epoch in eachindex(dat.data)
-    for col in names(dat.data[epoch])[3:end]
-      dat.data[epoch][:, col] .-= mean(dat.data[epoch][:, col])
-    end
-  end
-end
-
-baseline!(dat)
-plot_databrowser(dat)
-baseline!(epochs)
-plot_databrowser(epochs)
-
-
-fig = Figure()
-ax = GLMakie.Axis(fig[1, 1])  # plot layout
-xrange = GLMakie.Observable(1:4000) # default xrange
-yrange = GLMakie.Observable(-1500:1500) # default yrange
-xlims!(ax, d.time[xrange.val[1]], d.time[xrange.val[end]])
-ylims!(ax, yrange.val[1], yrange.val[end])
-ax.xlabel = "Time (ms)"
-ax.ylabel = "Amplitude (mV)"
-for i = 3:(ncol(d)) # for all channels
-  lines!(ax, @lift(d.time[$xrange]), @lift(d[$xrange, i]))
-end
-
-
-
-function plot_databrowser(dat::ContinuousData)
+function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:AbstractString},Vector{Symbol}})
 
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
+  toggles = [Toggle(fig, active=active) for active in [true, false]]
+  labels = [Label(fig, lift(x -> x ? "$l visible" : "$l invisible", t.active))
+            for (t, l) in zip(toggles, ["sine", "cosine"])]
+
 
   xrange = GLMakie.Observable(1:4000) # default xrange
   yrange = GLMakie.Observable(-1500:1500) # default yrange
@@ -315,35 +355,44 @@ function plot_databrowser(dat::ContinuousData)
 
   xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
-  ax.xlabel = "Time (ms)"
+  ax.xlabel = "Time (S)"
   ax.ylabel = "Amplitude (mV)"
 
   function draw(ax::Axis, xrange::Observable)
-    for i = 3:(size(dat.data)[2]) # for all channels
-      lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, i]))
+    for col in names(dat.data)
+      if col in channel_labels
+        lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]))
+      end
     end
+    e = @lift dat.data[$xrange, [:time, :events]]
+    @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
+    #end
   end
 
   function step_back(ax::Axis, xrange::Observable)
     xrange.val[1] - 100 < 0 && return
     xrange[] = xrange.val .- 100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
+    ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
   function step_forward(ax::Axis, xmax, xrange::Observable)
     xrange.val[1] + 100 > xmax && return
     xrange[] = xrange.val .+ 100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
+    ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
   function chans_less(ax::Axis, yrange::Observable)
     (yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
     yrange.val = yrange[][1]+100:yrange[][end]-100
+    xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
   function chans_more(ax::Axis, yrange::Observable)
     yrange.val = yrange[][1]-100:yrange[][end]+100
+    xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
@@ -351,6 +400,19 @@ function plot_databrowser(dat::ContinuousData)
   display(fig)
 
 end
+
+function plot_databrowser(dat::ContinuousData)
+  plot_databrowser(dat, dat.layout.label)
+end
+
+function plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractString,Vector})
+  plot_databrowser(dat, [channel_labels])
+end
+
+
+baseline!(dat, dat.layout.label, [])
+plot_databrowser(dat)
+
 
 function plot_databrowser(dat::EpochData)
 
