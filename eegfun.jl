@@ -209,21 +209,20 @@ function _apply_rereference!(dat::DataFrame, channel_labels, reference)
   end
 end
 
-function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{Int64,Vector{Int64}})
-  reference_channel = channel_number_to_channel_label(channel_labels, reference_channel)
-  reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
+function rereference!(dat::DataFrame, channel_labels, reference_channels::Union{Int64,Vector{Int64}})
+  reference_channels = channel_number_to_channel_label(channel_labels, reference_channels)
+  reference = reduce(+, eachcol(dat[:, reference_channels])) ./ length(reference_channels)
   _apply_rereference!(dat, channel_labels, reference)
 end
 
-function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Int64,Vector{Int64}})
+function rereference(dat::DataFrame, channel_labels, reference_channels::Union{Int64,Vector{Int64}})
   dat_out = deepcopy(dat)
-  rereference!(dat_out, channel_labels, reference_channel)
+  rereference!(dat_out, channel_labels, reference_channels)
   return dat_out
 end
 
-function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{AbstractString,Symbol})
-  reference_channel = [reference_channel]
-  _apply_rereference!(dat, channel_labels, reference_channel)
+function rereference!(dat::DataFrame, channel_labels, reference_channels::Union{AbstractString,Symbol})
+  rereference!(dat, channel_labels, [reference_channels])
 end
 
 function rereference(dat::DataFrame, channel_labels, reference_channel::Union{AbstractString,Symbol})
@@ -234,12 +233,12 @@ function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Ab
 end
 
 
-function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{Vector{AbstractString},Vector{Symbol}})
+function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{Vector{<:AbstractString},Vector{Symbol}})
   reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
   _apply_rereference!(dat, channel_labels, reference)
 end
 
-function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Vector{AbstractString},Vector{Symbol}})
+function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Vector{<:AbstractString},Vector{Symbol}})
   dat_out = deepcopy(dat)
   reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
   _apply_rereference!(dat_out, channel_labels, reference)
@@ -262,14 +261,135 @@ function rereference!(dat::EpochData, channel_labels, reference_channel)
   end
 end
 
-function rereference!(dat::EpochData, channel_labels, reference_channel)
+function rereference(dat::EpochData, channel_labels, reference_channel)
   dat_out = deepcopy(dat)
   rereference!(dat_out, channel_labels, reference_channel)
   return dat_out
 end
 
+# # test re-reference
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# rereference!(dat, dat.layout.label, 1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# rereference!(dat, dat.layout.label, :Fp1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# rereference!(dat, dat.layout.label, "Fp1")
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# rereference!(dat, dat.layout.label, [1, 2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# rereference!(dat, dat.layout.label, [:Fp1, :Fp2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# rereference!(dat, dat.layout.label, ["Fp1", "Fp2"])
+# 
+# 
+# # test re-reference
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# rereference!(epochs, epochs.layout.label, 1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# rereference!(epochs, epochs.layout.label, :Fp1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# rereference!(epochs, epochs.layout.label, "Fp1")
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# rereference!(epochs, epochs.layout.label, [1, 2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# rereference!(epochs, epochs.layout.label, [:Fp1, :Fp2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# rereference!(epochs, epochs.layout.label, ["Fp1", "Fp2"])
+
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = rereference(dat, dat.layout.label, 1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = rereference(dat, dat.layout.label, :Fp1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = rereference(dat, dat.layout.label, "Fp1")
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = rereference(dat, dat.layout.label, [1, 2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = rereference(dat, dat.layout.label, [:Fp1, :Fp2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = rereference(dat, dat.layout.label, ["Fp1", "Fp2"])
+# 
+# # test re-reference
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = rereference(epochs, epochs.layout.label, 1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = rereference(epochs, epochs.layout.label, :Fp1)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = rereference(epochs, epochs.layout.label, "Fp1")
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = rereference(epochs, epochs.layout.label, [1, 2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = rereference(epochs, epochs.layout.label, [:Fp1, :Fp2])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = rereference(epochs, epochs.layout.label, ["Fp1", "Fp2"])
 
 
+
+
+
+
+
+
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# erp = average_epochs(epochs)
 
 
 
