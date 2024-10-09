@@ -3,12 +3,12 @@ using CSV
 using DSP
 using DataFrames
 using GLMakie
-using JLD2
+#using JLD2
 using LinearAlgebra
-using MAT
+#using MAT
 using Printf
 using Random
-using ScatteredInterpolation
+#using ScatteredInterpolation
 using StatsBase
 
 
@@ -181,7 +181,9 @@ function filter!(dat::Union{ContinuousData,ErpData}, type, freq, order)
 end
 
 function filter(dat::Union{ContinuousData,ErpData}, type, freq, order)
-  return filter(dat.data, dat.layout.label, type, freq, order, dat.sample_rate)
+  dat_out = deepcopy(dat)
+  filter!(dat_out.data, dat_out.layout.label, type, freq, order, dat_out.sample_rate)
+  return dat_out
 end
 
 function filter!(dat::EpochData, type, freq, order)
@@ -196,6 +198,44 @@ function filter(dat::EpochData, type, freq, order)
   return dat_out
 end
 
+
+# # test filter
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# filter!(dat, "hp", 1, 2)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# filter!(dat, "lp", 1, 2)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# filter!(epochs, "hp", 1, 2)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# filter!(epochs, "lp", 1, 2)
+# 
+# # test filter
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = filter(dat, "hp", 1, 2)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# dat1 = filter(dat, "lp", 1, 2)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = filter(epochs, "hp", 1, 2)
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# epochs1 = filter(epochs, "lp", 1, 2)
 
 
 
@@ -385,12 +425,10 @@ end
 
 
 
-
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# erp = average_epochs(epochs)
-
+dat = read_bdf("../Flank_C_3.bdf")
+dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+epochs = extract_epochs(dat, 1, -0.5, 2)
+erp = average_epochs(epochs)
 
 
 
@@ -431,6 +469,7 @@ end
 
 function baseline!(dat::EpochData, channel_labels, baseline_interval)
   for epoch in eachindex(dat.data)
+    println(epoch)
     baseline!(dat.data[epoch], channel_labels, baseline_interval)
   end
 end
@@ -441,23 +480,35 @@ function baseline!(dat::EpochData, channel_labels, baseline_interval)
   return dat_out
 end
 
+# test baseline
+dat = read_bdf("../Flank_C_3.bdf")
+dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+baseline!(dat, dat.layout.label, [0.01 0.02])
 
-
+dat = read_bdf("../Flank_C_3.bdf")
+dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+epochs = extract_epochs(dat, 1, -0.5, 2)
+baseline!(epochs, epochs.layout.label, [-0.5 -0.5])
 
 dat = read_bdf("../Flank_C_3.bdf")
 dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 epochs = extract_epochs(dat, 1, -0.5, 2)
 erp = average_epochs(epochs)
+baseline!(erp, erp.layout.label, [-0.5 -0.5])
+
+
+
 
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:AbstractString},Vector{Symbol}})
 
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
+
+  # TODO: how do i position these?
   toggles = [Toggle(fig, active=active) for active in [true, false]]
   labels = [Label(fig, lift(x -> x ? "$l visible" : "$l invisible", t.active))
             for (t, l) in zip(toggles, ["sine", "cosine"])]
-
 
   xrange = GLMakie.Observable(1:4000) # default xrange
   yrange = GLMakie.Observable(-1500:1500) # default yrange
@@ -486,7 +537,6 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
     end
     e = @lift dat.data[$xrange, [:time, :events]]
     @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
-    #end
   end
 
   function step_back(ax::Axis, xrange::Observable)
@@ -534,7 +584,7 @@ baseline!(dat, dat.layout.label, [])
 plot_databrowser(dat)
 
 
-function plot_databrowser(dat::EpochData)
+function plot_databrowser(dat::EpochData, channel_labels::Union{Vector{<:AbstractString},Vector{Symbol}})
 
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
@@ -562,9 +612,14 @@ function plot_databrowser(dat::EpochData)
   ax.ylabel = "Amplitude (mV)"
 
   function draw(ax::Axis, xrange::Observable)
-    for i = 2:(size(dat.data[1])[2]) # for all channels
-      lines!(ax, @lift(dat.data[$trial][$xrange, 1]), @lift(dat.data[$trial][$xrange, i]))
+    println(trial.val)
+    for col in names(dat.data[trial.val])
+      if col in channel_labels
+        lines!(ax, @lift(dat.data[$trial][$xrange, 1]), @lift(dat.data[$trial][$xrange, col]))
+      end
     end
+    e = @lift dat.data[trial.val][$xrange, [:time, :events]]
+    @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
   end
 
   function step_epoch_forward(trial::Observable)
@@ -592,7 +647,18 @@ function plot_databrowser(dat::EpochData)
   display(fig)
 
 end
-# plot_databrowser(epochs)
+epochs = baseline(epochs, epochs.layout.label, [-0.2, 0])
+plot_databrowser(epochs)
+
+function plot_databrowser(dat::EpochData)
+  plot_databrowser(dat, dat.layout.label)
+end
+
+function plot_databrowser(dat::EpochData, channel_labels::Union{<:AbstractString,Vector})
+  plot_databrowser(dat, [channel_labels])
+end
+
+
 
 
 
