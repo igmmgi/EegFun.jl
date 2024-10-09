@@ -1,3 +1,4 @@
+using Base: active_project
 using BioSemiBDF
 using CSV
 using DSP
@@ -480,35 +481,39 @@ function baseline!(dat::EpochData, channel_labels, baseline_interval)
   return dat_out
 end
 
-# test baseline
-dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-baseline!(dat, dat.layout.label, [0.01 0.02])
+# # test baseline
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# baseline!(dat, dat.layout.label, [0.01 0.02])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# baseline!(epochs, epochs.layout.label, [-0.5 -0.5])
+# 
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# erp = average_epochs(epochs)
+# baseline!(erp, erp.layout.label, [-0.5 -0.5])
 
-dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-epochs = extract_epochs(dat, 1, -0.5, 2)
-baseline!(epochs, epochs.layout.label, [-0.5 -0.5])
 
-dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-epochs = extract_epochs(dat, 1, -0.5, 2)
-erp = average_epochs(epochs)
-baseline!(erp, erp.layout.label, [-0.5 -0.5])
-
-
-
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# erp = average_epochs(epochs)
+# baseline!(erp, erp.layout.label, [-0.5 -0.5])
 
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:AbstractString},Vector{Symbol}})
 
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
+  toggles = [Toggle(fig, active=active) for active in [true]]
+  labels = [Label(fig, lift(x -> x ? "$l (off)" : "$l (on)", t.active))
+            for (t, l) in zip(toggles, ["Events"])]
 
-  # TODO: how do i position these?
-  toggles = [Toggle(fig, active=active) for active in [true, false]]
-  labels = [Label(fig, lift(x -> x ? "$l visible" : "$l invisible", t.active))
-            for (t, l) in zip(toggles, ["sine", "cosine"])]
+  fig[1, 2] = grid!(hcat(toggles, labels), tellheight=false)
 
   xrange = GLMakie.Observable(1:4000) # default xrange
   yrange = GLMakie.Observable(-1500:1500) # default yrange
@@ -529,15 +534,28 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   ax.xlabel = "Time (S)"
   ax.ylabel = "Amplitude (mV)"
 
+
   function draw(ax::Axis, xrange::Observable)
     for col in names(dat.data)
       if col in channel_labels
         lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]))
       end
     end
-    e = @lift dat.data[$xrange, [:time, :events]]
-    @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
+    #  e = @lift dat.data[$xrange, [:time, :events]]
+    #  @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
+    #e = @lift dat.data[$xrange, [:time, :events]]
+    #t = vlines!($e.time[$e.events.!=0], color=:black, linewidth=2)
   end
+
+  @lift e = dat.data[$xrange, [:time, :events]]
+  @lift t = vlines!($e.time[$e.events.!=0], color=:black, linewidth=2)
+  #t = vlines!(e.time[e.events.!=0], color=:black, linewidth=2)
+  # t = vlines!([2])
+  connect!(t.visible, toggles[1].active)
+  # if lift(plot_events) == true
+  #   e = @lift dat.data[$xrange, [:time, :events]]
+  #   @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
+  # end
 
   function step_back(ax::Axis, xrange::Observable)
     xrange.val[1] - 100 < 0 && return
@@ -580,6 +598,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractS
 end
 
 
+dat = read_bdf("../Flank_C_3.bdf")
+dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 baseline!(dat, dat.layout.label, [])
 plot_databrowser(dat)
 
