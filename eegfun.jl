@@ -509,13 +509,24 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
 
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
-  toggles = [Toggle(fig, active=active) for active in [true]]
-  labels = [Label(fig, lift(x -> x ? "$l (off)" : "$l (on)", t.active))
-            for (t, l) in zip(toggles, ["Events"])]
-
-  fig[1, 2] = grid!(hcat(toggles, labels), tellheight=false)
 
   xrange = GLMakie.Observable(1:4000) # default xrange
+
+  # toggle buttons
+  toggles = [Toggle(fig, active=active) for active in [false]]
+  toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
+                   for (t, l) in zip(toggles, ["Events"])]
+  # sliders
+  sliders = [Slider(fig, range=$xrange, startvalue=3, tellheight=false, width=100)]
+  slider_labels = [Label(fig, "x-range")]
+  fig[1, 2] = grid!(vcat(hcat(sliders, slider_labels), hcat(toggles, toggle_labels)), tellheight=false)
+
+  xrange = lift(sliders[1].value) do x
+    println("here")
+    1:x
+  end
+
+
   yrange = GLMakie.Observable(-1500:1500) # default yrange
 
   # keyboard events
@@ -541,21 +552,13 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
         lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]))
       end
     end
-    #  e = @lift dat.data[$xrange, [:time, :events]]
-    #  @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
-    #e = @lift dat.data[$xrange, [:time, :events]]
-    #t = vlines!($e.time[$e.events.!=0], color=:black, linewidth=2)
   end
 
-  @lift e = dat.data[$xrange, [:time, :events]]
-  @lift t = vlines!($e.time[$e.events.!=0], color=:black, linewidth=2)
-  #t = vlines!(e.time[e.events.!=0], color=:black, linewidth=2)
-  # t = vlines!([2])
-  connect!(t.visible, toggles[1].active)
-  # if lift(plot_events) == true
-  #   e = @lift dat.data[$xrange, [:time, :events]]
-  #   @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
-  # end
+  # events
+  event_data = @lift(dat.data[$xrange, [:time, :events]].time[dat.data[$xrange, [:time, :events]].events.!=0])
+  event_lines = vlines!(event_data, color=:black, linewidth=2)
+  connect!(event_lines.visible, toggles[1].active)
+
 
   function step_back(ax::Axis, xrange::Observable)
     xrange.val[1] - 100 < 0 && return
