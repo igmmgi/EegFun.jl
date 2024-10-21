@@ -1,15 +1,14 @@
-using Base: active_project
 using BioSemiBDF
 using CSV
 using DSP
 using DataFrames
 using GLMakie
-#using JLD2
+using JLD2
 using LinearAlgebra
-#using MAT
+using MAT
 using Printf
 using Random
-#using ScatteredInterpolation
+using ScatteredInterpolation
 using StatsBase
 
 
@@ -51,15 +50,13 @@ function Base.show(io::IO, dat::ErpData)
 end
 
 ########################################################################
-
-
-
-function create_dataframe(data::BioSemiBDF.BioSemiData)
-  return hcat(DataFrame(time=data.time, events=data.triggers.raw), DataFrame(data.data, Symbol.(data.header.channel_labels[1:end-1])))
+function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)
+  return hcat(DataFrame(time=data.time, events=data.triggers.raw),
+    DataFrame(data.data, Symbol.(data.header.channel_labels[1:end-1])))
 end
 
-function eeg_data(dat::BioSemiBDF.BioSemiData, layout_file_name::String)
-  return ContinuousData(create_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1])
+function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)
+  return ContinuousData(create_eeg_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1])
 end
 
 
@@ -162,7 +159,7 @@ function _apply_filter!(dat::DataFrame, columns, filter)
   end
 end
 
-function filter!(dat::DataFrame, columns, filter_type, freq, order, sample_rate)
+function filter_data!(dat::DataFrame, columns, filter_type, freq, order, sample_rate)
   if filter_type == "hp"
     filter = digitalfilter(Highpass(freq, fs=sample_rate), Butterworth(order))
   elseif filter_type == "lp"
@@ -171,31 +168,31 @@ function filter!(dat::DataFrame, columns, filter_type, freq, order, sample_rate)
   _apply_filter!(dat, columns, filter)
 end
 
-function filter(dat::DataFrame, columns, type, freq, order, sample_rate)
+function filter_data(dat::DataFrame, columns, type, freq, order, sample_rate)
   dat_out = deepcopy(dat)
-  filter!(dat_out, columns, type, freq, order, sample_rate)
+  filter_data!(dat_out, columns, type, freq, order, sample_rate)
   return dat_out
 end
 
-function filter!(dat::Union{ContinuousData,ErpData}, type, freq, order)
-  filter!(dat.data, dat.layout.label, type, freq, order, dat.sample_rate)
+function filter_data!(dat::Union{ContinuousData,ErpData}, type, freq, order)
+  filter_data!(dat.data, dat.layout.label, type, freq, order, dat.sample_rate)
 end
 
-function filter(dat::Union{ContinuousData,ErpData}, type, freq, order)
+function filter_data(dat::Union{ContinuousData,ErpData}, type, freq, order)
   dat_out = deepcopy(dat)
-  filter!(dat_out.data, dat_out.layout.label, type, freq, order, dat_out.sample_rate)
+  filter_data!(dat_out.data, dat_out.layout.label, type, freq, order, dat_out.sample_rate)
   return dat_out
 end
 
-function filter!(dat::EpochData, type, freq, order)
+function filter_data!(dat::EpochData, type, freq, order)
   for epoch in eachindex(dat.data)
-    filter!(dat.data[epoch], dat.layout.label, type, freq, order, dat.sample_rate)
+    filter_data!(dat.data[epoch], dat.layout.label, type, freq, order, dat.sample_rate)
   end
 end
 
-function filter(dat::EpochData, type, freq, order)
+function filter_data(dat::EpochData, type, freq, order)
   dat_out = deepcopy(dat)
-  filter!(dat_out, type, freq, order)
+  filter_data!(dat_out, type, freq, order)
   return dat_out
 end
 
@@ -420,19 +417,10 @@ end
 # epochs = extract_epochs(dat, 1, -0.5, 2)
 # epochs1 = rereference(epochs, epochs.layout.label, ["Fp1", "Fp2"])
 
-
-
-
-
-
-
-dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-epochs = extract_epochs(dat, 1, -0.5, 2)
-erp = average_epochs(epochs)
-
-
-
+# dat = read_bdf("../Flank_C_3.bdf")
+# dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# epochs = extract_epochs(dat, 1, -0.5, 2)
+# erp = average_epochs(epochs)
 
 ###############################################################
 function _apply_baseline!(dat::DataFrame, channel_labels, baseline_interval)
@@ -498,8 +486,8 @@ end
 # baseline!(erp, erp.layout.label, [-0.5 -0.5])
 
 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+dat = read_bdf("../Flank_C_3.bdf")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 # epochs = extract_epochs(dat, 1, -0.5, 2)
 # erp = average_epochs(epochs)
 # baseline!(erp, erp.layout.label, [-0.5 -0.5])
@@ -516,15 +504,18 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   toggles = [Toggle(fig, active=active) for active in [false]]
   toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
                    for (t, l) in zip(toggles, ["Events"])]
+
+  # # sliders
+  # sliders = [Slider(fig, range=xrange, startvalue=3, tellheight=false, width=100)]
+  # slider_labels = [Label(fig, "x-range")]
+  # fig[1, 2] = grid!(vcat(hcat(sliders, slider_labels), hcat(toggles, toggle_labels)), tellheight=false)
+
   # sliders
-  sliders = [Slider(fig, range=$xrange, startvalue=3, tellheight=false, width=100)]
+  sliders = [IntervalSlider(fig, range=1:10000, startvalues=(1, 4000), tellheight=false, width=100)]
   slider_labels = [Label(fig, "x-range")]
   fig[1, 2] = grid!(vcat(hcat(sliders, slider_labels), hcat(toggles, toggle_labels)), tellheight=false)
 
-  xrange = lift(sliders[1].value) do x
-    println("here")
-    1:x
-  end
+  #xrange = sliders[1].interval[1]
 
 
   yrange = GLMakie.Observable(-1500:1500) # default yrange
@@ -559,8 +550,17 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   event_lines = vlines!(event_data, color=:black, linewidth=2)
   connect!(event_lines.visible, toggles[1].active)
 
+  lift(sliders[1].interval) do interval
+    xrange[] = interval[1]:interval[2]
+    #xrange[] = xrange.val .+ 100
+    xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
+    ylims!(ax, yrange.val[1], yrange.val[end])
+    #xlims!(ax, dat.data.time[interval[1]], dat.data.time[interval[2]])
+    #xlims!(ax, dat.data.time[interval[1]], dat.data.time[interval[2]])
+    #xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
+  end
 
-  function step_back(ax::Axis, xrange::Observable)
+  function step_back(ax::Axis, xrange::Observable#)
     xrange.val[1] - 100 < 0 && return
     xrange[] = xrange.val .- 100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
@@ -602,8 +602,11 @@ end
 
 
 dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+
 baseline!(dat, dat.layout.label, [])
+channel_labels = dat.layout.label
+
 plot_databrowser(dat)
 
 
