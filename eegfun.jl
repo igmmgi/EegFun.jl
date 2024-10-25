@@ -12,6 +12,7 @@ using ScatteredInterpolation
 using StatsBase
 
 
+
 mutable struct ContinuousData
   data::DataFrame
   layout::DataFrame
@@ -91,8 +92,7 @@ function search_sequence(array, sequence::Array{Int})
   return idx_positions
 
 end
-search_sequence(array, sequence::Int) = findall(array .== sequence)
-
+search_sequence(array, sequence::Int) = intersect(findall(array .== sequence), findall(diff(vcat(0, array)) .>= 1))
 
 find_idx_range(time, start_time, end_time) = findmin(abs.(time .- start_time))[2]:findmin(abs.(time .- end_time))[2]
 find_idx_range(time, limits) = find_idx_range(time, limits[1], limits[end])
@@ -131,7 +131,6 @@ function average_epochs(dat::EpochData)
   erp = combine(groupby(reduce(vcat, dat.data), :time), Not([:time, :events, :epoch, :sample]) .=> mean .=> Not([:time, :events, :epoch, :sample]))
   return ErpData(erp, dat.layout, dat.sample_rate)
 end
-
 
 function channel_number_to_channel_label(channel_labels, channel_numbers::Int64)
   return [channel_labels[channel_numbers]]
@@ -197,43 +196,46 @@ function filter_data(dat::EpochData, type, freq, order)
 end
 
 
-# # test filter
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# filter!(dat, "hp", 1, 2)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# filter!(dat, "lp", 1, 2)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# filter!(epochs, "hp", 1, 2)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# filter!(epochs, "lp", 1, 2)
-# 
-# # test filter
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = filter(dat, "hp", 1, 2)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = filter(dat, "lp", 1, 2)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = filter(epochs, "hp", 1, 2)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = filter(epochs, "lp", 1, 2)
+# test filter
+function test_filter()
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  filter_data!(dat, "hp", 1, 2)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  filter_data!(dat, "lp", 1, 2)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  filter_data!(epochs, "hp", 1, 2)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  filter_data!(epochs, "lp", 1, 2)
+
+  # test filter
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = filter_data(dat, "hp", 1, 2)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = filter_data(dat, "lp", 1, 2)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = filter_data(epochs, "hp", 1, 2)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = filter_data(epochs, "lp", 1, 2)
+end
+
 
 
 
@@ -253,27 +255,33 @@ function rereference!(dat::DataFrame, channel_labels, reference_channels::Union{
   _apply_rereference!(dat, channel_labels, reference)
 end
 
-function rereference(dat::DataFrame, channel_labels, reference_channels::Union{Int64,Vector{Int64}})
-  dat_out = deepcopy(dat)
-  rereference!(dat_out, channel_labels, reference_channels)
-  return dat_out
-end
-
 function rereference!(dat::DataFrame, channel_labels, reference_channels::Union{AbstractString,Symbol})
   rereference!(dat, channel_labels, [reference_channels])
 end
 
-function rereference(dat::DataFrame, channel_labels, reference_channel::Union{AbstractString,Symbol})
-  dat_out = deepcopy(dat)
-  reference_channel = [reference_channel]
-  _apply_rereference!(dat_out, channel_labels, reference_channel)
-  return dat_out
-end
-
-
 function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{Vector{<:AbstractString},Vector{Symbol}})
   reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
   _apply_rereference!(dat, channel_labels, reference)
+end
+
+function rereference!(dat::Union{ContinuousData,ErpData}, channel_labels, reference_channel)
+  rereference!(dat.data, channel_labels, reference_channel)
+end
+
+function rereference!(dat::Union{ContinuousData,ErpData}, reference_channel)
+  rereference!(dat.data, dat.layout.label, reference_channel)
+end
+
+function rereference!(dat::EpochData, channel_labels, reference_channel)
+  for epoch in eachindex(dat.data)
+    rereference!(dat.data[epoch], channel_labels, reference_channel)
+  end
+end
+
+function rereference!(dat::EpochData, reference_channel)
+  for epoch in eachindex(dat.data)
+    rereference!(dat.data[epoch], dat.layout.label, reference_channel)
+  end
 end
 
 function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Vector{<:AbstractString},Vector{Symbol}})
@@ -283,8 +291,17 @@ function rereference(dat::DataFrame, channel_labels, reference_channel::Union{Ve
   return dat_out
 end
 
-function rereference!(dat::Union{ContinuousData,ErpData}, channel_labels, reference_channel)
-  rereference!(dat.data, channel_labels, reference_channel)
+function rereference(dat::DataFrame, channel_labels, reference_channels::Union{Int64,Vector{Int64}})
+  dat_out = deepcopy(dat)
+  rereference!(dat_out, channel_labels, reference_channels)
+  return dat_out
+end
+
+function rereference(dat::DataFrame, channel_labels, reference_channel::Union{AbstractString,Symbol})
+  dat_out = deepcopy(dat)
+  reference_channel = [reference_channel]
+  _apply_rereference!(dat_out, channel_labels, reference_channel)
+  return dat_out
 end
 
 function rereference(dat::Union{ContinuousData,ErpData}, channel_labels, reference_channel)
@@ -293,10 +310,10 @@ function rereference(dat::Union{ContinuousData,ErpData}, channel_labels, referen
   return dat_out
 end
 
-function rereference!(dat::EpochData, channel_labels, reference_channel)
-  for epoch in eachindex(dat.data)
-    rereference!(dat.data[epoch], channel_labels, reference_channel)
-  end
+function rereference(dat::Union{ContinuousData,ErpData}, reference_channel)
+  dat_out = deepcopy(dat)
+  rereference!(dat_out.data, dat_out.layout.label, reference_channel)
+  return dat_out
 end
 
 function rereference(dat::EpochData, channel_labels, reference_channel)
@@ -305,122 +322,236 @@ function rereference(dat::EpochData, channel_labels, reference_channel)
   return dat_out
 end
 
-# # test re-reference
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# rereference!(dat, dat.layout.label, 1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# rereference!(dat, dat.layout.label, :Fp1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# rereference!(dat, dat.layout.label, "Fp1")
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# rereference!(dat, dat.layout.label, [1, 2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# rereference!(dat, dat.layout.label, [:Fp1, :Fp2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# rereference!(dat, dat.layout.label, ["Fp1", "Fp2"])
-# 
-# 
-# # test re-reference
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# rereference!(epochs, epochs.layout.label, 1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# rereference!(epochs, epochs.layout.label, :Fp1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# rereference!(epochs, epochs.layout.label, "Fp1")
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# rereference!(epochs, epochs.layout.label, [1, 2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# rereference!(epochs, epochs.layout.label, [:Fp1, :Fp2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# rereference!(epochs, epochs.layout.label, ["Fp1", "Fp2"])
+function rereference(dat::EpochData, reference_channel)
+  dat_out = deepcopy(dat)
+  rereference!(dat_out, dat_out.layout.label, reference_channel)
+  return dat_out
+end
 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = rereference(dat, dat.layout.label, 1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = rereference(dat, dat.layout.label, :Fp1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = rereference(dat, dat.layout.label, "Fp1")
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = rereference(dat, dat.layout.label, [1, 2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = rereference(dat, dat.layout.label, [:Fp1, :Fp2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# dat1 = rereference(dat, dat.layout.label, ["Fp1", "Fp2"])
-# 
-# # test re-reference
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = rereference(epochs, epochs.layout.label, 1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = rereference(epochs, epochs.layout.label, :Fp1)
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = rereference(epochs, epochs.layout.label, "Fp1")
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = rereference(epochs, epochs.layout.label, [1, 2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = rereference(epochs, epochs.layout.label, [:Fp1, :Fp2])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# epochs1 = rereference(epochs, epochs.layout.label, ["Fp1", "Fp2"])
 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# erp = average_epochs(epochs)
+
+function test_rereference()
+
+  # test re-reference
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, dat.layout.label, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, dat.layout.label, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, dat.layout.label, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, dat.layout.label, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, dat.layout.label, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, dat.layout.label, ["Fp1", "Fp2"])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  rereference!(dat, ["Fp1", "Fp2"])
+
+  # test re-reference
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, epochs.layout.label, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, epochs.layout.label, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, epochs.layout.label, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, epochs.layout.label, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, epochs.layout.label, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, epochs.layout.label, ["Fp1", "Fp2"])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  rereference!(epochs, ["Fp1", "Fp2"])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, dat.layout.label, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, dat.layout.label, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, dat.layout.label, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, dat.layout.label, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, dat.layout.label, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, dat.layout.label, ["Fp1", "Fp2"])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = rereference(dat, ["Fp1", "Fp2"])
+
+  # test re-reference
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, epochs.layout.label, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, 1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, epochs.layout.label, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, :Fp1)
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, epochs.layout.label, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, "Fp1")
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, epochs.layout.label, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, [1, 2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, epochs.layout.label, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, [:Fp1, :Fp2])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, epochs.layout.label, ["Fp1", "Fp2"])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = rereference(epochs, ["Fp1", "Fp2"])
+
+end
 
 ###############################################################
 function _apply_baseline!(dat::DataFrame, channel_labels, baseline_interval)
@@ -439,15 +570,30 @@ function baseline!(dat::DataFrame, channel_labels, baseline_interval)
   _apply_baseline!(dat, channel_labels, baseline_interval)
 end
 
+function baseline!(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_interval)
+  baseline!(dat.data, channel_labels, baseline_interval)
+end
+
+function baseline!(dat::Union{ContinuousData,ErpData}, baseline_interval)
+  baseline!(dat.data, dat.layout.label, baseline_interval)
+end
+
+function baseline!(dat::EpochData, channel_labels, baseline_interval)
+  for epoch in eachindex(dat.data)
+    baseline!(dat.data[epoch], channel_labels, baseline_interval)
+  end
+end
+
+function baseline!(dat::EpochData, baseline_interval)
+  for epoch in eachindex(dat.data)
+    baseline!(dat.data[epoch], dat.layout.label, baseline_interval)
+  end
+end
+
 function baseline(dat::DataFrame, channel_labels, baseline_interval)
   dat_out = deepcopy(dat)
   baseline!(dat_out, channel_labels, baseline_interval)
   return dat_out
-end
-
-
-function baseline!(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_interval)
-  baseline!(dat.data, channel_labels, baseline_interval)
 end
 
 function baseline(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_interval)
@@ -456,41 +602,186 @@ function baseline(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_i
   return dat_out
 end
 
-function baseline!(dat::EpochData, channel_labels, baseline_interval)
-  for epoch in eachindex(dat.data)
-    println(epoch)
-    baseline!(dat.data[epoch], channel_labels, baseline_interval)
-  end
+function baseline(dat::Union{ContinuousData,ErpData}, baseline_interval)
+  dat_out = deepcopy(dat)
+  baseline!(dat_out.data, dat_out.layout.label, baseline_interval)
+  return dat_out
 end
 
-function baseline!(dat::EpochData, channel_labels, baseline_interval)
+function baseline(dat::EpochData, channel_labels, baseline_interval)
   dat_out = deepcopy(dat)
   baseline!(dat_out, channel_labels, baseline_interval)
   return dat_out
 end
 
-# # test baseline
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# baseline!(dat, dat.layout.label, [0.01 0.02])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# baseline!(epochs, epochs.layout.label, [-0.5 -0.5])
-# 
-# dat = read_bdf("../Flank_C_3.bdf")
-# dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# erp = average_epochs(epochs)
-# baseline!(erp, erp.layout.label, [-0.5 -0.5])
+function baseline(dat::EpochData, baseline_interval)
+  dat_out = deepcopy(dat)
+  baseline!(dat_out, dat_out.layout.label, baseline_interval)
+  return dat_out
+end
 
 
-dat = read_bdf("../Flank_C_3.bdf")
+
+
+function test_baseline()
+
+  # test baseline
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  baseline!(dat, dat.layout.label, [0.01 0.02])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  baseline!(dat, [0.01 0.02])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  baseline!(epochs, epochs.layout.label, [-0.5 -0.5])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  baseline!(epochs, [-0.5 -0.5])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  erp = average_epochs(epochs)
+  baseline!(erp, erp.layout.label, [-0.5 -0.5])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  erp = average_epochs(epochs)
+  baseline!(erp, [-0.5 -0.5])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = baseline(dat, dat.layout.label, [0.01 0.02])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  dat1 = baseline(dat, [0.01 0.02])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = baseline(epochs, epochs.layout.label, [-0.5 -0.5])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  epochs1 = baseline(epochs, [-0.5 -0.5])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  erp = average_epochs(epochs)
+  erp1 = baseline(erp, erp.layout.label, [-0.5 -0.5])
+
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  epochs = extract_epochs(dat, 1, -0.5, 2)
+  erp = average_epochs(epochs)
+  erp1 = baseline(erp, [-0.5 -0.5])
+
+end
+
+# test_filter()
+# test_rereference()
+# test_baseline()
+
+# cond = 1
+# subject = 3
+# @time dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
+# @time dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+# @time epochs = extract_epochs(dat, 1, -0.5, 2)
+# @time erp = average_epochs(epochs)
+# @time save_object("$(subject)_$(cond)_epochs.jld2", epochs)
+# @time save_object("$(subject)_$(cond)_erp.jld2", erp)
+
+subject = 3
+cond = 1
+dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
 dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# epochs = extract_epochs(dat, 1, -0.5, 2)
-# erp = average_epochs(epochs)
-# baseline!(erp, erp.layout.label, [-0.5 -0.5])
+epochs = extract_epochs(dat, 1, -0.5, 2)
+erp = average_epochs(epochs)
+save_object("$(subject)_$(cond)_epochs.jld2", epochs)
+save_object("$(subject)_$(cond)_erp.jld2", erp)
+
+function test_analysis()
+  for subject in 3:4
+    for condition in [1, 3]
+      println("Reading file: Flank_C_$(subject).bdf")
+      dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
+      dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+      filter_data!(dat, "hp", 1, 2)
+      epochs = extract_epochs(dat, condition, -0.5, 2)
+      erp = average_epochs(epochs)
+      if subject == 3
+        erp.layout.label[1] = "test"
+      end
+      save_object("$(subject)_$(condition)_epochs.jld2", epochs)
+      save_object("$(subject)_$(condition)_erp.jld2", erp)
+    end
+  end
+end
+
+@time test_analysis()
+
+t1 = load_object("3_1_erp.jld2")
+t2 = load_object("4_1_erp.jld2")
+
+
+function grand_average_erps(subjects, conditions)
+
+  sample_rate = nothing
+  layout = nothing
+
+  for condition in conditions
+
+    ind_subject_condition_array = []
+
+    for subject in subjects
+
+      # load individual subject data
+      erp = load_object("$(subject)_$(condition)_erp.jld2")
+
+      # basic data checks to make sure sample layout and sample rate
+      if isnothing(sample_rate)
+        sample_rate = erp.sample_rate
+      end
+      if isnothing(layout)
+        layout = erp.layout
+      end
+      if !isnothing(sample_rate)
+        if sample_rate != erp.sample_rate
+          throw(DomainError([sample_rate, erp.sample_rate], "sample rates across files do not match!"))
+        end
+      end
+      if !isnothing(layout)
+        if layout != erp.layout
+          throw(DomainError([layout, erp.layout], "layout across files do not match!"))
+        end
+      end
+      # update sample_rate/layout from current file
+      sample_rate = erp.sample_rate
+      layout = erp.layout
+
+      # perform subject average
+      for subject in subjects
+        push!(ind_subject_condition_array, erp.data)
+      end
+      grand_average = reduce(.+, ind_subject_condition_array) ./ length(ind_subject_condition_array)
+      save_object("$(cond)_ga_erp.jld2", grand_average)
+
+    end
+  end
+end
+grand_average_erps([3, 4], 1)
+
+
 
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:AbstractString},Vector{Symbol}})
@@ -498,27 +789,14 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
 
-  xrange = GLMakie.Observable(1:4000) # default xrange
+  xrange = GLMakie.Observable(1:2000) # default xrange
+  yrange = GLMakie.Observable(-1500:1500) # default yrange
 
   # toggle buttons
   toggles = [Toggle(fig, active=active) for active in [false]]
   toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
                    for (t, l) in zip(toggles, ["Events"])]
-
-  # # sliders
-  # sliders = [Slider(fig, range=xrange, startvalue=3, tellheight=false, width=100)]
-  # slider_labels = [Label(fig, "x-range")]
-  # fig[1, 2] = grid!(vcat(hcat(sliders, slider_labels), hcat(toggles, toggle_labels)), tellheight=false)
-
-  # sliders
-  sliders = [IntervalSlider(fig, range=1:10000, startvalues=(1, 4000), tellheight=false, width=100)]
-  slider_labels = [Label(fig, "x-range")]
-  fig[1, 2] = grid!(vcat(hcat(sliders, slider_labels), hcat(toggles, toggle_labels)), tellheight=false)
-
-  #xrange = sliders[1].interval[1]
-
-
-  yrange = GLMakie.Observable(-1500:1500) # default yrange
+  fig[1, 2] = grid!(hcat(toggles, toggle_labels), tellheight=false)
 
   # keyboard events
   on(events(fig).keyboardbutton) do event
@@ -536,32 +814,14 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   ax.xlabel = "Time (S)"
   ax.ylabel = "Amplitude (mV)"
 
-
-  function draw(ax::Axis, xrange::Observable)
-    for col in names(dat.data)
-      if col in channel_labels
-        lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]))
-      end
-    end
-  end
-
   # events
   event_data = @lift(dat.data[$xrange, [:time, :events]].time[dat.data[$xrange, [:time, :events]].events.!=0])
   event_lines = vlines!(event_data, color=:black, linewidth=2)
   connect!(event_lines.visible, toggles[1].active)
 
-  lift(sliders[1].interval) do interval
-    xrange[] = interval[1]:interval[2]
-    #xrange[] = xrange.val .+ 100
-    xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
-    ylims!(ax, yrange.val[1], yrange.val[end])
-    #xlims!(ax, dat.data.time[interval[1]], dat.data.time[interval[2]])
-    #xlims!(ax, dat.data.time[interval[1]], dat.data.time[interval[2]])
-    #xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
-  end
 
-  function step_back(ax::Axis, xrange::Observable#)
-    xrange.val[1] - 100 < 0 && return
+  function step_back(ax::Axis, xrange::Observable)
+    xrange.val[1] - 100 < 1 && return
     xrange[] = xrange.val .- 100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
@@ -587,6 +847,14 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
+  function draw(ax::Axis, xrange::Observable)
+    for col in names(dat.data)
+      if col in channel_labels
+        lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]))
+      end
+    end
+  end
+
   draw(ax, xrange)
   display(fig)
 
@@ -600,13 +868,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractS
   plot_databrowser(dat, [channel_labels])
 end
 
-
 dat = read_bdf("../Flank_C_3.bdf")
 dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-
 baseline!(dat, dat.layout.label, [])
-channel_labels = dat.layout.label
-
 plot_databrowser(dat)
 
 
@@ -618,6 +882,12 @@ function plot_databrowser(dat::EpochData, channel_labels::Union{Vector{<:Abstrac
   xrange = GLMakie.Observable(1:nrow(dat.data[1])) # default xrange
   yrange = GLMakie.Observable(-1500:1500) # default yrange
   trial = GLMakie.Observable(1) # first trial
+
+  # toggle buttons
+  toggles = [Toggle(fig, active=active) for active in [false]]
+  toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
+                   for (t, l) in zip(toggles, ["Events"])]
+  fig[1, 2] = grid!(hcat(toggles, toggle_labels), tellheight=false)
 
   # keyboard events
   on(events(fig).keyboardbutton) do event
@@ -632,21 +902,15 @@ function plot_databrowser(dat::EpochData, channel_labels::Union{Vector{<:Abstrac
 
   xlims!(ax, dat.data[1].time[xrange.val[1]], dat.data[1].time[xrange.val[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
-  vlines!(0, color=:gray, linewidth=2)
   ax.title = "Epoch $(trial.val)/$(length(dat.data))"
-  ax.xlabel = "Time (ms)"
+  ax.xlabel = "Time (S)"
   ax.ylabel = "Amplitude (mV)"
 
-  function draw(ax::Axis, xrange::Observable)
-    println(trial.val)
-    for col in names(dat.data[trial.val])
-      if col in channel_labels
-        lines!(ax, @lift(dat.data[$trial][$xrange, 1]), @lift(dat.data[$trial][$xrange, col]))
-      end
-    end
-    e = @lift dat.data[trial.val][$xrange, [:time, :events]]
-    @lift(vlines!($e.time[$e.events.!=0], color=:black, linewidth=2))
-  end
+
+  # events
+  event_data = @lift(dat.data[$trial][$xrange, [:time, :events]].time[dat.data[$trial][$xrange, [:time, :events]].events.!=0])
+  event_lines = vlines!(event_data, color=:black, linewidth=2)
+  connect!(event_lines.visible, toggles[1].active)
 
   function step_epoch_forward(trial::Observable)
     trial[] = min(length(dat.data), trial.val[1] + 1)
@@ -669,12 +933,18 @@ function plot_databrowser(dat::EpochData, channel_labels::Union{Vector{<:Abstrac
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
+  function draw(ax::Axis, xrange::Observable)
+    for col in names(dat.data[trial.val])
+      if col in channel_labels
+        lines!(ax, @lift(dat.data[$trial][$xrange, 1]), @lift(dat.data[$trial][$xrange, col]))
+      end
+    end
+  end
+
   draw(ax, xrange)
   display(fig)
 
 end
-epochs = baseline(epochs, epochs.layout.label, [-0.2, 0])
-plot_databrowser(epochs)
 
 function plot_databrowser(dat::EpochData)
   plot_databrowser(dat, dat.layout.label)
@@ -684,8 +954,10 @@ function plot_databrowser(dat::EpochData, channel_labels::Union{<:AbstractString
   plot_databrowser(dat, [channel_labels])
 end
 
-
-
+dat = read_bdf("../Flank_C_3.bdf")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+epochs = extract_epochs(dat, 1, -0.5, 2)
+plot_databrowser(epochs)
 
 
 # basic plotting functions
@@ -694,7 +966,7 @@ function plot_epoch(dat::EpochData, trial::Int, channel; xlim=nothing, ylim=noth
   f = Figure()
   ax = GLMakie.Axis(f[1, 1])
 
-  GLMakie.lines!(dat.trials[trial][!, :time], dat.trials[trial][!, channel], label=string(channel))
+  GLMakie.lines!(dat.data[trial][!, :time], dat.data[trial][!, channel], label=string(channel))
 
   !isnothing(xlim) && xlims!(ax, xlim)
   !isnothing(ylim) && xlims!(ax, ylim)
@@ -706,6 +978,11 @@ function plot_epoch(dat::EpochData, trial::Int, channel; xlim=nothing, ylim=noth
 
 end
 
+dat = read_bdf("../Flank_C_3.bdf")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+epochs = extract_epochs(dat, 1, -0.5, 2)
+plot_epoch(epochs, 1, [25, 62], legend=false)
+
 
 # basic plotting functions
 function plot_epoch(dat::EpochData, trials, channels; xlim=nothing, ylim=nothing, legend=true, xlabel="Time (S)", ylabel="mV")
@@ -714,7 +991,7 @@ function plot_epoch(dat::EpochData, trials, channels; xlim=nothing, ylim=nothing
 
   for trial in trials
     for channel in channels
-      GLMakie.lines!(dat.trials[trial][!, :time], dat.trials[trial][!, channel], label=string(channel))
+      GLMakie.lines!(dat.data[trial][!, :time], dat.data[trial][!, channel], label=string(channel))
     end
   end
 
@@ -728,6 +1005,13 @@ function plot_epoch(dat::EpochData, trials, channels; xlim=nothing, ylim=nothing
 end
 
 
+dat = read_bdf("../Flank_C_3.bdf")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+epochs = extract_epochs(dat, 1, -0.5, 2)
+plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend=false)
+
+
+########################################################################
 
 
 function data_interpolation_topo(dat, points; radius=2.5, grid_scale=300)
@@ -741,7 +1025,7 @@ function data_interpolation_topo(dat, points; radius=2.5, grid_scale=300)
   return dat
 end
 
-function head_shape(f, ax, layout; radius=2.5, linewidth=2, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
+function head_shape(f, ax, layout; radius=2.5, linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0)
   # head shape
   arc!(ax, Point2f(0), radius, -π, π, color=:black, linewidth=linewidth) # head
   arc!(Point2f(radius, 0), radius / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
@@ -750,11 +1034,11 @@ function head_shape(f, ax, layout; radius=2.5, linewidth=2, plot_points=true, pl
 
   # points
   if plot_points
-    scatter!(ax, layout[!, :X2], layout[!, :Y2], marker=:circle, markersize=10, color=:black)
+    scatter!(ax, layout[!, :X2], layout[!, :Y2], marker=:circle, markersize=markersize, color=:black)
   end
 
   if plot_labels
-    foreach(i -> text!(ax, position=(layout[!, :X2][i] + label_x_offset, layout[!, :Y2][i] + label_y_offset), layout.label[i]), 1:nrow(layout))
+    foreach(i -> text!(ax, fontsize=fontsize, position=(layout[!, :X2][i] + label_x_offset, layout[!, :Y2][i] + label_y_offset), layout.label[i]), 1:nrow(layout))
   end
 
   # hide some plot stuff
@@ -766,17 +1050,34 @@ function head_shape(f, ax, layout; radius=2.5, linewidth=2, plot_points=true, pl
 
 end
 
-function head_shape(layout; radius=2.5, linewidth=2)
+function head_shape(layout; kwargs...)
   f = Figure()
   ax = GLMakie.Axis(f[1, 1])
-  head_shape(f, ax, layout, radius=radius, linewidth=linewidth)
+  head_shape(f, ax, layout; kwargs...)
 end
+
+
+polar2cartXY(dat.layout)
+head_shape(dat.layout, linewidth=15, markersize=30, fontsize=50)
+
+function circle_mask!(dat, grid_scale)
+  for col in 1:size(dat)[1]
+    for row in 1:size(dat)[2]
+      xcentre = (grid_scale / 2) - col
+      ycenter = (grid_scale / 2) - row
+      if sqrt((xcentre^2 + ycenter^2)) > (grid_scale / 2)
+        dat[col, row] = NaN
+      end
+    end
+  end
+end
+
 
 
 function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
 
   points = Matrix(dat.layout[!, [:X2, :Y2]])'
-  data = data_interpolation_topo(Vector(dat.data[1000, 3:end]), points)
+  data = data_interpolation_topo(Vector(dat.data[1000, dat.layout.label]), points)
 
   if isnothing(ylim)
     ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
@@ -796,20 +1097,17 @@ end
 
 
 
-# plot_topoplot(dat, ylim=(-100, 100))
 
-function circle_mask!(dat, grid_scale)
-  for col in 1:size(dat)[1]
-    for row in 1:size(dat)[2]
-      xcentre = (grid_scale / 2) - col
-      ycenter = (grid_scale / 2) - row
-      if sqrt((xcentre^2 + ycenter^2)) > (grid_scale / 2)
-        dat[col, row] = NaN
-      end
-    end
-  end
-end
 
+polar2cartXY(dat.layout)
+plot_topoplot(dat, ylim=(-100, 100))
+
+
+dat = read_bdf("../Flank_C_3.bdf")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+epochs = extract_epochs(dat, 1, -0.5, 2)
+polar2cartXY(epochs.layout)
+plot_topoplot(dat, ylim=(-100, 100))
 
 
 
@@ -842,262 +1140,271 @@ end
 
 
 
-function read_mat_file(filename)
-  file = matopen(filename)
-  dat = read(file)
-  close(file)
-  return dat
-end
-
-
-struct InfoICA
-  topo
-  unmixing
-  label
-end
-
-
-function infomax_ica(dat; extended=true)
-
-  # define some default values
-  l_rate = 0.001 # initial learning rate
-  max_iter = 200 # maximum number of iterations
-  w_change = 1e-12 # change to stop iteration
-  use_bias = true
-  anneal_deg = 60.0 # angle at which learning rate reduced
-  anneal_step = 0.9 # factor by which learning rate reduced
-  blowup = 1e4 # max difference allowed between two successive estimations of unmixing matrix
-  blowup_fac = 0.5 # factor by which learning rate will be reduced if "blowup"
-  n_small_angle = 20
-  max_weight = 1e8     # larger than this have "blowup"
-  restart_factor = 0.9 # if weights blowup, restart with lrate
-  degconst = 180 ./ pi
-
-  # for extended Infomax
-  ext_blocks = 1
-  n_subgauss = 1
-  extmomentum = 0.5
-  signsbias = 0.02
-  signcount_threshold = 25
-  signcount_step = 2
-  kurt_size = 6000
-
-  # check data shape and get block sizes
-  n_features, n_samples = size(dat)
-  n_features_square = n_features^2
-  block = trunc(Int, sqrt(n_samples / 3.0))
-  nblock = div(n_samples, block)
-  lastt = (nblock - 1) * block + 1
-
-  # start ICA
-  @printf "Computing Infomax ICA\n"
-
-  # initialize training
-  weights = Matrix{Float64}(I, n_features, n_features) # identity matrix
-  BI = block * Matrix{Float64}(I, n_features, n_features)
-  bias = zeros(n_features, 1)
-  onesrow = ones((1, block))
-  startweights = copy(weights)
-  oldweights = copy(startweights)
-  step = 0
-  count_small_angle = 0
-  wts_blowup = false
-  blockno = 0
-  signcount = 0
-  initial_ext_blocks = ext_blocks  # save the initial value in case of reset
-
-  if extended
-    signs = ones(n_features)
-    signs[1:n_subgauss] .= -1
-    kurt_size = min(kurt_size, n_samples)
-    old_kurt = zeros(n_features)
-    oldsigns = zeros(n_features)
-  end
-
-  # trainings loop
-  olddelta = 1.0
-  oldchange = 0.0
-  while step < max_iter
-
-    permute = shuffle(1:n_samples)
-    permute = 1:n_samples
-
-    for t = 1:block:lastt
-
-      u = *(weights, dat[:, permute[t:t+block-1]]) .+ *(bias, onesrow)
-
-      if extended
-        # extended ICA update
-        y = tanh.(u)
-        weights += l_rate * *(weights, BI .- signs[:] .* *(y, u') - *(u, u'))
-        if use_bias
-          bias += (l_rate .* sum(y, dims=2) .* -2.0)
-        end
-      else
-        y = 1 ./ (1 .+ exp.(-u))
-        weights += l_rate * *(weights, BI + *(u', (1.0 .- 2.0 .* y)))
-        if use_bias
-          bias += (l_rate .* sum((1.0 .- 2.0 .* y), dims=1))'
-        end
-      end
-
-      # check change limit
-      if maximum(abs.(weights)) > max_weight
-        wts_blowup = true
-        break
-      end
-
-      blockno += 1
-      # ICA kurtosis estimation
-      if extended
-        if ext_blocks > 0 & blockno % ext_blocks == 0
-          if kurt_size < n_samples
-            rp = trunc.(Int, (rand(kurt_size) .* (n_samples - 1))) .+ 1
-            tpartact = *(weights, dat[:, rp])'
-          else
-            tpartact = *(weights, dat)'
-          end
-          # estimate kurtosis
-          kurt = kurtosis.(eachcol(tpartact))
-          if extmomentum != 0
-            kurt = extmomentum .* old_kurt .+ (1.0 .- extmomentum) .* kurt
-            old_kurt = kurt
-          end
-          # estimate weighted signs
-          signs = sign.(kurt .+ signsbias)
-          ndiff = sum(signs .- oldsigns .!= 0)
-          ndiff == 0 ? signcount += 1 : signcount = 0
-          oldsigns = signs
-          if signcount >= signcount_threshold
-            ext_blocks = trunc.(ext_blocks .* signcount_step)
-            signcount = 0
-          end
-        end
-      end
-
-    end
-
-    if !wts_blowup
-      oldwtchange = weights .- oldweights
-      step += 1
-      angledelta = 0.0
-      delta = oldwtchange[:]
-      change = sum(delta .* delta)
-      if step > 2
-        angledelta = acos(sum(delta .* olddelta) / sqrt(change * oldchange))
-        angledelta *= degconst
-      end
-
-      @printf "step %d: lrate %5f, wchange %8.8f, angledelta %4.1f\n" step l_rate change angledelta
-
-      # anneal learning rate
-      oldweights = copy(weights)
-      if angledelta > anneal_deg
-        l_rate *= anneal_step  # anneal learning rate
-        # accumulate angledelta until anneal_deg reaches l_rate
-        olddelta = delta
-        oldchange = change
-        count_small_angle = 0  # reset count when angledelta is large
-      else
-        if step == 1  # on first step only
-          olddelta = delta  # initialize
-          oldchange = change
-        end
-        if !isnothing(n_small_angle)
-          count_small_angle += 1
-          if count_small_angle > n_small_angle
-            max_iter = step
-          end
-        end
-      end
-
-      # apply stopping rule
-      if step > 2 && change < w_change
-        step = max_iter
-      elseif change > blowup
-        l_rate *= blowup_fac
-      end
-
-      # restart if weights blow up (for lowering l_rate)
-    else
-      step = 0  # start again
-      wts_blowup = false  # re-initialize variables
-      blockno = 1
-      l_rate *= restart_factor  # with lower learning rate
-      weights = copy(startweights)
-      oldweights = copy(startweights)
-      olddelta = zeros((1, n_features_square))
-      bias = zeros((n_features, 1))
-
-      ext_blocks = initial_ext_blocks
-
-      # for extended Infomax
-      if extended
-        signs = ones(n_features)
-        signs[1:n_subgauss] .= -1
-        oldsigns = zeros(n_features)
-      end
-
-      @printf "lowering learning rate to %g ... re-starting ...\n" l_rate
-
-    end
-  end
-
-  return weights
-
-end
-
-
-
-
-
-function pre_whiten(dat)
-  return dat ./ std(dat)
-end
-
-
-# pca
-function pca_reduction(dat)
-  dat = copy(dat)
-  dat .-= mean(dat, dims=1)
-
-  U, S, V = LinearAlgebra.svd(dat, full=false)
-  max_abs_cols = argmax(abs.(U), dims=1)
-  signs = sign.(U[max_abs_cols])
-  U .*= signs
-  V .*= signs
-
-  explained_variance = (S .^ 2) ./ (size(dat)[1] - 1)
-  # total_var = sum(explained_variance)
-  # explained_variance_ratio_ = explained_variance / total_var
-
-  U .*= sqrt(size(dat)[1] - 1)
-
-  return U, explained_variance, V
-
-end
+# function read_mat_file(filename)
+#   file = matopen(filename)
+#   dat = read(file)
+#   close(file)
+#   return dat
+# end
+# 
+# 
+# struct InfoICA
+#   topo
+#   unmixing
+#   label
+# end
+# 
+# 
+# function infomax_ica(dat; extended=true)
+# 
+#   # define some default values
+#   l_rate = 0.001 # initial learning rate
+#   max_iter = 200 # maximum number of iterations
+#   w_change = 1e-12 # change to stop iteration
+#   use_bias = true
+#   anneal_deg = 60.0 # angle at which learning rate reduced
+#   anneal_step = 0.9 # factor by which learning rate reduced
+#   blowup = 1e4 # max difference allowed between two successive estimations of unmixing matrix
+#   blowup_fac = 0.5 # factor by which learning rate will be reduced if "blowup"
+#   n_small_angle = 20
+#   max_weight = 1e8     # larger than this have "blowup"
+#   restart_factor = 0.9 # if weights blowup, restart with lrate
+#   degconst = 180 ./ pi
+# 
+#   # for extended Infomax
+#   ext_blocks = 1
+#   n_subgauss = 1
+#   extmomentum = 0.5
+#   signsbias = 0.02
+#   signcount_threshold = 25
+#   signcount_step = 2
+#   kurt_size = 6000
+# 
+#   # check data shape and get block sizes
+#   n_features, n_samples = size(dat)
+#   n_features_square = n_features^2
+#   block = trunc(Int, sqrt(n_samples / 3.0))
+#   nblock = div(n_samples, block)
+#   lastt = (nblock - 1) * block + 1
+# 
+#   # start ICA
+#   @printf "Computing Infomax ICA\n"
+# 
+#   # initialize training
+#   weights = Matrix{Float64}(I, n_features, n_features) # identity matrix
+#   BI = block * Matrix{Float64}(I, n_features, n_features)
+#   bias = zeros(n_features, 1)
+#   onesrow = ones((1, block))
+#   startweights = copy(weights)
+#   oldweights = copy(startweights)
+#   step = 0
+#   count_small_angle = 0
+#   wts_blowup = false
+#   blockno = 0
+#   signcount = 0
+#   initial_ext_blocks = ext_blocks  # save the initial value in case of reset
+# 
+#   if extended
+#     signs = ones(n_features)
+#     signs[1:n_subgauss] .= -1
+#     kurt_size = min(kurt_size, n_samples)
+#     old_kurt = zeros(n_features)
+#     oldsigns = zeros(n_features)
+#   end
+# 
+#   # trainings loop
+#   olddelta = 1.0
+#   oldchange = 0.0
+#   while step < max_iter
+# 
+#     permute = shuffle(1:n_samples)
+#     permute = 1:n_samples
+# 
+#     for t = 1:block:lastt
+# 
+#       u = *(weights, dat[:, permute[t:t+block-1]]) .+ *(bias, onesrow)
+# 
+#       if extended
+#         # extended ICA update
+#         y = tanh.(u)
+#         weights += l_rate * *(weights, BI .- signs[:] .* *(y, u') - *(u, u'))
+#         if use_bias
+#           bias += (l_rate .* sum(y, dims=2) .* -2.0)
+#         end
+#       else
+#         y = 1 ./ (1 .+ exp.(-u))
+#         weights += l_rate * *(weights, BI + *(u', (1.0 .- 2.0 .* y)))
+#         if use_bias
+#           bias += (l_rate .* sum((1.0 .- 2.0 .* y), dims=1))'
+#         end
+#       end
+# 
+#       # check change limit
+#       if maximum(abs.(weights)) > max_weight
+#         wts_blowup = true
+#         break
+#       end
+# 
+#       blockno += 1
+#       # ICA kurtosis estimation
+#       if extended
+#         if ext_blocks > 0 & blockno % ext_blocks == 0
+#           if kurt_size < n_samples
+#             rp = trunc.(Int, (rand(kurt_size) .* (n_samples - 1))) .+ 1
+#             tpartact = *(weights, dat[:, rp])'
+#           else
+#             tpartact = *(weights, dat)'
+#           end
+#           # estimate kurtosis
+#           kurt = kurtosis.(eachcol(tpartact))
+#           if extmomentum != 0
+#             kurt = extmomentum .* old_kurt .+ (1.0 .- extmomentum) .* kurt
+#             old_kurt = kurt
+#           end
+#           # estimate weighted signs
+#           signs = sign.(kurt .+ signsbias)
+#           ndiff = sum(signs .- oldsigns .!= 0)
+#           ndiff == 0 ? signcount += 1 : signcount = 0
+#           oldsigns = signs
+#           if signcount >= signcount_threshold
+#             ext_blocks = trunc.(ext_blocks .* signcount_step)
+#             signcount = 0
+#           end
+#         end
+#       end
+# 
+#     end
+# 
+#     if !wts_blowup
+#       oldwtchange = weights .- oldweights
+#       step += 1
+#       angledelta = 0.0
+#       delta = oldwtchange[:]
+#       change = sum(delta .* delta)
+#       if step > 2
+#         angledelta = acos(sum(delta .* olddelta) / sqrt(change * oldchange))
+#         angledelta *= degconst
+#       end
+# 
+#       @printf "step %d: lrate %5f, wchange %8.8f, angledelta %4.1f\n" step l_rate change angledelta
+# 
+#       # anneal learning rate
+#       oldweights = copy(weights)
+#       if angledelta > anneal_deg
+#         l_rate *= anneal_step  # anneal learning rate
+#         # accumulate angledelta until anneal_deg reaches l_rate
+#         olddelta = delta
+#         oldchange = change
+#         count_small_angle = 0  # reset count when angledelta is large
+#       else
+#         if step == 1  # on first step only
+#           olddelta = delta  # initialize
+#           oldchange = change
+#         end
+#         if !isnothing(n_small_angle)
+#           count_small_angle += 1
+#           if count_small_angle > n_small_angle
+#             max_iter = step
+#           end
+#         end
+#       end
+# 
+#       # apply stopping rule
+#       if step > 2 && change < w_change
+#         step = max_iter
+#       elseif change > blowup
+#         l_rate *= blowup_fac
+#       end
+# 
+#       # restart if weights blow up (for lowering l_rate)
+#     else
+#       step = 0  # start again
+#       wts_blowup = false  # re-initialize variables
+#       blockno = 1
+#       l_rate *= restart_factor  # with lower learning rate
+#       weights = copy(startweights)
+#       oldweights = copy(startweights)
+#       olddelta = zeros((1, n_features_square))
+#       bias = zeros((n_features, 1))
+# 
+#       ext_blocks = initial_ext_blocks
+# 
+#       # for extended Infomax
+#       if extended
+#         signs = ones(n_features)
+#         signs[1:n_subgauss] .= -1
+#         oldsigns = zeros(n_features)
+#       end
+# 
+#       @printf "lowering learning rate to %g ... re-starting ...\n" l_rate
+# 
+#     end
+#   end
+# 
+#   return weights
+# 
+# end
+# 
+# 
+# 
+# 
+# 
+# function pre_whiten(dat)
+#   return dat ./ std(dat)
+# end
+# 
+# 
+# # pca
+# function pca_reduction(dat)
+#   dat = copy(dat)
+#   dat .-= mean(dat, dims=1)
+# 
+#   U, S, V = LinearAlgebra.svd(dat, full=false)
+#   max_abs_cols = argmax(abs.(U), dims=1)
+#   signs = sign.(U[max_abs_cols])
+#   U .*= signs
+#   V .*= signs
+# 
+#   explained_variance = (S .^ 2) ./ (size(dat)[1] - 1)
+#   # total_var = sum(explained_variance)
+#   # explained_variance_ratio_ = explained_variance / total_var
+# 
+#   U .*= sqrt(size(dat)[1] - 1)
+# 
+#   return U, explained_variance, V
+# 
+# end
 
 
 
 
 
 dat = read_bdf("../Flank_C_3.bdf")
-dat = eeg_data(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+filter_data!(dat, "hp", 2, 2)
+rereference!(dat, dat.layout.label, collect(1:72));
 
-# highpass_filter!(dat, 1, 2)
+# dat = Matrix(dat.data[:, 3:end])
+# 
+# dat = pre_whiten(dat)
+# 
+# dat = read_mat_file("../dat_ica.mat")
+# dat = dat["dat_ica"]
+# dat = dat'
+# 
+# dat, explained_variance = pca_reduction(dat)
+# 
+# @time unmixing_matrix = infomax_ica(dat[1:20000, 1:68]', extended=true)
+# @time unmixing_matrix = infomax_ica(dat', extended=true)
 
-dat = Matrix(dat.data[:, 3:end])
+using MultivariateStats
 
-dat = pre_whiten(dat)
+model = fit(ICA, Matrix(dat.data[:, 3:end])', 71, maxiter=2, tol=0.1)
 
-dat = read_mat_file("../dat_ica.mat")
-dat = dat["dat_ica"]
-dat = dat'
+ic_mw = 68 == size(dat', 1) ? inv(model.W)' : pinv(model.W)'
+ic = MultivariateStats.predict(model, dat')
 
-dat, explained_variance = pca_reduction(dat)
-
-unmixing_matrix = infomax_ica(dat[1:20000, 1:68]', extended=true)
-unmixing_matrix = infomax_ica(dat)
+var(ic, dims=2)
 
 # f = Figure()
 # ax = GLMakie.Axis(f[1, 1])
