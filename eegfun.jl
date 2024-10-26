@@ -196,48 +196,6 @@ function filter_data(dat::EpochData, type, freq, order)
 end
 
 
-# test filter
-function test_filter()
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  filter_data!(dat, "hp", 1, 2)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  filter_data!(dat, "lp", 1, 2)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  filter_data!(epochs, "hp", 1, 2)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  filter_data!(epochs, "lp", 1, 2)
-
-  # test filter
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = filter_data(dat, "hp", 1, 2)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = filter_data(dat, "lp", 1, 2)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = filter_data(epochs, "hp", 1, 2)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = filter_data(epochs, "lp", 1, 2)
-end
-
-
-
 
 ###############################################################
 # re-rereference
@@ -263,6 +221,9 @@ function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{V
   reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
   _apply_rereference!(dat, channel_labels, reference)
 end
+
+
+
 
 function rereference!(dat::Union{ContinuousData,ErpData}, channel_labels, reference_channel)
   rereference!(dat.data, channel_labels, reference_channel)
@@ -328,230 +289,6 @@ function rereference(dat::EpochData, reference_channel)
   return dat_out
 end
 
-
-
-function test_rereference()
-
-  # test re-reference
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, dat.layout.label, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, dat.layout.label, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, dat.layout.label, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, dat.layout.label, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, dat.layout.label, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, dat.layout.label, ["Fp1", "Fp2"])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  rereference!(dat, ["Fp1", "Fp2"])
-
-  # test re-reference
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, epochs.layout.label, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, epochs.layout.label, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, epochs.layout.label, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, epochs.layout.label, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, epochs.layout.label, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, epochs.layout.label, ["Fp1", "Fp2"])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  rereference!(epochs, ["Fp1", "Fp2"])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, dat.layout.label, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, dat.layout.label, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, dat.layout.label, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, dat.layout.label, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, dat.layout.label, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, dat.layout.label, ["Fp1", "Fp2"])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = rereference(dat, ["Fp1", "Fp2"])
-
-  # test re-reference
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, epochs.layout.label, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, 1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, epochs.layout.label, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, :Fp1)
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, epochs.layout.label, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, "Fp1")
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, epochs.layout.label, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, [1, 2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, epochs.layout.label, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, [:Fp1, :Fp2])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, epochs.layout.label, ["Fp1", "Fp2"])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = rereference(epochs, ["Fp1", "Fp2"])
-
-end
 
 ###############################################################
 function _apply_baseline!(dat::DataFrame, channel_labels, baseline_interval)
@@ -621,76 +358,34 @@ function baseline(dat::EpochData, baseline_interval)
 end
 
 
-
-
-function test_baseline()
-
-  # test baseline
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  baseline!(dat, dat.layout.label, [0.01 0.02])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  baseline!(dat, [0.01 0.02])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  baseline!(epochs, epochs.layout.label, [-0.5 -0.5])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  baseline!(epochs, [-0.5 -0.5])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  erp = average_epochs(epochs)
-  baseline!(erp, erp.layout.label, [-0.5 -0.5])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  erp = average_epochs(epochs)
-  baseline!(erp, [-0.5 -0.5])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = baseline(dat, dat.layout.label, [0.01 0.02])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  dat1 = baseline(dat, [0.01 0.02])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = baseline(epochs, epochs.layout.label, [-0.5 -0.5])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  epochs1 = baseline(epochs, [-0.5 -0.5])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  erp = average_epochs(epochs)
-  erp1 = baseline(erp, erp.layout.label, [-0.5 -0.5])
-
-  dat = read_bdf("../Flank_C_3.bdf")
-  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-  epochs = extract_epochs(dat, 1, -0.5, 2)
-  erp = average_epochs(epochs)
-  erp1 = baseline(erp, [-0.5 -0.5])
-
+function correlation_matrix(dat)
+  return [dat.layout.label DataFrame(cor(Matrix(dat.data[!, dat.layout.label])), dat.layout.label)]
 end
 
-# test_filter()
-# test_rereference()
-# test_baseline()
+subject = 3
+dat = read_bdf("../Flank_C_$(subject).bdf")
+dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+filter_data!(dat, "hp", 1, 2)
+
+
+function is_extreme_values(dat::DataFrame, columns, criterion)
+  return any(x->abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2) 
+end
+
+function n_extreme_values(dat::DataFrame, columns, criterion)
+  return sum(x->abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2) 
+end
+
+a = n_extreme_values(dat.data, dat.layout.label, 40)
+
+
+
+
+
+
+
+
+
 
 # cond = 1
 # subject = 3
@@ -703,12 +398,78 @@ end
 
 subject = 3
 cond = 1
-dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
+dat = read_bdf("../Flank_C_$(subject).bdf")
 dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 epochs = extract_epochs(dat, 1, -0.5, 2)
-erp = average_epochs(epochs)
-save_object("$(subject)_$(cond)_epochs.jld2", epochs)
-save_object("$(subject)_$(cond)_erp.jld2", erp)
+# erp = average_epochs(epochs)
+# save_object("$(subject)_$(cond)_epochs.jld2", epochs)
+# save_object("$(subject)_$(cond)_erp.jld2", erp)
+
+
+# channel difference
+function calculate_channel_difference(dat::DataFrame, channels1::Vector, channels2::Vector)
+  channels1 = sum([dat[!, c] for c in channels1]) / length(channels1)
+  channels2 = sum([dat[!, c] for c in channels2]) / length(channels2)
+  return channels1 .- channels2;
+end
+
+function calculate_channel_difference(dat::DataFrame, channels1, channels2)
+  return calculate_channel_difference(dat, [channels1], [channels2]);
+end
+
+function diff_channel!(dat::DataFrame, channels1::Vector, channels2::Vector, difference_label)
+  dat[:, difference_label] = calculate_channel_difference(dat, channels1, channels1);
+end
+
+function diff_channel!(dat::DataFrame, channels1, channels2, difference_label)
+  diff_channel!(dat, [channels1], [channels2], difference_label);
+end
+
+function diff_channel!(dat::Union{ContinuousData,ErpData}, channels1::Vector, channels2::Vector, difference_label)
+  dat.data[:, difference_label] = calculate_channel_difference(dat.data, channels1, channels1);
+end
+
+function diff_channel!(dat::Union{ContinuousData,ErpData}, channels1, channels2, difference_label)
+  diff_channel!(dat, [channels1], [channels2], difference_label);
+end
+
+function diff_channel!(dat::EpochData, channels1::Vector, channels2::Vector, difference_label)
+  for epoch in eachindex(dat.data)
+    diff_channel!(dat.data[epoch], channels1, channels2, difference_label);
+  end
+end
+
+function diff_channel!(dat::EpochData, channels1, channels2, difference_label)
+  diff_channel!(dat, [channels1], [channels2], difference_label);
+end
+
+
+function test_diff_channel()
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+
+  diff_channel!(dat, :Fp1, :Fp2, :test)
+  diff_channel!(dat, [:Fp1], [:Fp2], :test)
+  diff_channel!(dat, "Fp1", "Fp2", :test)
+  diff_channel!(dat, ["Fp1"], ["Fp2"], :test)
+
+end
+
+
+diff_channel!(epochs, :Fp1, :Fp2, :test)
+diff_channel!(dat, :Fp1, :Fp1, "diff")
+diff_channel!(dat, "Fp1", "Fp1", "diff")
+diff_channel!(dat, [:Fp1], [:Fp1], "diff")
+diff_channel!(dat, ["Fp1"], ["Fp1"], "diff")
+diff_channel!(dat, [:Fp1, :Fp2], [:Fp1, :Fp2], "diff")
+
+
+
+
+
+
+
+
 
 function test_analysis()
   for subject in 3:4
@@ -719,9 +480,6 @@ function test_analysis()
       filter_data!(dat, "hp", 1, 2)
       epochs = extract_epochs(dat, condition, -0.5, 2)
       erp = average_epochs(epochs)
-      if subject == 3
-        erp.layout.label[1] = "test"
-      end
       save_object("$(subject)_$(condition)_epochs.jld2", epochs)
       save_object("$(subject)_$(condition)_erp.jld2", erp)
     end
@@ -730,11 +488,28 @@ end
 
 @time test_analysis()
 
-t1 = load_object("3_1_erp.jld2")
-t2 = load_object("4_1_erp.jld2")
+
+function check_files_exist(subjects, conditions, filetype)
+  problem = false
+  for subject in subjects
+    for condition in conditions
+      fname = "$(subject)_$(condition)_$(filetype).jld2"
+      if !isfile(fname)
+        println("File: $(fname) does not exist")
+        problem = true
+      end
+    end 
+  end
+  return problem
+end
 
 
 function grand_average_erps(subjects, conditions)
+
+  file_problem = check_files_exist(subjects, conditions, "erp");
+  if file_problem
+    return
+  end
 
   sample_rate = nothing
   layout = nothing
