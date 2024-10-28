@@ -140,12 +140,181 @@ function channel_number_to_channel_label(channel_labels, channel_numbers::Vector
   return channel_labels[channel_numbers]
 end
 
-function polar2cartXY(layout::DataFrame)
+
+function polar_to_cartesian_xy!(layout::DataFrame; radius=1)
   inc = layout[!, :inc] .* (pi / 180)
   azi = layout[!, :azi] .* (pi / 180)
-  layout[!, "X2"] = inc .* cos.(azi)
-  layout[!, "Y2"] = inc .* sin.(azi)
+  layout[!, "x2"] = inc .* cos.(azi) .* radius
+  layout[!, "y2"] = inc .* sin.(azi) .* radius
 end
+polar_to_cartesian_xy!(dat.layout)
+head_shape_2d(dat.layout, linewidth=15, markersize=20, fontsize=20)
+
+function polar_to_cartesian_xyz!(layout::DataFrame; radius=2)
+  inc = layout[!, :inc] .* (pi / 180)
+  azi = layout[!, :azi] .* (pi / 180)
+  layout[!, "x3"] = radius .* sin.(inc) .* cos.(azi)
+  layout[!, "y3"] = radius .* sin.(inc) .* sin.(azi)
+  layout[!, "z3"] = radius .* cos.(inc)
+end
+polar_to_cartesian_xyz!(dat.layout)
+head_shape_3d(dat.layout, linewidth=15, markersize=20, fontsize=20)
+
+
+function calculate_distance_xy(x1, y1, x2, y2)
+  return sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)))
+end
+
+
+function head_shape_2d(f, ax, layout; radius=2.1, linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0)
+  # head shape
+  arc!(ax, Point2f(0), radius, -π, π, color=:black, linewidth=linewidth) # head
+  arc!(Point2f(radius, 0), radius / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
+  arc!(Point2f(-radius, 0), -radius / 7, π / 2, -π / 2, color=:black, linewidth=linewidth) # ear left
+  lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 2, color=:black, linewidth=linewidth) # nose
+
+  # points
+  if plot_points
+    scatter!(ax, layout[!, :x2], layout[!, :y2], marker=:circle, markersize=markersize, color=:black)
+  end
+
+  if plot_labels
+    foreach(i -> text!(ax, fontsize=fontsize, position=(layout[!, :x2][i] + label_x_offset, layout[!, :y2][i] + label_y_offset), layout.label[i]), 1:nrow(layout))
+  end
+
+  # hide some plot stuff
+  hidexdecorations!(ax; label=true, ticklabels=true, ticks=true, grid=true, minorgrid=true, minorticks=true)
+  hideydecorations!(ax; label=true, ticklabels=true, ticks=true, grid=true, minorgrid=true, minorticks=true)
+  hidespines!(ax, :t, :r, :l, :b)
+
+  return f
+
+end
+
+function head_shape_2d(layout; kwargs...)
+  f = Figure()
+  ax = GLMakie.Axis(f[1, 1])
+  head_shape_2d(f, ax, layout; kwargs...)
+end
+
+
+using FileIO
+brain = load(assetpath("/home/ian/Downloads/OBJ/Super Average Head.obj"))
+f = Figure()
+for (i, azimuth) in enumerate([0, 0.1, 0.2, 0.3, 0.4, 0.5])
+  ax = Axis3(f[fldmod1(i, 3)...], azimuth=azimuth * pi)
+  hidedecorations!(ax)  # hides ticks, grid and lables
+  hidespines!(ax)  # hid
+  clip_planes = [Plane3f(Point3f(0), Vec3f(0, 1, 0))]
+  mesh!(ax, brain, color=:grey, clip_planes=clip_planes)
+  wireframe!(ax, brain, clip_planes=clip_planes, color=:grey)
+  layout = dat.layout
+  scatter!(ax, (layout[!, :x3] ./ 25) .+ 0.01, (layout[!, :y3] ./ 25) .+ 0.35, layout[!, :z3] ./ 25, marker=:circle, markersize=markersize, color=:black)
+  foreach(i -> text!(ax, fontsize=fontsize / 2, position=((layout[!, :x3][i] / 25) + 0.01 + label_x_offset, (layout[!, :y3][i] / 25) + 0.35 + label_y_offset, (layout[!, :z3][i] / 25) + 0.01 + label_z_offset), layout.label[i]), 1:nrow(layout))
+end
+
+
+
+
+
+
+function head_shape_3d(f, ax, layout; radius=2.1, linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0, label_z_offset=0)
+
+  # points
+  if plot_points
+    scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3], marker=:circle, markersize=markersize, color=:black)
+  end
+
+  if plot_labels
+    foreach(i -> text!(ax, fontsize=fontsize, position=(layout[!, :x3][i] + label_x_offset, layout[!, :y3][i] + label_y_offset, layout[!, :z3][i] + label_z_offset), layout.label[i]), 1:nrow(layout))
+  end
+
+  # hide some plot stuff
+  hidedecorations!(ax)
+  hidespines!(ax)
+
+  return f
+
+end
+
+function head_shape_3d(layout; kwargs...)
+  f = Figure()
+  ax = GLMakie.Axis3(f[1, 1])
+  head_shape_3d(f, ax, layout; kwargs...)
+end
+
+
+
+
+
+
+
+function circle_mask!(dat, grid_scale)
+  for col in 1:size(dat)[1]
+    for row in 1:size(dat)[2]
+      xcentre = (grid_scale / 2) - col
+      ycenter = (grid_scale / 2) - row
+      if sqrt((xcentre^2 + ycenter^2)) > (grid_scale / 2)
+        dat[col, row] = NaN
+      end
+    end
+  end
+end
+
+
+
+function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
+
+  points = Matrix(dat.layout[!, [:X2, :Y2]])'
+  data = data_interpolation_topo(Vector(dat.data[1000, dat.layout.label]), points)
+
+  if isnothing(ylim)
+    ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
+  end
+
+  f = Figure()
+  ax = GLMakie.Axis(f[1, 1])
+  co = contourf!(range(-radius, radius, length=grid_scale), range(-radius, radius, length=grid_scale), data,
+    levels=100, colormap=:jet)
+  Colorbar(f[1, 2], co)
+
+  # head shape
+  head_shape(f, ax, dat.layout, plot_points=plot_points, plot_labels=plot_labels, label_x_offset=label_x_offset, label_y_offset=label_y_offset)
+
+  return f
+end
+
+
+
+
+
+polar2cartXY(dat.layout)
+plot_topoplot(dat, ylim=(-100, 100))
+
+
+
+
+
+
+
+function get_electrode_neighbours(layout, distance_criterion)
+  neighbour_dict = Dict()
+  for (idx_electrode1, label_electrode1) in enumerate(layout.label)
+    neighbour_dict[Symbol(label_electrode1)] = []
+    for (idx_electrode2, label_electrode2) in enumerate(layout.label)
+      if (idx_electrode1 == idx_electrode2)
+        continue
+      end
+      distance = calculate_distance_xy(layout.X2[idx_electrode1], layout.Y2[idx_electrode1], layout.X2[idx_electrode2], layout.Y2[idx_electrode2])
+      if distance <= distance_criterion
+        push!(neighbour_dict[Symbol(label_electrode1)], Symbol(label_electrode2))
+      end
+    end
+  end
+  return neighbour_dict
+end
+
+neighbours = get_electrode_neighbours(dat.layout, 35)
 
 
 ###############################################################
@@ -363,11 +532,11 @@ function correlation_matrix(dat)
 end
 
 function is_extreme_value(dat::DataFrame, columns, criterion)
-  return any(x->abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2) 
+  return any(x -> abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2)
 end
 
 function n_extreme_value(dat::DataFrame, columns, criterion)
-  return sum(x->abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2) 
+  return sum(x -> abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2)
 end
 
 # cond = 1
@@ -391,39 +560,39 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # channel difference
 function calculate_channel_difference(dat::DataFrame, channels1::Vector, channels2::Vector)
-  channels1 = sum([dat[!, c] for c in channels1]) / length(channels1);
-  channels2 = sum([dat[!, c] for c in channels2]) / length(channels2);
-  return channels1 .- channels2;
+  channels1 = sum([dat[!, c] for c in channels1]) / length(channels1)
+  channels2 = sum([dat[!, c] for c in channels2]) / length(channels2)
+  return channels1 .- channels2
 end
 
 function calculate_channel_difference(dat::DataFrame, channels1, channels2)
-  return calculate_channel_difference(dat, [channels1], [channels2]);
+  return calculate_channel_difference(dat, [channels1], [channels2])
 end
 
 function diff_channel!(dat::DataFrame, channels1::Vector, channels2::Vector, difference_label)
-  dat[:, difference_label] = calculate_channel_difference(dat, channels1, channels2);
+  dat[:, difference_label] = calculate_channel_difference(dat, channels1, channels2)
 end
 
 function diff_channel!(dat::DataFrame, channels1, channels2, difference_label)
-  diff_channel!(dat, [channels1], [channels2], difference_label);
+  diff_channel!(dat, [channels1], [channels2], difference_label)
 end
 
 function diff_channel!(dat::Union{ContinuousData,ErpData}, channels1::Vector, channels2::Vector, difference_label)
-  dat.data[:, difference_label] = calculate_channel_difference(dat.data, channels1, channels2);
+  dat.data[:, difference_label] = calculate_channel_difference(dat.data, channels1, channels2)
 end
 
 function diff_channel!(dat::Union{ContinuousData,ErpData}, channels1, channels2, difference_label)
-  diff_channel!(dat, [channels1], [channels2], difference_label);
+  diff_channel!(dat, [channels1], [channels2], difference_label)
 end
 
 function diff_channel!(dat::EpochData, channels1::Vector, channels2::Vector, difference_label)
   for epoch in eachindex(dat.data)
-    diff_channel!(dat.data[epoch], channels1, channels2, difference_label);
+    diff_channel!(dat.data[epoch], channels1, channels2, difference_label)
   end
 end
 
 function diff_channel!(dat::EpochData, channels1, channels2, difference_label)
-  diff_channel!(dat, [channels1], [channels2], difference_label);
+  diff_channel!(dat, [channels1], [channels2], difference_label)
 end
 
 
@@ -439,8 +608,8 @@ diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
 function detect_eog_onsets!(dat, criterion, channel_in, channel_out)
   step_size = div(dat.sample_rate, 20)
   eog_diff = diff(dat.data[!, channel_in][1:step_size:end])
-  eog_idx = findall(abs.(eog_diff) .>= criterion)  
-  eog_idx = eog_idx[(diff([0; eog_idx]) .> 2)] .* step_size
+  eog_idx = findall(abs.(eog_diff) .>= criterion)
+  eog_idx = eog_idx[(diff([0; eog_idx]).>2)] .* step_size
   dat.data[!, channel_out] .= false
   dat.data[eog_idx, channel_out] .= true
 end
@@ -450,7 +619,7 @@ detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 function test_plot_eog_detection(dat, xlim, channel, detected)
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
-  lines!(ax,dat.data.time[xlim], dat.data[!, channel][xlim])
+  lines!(ax, dat.data.time[xlim], dat.data[!, channel][xlim])
   vlines!(ax, dat.data.time[xlim][dat.data[!, detected][xlim]], color=:black)
   display(fig)
 end
@@ -494,7 +663,7 @@ function check_files_exist(subjects, conditions, filetype)
         println("File: $(fname) does not exist")
         problem = true
       end
-    end 
+    end
   end
   return problem
 end
@@ -502,7 +671,7 @@ end
 
 function grand_average_erps(subjects, conditions)
 
-  file_problem = check_files_exist(subjects, conditions, "erp");
+  file_problem = check_files_exist(subjects, conditions, "erp")
   if file_problem
     return
   end
