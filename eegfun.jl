@@ -362,12 +362,6 @@ function correlation_matrix(dat)
   return [dat.layout.label DataFrame(cor(Matrix(dat.data[!, dat.layout.label])), dat.layout.label)]
 end
 
-subject = 3
-dat = read_bdf("../Flank_C_$(subject).bdf")
-dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-filter_data!(dat, "hp", 1, 2)
-
-
 function is_extreme_value(dat::DataFrame, columns, criterion)
   return any(x->abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2) 
 end
@@ -375,16 +369,6 @@ end
 function n_extreme_value(dat::DataFrame, columns, criterion)
   return sum(x->abs.(x) .>= criterion, Matrix(dat[!, columns]), dims=2) 
 end
-
-
-
-
-
-
-
-
-
-
 
 # cond = 1
 # subject = 3
@@ -407,8 +391,8 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # channel difference
 function calculate_channel_difference(dat::DataFrame, channels1::Vector, channels2::Vector)
-  channels1 = sum([dat[!, c] for c in channels1]) / length(channels1)
-  channels2 = sum([dat[!, c] for c in channels2]) / length(channels2)
+  channels1 = sum([dat[!, c] for c in channels1]) / length(channels1);
+  channels2 = sum([dat[!, c] for c in channels2]) / length(channels2);
   return channels1 .- channels2;
 end
 
@@ -447,10 +431,10 @@ dat = read_bdf("../Flank_C_3.bdf")
 dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 filter_data!(dat, "hp", 1, 2)
 filter_data!(dat, "lp", 20, 6)
-
 # add in EOG channels
-diff_channel!(dat, "F9", "F10", "hEOG")
-diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG")
+
+diff_channel!(dat, "F9", "F10", "hEOG");
+diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
 
 function detect_eog_onsets!(dat, criterion, channel_in, channel_out)
   step_size = div(dat.sample_rate, 20)
@@ -470,42 +454,17 @@ function test_plot_eog_detection(dat, xlim, channel, detected)
   vlines!(ax, dat.data.time[xlim][dat.data[!, detected][xlim]], color=:black)
   display(fig)
 end
-test_plot_eog_detection(dat, 1:10000, "vEOG", "is_vEOG")
-test_plot_eog_detection(dat, 1:10000, "hEOG", "is_hEOG")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-lines(dat.data.time[1:15000], dat.data.vEOG[1:15000])
-vlines!(dat.data.time[1:15000][dat.data.veog[1:15000]], color=:black)
-
-
-
-
-
-veog_idx = findall(diff(veog_idx) .> 2) * veog_step_size
-
+test_plot_eog_detection(dat, 1000:14000, "vEOG", "is_vEOG")
+test_plot_eog_detection(dat, 1000:4000, "hEOG", "is_hEOG")
 
 
 function test_diff_channel()
   dat = read_bdf("../Flank_C_3.bdf")
   dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-
   diff_channel!(dat, :Fp1, :Fp2, :test)
   diff_channel!(dat, [:Fp1], [:Fp2], :test)
   diff_channel!(dat, "Fp1", "Fp2", :test)
   diff_channel!(dat, ["Fp1"], ["Fp2"], :test)
-
 end
 
 function test_analysis()
@@ -662,7 +621,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   function draw(ax::Axis, xrange::Observable)
     for col in names(dat.data)
       if col in channel_labels
-        lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]))
+        lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]), color=:black)
       end
     end
   end
@@ -683,6 +642,7 @@ end
 dat = read_bdf("../Flank_C_3.bdf")
 dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 baseline!(dat, dat.layout.label, [])
+filter_data!(dat, "hp", 1, 2)
 plot_databrowser(dat)
 
 
