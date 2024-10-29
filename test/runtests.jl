@@ -330,9 +330,20 @@ function test_baseline()
 
 end
 
-# test_filter()
-# test_rereference()
-# test_baseline()
+
+function test_diff_channel()
+  dat = read_bdf("../Flank_C_3.bdf")
+  dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+  diff_channel!(dat, :Fp1, :Fp2, :test)
+  diff_channel!(dat, [:Fp1], [:Fp2], :test)
+  diff_channel!(dat, "Fp1", "Fp2", :test)
+  diff_channel!(dat, ["Fp1"], ["Fp2"], :test)
+end
+
+test_filter()
+test_rereference()
+test_baseline()
+test_diff_channel()
 
 
 
