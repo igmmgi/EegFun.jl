@@ -141,7 +141,8 @@ function channel_number_to_channel_label(channel_labels, channel_numbers::Vector
 end
 
 
-function polar_to_cartesian_xy!(layout::DataFrame; radius=1)
+function polar_to_cartesian_xy!(layout::DataFrame)
+  radius = 88 # mm
   inc = layout[!, :inc] .* (pi / 180)
   azi = layout[!, :azi] .* (pi / 180)
   layout[!, "x2"] = inc .* cos.(azi) .* radius
@@ -150,7 +151,8 @@ end
 polar_to_cartesian_xy!(dat.layout)
 head_shape_2d(dat.layout, linewidth=15, markersize=20, fontsize=20)
 
-function polar_to_cartesian_xyz!(layout::DataFrame; radius=2)
+function polar_to_cartesian_xyz!(layout::DataFrame)
+  radius = 88 # mm
   inc = layout[!, :inc] .* (pi / 180)
   azi = layout[!, :azi] .* (pi / 180)
   layout[!, "x3"] = radius .* sin.(inc) .* cos.(azi)
@@ -165,8 +167,16 @@ function calculate_distance_xy(x1, y1, x2, y2)
   return sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)))
 end
 
+function calculate_distance_xyz(x1, y1, z1, x2, y2, z2)
+  return sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)) + ((z1 - z2) * (z1 - z2)))
+end
 
-function head_shape_2d(f, ax, layout; radius=2.1, linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0)
+
+
+function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0)
+
+  radius = 88 # mm
+
   # head shape
   arc!(ax, Point2f(0), radius, -π, π, color=:black, linewidth=linewidth) # head
   arc!(Point2f(radius, 0), radius / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
@@ -213,13 +223,10 @@ for (i, azimuth) in enumerate([0, 0.1, 0.2, 0.3, 0.4, 0.5])
   foreach(i -> text!(ax, fontsize=fontsize / 2, position=((layout[!, :x3][i] / 25) + 0.01 + label_x_offset, (layout[!, :y3][i] / 25) + 0.35 + label_y_offset, (layout[!, :z3][i] / 25) + 0.01 + label_z_offset), layout.label[i]), 1:nrow(layout))
 end
 
+function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0, label_z_offset=0)
 
-
-
-
-
-function head_shape_3d(f, ax, layout; radius=2.1, linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0, label_z_offset=0)
-
+  radius = 88 # mm
+  
   # points
   if plot_points
     scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3], marker=:circle, markersize=markersize, color=:black)
@@ -243,12 +250,6 @@ function head_shape_3d(layout; kwargs...)
   head_shape_3d(f, ax, layout; kwargs...)
 end
 
-
-
-
-
-
-
 function circle_mask!(dat, grid_scale)
   for col in 1:size(dat)[1]
     for row in 1:size(dat)[2]
@@ -263,7 +264,9 @@ end
 
 
 
-function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
+function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
+
+  radius = 88 # mm
 
   points = Matrix(dat.layout[!, [:X2, :Y2]])'
   data = data_interpolation_topo(Vector(dat.data[1000, dat.layout.label]), points)
@@ -285,18 +288,6 @@ function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300, plot_point
 end
 
 
-
-
-
-polar2cartXY(dat.layout)
-plot_topoplot(dat, ylim=(-100, 100))
-
-
-
-
-
-
-
 function get_electrode_neighbours(layout, distance_criterion)
   neighbour_dict = Dict()
   for (idx_electrode1, label_electrode1) in enumerate(layout.label)
@@ -314,7 +305,6 @@ function get_electrode_neighbours(layout, distance_criterion)
   return neighbour_dict
 end
 
-neighbours = get_electrode_neighbours(dat.layout, 35)
 
 
 ###############################################################
@@ -390,9 +380,6 @@ function rereference!(dat::DataFrame, channel_labels, reference_channel::Union{V
   reference = reduce(+, eachcol(dat[:, reference_channel])) ./ length(reference_channel)
   _apply_rereference!(dat, channel_labels, reference)
 end
-
-
-
 
 function rereference!(dat::Union{ContinuousData,ErpData}, channel_labels, reference_channel)
   rereference!(dat.data, channel_labels, reference_channel)
@@ -525,7 +512,6 @@ function baseline(dat::EpochData, baseline_interval)
   baseline!(dat_out, dat_out.layout.label, baseline_interval)
   return dat_out
 end
-
 
 function correlation_matrix(dat)
   return [dat.layout.label DataFrame(cor(Matrix(dat.data[!, dat.layout.label])), dat.layout.label)]
@@ -759,7 +745,6 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   event_lines = vlines!(event_data, color=:black, linewidth=2)
   connect!(event_lines.visible, toggles[1].active)
 
-
   function step_back(ax::Axis, xrange::Observable)
     xrange.val[1] - 100 < 1 && return
     xrange[] = xrange.val .- 100
@@ -955,7 +940,9 @@ plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend=false)
 ########################################################################
 
 
-function data_interpolation_topo(dat, points; radius=2.5, grid_scale=300)
+function data_interpolation_topo(dat, points; grid_scale=300)
+
+  radius = 88 # mm
   x = y = range(-radius, radius, length=grid_scale)
   X, Y = repeat(x', grid_scale)[:], repeat(y', grid_scale)[:]
   grid = [X Y]'
@@ -966,56 +953,10 @@ function data_interpolation_topo(dat, points; radius=2.5, grid_scale=300)
   return dat
 end
 
-function head_shape(f, ax, layout; radius=2.5, linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0)
-  # head shape
-  arc!(ax, Point2f(0), radius, -π, π, color=:black, linewidth=linewidth) # head
-  arc!(Point2f(radius, 0), radius / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
-  arc!(Point2f(-radius, 0), -radius / 7, π / 2, -π / 2, color=:black, linewidth=linewidth) # ear left
-  lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 2, color=:black, linewidth=linewidth) # nose
 
-  # points
-  if plot_points
-    scatter!(ax, layout[!, :X2], layout[!, :Y2], marker=:circle, markersize=markersize, color=:black)
-  end
+function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
 
-  if plot_labels
-    foreach(i -> text!(ax, fontsize=fontsize, position=(layout[!, :X2][i] + label_x_offset, layout[!, :Y2][i] + label_y_offset), layout.label[i]), 1:nrow(layout))
-  end
-
-  # hide some plot stuff
-  hidexdecorations!(ax; label=true, ticklabels=true, ticks=true, grid=true, minorgrid=true, minorticks=true)
-  hideydecorations!(ax; label=true, ticklabels=true, ticks=true, grid=true, minorgrid=true, minorticks=true)
-  hidespines!(ax, :t, :r, :l, :b)
-
-  return f
-
-end
-
-function head_shape(layout; kwargs...)
-  f = Figure()
-  ax = GLMakie.Axis(f[1, 1])
-  head_shape(f, ax, layout; kwargs...)
-end
-
-
-polar2cartXY(dat.layout)
-head_shape(dat.layout, linewidth=15, markersize=30, fontsize=50)
-
-function circle_mask!(dat, grid_scale)
-  for col in 1:size(dat)[1]
-    for row in 1:size(dat)[2]
-      xcentre = (grid_scale / 2) - col
-      ycenter = (grid_scale / 2) - row
-      if sqrt((xcentre^2 + ycenter^2)) > (grid_scale / 2)
-        dat[col, row] = NaN
-      end
-    end
-  end
-end
-
-
-
-function plot_topoplot(dat; ylim=nothing, radius=2.5, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
+  radius = 88 # mm
 
   points = Matrix(dat.layout[!, [:X2, :Y2]])'
   data = data_interpolation_topo(Vector(dat.data[1000, dat.layout.label]), points)
