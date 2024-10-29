@@ -6,6 +6,7 @@ using GLMakie
 using JLD2
 using LinearAlgebra
 using MAT
+using OrderedCollections
 using Printf
 using Random
 using ScatteredInterpolation
@@ -49,6 +50,8 @@ function Base.show(io::IO, dat::ErpData)
   println(io, "Labels: ", join(names(dat.data), ", "))
   println(io, "Sample Rate: ", dat.sample_rate)
 end
+
+
 
 ########################################################################
 function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)
@@ -100,6 +103,24 @@ find_idx_start_end(time, start_time, end_time) = findmin(abs.(time .- start_time
 find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
 
 
+datarange(x) = -(-(extrema(x)...))
+
+function channel_summary(dat, channel_labels)
+  out_stats =  OrderedDict(OrderedDict())
+  for col in names(dat.data)
+    if col in channel_labels
+      out_stats[Symbol(col)] = OrderedDict(:min => minimum(dat.data[!, col]), 
+                                           :max => maximum(dat.data[!, col]), 
+                                           :range => datarange(dat.data[!, col]), 
+                                           :std => std(dat.data[!, col]),
+                                           :mad => std(dat.data[!, col]))
+    end
+  end
+  return out_stats
+end
+channel_summary(dat, dat.layout.label)
+
+
 function extract_epochs(dat::ContinuousData, trigger_sequence, start_time, end_time; zero_position=1)
 
   # find t==0 positions
@@ -147,9 +168,9 @@ function polar_to_cartesian_xy!(layout::DataFrame)
   azi = layout[!, :azi] .* (pi / 180)
   layout[!, "x2"] = inc .* cos.(azi) .* radius
   layout[!, "y2"] = inc .* sin.(azi) .* radius
+  return
 end
 polar_to_cartesian_xy!(dat.layout)
-head_shape_2d(dat.layout, linewidth=15, markersize=20, fontsize=20)
 
 function polar_to_cartesian_xyz!(layout::DataFrame)
   radius = 88 # mm
@@ -158,10 +179,9 @@ function polar_to_cartesian_xyz!(layout::DataFrame)
   layout[!, "x3"] = radius .* sin.(inc) .* cos.(azi)
   layout[!, "y3"] = radius .* sin.(inc) .* sin.(azi)
   layout[!, "z3"] = radius .* cos.(inc)
+  return
 end
 polar_to_cartesian_xyz!(dat.layout)
-head_shape_3d(dat.layout, linewidth=15, markersize=20, fontsize=20)
-
 
 function calculate_distance_xy(x1, y1, x2, y2)
   return sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)))
@@ -178,10 +198,10 @@ function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels
   radius = 88 # mm
 
   # head shape
-  arc!(ax, Point2f(0), radius, -π, π, color=:black, linewidth=linewidth) # head
-  arc!(Point2f(radius, 0), radius / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
-  arc!(Point2f(-radius, 0), -radius / 7, π / 2, -π / 2, color=:black, linewidth=linewidth) # ear left
-  lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 2, color=:black, linewidth=linewidth) # nose
+  arc!(ax, Point2f(0), radius * 2, -π, π, color=:black, linewidth=linewidth) # head
+  arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
+  arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2, color=:black, linewidth=linewidth) # ear left
+  lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4, color=:black, linewidth=linewidth) # nose
 
   # points
   if plot_points
@@ -208,25 +228,25 @@ function head_shape_2d(layout; kwargs...)
 end
 
 
-using FileIO
-brain = load(assetpath("/home/ian/Downloads/OBJ/Super Average Head.obj"))
-f = Figure()
-for (i, azimuth) in enumerate([0, 0.1, 0.2, 0.3, 0.4, 0.5])
-  ax = Axis3(f[fldmod1(i, 3)...], azimuth=azimuth * pi)
-  hidedecorations!(ax)  # hides ticks, grid and lables
-  hidespines!(ax)  # hid
-  clip_planes = [Plane3f(Point3f(0), Vec3f(0, 1, 0))]
-  mesh!(ax, brain, color=:grey, clip_planes=clip_planes)
-  wireframe!(ax, brain, clip_planes=clip_planes, color=:grey)
-  layout = dat.layout
-  scatter!(ax, (layout[!, :x3] ./ 25) .+ 0.01, (layout[!, :y3] ./ 25) .+ 0.35, layout[!, :z3] ./ 25, marker=:circle, markersize=markersize, color=:black)
-  foreach(i -> text!(ax, fontsize=fontsize / 2, position=((layout[!, :x3][i] / 25) + 0.01 + label_x_offset, (layout[!, :y3][i] / 25) + 0.35 + label_y_offset, (layout[!, :z3][i] / 25) + 0.01 + label_z_offset), layout.label[i]), 1:nrow(layout))
-end
+# using FileIO
+# brain = load(assetpath("/home/ian/Downloads/OBJ/Super Average Head.obj"))
+# f = Figure()
+# for (i, azimuth) in enumerate([0, 0.1, 0.2, 0.3, 0.4, 0.5])
+#   ax = Axis3(f[fldmod1(i, 3)...], azimuth=azimuth * pi)
+#   hidedecorations!(ax)  # hides ticks, grid and lables
+#   hidespines!(ax)  # hid
+#   clip_planes = [Plane3f(Point3f(0), Vec3f(0, 1, 0))]
+#   mesh!(ax, brain, color=:grey, clip_planes=clip_planes)
+#   wireframe!(ax, brain, clip_planes=clip_planes, color=:grey)
+#   layout = dat.layout
+#   scatter!(ax, (layout[!, :x3] ./ 25) .+ 0.01, (layout[!, :y3] ./ 25) .+ 0.35, layout[!, :z3] ./ 25, marker=:circle, markersize=markersize, color=:black)
+#   foreach(i -> text!(ax, fontsize=fontsize / 2, position=((layout[!, :x3][i] / 25) + 0.01 + label_x_offset, (layout[!, :y3][i] / 25) + 0.35 + label_y_offset, (layout[!, :z3][i] / 25) + 0.01 + label_z_offset), layout.label[i]), 1:nrow(layout))
+# end
 
 function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0, label_z_offset=0)
 
   radius = 88 # mm
-  
+
   # points
   if plot_points
     scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3], marker=:circle, markersize=markersize, color=:black)
@@ -268,7 +288,7 @@ function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot
 
   radius = 88 # mm
 
-  points = Matrix(dat.layout[!, [:X2, :Y2]])'
+  points = Matrix(dat.layout[!, [:x2, :y2]])'
   data = data_interpolation_topo(Vector(dat.data[1000, dat.layout.label]), points)
 
   if isnothing(ylim)
@@ -277,26 +297,25 @@ function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot
 
   f = Figure()
   ax = GLMakie.Axis(f[1, 1])
-  co = contourf!(range(-radius, radius, length=grid_scale), range(-radius, radius, length=grid_scale), data,
-    levels=100, colormap=:jet)
+  co = contourf!(range(-radius, radius, length=grid_scale), range(-radius, radius, length=grid_scale), data, levels=100, colormap=:jet)
   Colorbar(f[1, 2], co)
 
   # head shape
-  head_shape(f, ax, dat.layout, plot_points=plot_points, plot_labels=plot_labels, label_x_offset=label_x_offset, label_y_offset=label_y_offset)
+  head_shape_2d(f, ax, dat.layout, plot_points=plot_points, plot_labels=plot_labels, label_x_offset=label_x_offset, label_y_offset=label_y_offset)
 
   return f
 end
 
 
-function get_electrode_neighbours(layout, distance_criterion)
-  neighbour_dict = Dict()
+function get_electrode_neighbours_xy(layout, distance_criterion)
+  neighbour_dict = OrderedDict()
   for (idx_electrode1, label_electrode1) in enumerate(layout.label)
     neighbour_dict[Symbol(label_electrode1)] = []
     for (idx_electrode2, label_electrode2) in enumerate(layout.label)
       if (idx_electrode1 == idx_electrode2)
         continue
       end
-      distance = calculate_distance_xy(layout.X2[idx_electrode1], layout.Y2[idx_electrode1], layout.X2[idx_electrode2], layout.Y2[idx_electrode2])
+      distance = calculate_distance_xy(layout.x2[idx_electrode1], layout.y2[idx_electrode1], layout.x2[idx_electrode2], layout.y2[idx_electrode2])
       if distance <= distance_criterion
         push!(neighbour_dict[Symbol(label_electrode1)], Symbol(label_electrode2))
       end
@@ -304,6 +323,27 @@ function get_electrode_neighbours(layout, distance_criterion)
   end
   return neighbour_dict
 end
+head_shape_2d(dat.layout)
+get_electrode_neighbours_xy(dat.layout, 40)
+
+function get_electrode_neighbours_xyz(layout, distance_criterion)
+  neighbour_dict = OrderedDict()
+  for (idx_electrode1, label_electrode1) in enumerate(layout.label)
+    neighbour_dict[Symbol(label_electrode1)] = []
+    for (idx_electrode2, label_electrode2) in enumerate(layout.label)
+      if (idx_electrode1 == idx_electrode2)
+        continue
+      end
+      distance = calculate_distance_xyz(layout.x3[idx_electrode1], layout.y3[idx_electrode1], layout.z3[idx_electrode1], layout.x2[idx_electrode2], layout.y2[idx_electrode2], layout.z3[idx_electrode2])
+      if distance <= distance_criterion
+        push!(neighbour_dict[Symbol(label_electrode1)], Symbol(label_electrode2))
+      end
+    end
+  end
+  return neighbour_dict
+end
+head_shape_3d(dat.layout)
+get_electrode_neighbours_xyz(dat.layout, 40)
 
 
 
