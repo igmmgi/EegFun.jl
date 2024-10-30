@@ -44,5 +44,10 @@ function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::Str
   return ContinuousData(create_eeg_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1])
 end
 
+function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)
+  return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1])
+end
+
+
 
 

@@ -16,41 +16,55 @@ include("types.jl")
 include("analyse.jl")
 include("baseline.jl")
 include("channel_difference.jl")
+include("epochs.jl")
 include("filter.jl")
 include("layout.jl")
 include("rereference.jl")
 include("topo.jl")
+include("plot.jl")
 include("utils.jl")
 
 
+# basic layouts
+layout = read_layout("/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+head_shape_2d(layout)
+head_shape_3d(layout)
 
-# using FileIO
-# brain = load(assetpath("/home/ian/Downloads/OBJ/Super Average Head.obj"))
-# f = Figure()
-# for (i, azimuth) in enumerate([0, 0.1, 0.2, 0.3, 0.4, 0.5])
-#   ax = Axis3(f[fldmod1(i, 3)...], azimuth=azimuth * pi)
-#   hidedecorations!(ax)  # hides ticks, grid and lables
-#   hidespines!(ax)  # hid
-#   clip_planes = [Plane3f(Point3f(0), Vec3f(0, 1, 0))]
-#   mesh!(ax, brain, color=:grey, clip_planes=clip_planes)
-#   wireframe!(ax, brain, clip_planes=clip_planes, color=:grey)
-#   layout = dat.layout
-#   scatter!(ax, (layout[!, :x3] ./ 25) .+ 0.01, (layout[!, :y3] ./ 25) .+ 0.35, layout[!, :z3] ./ 25, marker=:circle, markersize=markersize, color=:black)
-#   foreach(i -> text!(ax, fontsize=fontsize / 2, position=((layout[!, :x3][i] / 25) + 0.01 + label_x_offset, (layout[!, :y3][i] / 25) + 0.35 + label_y_offset, (layout[!, :z3][i] / 25) + 0.01 + label_z_offset), layout.label[i]), 1:nrow(layout))
-# end
+# read bdf file
+subject = 3
+dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
+# dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+dat = create_eeg_dataframe(dat, layout)
+
+# basic bdf plot
+plot_databrowser(dat)
+filter_data!(dat, "hp", 1, 2)
+
+# extract epochs
+epochs = extract_epochs(dat, 1, -0.5, 2)
+plot_databrowser(epochs)
+plot_epoch(epochs, [1], ["PO7", "PO8"])
+plot_epoch(epochs, collect(1:10), :PO7)
+
+# average epochs
+erp = average_epochs(epochs)
+plot_databrowser(erp)
+
+
+save_object("$(subject)_$(cond)_epochs.jld2", epochs)
+save_object("$(subject)_$(cond)_erp.jld2", erp)
+
+
+
+colmeans(df, cols) = reduce(+, eachcol(df[!, cols])) ./ length(cols)
 
 
 
 
+reduce(+, eachcol(dat.data[trial][!, channel])) ./ length(channel)
 
-# cond = 1
-# subject = 3
-# @time dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
-# @time dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-# @time epochs = extract_epochs(dat, 1, -0.5, 2)
-# @time erp = average_epochs(epochs)
-# @time save_object("$(subject)_$(cond)_epochs.jld2", epochs)
-# @time save_object("$(subject)_$(cond)_erp.jld2", erp)
+
+
 
 subject = 3
 cond = 1
