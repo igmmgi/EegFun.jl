@@ -178,6 +178,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
 
 end
 
+
+
 function plot_databrowser(dat::ContinuousData)
   plot_databrowser(dat, dat.layout.label)
 end
@@ -249,7 +251,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Union{Vector{<:Abstrac
   function draw(ax::Axis, xrange::Observable)
     for col in names(dat.data[trial.val])
       if col in channel_labels
-        lines!(ax, @lift(dat.data[$trial][$xrange, 1]), @lift(dat.data[$trial][$xrange, col]))
+        lines!(ax, @lift(dat.data[$trial][$xrange, 1]), @lift(dat.data[$trial][$xrange, col]), color=:black)
       end
     end
   end
@@ -271,43 +273,31 @@ end
 
 # #################################################################
 # plot epoch: Epoched Data
-function plot_epoch(dat::EpochData, trial::Int, channel; xlim=nothing, ylim=nothing, legend=true, xlabel="Time (S)", ylabel="mV")
+function plot_epochs(dat::EpochData, channels::Union{Vector{<:AbstractString},Vector{Symbol}}; xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV")
 
   f = Figure()
   ax = GLMakie.Axis(f[1, 1])
 
-  GLMakie.lines!(dat.data[trial][!, :time], dat.data[trial][!, channel], label=string(channel))
+  avg_data = zeros(nrow(dat.data[1]))
+  for trial in eachindex(dat.data)
+    trial_data = colmeans(dat.data[trial], channels)
+    avg_data .+= trial_data
+    GLMakie.lines!(dat.data[trial][!, :time], trial_data, color=:grey)
+  end
+  avg_data ./= length(dat.data)
+  GLMakie.lines!(dat.data[1][!, :time], avg_data, color=:black)
 
   !isnothing(xlim) && xlims!(ax, xlim)
   !isnothing(ylim) && xlims!(ax, ylim)
-  legend && axislegend()
-  ax.xlabel = xlabel
-  ax.ylabel = ylabel
-
-  return f
-
-end
-
-function plot_epoch(dat::EpochData, trials, channels; avg_channels=false, xlim=nothing, ylim=nothing, legend=true, xlabel="Time (S)", ylabel="mV")
-
-  f = Figure()
-  ax = GLMakie.Axis(f[1, 1])
-
-  if avg_channels
-
-  end
-  for trial in trials
-    for channel in channels
-      GLMakie.lines!(dat.data[trial][!, :time], dat.data[trial][!, channel], label=string(channel))
-    end
-  end
-
-  !isnothing(xlim) && xlims!(ax, xlim)
-  !isnothing(ylim) && xlims!(ax, ylim)
-  legend && axislegend()
   ax.xlabel = xlabel
   ax.ylabel = ylabel
 
   return f
 end
+
+function plot_epochs(dat::EpochData, channels::Union{AbstractString,Symbol}; xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV")
+  plot_epochs(dat::EpochData, [channels]; xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV")
+end
+
+
 
