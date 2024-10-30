@@ -32,22 +32,29 @@ head_shape_3d(layout)
 
 # read bdf file
 subject = 3
-dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
+dat = read_bdf("../Flank_C_$(subject).bdf")
 # dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 dat = create_eeg_dataframe(dat, layout)
 
 # basic bdf plot
 plot_databrowser(dat)
-filter_data!(dat, "hp", 1, 2)
+filter_data!(dat, "hp", 0.1, 2)
+filter_data!(dat, "lp", 30, 6)
 
 # extract epochs
 epochs = extract_epochs(dat, 1, -0.5, 2)
+
+# plot epochs
 plot_databrowser(epochs)
-plot_epoch(epochs, [1], ["PO7", "PO8"])
-plot_epoch(epochs, collect(1:10), :PO7)
+plot_epochs(epochs, ["PO7", "PO8"])
+plot_epochs(epochs, [:PO7])
 
 # average epochs
 erp = average_epochs(epochs)
+
+
+
+
 plot_databrowser(erp)
 
 
@@ -55,32 +62,6 @@ save_object("$(subject)_$(cond)_epochs.jld2", epochs)
 save_object("$(subject)_$(cond)_erp.jld2", erp)
 
 
-
-colmeans(df, cols) = reduce(+, eachcol(df[!, cols])) ./ length(cols)
-
-
-
-
-reduce(+, eachcol(dat.data[trial][!, channel])) ./ length(channel)
-
-
-
-
-subject = 3
-cond = 1
-dat = read_bdf("../Flank_C_$(subject).bdf")
-dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-epochs = extract_epochs(dat, 1, -0.5, 2)
-# erp = average_epochs(epochs)
-# save_object("$(subject)_$(cond)_epochs.jld2", epochs)
-# save_object("$(subject)_$(cond)_erp.jld2", erp)
-
-
-dat = read_bdf("../Flank_C_3.bdf")
-dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-filter_data!(dat, "hp", 1, 2)
-filter_data!(dat, "lp", 20, 6)
-# add in EOG channels
 
 diff_channel!(dat, "F9", "F10", "hEOG");
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
