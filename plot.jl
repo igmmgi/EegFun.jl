@@ -1,12 +1,15 @@
 using GLMakie
 
-# #######################################
+#########################################
 # 2D head shape
-function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0)
+function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=20, markersize=12, label_x_offset=0, label_y_offset=0)
 
-  radius = 88 # mm
+  if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+    polar_to_cartesian_xy!(layout)
+  end
 
   # head shape
+  radius = 88 # mm
   arc!(ax, Point2f(0), radius * 2, -π, π, color=:black, linewidth=linewidth) # head
   arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
   arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2, color=:black, linewidth=linewidth) # ear left
@@ -18,7 +21,9 @@ function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels
   end
 
   if plot_labels
-    foreach(i -> text!(ax, fontsize=fontsize, position=(layout[!, :x2][i] + label_x_offset, layout[!, :y2][i] + label_y_offset), layout.label[i]), 1:nrow(layout))
+    for label in eachrow(layout)
+      text!(ax, fontsize=fontsize, position=(label.x2 + label_x_offset, label.y2 + label_y_offset), label.label)
+    end
   end
 
   # hide some plot stuff
@@ -37,11 +42,13 @@ function head_shape_2d(layout; kwargs...)
 end
 
 
-# #######################################
-# 2D head shape
-function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=40, markersize=10, label_x_offset=0, label_y_offset=0, label_z_offset=0)
+#########################################
+# 3D head shape
+function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=20, markersize=12, label_x_offset=0, label_y_offset=0, label_z_offset=0)
 
-  radius = 88 # mm
+  if (:x3 ∉ names(layout) || :y3 ∉ names(layout) || :z3 ∉ names(layout))
+    polar_to_cartesian_xyz!(layout)
+  end
 
   # points
   if plot_points
@@ -49,7 +56,9 @@ function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels
   end
 
   if plot_labels
-    foreach(i -> text!(ax, fontsize=fontsize, position=(layout[!, :x3][i] + label_x_offset, layout[!, :y3][i] + label_y_offset, layout[!, :z3][i] + label_z_offset), layout.label[i]), 1:nrow(layout))
+    for label in eachrow(layout)
+      text!(ax, fontsize=fontsize, position=(label.x3 + label_x_offset, label.y3 + label_y_offset, label.z3 + label_z_offset), label.label)
+    end
   end
 
   # hide some plot stuff
@@ -66,6 +75,8 @@ function head_shape_3d(layout; kwargs...)
   head_shape_3d(f, ax, layout; kwargs...)
 end
 
+
+##########################################
 # 2D topographic plot
 function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
 
@@ -256,6 +267,10 @@ function plot_databrowser(dat::EpochData, channel_labels::Union{<:AbstractString
   plot_databrowser(dat, [channel_labels])
 end
 
+
+
+# #################################################################
+# plot epoch: Epoched Data
 function plot_epoch(dat::EpochData, trial::Int, channel; xlim=nothing, ylim=nothing, legend=true, xlabel="Time (S)", ylabel="mV")
 
   f = Figure()
@@ -273,11 +288,14 @@ function plot_epoch(dat::EpochData, trial::Int, channel; xlim=nothing, ylim=noth
 
 end
 
-function plot_epoch(dat::EpochData, trials, channels; xlim=nothing, ylim=nothing, legend=true, xlabel="Time (S)", ylabel="mV")
+function plot_epoch(dat::EpochData, trials, channels; avg_channels=false, xlim=nothing, ylim=nothing, legend=true, xlabel="Time (S)", ylabel="mV")
 
   f = Figure()
   ax = GLMakie.Axis(f[1, 1])
 
+  if avg_channels
+
+  end
   for trial in trials
     for channel in channels
       GLMakie.lines!(dat.data[trial][!, :time], dat.data[trial][!, channel], label=string(channel))
