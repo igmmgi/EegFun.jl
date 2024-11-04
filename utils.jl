@@ -2,7 +2,7 @@
 function check_files_exist(conditions, filetype)
   problem = false
   for condition in conditions
-    fname = "$$(condition)_$(filetype).jld2"
+    fname = "$(condition)_$(filetype).jld2"
     if !isfile(fname)
       println("File: $(fname) does not exist")
       problem = true

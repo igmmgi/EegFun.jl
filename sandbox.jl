@@ -13,6 +13,8 @@ using ScatteredInterpolation
 using StatsBase
 
 include("types.jl")
+include("utils.jl")
+
 include("analyse.jl")
 include("baseline.jl")
 include("channel_difference.jl")
