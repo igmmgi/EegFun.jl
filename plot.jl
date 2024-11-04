@@ -134,9 +134,15 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   ax.ylabel = "Amplitude (mV)"
 
   # events
-  event_data = @lift(dat.data[$xrange, [:time, :events]].time[dat.data[$xrange, [:time, :events]].events.!=0])
-  event_lines = vlines!(event_data, color=:black, linewidth=2)
+  event_data_time = @lift(dat.data[$xrange, [:time, :events]].time[dat.data[$xrange, [:time, :events]].events.!=0])
+  event_data_trigger = @lift(dat.data[$xrange, [:time, :events]].events[dat.data[$xrange, [:time, :events]].events.!=0])
+
+  event_lines = vlines!(event_data_time, color=:grey, linewidth=2)
+  text_lines = text!(string.(event_data_trigger), position=event_data_time)
+
+  connect!(text_lines.visible, toggles[1].active)
   connect!(event_lines.visible, toggles[1].active)
+
 
   function step_back(ax::Axis, xrange::Observable)
     xrange.val[1] - 100 < 1 && return
@@ -146,6 +152,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   end
 
   function step_forward(ax::Axis, xmax, xrange::Observable)
+    println(event_data_time)
+    println(event_data_trigger)
     xrange.val[1] + 100 > xmax && return
     xrange[] = xrange.val .+ 100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])

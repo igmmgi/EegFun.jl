@@ -21,21 +21,20 @@ include("channel_difference.jl")
 include("epochs.jl")
 include("filter.jl")
 include("layout.jl")
+include("plot.jl")
 include("rereference.jl")
 include("topo.jl")
-include("plot.jl")
 include("utils.jl")
 
 
 # basic layouts
-layout = read_layout("/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+layout = read_layout("/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv");
 head_shape_2d(layout)
 head_shape_3d(layout)
 
 # read bdf file
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf")
-# dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 dat = create_eeg_dataframe(dat, layout)
 
 # basic bdf plot
