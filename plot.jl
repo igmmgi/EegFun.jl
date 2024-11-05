@@ -101,6 +101,7 @@ function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot
 
 end
 
+
 ##################################################################
 # Data Browser: Continuous Data
 function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:AbstractString},Vector{Symbol}})
@@ -108,7 +109,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
 
-  xrange = GLMakie.Observable(1:2000) # default xrange
+  xrange = GLMakie.Observable(1:2000)
+  triggers = @lift(findall(x -> x != 0, dat.data[$xrange, :].events))
   yrange = GLMakie.Observable(-1500:1500) # default yrange
 
   # toggle buttons
@@ -134,28 +136,43 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   ax.ylabel = "Amplitude (mV)"
 
   # events
-  event_data_time = @lift(dat.data[$xrange, [:time, :events]].time[dat.data[$xrange, [:time, :events]].events.!=0])
-  event_data_trigger = @lift(dat.data[$xrange, [:time, :events]].events[dat.data[$xrange, [:time, :events]].events.!=0])
-
-  event_lines = vlines!(event_data_time, color=:grey, linewidth=2)
-  text_lines = text!(string.(event_data_trigger), position=event_data_time)
-
-  connect!(text_lines.visible, toggles[1].active)
+  event_data_time = @lift(dat.data[$xrange[$triggers], [:time, :events]])
+  event_lines = vlines!(event_data_time.val.time, color=:grey, linewidth=2)
+  event_text = text!(string.(event_data_time.val.events), position=[(x, 1000) for x in event_data_time.val.time], space=:data)
   connect!(event_lines.visible, toggles[1].active)
+  connect!(event_text.visible, toggles[1].active)
 
+  function plot_events(event_data_time)
+    delete!(ax, event_lines)
+    delete!(ax, event_text)
+    event_lines = vlines!(event_data_time.val.time, color=:grey, linewidth=2)
+    event_text = text!(string.(event_data_time.val.events), position=[(x, 1000) for x in event_data_time.val.time], space=:data)
+    connect!(event_lines.visible, toggles[1].active)
+    connect!(event_text.visible, toggles[1].active)
+  end
+
+  on(toggles[1].active) do x
+    if x
+      plot_events(event_data_time)
+    end
+  end
+
+  on(event_data_time) do _
+    if toggles[1].active.val
+      plot_events(event_data_time)
+    end
+  end
 
   function step_back(ax::Axis, xrange::Observable)
-    xrange.val[1] - 100 < 1 && return
-    xrange[] = xrange.val .- 100
+    xrange.val[1] - 200 < 1 && return
+    xrange[] = xrange.val .- 200
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
   function step_forward(ax::Axis, xmax, xrange::Observable)
-    println(event_data_time)
-    println(event_data_trigger)
-    xrange.val[1] + 100 > xmax && return
-    xrange[] = xrange.val .+ 100
+    xrange.val[1] + 200 > xmax && return
+    xrange[] = xrange.val .+ 200
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
@@ -186,8 +203,6 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
 
 end
 
-
-
 function plot_databrowser(dat::ContinuousData)
   plot_databrowser(dat, dat.layout.label)
 end
@@ -195,6 +210,8 @@ end
 function plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractString,Vector})
   plot_databrowser(dat, [channel_labels])
 end
+
+
 
 # #################################################################
 # Data Browser: Epoched Data
