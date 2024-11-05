@@ -41,6 +41,7 @@ dat = create_eeg_dataframe(dat, layout)
 plot_databrowser(dat)
 filter_data!(dat, "hp", 0.1, 2)
 filter_data!(dat, "lp", 30, 6)
+plot_databrowser(dat)
 
 # extract epochs
 epochs = extract_epochs(dat, 1, -0.5, 2)
