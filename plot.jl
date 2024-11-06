@@ -137,30 +137,26 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
 
   # events
   event_data_time = @lift(dat.data[$xrange[$triggers], [:time, :events]])
-  event_lines = vlines!(event_data_time.val.time, color=:grey, linewidth=2)
-  event_text = text!(string.(event_data_time.val.events), position=[(x, 1000) for x in event_data_time.val.time], space=:data)
-  connect!(event_lines.visible, toggles[1].active)
-  connect!(event_text.visible, toggles[1].active)
+  event_lines = []
+  event_text = []
 
-  function plot_events(event_data_time)
-    delete!(ax, event_lines)
-    delete!(ax, event_text)
-    event_lines = vlines!(event_data_time.val.time, color=:grey, linewidth=2)
-    event_text = text!(string.(event_data_time.val.events), position=[(x, 1000) for x in event_data_time.val.time], space=:data)
-    connect!(event_lines.visible, toggles[1].active)
-    connect!(event_text.visible, toggles[1].active)
+  function plot_events(event_data_time, visible)
+    [delete!(ax, e) for e in event_lines]
+    [delete!(ax, e) for e in event_text]
+    if visible
+      push!(event_lines, vlines!(event_data_time.val.time, color=:grey, linewidth=2))
+      event_label_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in event_data_time.val.time]
+      push!(event_text, text!(string.(event_data_time.val.events), position=event_label_pos, space=:data,
+        align=(:center, :center), fontsize=30))
+    end
   end
 
   on(toggles[1].active) do x
-    if x
-      plot_events(event_data_time)
-    end
+    plot_events(event_data_time, x)
   end
 
   on(event_data_time) do _
-    if toggles[1].active.val
-      plot_events(event_data_time)
-    end
+    plot_events(event_data_time, toggles[1].active.val)
   end
 
   function step_back(ax::Axis, xrange::Observable)
@@ -182,12 +178,14 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
     yrange.val = yrange[][1]+100:yrange[][end]-100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
+    plot_events(event_data_time, toggles[1].active.val)
   end
 
   function chans_more(ax::Axis, yrange::Observable)
     yrange.val = yrange[][1]-100:yrange[][end]+100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
+    plot_events(event_data_time, toggles[1].active.val)
   end
 
   function draw(ax::Axis, xrange::Observable)

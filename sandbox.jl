@@ -29,8 +29,8 @@ include("utils.jl")
 
 # basic layouts
 layout = read_layout("/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv");
-head_shape_2d(layout)
-head_shape_3d(layout)
+# head_shape_2d(layout)
+# head_shape_3d(layout)
 
 # read bdf file
 subject = 3
