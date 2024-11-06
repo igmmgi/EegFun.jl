@@ -14,7 +14,6 @@ using StatsBase
 
 include("types.jl")
 include("utils.jl")
-
 include("analyse.jl")
 include("baseline.jl")
 include("channel_difference.jl")
@@ -36,16 +35,20 @@ layout = read_layout("/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv");
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf")
 dat = create_eeg_dataframe(dat, layout)
-
 # basic bdf plot
-plot_databrowser(dat)
+# plot_databrowser(dat)
 filter_data!(dat, "hp", 0.1, 2)
 filter_data!(dat, "lp", 30, 6)
+include("plot.jl")
+# calculate EOG channels
+diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
+diff_channel!(dat, "F9", "F10", "hEOG");
 plot_databrowser(dat)
+# plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 
 # calculate EOG channels
-diff_channel!(dat, "F9", "F10", "hEOG");
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
+diff_channel!(dat, "F9", "F10", "hEOG");
 
 # autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
