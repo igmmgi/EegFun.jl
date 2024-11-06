@@ -104,7 +104,7 @@ end
 
 ##################################################################
 # Data Browser: Continuous Data
-function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:AbstractString},Vector{Symbol}})
+function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:AbstractString})
 
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
@@ -114,10 +114,17 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   yrange = GLMakie.Observable(-1500:1500) # default yrange
 
   # toggle buttons
-  toggles = [Toggle(fig, active=active) for active in [false]]
-  toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
-                   for (t, l) in zip(toggles, ["Events"])]
-  fig[1, 2] = grid!(hcat(toggles, toggle_labels), tellheight=false)
+  if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
+    toggles = [Toggle(fig, active=active) for active in [false, false, false]]
+    toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
+                     for (t, l) in zip(toggles, ["Events", "vEOG", "hEOG"])]
+    fig[1, 2] = grid!(hcat(toggles, toggle_labels), tellheight=false)
+  else
+    toggles = [Toggle(fig, active=active) for active in [false]]
+    toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
+                     for (t, l) in zip(toggles, ["Events"])]
+    fig[1, 2] = grid!(hcat(toggles, toggle_labels), tellheight=false)
+  end
 
   # keyboard events
   on(events(fig).keyboardbutton) do event
@@ -135,7 +142,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
   ax.xlabel = "Time (S)"
   ax.ylabel = "Amplitude (mV)"
 
-  # events
+  ################### Triggers/Events ###############################
   event_data_time = @lift(dat.data[$xrange[$triggers], [:time, :events]])
   event_lines = []
   event_text = []
@@ -144,7 +151,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
     [delete!(ax, e) for e in event_lines]
     [delete!(ax, e) for e in event_text]
     if visible
-      push!(event_lines, vlines!(event_data_time.val.time, color=:grey, linewidth=2))
+      push!(event_lines, vlines!(event_data_time.val.time, color=:grey, linewidth=1))
       event_label_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in event_data_time.val.time]
       push!(event_text, text!(string.(event_data_time.val.events), position=event_label_pos, space=:data,
         align=(:center, :center), fontsize=30))
@@ -157,6 +164,60 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
 
   on(event_data_time) do _
     plot_events(event_data_time, toggles[1].active.val)
+  end
+
+  if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
+
+    ################### vEOG ###############################
+    vEOG = @lift(findall(x -> x != 0, dat.data[$xrange, :].is_vEOG))
+    vEOG_data_time = @lift(dat.data[$xrange[$vEOG], [:time, :events]])
+    vEOG_lines = []
+    vEOG_text = []
+
+    function plot_vEOG(vEOG_data_time, visible)
+      [delete!(ax, e) for e in vEOG_lines]
+      [delete!(ax, e) for e in vEOG_text]
+      if visible
+        push!(vEOG_lines, vlines!(vEOG_data_time.val.time, color=:grey, linewidth=1))
+        vEOG_label_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.val.time]
+        push!(vEOG_text, text!(repeat(["V"], length(vEOG_data_time.val.time)), position=vEOG_label_pos, space=:data,
+          align=(:center, :center), fontsize=30))
+      end
+    end
+
+    on(toggles[2].active) do x
+      plot_vEOG(vEOG_data_time, x)
+    end
+
+    on(vEOG_data_time) do _
+      plot_vEOG(vEOG_data_time, toggles[2].active.val)
+    end
+
+    ################### hEOG ###############################
+    hEOG = @lift(findall(x -> x != 0, dat.data[$xrange, :].is_hEOG))
+    hEOG_data_time = @lift(dat.data[$xrange[$hEOG], [:time, :events]])
+    hEOG_lines = []
+    hEOG_text = []
+
+    function plot_hEOG(hEOG_data_time, visible)
+      [delete!(ax, e) for e in hEOG_lines]
+      [delete!(ax, e) for e in hEOG_text]
+      if visible
+        push!(hEOG_lines, vlines!(hEOG_data_time.val.time, color=:grey, linewidth=1))
+        hEOG_label_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.val.time]
+        push!(hEOG_text, text!(repeat(["H"], length(hEOG_data_time.val.time)), position=hEOG_label_pos, space=:data,
+          align=(:center, :center), fontsize=30))
+      end
+    end
+
+    on(toggles[3].active) do x
+      plot_hEOG(hEOG_data_time, x)
+    end
+
+    on(hEOG_data_time) do _
+      plot_hEOG(hEOG_data_time, toggles[3].active.val)
+    end
+
   end
 
   function step_back(ax::Axis, xrange::Observable)
@@ -179,6 +240,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
     plot_events(event_data_time, toggles[1].active.val)
+    plot_vEOG(vEOG_data_time, toggles[2].active.val)
+    plot_vEOG(vEOG_data_time, toggles[2].active.val)
+    plot_hEOG(hEOG_data_time, toggles[3].active.val)
   end
 
   function chans_more(ax::Axis, yrange::Observable)
@@ -186,6 +250,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Union{Vector{<:Ab
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
     plot_events(event_data_time, toggles[1].active.val)
+    plot_vEOG(vEOG_data_time, toggles[2].active.val)
+    plot_hEOG(hEOG_data_time, toggles[3].active.val)
   end
 
   function draw(ax::Axis, xrange::Observable)

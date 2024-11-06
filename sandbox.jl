@@ -43,6 +43,20 @@ filter_data!(dat, "hp", 0.1, 2)
 filter_data!(dat, "lp", 30, 6)
 plot_databrowser(dat)
 
+# calculate EOG channels
+diff_channel!(dat, "F9", "F10", "hEOG");
+diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
+
+# autodetect EOG signals
+detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+
+plot_databrowser(dat, ["vEOG"])
+plot_databrowser(dat, ["hEOG"])
+
+
+
+
 # extract epochs
 epochs = extract_epochs(dat, 1, -0.5, 2)
 
