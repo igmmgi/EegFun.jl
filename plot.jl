@@ -111,7 +111,12 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
   xrange = GLMakie.Observable(1:2000)
   triggers = @lift(findall(x -> x != 0, dat.data[$xrange, :].events))
-  yrange = GLMakie.Observable(-1500:1500) # default yrange
+
+  # get appropriate y range
+  bounds = Int(round(max(abs(mean(minimum(Matrix(dat.data[!, channel_labels]), dims=1))),
+    abs(mean(maximum(Matrix(dat.data[!, channel_labels]), dims=1))))))
+
+  yrange = GLMakie.Observable(-bounds:bounds) # default yrange
 
   # toggle buttons
   if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
@@ -234,15 +239,17 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
-  function chans_less(ax::Axis, yrange::Observable)
+  function chans_less(ax::Axis, yrange::Observable)a
     (yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
     yrange.val = yrange[][1]+100:yrange[][end]-100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
     plot_events(event_data_time, toggles[1].active.val)
-    plot_vEOG(vEOG_data_time, toggles[2].active.val)
-    plot_vEOG(vEOG_data_time, toggles[2].active.val)
-    plot_hEOG(hEOG_data_time, toggles[3].active.val)
+    if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
+      plot_vEOG(vEOG_data_time, toggles[2].active.val)
+      plot_hEOG(hEOG_data_time, toggles[3].active.val)
+    end
+
   end
 
   function chans_more(ax::Axis, yrange::Observable)
@@ -250,19 +257,33 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
     plot_events(event_data_time, toggles[1].active.val)
-    plot_vEOG(vEOG_data_time, toggles[2].active.val)
-    plot_hEOG(hEOG_data_time, toggles[3].active.val)
+    if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
+      plot_vEOG(vEOG_data_time, toggles[2].active.val)
+      plot_hEOG(hEOG_data_time, toggles[3].active.val)
+    end
   end
 
-  function draw(ax::Axis, xrange::Observable)
-    for col in names(dat.data)
+  offset = GLMakie.Observable(collect(LinRange(bounds * 0.9, -bounds * 0.9, length(channel_labels))))
+  #for (idx, col) in enumerate(channel_labels)
+  #  dat.data[!, col] .+= offset.val[idx]
+  #end
+
+  function draw(ax::Axis, xrange::Observable, offset::Observable)
+    l = collect(LinRange(0.945, 0.075, length(channel_labels)))
+    #offset = collect(LinRange(bounds * 0.9, -bounds * 0.9, length(channel_labels)))
+    i = 1
+    for (idx, col) in enumerate(names(dat.data))
       if col in channel_labels
-        lines!(ax, @lift(dat.data[$xrange, 1]), @lift(dat.data[$xrange, col]), color=:black)
+        lines!(ax, @lift(dat.data[$xrange, :time]), @lift(dat.data[$xrange, col] .+= $offset[i]), color=:black)
+        # text!(ax, @lift(dat.data[$xrange, :time][1]), @lift(dat.data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+        # text!(fig.scene, 0.005, l[i], text=col, align=(:left, :center), fontsize=20, space=:relative)
+        i += 1
       end
     end
   end
 
-  draw(ax, xrange)
+  hideydecorations!(ax, label=true)
+  draw(ax, xrange, offset)
   display(fig)
 
 end
