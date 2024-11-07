@@ -109,13 +109,19 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])  # plot layout
 
+  # controls
+  interactions(ax)
+  # deregister_interaction!(ax, :rectanglezoom)
+  # deregister_interaction!(ax, :dragpan)
+  # deregister_interaction!(ax, :scrollzoom)
+  # deregister_interaction!(ax, :limitreset)
+
   xrange = GLMakie.Observable(1:2000)
   triggers = @lift(findall(x -> x != 0, dat.data[$xrange, :].events))
 
   # get appropriate y range
   bounds = Int(round(max(abs(mean(minimum(Matrix(dat.data[!, channel_labels]), dims=1))),
-    abs(mean(maximum(Matrix(dat.data[!, channel_labels]), dims=1))))))
-
+    abs(mean(maximum(Matrix(dat.data[!, channel_labels]), dims=1)))))) ./ 8
   yrange = GLMakie.Observable(-bounds:bounds) # default yrange
 
   # toggle buttons
@@ -239,7 +245,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
-  function chans_less(ax::Axis, yrange::Observable)a
+  function chans_less(ax::Axis, yrange::Observable)
     (yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
     yrange.val = yrange[][1]+100:yrange[][end]-100
     xlims!(ax, dat.data.time[xrange.val[1]], dat.data.time[xrange.val[end]])
@@ -264,26 +270,21 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   end
 
   offset = GLMakie.Observable(collect(LinRange(bounds * 0.9, -bounds * 0.9, length(channel_labels))))
-  #for (idx, col) in enumerate(channel_labels)
-  #  dat.data[!, col] .+= offset.val[idx]
-  #end
+  for (idx, col) in enumerate(channel_labels)
+    dat.data[!, col] .+= offset.val[idx]
+  end
 
-  function draw(ax::Axis, xrange::Observable, offset::Observable)
-    l = collect(LinRange(0.945, 0.075, length(channel_labels)))
-    #offset = collect(LinRange(bounds * 0.9, -bounds * 0.9, length(channel_labels)))
-    i = 1
-    for (idx, col) in enumerate(names(dat.data))
+  function draw(ax::Axis, xrange::Observable)
+    for col in names(dat.data)
       if col in channel_labels
-        lines!(ax, @lift(dat.data[$xrange, :time]), @lift(dat.data[$xrange, col] .+= $offset[i]), color=:black)
-        # text!(ax, @lift(dat.data[$xrange, :time][1]), @lift(dat.data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
-        # text!(fig.scene, 0.005, l[i], text=col, align=(:left, :center), fontsize=20, space=:relative)
-        i += 1
+        lines!(ax, @lift(dat.data[$xrange, :time]), @lift(dat.data[$xrange, col]), color=:black)
+        text!(ax, @lift(dat.data[$xrange, :time][1]), @lift(dat.data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
       end
     end
   end
 
   hideydecorations!(ax, label=true)
-  draw(ax, xrange, offset)
+  draw(ax, xrange)
   display(fig)
 
 end
