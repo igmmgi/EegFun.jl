@@ -1,5 +1,5 @@
 function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)
-  return hcat(DataFrame(time=data.time, events=data.triggers.raw),
+  return hcat(DataFrame(time=data.time, triggers=data.triggers.raw),
     DataFrame(data.data, Symbol.(data.header.channel_labels[1:end-1])))
 end
 
@@ -10,10 +10,6 @@ end
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)
   return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1])
 end
-
-
-
-
 
 function channel_summary(dat, channel_labels)
   out_stats = OrderedDict(OrderedDict())
@@ -40,6 +36,7 @@ function detect_eog_onsets!(dat, criterion, channel_in, channel_out)
   eog_idx = eog_idx[(diff([0; eog_idx]).>2)] .* step_size
   dat.data[!, channel_out] .= false
   dat.data[eog_idx, channel_out] .= true
+  return nothing
 end
 
 function is_extreme_value(dat::DataFrame, columns, criterion)
