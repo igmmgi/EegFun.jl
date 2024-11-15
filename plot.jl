@@ -102,13 +102,21 @@ function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot
 
 end
 
+abstract type AbstractToggleButton end
+abstract type TriggerToggleButton <: AAbstractToggleButton end
+
+struct ToggleButton <: AbstractToggleButton
+  value::String
+  label::String
+end
+
+
 
 ##################################################################
 # Data Browser: Continuous Data
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:AbstractString})
 
-  data = copy(dat.data)
-
+  # Makie Figure
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])
 
@@ -119,20 +127,19 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   # deregister_interaction!(ax, :scrollzoom)
   # deregister_interaction!(ax, :limitreset)
 
+  # data to plot
+  data = copy(dat.data)
+
   # xrange/yrange
-  nchannels = length(channel_labels)
-  bounds = 1500
   xrange = GLMakie.Observable(1:2000)
-  yrange = GLMakie.Observable(-bounds:bounds) # default yrange
-  offset = GLMakie.Observable(collect(LinRange(bounds * ((nchannels / 100) + 0.2), -bounds * ((nchannels / 100) + 0.2), nchannels)))
+  yrange = GLMakie.Observable(-1500:1500) # default yrange
+  nchannels = length(channel_labels)
+  offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
 
   xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
   ax.xlabel = "Time (S)"
   ax.ylabel = "Amplitude (mV)"
-
-  scale = GLMakie.Observable(1.0)
-
 
   # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
   toggle_values = []
@@ -153,11 +160,6 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     push!(toggle_values, false)
     push!(toggle_labels, "Extreme Value")
   end
-
-  # is = IntervalSlider(fig[2, 1], range=@lift(data[$xrange, :time]), startvalues=(1, 2))
-  # vl = lift(x -> x[1], is.interval)
-  # vr = lift(x -> x[2], is.interval)
-  # vspan!(fig[1, 1], vl, vr)
 
   toggles = [Toggle(fig, active=active) for active in toggle_values]
   toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
@@ -331,26 +333,24 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   end
 
   function chans_less(ax::Axis, yrange::Observable)
-    #(yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
-    #yrange.val = yrange[][1]+100:yrange[][end]-100
-    #ylims!(ax, yrange.val[1], yrange.val[end])
-    scale[] = scale.val * 0.9
-    # plot_events(event_data_time, toggles[1].active.val)
-    # if ("is_vEOG" in names(data) && "is_hEOG" in names(dat.data))
-    #   plot_vEOG(vEOG_data_time, toggles[2].active.val)
-    #   plot_hEOG(hEOG_data_time, toggles[3].active.val)
-    # end
+    (yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
+    yrange.val = yrange[][1]+100:yrange[][end]-100
+    ylims!(ax, yrange.val[1], yrange.val[end])
+    plot_events(event_data_time, toggles[1].active.val)
+    if ("is_vEOG" in names(data) && "is_hEOG" in names(dat.data))
+      plot_vEOG(vEOG_data_time, toggles[2].active.val)
+      plot_hEOG(hEOG_data_time, toggles[3].active.val)
+    end
   end
 
   function chans_more(ax::Axis, yrange::Observable)
-    #yrange.val = yrange[][1]-100:yrange[][end]+100
-    #ylims!(ax, yrange.val[1], yrange.val[end])
-    scale[] = scale.val * 1.1
-    # plot_events(event_data_time, toggles[1].active.val)
-    # if ("is_vEOG" in names(data) && "is_hEOG" in names(dat.data))
-    #   plot_vEOG(vEOG_data_time, toggles[2].active.val)
-    #   plot_hEOG(hEOG_data_time, toggles[3].active.val)
-    # end
+    yrange.val = yrange[][1]-100:yrange[][end]+100
+    ylims!(ax, yrange.val[1], yrange.val[end])
+    plot_events(event_data_time, toggles[1].active.val)
+    if ("is_vEOG" in names(data) && "is_hEOG" in names(dat.data))
+      plot_vEOG(vEOG_data_time, toggles[2].active.val)
+      plot_hEOG(hEOG_data_time, toggles[3].active.val)
+    end
   end
 
   function yoffset!()
@@ -364,7 +364,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
       if col in channel_labels
         # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color= :black)
         # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color= @lift(data[$xrange, :is_extreme]), colormap = [:black, :red])
-        lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col] .* $scale), color=@lift(abs.(dat.data[$xrange, col]) .>= 100), colormap=[:black, :black, :red], linewidth=2)
+        lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=@lift(abs.(dat.data[$xrange, col]) .>= 100), colormap=[:black, :black, :red], linewidth=2)
         # text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1] .* scale.val[1]), text=col, align=(:left, :center), fontsize=20)
       end
     end
