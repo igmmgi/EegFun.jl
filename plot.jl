@@ -102,15 +102,25 @@ function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot
 
 end
 
-abstract type AbstractToggleButton end
-abstract type TriggerToggleButton <: AAbstractToggleButton end
 
-struct ToggleButton <: AbstractToggleButton
-  value::String
+struct ToggleButton
+  value::Bool
   label::String
 end
 
+function toggle_button_group(fig, labels)
+  value_labels = []
+  "triggers" in labels && push!(value_labels, ToggleButton(false, "Trigger"))
+  "is_vEOG" in labels && push!(value_labels, ToggleButton(false, "vEOG"))
+  "is_hEOG" in labels && push!(value_labels, ToggleButton(false, "hEOG"))
+  "is_extreme" in labels && push!(value_labels, ToggleButton(false, "extreme"))
 
+  toggle_buttons = [Toggle(fig, active=t.value) for t in value_labels]
+  toggle_labels = [Label(fig, t.label) for t in value_labels]
+
+  return hcat(toggle_buttons, toggle_labels)
+
+end
 
 ##################################################################
 # Data Browser: Continuous Data
@@ -142,32 +152,14 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   ax.ylabel = "Amplitude (mV)"
 
   # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
-  toggle_values = []
-  toggle_labels = []
-  if "triggers" in names(data)
-    push!(toggle_values, false)
-    push!(toggle_labels, "Trigger")
-  end
-  if "is_vEOG" in names(data)
-    push!(toggle_values, false)
-    push!(toggle_labels, "vEOG")
-  end
-  if "is_hEOG" in names(data)
-    push!(toggle_values, false)
-    push!(toggle_labels, "hEOG")
-  end
-  if "is_extreme" in names(data)
-    push!(toggle_values, false)
-    push!(toggle_labels, "Extreme Value")
-  end
+  toggles = toggle_button_group(fig, names(data))
+  # menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="Fp1"), Label(fig, "Labels"))
+  fig[1, 2] = grid!(toggles, tellheight=false)
+  # fig[1, 2] = grid!(vcat(toggles, menu), tellheight=false)
 
-  toggles = [Toggle(fig, active=active) for active in toggle_values]
-  toggle_labels = [Label(fig, lift(x -> x ? "$l (on)" : "$l (off)", t.active))
-                   for (t, l) in zip(toggles, toggle_labels)]
-
-  # menu = hcat(Menu(fig, options = dat.layout.label, default = "Fp1"), Label(fig, "menu"))
-  # fig[1, 2] = grid!(vcat(hcat(toggles, toggle_labels), menu), tellheight=false)
-  fig[1, 2] = grid!(hcat(toggles, toggle_labels), tellheight=false)
+  # on(menu[1].selection) do s
+  #   println(s)
+  # end
 
   # keyboard events
   on(events(fig).keyboardbutton) do event
