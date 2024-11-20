@@ -122,7 +122,7 @@ function toggle_button_group(fig, labels)
   "is_extreme" in labels && push!(value_labels, ToggleButton(false, "extreme"))
 
   toggle_buttons = [Toggle(fig, active=t.value) for t in value_labels]
-  toggle_labels = [Label(fig, t.label) for t in value_labels]
+  toggle_labels = [Label(fig, t.label, fontsize=30, halign=:left) for t in value_labels]
 
   return hcat(toggle_buttons, toggle_labels)
 
@@ -150,7 +150,13 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   xrange = GLMakie.Observable(1:2000)
   yrange = GLMakie.Observable(-1500:1500) # default yrange
   nchannels = length(channel_labels)
-  offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
+  if nchannels > 1
+    # rough heuristic to space lines across y axis
+    offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
+  else
+    # just centre
+    offset = GLMakie.Observable(0.0)
+  end
 
   xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
@@ -160,12 +166,27 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
   toggles = toggle_button_group(fig, names(data))
   # menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="Fp1"), Label(fig, "Labels"))
-  fig[1, 2] = grid!(toggles, tellheight=false)
   # fig[1, 2] = grid!(vcat(toggles, menu), tellheight=false)
 
   # on(menu[1].selection) do s
   #   println(s)
   # end
+
+  slider_extreme = Slider(fig[1, 2], range=0:5:200, startvalue=0, width=100)
+  fig[1, 2] = grid!(vcat(toggles, hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30))), tellheight=false)
+  colsize!(fig.layout, 2, Relative(1 / 8))
+
+  crit_val = lift(slider_extreme.value) do x
+    x
+  end
+
+  slider_x = IntervalSlider(fig[2, 1], range=1:nrow(data), startvalues=(1, 2000))
+
+  on(slider_x.interval) do x
+    xrange[] = slider_x.selected_indices.val[1]:slider_x.selected_indices.val[2]
+    xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
+    ylims!(ax, yrange.val[1], yrange.val[end])
+  end
 
   # keyboard events
   on(events(fig).keyboardbutton) do event
@@ -312,10 +333,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   function draw(ax, xrange::Observable)
     for col in names(data)
       if col in channel_labels
-        # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color= :black)
-        # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color= @lift(data[$xrange, :is_extreme]), colormap = [:black, :red])
-        lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=@lift(abs.(dat.data[$xrange, col]) .>= 100), colormap=[:black, :black, :red], linewidth=2)
-        text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+        # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=:black)
+        # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=@lift(abs.(dat.data[$xrange, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
+        # text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
       end
     end
   end
