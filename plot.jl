@@ -146,19 +146,22 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   # data to plot
   data = copy(dat.data)
 
+  # xlimit = GLMakie.Observable(8000)
+  xlimit = 8000
+
   # xrange/yrange
-  xrange = GLMakie.Observable(1:2000)
+  # xrange = GLMakie.Observable(1:xlimit.val)
+  xrange = GLMakie.Observable(1:xlimit)
   yrange = GLMakie.Observable(-1500:1500) # default yrange
   nchannels = length(channel_labels)
-  if nchannels > 1
-    # rough heuristic to space lines across y axis
+  if nchannels > 1 # rough heuristic to space lines across y axis
     offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
-  else
-    # just centre
+  else # just centre
     offset = GLMakie.Observable(0.0)
   end
 
-  xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
+  #  @lift xlims!(ax, data.time[$xrange.val[1]], data.time[xrange.val[end]])
+  @lift xlims!(ax, data.time[$xrange[1]], data.time[$xrange[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
   ax.xlabel = "Time (S)"
   ax.ylabel = "Amplitude (mV)"
@@ -180,12 +183,20 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     x
   end
 
-  slider_x = IntervalSlider(fig[2, 1], range=1:nrow(data), startvalues=(1, 2000))
+  # slider_x = IntervalSlider(fig[2, 1], range=1:nrow(data), startvalues=(1, 2000))
+  slider_range = Slider(fig[3, 1], range=1000:10000, startvalue=xlimit, snap=false)
+  # slider_x = Slider(fig[2, 1], range=xlimit.val+1:nrow(data), startvalue=xlimit.val + 1)
+  slider_x = Slider(fig[2, 1], range=slider_range.value.val:nrow(data), startvalue=slider_range.value, snap=false)
 
-  on(slider_x.interval) do x
-    xrange[] = slider_x.selected_indices.val[1]:slider_x.selected_indices.val[2]
+  on(slider_x.value) do x
+    xrange[] = x-slider_range.value.val:x-1
     xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
-    ylims!(ax, yrange.val[1], yrange.val[end])
+  end
+
+
+  on(slider_range.value) do x
+    xrange.val = slider_x.value.val-x:slider_x.value.val-1
+    xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
   end
 
   # keyboard events
@@ -292,21 +303,20 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     xrange.val[1] - 200 < 1 && return
     xrange[] = xrange.val .- 200
     xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
-    ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
   function step_forward(ax::Axis, xmax, xrange::Observable)
     xrange.val[1] + 200 > xmax && return
     xrange[] = xrange.val .+ 200
+    # set_close_to!(slider_x, 20000)
     xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
-    ylims!(ax, yrange.val[1], yrange.val[end])
   end
 
   function chans_less(ax::Axis, yrange::Observable)
     (yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
     yrange.val = yrange[][1]+100:yrange[][end]-100
     ylims!(ax, yrange.val[1], yrange.val[end])
-    plot_event_markers!(event_data_time, toggles[1].active.val, "val")
+    plot_event_markers!(trigger_event, trigger_data_time, toggles[1].active.val, "val")
     if ("is_vEOG" in names(data) && "is_hEOG" in names(dat.data))
       plot_event_markers!(vEOG_event, vEOG_data_time, toggles[2].active.val, "v")
       plot_event_markers!(hEOG_event, hEOG_data_time, toggles[3].active.val, "h")
@@ -316,7 +326,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   function chans_more(ax::Axis, yrange::Observable)
     yrange.val = yrange[][1]-100:yrange[][end]+100
     ylims!(ax, yrange.val[1], yrange.val[end])
-    plot_event_markers!(event_data_time, toggles[1].active.val, "val")
+    plot_event_markers!(trigger_event, trigger_data_time, toggles[1].active.val, "val")
     if ("is_vEOG" in names(data) && "is_hEOG" in names(dat.data))
       plot_event_markers!(vEOG_event, vEOG_data_time, toggles[2].active.val, "v")
       plot_event_markers!(hEOG_event, hEOG_data_time, toggles[3].active.val, "h")
@@ -334,8 +344,12 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     for col in names(data)
       if col in channel_labels
         # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=:black)
-        # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=@lift(abs.(dat.data[$xrange, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
+        # @lift lines!(ax, data[$xrange, :time], data[$xrange, col], color=:black)
+        lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=@lift(abs.(dat.data[$xrange, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
+        # @lift lines!(ax, data[$xrange, :time], data[$xrange, col]) #, color=@lift(abs.(dat.data[$xrange, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
         # text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+        # @lift lines!(ax, data[$x, :time], data[$x, col], color=abs.(dat.data[$x, col] .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
+        #@lift text!(ax, data[$xrange, :time][1], data[$xrange, col][1], text=col, align=(:left, :center), fontsize=20)
       end
     end
   end
