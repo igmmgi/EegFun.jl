@@ -146,11 +146,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   # data to plot
   data = copy(dat.data)
 
-  # xlimit = GLMakie.Observable(8000)
-  xlimit = 8000
-
   # xrange/yrange
-  # xrange = GLMakie.Observable(1:xlimit.val)
+  xlimit = 8000
   xrange = GLMakie.Observable(1:xlimit)
   yrange = GLMakie.Observable(-1500:1500) # default yrange
   nchannels = length(channel_labels)
@@ -160,7 +157,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     offset = GLMakie.Observable(0.0)
   end
 
-  #  @lift xlims!(ax, data.time[$xrange.val[1]], data.time[xrange.val[end]])
+
+
   @lift xlims!(ax, data.time[$xrange[1]], data.time[$xrange[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
   ax.xlabel = "Time (S)"
@@ -193,9 +191,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
   end
 
-
   on(slider_range.value) do x
-    xrange.val = slider_x.value.val-x:slider_x.value.val-1
+    xrange.val = max(1, slider_x.value.val - x):slider_x.value.val-1
     xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
   end
 
@@ -281,6 +278,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
   end
 
+
+
   if ("is_extreme" in names(data))
     ################### Extreme Values ###############################
     extreme = @lift(findall(x -> x != 0, data[$xrange, :].is_extreme))
@@ -299,6 +298,28 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
   end
 
+
+  # WIP alternative to individual lines for marking extreme values
+  # if ("is_extreme" in names(data))
+  #   ################### Extreme Values ###############################
+  #   extreme = @lift(findall(x -> x != 0, data[$xrange, :].is_extreme))
+  #   out = @lift splitgroups($extreme)
+  #   extreme_event = []
+
+  #   on(toggles[4].active) do x
+  #     if length(extreme_event) >= 1
+  #       delete!(ax, extreme_event[1])
+  #       extreme_event = []
+  #     else
+  #       # push!(extreme_event, vspan!(ax, @lift(data[$xrange[$out[1]], [:time]].time), @lift(data[$xrange[$out[2]], [:time]].time), color="LightGrey", alpha=0.75))
+  #       @lift push!(extreme_event, vspan!(ax, data[$xrange[$out[1]], [:time]].time, data[$xrange[$out[2]], [:time]].time, color="LightGrey", alpha=0.75))
+  #     end
+  #     # push!(extreme_event, vspan!(ax, data[$xrange[$out[1]], [:time]].time, data[$xrange[$out[2]], [:time]].time, color="LightGrey", alpha=0.5))
+  #     # @lift vspan!(ax, data[$xrange[$out[1]], [:time]].time, data[$xrange[$out[2]], [:time]].time, color="LightGrey", alpha=0.5)
+  #   end
+
+  # end
+
   function step_back(ax::Axis, xrange::Observable)
     xrange.val[1] - 200 < 1 && return
     xrange[] = xrange.val .- 200
@@ -308,7 +329,6 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   function step_forward(ax::Axis, xmax, xrange::Observable)
     xrange.val[1] + 200 > xmax && return
     xrange[] = xrange.val .+ 200
-    # set_close_to!(slider_x, 20000)
     xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
   end
 
@@ -341,15 +361,18 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   end
 
   function draw(ax, xrange::Observable)
+
     for col in names(data)
       if col in channel_labels
-        # lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=:black)
-        # @lift lines!(ax, data[$xrange, :time], data[$xrange, col], color=:black)
+
+        # seems to be bug when changing both sliders
         lines!(ax, @lift(data[$xrange, :time]), @lift(data[$xrange, col]), color=@lift(abs.(dat.data[$xrange, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
-        # @lift lines!(ax, data[$xrange, :time], data[$xrange, col]) #, color=@lift(abs.(dat.data[$xrange, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
-        # text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
-        # @lift lines!(ax, data[$x, :time], data[$x, col], color=abs.(dat.data[$x, col] .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
-        #@lift text!(ax, data[$xrange, :time][1], data[$xrange, col][1], text=col, align=(:left, :center), fontsize=20)
+        text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+
+        # this works but is much slower!
+        # @lift lines!(ax, data[$xrange, :time], data[$xrange, col], color=abs.(dat.data[$xrange, col] .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
+        # @lift text!(ax, data[$xrange, :time][1], data[$xrange, col][1], text=col, align=(:left, :center), fontsize=20)
+
       end
     end
   end

@@ -38,3 +38,21 @@ end
 datarange(x) = -(-(extrema(x)...))
 
 colmeans(df::DataFrame, cols) = reduce(+, eachcol(df[!, cols])) ./ length(cols)
+
+
+function consecutive(f, A::AbstractVector; step=1)
+  [f(A[i+step], A[i]) for i = 1:length(A)-step]
+end
+
+
+function splitgroups(v)
+  start = 1
+  start_idx::Vector{Int64} = []
+  end_idx::Vector{Int64} = []
+  for stop in [findall(diff(v) .> 1); lastindex(v)]
+    push!(start_idx, v[start])
+    push!(end_idx, v[stop])
+    start = stop + 1
+  end
+  start_idx, end_idx
+end
