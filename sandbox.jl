@@ -50,7 +50,7 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
 plot_databrowser(dat)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
-# plot_databrowser(dat, ["hEOG"])
+#plot_databrowser(dat, ["hEOG"])
 
 
 
