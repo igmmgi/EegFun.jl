@@ -146,9 +146,10 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
   # data to plot
   data = copy(dat.data)
+  data_filtered = nothing
 
   # xrange/yrange
-  xlimit = 8000
+  xlimit = 10000
   xrange = GLMakie.Observable(1:xlimit)
   yrange = GLMakie.Observable(-1500:1500) # default yrange
   nchannels = length(channel_labels)
@@ -157,6 +158,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
 
   if nchannels > 1 # rough heuristic to space lines across y axis
+    # offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
     offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
   else # just centre
     offset = GLMakie.Observable(0.0)
@@ -208,7 +210,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     x
   end
 
-  slider_range = Slider(fig[3, 1], range=100:20000, startvalue=xlimit, snap=false)
+  slider_range = Slider(fig[3, 1], range=100:30000, startvalue=xlimit, snap=false)
   slider_x = Slider(fig[2, 1], range=slider_range.value.val:nrow(data), startvalue=slider_range.value, snap=false)
 
   on(slider_x.value) do x
@@ -232,10 +234,6 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     return Consume(false)
   end
 
-
-
-
-  data_filtered = nothing
 
   on(toggles[1].active) do _
     empty!(ax)
