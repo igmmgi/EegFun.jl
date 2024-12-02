@@ -116,6 +116,7 @@ function toggle_button_group(fig, labels)
   "is_vEOG" in labels && push!(value_labels, ToggleButton(false, "vEOG"))
   "is_hEOG" in labels && push!(value_labels, ToggleButton(false, "hEOG"))
   "is_extreme" in labels && push!(value_labels, ToggleButton(false, "extreme"))
+  push!(value_labels, ToggleButton(false, "LP-Filter On/Off"))
 
   toggle_buttons = [Toggle(fig, active=t.value) for t in value_labels]
   toggle_labels = [Label(fig, t.label, fontsize=30, halign=:left) for t in value_labels]
@@ -123,6 +124,10 @@ function toggle_button_group(fig, labels)
   return hcat(toggle_buttons, toggle_labels)
 
 end
+
+
+
+
 
 ##################################################################
 # Data Browser: Continuous Data
@@ -165,7 +170,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
   toggles = toggle_button_group(fig, names(data))
 
-  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All", direction=:down), Label(fig, "Labels"))
+  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All", direction=:down), Label(fig, "Labels", fontsize=30, halign=:left))
   on(menu[1].selection) do s
     channel_labels = [s]
     if s == "All"
@@ -186,19 +191,24 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
       offset = GLMakie.Observable(0.0)
     end
     yoffset!()
-    draw()
+    draw(plot_labels=true)
   end
 
   slider_extreme = Slider(fig[1, 2], range=0:5:200, startvalue=200, width=100)
+  slider_lp_filter = Slider(fig[1, 2], range=10:5:100, startvalue=30, width=100)
 
-  fig[1, 2] = grid!(vcat(toggles, hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30)), menu), tellheight=false)
+  fig[1, 2] = grid!(vcat(toggles,
+      hcat(slider_lp_filter, Label(fig, @lift("LP-Filter Value: $($(slider_lp_filter.value))"), fontsize=30, halign=:left)),
+      hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30)),
+      menu),
+    tellheight=false)
   colsize!(fig.layout, 2, Relative(1 / 8))
 
   crit_val = lift(slider_extreme.value) do x
     x
   end
 
-  slider_range = Slider(fig[3, 1], range=1000:10000, startvalue=xlimit, snap=false)
+  slider_range = Slider(fig[3, 1], range=100:20000, startvalue=xlimit, snap=false)
   slider_x = Slider(fig[2, 1], range=slider_range.value.val:nrow(data), startvalue=slider_range.value, snap=false)
 
   on(slider_x.value) do x
@@ -223,16 +233,32 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   end
 
 
+
+
+  data_filtered = nothing
+
   on(toggles[1].active) do _
     empty!(ax)
     if toggles[1].active.val == true
       ycentre!()
-      draw(false)
+      draw(plot_labels=false)
     elseif toggles[1].active.val == false
       yoffset!()
-      draw(true)
+      draw(plot_labels=true)
     end
   end
+
+  on(toggles[6].active) do _
+    empty!(ax)
+    if toggles[6].active.val == true
+      data_filtered = filter_data(data, channel_labels, "lp", slider_lp_filter.value.val, 6, dat.sample_rate)
+    elseif toggles[6].active.val == false
+      data_filtered = nothing
+    end
+    draw(plot_labels=true)
+  end
+
+
 
   #################### Triggers/Events ###############################
   trigger_data_time = @views data[findall(x -> x != 0, data[!, :].triggers), [:time, :triggers]]
@@ -347,18 +373,30 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   end
 
 
-  function draw(plot_labels)
+  function draw(; plot_labels=true)
+    alpha_orig = 1
+    linewidth_orig = 2
+    plot_filtered_data = !isnothing(data_filtered)
+    if plot_filtered_data
+      alpha_orig = 0.5
+      linewidth_orig = 1
+    end
     for col in channel_labels
-      lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
+      # original data
+      lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=linewidth_orig, alpha=alpha_orig)
       if plot_labels
         text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+      end
+      # also show filtered data
+      if plot_filtered_data
+        lines!(ax, data_filtered[!, :time], data_filtered[!, col], color=:blue, linewidth=2)
       end
     end
   end
 
   hideydecorations!(ax, label=true)
   yoffset!()
-  draw(true)
+  draw(plot_labels=true)
   display(fig)
   # DataInspector(fig)
 

@@ -38,7 +38,7 @@ dat = create_eeg_dataframe(dat, layout)
 # basic bdf plot
 # plot_databrowser(dat)
 filter_data!(dat, "hp", 0.1, 2)
-# filter_data!(dat, "lp", 30, 6)
+# filter_data!(dat, "lp", 10, 6)
 include("plot.jl")
 # calculate EOG channels
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
@@ -50,7 +50,7 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
 plot_databrowser(dat)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
-#plot_databrowser(dat, ["hEOG"])
+# plot_databrowser(dat, ["hEOG"])
 
 
 
