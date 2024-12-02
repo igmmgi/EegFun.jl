@@ -111,6 +111,7 @@ end
 
 function toggle_button_group(fig, labels)
   value_labels = []
+  push!(value_labels, ToggleButton(false, "Butterfly Plot"))
   "triggers" in labels && push!(value_labels, ToggleButton(false, "Trigger"))
   "is_vEOG" in labels && push!(value_labels, ToggleButton(false, "vEOG"))
   "is_hEOG" in labels && push!(value_labels, ToggleButton(false, "hEOG"))
@@ -221,12 +222,24 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     return Consume(false)
   end
 
+
+  on(toggles[1].active) do _
+    empty!(ax)
+    if toggles[1].active.val == true
+      ycentre!()
+      draw(false)
+    elseif toggles[1].active.val == false
+      yoffset!()
+      draw(true)
+    end
+  end
+
   #################### Triggers/Events ###############################
   trigger_data_time = @views data[findall(x -> x != 0, data[!, :].triggers), [:time, :triggers]]
 
   trigger_event_line = []
   trigger_event_label = []
-  on(toggles[1].active) do x
+  on(toggles[2].active) do x
 
     if length(trigger_event_line) >= 1
       delete!(ax, trigger_event_line[1])
@@ -249,7 +262,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
     vEOG_event_line = []
     vEOG_event_label = []
-    on(toggles[2].active) do x
+    on(toggles[3].active) do x
       if length(vEOG_event_line) >= 1
         delete!(ax, vEOG_event_line[1])
         delete!(ax, vEOG_event_label[1])
@@ -267,7 +280,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
     hEOG_event_line = []
     hEOG_event_label = []
-    on(toggles[3].active) do x
+    on(toggles[4].active) do x
       if length(hEOG_event_line) >= 1
         delete!(ax, hEOG_event_line[1])
         delete!(ax, hEOG_event_label[1])
@@ -287,7 +300,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     extreme = @views splitgroups(findall(x -> x != 0, data[!, :].is_extreme))
 
     extreme_event = []
-    on(toggles[4].active) do x
+    on(toggles[5].active) do x
       if length(extreme_event) >= 1
         delete!(ax, extreme_event[1])
         extreme_event = []
@@ -327,16 +340,25 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     end
   end
 
-  function draw()
+  function ycentre!()
+    for (idx, col) in enumerate(channel_labels)
+      data[!, col] .-= offset.val[idx]
+    end
+  end
+
+
+  function draw(plot_labels)
     for col in channel_labels
       lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=2)
-      text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+      if plot_labels
+        text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+      end
     end
   end
 
   hideydecorations!(ax, label=true)
   yoffset!()
-  draw()
+  draw(true)
   display(fig)
   # DataInspector(fig)
 
