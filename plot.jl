@@ -164,13 +164,17 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
   toggles = toggle_button_group(fig, names(data))
 
-  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All"), Label(fig, "Labels"))
+  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All", direction=:down), Label(fig, "Labels"))
   on(menu[1].selection) do s
     channel_labels = [s]
     if s == "All"
       channel_labels = channel_labels_original
-    else if s == "Left"
-        channel_labels = 
+    elseif s == "Left"
+      channel_labels = channel_labels_original[findall(occursin.(r"\d*[13579]$", channel_labels_original))]
+    elseif s == "Right"
+      channel_labels = channel_labels_original[findall(occursin.(r"\d*[24680]$", channel_labels_original))]
+    elseif s == "Central"
+      channel_labels = channel_labels_original[findall(occursin.(r"z$", channel_labels_original))]
     end
     nchannels = length(channel_labels)
     empty!(ax)
