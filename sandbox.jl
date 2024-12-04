@@ -43,7 +43,7 @@ include("plot.jl")
 # calculate EOG channels
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
 diff_channel!(dat, "F9", "F10", "hEOG");
-# autodetect EOG signals
+# # autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);

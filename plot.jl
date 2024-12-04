@@ -104,34 +104,81 @@ end
 
 
 struct ToggleButton
-  value::Bool
   label::String
+  fun::Function
 end
-
-
-function toggle_button_group(fig, labels)
-  value_labels = []
-  push!(value_labels, ToggleButton(false, "Butterfly Plot"))
-  "triggers" in labels && push!(value_labels, ToggleButton(false, "Trigger"))
-  "is_vEOG" in labels && push!(value_labels, ToggleButton(false, "vEOG"))
-  "is_hEOG" in labels && push!(value_labels, ToggleButton(false, "hEOG"))
-  "is_extreme" in labels && push!(value_labels, ToggleButton(false, "extreme"))
-  push!(value_labels, ToggleButton(false, "LP-Filter On/Off"))
-
-  toggle_buttons = [Toggle(fig, active=t.value) for t in value_labels]
-  toggle_labels = [Label(fig, t.label, fontsize=30, halign=:left) for t in value_labels]
-
-  return hcat(toggle_buttons, toggle_labels)
-
-end
-
-
-
-
 
 ##################################################################
 # Data Browser: Continuous Data
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:AbstractString})
+
+  function butterfly_plot(active)
+    empty!(ax)
+    if active
+      ycentre!()
+      draw(plot_labels=false)
+    elseif !active
+      yoffset!()
+      draw(plot_labels=true)
+    end
+  end
+
+  function apply_lp_filter(active)
+    empty!(ax)
+    if active
+      data_filtered = filter_data(data, channel_labels, "lp", slider_lp_filter.value.val, 6, dat.sample_rate)
+    elseif !active
+      data_filtered = nothing
+    end
+    draw(plot_labels=true)
+  end
+
+
+  function trigger_lines(active)
+      trigger_lines.visible = active
+      trigger_text.visible = active
+      text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
+      trigger_text.position = text_pos
+  end
+
+  function vEOG_lines(active) 
+      vEOG_lines.visible = active
+      vEOG_text.visible = active
+      text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
+      vEOG_text.position = text_pos
+  end
+
+  function hEOG_lines(active) 
+      hEOG_lines.visible = active
+      hEOG_text.visible = active
+      text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
+      hEOG_text.position = text_pos
+  end
+
+  function extreme_lines(active)
+    extreme_spans.visible = active
+  end
+
+
+  function toggle_button_group(fig, labels)
+    toggles = []
+    push!(toggles, ToggleButton("Butterfly Plot", butterfly_plot))
+    "triggers" in labels && push!(toggles, ToggleButton("Trigger", trigger_lines))
+    "is_vEOG" in labels && push!(toggles, ToggleButton("vEOG", vEOG_lines))
+    "is_hEOG" in labels && push!(toggles, ToggleButton("hEOG", hEOG_lines))
+    "is_extreme" in labels && push!(toggles, ToggleButton("extreme", extreme_lines))
+    push!(toggles, ToggleButton("LP-Filter On/Off", apply_lp_filter))
+
+    toggle_buttons = [Toggle(fig, active=false) for toggle in toggles]
+    toggle_labels = [Label(fig, toggle.label, fontsize=30, halign=:left) for toggle in toggles]
+    toggle_functions = [toggle.fun for toggle in toggles]
+
+  return hcat(toggle_buttons, toggle_labels, toggle_functions)
+
+end
+
+
+
 
   # Makie Figure
   fig = Figure()
@@ -199,7 +246,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   slider_extreme = Slider(fig[1, 2], range=0:5:200, startvalue=200, width=100)
   slider_lp_filter = Slider(fig[1, 2], range=10:5:100, startvalue=30, width=100)
 
-  fig[1, 2] = grid!(vcat(toggles,
+  fig[1, 2] = grid!(vcat(toggles[:,1:2],
       hcat(slider_lp_filter, Label(fig, @lift("LP-Filter Value: $($(slider_lp_filter.value))"), fontsize=30, halign=:left)),
       hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30)),
       menu),
@@ -234,105 +281,36 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     return Consume(false)
   end
 
-
-  on(toggles[1].active) do _
-    empty!(ax)
-    if toggles[1].active.val == true
-      ycentre!()
-      draw(plot_labels=false)
-    elseif toggles[1].active.val == false
-      yoffset!()
-      draw(plot_labels=true)
+  # toggle buttons and functions
+  for t in 1:length(toggles[:,1])
+    on(toggles[t,1].active) do _
+      toggles[t,3](toggles[t,1].active.val)
     end
   end
-
-  on(toggles[6].active) do _
-    empty!(ax)
-    if toggles[6].active.val == true
-      data_filtered = filter_data(data, channel_labels, "lp", slider_lp_filter.value.val, 6, dat.sample_rate)
-    elseif toggles[6].active.val == false
-      data_filtered = nothing
-    end
-    draw(plot_labels=true)
-  end
-
-
 
   #################### Triggers/Events ###############################
   trigger_data_time = @views data[findall(x -> x != 0, data[!, :].triggers), [:time, :triggers]]
+  trigger_lines = vlines!(trigger_data_time.time, color=:grey, linewidth=1, visible = false)
+  text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
+  trigger_text = text!(string.(trigger_data_time.triggers), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
 
-  trigger_event_line = []
-  trigger_event_label = []
-  on(toggles[2].active) do x
-
-    if length(trigger_event_line) >= 1
-      delete!(ax, trigger_event_line[1])
-      delete!(ax, trigger_event_label[1])
-      trigger_event_line = []
-      trigger_event_label = []
-    else
-      xpos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
-      push!(trigger_event_line, vlines!(trigger_data_time.time, color=:grey, linewidth=1))
-      push!(trigger_event_label, text!(string.(trigger_data_time.triggers), position=xpos, space=:data, align=(:center, :center), fontsize=30))
-    end
-
-  end
-
-
+  ################### vEOG/hEOG ###############################
   if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
-
-    ################### vEOG ###############################
     vEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_vEOG), [:time, :is_vEOG]]
+    vEOG_lines = vlines!(vEOG_data_time.time, color=:grey, linewidth=1, visible = false)
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
+    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
 
-    vEOG_event_line = []
-    vEOG_event_label = []
-    on(toggles[3].active) do x
-      if length(vEOG_event_line) >= 1
-        delete!(ax, vEOG_event_line[1])
-        delete!(ax, vEOG_event_label[1])
-        vEOG_event_line = []
-        vEOG_event_label = []
-      else
-        xpos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
-        push!(vEOG_event_line, vlines!(vEOG_data_time.time, color=:grey, linewidth=1))
-        push!(vEOG_event_label, text!(repeat(["v"], nrow(vEOG_data_time)), position=xpos, space=:data, align=(:center, :center), fontsize=30))
-      end
-    end
-
-    ################### hEOG ###############################
     hEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_hEOG), [:time, :is_hEOG]]
-
-    hEOG_event_line = []
-    hEOG_event_label = []
-    on(toggles[4].active) do x
-      if length(hEOG_event_line) >= 1
-        delete!(ax, hEOG_event_line[1])
-        delete!(ax, hEOG_event_label[1])
-        hEOG_event_line = []
-        hEOG_event_label = []
-      else
-        xpos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
-        push!(hEOG_event_line, vlines!(hEOG_data_time.time, color=:grey, linewidth=1))
-        push!(hEOG_event_label, text!(repeat(["h"], nrow(hEOG_data_time)), position=xpos, space=:data, align=(:center, :center), fontsize=30))
-      end
-    end
-
+    hEOG_lines = vlines!(hEOG_data_time.time, color=:grey, linewidth=1, visible = false)
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
+    hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
   end
 
+  ################### Extreme Values ###############################
   if ("is_extreme" in names(data))
-    ################### Extreme Values ###############################
     extreme = @views splitgroups(findall(x -> x != 0, data[!, :].is_extreme))
-
-    extreme_event = []
-    on(toggles[5].active) do x
-      if length(extreme_event) >= 1
-        delete!(ax, extreme_event[1])
-        extreme_event = []
-      else
-        push!(extreme_event, vspan!(ax, data[extreme[1], :time], data[extreme[2], :time], color="LightGrey", alpha=0.5))
-      end
-    end
-
+    extreme_spans = vspan!(ax, data[extreme[1], :time], data[extreme[2], :time], color="LightGrey", alpha=0.5, visible=false)
   end
 
   function step_back()
