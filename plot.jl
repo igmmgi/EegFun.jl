@@ -113,7 +113,9 @@ end
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:AbstractString})
 
   function butterfly_plot(active)
-    empty!(ax)
+    [delete!(ax, value) for (key, value) in channel_data_original]
+    [delete!(ax, value) for (key, value) in channel_data_filtered]
+    [delete!(ax, value) for (key, value) in channel_data_labels]
     if active
       ycentre!()
       draw(plot_labels=false)
@@ -124,7 +126,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   end
 
   function apply_lp_filter(active)
-    empty!(ax)
+    [delete!(ax, value) for (key, value) in channel_data_original]
+    [delete!(ax, value) for (key, value) in channel_data_filtered]
+    [delete!(ax, value) for (key, value) in channel_data_labels]
     if active
       data_filtered = filter_data(data, channel_labels, "lp", slider_lp_filter.value.val, 6, dat.sample_rate)
     elseif !active
@@ -133,32 +137,30 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     draw(plot_labels=true)
   end
 
-
   function trigger_lines(active)
-      trigger_lines.visible = active
-      trigger_text.visible = active
-      text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
-      trigger_text.position = text_pos
+    trigger_lines.visible = active
+    trigger_text.visible = active
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
+    trigger_text.position = text_pos
   end
 
   function vEOG_lines(active) 
-      vEOG_lines.visible = active
-      vEOG_text.visible = active
-      text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
-      vEOG_text.position = text_pos
+    vEOG_lines.visible = active
+    vEOG_text.visible = active
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
+    vEOG_text.position = text_pos
   end
 
   function hEOG_lines(active) 
-      hEOG_lines.visible = active
-      hEOG_text.visible = active
-      text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
-      hEOG_text.position = text_pos
+    hEOG_lines.visible = active
+    hEOG_text.visible = active
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
+    hEOG_text.position = text_pos
   end
 
   function extreme_lines(active)
     extreme_spans.visible = active
   end
-
 
   function toggle_button_group(fig, labels)
     toggles = []
@@ -173,12 +175,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     toggle_labels = [Label(fig, toggle.label, fontsize=30, halign=:left) for toggle in toggles]
     toggle_functions = [toggle.fun for toggle in toggles]
 
-  return hcat(toggle_buttons, toggle_labels, toggle_functions)
+    return hcat(toggle_buttons, toggle_labels, toggle_functions)
 
-end
-
-
-
+  end
 
   # Makie Figure
   fig = Figure()
@@ -203,10 +202,8 @@ end
   channel_labels_original = channel_labels
   channels_to_plot = GLMakie.Observable(channel_labels)
 
-
-  if nchannels > 1 # rough heuristic to space lines across y axis
-    # offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
-    offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
+  if nchannels > 1
+    offset = GLMakie.Observable(LinRange(yrange.val[end] * 0.9, yrange.val[1] * 0.9, nchannels))
   else # just centre
     offset = GLMakie.Observable(0.0)
   end
@@ -232,25 +229,35 @@ end
       channel_labels = channel_labels_original[findall(occursin.(r"z$", channel_labels_original))]
     end
     nchannels = length(channel_labels)
-    empty!(ax)
+    [delete!(ax, value) for (key, value) in channel_data_original]
+    [delete!(ax, value) for (key, value) in channel_data_filtered]
+    [delete!(ax, value) for (key, value) in channel_data_labels]
+
     data = copy(dat.data)
-    if nchannels > 1 # rough heuristic to space lines across y axis
-      offset = GLMakie.Observable(collect(LinRange(1500 * ((nchannels / 100) + 0.2), -1500 * ((nchannels / 100) + 0.2), nchannels)))
+    if !isnothing(data_filtered)
+      apply_lp_filter(true)
+    end
+    if nchannels > 1
+      offset = GLMakie.Observable(LinRange(yrange.val[end] * 0.9, yrange.val[1] * 0.9, nchannels))
     else # just centre
       offset = GLMakie.Observable(0.0)
     end
     yoffset!()
+    if !isnothing(data_filtered)
+      apply_lp_filter(true)
+      else
     draw(plot_labels=true)
+  end
   end
 
   slider_extreme = Slider(fig[1, 2], range=0:5:200, startvalue=200, width=100)
   slider_lp_filter = Slider(fig[1, 2], range=10:5:100, startvalue=30, width=100)
 
   fig[1, 2] = grid!(vcat(toggles[:,1:2],
-      hcat(slider_lp_filter, Label(fig, @lift("LP-Filter Value: $($(slider_lp_filter.value))"), fontsize=30, halign=:left)),
-      hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30)),
-      menu),
-    tellheight=false)
+                         hcat(slider_lp_filter, Label(fig, @lift("LP-Filter Value: $($(slider_lp_filter.value))"), fontsize=30, halign=:left)),
+                         hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30)),
+                         menu),
+                    tellheight=false)
   colsize!(fig.layout, 2, Relative(1 / 8))
 
   crit_val = lift(slider_extreme.value) do x
@@ -349,6 +356,10 @@ end
   end
 
 
+  channel_data_original = Dict()
+  channel_data_filtered = Dict()
+  channel_data_labels = Dict()
+
   function draw(; plot_labels=true)
     alpha_orig = 1
     linewidth_orig = 2
@@ -359,13 +370,13 @@ end
     end
     for col in channel_labels
       # original data
-      lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=linewidth_orig, alpha=alpha_orig)
+      channel_data_original[col] = lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:black, :black, :red], linewidth=linewidth_orig, alpha=alpha_orig)
       if plot_labels
-        text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+        channel_data_labels[col] = text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
       end
       # also show filtered data
       if plot_filtered_data
-        lines!(ax, data_filtered[!, :time], data_filtered[!, col], color=:blue, linewidth=2)
+        channel_data_filtered[col] = lines!(ax, data_filtered[!, :time], data_filtered[!, col], color=:blue, linewidth=2)
       end
     end
   end
@@ -373,6 +384,7 @@ end
   hideydecorations!(ax, label=true)
   yoffset!()
   draw(plot_labels=true)
+  println(yrange)
   display(fig)
   # DataInspector(fig)
 
