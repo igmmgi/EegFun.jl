@@ -41,26 +41,22 @@ filter_data!(dat, "hp", 0.1, 2)
 # filter_data!(dat, "lp", 10, 6)
 include("plot.jl")
 # calculate EOG channels
-#diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
-#diff_channel!(dat, "F9", "F10", "hEOG");
+diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
+diff_channel!(dat, "F9", "F10", "hEOG");
 ## # autodetect EOG signals
-#detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-#detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-#dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
-plot_databrowser(dat)
+detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
+# plot_databrowser(dat)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
 # plot_databrowser(dat, ["hEOG"])
-
-
-
-
-
 # extract epochs
 epochs = extract_epochs(dat, 1, -0.5, 2)
-
 # plot epochs
+include("plot.jl")
 plot_databrowser(epochs)
+
 plot_epochs(epochs, ["PO7", "PO8"])
 plot_epochs(epochs, [:PO7])
 
