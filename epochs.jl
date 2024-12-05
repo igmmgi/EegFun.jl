@@ -40,7 +40,7 @@ find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(
 function extract_epochs(dat::ContinuousData, trigger_sequence, start_time, end_time; zero_position=1)
 
   # find t==0 positions
-  zero_idx = search_sequence(dat.data.events, trigger_sequence) .+ (zero_position - 1)
+  zero_idx = search_sequence(dat.data.triggers, trigger_sequence) .+ (zero_position - 1)
   isempty(zero_idx) && error("Trigger sequence not found!")
 
   # keep original sample index
