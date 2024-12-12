@@ -408,6 +408,7 @@ end
 function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractString})
 
   function butterfly_plot(active)
+    println("butterfly_plot")
     clear_axes()
     if active
       ycentre!()
@@ -431,21 +432,24 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   function plot_trigger_lines(active)
     trigger_lines.visible = active
     trigger_text.visible = active
-    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time]
     trigger_text.position = text_pos
   end
 
   function plot_vEOG_lines(active) 
+    println(vEOG_data_time.val)
+    println(vEOG_lines)
     vEOG_lines.visible = active
     vEOG_text.visible = active
-    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
-    vEOG_text.position = text_pos
+    vEOG_lines[1].val = 1.0
+    #text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.val.time]
+    #vEOG_text.position = text_pos
   end
 
   function plot_hEOG_lines(active) 
     hEOG_lines.visible = active
     hEOG_text.visible = active
-    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.val.time]
     hEOG_text.position = text_pos
   end
 
@@ -500,17 +504,17 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   end
 
   function yoffset!()
-    for trial in eachindex(data)
+    for t in eachindex(data)
       for (idx, col) in enumerate(channel_labels)
-        data[trial][!, col] .+= offset.val[idx]
+        data[t][!, col] .+= offset.val[idx]
       end
     end
   end
 
   function ycentre!()
-    for trial in eachindex(data)
+    for t in eachindex(data)
       for (idx, col) in enumerate(channel_labels)
-        data[trial][!, col] .-= offset.val[idx]
+        data[t][!, col] .-= offset.val[idx]
       end
     end
   end
@@ -533,7 +537,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   # deregister_interaction!(ax, :limitreset)
 
   # data to plot
-  data = copy(dat.data)
+  data = deepcopy(dat.data)
   data_filtered = nothing
 
   channel_data_original = Dict()
@@ -554,6 +558,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   else # just centre
     offset = GLMakie.Observable(0.0)
   end
+  println(offset)
 
   xlims!(ax, data[1].time[xrange.val[1]], data[1].time[xrange.val[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
@@ -636,17 +641,17 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   trigger_text = text!(string.(trigger_data_time.val.triggers), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
 
   ################### vEOG/hEOG ###############################
-  #if ("is_vEOG" in names(dat.data[1]) && "is_hEOG" in names(dat.data[1]))
-  #  vEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_vEOG), [:time, :is_vEOG]]
-  #  vEOG_lines = vlines!(vEOG_data_time.time, color=:grey, linewidth=1, visible = false)
-  #  text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
-  #  vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+  if ("is_vEOG" in names(dat.data[1]) && "is_hEOG" in names(dat.data[1]))
+    vEOG_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].is_vEOG), [:time, :is_vEOG]]
+    vEOG_lines = vlines!(vEOG_data_time.val.time, color=:grey, linewidth=1, visible = false)
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.val.time]
+    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time.val)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
 
-  #  hEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_hEOG), [:time, :is_hEOG]]
-  #  hEOG_lines = vlines!(hEOG_data_time.time, color=:grey, linewidth=1, visible = false)
-  #  text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
-  #  hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
-  #end
+    hEOG_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].is_hEOG), [:time, :is_hEOG]]
+    hEOG_lines = vlines!(hEOG_data_time.val.time, color=:grey, linewidth=1, visible = false)
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.val.time]
+    hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time.val)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+  end
 
   extreme_spans = []
   function update_extreme_spans!()
@@ -669,6 +674,12 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     update_extreme_spans!()
   end
 
+
+    #  channel_data_original[col] = lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:darkgrey, :darkgrey, :red], linewidth=linewidth_orig, alpha=alpha_orig)
+
+
+ 
+
   function draw(; plot_labels=true)
     alpha_orig = 1
     linewidth_orig = 2
@@ -679,10 +690,10 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
     for col in channel_labels
       # original data
-      channel_data_original[col] = lines!(ax, @lift(data[$trial][!, :time]), @lift(data[$trial][!, col]), color=@lift(abs.(dat.data[$trial][!, col]) .>= $crit_val), colormap=[:darkgrey, :darkgrey, :red], linewidth=linewidth_orig, alpha=alpha_orig)
-      if plot_labels
-        channel_data_labels[col] = text!(ax, @lift(data[$trial][$xrange, :time][1]), @lift(data[$trial][$xrange, col][$trial]), text=col, align=(:left, :center), fontsize=20)
-      end
+      channel_data_original[col] = lines!(ax, data[trial.val][!, :time], data[trial.val][!, col], color=@lift(abs.(dat.data[$trial][!, col]) .>= $crit_val), colormap=[:darkgrey, :darkgrey, :red], linewidth=linewidth_orig, alpha=alpha_orig)
+      #if plot_labels
+      #  channel_data_labels[col] = text!(ax, @lift(data[trial][$xrange, :time][1]), @lift(data[trial][$xrange, col][$trial]), text=col, align=(:left, :center), fontsize=20)
+      #end
       # # also show filtered data
       # if plot_filtered_data
       #   channel_data_filtered[col] = lines!(ax, data_filtered[trial.val][!, :time], data_filtered[trial.val][!, col], color=:blue, linewidth=2)
