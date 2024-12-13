@@ -52,7 +52,7 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
 # plot_databrowser(dat, ["vEOG", "hEOG"])
 # plot_databrowser(dat, ["hEOG"])
 # extract epochs
-epochs = extract_epochs(dat, 2, -0.5, 2)
+epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # plot epochs
 include("plot.jl")
