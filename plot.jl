@@ -436,19 +436,16 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   end
 
   function plot_vEOG_lines(active) 
-    println(vEOG_data_time.val)
-    println(vEOG_lines)
     vEOG_lines.visible = active
     vEOG_text.visible = active
-    vEOG_lines[1].val = 1.0
-    #text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.val.time]
-    #vEOG_text.position = text_pos
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
+    vEOG_text.position = text_pos
   end
 
   function plot_hEOG_lines(active) 
     hEOG_lines.visible = active
     hEOG_text.visible = active
-    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.val.time]
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
     hEOG_text.position = text_pos
   end
 
@@ -480,6 +477,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     trial[] = min(length(dat.data), trial.val[1] + 1)
     ax.title = "Epoch $(trial.val)/$(length(dat.data))"
     update_extreme_spans!()
+    update_vEOG!()
     draw(trial.val)
   end
 
@@ -639,12 +637,24 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   trigger_text = text!(string.(trigger_data_time.val.triggers), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
 
   ################### vEOG/hEOG ###############################
-  if ("is_vEOG" in names(dat.data[1]) && "is_hEOG" in names(dat.data[1]))
-    vEOG_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].is_vEOG), [:time, :is_vEOG]]
-    vEOG_lines = vlines!(vEOG_data_time.val.time, color=:grey, linewidth=1, visible = false)
-    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.val.time]
-    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time.val)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+  vEOG_data_time = []
+  vEOG_lines = []
+  vEOG_text = []
+  function update_vEOG!()
+    vEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_vEOG), [:time, :is_vEOG]]
+    vEOG_lines = vlines!(vEOG_data_time.time, color=:grey, linewidth=1, visible = false)
+    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
+    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+  end
+  if ("is_vEOG" in names(dat.data[1])) 
+    update_vEOG!()
+    #vEOG_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].is_vEOG), [:time, :is_vEOG]]
+    #vEOG_lines = vlines!(vEOG_data_time.val.time, color=:grey, linewidth=1, visible = false)
+    #text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.val.time]
+    #vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time.val)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+  end
 
+  if ("is_HEOG" in names(dat.data[1]))
     hEOG_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].is_hEOG), [:time, :is_hEOG]]
     hEOG_lines = vlines!(hEOG_data_time.val.time, color=:grey, linewidth=1, visible = false)
     text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.val.time]
