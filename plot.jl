@@ -408,7 +408,6 @@ end
 function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractString})
 
   function butterfly_plot(active)
-    println("butterfly_plot")
     clear_axes()
     if active
       ycentre!()
@@ -481,7 +480,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     trial[] = min(length(dat.data), trial.val[1] + 1)
     ax.title = "Epoch $(trial.val)/$(length(dat.data))"
     update_extreme_spans!()
-    draw()
+    draw(trial.val)
   end
 
   function step_epoch_backward()
@@ -489,7 +488,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     trial[] = max(1, trial.val[1] - 1)
     ax.title = "Epoch $(trial.val)/$(length(dat.data))"
     update_extreme_spans!()
-    draw()
+    draw(trial.val)
   end
 
   function chans_less()
@@ -558,7 +557,6 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   else # just centre
     offset = GLMakie.Observable(0.0)
   end
-  println(offset)
 
   xlims!(ax, data[1].time[xrange.val[1]], data[1].time[xrange.val[end]])
   ylims!(ax, yrange.val[1], yrange.val[end])
@@ -590,7 +588,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     nchannels = length(channel_labels)
     clear_axes()
 
-    data = copy(dat.data)
+    data = deepcopy(dat.data)
     if !isnothing(data_filtered)
       apply_lp_filter(true)
     end
@@ -663,10 +661,11 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     if length(tmp) > 0
       extreme = splitgroups(tmp)
       if length(extreme) > 0
-        push!(extreme_spans, vspan!(ax, data[trial.val][extreme[1], :time], data[trial.val][extreme[2], :time], color="LightGrey", alpha=0.5, visible=false))
+        # TODO: hard coded Toggle index!!!
+        push!(extreme_spans, vspan!(ax, data[trial.val][extreme[1], :time], data[trial.val][extreme[2], :time], color="LightGrey", alpha=0.5, visible=toggles[5,1].active.val))
+        println(toggles[5,2].visible)
       end
     end
-    # plot_extreme_lines(false)
   end
 
   #################### Extreme Values ###############################
@@ -674,13 +673,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     update_extreme_spans!()
   end
 
-
-    #  channel_data_original[col] = lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:darkgrey, :darkgrey, :red], linewidth=linewidth_orig, alpha=alpha_orig)
-
-
- 
-
-  function draw(; plot_labels=true)
+  function draw(trial_number; plot_labels=true)
     alpha_orig = 1
     linewidth_orig = 2
     plot_filtered_data = !isnothing(data_filtered)
@@ -690,7 +683,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
     for col in channel_labels
       # original data
-      channel_data_original[col] = lines!(ax, data[trial.val][!, :time], data[trial.val][!, col], color=@lift(abs.(dat.data[$trial][!, col]) .>= $crit_val), colormap=[:darkgrey, :darkgrey, :red], linewidth=linewidth_orig, alpha=alpha_orig)
+      channel_data_original[col] = lines!(ax, data[trial_number][!, :time], data[trial_number][!, col], color=@lift(abs.(dat.data[trial_number][!, col]) .>= $crit_val), colormap=[:darkgrey, :darkgrey, :red], linewidth=linewidth_orig, alpha=alpha_orig)
       #if plot_labels
       #  channel_data_labels[col] = text!(ax, @lift(data[trial][$xrange, :time][1]), @lift(data[trial][$xrange, col][$trial]), text=col, align=(:left, :center), fontsize=20)
       #end
@@ -707,7 +700,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
 
   hideydecorations!(ax, label=true)
   yoffset!()
-  draw(plot_labels=true)
+  draw(1, plot_labels=true)
   display(fig)
   # DataInspector(fig)
 
