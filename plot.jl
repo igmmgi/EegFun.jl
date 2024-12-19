@@ -81,8 +81,6 @@ function head_shape_3d(layout; kwargs...)
   head_shape_3d(fig, ax, layout; kwargs...)
 end
 
-head_shape_3d(epochs.layout)
-
 
 ##########################################
 # 2D topographic plot
@@ -175,7 +173,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     push!(toggles, ToggleButton("LP-Filter On/Off", apply_lp_filter))
 
     toggle_buttons = [Toggle(fig, active=false) for toggle in toggles]
-    toggle_labels = [Label(fig, toggle.label, fontsize=30, halign=:left) for toggle in toggles]
+    toggle_labels = [Label(fig, toggle.label, fontsize=22, halign=:left) for toggle in toggles]
     toggle_functions = [toggle.fun for toggle in toggles]
 
     return hcat(toggle_buttons, toggle_labels, toggle_functions)
@@ -270,7 +268,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
   end
 
   # menu for electrode/channel selection
-  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All", direction=:down), Label(fig, "Labels", fontsize=30, halign=:left))
+  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All", direction=:down, fontsize=18), Label(fig, "Labels", fontsize=22, halign=:left))
   on(menu[1].selection) do s
     channel_labels = [s]
     if s == "All"
@@ -302,8 +300,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     end
   end
 
-  slider_extreme = Slider(fig[1, 2], range=0:5:200, startvalue=200, width=100)
-  slider_lp_filter = Slider(fig[1, 2], range=10:5:100, startvalue=30, width=100)
+  slider_extreme = Slider(fig[1, 2], range=0:5:100, startvalue=100, width=100)
+  slider_lp_filter = Slider(fig[1, 2], range=5:5:60, startvalue=20, width=100)
 
   crit_val = lift(slider_extreme.value) do x
     x
@@ -337,30 +335,30 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
   # position GUI controls
   fig[1, 2] = grid!(vcat(toggles[:, 1:2],
-      hcat(slider_lp_filter, Label(fig, @lift("LP-Filter Value: $($(slider_lp_filter.value))"), fontsize=30, halign=:left)),
-      hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30)),
+      hcat(slider_lp_filter, Label(fig, @lift("LP-Filter: $($(slider_lp_filter.value)) Hz"), fontsize=22, halign=:left)),
+      hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize=22)),
       menu),
     tellheight=false)
-  colsize!(fig.layout, 2, Relative(1 / 8))
+  colsize!(fig.layout, 2, Relative(1 / 6))
 
 
   #################### Triggers/Events ###############################
   trigger_data_time = @views data[findall(x -> x != 0, data[!, :].triggers), [:time, :triggers]]
   trigger_lines = vlines!(trigger_data_time.time, color=:grey, linewidth=1, visible=false)
   text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
-  trigger_text = text!(string.(trigger_data_time.triggers), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+  trigger_text = text!(string.(trigger_data_time.triggers), position=text_pos, space=:data, align=(:center, :center), fontsize=22, visible=false)
 
   ################### vEOG/hEOG ###############################
   if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
     vEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_vEOG), [:time, :is_vEOG]]
     vEOG_lines = vlines!(vEOG_data_time.time, color=:grey, linewidth=1, visible=false)
     text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
-    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=22, visible=false)
 
     hEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_hEOG), [:time, :is_hEOG]]
     hEOG_lines = vlines!(hEOG_data_time.time, color=:grey, linewidth=1, visible=false)
     text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
-    hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+    hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=22, visible=false)
   end
 
   ################### Extreme Values ###############################
@@ -381,7 +379,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
       # original data
       channel_data_original[col] = lines!(ax, data[!, :time], data[!, col], color=@lift(abs.(dat.data[!, col]) .>= $crit_val), colormap=[:darkgrey, :darkgrey, :red], linewidth=linewidth_orig, alpha=alpha_orig)
       if plot_labels
-        channel_data_labels[col] = text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=20)
+        channel_data_labels[col] = text!(ax, @lift(data[$xrange, :time][1]), @lift(data[$xrange, col][1]), text=col, align=(:left, :center), fontsize=18)
       end
       # also show filtered data
       if plot_filtered_data
@@ -477,7 +475,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     push!(toggles, ToggleButton("LP-Filter On/Off", apply_lp_filter))
 
     toggle_buttons = [Toggle(fig, active=false) for toggle in toggles]
-    toggle_labels = [Label(fig, toggle.label, fontsize=30, halign=:left) for toggle in toggles]
+    toggle_labels = [Label(fig, toggle.label, fontsize=22, halign=:left) for toggle in toggles]
     toggle_functions = [toggle.fun for toggle in toggles]
 
     return hcat(toggle_buttons, toggle_labels, toggle_functions)
@@ -586,7 +584,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   end
 
   # menu for electrode/channel selection
-  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All", direction=:down), Label(fig, "Labels", fontsize=30, halign=:left))
+  menu = hcat(Menu(fig, options=vcat(["All", "Left", "Right", "Central"], dat.layout.label), default="All", direction=:down, fontsize=18), Label(fig, "Labels", fontsize=22, halign=:left))
   on(menu[1].selection) do s
     channel_labels = [s]
     if s == "All"
@@ -618,7 +616,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
   end
 
-  menu_trial = hcat(Menu(fig, options=1:length(data), default=1, direction=:down), Label(fig, "Epoch", fontsize=30, halign=:left))
+  menu_trial = hcat(Menu(fig, options=1:length(data), default=1, direction=:down, fontsize=18), Label(fig, "Epoch", fontsize=22, halign=:left))
   on(menu_trial[1].selection) do s
     clear_axes()
     trial[] = s
@@ -629,8 +627,8 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     draw()
   end
 
-  slider_extreme = Slider(fig[1, 2], range=0:5:200, startvalue=200, width=100)
-  slider_lp_filter = Slider(fig[1, 2], range=10:5:100, startvalue=30, width=100)
+  slider_extreme = Slider(fig[1, 2], range=0:5:100, startvalue=200, width=100)
+  slider_lp_filter = Slider(fig[1, 2], range=5:5:60, startvalue=20, width=100)
 
   crit_val = lift(slider_extreme.value) do x
     x
@@ -653,18 +651,18 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
 
   # position GUI controls
   fig[1, 2] = grid!(vcat(toggles[:, 1:2],
-      hcat(slider_lp_filter, Label(fig, @lift("LP-Filter Value: $($(slider_lp_filter.value))"), fontsize=30, halign=:left)),
-      hcat(slider_extreme, Label(fig, @lift("Extreme Values: $($(slider_extreme.value)) μV"), fontsize=30)),
+      hcat(slider_lp_filter, Label(fig, @lift("LP-Filter: $($(slider_lp_filter.value)) Hz"), fontsize=22, halign=:left)),
+      hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize=22)),
       menu, menu_trial),
     tellheight=false)
-  colsize!(fig.layout, 2, Relative(1 / 8))
+  colsize!(fig.layout, 2, Relative(1 / 10))
 
-
+  
   #################### Triggers/Events ###############################
   trigger_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].triggers), [:time, :triggers]]
   trigger_lines = vlines!(trigger_data_time.val.time, color=:grey, linewidth=1, visible=false)
   text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time]
-  trigger_text = text!(string.(trigger_data_time.val.triggers), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+  trigger_text = text!(string.(trigger_data_time.val.triggers), position=text_pos, space=:data, align=(:center, :center), fontsize=22, visible=false)
 
   ################### vEOG/hEOG ###############################
   vEOG_data_time = []
@@ -678,7 +676,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     vEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_vEOG), [:time, :is_vEOG]]
     vEOG_lines = vlines!(vEOG_data_time.time, color=:grey, linewidth=1, visible=false)
     text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
-    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+    vEOG_text = text!(repeat(["v"], nrow(vEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=22, visible=false)
     plot_vEOG_lines(toggles[3, 1].active.val)
   end
   if ("is_vEOG" in names(dat.data[1]))
@@ -697,7 +695,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     hEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_hEOG), [:time, :is_hEOG]]
     hEOG_lines = vlines!(hEOG_data_time.time, color=:grey, linewidth=1, visible=false)
     text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
-    hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=30, visible=false)
+    hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=22, visible=false)
     plot_hEOG_lines(toggles[4, 1].active.val)
   end
   if ("is_HEOG" in names(dat.data[1]))
