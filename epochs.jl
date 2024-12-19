@@ -65,7 +65,7 @@ function extract_epochs(dat::ContinuousData, trigger_sequence, start_time, end_t
 end
 
 function average_epochs(dat::EpochData)
-  erp = combine(groupby(reduce(vcat, dat.data), :time), Not([:time, :events, :epoch, :sample]) .=> mean .=> Not([:time, :events, :epoch, :sample]))
+  erp = combine(groupby(reduce(vcat, dat.data), :time), Not([:time, :triggers, :epoch, :sample]) .=> mean .=> Not([:time, :triggers, :epoch, :sample]))
   return ErpData(erp, dat.layout, dat.sample_rate)
 end
 
