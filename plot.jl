@@ -3,7 +3,9 @@ using GLMakie
 
 #########################################
 # 2D head shape
-function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=20, markersize=12, label_x_offset=0, label_y_offset=0)
+function head_shape_2d(fig, ax, layout;
+  linewidth=2, plot_points=true, plot_labels=true, font_size=20, point_size=12, label_x_offset=0, label_y_offset=0, head_colour=:black,
+  point_colour=:black, text_colour=:black, point_shape=:circle)
 
   if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
     polar_to_cartesian_xy!(layout)
@@ -11,19 +13,19 @@ function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels
 
   # head shape
   radius = 88 # mm
-  arc!(ax, Point2f(0), radius * 2, -π, π, color=:black, linewidth=linewidth) # head
-  arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2, color=:black, linewidth=linewidth) # ear right
-  arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2, color=:black, linewidth=linewidth) # ear left
-  lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4, color=:black, linewidth=linewidth) # nose
+  arc!(ax, Point2f(0), radius * 2, -π, π, color=head_colour, linewidth=linewidth) # head
+  arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2, color=head_colour, linewidth=linewidth) # ear right
+  arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2, color=head_colour, linewidth=linewidth) # ear left
+  lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4, color=head_colour, linewidth=linewidth) # nose
 
   # points
   if plot_points
-    scatter!(ax, layout[!, :x2], layout[!, :y2], marker=:circle, markersize=markersize, color=:black)
+    scatter!(ax, layout[!, :x2], layout[!, :y2], marker=point_shape, markersize=point_size, color=point_colour)
   end
 
   if plot_labels
     for label in eachrow(layout)
-      text!(ax, fontsize=fontsize, position=(label.x2 + label_x_offset, label.y2 + label_y_offset), label.label)
+      text!(ax, fontsize=font_size, position=(label.x2 + label_x_offset, label.y2 + label_y_offset), label.label, color=text_colour)
     end
   end
 
@@ -32,20 +34,23 @@ function head_shape_2d(f, ax, layout; linewidth=2, plot_points=true, plot_labels
   hideydecorations!(ax; label=true, ticklabels=true, ticks=true, grid=true, minorgrid=true, minorticks=true)
   hidespines!(ax, :t, :r, :l, :b)
 
-  return f
+  return fig
 
 end
 
+
 function head_shape_2d(layout; kwargs...)
-  f = Figure()
-  ax = GLMakie.Axis(f[1, 1])
-  head_shape_2d(f, ax, layout; kwargs...)
+  fig = Figure()
+  ax = GLMakie.Axis(fig[1, 1])
+  head_shape_2d(fig, ax, layout; kwargs...)
 end
 
 
 #########################################
 # 3D head shape
-function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels=true, fontsize=20, markersize=12, label_x_offset=0, label_y_offset=0, label_z_offset=0)
+function head_shape_3d(fig, ax, layout;
+  plot_points=true, plot_labels=true, font_size=20, marker_size=12, label_x_offset=0, label_y_offset=0, label_z_offset=0,
+  point_colour=:black, text_colour=:black, point_shape=:circle)
 
   if (:x3 ∉ names(layout) || :y3 ∉ names(layout) || :z3 ∉ names(layout))
     polar_to_cartesian_xyz!(layout)
@@ -53,12 +58,12 @@ function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels
 
   # points
   if plot_points
-    scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3], marker=:circle, markersize=markersize, color=:black)
+    scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3], marker=point_shape, markersize=marker_size, color=point_colour)
   end
 
   if plot_labels
     for label in eachrow(layout)
-      text!(ax, fontsize=fontsize, position=(label.x3 + label_x_offset, label.y3 + label_y_offset, label.z3 + label_z_offset), label.label)
+      text!(ax, fontsize=font_size, position=(label.x3 + label_x_offset, label.y3 + label_y_offset, label.z3 + label_z_offset), label.label, color=text_colour)
     end
   end
 
@@ -66,23 +71,28 @@ function head_shape_3d(f, ax, layout; linewidth=2, plot_points=true, plot_labels
   hidedecorations!(ax)
   hidespines!(ax)
 
-  return f
+  return fig
 
 end
 
 function head_shape_3d(layout; kwargs...)
-  f = Figure()
-  ax = GLMakie.Axis3(f[1, 1])
-  head_shape_3d(f, ax, layout; kwargs...)
+  fig = Figure()
+  ax = GLMakie.Axis3(fig[1, 1])
+  head_shape_3d(fig, ax, layout; kwargs...)
 end
+
+head_shape_3d(epochs.layout)
 
 
 ##########################################
 # 2D topographic plot
-function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0)
+function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0, colour_map=:jet)
 
   radius = 88 # mm
 
+  if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+    polar_to_cartesian_xy!(layout)
+  end
   points = Matrix(dat.layout[!, [:x2, :y2]])'
   data = data_interpolation_topo(Vector(dat.data[1000, dat.layout.label]), points)
 
@@ -90,17 +100,18 @@ function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot
     ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
   end
 
-  f = Figure()
-  ax = GLMakie.Axis(f[1, 1])
-  co = contourf!(range(-radius, radius, length=grid_scale), range(-radius, radius, length=grid_scale), data, levels=100, colormap=:jet)
-  Colorbar(f[1, 2], co)
+  fig = Figure()
+  ax = GLMakie.Axis(fig[1, 1])
+  co = contourf!(range(-radius, radius, length=grid_scale), range(-radius, radius, length=grid_scale), data, levels=100, colormap=colour_map)
+  Colorbar(fig[1, 2], co)
 
   # head shape
-  head_shape_2d(f, ax, dat.layout, plot_points=plot_points, plot_labels=plot_labels, label_x_offset=label_x_offset, label_y_offset=label_y_offset)
+  head_shape_2d(fig, ax, dat.layout, plot_points=plot_points, plot_labels=plot_labels, label_x_offset=label_x_offset, label_y_offset=label_y_offset)
 
-  return f
+  return fig
 
 end
+
 
 
 struct ToggleButton
@@ -313,17 +324,15 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
   # keyboard events
   on(events(fig).keyboardbutton) do event
-    println(event)
     if event.action in (Keyboard.press, Keyboard.repeat)
-      #if event.action in (Keyboard.press,)
       event.key == Keyboard.left && step_back()
       event.key == Keyboard.right && step_forward()
       event.key == Keyboard.down && chans_less()
       event.key == Keyboard.up && chans_more()
     end
     # TODO: what is best here?
-    #return Consume()
-    #return Consume(false)
+    # return Consume()
+    # return Consume(false)
   end
 
   # position GUI controls
@@ -760,31 +769,61 @@ end
 
 
 # #################################################################
-# plot epoch: Epoched Data
-function plot_epochs(dat::EpochData, channels::Union{Vector{<:AbstractString},Vector{Symbol}}; xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV")
+# plot_epochs: Epoched Data (Single Condition; Single Channel or Average of multiple channels)
+function plot_epochs(dat::EpochData, channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+  xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV", linewidth=[1, 3], colour=[:grey, :black], yreversed=false)
 
-  f = Figure()
-  ax = GLMakie.Axis(f[1, 1])
+  fig = Figure()
+  ax = GLMakie.Axis(fig[1, 1])
 
+  # plot each trial (average acrossed electordes if >1) and overall average
   avg_data = zeros(nrow(dat.data[1]))
   for trial in eachindex(dat.data)
     trial_data = colmeans(dat.data[trial], channels)
     avg_data .+= trial_data
-    GLMakie.lines!(dat.data[trial][!, :time], trial_data, color=:grey)
+    GLMakie.lines!(dat.data[trial][!, :time], trial_data, color=colour[1], linewidth=linewidth[1])
   end
   avg_data ./= length(dat.data)
-  GLMakie.lines!(dat.data[1][!, :time], avg_data, color=:black)
+  GLMakie.lines!(dat.data[1][!, :time], avg_data, color=colour[2], linewidth=linewidth[2])
 
   !isnothing(xlim) && xlims!(ax, xlim)
-  !isnothing(ylim) && xlims!(ax, ylim)
+  !isnothing(ylim) && ylims!(ax, ylim)
+  ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
   ax.xlabel = xlabel
   ax.ylabel = ylabel
+  ax.yreversed = yreversed
 
-  return f
+  return fig
+
 end
 
-function plot_epochs(dat::EpochData, channels::Union{AbstractString,Symbol}; xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV")
-  plot_epochs(dat::EpochData, [channels]; xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV")
+function plot_epochs(dat::EpochData, channels::Union{AbstractString,Symbol}; kwargs...)
+  plot_epochs(dat::EpochData, [channels]; kwargs...)
+end
+
+
+# #################################################################
+# plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
+function plot_erp(dat::ErpData, channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+  xlim=nothing, ylim=nothing, xlabel="Time (S)", ylabel="mV", linewidth=[1, 3], colour=:black, yreversed=false)
+
+  fig = Figure()
+  ax = GLMakie.Axis(fig[1, 1])
+
+  GLMakie.lines!(dat.data[!, :time], colmeans(dat.data, channels), color=colour, linewidth=linewidth[2])
+  !isnothing(xlim) && xlims!(ax, xlim)
+  !isnothing(ylim) && xlims!(ax, ylim)
+  ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
+  ax.xlabel = xlabel
+  ax.ylabel = ylabel
+  ax.yreversed = yreversed
+
+  return fig
+
+end
+
+function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs...)
+  plot_erp(dat, [channels]; kwargs...)
 end
 
 

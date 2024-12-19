@@ -59,16 +59,25 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 include("plot.jl")
 plot_databrowser(epochs)
 
-# plot_epochs(epochs, ["PO7", "PO8"])
-# plot_epochs(epochs, [:PO7])
+plot_epochs(epochs, :Fp1)
+plot_epochs(epochs, "Fp1")
+
+plot_epochs(epochs, epochs.layout.label)
+plot_epochs(epochs, ["PO7", "PO8"])
+
 
 # average epochs
 erp = average_epochs(epochs)
 
+plot_erp(erp, :Fp1)
+plot_erp(erp, :Fp1, yreversed=true)
+plot_erp(erp, "Fp1")
+
+plot_erp(erp, [:Fp1, :Fp2])
+plot_erp(erp, ["Fp1", "Fp2"])
 
 
 
-plot_databrowser(erp)
 
 
 save_object("$(subject)_$(cond)_epochs.jld2", epochs)
@@ -178,20 +187,6 @@ plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend=false)
 
 
 ########################################################################
-
-
-function data_interpolation_topo(dat, points; grid_scale=300)
-
-  radius = 88 # mm
-  x = y = range(-radius, radius, length=grid_scale)
-  X, Y = repeat(x', grid_scale)[:], repeat(y', grid_scale)[:]
-  grid = [X Y]'
-  dat = interpolate(Multiquadratic(), points, dat)
-  dat = ScatteredInterpolation.evaluate(dat, grid)
-  dat = reshape(dat, grid_scale, grid_scale)
-  circle_mask!(dat, grid_scale)
-  return dat
-end
 
 
 
