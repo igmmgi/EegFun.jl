@@ -22,8 +22,8 @@ ax = Axis3(f[1, 1])
 hidedecorations!(ax)  # hides ticks, grid and lables
 hidespines!(ax)  # hid
 clip_planes = [Plane3f(Point3f(0), Vec3f(0, 1, 0))]
-mesh!(ax, brain, color=:grey, clip_planes=clip_planes)
-wireframe!(ax, brain, clip_planes=clip_planes, color=:grey)
+mesh!(ax, brain, color = :grey, clip_planes = clip_planes)
+wireframe!(ax, brain, clip_planes = clip_planes, color = :grey)
 
 
 
@@ -31,10 +31,3 @@ wireframe!(ax, brain, clip_planes=clip_planes, color=:grey)
 # vl = lift(x -> x[1], is.interval)
 # vr = lift(x -> x[2], is.interval)
 # vspan!(fig[1, 1], vl, vr)
-
-
-
-
-
-
-
