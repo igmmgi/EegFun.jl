@@ -1,0 +1,8 @@
+indent = 4
+margin = 120
+
+align_assignment = true
+align_struct_field = true
+align_conditional = true
+align_pair_arrow = true
+align_matrix = true

@@ -70,7 +70,7 @@ include("plot.jl")
 erp = average_epochs(epochs)
 
 plot_erp(erp, :Fp1)
-plot_erp(erp, :Fp1, yreversed=true)
+plot_erp(erp, :Fp1, yreversed = true)
 plot_erp(erp, "Fp1")
 plot_erp(erp, [:Fp1, :Fp2])
 plot_erp(erp, ["Fp1", "Fp2"])
@@ -78,7 +78,7 @@ plot_erp(erp, ["Fp1", "Fp2"])
 
 include("plot.jl")
 include("topo.jl")
-plot_topoplot(erp, xlim=300, font_size=30, point_size=20)
+plot_topoplot(erp)
 
 
 save_object("$(subject)_$(cond)_epochs.jld2", epochs)
@@ -95,11 +95,11 @@ detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 function test_plot_eog_detection(dat, xlim, channel, detected)
-  fig = Figure()
-  ax = GLMakie.Axis(fig[1, 1])  # plot layout
-  lines!(ax, dat.data.time[xlim], dat.data[!, channel][xlim])
-  vlines!(ax, dat.data.time[xlim][dat.data[!, detected][xlim]], color=:black)
-  display(fig)
+    fig = Figure()
+    ax = GLMakie.Axis(fig[1, 1])  # plot layout
+    lines!(ax, dat.data.time[xlim], dat.data[!, channel][xlim])
+    vlines!(ax, dat.data.time[xlim][dat.data[!, detected][xlim]], color = :black)
+    display(fig)
 end
 test_plot_eog_detection(dat, 1000:14000, "vEOG", "is_vEOG")
 test_plot_eog_detection(dat, 1000:4000, "hEOG", "is_hEOG")
@@ -107,18 +107,18 @@ test_plot_eog_detection(dat, 1000:4000, "hEOG", "is_hEOG")
 
 
 function test_analysis()
-  for subject in 3:4
-    for condition in [1, 3]
-      println("Reading file: Flank_C_$(subject).bdf")
-      dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
-      dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-      filter_data!(dat, "hp", 1, 2)
-      epochs = extract_epochs(dat, condition, -0.5, 2)
-      erp = average_epochs(epochs)
-      save_object("$(subject)_$(condition)_epochs.jld2", epochs)
-      save_object("$(subject)_$(condition)_erp.jld2", erp)
+    for subject = 3:4
+        for condition in [1, 3]
+            println("Reading file: Flank_C_$(subject).bdf")
+            dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
+            dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+            filter_data!(dat, "hp", 1, 2)
+            epochs = extract_epochs(dat, condition, -0.5, 2)
+            erp = average_epochs(epochs)
+            save_object("$(subject)_$(condition)_epochs.jld2", epochs)
+            save_object("$(subject)_$(condition)_erp.jld2", erp)
+        end
     end
-  end
 end
 
 @time test_analysis()
@@ -128,53 +128,53 @@ end
 
 function grand_average_erps(subjects, conditions)
 
-  file_problem = check_files_exist(subjects, conditions, "erp")
-  if file_problem
-    return
-  end
-
-  sample_rate = nothing
-  layout = nothing
-
-  for condition in conditions
-
-    ind_subject_condition_array = []
-
-    for subject in subjects
-
-      # load individual subject data
-      erp = load_object("$(subject)_$(condition)_erp.jld2")
-
-      # basic data checks to make sure sample layout and sample rate
-      if isnothing(sample_rate)
-        sample_rate = erp.sample_rate
-      end
-      if isnothing(layout)
-        layout = erp.layout
-      end
-      if !isnothing(sample_rate)
-        if sample_rate != erp.sample_rate
-          throw(DomainError([sample_rate, erp.sample_rate], "sample rates across files do not match!"))
-        end
-      end
-      if !isnothing(layout)
-        if layout != erp.layout
-          throw(DomainError([layout, erp.layout], "layout across files do not match!"))
-        end
-      end
-      # update sample_rate/layout from current file
-      sample_rate = erp.sample_rate
-      layout = erp.layout
-
-      # perform subject average
-      for subject in subjects
-        push!(ind_subject_condition_array, erp.data)
-      end
-      grand_average = reduce(.+, ind_subject_condition_array) ./ length(ind_subject_condition_array)
-      save_object("$(cond)_ga_erp.jld2", grand_average)
-
+    file_problem = check_files_exist(subjects, conditions, "erp")
+    if file_problem
+        return
     end
-  end
+
+    sample_rate = nothing
+    layout = nothing
+
+    for condition in conditions
+
+        ind_subject_condition_array = []
+
+        for subject in subjects
+
+            # load individual subject data
+            erp = load_object("$(subject)_$(condition)_erp.jld2")
+
+            # basic data checks to make sure sample layout and sample rate
+            if isnothing(sample_rate)
+                sample_rate = erp.sample_rate
+            end
+            if isnothing(layout)
+                layout = erp.layout
+            end
+            if !isnothing(sample_rate)
+                if sample_rate != erp.sample_rate
+                    throw(DomainError([sample_rate, erp.sample_rate], "sample rates across files do not match!"))
+                end
+            end
+            if !isnothing(layout)
+                if layout != erp.layout
+                    throw(DomainError([layout, erp.layout], "layout across files do not match!"))
+                end
+            end
+            # update sample_rate/layout from current file
+            sample_rate = erp.sample_rate
+            layout = erp.layout
+
+            # perform subject average
+            for subject in subjects
+                push!(ind_subject_condition_array, erp.data)
+            end
+            grand_average = reduce(.+, ind_subject_condition_array) ./ length(ind_subject_condition_array)
+            save_object("$(cond)_ga_erp.jld2", grand_average)
+
+        end
+    end
 end
 grand_average_erps([3, 4], 1)
 
@@ -184,7 +184,7 @@ grand_average_erps([3, 4], 1)
 dat = read_bdf("../Flank_C_3.bdf")
 dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
 epochs = extract_epochs(dat, 1, -0.5, 2)
-plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend=false)
+plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend = false)
 
 
 ########################################################################
@@ -487,12 +487,12 @@ rereference!(dat, dat.layout.label, collect(1:72));
 
 using MultivariateStats
 
-model = fit(ICA, Matrix(dat.data[:, 3:end])', 71, maxiter=2, tol=0.1)
+model = fit(ICA, Matrix(dat.data[:, 3:end])', 71, maxiter = 2, tol = 0.1)
 
 ic_mw = 68 == size(dat', 1) ? inv(model.W)' : pinv(model.W)'
 ic = MultivariateStats.predict(model, dat')
 
-var(ic, dims=2)
+var(ic, dims = 2)
 
 # f = Figure()
 # ax = GLMakie.Axis(f[1, 1])
@@ -511,10 +511,10 @@ mixing_matrix = LinearAlgebra.pinv(unmixing_matrix)
 
 # sort
 source_data = dat[1:20000, 1:10]
-var = sum(mixing_matrix^2, dims=1) .* sum(source_data .^ 2, dims=1) / (10 * 20000 - 1)
+var = sum(mixing_matrix^2, dims = 1) .* sum(source_data .^ 2, dims = 1) / (10 * 20000 - 1)
 var ./= sum(var)
 
-order = sortperm(var, dims=2, rev=true)
+order = sortperm(var, dims = 2, rev = true)
 var[order]
 
 unmixing_matrix = unmixing_matrix[order[:], :]
@@ -523,9 +523,3 @@ mixing_matrix = mixing_matrix[order[:], :]
 lines(mixing_matrix[1, :])
 
 unmixing_matrix = unmixing_matrix * eye(69, 69) * eigen(:)
-
-
-
-
-
-
