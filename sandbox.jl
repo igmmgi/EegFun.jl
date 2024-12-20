@@ -12,6 +12,7 @@ using Random
 using ScatteredInterpolation
 using StatsBase
 
+
 include("types.jl")
 include("utils.jl")
 include("analyse.jl")
@@ -47,7 +48,7 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
-plot_databrowser(dat)
+# plot_databrowser(dat)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
 # plot_databrowser(dat, ["hEOG"])
@@ -57,13 +58,12 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # plot epochs
 include("plot.jl")
-plot_databrowser(epochs)
 
-plot_epochs(epochs, :Fp1)
-plot_epochs(epochs, "Fp1")
-
-plot_epochs(epochs, epochs.layout.label)
-plot_epochs(epochs, ["PO7", "PO8"])
+# plot_databrowser(epochs)
+# plot_epochs(epochs, :Fp1)
+# plot_epochs(epochs, "Fp1")
+# plot_epochs(epochs, epochs.layout.label)
+# plot_epochs(epochs, ["PO7", "PO8"])
 
 
 # average epochs
@@ -72,12 +72,13 @@ erp = average_epochs(epochs)
 plot_erp(erp, :Fp1)
 plot_erp(erp, :Fp1, yreversed=true)
 plot_erp(erp, "Fp1")
-
 plot_erp(erp, [:Fp1, :Fp2])
 plot_erp(erp, ["Fp1", "Fp2"])
 
 
-
+include("plot.jl")
+include("topo.jl")
+plot_topoplot(erp, xlim=300, font_size=30, point_size=20)
 
 
 save_object("$(subject)_$(cond)_epochs.jld2", epochs)

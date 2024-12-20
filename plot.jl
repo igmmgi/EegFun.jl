@@ -1,6 +1,5 @@
 using GLMakie
 
-
 #########################################
 # 2D head shape
 function head_shape_2d(fig, ax, layout;
@@ -22,7 +21,6 @@ function head_shape_2d(fig, ax, layout;
   if plot_points
     scatter!(ax, layout[!, :x2], layout[!, :y2], marker=point_shape, markersize=point_size, color=point_colour)
   end
-
   if plot_labels
     for label in eachrow(layout)
       text!(ax, fontsize=font_size, position=(label.x2 + label_x_offset, label.y2 + label_y_offset), label.label, color=text_colour)
@@ -84,15 +82,22 @@ end
 
 ##########################################
 # 2D topographic plot
-function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot_labels=true, label_x_offset=0, label_y_offset=0, colour_map=:jet)
-
+function plot_topoplot(dat; xlim=nothing, ylim=nothing, grid_scale=300, colour_map=:jet,
+    linewidth=2, plot_points=true, plot_labels=true, font_size=20, point_size=12, label_x_offset=0, 
+    label_y_offset=0, head_colour=:black, point_colour=:black, text_colour=:black, point_shape=:circle)
+ 
   radius = 88 # mm
 
-  if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+  if (:x2 ∉ names(dat.layout) || :y2 ∉ names(dat.layout))
     polar_to_cartesian_xy!(layout)
   end
   points = Matrix(dat.layout[!, [:x2, :y2]])'
-  data = data_interpolation_topo(Vector(dat.data[1000, dat.layout.label]), points)
+
+  if isnothing(xlim)
+    xlim=1
+  end
+
+  data = data_interpolation_topo(Vector(dat.data[xlim, dat.layout.label]), points, grid_scale)
 
   if isnothing(ylim)
     ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
@@ -100,11 +105,20 @@ function plot_topoplot(dat; ylim=nothing, grid_scale=300, plot_points=true, plot
 
   fig = Figure()
   ax = GLMakie.Axis(fig[1, 1])
-  co = contourf!(range(-radius, radius, length=grid_scale), range(-radius, radius, length=grid_scale), data, levels=100, colormap=colour_map)
+
+  co = contourf!(range(-radius*2, radius*2, length=grid_scale), 
+                 range(-radius*2, radius*2, length=grid_scale), 
+                 data, 
+                 levels=div(grid_scale,2), 
+                 colormap=colour_map)
   Colorbar(fig[1, 2], co)
 
   # head shape
-  head_shape_2d(fig, ax, dat.layout, plot_points=plot_points, plot_labels=plot_labels, label_x_offset=label_x_offset, label_y_offset=label_y_offset)
+  head_shape_2d(fig, ax, dat.layout, 
+                linewidth=linewidth, plot_points=plot_points, plot_labels=plot_labels, 
+                font_size=font_size, point_size=point_size, label_x_offset=label_x_offset, 
+                label_y_offset=label_y_offset, head_colour=head_colour, point_colour=point_colour, 
+                text_colour=text_colour, point_shape=point_shape)
 
   return fig
 
@@ -655,7 +669,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
       hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize=22)),
       menu, menu_trial),
     tellheight=false)
-  colsize!(fig.layout, 2, Relative(1 / 10))
+  colsize!(fig.layout, 2, Relative(1 / 6))
 
   
   #################### Triggers/Events ###############################
@@ -687,7 +701,6 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
   hEOG_lines = []
   hEOG_text = []
   function update_hEOG!()
-
     if length(hEOG_lines) > 0
       delete!(ax, hEOG_lines)
       delete!(ax, hEOG_text)
@@ -698,7 +711,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     hEOG_text = text!(repeat(["h"], nrow(hEOG_data_time)), position=text_pos, space=:data, align=(:center, :center), fontsize=22, visible=false)
     plot_hEOG_lines(toggles[4, 1].active.val)
   end
-  if ("is_HEOG" in names(dat.data[1]))
+  if ("is_hEOG" in names(dat.data[1]))
     update_hEOG!()
   end
 
