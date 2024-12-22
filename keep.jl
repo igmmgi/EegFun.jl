@@ -25,9 +25,3 @@ clip_planes = [Plane3f(Point3f(0), Vec3f(0, 1, 0))]
 mesh!(ax, brain, color = :grey, clip_planes = clip_planes)
 wireframe!(ax, brain, clip_planes = clip_planes, color = :grey)
 
-
-
-# is = IntervalSlider(fig[2, 1], range=@lift(data[$xrange, :time]), startvalues=(1, 2))
-# vl = lift(x -> x[1], is.interval)
-# vr = lift(x -> x[2], is.interval)
-# vspan!(fig[1, 1], vl, vr)
