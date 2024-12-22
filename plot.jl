@@ -1091,6 +1091,32 @@ function plot_erp(
 
 end
 
+
+layout = read_layout("./layouts/biosemi72.csv");
+polar_to_cartesian_xy!(layout)
+
+
+function plot_grid()
+  xminmaxrange = maximum(layout.x2) - minimum(layout.x2) 
+  yminmaxrange = maximum(layout.y2) - minimum(layout.y2) 
+  plot_height=0.05
+  plot_width=0.05
+  xpositions = (layout.x2 ./ xminmaxrange)  .+ 0.5
+  ypositions = (layout.y2 ./ yminmaxrange)  .+ 0.5 
+  fig = Figure()
+  for (x, y, label) in zip(xpositions, ypositions, layout.label)
+    ax = Axis(fig[1,1], width=Relative(plot_width), height=Relative(plot_height), halign=x, valign=y)
+    lines!(ax, 1:10)
+    lines!(ax, 10:-1:1)
+    text!(ax, x, y; text = label)
+  end
+  return fig
+end
+plot_grid()
+
+
+
+
 function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs...)
     plot_erp(dat, [channels]; kwargs...)
 end
