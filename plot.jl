@@ -1095,13 +1095,95 @@ function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs..
     plot_erp(dat, [channels]; kwargs...)
 end
 
+function data_limits_x(dat::DataFrame, col)
+    return [dat[!, col][1], dat[!, col][end]]
+end
+
+function data_limits_y(dat::DataFrame, col)
+    return [minimum(minimum.(eachcol(dat[!, col]))), maximum(maximum.(eachcol(dat[!, col])))]
+end
 
 
-layout = read_layout("./layouts/biosemi72.csv");
-polar_to_cartesian_xy!(layout)
+
+function plot_grid_rect(
+    dat::ErpData;
+    channels = nothing,
+    dims = nothing,
+    xlim = nothing,
+    ylim = nothing,
+    hide_decorations = false,
+)
+    if isnothing(channels)
+        channels = dat.layout.label
+    end
+    if isnothing(dims)
+        dim1 = ceil(Int, sqrt(length(channels)))
+        dim2 = ceil(Int, length(channels) ./ dim1)
+        dims = [dim1, dim2]
+    end
+    # x/y limits
+    if (isnothing(xlim))
+        xlim = data_limits_x(dat.data, :time)
+    end
+    if (isnothing(ylim))
+        ylim = data_limits_y(dat.data, dat.layout.label)
+    end
+    if isnothing(dims)
+        dim1 = ceil(Int, sqrt(length(channels)))
+        dim2 = ceil(Int, length(channels) ./ dim1)
+        dims = [dim1, dim2]
+    end
+    count = 1
+    fig = Figure()
+    for dim1 = 1:dims[1]
+        for dim2 = 1:dims[2]
+            ax = Axis(fig[dim1, dim2])
+            lines!(ax, dat.data[!, :time], dat.data[!, channels[count]])
+            vlines!(ax, [0], color = :black)
+            hlines!(ax, [0], color = :black)
+            if hide_decorations
+                hide_decorations!(ax)
+            end
+            xlims!(ax, xlim)
+            ylims!(ax, ylim)
+            count += 1
+            if count > length(channels)
+                break
+            end
+        end
+    end
+    return fig
+end
+# plot_grid_rect(dat, dims = [5, 1], channels = ["Fp1", "Fp2", "Cz", "PO7", "PO8"])
 
 
-function plot_grid(
+function hide_decorations!(ax)
+    hidexdecorations!(
+        ax;
+        label = true,
+        ticklabels = true,
+        ticks = true,
+        grid = true,
+        minorgrid = true,
+        minorticks = true,
+    )
+    hideydecorations!(
+        ax;
+        label = true,
+        ticklabels = true,
+        ticks = true,
+        grid = true,
+        minorgrid = true,
+        minorticks = true,
+    )
+    hidespines!(ax, :t, :r, :l, :b)
+end
+
+
+
+
+
+function plot_grid_topo(
     dat::ErpData;
     plot_label_position = nothing,
     plot_label = true,
@@ -1114,18 +1196,19 @@ function plot_grid(
     show_scale = false,
     scale_position = [0.95, 0.05],
 )
+
+    # x/y limits
     if (isnothing(xlim))
-        xlim = [dat.data.time[1], dat.data.time[end]]
+        xlim = data_limits_x(dat.data, :time)
     end
     if (isnothing(ylim))
-        ylim = [
-            minimum(minimum.(eachcol(dat.data[!, dat.layout.label]))),
-            maximum(maximum.(eachcol(dat.data[!, dat.layout.label]))),
-        ]
+        ylim = data_limits_y(dat.data, dat.layout.label)
     end
+
     if plot_label && isnothing(plot_label_position)
         plot_label_positon = [xlim[1] ylim[2]]
     end
+
     xminmaxrange = maximum(dat.layout.x2) - minimum(dat.layout.x2)
     yminmaxrange = maximum(dat.layout.y2) - minimum(dat.layout.y2)
     xpositions = (layout.x2 ./ xminmaxrange) .+ 0.5
@@ -1148,28 +1231,10 @@ function plot_grid(
         end
         # hide some plot stuff (but this seems v. slow!)
         if hide_decorations
-            hidexdecorations!(
-                ax;
-                label = true,
-                ticklabels = true,
-                ticks = true,
-                grid = true,
-                minorgrid = true,
-                minorticks = true,
-            )
-            hideydecorations!(
-                ax;
-                label = true,
-                ticklabels = true,
-                ticks = true,
-                grid = true,
-                minorgrid = true,
-                minorticks = true,
-            )
-            hidespines!(ax, :t, :r, :l, :b)
-            xlims!(ax, xlim)
-            ylims!(ax, ylim)
+            hide_decorations!(ax)
         end
+        xlims!(ax, xlim)
+        ylims!(ax, ylim)
     end
     if show_scale
         ax = Axis(
@@ -1189,8 +1254,6 @@ function plot_grid(
     linkaxes!(filter(x -> x isa Axis, fig.content)...)
     return fig
 end
-plot_grid(erp)
-# plot_grid(erp, xlim = [0, 1], ylim = [-5 5], plot_height = 0.1)
 
 
 
