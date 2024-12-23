@@ -176,7 +176,7 @@ function plot_topoplot(
     radius = 88 # mm
 
     if (:x2 ∉ names(dat.layout) || :y2 ∉ names(dat.layout))
-        polar_to_cartesian_xy!(layout)
+        polar_to_cartesian_xy!(dat.layout)
     end
     points = Matrix(dat.layout[!, [:x2, :y2]])'
 
@@ -1091,32 +1091,107 @@ function plot_erp(
 
 end
 
+function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs...)
+    plot_erp(dat, [channels]; kwargs...)
+end
+
+
 
 layout = read_layout("./layouts/biosemi72.csv");
 polar_to_cartesian_xy!(layout)
 
 
-function plot_grid()
-  xminmaxrange = maximum(layout.x2) - minimum(layout.x2) 
-  yminmaxrange = maximum(layout.y2) - minimum(layout.y2) 
-  plot_height=0.05
-  plot_width=0.05
-  xpositions = (layout.x2 ./ xminmaxrange)  .+ 0.5
-  ypositions = (layout.y2 ./ yminmaxrange)  .+ 0.5 
-  fig = Figure()
-  for (x, y, label) in zip(xpositions, ypositions, layout.label)
-    ax = Axis(fig[1,1], width=Relative(plot_width), height=Relative(plot_height), halign=x, valign=y)
-    lines!(ax, 1:10)
-    lines!(ax, 10:-1:1)
-    text!(ax, x, y; text = label)
-  end
-  return fig
+function plot_grid(
+    dat::ErpData;
+    plot_label_position = nothing,
+    plot_label = true,
+    plot_label_fontsize = 16,
+    xlim = nothing,
+    ylim = nothing,
+    plot_height = 0.05,
+    plot_width = 0.05,
+    hide_decorations = false,
+    show_scale = false,
+    scale_position = [0.95, 0.05],
+)
+    if (isnothing(xlim))
+        xlim = [dat.data.time[1], dat.data.time[end]]
+    end
+    if (isnothing(ylim))
+        ylim = [
+            minimum(minimum.(eachcol(dat.data[!, dat.layout.label]))),
+            maximum(maximum.(eachcol(dat.data[!, dat.layout.label]))),
+        ]
+    end
+    if plot_label && isnothing(plot_label_position)
+        plot_label_positon = [xlim[1] ylim[2]]
+    end
+    xminmaxrange = maximum(dat.layout.x2) - minimum(dat.layout.x2)
+    yminmaxrange = maximum(dat.layout.y2) - minimum(dat.layout.y2)
+    xpositions = (layout.x2 ./ xminmaxrange) .+ 0.5
+    ypositions = (layout.y2 ./ yminmaxrange) .+ 0.5
+    fig = Figure()
+    for (x, y, label) in zip(xpositions, ypositions, dat.layout.label)
+        ax = Axis(fig[1, 1], width = Relative(plot_width), height = Relative(plot_height), halign = x, valign = y)
+        lines!(ax, dat.data[!, :time], dat.data[!, label])
+        vlines!(ax, [0], color = :black)
+        hlines!(ax, [0], color = :black)
+        if plot_label
+            text!(
+                ax,
+                plot_label_positon[1],
+                plot_label_positon[end],
+                fontsize = plot_label_fontsize,
+                text = label,
+                align = (:left, :top),
+            )
+        end
+        # hide some plot stuff (but this seems v. slow!)
+        if hide_decorations
+            hidexdecorations!(
+                ax;
+                label = true,
+                ticklabels = true,
+                ticks = true,
+                grid = true,
+                minorgrid = true,
+                minorticks = true,
+            )
+            hideydecorations!(
+                ax;
+                label = true,
+                ticklabels = true,
+                ticks = true,
+                grid = true,
+                minorgrid = true,
+                minorticks = true,
+            )
+            hidespines!(ax, :t, :r, :l, :b)
+            xlims!(ax, xlim)
+            ylims!(ax, ylim)
+        end
+    end
+    if show_scale
+        ax = Axis(
+            fig[1, 1],
+            width = Relative(plot_width),
+            height = Relative(plot_height),
+            halign = scale_position[1],
+            valign = scale_position[2],
+        )
+        lines!(ax, dat.data[!, :time], zeros(nrow(dat.data)))
+        vlines!(ax, [0], color = :black)
+        hlines!(ax, [0], color = :black)
+        xlims!(ax, xlim)
+        ylims!(ax, ylim)
+        hidespines!(ax, :t, :r, :l, :b)
+    end
+    linkaxes!(filter(x -> x isa Axis, fig.content)...)
+    return fig
 end
-plot_grid()
+plot_grid(erp)
+# plot_grid(erp, xlim = [0, 1], ylim = [-5 5], plot_height = 0.1)
 
 
 
 
-function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs...)
-    plot_erp(dat, [channels]; kwargs...)
-end
