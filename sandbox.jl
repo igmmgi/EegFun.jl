@@ -12,10 +12,6 @@ using Random
 using ScatteredInterpolation
 using StatsBase
 
-
-
-
-
 include("types.jl")
 include("utils.jl")
 include("analyse.jl")
@@ -32,7 +28,7 @@ include("utils.jl")
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
-# head_shape_2d(layout)
+head_shape_2d(layout)
 # head_shape_3d(layout)
 
 # read bdf file
@@ -82,6 +78,9 @@ plot_erp(erp, ["Fp1", "Fp2"])
 include("plot.jl")
 include("topo.jl")
 plot_topoplot(erp)
+
+
+plot_erp_image(epochs, [:Fp1, :Fp2])
 
 
 save_object("$(subject)_$(cond)_epochs.jld2", epochs)

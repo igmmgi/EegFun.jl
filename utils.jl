@@ -38,6 +38,8 @@ end
 datarange(x) = -(-(extrema(x)...))
 
 colmeans(df::DataFrame, cols) = reduce(+, eachcol(df[!, cols])) ./ length(cols)
+colmeans(df::Matrix) = reduce(+, eachrow(df)) ./ size(df)[1]
+colmeans(df::Matrix, cols) = reduce(+, eachrow(df[:, cols])) ./ size(df)[1]
 
 
 function consecutive(f, A::AbstractVector; step = 1)
