@@ -1,80 +1,50 @@
 using GLMakie
 
-
 #########################################
 # 2D head shape
-function head_shape_2d(
-    fig,
-    ax,
-    layout;
-    linewidth = 2,
-    plot_points = true,
-    plot_labels = true,
-    font_size = 20,
-    point_size = 12,
-    label_x_offset = 0,
-    label_y_offset = 0,
-    head_colour = :black,
-    point_colour = :black,
-    text_colour = :black,
-    point_shape = :circle,
-)
+function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
 
     if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
         polar_to_cartesian_xy!(layout)
     end
 
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+
+    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+    plot_points = pop!(point_kwargs, :plot_points)
+
+    label_default_kwargs =
+        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+    plot_labels = pop!(label_kwargs, :plot_labels)
+    xoffset = pop!(label_kwargs, :xoffset)
+    yoffset = pop!(label_kwargs, :yoffset)
+
     # head shape
     radius = 88 # mm
-    arc!(ax, Point2f(0), radius * 2, -π, π, color = head_colour, linewidth = linewidth) # head
-    arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2, color = head_colour, linewidth = linewidth) # ear right
-    arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2, color = head_colour, linewidth = linewidth) # ear left
-    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4, color = head_colour, linewidth = linewidth) # nose
+    arc!(ax, Point2f(0), radius * 2, -π, π; head_kwargs...) # head
+    arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2; head_kwargs...) # ear right
+    arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2; head_kwargs...) # ear left
+    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4; head_kwargs...) # nose
 
     # points
     if plot_points
-        scatter!(
-            ax,
-            layout[!, :x2],
-            layout[!, :y2],
-            marker = point_shape,
-            markersize = point_size,
-            color = point_colour,
-        )
+        scatter!(ax, layout[!, :x2], layout[!, :y2]; point_kwargs...)
     end
 
     if plot_labels
         for label in eachrow(layout)
-            text!(
-                ax,
-                fontsize = font_size,
-                position = (label.x2 + label_x_offset, label.y2 + label_y_offset),
-                label.label,
-                color = text_colour,
-            )
+            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), label.label; label_kwargs...)
         end
     end
 
+    # TODO: hightlight/border around specific ROI's
+
     # hide some plot stuff
-    hidexdecorations!(
-        ax;
-        label = true,
-        ticklabels = true,
-        ticks = true,
-        grid = true,
-        minorgrid = true,
-        minorticks = true,
-    )
-    hideydecorations!(
-        ax;
-        label = true,
-        ticklabels = true,
-        ticks = true,
-        grid = true,
-        minorgrid = true,
-        minorticks = true,
-    )
-    hidespines!(ax, :t, :r, :l, :b)
+    hidedecorations!(ax)
+    hidespines!(ax)
 
     return fig
 
@@ -90,47 +60,36 @@ end
 
 #########################################
 # 3D head shape
-function head_shape_3d(
-    fig,
-    ax,
-    layout;
-    plot_points = true,
-    plot_labels = true,
-    font_size = 20,
-    marker_size = 12,
-    label_x_offset = 0,
-    label_y_offset = 0,
-    label_z_offset = 0,
-    point_colour = :black,
-    text_colour = :black,
-    point_shape = :circle,
-)
+function head_shape_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Dict())
 
     if (:x3 ∉ names(layout) || :y3 ∉ names(layout) || :z3 ∉ names(layout))
         polar_to_cartesian_xyz!(layout)
     end
 
+    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+    plot_points = pop!(point_kwargs, :plot_points)
+
+    label_default_kwargs =
+        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+    plot_labels = pop!(label_kwargs, :plot_labels)
+    xoffset = pop!(label_kwargs, :xoffset)
+    yoffset = pop!(label_kwargs, :yoffset)
+    zoffset = pop!(label_kwargs, :zoffset)
+
     # points
     if plot_points
-        scatter!(
-            ax,
-            layout[!, :x3],
-            layout[!, :y3],
-            layout[!, :z3],
-            marker = point_shape,
-            markersize = marker_size,
-            color = point_colour,
-        )
+        scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3], point_kwargs...)
     end
 
     if plot_labels
         for label in eachrow(layout)
             text!(
                 ax,
-                fontsize = font_size,
-                position = (label.x3 + label_x_offset, label.y3 + label_y_offset, label.z3 + label_z_offset),
+                position = (label.x3 + xoffset, label.y3 + yoffset, label.z3 + zoffset),
                 label.label,
-                color = text_colour,
+                label_kwargs...,
             )
         end
     end
@@ -156,29 +115,36 @@ function plot_topoplot(
     dat;
     xlim = nothing,
     ylim = nothing,
-    grid_scale = 300,
-    colour_map = :jet,
-    linewidth = 2,
-    plot_points = true,
-    plot_labels = true,
-    font_size = 20,
-    point_size = 12,
-    label_x_offset = 0,
-    label_y_offset = 0,
-    head_colour = :black,
-    point_colour = :black,
-    text_colour = :black,
-    point_shape = :circle,
-    plot_colour_bar = true,
-    colour_bar_width = 30,
+    gridscale = 300,
+    colourmap = :jet,
+    head_kwargs = Dict(),
+    point_kwargs = Dict(),
+    label_kwargs = Dict(),
+    topo_kwargs = Dict(),
+    colorbar_kwargs = Dict(),
 )
-
-    radius = 88 # mm
 
     if (:x2 ∉ names(dat.layout) || :y2 ∉ names(dat.layout))
         polar_to_cartesian_xy!(dat.layout)
     end
-    points = Matrix(dat.layout[!, [:x2, :y2]])'
+
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+
+    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+
+    label_default_kwargs =
+        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+    xoffset = pop!(label_kwargs, :xoffset)
+    yoffset = pop!(label_kwargs, :yoffset)
+
+    topo_default_kwargs = Dict(:colormap => :jet)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, width => 30)
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
 
     if isnothing(xlim)
         xlim = [dat.data.time[1], dat.data.time[end]]
@@ -189,7 +155,11 @@ function plot_topoplot(
     xlim_idx = find_idx_range(dat.data.time, xlim[1], xlim[2])
 
     # interpolate data
-    data = data_interpolation_topo(mean.(eachcol(dat.data[xlim_idx, dat.layout.label])), points, grid_scale)
+    data = data_interpolation_topo(
+        mean.(eachcol(dat.data[xlim_idx, dat.layout.label])),
+        Matrix(dat.layout[!, [:x2, :y2]])',
+        gridscale,
+    )
 
     if isnothing(ylim)
         ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
@@ -198,34 +168,21 @@ function plot_topoplot(
     fig = Figure()
     ax = GLMakie.Axis(fig[1, 1])
 
+    radius = 88 # mm
     co = contourf!(
         range(-radius * 2, radius * 2, length = grid_scale),
         range(-radius * 2, radius * 2, length = grid_scale),
         data,
         levels = range(ylim[1], ylim[2], div(grid_scale, 2)),
-        colormap = colour_map,
+        topo_kwargs...,
     )
+
     if plot_colour_bar
-        Colorbar(fig[1, 2], co, label = "mV", width = colour_bar_width)
+        Colorbar(fig[1, 2], co, colorbar_kwargs...)
     end
 
     # head shape
-    head_shape_2d(
-        fig,
-        ax,
-        dat.layout,
-        linewidth = linewidth,
-        plot_points = plot_points,
-        plot_labels = plot_labels,
-        font_size = font_size,
-        point_size = point_size,
-        label_x_offset = label_x_offset,
-        label_y_offset = label_y_offset,
-        head_colour = head_colour,
-        point_colour = point_colour,
-        text_colour = text_colour,
-        point_shape = point_shape,
-    )
+    head_shape_2d(fig, ax, dat.layout, head_kwargs..., point_kwargs..., label_kwargs...)
 
     return fig
 
@@ -1096,15 +1053,16 @@ function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs..
 end
 
 function data_limits_x(dat::DataFrame, col)
-    return [dat[!, col][1], dat[!, col][end]]
+    return extrema(dat.time)
 end
 
 function data_limits_y(dat::DataFrame, col)
-    return [minimum(minimum.(eachcol(dat[!, col]))), maximum(maximum.(eachcol(dat[!, col])))]
+    return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
 end
 
 
-
+# #################################################################
+# plot_grid_rect: 
 function plot_grid_rect(
     dat::ErpData;
     channels = nothing,
@@ -1157,32 +1115,6 @@ end
 # plot_grid_rect(dat, dims = [5, 1], channels = ["Fp1", "Fp2", "Cz", "PO7", "PO8"])
 
 
-function hide_decorations!(ax)
-    hidexdecorations!(
-        ax;
-        label = true,
-        ticklabels = true,
-        ticks = true,
-        grid = true,
-        minorgrid = true,
-        minorticks = true,
-    )
-    hideydecorations!(
-        ax;
-        label = true,
-        ticklabels = true,
-        ticks = true,
-        grid = true,
-        minorgrid = true,
-        minorticks = true,
-    )
-    hidespines!(ax, :t, :r, :l, :b)
-end
-
-
-
-
-
 function plot_grid_topo(
     dat::ErpData;
     plot_label_position = nothing,
@@ -1209,8 +1141,7 @@ function plot_grid_topo(
         plot_label_positon = [xlim[1] ylim[2]]
     end
 
-    xminmaxrange = maximum(dat.layout.x2) - minimum(dat.layout.x2)
-    yminmaxrange = maximum(dat.layout.y2) - minimum(dat.layout.y2)
+    xminmaxrange, yminmaxrange = datarange(dat.layout.x2), datarange(dat.layout.y2)
     xpositions = (layout.x2 ./ xminmaxrange) .+ 0.5
     ypositions = (layout.y2 ./ yminmaxrange) .+ 0.5
     fig = Figure()
@@ -1256,5 +1187,23 @@ function plot_grid_topo(
 end
 
 
+function plot_erp_image(dat::EpochData, channels::Vector{Symbol}; colorrange = nothing)
+    data = zeros(length(dat.data), nrow(dat.data[1]))
+    for epoch in eachindex(dat.data)
+        data[epoch, :] = colmeans(dat.data[epoch], channels)
+    end
+    if isnothing(colorrange)
+        colorrange = extrema(data)
+    end
+    fig = Figure()
+    ax = GLMakie.Axis(fig[1, 1])
+    heatmap!(ax, dat.data[1].time, 1:length(dat.data), data, colorrange = colorrange)
+    ax = GLMakie.Axis(fig[2, 1])
+    lines!(ax, dat.data[1].time, colmeans(data))
+    xlims!(ax, (-0.5, 2))
+    return fig
+end
 
-
+function plot_erp_image(dat::EpochData, channel)
+    plot_erp_image(dat, [channel])
+end
