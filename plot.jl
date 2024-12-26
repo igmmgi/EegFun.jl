@@ -70,8 +70,15 @@ function head_shape_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Di
     point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = pop!(point_kwargs, :plot_points)
 
-    label_default_kwargs =
-        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_default_kwargs = Dict(
+        :plot_labels => true,
+        :fontsize => 20,
+        :color => :black,
+        :color => :black,
+        :xoffset => 0,
+        :yoffset => 0,
+        :zoffset => 0,
+    )
     label_kwargs = merge(label_default_kwargs, label_kwargs)
     plot_labels = pop!(label_kwargs, :plot_labels)
     xoffset = pop!(label_kwargs, :xoffset)
@@ -80,7 +87,7 @@ function head_shape_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Di
 
     # points
     if plot_points
-        scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3], point_kwargs...)
+        scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3]; point_kwargs...)
     end
 
     if plot_labels
@@ -88,7 +95,7 @@ function head_shape_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Di
             text!(
                 ax,
                 position = (label.x3 + xoffset, label.y3 + yoffset, label.z3 + zoffset),
-                label.label,
+                label.label;
                 label_kwargs...,
             )
         end
@@ -115,8 +122,6 @@ function plot_topoplot(
     dat;
     xlim = nothing,
     ylim = nothing,
-    gridscale = 300,
-    colourmap = :jet,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
@@ -140,8 +145,9 @@ function plot_topoplot(
     xoffset = pop!(label_kwargs, :xoffset)
     yoffset = pop!(label_kwargs, :yoffset)
 
-    topo_default_kwargs = Dict(:colormap => :jet)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = pop!(topo_kwargs, :gridscale)
 
     colorbar_default_kwargs = Dict(:plot_colorbar => true, width => 30)
     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
@@ -190,13 +196,17 @@ end
 
 
 
+
+##################################################################
+# Data Browser: Continuous Data
+
 struct ToggleButton
     label::String
     fun::Function
 end
 
-##################################################################
-# Data Browser: Continuous Data
+
+
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:AbstractString})
 
     function butterfly_plot(active)
@@ -580,22 +590,19 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     function plot_trigger_lines(active)
         trigger_lines.visible = active
         trigger_text.visible = active
-        text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time]
-        trigger_text.position = text_pos
+        trigger_text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time]
     end
 
     function plot_vEOG_lines(active)
         vEOG_lines.visible = active
         vEOG_text.visible = active
-        text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
-        vEOG_text.position = text_pos
+        vEOG_text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
     end
 
     function plot_hEOG_lines(active)
         hEOG_lines.visible = active
         hEOG_text.visible = active
-        text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
-        hEOG_text.position = text_pos
+        hEOG_text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
     end
 
     function plot_extreme_lines(active)
@@ -1186,6 +1193,9 @@ function plot_grid_topo(
     return fig
 end
 
+
+# #################################################################
+# plot_erp_image: 
 
 function plot_erp_image(dat::EpochData, channels::Vector{Symbol}; colorrange = nothing)
     data = zeros(length(dat.data), nrow(dat.data[1]))
