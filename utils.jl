@@ -58,3 +58,14 @@ function splitgroups(v)
     end
     start_idx, end_idx
 end
+
+function data_limits_x(dat::DataFrame)
+    return extrema(dat.time)
+end
+
+function data_limits_y(dat::DataFrame, col)
+    return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
+end
+
+
+

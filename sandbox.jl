@@ -39,7 +39,7 @@ dat = create_eeg_dataframe(dat, layout)
 # plot_databrowser(dat)
 filter_data!(dat, "hp", 0.1, 2)
 # filter_data!(dat, "lp", 10, 6)
-include("plot.jl")
+# include("plot.jl")
 # calculate EOG channels
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
 diff_channel!(dat, "F9", "F10", "hEOG");
@@ -59,11 +59,10 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 include("plot.jl")
 
 # plot_databrowser(epochs)
-# plot_epochs(epochs, :Fp1)
+plot_epochs(epochs, :Fp1, xlim = [0, 1], ylim = nothing; :linewidth = [10, 1])
 # plot_epochs(epochs, "Fp1")
 # plot_epochs(epochs, epochs.layout.label)
 # plot_epochs(epochs, ["PO7", "PO8"])
-
 
 # average epochs
 erp = average_epochs(epochs)
