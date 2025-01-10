@@ -1,5 +1,23 @@
 using GLMakie
 
+xpos = [0, 5, 0]
+ypos = [0, 5, 5]
+border_size = 1
+
+p = 0:2*pi/180:2*pi
+points = hcat(sin.(p), cos.(p))
+
+
+
+function boundary_border(xpos, ypos, size) end
+
+points = [[th, -sin(th)] .+ (0.4 * rand(2) .- 0.2) for th in range(0, stop = 2pi, length = 5000)]
+points = [[sin(x), cos(x)] for x in p]
+
+hull = concave_hull(points)
+plot(hull.vertices)
+
+
 #########################################
 # 2D head shape
 function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
@@ -450,10 +468,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     #################### Triggers/Events ###############################
     trigger_data_time = @views data[findall(x -> x != 0, data[!, :].triggers), [:time, :triggers]]
     trigger_lines = vlines!(trigger_data_time.time, color = :grey, linewidth = 1, visible = false)
-    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time]
     trigger_text = text!(
         string.(trigger_data_time.triggers),
-        position = text_pos,
+        position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.time],
         space = :data,
         align = (:center, :center),
         fontsize = 22,
@@ -464,10 +481,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
         vEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_vEOG), [:time, :is_vEOG]]
         vEOG_lines = vlines!(vEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
-        text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
         vEOG_text = text!(
             repeat(["v"], nrow(vEOG_data_time)),
-            position = text_pos,
+            position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time],
             space = :data,
             align = (:center, :center),
             fontsize = 22,
@@ -476,10 +492,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
         hEOG_data_time = @views data[findall(x -> x != 0, data[!, :].is_hEOG), [:time, :is_hEOG]]
         hEOG_lines = vlines!(hEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
-        text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
         hEOG_text = text!(
             repeat(["h"], nrow(hEOG_data_time)),
-            position = text_pos,
+            position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time],
             space = :data,
             align = (:center, :center),
             fontsize = 22,
@@ -827,10 +842,9 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     #################### Triggers/Events ###############################
     trigger_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].triggers), [:time, :triggers]]
     trigger_lines = vlines!(trigger_data_time.val.time, color = :grey, linewidth = 1, visible = false)
-    text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time]
     trigger_text = text!(
         string.(trigger_data_time.val.triggers),
-        position = text_pos,
+        position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time],
         space = :data,
         align = (:center, :center),
         fontsize = 22,
@@ -848,10 +862,9 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         end
         vEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_vEOG), [:time, :is_vEOG]]
         vEOG_lines = vlines!(vEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
-        text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
         vEOG_text = text!(
             repeat(["v"], nrow(vEOG_data_time)),
-            position = text_pos,
+            position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time],
             space = :data,
             align = (:center, :center),
             fontsize = 22,
@@ -873,10 +886,9 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         end
         hEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_hEOG), [:time, :is_hEOG]]
         hEOG_lines = vlines!(hEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
-        text_pos = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
         hEOG_text = text!(
             repeat(["h"], nrow(hEOG_data_time)),
-            position = text_pos,
+            position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time],
             space = :data,
             align = (:center, :center),
             fontsize = 22,
@@ -985,17 +997,20 @@ end
 
 # #################################################################
 # plot_epochs: Epoched Data (Single Condition; Single Channel or Average of multiple channels)
-function plot_epochs(
-    dat::EpochData,
-    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
-    xlim = nothing,
-    ylim = nothing,
-    xlabel = "Time (S)",
-    ylabel = "mV",
-    linewidth = [1, 3],
-    colour = [:grey, :black],
-    yreversed = false,
-)
+function plot_epochs(dat::EpochData, channels::Union{Vector{<:AbstractString},Vector{Symbol}}; kwargs = Dict())
+
+    default_kwargs = Dict(
+        :xlim => nothing,
+        :ylim => nothing,
+        :title => nothing,
+        :xlabel => "Time (S)",
+        :ylabel => "mV",
+        :linewidth => [1, 3],
+        :color => [:grey, :black],
+        :yreversed => false,
+    )
+
+    kwargs = merge(default_kwargs, kwargs)
 
     fig = Figure()
     ax = GLMakie.Axis(fig[1, 1])
@@ -1005,17 +1020,30 @@ function plot_epochs(
     for trial in eachindex(dat.data)
         trial_data = colmeans(dat.data[trial], channels)
         avg_data .+= trial_data
-        GLMakie.lines!(dat.data[trial][!, :time], trial_data, color = colour[1], linewidth = linewidth[1])
+        GLMakie.lines!(
+            dat.data[trial][!, :time],
+            trial_data,
+            color = kwargs[:color][1],
+            linewidth = kwargs[:linewidth][1],
+        )
     end
     avg_data ./= length(dat.data)
-    GLMakie.lines!(dat.data[1][!, :time], avg_data, color = colour[2], linewidth = linewidth[2])
+    GLMakie.lines!(dat.data[1][!, :time], avg_data, color = kwargs[:color][2], linewidth = kwargs[:linewidth][2])
 
-    !isnothing(xlim) && xlims!(ax, xlim)
-    !isnothing(ylim) && ylims!(ax, ylim)
-    ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
-    ax.xlabel = xlabel
-    ax.ylabel = ylabel
-    ax.yreversed = yreversed
+    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
+    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
+    if isnothing(kwargs[:title])
+        ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
+    else
+        ax.title = kwargs[:title]
+    end
+    ax.xlabel = kwargs[:xlabel]
+    ax.ylabel = kwargs[:ylabel]
+    ax.yreversed = kwargs[:yreversed]
+
+    # plot theme adjustments
+    fontsize_theme = Theme(fontsize = 24)
+    update_theme!(fontsize_theme)
 
     return fig
 
@@ -1028,28 +1056,38 @@ end
 
 # #################################################################
 # plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
-function plot_erp(
-    dat::ErpData,
-    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
-    xlim = nothing,
-    ylim = nothing,
-    xlabel = "Time (S)",
-    ylabel = "mV",
-    linewidth = [1, 3],
-    colour = :black,
-    yreversed = false,
-)
+function plot_erp(dat::ErpData, channels::Union{Vector{<:AbstractString},Vector{Symbol}}; kwargs = Dict())
+
+    default_kwargs = Dict(
+        :xlim => nothing,
+        :ylim => nothing,
+        :title => nothing,
+        :xlabel => "Time (S)",
+        :ylabel => "mV",
+        :linewidth => [1, 3],
+        :color => [:grey, :black],
+        :yreversed => false,
+    )
+
+    kwargs = merge(default_kwargs, kwargs)
 
     fig = Figure()
     ax = GLMakie.Axis(fig[1, 1])
 
-    GLMakie.lines!(dat.data[!, :time], colmeans(dat.data, channels), color = colour, linewidth = linewidth[2])
-    !isnothing(xlim) && xlims!(ax, xlim)
-    !isnothing(ylim) && xlims!(ax, ylim)
-    ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
-    ax.xlabel = xlabel
-    ax.ylabel = ylabel
-    ax.yreversed = yreversed
+    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
+    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
+    if isnothing(kwargs[:title])
+        ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
+    else
+        ax.title = kwargs[:title]
+    end
+    ax.xlabel = kwargs[:xlabel]
+    ax.ylabel = kwargs[:ylabel]
+    ax.yreversed = kwargs[:yreversed]
+
+    # plot theme adjustments
+    fontsize_theme = Theme(fontsize = 24)
+    update_theme!(fontsize_theme)
 
     return fig
 
@@ -1059,67 +1097,73 @@ function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs..
     plot_erp(dat, [channels]; kwargs...)
 end
 
-function data_limits_x(dat::DataFrame, col)
-    return extrema(dat.time)
-end
-
-function data_limits_y(dat::DataFrame, col)
-    return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
-end
-
 
 # #################################################################
 # plot_grid_rect: 
-function plot_grid_rect(
-    dat::ErpData;
-    channels = nothing,
-    dims = nothing,
-    xlim = nothing,
-    ylim = nothing,
-    hide_decorations = false,
-)
+function plot_grid_rect(dat::ErpData; channels = nothing, kwargs = Dict())
     if isnothing(channels)
         channels = dat.layout.label
     end
-    if isnothing(dims)
+    default_kwargs = Dict{Symbol,Any}(
+        :xlim => nothing,
+        :ylim => nothing,
+        :xlabel => "Time (S)",
+        :ylabel => "mV",
+        :dims => nothing,
+        :hidedecorations => false,
+        :theme_fontsize => 24,
+        :yreversed => false,
+    )
+    kwargs = merge(default_kwargs, kwargs)
+    if isnothing(kwargs[:dims])
         dim1 = ceil(Int, sqrt(length(channels)))
         dim2 = ceil(Int, length(channels) ./ dim1)
-        dims = [dim1, dim2]
+        kwargs[:dims] = [dim1, dim2]
     end
     # x/y limits
-    if (isnothing(xlim))
-        xlim = data_limits_x(dat.data, :time)
+    if (isnothing(kwargs[:xlim]))
+        kwargs[:xlim] = data_limits_x(dat.data)
     end
-    if (isnothing(ylim))
-        ylim = data_limits_y(dat.data, dat.layout.label)
-    end
-    if isnothing(dims)
-        dim1 = ceil(Int, sqrt(length(channels)))
-        dim2 = ceil(Int, length(channels) ./ dim1)
-        dims = [dim1, dim2]
+    if (isnothing(kwargs[:ylim]))
+        kwargs[:ylim] = data_limits_y(dat.data, dat.layout.label)
     end
     count = 1
     fig = Figure()
-    for dim1 = 1:dims[1]
-        for dim2 = 1:dims[2]
+    for dim1 = 1:kwargs[:dims][1]
+        for dim2 = 1:kwargs[:dims][2]
+            # ax = Axis(fig[dim1, dim2], width = 200, height = 150)
             ax = Axis(fig[dim1, dim2])
             lines!(ax, dat.data[!, :time], dat.data[!, channels[count]])
             vlines!(ax, [0], color = :black)
             hlines!(ax, [0], color = :black)
-            if hide_decorations
-                hide_decorations!(ax)
+            ax.title = "$(channels[count])"
+            if kwargs[:hidedecorations]
+                hidedecorations!(ax)
             end
-            xlims!(ax, xlim)
-            ylims!(ax, ylim)
+            xlims!(ax, kwargs[:xlim])
+            ylims!(ax, kwargs[:ylim])
+            if count == 3
+                ax.xlabel = kwargs[:xlabel]
+                ax.ylabel = kwargs[:ylabel]
+            end
+            ax.yreversed = kwargs[:yreversed]
             count += 1
             if count > length(channels)
                 break
             end
+            # colsize!(fig.layout, dim2, Relative(0.1))
         end
+        # rowsize!(fig.layout, dim1, Relative(0.1))
     end
+    # colgap!(fig.layout, 150)
+    # rowgap!(fig.layout, 150)
+    linkaxes!(filter(x -> x isa Axis, fig.content)...)
+    # plot theme adjustments
+    fontsize_theme = Theme(fontsize = kwargs[:theme_fontsize])
+    update_theme!(fontsize_theme)
     return fig
 end
-# plot_grid_rect(dat, dims = [5, 1], channels = ["Fp1", "Fp2", "Cz", "PO7", "PO8"])
+plot_grid_rect(erp)
 
 
 function plot_grid_topo(
