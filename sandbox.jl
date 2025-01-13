@@ -28,8 +28,16 @@ include("utils.jl")
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
-# head_shape_2d(layout)
+polar_to_cartesian_xy!(layout)
+fig = head_shape_2d(layout)
 # head_shape_3d(layout)
+
+# xpos = filter(row -> row.label ∈ ["PO3", "O1", "PO7"], layout).x2
+# ypos = filter(row -> row.label ∈ ["PO3", "O1", "PO7"], layout).y2
+# border = point_border(xpos, ypos, 10)
+# lines!(border, linewidth=2)
+# fig
+
 
 # read bdf file
 subject = 3

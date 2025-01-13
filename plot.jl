@@ -1,22 +1,21 @@
 using GLMakie
 using ConcaveHull
 
-xpos = [0, 5, 0]
-ypos = [0, 5, 5]
-border_size = 0.5
-p = 0:2*pi/361:2*pi
-xs = border_size .* sin.(p) .+ transpose(xpos) 
-ys = border_size .* cos.(p) .+ transpose(ypos) 
-points = [[xs[i], ys[i]] for i in 1:length(xs)]
-hull = concave_hull(points)
-lines(hull.vertices)
-scatter!(xpos, ypos)
+# TODO: this seems too slow!
+# LibGEOS?
+function point_border(xpos, ypos, border_size)
+    circle_points = 0:2*pi/361:2*pi
+    xs = border_size .* sin.(circle_points) .+ transpose(xpos)
+    xs = xs[:]
+    ys = border_size .* cos.(circle_points) .+ transpose(ypos)
+    ys = ys[:]
+    xys = [[xs[i], ys[i]] for i in eachindex(xs)]
+    hull = concave_hull(xys, 100)
+    return hull.vertices
+end
 
 
-
-
-
-
+# TODO: butterfly plot/global field power
 
 #########################################
 # 2D head shape
@@ -1163,7 +1162,6 @@ function plot_grid_rect(dat::ErpData; channels = nothing, kwargs = Dict())
     update_theme!(fontsize_theme)
     return fig
 end
-plot_grid_rect(erp)
 
 
 function plot_grid_topo(
