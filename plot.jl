@@ -1,21 +1,21 @@
 using GLMakie
+using ConcaveHull
 
 xpos = [0, 5, 0]
 ypos = [0, 5, 5]
-border_size = 1
-
-p = 0:2*pi/180:2*pi
-points = hcat(sin.(p), cos.(p))
-
-
-
-function boundary_border(xpos, ypos, size) end
-
-points = [[th, -sin(th)] .+ (0.4 * rand(2) .- 0.2) for th in range(0, stop = 2pi, length = 5000)]
-points = [[sin(x), cos(x)] for x in p]
-
+border_size = 0.5
+p = 0:2*pi/361:2*pi
+xs = border_size .* sin.(p) .+ transpose(xpos) 
+ys = border_size .* cos.(p) .+ transpose(ypos) 
+points = [[xs[i], ys[i]] for i in 1:length(xs)]
 hull = concave_hull(points)
-plot(hull.vertices)
+lines(hull.vertices)
+scatter!(xpos, ypos)
+
+
+
+
+
 
 
 #########################################
