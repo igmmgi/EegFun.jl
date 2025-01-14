@@ -4,6 +4,7 @@ using DSP
 using DataFrames
 using GLMakie
 using JLD2
+using LibGEOS
 using LinearAlgebra
 using MAT
 using OrderedCollections
@@ -28,15 +29,9 @@ include("utils.jl")
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
-polar_to_cartesian_xy!(layout)
-fig = head_shape_2d(layout)
+# head_shape_2d(layout)
 # head_shape_3d(layout)
 
-# xpos = filter(row -> row.label ∈ ["PO3", "O1", "PO7"], layout).x2
-# ypos = filter(row -> row.label ∈ ["PO3", "O1", "PO7"], layout).y2
-# border = point_border(xpos, ypos, 10)
-# lines!(border, linewidth=2)
-# fig
 
 
 # read bdf file
@@ -55,6 +50,7 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
+include("plot.jl")
 plot_databrowser(dat)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
