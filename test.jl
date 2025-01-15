@@ -1,53 +1,94 @@
-using Random, VoronoiDelaunay, Plots
+# Analyzin Neural TimeSeries Data
+# Chapter 10
+using LinearAlgebra
+using DSP 
+using BenchmarkTools
+using GLMakie
 
-import Base.==
+a = [1, 2, 3]
+b = [4, 5, 6]
 
-struct MyEdge{T<:AbstractPoint2D}
-    _a::T
-    _b::T
+@btime sum(a .* b)
+@btime dot(a, b) # faster
+
+# Figure 10.2
+# TODO: length of my_conv result vs. DSP conv function?
+function my_conv(signal, kernel)
+  # step 1: pad signal with zeros at start/end size of kernel - 1
+  kernel_length = length(kernel)
+  signal = [zeros(kernel_length-1); signal; zeros(kernel_length-1)]
+  # step 2: flip kernel 
+  kernel = reverse(kernel) 
+  # step 3: compute dot product for all points in signal
+  out = zeros(length(signal))
+  @inbounds for idx = kernel_length:length(signal)
+    @views out[idx] = dot(signal[idx-(kernel_length-1):idx], kernel)
+  end
+  # step 4: remove padding
+  return out[kernel_length:(end-(kernel_length-1))]
 end
 
-==(e1::MyEdge{T}, e2::MyEdge{T}) where {T<:AbstractPoint2D} = ((e1._a === e2._a) && (e1._b === e2._b)) || ((e1._b === e2._a) && (e2._b === e1._a))
+signal = zeros(100)
+signal[45:55] .= 1
+kernel = LinRange(1, 0.2, 5)
+fig = Figure()
+ax1 = GLMakie.Axis(fig[1, 1])
+lines!(ax1, signal)
+xlims!(ax1, 0, 100)
+ax2 = GLMakie.Axis(fig[2, 1])
+lines!(ax2, kernel)
+xlims!(ax2, 0, 100)
+result = conv(signal, kernel) # from DSP (convolution)
+# result = conv(signal, kernel)[3:end-2] # from DSP
+# result = xcorr(signal, kernel) # from DSP (cross-correlation kernel NOT flipped) 
+my_result = my_conv(signal, kernel) 
+ax3 = GLMakie.Axis(fig[3, 1])
+lines!(ax3, result)
+lines!(ax3, my_result)
+xlims!(ax3, 0, 100)
 
-###==(p1::T, p2::T) where {T<:AbstractPoint2D} = (getx(p1) == getx(p2)) && (gety(p1) == gety(p2))
+# Figure 11.1
+time = LinRange(0, 2, 2000)
+freq = 20
+amp =2
+signal = amp*sin.(2*pi.*freq*time)
+fig = Figure()
+ax = Axis(fig[1,1])
+lines!(ax, time, signal)
+ax.xlabel = "Time (S)"
+ax.ylabel = "Amplitude"
 
-### Create a Delaunay tesselation from random points
-tess = DelaunayTessellation2D(10)
-
-for _ in 1:5
-    push!(tess, Point2D(rand()+1, rand()+1))
+# Figure 11.2/11.3
+time = LinRange(0, 2, 2000)
+freqs = [5, 10, 15, 30]
+amps = [5, 1, 2, 8]
+fig = Figure()
+signal_sum = zeros(length(time))
+for (idx, plt) in enumerate(freqs)
+  signal = amps[idx]*sin.(2*pi.*freqs[idx]*time)
+  signal_sum .+= signal
+  ax = Axis(fig[idx,1])
+  ylims!(ax,-maximum(amps)*1.1, maximum(amps)*1.1 )
+  lines!(ax, time, signal)
 end
+ax = Axis(fig[length(freqs)+1, 1])
+lines!(ax, time, signal_sum)
+lines!(ax, time, signal_sum .+ (rand(length(signal_sum)) .- 0.5 ).* 50) # add some noise
 
-edges = MyEdge[]
-function add_edge!(edges, edge)
-    i = findfirst(e -> e == edge, edges)
 
-    if isnothing(i) # not found
-        push!(edges, edge)
-    else # found so not outer, remove this edge
-        deleteat!(edges, i) 
-    end
-end
+# Figure 11.4
+N = 10 
+data = rand(N)
+fourier = zeros(N)
+time = collect((1:N-1)/N)
 
-for trig in tess
-    a, b, c = geta(trig), getb(trig), getc(trig)
-    add_edge!(edges, MyEdge(b, c))
-    add_edge!(edges, MyEdge(a, b))
-    add_edge!(edges, MyEdge(a, c))
-end
+fi = 5 
 
-### PLOT
-x, y = Float64[], Float64[] # outer edges
-for edge in edges
-    push!(x, getx(edge._a))
-    push!(x, getx(edge._b))
-    push!(x, NaN)
-    push!(y, gety(edge._a))
-    push!(y, gety(edge._b))
-    push!(y, NaN)
-end
+lines(real.(exp.(-1*im .*2 .* pi*(fi.-1) .* time)))
 
-xall, yall = getplotxy(delaunayedges(tess)) # all the edges
 
-plot(xall, yall, color=:blue, fmt=:svg, size=(400,400))
-plot!(x, y, color=:red, linewidth=3, opacity=0.5)
+for fi = 1:N
+  sine_wave = exp(-im.*2*pi*(fi.-1).*time)
+
+
+
