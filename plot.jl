@@ -227,38 +227,42 @@ end
 # Data Browser: Continuous Data
 
 struct ToggleButton
-    label::String
-    fun::Function
+    label
+    fun
 end
 
 struct Marker
-    data::Any
-    line::Any
-    text::Any
+    data
+    line
+    text
 end
 
-function add_marker!(markers, ax, data, col; label = nothing)
+function add_marker!(markers, ax, data, col; label = nothing, trial = nothing)
+  if isnothing(trial)
     marker_data = data[findall(x -> x != 0, data[!, col]), [:time, col]]
-    if isnothing(label)
-        label = string.(marker_data[!, col])
-    else
-        label = repeat([label], nrow(marker_data))
-    end
-    push!(
+  else
+    marker_data = data[trial][findall(x -> x != 0, data[trial][!, col]), [:time, col]]
+  end
+  if isnothing(label)
+    label = string.(marker_data[!, col])
+  else
+    label = repeat([label], nrow(marker_data))
+  end
+  push!(
         markers,
         Marker(
-            marker_data,
-            vlines!(marker_data.time, color = :grey, linewidth = 1, visible = false),
-            text!(
-                label,
-                position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker_data.time],
-                space = :data,
-                align = (:center, :center),
-                fontsize = 22,
-                visible = false,
-            ),
-        ),
-    )
+               marker_data,
+               vlines!(marker_data.time, color = :grey, linewidth = 1, visible = false),
+               text!(
+                     label,
+                     position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker_data.time],
+                     space = :data,
+                     align = (:center, :center),
+                     fontsize = 22,
+                     visible = false,
+                    ),
+              ),
+       )
 end
 
 
@@ -313,25 +317,25 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
     end
 
-    function step_back()
+    function xback()
         xrange.val[1] - 200 < 1 && return
         xrange[] = xrange.val .- 200
         xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
     end
 
-    function step_forward()
+    function xforward()
         xrange.val[1] + 200 > nrow(data) && return
         xrange[] = xrange.val .+ 200
         xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
     end
 
-    function chans_less()
+    function yless()
         (yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
         yrange.val = yrange[][1]+100:yrange[][end]-100
         ylims!(ax, yrange.val[1], yrange.val[end])
     end
 
-    function chans_more()
+    function ymore()
         yrange.val = yrange[][1]-100:yrange[][end]+100
         ylims!(ax, yrange.val[1], yrange.val[end])
     end
@@ -393,7 +397,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     ax.ylabel = "Amplitude (mV)"
 
     # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
-    toggles = toggle_button_group(fig, names(data))
+    toggles = toggle_button_group(fig, names(data[1]))
     for t = 1:length(toggles[:, 1])
         if toggles[t, 2].text.val ∈ ["Trigger", "vEOG", "hEOG"]
             on(toggles[t, 1].active) do _
@@ -472,10 +476,10 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     # keyboard events
     on(events(fig).keyboardbutton) do event
         if event.action in (Keyboard.press, Keyboard.repeat)
-            event.key == Keyboard.left && step_back()
-            event.key == Keyboard.right && step_forward()
-            event.key == Keyboard.down && chans_less()
-            event.key == Keyboard.up && chans_more()
+            event.key == Keyboard.left && xback()
+            event.key == Keyboard.right && xforward()
+            event.key == Keyboard.down && yless()
+            event.key == Keyboard.up && ymore()
         end
         # TODO: what is best here?
         # return Consume()
@@ -606,23 +610,20 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         draw(plot_labels = true)
     end
 
-    function plot_trigger_lines(active)
-        trigger_lines.visible = active
-        trigger_text.visible = active
-        trigger_text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time]
+    function plot_lines(marker, active)
+      marker.line.visible = active
+      marker.text.visible = active
+      marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time]
     end
 
-    function plot_vEOG_lines(active)
-        vEOG_lines.visible = active
-        vEOG_text.visible = active
-        vEOG_text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time]
+    function update_markers!(markers)
+      add_marker!(markers, ax, data, :triggers, trial = trial.val)
+      if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
+        add_marker!(markers, ax, data, :is_vEOG, trial = trial.val)
+        add_marker!(markers, ax, data, :is_hEOG, trial = trial.val)
+      end
     end
-
-    function plot_hEOG_lines(active)
-        hEOG_lines.visible = active
-        hEOG_text.visible = active
-        hEOG_text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time]
-    end
+ 
 
     function plot_extreme_lines(active)
         if length(extreme_spans) > 0
@@ -633,9 +634,9 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     function toggle_button_group(fig, labels)
         toggles = []
         push!(toggles, ToggleButton("Butterfly Plot", butterfly_plot))
-        "triggers" in labels && push!(toggles, ToggleButton("Trigger", plot_trigger_lines))
-        "is_vEOG" in labels && push!(toggles, ToggleButton("vEOG", plot_vEOG_lines))
-        "is_hEOG" in labels && push!(toggles, ToggleButton("hEOG", plot_hEOG_lines))
+        "triggers" in labels && push!(toggles, ToggleButton("Trigger", plot_lines))
+        "is_vEOG" in labels && push!(toggles, ToggleButton("vEOG", plot_lines))
+        "is_hEOG" in labels && push!(toggles, ToggleButton("hEOG", plot_lines))
         "is_extreme" in labels && push!(toggles, ToggleButton("extreme", plot_extreme_lines))
         push!(toggles, ToggleButton("LP-Filter On/Off", apply_lp_filter))
 
@@ -648,32 +649,30 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
 
     function step_epoch_forward()
-        clear_axes()
-        trial[] = min(length(dat.data), trial.val[1] + 1)
-        ax.title = "Epoch $(trial.val)/$(length(dat.data))"
-        update_extreme_spans!()
-        update_vEOG!()
-        update_hEOG!()
-        draw()
+      clear_axes()
+      trial[] = min(length(dat.data), trial.val[1] + 1)
+      ax.title = "Epoch $(trial.val)/$(length(dat.data))"
+      update_extreme_spans!()
+      update_markers!(markers)
+      draw()
     end
 
     function step_epoch_backward()
-        clear_axes()
-        trial[] = max(1, trial.val[1] - 1)
-        ax.title = "Epoch $(trial.val)/$(length(dat.data))"
-        update_extreme_spans!()
-        update_vEOG!()
-        update_hEOG!()
-        draw()
+      clear_axes()
+      trial[] = max(1, trial.val[1] - 1)
+      ax.title = "Epoch $(trial.val)/$(length(dat.data))"
+      update_extreme_spans!()
+      update_markers!(markers)
+      draw()
     end
 
-    function chans_less()
+    function yless()
         (yrange.val[1] + 100 >= 0 || yrange.val[end] - 100 <= 0) && return
         yrange.val = yrange[][1]+100:yrange[][end]-100
         ylims!(ax, yrange.val[1], yrange.val[end])
     end
 
-    function chans_more()
+    function ymore()
         yrange.val = yrange[][1]-100:yrange[][end]+100
         ylims!(ax, yrange.val[1], yrange.val[end])
     end
@@ -741,10 +740,16 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     ax.ylabel = "Amplitude (mV)"
 
     # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
-    toggles = toggle_button_group(fig, names(data[1]))
+    toggles = toggle_button_group(fig, names(data[trial.val]))
     for t = 1:length(toggles[:, 1])
-        on(toggles[t, 1].active) do _
-            toggles[t, 3](toggles[t, 1].active.val)
+        if toggles[t, 2].text.val ∈ ["Trigger", "vEOG", "hEOG"]
+            on(toggles[t, 1].active) do _
+                toggles[t, 3](markers[t-1], toggles[t, 1].active.val)
+            end
+        else
+            on(toggles[t, 1].active) do _
+                toggles[t, 3](toggles[t, 1].active.val)
+            end
         end
     end
 
@@ -791,17 +796,16 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
 
     menu_trial = hcat(
-        Menu(fig, options = 1:length(data), default = 1, direction = :down, fontsize = 18),
-        Label(fig, "Epoch", fontsize = 22, halign = :left),
-    )
+                      Menu(fig, options = 1:length(data), default = 1, direction = :down, fontsize = 18),
+                      Label(fig, "Epoch", fontsize = 22, halign = :left),
+                     )
     on(menu_trial[1].selection) do s
-        clear_axes()
-        trial[] = s
-        ax.title = "Epoch $(trial.val)/$(length(dat.data))"
-        update_extreme_spans!()
-        update_vEOG!()
-        update_hEOG!()
-        draw()
+      clear_axes()
+      trial[] = s
+      ax.title = "Epoch $(trial.val)/$(length(dat.data))"
+      update_extreme_spans!()
+      update_markers!(markers)
+      draw()
     end
 
     slider_extreme = Slider(fig[1, 2], range = 0:5:100, startvalue = 200, width = 100)
@@ -818,8 +822,8 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
             #if event.action in (Keyboard.press,)
             event.key == Keyboard.left && step_epoch_backward()
             event.key == Keyboard.right && step_epoch_forward()
-            event.key == Keyboard.down && chans_less()
-            event.key == Keyboard.up && chans_more()
+            event.key == Keyboard.down && yless()
+            event.key == Keyboard.up && ymore()
         end
         # TODO: what is best here?
         # return Consume()
@@ -843,66 +847,83 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     colsize!(fig.layout, 2, Relative(1 / 6))
 
 
-    #################### Triggers/Events ###############################
-    trigger_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].triggers), [:time, :triggers]]
-    trigger_lines = vlines!(trigger_data_time.val.time, color = :grey, linewidth = 1, visible = false)
-    trigger_text = text!(
-        string.(trigger_data_time.val.triggers),
-        position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time],
-        space = :data,
-        align = (:center, :center),
-        fontsize = 22,
-        visible = false,
-    )
+    ################### vertical line markers ###############################
+    # Vertical line markers
+    markers = []
+    function update_markers!(markers)
+      empty!(markers)
+      add_marker!(markers, ax, data, :triggers, trial = trial.val)
+      if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
+        add_marker!(markers, ax, data, :is_vEOG, trial = trial.val)
+        add_marker!(markers, ax, data, :is_hEOG, trial = trial.val)
+      end
+    end
+    update_markers!(markers)
 
-    ################### vEOG/hEOG ###############################
-    vEOG_data_time = []
-    vEOG_lines = []
-    vEOG_text = []
-    function update_vEOG!()
-        if length(vEOG_lines) > 0
-            delete!(ax, vEOG_lines)
-            delete!(ax, vEOG_text)
-        end
-        vEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_vEOG), [:time, :is_vEOG]]
-        vEOG_lines = vlines!(vEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
-        vEOG_text = text!(
-            repeat(["v"], nrow(vEOG_data_time)),
-            position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time],
-            space = :data,
-            align = (:center, :center),
-            fontsize = 22,
-            visible = false,
-        )
-        plot_vEOG_lines(toggles[3, 1].active.val)
-    end
-    if ("is_vEOG" in names(dat.data[1]))
-        update_vEOG!()
-    end
 
-    hEOG_data_time = []
-    hEOG_lines = []
-    hEOG_text = []
-    function update_hEOG!()
-        if length(hEOG_lines) > 0
-            delete!(ax, hEOG_lines)
-            delete!(ax, hEOG_text)
-        end
-        hEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_hEOG), [:time, :is_hEOG]]
-        hEOG_lines = vlines!(hEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
-        hEOG_text = text!(
-            repeat(["h"], nrow(hEOG_data_time)),
-            position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time],
-            space = :data,
-            align = (:center, :center),
-            fontsize = 22,
-            visible = false,
-        )
-        plot_hEOG_lines(toggles[4, 1].active.val)
-    end
-    if ("is_hEOG" in names(dat.data[1]))
-        update_hEOG!()
-    end
+    # #################### Triggers/Events ###############################
+    # trigger_data_time = @lift data[$trial][findall(x -> x != 0, data[$trial][!, :].triggers), [:time, :triggers]]
+    # trigger_lines = vlines!(trigger_data_time.val.time, color = :grey, linewidth = 1, visible = false)
+    # trigger_text = text!(
+    #     string.(trigger_data_time.val.triggers),
+    #     position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in trigger_data_time.val.time],
+    #     space = :data,
+    #     align = (:center, :center),
+    #     fontsize = 22,
+    #     visible = false,
+    # )
+
+
+
+
+    # ################### vEOG/hEOG ###############################
+    # vEOG_data_time = []
+    # vEOG_lines = []
+    # vEOG_text = []
+    # function update_vEOG!()
+    #     if length(vEOG_lines) > 0
+    #         delete!(ax, vEOG_lines)
+    #         delete!(ax, vEOG_text)
+    #     end
+    #     vEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_vEOG), [:time, :is_vEOG]]
+    #     vEOG_lines = vlines!(vEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
+    #     vEOG_text = text!(
+    #         repeat(["v"], nrow(vEOG_data_time)),
+    #         position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in vEOG_data_time.time],
+    #         space = :data,
+    #         align = (:center, :center),
+    #         fontsize = 22,
+    #         visible = false,
+    #     )
+    #     plot_vEOG_lines(toggles[3, 1].active.val)
+    # end
+    # if ("is_vEOG" in names(dat.data[1]))
+    #     update_vEOG!()
+    # end
+
+    # hEOG_data_time = []
+    # hEOG_lines = []
+    # hEOG_text = []
+    # function update_hEOG!()
+    #     if length(hEOG_lines) > 0
+    #         delete!(ax, hEOG_lines)
+    #         delete!(ax, hEOG_text)
+    #     end
+    #     hEOG_data_time = data[trial.val][findall(x -> x != 0, data[trial.val][!, :].is_hEOG), [:time, :is_hEOG]]
+    #     hEOG_lines = vlines!(hEOG_data_time.time, color = :grey, linewidth = 1, visible = false)
+    #     hEOG_text = text!(
+    #         repeat(["h"], nrow(hEOG_data_time)),
+    #         position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in hEOG_data_time.time],
+    #         space = :data,
+    #         align = (:center, :center),
+    #         fontsize = 22,
+    #         visible = false,
+    #     )
+    #     plot_hEOG_lines(toggles[4, 1].active.val)
+    # end
+    # if ("is_hEOG" in names(dat.data[1]))
+    #     update_hEOG!()
+    # end
 
     extreme_spans = []
     function update_extreme_spans!()

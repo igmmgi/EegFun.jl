@@ -77,12 +77,13 @@ lines!(ax, time, signal_sum .+ (rand(length(signal_sum)) .- 0.5 ).* 50) # add so
 
 
 # Figure 11.4
-N = 10 
+N = 1000
 data = rand(N)
 fourier = zeros(N)
 time = collect((1:N-1)/N)
+time = (1:N-1)/N
 
-fi = 5 
+fi = 15 
 
 lines(real.(exp.(-1*im .*2 .* pi*(fi.-1) .* time)))
 

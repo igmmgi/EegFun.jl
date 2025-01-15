@@ -50,7 +50,6 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
-include("plot.jl")
 plot_databrowser(dat)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
@@ -61,9 +60,10 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # plot epochs
 include("plot.jl")
+plot_databrowser(epochs)
 
-# plot_databrowser(epochs)
-plot_epochs(epochs, :Fp1, xlim = [0, 1], ylim = nothing; :linewidth = [10, 1])
+
+plot_epochs(epochs, :Fp1)
 # plot_epochs(epochs, "Fp1")
 # plot_epochs(epochs, epochs.layout.label)
 # plot_epochs(epochs, ["PO7", "PO8"])
