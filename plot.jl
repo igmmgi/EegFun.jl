@@ -397,7 +397,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     ax.ylabel = "Amplitude (mV)"
 
     # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
-    toggles = toggle_button_group(fig, names(data[1]))
+    toggles = toggle_button_group(fig, names(data))
     for t = 1:length(toggles[:, 1])
         if toggles[t, 2].text.val ∈ ["Trigger", "vEOG", "hEOG"]
             on(toggles[t, 1].active) do _
