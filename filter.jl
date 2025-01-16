@@ -10,9 +10,9 @@ end
 
 function filter_data!(dat::DataFrame, columns, filter_type, freq, order, sample_rate)
     if filter_type == "hp"
-        filter = digitalfilter(Highpass(freq, fs = sample_rate), Butterworth(order))
+        filter = digitalfilter(Highpass(freq), Butterworth(order); fs = sample_rate)
     elseif filter_type == "lp"
-        filter = digitalfilter(Lowpass(freq, fs = sample_rate), Butterworth(order))
+        filter = digitalfilter(Lowpass(freq), Butterworth(order); fs = sample_rate)
     end
     _apply_filter!(dat, columns, filter)
 end
