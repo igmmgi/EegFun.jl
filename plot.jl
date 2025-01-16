@@ -521,8 +521,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     markers = []
     add_marker!(markers, ax, data, :triggers)
     if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
-        add_marker!(markers, ax, data, :is_vEOG)
-        add_marker!(markers, ax, data, :is_hEOG)
+        add_marker!(markers, ax, data, :is_vEOG, label="v")
+        add_marker!(markers, ax, data, :is_hEOG, label="h")
     end
 
     ################### Extreme Values ###############################
@@ -630,8 +630,8 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     function update_markers!(markers)
         add_marker!(markers, ax, data, :triggers, trial = trial.val)
         if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
-            add_marker!(markers, ax, data, :is_vEOG, trial = trial.val)
-            add_marker!(markers, ax, data, :is_hEOG, trial = trial.val)
+            add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
+            add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
         end
     end
 
@@ -831,8 +831,8 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         empty!(markers)
         add_marker!(markers, ax, data, :triggers, trial = trial.val)
         if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
-            add_marker!(markers, ax, data, :is_vEOG, trial = trial.val)
-            add_marker!(markers, ax, data, :is_hEOG, trial = trial.val)
+            add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
+            add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
         end
     end
     update_markers!(markers)
