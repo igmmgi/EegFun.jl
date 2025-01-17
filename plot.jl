@@ -44,13 +44,14 @@ function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dic
     hidedecorations!(ax)
     hidespines!(ax)
 
-    return fig
+    return fig, ax
 
 end
 
 function head_shape_2d(layout; kwargs...)
     fig = Figure()
-    ax = GLMakie.Axis(fig[1, 1])
+    # ax = GLMakie.Axis(fig[1, 1])
+    ax = Axis(fig[1, 1])
     head_shape_2d(fig, ax, layout; kwargs...)
 end
 
@@ -287,9 +288,7 @@ function ycentre!(data, channel_labels, offset)
     end
 end
 
-function clear_axes(ax, datas)
-    [delete!(ax, value) for data in datas for (key, value) in data]
-end
+clear_axes(ax, datas) = [delete!(ax, value) for data in datas for (key, value) in data]
 
 
 function add_marker!(markers, ax, data, col; label = nothing, trial = nothing)
@@ -521,8 +520,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     markers = []
     add_marker!(markers, ax, data, :triggers)
     if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
-        add_marker!(markers, ax, data, :is_vEOG, label="v")
-        add_marker!(markers, ax, data, :is_hEOG, label="h")
+        add_marker!(markers, ax, data, :is_vEOG, label = "v")
+        add_marker!(markers, ax, data, :is_hEOG, label = "h")
     end
 
     ################### Extreme Values ###############################
@@ -587,13 +586,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
 
 end
 
-function plot_databrowser(dat::ContinuousData)
-    plot_databrowser(dat, dat.layout.label)
-end
-
-function plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractString,Vector})
-    plot_databrowser(dat, [channel_labels])
-end
+plot_databrowser(dat::ContinuousData) = plot_databrowser(dat, dat.layout.label)
+plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractString,Vector}) = plot_databrowser(dat, [channel_labels])
 
 
 
@@ -922,13 +916,8 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
 
 end
 
-function plot_databrowser(dat::EpochData)
-    plot_databrowser(dat, dat.layout.label)
-end
-
-function plot_databrowser(dat::EpochData, channel_labels::Union{<:AbstractString,Vector})
-    plot_databrowser(dat, [channel_labels])
-end
+plot_databrowser(dat::EpochData) = plot_databrowser(dat, dat.layout.label)
+plot_databrowser(dat::EpochData, channel_labels::Union{<:AbstractString,Vector}) = plot_databrowser(dat, [channel_labels])
 
 
 
@@ -986,9 +975,7 @@ function plot_epochs(dat::EpochData, channels::Union{Vector{<:AbstractString},Ve
 
 end
 
-function plot_epochs(dat::EpochData, channels::Union{AbstractString,Symbol}; kwargs...)
-    plot_epochs(dat::EpochData, [channels]; kwargs...)
-end
+plot_epochs(dat::EpochData, channels::Union{AbstractString,Symbol}; kwargs...) = plot_epochs(dat::EpochData, [channels]; kwargs...)
 
 
 # #################################################################
@@ -1030,9 +1017,7 @@ function plot_erp(dat::ErpData, channels::Union{Vector{<:AbstractString},Vector{
 
 end
 
-function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs...)
-    plot_erp(dat, [channels]; kwargs...)
-end
+plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs...) = plot_erp(dat, [channels]; kwargs...)
 
 
 # #################################################################
@@ -1194,6 +1179,4 @@ function plot_erp_image(dat::EpochData, channels::Vector{Symbol}; colorrange = n
     return fig
 end
 
-function plot_erp_image(dat::EpochData, channel)
-    plot_erp_image(dat, [channel])
-end
+plot_erp_image(dat::EpochData, channel) = plot_erp_image(dat, [channel])

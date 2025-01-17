@@ -7,9 +7,7 @@ mutable struct Coord
     coord::Array{CoordXY}
 end
 
-function read_layout(layout_file_name)
-    return DataFrame(CSV.File(layout_file_name))
-end
+read_layout(layout_file_name) = DataFrame(CSV.File(layout_file_name))
 
 
 function polar_to_cartesian_xy!(layout::DataFrame)
@@ -31,13 +29,9 @@ function polar_to_cartesian_xyz!(layout::DataFrame)
     return
 end
 
-function calculate_distance_xy(x1, y1, x2, y2)
-    return sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)))
-end
-
-function calculate_distance_xyz(x1, y1, z1, x2, y2, z2)
-    return sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)) + ((z1 - z2) * (z1 - z2)))
-end
+# distances
+calculate_distance_xy(x1, y1, x2, y2) =  sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)))
+calculate_distance_xyz(x1, y1, z1, x2, y2, z2) = sqrt(((x1 - x2) * (x1 - x2)) + ((y1 - y2) * (y1 - y2)) + ((z1 - z2) * (z1 - z2)))
 
 function get_electrode_neighbours_xy(layout, distance_criterion)
     neighbour_dict = OrderedDict()

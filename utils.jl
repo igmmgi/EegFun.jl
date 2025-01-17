@@ -27,13 +27,8 @@ function check_files_exist(subjects, conditions, filetype)
 end
 
 
-function channel_number_to_channel_label(channel_labels, channel_numbers::Int64)
-    return [channel_labels[channel_numbers]]
-end
-
-function channel_number_to_channel_label(channel_labels, channel_numbers::Vector{Int64})
-    return channel_labels[channel_numbers]
-end
+channel_number_to_channel_label(channel_labels, channel_numbers::Int64) =  [channel_labels[channel_numbers]]
+channel_number_to_channel_label(channel_labels, channel_numbers::Vector{Int64}) = channel_labels[channel_numbers]
 
 datarange(x) = -(-(extrema(x)...))
 
@@ -42,9 +37,7 @@ colmeans(df::Matrix) = reduce(+, eachrow(df)) ./ size(df)[1]
 colmeans(df::Matrix, cols) = reduce(+, eachrow(df[:, cols])) ./ size(df)[1]
 
 
-function consecutive(f, A::AbstractVector; step = 1)
-    [f(A[i+step], A[i]) for i = 1:length(A)-step]
-end
+consecutive(f, A::AbstractVector; step = 1) = [f(A[i+step], A[i]) for i = 1:length(A)-step]
 
 
 function splitgroups(v)
@@ -59,13 +52,9 @@ function splitgroups(v)
     start_idx, end_idx
 end
 
-function data_limits_x(dat::DataFrame)
-    return extrema(dat.time)
-end
-
-function data_limits_y(dat::DataFrame, col)
-    return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
-end
+# data limits
+data_limits_x(dat::DataFrame) =  extrema(dat.time)
+data_limits_y(dat::DataFrame, col) = [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
 
 
 

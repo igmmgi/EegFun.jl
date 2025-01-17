@@ -5,9 +5,8 @@ function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)
     )
 end
 
-function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)
-    return ContinuousData(create_eeg_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1])
-end
+create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String) =
+    ContinuousData(create_eeg_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1])
 
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)
     return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1])
@@ -29,9 +28,7 @@ function channel_summary(dat, channel_labels)
     return out_stats
 end
 
-function correlation_matrix(dat)
-    return [dat.layout.label DataFrame(cor(Matrix(dat.data[!, dat.layout.label])), dat.layout.label)]
-end
+correlation_matrix(dat) = [dat.layout.label DataFrame(cor(Matrix(dat.data[!, dat.layout.label])), dat.layout.label)]
 
 function detect_eog_onsets!(dat, criterion, channel_in, channel_out)
     step_size = div(dat.sample_rate, 20)
@@ -43,10 +40,7 @@ function detect_eog_onsets!(dat, criterion, channel_in, channel_out)
     return nothing
 end
 
-function is_extreme_value(dat::DataFrame, columns, criterion)
-    return any(x -> abs.(x) .>= criterion, Matrix(dat[!, columns]), dims = 2)
-end
-
-function n_extreme_value(dat::DataFrame, columns, criterion)
-    return sum(x -> abs.(x) .>= criterion, Matrix(dat[!, columns]), dims = 2)
-end
+# extreme values
+is_extreme_value(dat::DataFrame, columns, criterion) =
+    any(x -> abs.(x) .>= criterion, Matrix(dat[!, columns]), dims = 2)
+n_extreme_value(dat::DataFrame, columns, criterion) = sum(x -> abs.(x) .>= criterion, Matrix(dat[!, columns]), dims = 2)
