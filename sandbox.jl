@@ -2,7 +2,8 @@ using BioSemiBDF
 using CSV
 using DSP
 using DataFrames
-using GLMakie
+#using GLMakie
+using CairoMakie
 using JLD2
 using LibGEOS
 using LinearAlgebra
@@ -29,7 +30,7 @@ include("utils.jl")
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
-# head_shape_2d(layout)
+f, ax = head_shape_2d(layout)
 # head_shape_3d(layout)
 
 
@@ -50,7 +51,7 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
-plot_databrowser(dat)
+# plot_databrowser(dat)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
 # plot_databrowser(dat, ["hEOG"])
@@ -59,9 +60,7 @@ plot_databrowser(dat)
 epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # plot epochs
-include("plot.jl")
 plot_databrowser(epochs)
-
 
 plot_epochs(epochs, :Fp1)
 # plot_epochs(epochs, "Fp1")
@@ -78,11 +77,10 @@ plot_erp(erp, [:Fp1, :Fp2])
 plot_erp(erp, ["Fp1", "Fp2"])
 
 
-include("plot.jl")
-include("topo.jl")
 plot_topoplot(erp)
 
 
+plot_erp_image(epochs, :Fp1)
 plot_erp_image(epochs, [:Fp1, :Fp2])
 
 
