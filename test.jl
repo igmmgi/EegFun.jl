@@ -4,6 +4,7 @@ using LinearAlgebra
 using DSP
 using BenchmarkTools
 using GLMakie
+using FFTW
 
 a = [1, 2, 3]
 b = [4, 5, 6]
@@ -80,57 +81,151 @@ ax.xlabel = "Time (S)"
 ax.ylabel = "Amplitude"
 
 
+
 # Figure 11.4
-N = 1000
+function myfft(signal)
+    signal_length = length(signal)
+    fourier = zeros(length(signal))
+    for fi = 1:signal_length
+        # sine_wave = real.(exp.(-im .* 2 .* pi * (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal))))
+        sine_wave = sin.(2 .* pi .* (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal)))
+        # compute dot product between sine wave and signal
+        fourier[fi] = dot(sine_wave, signal)
+    end
+    return fourier
+end
+
+
 sample_rate = 1000
-time = LinRange(0, 2, N)
+time = 0:(1/sample_rate):2
 amps = [1, 0.5]
 freqs = [3, 8]
+hz = LinRange(0, sample_rate, length(time))
+signal1 = amps[1] * sin.(2 .* pi .* freqs[1] .* time)
+signal2 = amps[2] * sin.(2 .* pi .* freqs[2] .* time)
+signal3 = signal1 + signal2
+fig = Figure()
+ax = Axis(fig[1, 1])
+lines!(ax, time, signal1)
+xlims!(ax, 0, time[end])
+ylims!(ax, -1.5, 1.5)
+ax.xlabel = "Time [s]"
+ax.ylabel = "Amplitude"
+ax = Axis(fig[1, 2])
+lines!(ax, time, signal2)
+xlims!(ax, 0, time[end])
+ylims!(ax, -1.5, 1.5)
+ax.xlabel = "Time [s]"
+ax.ylabel = "Amplitude"
+ax = Axis(fig[1, 3])
+lines!(ax, time, signal3)
+xlims!(ax, 0, time[end])
+ylims!(ax, -1.5, 1.5)
+ax.xlabel = "Time [s]"
+ax.ylabel = "Amplitude"
+ax = Axis(fig[2, 1])
+f = myfft(signal1) ./ length(time)
+barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
+xlims!(ax, 0, 10)
+#ylims!(ax, 0, 2)
+ax.xlabel = "Frequency (Hz)"
+ax.ylabel = "Amplitude"
+ax = Axis(fig[2, 2])
+f = myfft(signal2) ./ length(time)
+barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
+xlims!(ax, 0, 10)
+ylims!(ax, 0, 2)
+ax.xlabel = "Frequency (Hz)"
+ax.ylabel = "Amplitude"
+ax = Axis(fig[2, 3])
+f = myfft(signal3) ./ length(time)
+barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
+xlims!(ax, 0, 10)
+ylims!(ax, 0, 2)
+ax.xlabel = "Frequency (Hz)"
+ax.ylabel = "Amplitude"
+
+
+# Figure 11.4
+sample_rate = 500
+time = 0:(1/sample_rate):2
+amps = [1, 0.5]
+freqs = [5, 8]
+hz = LinRange(0, sample_rate, length(time))
 signal1 = amps[1] * sin.(2 .* pi .* freqs[1] .* time)
 signal2 = amps[2] * sin.(2 .* pi .* freqs[2] .* time)
 signal3 = signal1 + signal2
 fig = Figure()
 ax = Axis(fig[1, 1])
 lines!(ax, signal1)
-xlims!(ax, 0, N)
+xlims!(ax, 0, length(time))
 ylims!(ax, -1.5, 1.5)
 ax = Axis(fig[1, 2])
 lines!(ax, signal2)
-xlims!(ax, 0, N)
+xlims!(ax, 0, length(time))
 ylims!(ax, -1.5, 1.5)
 ax = Axis(fig[1, 3])
 lines!(ax, signal3)
-xlims!(ax, 0, N)
+xlims!(ax, 0, length(time))
 ylims!(ax, -1.5, 1.5)
-function fft(signal)
-    signal_length = length(signal)
-    fourier = zeros(length(signal))
-    time = collect((0:signal_length-1) / signal_length)
-    for fi = 1:signal_length
-        sine_wave = real.(exp.(-im .* 2 * pi * (fi .- 1) .* time))
-        # compute dot product between sine wave and signal
-        fourier[fi] = dot(sine_wave, signal)
-    end
-    return fourier
-end
 ax = Axis(fig[2, 1])
-f = fft(signal1) #./ length(time)
-hz = LinRange(0, 1000, 1000)
+@btime f = fft(signal1) ./ length(time)
 barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
-xlims!(ax, 0, 20)
-ylims!(ax, 0, 20)
+xlims!(ax, 0, 10)
+ylims!(ax, 0, 2)
 ax = Axis(fig[2, 2])
-f = fft(signal2) #./ length(time)
-hz = LinRange(0, 1000, 1000)
+f = fft(signal2) ./ length(time)
 barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
-xlims!(ax, 0, 20)
-ylims!(ax, 0, 20)
+xlims!(ax, 0, 10)
+ylims!(ax, 0, 2)
 ax = Axis(fig[2, 3])
-f = fft(signal3) #./ length(time)
-hz = LinRange(0, 1000, 1000)
+f = fft(signal3) ./ length(time)
 barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
-xlims!(ax, 0, 20)
-ylims!(ax, 0, 20)
+xlims!(ax, 0, 10)
+ylims!(ax, 0, 2)
+
+
+# Figure 11.6 Extended
+sample_rate = 100
+nyquist_freq = sample_rate / 2
+time = 0:(1/sample_rate):(1-(1/sample_rate))
+data = randn(sample_rate)
+fig = Figure()
+ax = Axis(fig[1, 1])
+lines!(ax, time, data)
+xlims!(ax, 0, time[end])
+ylims!(ax, -3, 3)
+fourier = zeros(size(data));
+frequencies = LinRange(0, nyquist_freq, floor(Int, length(data) / 2 + 1));
+ax = Axis(fig[2, 1])
+xlims!(ax, 0, time[end])
+for ii = 1:length(data)
+    sine_wave = exp.(-im .* 2 .* pi * (ii .- 1) .* (0:(length(data)-1)) ./ (length(data)))
+    lines!(ax, time, real.(sine_wave))
+    #fourier[ii] = dot(real.(sine_wave), data)
+    fourier[ii] = sum(real.(sine_wave) .* data)
+end
+xlims!(ax, 0, time[end])
+fourier = fourier ./ length(data)
+ax = Axis(fig[3, 1])
+xlims!(ax, 0 - 0.5, frequencies[end] + 0.5)
+barplot!(ax, frequencies, abs.(fourier[1:length(frequencies)] .* 2))
+# reconstruct data
+reconstructed_data = zeros(length(data))
+ax = Axis(fig[4, 1])
+xlims!(ax, 0, time[end])
+for ii = 1:length(data)
+    sine_wave = fourier[ii] * exp.(-im .* 2 .* pi * (ii .- 1) .* time)
+    lines!(ax, time, real.(sine_wave))
+    reconstructed_data = reconstructed_data .+ real.(sine_wave)
+end
+reconstructed_data == data
+ax = Axis(fig[5, 1])
+lines!(ax, time, real.(reconstructed_data))
+xlims!(ax, 0, time[end])
+ylims!(ax, -3, 3)
+
+
 
 
 
