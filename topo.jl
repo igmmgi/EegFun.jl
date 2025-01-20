@@ -17,7 +17,7 @@ function data_interpolation_topo(dat, points, grid_scale)
     x = y = range(-radius, radius, length = grid_scale)
     X, Y = repeat(x, outer = length(x))[:], repeat(y, inner = length(y))[:]
     grid = [X Y]'
-    dat = interpolate(Multiquadratic(), points, dat)
+    dat = ScatteredInterpolation.interpolate(Multiquadratic(), points, dat)
     dat = ScatteredInterpolation.evaluate(dat, grid)
     dat = reshape(dat, grid_scale, grid_scale)
     circle_mask!(dat, grid_scale)
