@@ -65,7 +65,7 @@ epochs = extract_epochs(dat, 1, -0.5, 2)
 # TODO: Trigger/vEOG/hEOG vertical lines fix!
 plot_databrowser(epochs)
 plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
-plot_databrowser(epochs, ["hEOG","vEOG"])
+plot_databrowser(epochs, ["hEOG", "vEOG"])
 plot_databrowser(epochs, "hEOG")
 
 # Plot Epochs (all)
@@ -81,7 +81,7 @@ f, ax = plot_erp(erp, :Fp1)
 plot_erp(erp, ["Fp1"])
 plot_erp(erp, [:Fp1, :Fp2])
 plot_erp(erp, ["Fp1", "Fp2"])
-plot_erp(erp, [:Fp1, :Fp2], kwargs=Dict(:yreversed => true))
+plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:yreversed => true))
 
 # Topoplot
 plot_topoplot(erp)
