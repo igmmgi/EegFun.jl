@@ -2,8 +2,8 @@ using BioSemiBDF
 using CSV
 using DSP
 using DataFrames
-#using GLMakie
-using CairoMakie
+using GLMakie
+# using CairoMakie
 using JLD2
 using LibGEOS
 using LinearAlgebra
@@ -30,10 +30,8 @@ include("utils.jl")
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
-f, ax = head_shape_2d(layout)
-# head_shape_3d(layout)
-
-
+head_shape_2d(layout);
+head_shape_3d(layout);
 
 # read bdf file
 subject = 3
@@ -51,47 +49,54 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
-# plot_databrowser(dat)
-# plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
-# plot_databrowser(dat, ["vEOG", "hEOG"])
-# plot_databrowser(dat, ["hEOG"])
+
+# Continuous Data Browser
+# TODO: Labels position when changing x-range
+include("plot.jl")
+plot_databrowser(dat)
+plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
+plot_databrowser(dat, ["vEOG", "hEOG"])
+plot_databrowser(dat, "hEOG")
 
 # extract epochs
 epochs = extract_epochs(dat, 1, -0.5, 2)
 
-# plot epochs
+# Epoch Data Browser
+# TODO: Trigger/vEOG/hEOG vertical lines fix!
 plot_databrowser(epochs)
+plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
+plot_databrowser(epochs, ["hEOG","vEOG"])
+plot_databrowser(epochs, "hEOG")
 
+# Plot Epochs (all)
 plot_epochs(epochs, :Fp1)
-# plot_epochs(epochs, "Fp1")
-# plot_epochs(epochs, epochs.layout.label)
-# plot_epochs(epochs, ["PO7", "PO8"])
+plot_epochs(epochs, "Fp1")
+plot_epochs(epochs, ["PO7", "PO8"])
 
 # average epochs
 erp = average_epochs(epochs)
 
-plot_erp(erp, :Fp1)
-plot_erp(erp, :Fp1, yreversed = true)
-plot_erp(erp, "Fp1")
+# ERP Plot
+f, ax = plot_erp(erp, :Fp1)
+plot_erp(erp, ["Fp1"])
 plot_erp(erp, [:Fp1, :Fp2])
 plot_erp(erp, ["Fp1", "Fp2"])
+plot_erp(erp, [:Fp1, :Fp2], kwargs=Dict(:yreversed => true))
 
-
+# Topoplot
 plot_topoplot(erp)
 
-
-plot_erp_image(epochs, :Fp1)
+# ERP Image
+# TODO: Does not look correct!
+plot_erp_image(epochs, "Fp1")
 plot_erp_image(epochs, [:Fp1, :Fp2])
 
 
 save_object("$(subject)_$(cond)_epochs.jld2", epochs)
 save_object("$(subject)_$(cond)_erp.jld2", erp)
 
-
-
 diff_channel!(dat, "F9", "F10", "hEOG");
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
-
 
 
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
@@ -99,11 +104,13 @@ detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 function test_plot_eog_detection(dat, xlim, channel, detected)
     fig = Figure()
-    ax = GLMakie.Axis(fig[1, 1])  # plot layout
+    ax = Axis(fig[1, 1])  # plot layout
     lines!(ax, dat.data.time[xlim], dat.data[!, channel][xlim])
     vlines!(ax, dat.data.time[xlim][dat.data[!, detected][xlim]], color = :black)
     display(fig)
+    return fix, ax
 end
+
 test_plot_eog_detection(dat, 1000:14000, "vEOG", "is_vEOG")
 test_plot_eog_detection(dat, 1000:4000, "hEOG", "is_hEOG")
 
