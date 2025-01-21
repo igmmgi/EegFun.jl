@@ -1,8 +1,9 @@
+using Base: Algorithm
 # Analyzin Neural TimeSeries Data
 # Chapter 10
 using LinearAlgebra
 using DSP
-using BenchmarkTools
+# using BenchmarkTools
 using GLMakie
 using FFTW
 
@@ -83,18 +84,18 @@ ax.ylabel = "Amplitude"
 
 
 # Figure 11.4
+# naive implementation
 function myfft(signal)
     signal_length = length(signal)
-    fourier = zeros(length(signal))
+    fourier = ComplexF64[0.0 + 0.0im for _ = 1:signal_length]
     for fi = 1:signal_length
-        sine_wave = real.(exp.(-im .* 2 .* pi * (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal))))
-        # sine_wave = sin.(2 .* pi .* (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal)))
-        # compute dot product between sine wave and signal
+        # Generate the complex exponential
+        sine_wave = exp.(-im * 2 * pi * (fi - 1) .* (0:(signal_length-1)) / signal_length)
+        # Compute the dot product
         fourier[fi] = dot(sine_wave, signal)
     end
     return fourier
 end
-
 
 sample_rate = 1000
 time = 0:(1/sample_rate):2
@@ -127,7 +128,7 @@ ax = Axis(fig[2, 1])
 f = myfft(signal1) ./ length(time)
 barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
 xlims!(ax, 0, 10)
-#ylims!(ax, 0, 2)
+ylims!(ax, 0, 2)
 ax.xlabel = "Frequency (Hz)"
 ax.ylabel = "Amplitude"
 ax = Axis(fig[2, 2])
@@ -169,7 +170,7 @@ lines!(ax, signal3)
 xlims!(ax, 0, length(time))
 ylims!(ax, -1.5, 1.5)
 ax = Axis(fig[2, 1])
-@btime f = fft(signal1) ./ length(time)
+f = fft(signal1) ./ length(time)
 barplot!(ax, hz, abs.(f[1:length(hz)] .* 2))
 xlims!(ax, 0, 10)
 ylims!(ax, 0, 2)
@@ -186,33 +187,27 @@ ylims!(ax, 0, 2)
 
 
 
-
-sample_rate = 1000
-time = 0:(1/sample_rate):2
-hz = LinRange(0, sample_rate, length(time))
-data = 1 * sin.(2 .* pi .* 5 .* time)
 # Figure 11.6 Extended
-# sample_rate = 100
-# nyquist_freq = sample_rate / 2
-# time = 0:(1/sample_rate):(1-(1/sample_rate))
-# data = randn(sample_rate)
+sample_rate = 200
+nyquist_freq = sample_rate / 2
+time = 0:(1/sample_rate):(1-(1/sample_rate))
+data = randn(sample_rate)
 fig = Figure()
 ax = Axis(fig[1, 1])
 lines!(ax, time, data)
 xlims!(ax, 0, time[end])
 ylims!(ax, -3, 3)
-fourier = zeros(size(data));
+fourier = ComplexF64[0.0 + 0.0im for _ = 1:length(data)]
 frequencies = LinRange(0, sample_rate, length(time));
 ax = Axis(fig[2, 1])
 xlims!(ax, 0, time[end])
 for ii = 1:length(data)
-  sine_wave = exp.(-im .* 2 .* pi * (ii .- 1) .* time)
-  #lines!(ax, time, real.(sine_wave))
-  fourier[ii] = dot(real.(sine_wave), data)
-  # fourier[ii] = sum(real.(sine_wave) .* data)
+    sine_wave = exp.(-im * 2 * pi * (ii - 1) .* time)
+    lines!(ax, time, real.(sine_wave))
+    # Compute the dot product
+    fourier[ii] = dot(sine_wave, data)
 end
 xlims!(ax, 0, time[end])
-
 fourier = fourier ./ length(data)
 ax = Axis(fig[3, 1])
 barplot!(ax, frequencies, abs.(fourier[1:length(frequencies)] .* 2))
@@ -222,10 +217,10 @@ reconstructed_data = zeros(length(data))
 ax = Axis(fig[4, 1])
 xlims!(ax, 0, time[end])
 for ii = 1:length(data)
-  sine_wave = fourier[ii]) * exp.(-im .* 2 .* pi * (ii - 1) .* time)
-  plot(real.(sine_wave))
-  lines!(ax, time, real.(sine_wave))
-  reconstructed_data = reconstructed_data .+ real.(sine_wave)
+    sine_wave = fourier[ii] * exp.(-im .* 2 .* pi * (ii - 1) .* time)
+    plot(real.(sine_wave))
+    lines!(ax, time, real.(sine_wave))
+    reconstructed_data = reconstructed_data .+ real.(sine_wave)
 end
 reconstructed_data == data
 ax = Axis(fig[5, 1])
@@ -235,6 +230,64 @@ ylims!(ax, -3, 3)
 
 
 
+# Figure 11.6 
+sample_rate = 200
+nyquist_freq = sample_rate / 2
+time = 0:(1/sample_rate):(1-(1/sample_rate))
+data = randn(sample_rate)
+fig = Figure()
+ax = Axis(fig[1, 1])
+lines!(ax, time, data)
+xlims!(ax, 0, time[end])
+ylims!(ax, -3, 3)
+fourier = fft(data)
+frequencies = LinRange(0, sample_rate, length(time));
+ax = Axis(fig[2, 1])
+xlims!(ax, 0, time[end])
+ax = Axis(fig[2, 1])
+barplot!(ax, frequencies, abs.(fourier[1:length(frequencies)] .* 2))
+xlims!(ax, 0 - 0.5, frequencies[end] + 0.5)
+# reconstruct data
+reconstructed_data = ifft(fourier)
+ax = Axis(fig[3, 1])
+lines!(ax, time, real.(reconstructed_data))
+xlims!(ax, 0, time[end])
+ylims!(ax, -3, 3)
 
+
+
+# Figure 11.10
+sample_rate = 256
+time = -1:(1/sample_rate):1
+signal = DataFrame(CSV.File("data.csv")).data[1:513]
+s = 5 / (2 * pi * 30);
+kernel = exp.((-time .^ 2) / (2 .* s^2)) ./ 30
+# Determine the size for FFT (length of convolution result)
+n = length(signal) + length(kernel) - 1
+# Zero-pad signals to length n for FFT
+padded_signal = [signal; zeros(n - length(signal))]
+padded_kernel = [kernel; zeros(n - length(kernel))]
+# Perform convolution in the time domain
+time_domain_convolution = conv(signal, kernel)
+# Compute the FFT of the padded signals
+freq_domain_signal = fft(padded_signal)
+freq_domain_kernel = fft(padded_kernel)
+# Perform multiplication in the frequency domain
+freq_domain_product = freq_domain_signal .* freq_domain_kernel
+# Compute the inverse FFT to return to the time domain
+freq_to_time_domain = real(ifft(freq_domain_product))
+# Align FFT-based convolution result to match time-domain convolution
+freq_to_time_domain = freq_to_time_domain[1:length(time_domain_convolution)]
+lines(time_domain_convolution)
+lines!(freq_to_time_domain .+ 0.1)  # added y offset for visual 
+
+result1 = ifft(fft(signal) .* fft(kernel))
+result2 = ifft(fft(padded_signal) .* fft(padded_kernel))
+result3 = conv(signal, kernel)#[floor(Int, n/4):end-(floor(Int, n/4)-1)]
+lines(real.(result2))
+lines!(real.(result3) .+ 0.1)
+
+
+# Chapter 12: Morlet Wavelets
 
 
