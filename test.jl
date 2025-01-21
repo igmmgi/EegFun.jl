@@ -87,8 +87,8 @@ function myfft(signal)
     signal_length = length(signal)
     fourier = zeros(length(signal))
     for fi = 1:signal_length
-        # sine_wave = real.(exp.(-im .* 2 .* pi * (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal))))
-        sine_wave = sin.(2 .* pi .* (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal)))
+        sine_wave = real.(exp.(-im .* 2 .* pi * (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal))))
+        # sine_wave = sin.(2 .* pi .* (fi .- 1) .* (0:(length(signal)-1)) ./ (length(signal)))
         # compute dot product between sine wave and signal
         fourier[fi] = dot(sine_wave, signal)
     end
@@ -185,43 +185,51 @@ xlims!(ax, 0, 10)
 ylims!(ax, 0, 2)
 
 
+
+
+sample_rate = 1000
+time = 0:(1/sample_rate):2
+hz = LinRange(0, sample_rate, length(time))
+data = 1 * sin.(2 .* pi .* 5 .* time)
 # Figure 11.6 Extended
-sample_rate = 100
-nyquist_freq = sample_rate / 2
-time = 0:(1/sample_rate):(1-(1/sample_rate))
-data = randn(sample_rate)
+# sample_rate = 100
+# nyquist_freq = sample_rate / 2
+# time = 0:(1/sample_rate):(1-(1/sample_rate))
+# data = randn(sample_rate)
 fig = Figure()
 ax = Axis(fig[1, 1])
 lines!(ax, time, data)
 xlims!(ax, 0, time[end])
 ylims!(ax, -3, 3)
 fourier = zeros(size(data));
-frequencies = LinRange(0, nyquist_freq, floor(Int, length(data) / 2 + 1));
+frequencies = LinRange(0, sample_rate, length(time));
 ax = Axis(fig[2, 1])
 xlims!(ax, 0, time[end])
 for ii = 1:length(data)
-    sine_wave = exp.(-im .* 2 .* pi * (ii .- 1) .* (0:(length(data)-1)) ./ (length(data)))
-    lines!(ax, time, real.(sine_wave))
-    #fourier[ii] = dot(real.(sine_wave), data)
-    fourier[ii] = sum(real.(sine_wave) .* data)
+  sine_wave = exp.(-im .* 2 .* pi * (ii .- 1) .* time)
+  #lines!(ax, time, real.(sine_wave))
+  fourier[ii] = dot(real.(sine_wave), data)
+  # fourier[ii] = sum(real.(sine_wave) .* data)
 end
 xlims!(ax, 0, time[end])
+
 fourier = fourier ./ length(data)
 ax = Axis(fig[3, 1])
-xlims!(ax, 0 - 0.5, frequencies[end] + 0.5)
 barplot!(ax, frequencies, abs.(fourier[1:length(frequencies)] .* 2))
+xlims!(ax, 0 - 0.5, frequencies[end] + 0.5)
 # reconstruct data
 reconstructed_data = zeros(length(data))
 ax = Axis(fig[4, 1])
 xlims!(ax, 0, time[end])
 for ii = 1:length(data)
-    sine_wave = fourier[ii] * exp.(-im .* 2 .* pi * (ii .- 1) .* time)
-    lines!(ax, time, real.(sine_wave))
-    reconstructed_data = reconstructed_data .+ real.(sine_wave)
+  sine_wave = fourier[ii]) * exp.(-im .* 2 .* pi * (ii - 1) .* time)
+  plot(real.(sine_wave))
+  lines!(ax, time, real.(sine_wave))
+  reconstructed_data = reconstructed_data .+ real.(sine_wave)
 end
 reconstructed_data == data
 ax = Axis(fig[5, 1])
-lines!(ax, time, real.(reconstructed_data))
+lines!(ax, time, reconstructed_data)
 xlims!(ax, 0, time[end])
 ylims!(ax, -3, 3)
 
