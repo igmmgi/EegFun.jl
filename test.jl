@@ -290,4 +290,156 @@ lines!(real.(result3) .+ 0.1)
 
 # Chapter 12: Morlet Wavelets
 
+# Figure 12.1
+sample_rate = 1000
+time = -1:(1/sample_rate):1
+freq = 4
+
+sine_wave = cos.(2 * pi .* freq .* time)
+# sine_wave = @. cos(2*pi * freq * time)
+# lines(sine_wave)
+
+n = 4 # number of wavelets
+s = n / (2 * pi * freq)
+gaussian_win = exp.(-time .^ 2 ./ (2 * s^2))
+# lines(gaussian_win)
+
+lines!(time, sine_wave .* gaussian_win)
+
+# Figure 12.4
+sample_rate = 250
+time = -1:(1/sample_rate):1
+fig = Figure()
+ax = Axis(fig[1, 1])
+num_wavelets = 80
+lowest_freq = 2
+highest_freq = 100
+freqs = LinRange(lowest_freq, highest_freq, num_wavelets)
+for freq in freqs
+    # sine_wave = cos.(2 * pi .* freq .* time)
+    sine_wave = exp.(2 * im * pi .* freq .* time)
+    println(freq)
+    n = 6 # number of wavelet
+    s = n / (2 * pi * freq)
+    gaussian_win = exp.(-time .^ 2 ./ (2 * s^2))
+    # lines(gaussian_win)
+    lines!(ax, time, real.(sine_wave) .* gaussian_win)
+end
+
+
+# Figure 12.5
+
+
+  signal = DataFrame(CSV.File("data.csv")).data
+  fig = Figure()
+  ax = Axis(fig[1, 1])
+  # create wavelet
+  sample_rate = 256
+  time = -1:(1/sample_rate):1
+  freq = 6
+  lines!(ax, signal)
+  sine_wave = exp.(2 * im * pi .* freq .* time)
+  s = 4.5 / (2 * pi * freq)
+  gaussian_win = exp.(-time .^ 2 ./ (2 * s^2))
+  wavelet = sine_wave .* gaussian_win
+  halfwaveletsize = ceil(Int, length(wavelet) / 2);
+  n_conv = length(wavelet) + length(signal) - 1
+  wavelet_padded = [wavelet; zeros(floor(Int, (n_conv - length(wavelet))))]
+  signal_padded = [signal; zeros(floor(Int, (n_conv - length(signal))))]
+  # half of the wavelet size, useful for chopping off edges after convolution.
+  fft_wavelet = fft(wavelet_padded)
+  fft_signal = fft(signal_padded)
+  ift = ifft(fft_wavelet .* fft_signal) .* sqrt(s) / 10;
+  wavelet_conv_data = real(ift[halfwaveletsize:(end-halfwaveletsize)]);
+  lines!(ax, wavelet_conv_data)
+  filter_high = digitalfilter(Highpass(4), Butterworth(2); fs = 256)
+  filter_low = digitalfilter(Lowpass(8), Butterworth(6); fs = 256)
+  signal_filtered = filtfilt(filter_high, signal)
+  signal_filtered = filtfilt(filter_low, signal_filtered)
+  lines!(ax, signal_filtered)
+
+
+signal = DataFrame(CSV.File("data2.csv")).data
+  # Figure 13.11
+function figure_12_5(signal)
+  min_freq = 2;
+  max_freq = 80;
+  num_freq = 30;
+  sample_rate = 256;
+  time = -1:(1/sample_rate):1
+  eeg_time = -1000:(1000/sample_rate):1500-(1000/sample_rate)
+  freqs = exp.(range(log(min_freq), log(max_freq), length=num_freq))
+  s     = exp.(range(log(3),        log(10),       length=num_freq)) ./ (2*pi.*freqs)
+  n_wavelet = length(time)
+  n_data = length(signal)
+  n_convolution = n_wavelet + n_data - 1; 
+  n_conv_pow2 =  nextpow(2, n_convolution)
+  half_of_wavelet_size = floor(Int, (n_wavelet-1)/2)
+  signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
+  eegfft = fft(signal_padded)
+  eegpower = zeros(num_freq, div(n_data, 99))  # seems 99 trials in exported mat file
+  find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
+  base_idx = find_idx_start_end(eeg_time, [-500 -200])
+  @inbounds for fi = 1:num_freq
+    wavelet = sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2*im*pi*freqs[fi].*time) .* exp.(-time .^ 2 ./ (2*(s[fi].^2)))
+    #lines(real.(wavelet))
+    wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
+    wavelet_fft = fft( wavelet_padded)
+    # convolution
+    eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size:end-halfwaveletsize];
+    # eegconv = eegconv[1:n_convolution][half_of_wavelet_size:end-halfwaveletsize];
+    eegconv = reshape(eegconv, 640, 99)
+    temppower = mean((abs.(eegconv)).^2, dims=2)
+    eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]]))
+  end
+  fig = Figure()
+  ax = Axis(fig[1, 1], yscale = log10)
+  contourf!(ax, eeg_time, freqs, transpose(eegpower), levels=-4:0.2:4, colormap = :jet)
+  xlims!(ax, -200, 1000)
+  ax.yticks = round.(freqs)
+  ylims!(ax, 2, 80)
+  #display(fig)
+  return fig, ax
+end
+
+fig, ax = figure_12_5(signal)
+
+
+# Figure 13.12
+frequency_good = 6
+frequency_bad = 2
+sample_rate = 500;
+cycles = 4
+time = -0.5:(1/sample_rate):0.5
+wavelet_good = exp.(2*im*pi*frequency_good.*time) .* exp.(-time .^2 ./ (2 .* (cycles/(2*pi*frequency_good)).^2))
+wavelet_bad = exp.(2*im*pi*frequency_bad.*time) .* exp.(-time .^2 ./ (2 .* (cycles/(2*pi*frequency_bad)).^2))
+lines(real.(wavelet_good))
+lines!(real.(wavelet_bad))
+
+
+# Figure 13.13
+frequency = 10;
+sample_rate = 500;
+time      = -.5:1/sample_rate:.5;
+numcycles = [ 3 7 ];
+fig = Figure()
+for i=1:length(numcycles)
+    # make wavelet
+    wavelet = exp.(2*im*pi*frequency.*time) .* exp.(-time .^2 ./(2*(numcycles[i]/(2*pi*frequency))^2));
+    ax = Axis(fig[1, i])
+    lines!(ax, time, real(wavelet))
+    ax.xlabel = "Time"
+    ax.ylabel = "Amplitude"
+    ax.title = "Wavelet $(frequency) Hz at $(numcycles[i]) cycles"
+    #subplot(2,1,2)
+    #hold on
+    #fft_wav = 2*abs(fft(wavelet));
+    #hz_wav  = linspace(0,srate/2,round(length(wavelet)/2)+1);
+    #plot(hz_wav,fft_wav(1:length(hz_wav)),wavecolors(i))
+end
+
+subplot(212)
+xlabel('Frequency (Hz)')
+set(gca,'xlim',[0 50])
+legend({[ num2str(numcycles(1)) ' cycles' ];[ num2str(numcycles(2)) ' cycles' ]})
 
