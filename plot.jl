@@ -83,10 +83,6 @@ function add_topo_rois!(fig, layout, rois; border_size = 10, roi_kwargs = Dict()
     end
 end
 
-
-
-
-
 #########################################
 # 3D head shape
 function head_shape_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Dict())
@@ -338,6 +334,14 @@ function plot_lines(ax, marker, active)
     marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time]
 end
 
+# function update_markers!(markers)
+#   empty!(markers)
+#   add_marker!(markers, ax, data, :triggers, trial = trial.val)
+#   if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
+#     add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
+#     add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
+#   end
+# end
 
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:AbstractString})
@@ -370,9 +374,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     function toggle_button_group(fig, labels)
         toggles = []
         push!(toggles, ToggleButton("Butterfly Plot", butterfly_plot))
-        "triggers" in labels && push!(toggles, ToggleButton("Trigger", update_markers!))
-        "is_vEOG" in labels && push!(toggles, ToggleButton("vEOG", update_markers!))
-        "is_hEOG" in labels && push!(toggles, ToggleButton("hEOG", update_markers!))
+        "triggers" in labels && push!(toggles, ToggleButton("Trigger", plot_lines))
+        "is_vEOG" in labels && push!(toggles, ToggleButton("vEOG", plot_lines))
+        "is_hEOG" in labels && push!(toggles, ToggleButton("hEOG", plot_lines))
         "is_extreme" in labels && push!(toggles, ToggleButton("extreme", plot_extreme_lines))
         push!(toggles, ToggleButton("LP-Filter On/Off", apply_lp_filter))
 
@@ -531,7 +535,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     # Vertical line markers
     markers = []
     add_marker!(markers, ax, data, :triggers)
-    if ("is_vEOG" in names(dat.data[1]) && "is_hEOG" in names(dat.data[1]))
+    # if ("is_vEOG" in names(dat.data[1]) && "is_hEOG" in names(dat.data[1]))
+    if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
         add_marker!(markers, ax, data, :is_vEOG, label = "v")
         add_marker!(markers, ax, data, :is_hEOG, label = "h")
     end
@@ -604,12 +609,6 @@ plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractString,Vec
 
 
 
-
-
-
-
-
-
 ###########################################################
 
 function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractString})
@@ -635,12 +634,16 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
 
     function update_markers!(markers)
-        empty!(markers)
-        add_marker!(markers, ax, data, :triggers, trial = trial.val)
-        if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
-            add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
-            add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
-        end
+      for marker in markers
+        delete!(ax, marker.line)
+        delete!(ax, marker.text)
+      end
+      empty!(markers)
+      add_marker!(markers, ax, data, :triggers, trial = trial.val)
+      if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
+        add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
+        add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
+      end
     end
 
     function plot_extreme_lines(active)
@@ -734,7 +737,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         else
             on(toggles[t, 1].active) do _
                 toggles[t, 3](toggles[t, 1].active.val)
-            end
+              end
         end
     end
 
@@ -793,18 +796,16 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         draw()
     end
 
-    slider_extreme = Slider(fig[1, 2], range = 0:5:100, startvalue = 200, width = 100)
-    slider_lp_filter = Slider(fig[1, 2], range = 5:5:60, startvalue = 20, width = 100)
+    slider_extreme   = Slider(fig[1, 2], range = 0:5:100, startvalue = 200, width = 100)
+    slider_lp_filter = Slider(fig[1, 2], range = 5:5:60,  startvalue = 20, width = 100)
 
     crit_val = lift(slider_extreme.value) do x
         x
     end
 
-
     # keyboard events
     on(events(fig).keyboardbutton) do event
         if event.action in (Keyboard.press,)
-            #if event.action in (Keyboard.press,)
             event.key == Keyboard.left && step_epoch_backward()
             event.key == Keyboard.right && step_epoch_forward()
             event.key == Keyboard.down && yless!(ax, yrange)

@@ -27,7 +27,6 @@ include("rereference.jl")
 include("topo.jl")
 include("utils.jl")
 
-
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
 head_shape_2d(layout);
@@ -52,7 +51,6 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
 
 # Continuous Data Browser
 # TODO: Labels position when changing x-range
-include("plot.jl")
 plot_databrowser(dat)
 plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 plot_databrowser(dat, ["vEOG", "hEOG"])
@@ -62,7 +60,6 @@ plot_databrowser(dat, "hEOG")
 epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # Epoch Data Browser
-# TODO: Trigger/vEOG/hEOG vertical lines fix!
 plot_databrowser(epochs)
 plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
 plot_databrowser(epochs, ["hEOG", "vEOG"])
