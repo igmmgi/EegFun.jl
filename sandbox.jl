@@ -51,6 +51,7 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
 
 # Continuous Data Browser
 # TODO: Labels position when changing x-range
+# TODO: Improve logic of plotting marker (triggers/EOG) lines?
 plot_databrowser(dat)
 plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 plot_databrowser(dat, ["vEOG", "hEOG"])
@@ -84,9 +85,9 @@ plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:yreversed => true))
 plot_topoplot(erp)
 
 # ERP Image
-# TODO: Does not look correct!
+plot_erp_image(epochs, :Fp1)
 plot_erp_image(epochs, "Fp1")
-plot_erp_image(epochs, [:Fp1, :Fp2])
+plot_erp_image(epochs, [:Fp1, :Fp2], colorrange = [-50, 50])
 
 
 save_object("$(subject)_$(cond)_epochs.jld2", epochs)
@@ -105,7 +106,7 @@ function test_plot_eog_detection(dat, xlim, channel, detected)
     lines!(ax, dat.data.time[xlim], dat.data[!, channel][xlim])
     vlines!(ax, dat.data.time[xlim][dat.data[!, detected][xlim]], color = :black)
     display(fig)
-    return fix, ax
+    return fig, ax
 end
 
 test_plot_eog_detection(dat, 1000:14000, "vEOG", "is_vEOG")
@@ -211,27 +212,6 @@ plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend = false)
 
 
 
-
-# average reference
-# rereference!(eeg, 1:72);
-# 
-# # high-pass/low-pass filter
-# highpass_filter!(eeg, 0.1, 2);
-# lowpass_filter!(eeg, 30, 6);
-# 
-# # extract epochs and baseline
-# epoched_data = extract_epochs(eeg, 1, -0.5, 2);
-# baseline!(epoched_data, 0, 0)
-# 
-# # plot some epoched data
-# plot_epoch(epoched_data, 1, [:PO7, :PO8]) # single trial/multiple eleectrodes
-# plot_epoch(epoched_data, collect(1:10), [:PO7])   # multiple trials/single electrode
-# 
-# # average epochs
-# erp = average_epochs(epoched_data);
-# 
-# # plot some erp data
-# plot_erp(erp, [:Fp1, :Fp2])
 
 
 

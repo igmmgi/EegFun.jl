@@ -1,4 +1,3 @@
-using Base: Algorithm
 # Analyzin Neural TimeSeries Data
 # Chapter 10
 using LinearAlgebra
@@ -328,81 +327,230 @@ end
 
 
 # Figure 12.5
+signal = DataFrame(CSV.File("data.csv")).data
+fig = Figure()
+ax = Axis(fig[1, 1])
+# create wavelet
+sample_rate = 256
+time = -1:(1/sample_rate):1
+freq = 6
+lines!(ax, signal)
+sine_wave = exp.(2 * im * pi .* freq .* time)
+s = 4.5 / (2 * pi * freq)
+gaussian_win = exp.(-time .^ 2 ./ (2 * s^2))
+wavelet = sine_wave .* gaussian_win
+halfwaveletsize = ceil(Int, length(wavelet) / 2);
+n_conv = length(wavelet) + length(signal) - 1
+wavelet_padded = [wavelet; zeros(floor(Int, (n_conv - length(wavelet))))]
+signal_padded = [signal; zeros(floor(Int, (n_conv - length(signal))))]
+# half of the wavelet size, useful for chopping off edges after convolution.
+fft_wavelet = fft(wavelet_padded)
+fft_signal = fft(signal_padded)
+ift = ifft(fft_wavelet .* fft_signal) .* sqrt(s) / 10;
+wavelet_conv_data = real(ift[halfwaveletsize:(end-halfwaveletsize)]);
+lines!(ax, wavelet_conv_data)
+filter_high = digitalfilter(Highpass(4), Butterworth(2); fs = 256)
+filter_low = digitalfilter(Lowpass(8), Butterworth(6); fs = 256)
+signal_filtered = filtfilt(filter_high, signal)
+signal_filtered = filtfilt(filter_low, signal_filtered)
+lines!(ax, signal_filtered)
 
 
-  signal = DataFrame(CSV.File("data.csv")).data
-  fig = Figure()
-  ax = Axis(fig[1, 1])
-  # create wavelet
-  sample_rate = 256
-  time = -1:(1/sample_rate):1
-  freq = 6
-  lines!(ax, signal)
-  sine_wave = exp.(2 * im * pi .* freq .* time)
-  s = 4.5 / (2 * pi * freq)
-  gaussian_win = exp.(-time .^ 2 ./ (2 * s^2))
-  wavelet = sine_wave .* gaussian_win
-  halfwaveletsize = ceil(Int, length(wavelet) / 2);
-  n_conv = length(wavelet) + length(signal) - 1
-  wavelet_padded = [wavelet; zeros(floor(Int, (n_conv - length(wavelet))))]
-  signal_padded = [signal; zeros(floor(Int, (n_conv - length(signal))))]
-  # half of the wavelet size, useful for chopping off edges after convolution.
-  fft_wavelet = fft(wavelet_padded)
-  fft_signal = fft(signal_padded)
-  ift = ifft(fft_wavelet .* fft_signal) .* sqrt(s) / 10;
-  wavelet_conv_data = real(ift[halfwaveletsize:(end-halfwaveletsize)]);
-  lines!(ax, wavelet_conv_data)
-  filter_high = digitalfilter(Highpass(4), Butterworth(2); fs = 256)
-  filter_low = digitalfilter(Lowpass(8), Butterworth(6); fs = 256)
-  signal_filtered = filtfilt(filter_high, signal)
-  signal_filtered = filtfilt(filter_low, signal_filtered)
-  lines!(ax, signal_filtered)
+
+
+find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
+
+signal = DataFrame(CSV.File("data2.csv")).data
+# Figure 13.11
+function figure_13_11_A(signal)
+    min_freq = 1
+    max_freq = 80
+    num_freq = 30
+    sample_rate = 256
+    time = -1:(1/sample_rate):1
+    eeg_time = -1000:(1000/sample_rate):1500-(1000/sample_rate)
+    freqs = exp.(range(log(min_freq), log(max_freq), length = num_freq))
+    # s = exp.(range(log(3), log(10), length = num_freq)) ./ (2 * pi .* freqs) # variable cycles/frequency
+    s = 3 ./ (2 * pi .* freqs)
+    n_wavelet = length(time)
+    n_data = length(signal)
+    n_convolution = n_wavelet + n_data - 1
+    n_conv_pow2 = nextpow(2, n_convolution)
+    half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
+    signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
+    eegfft = fft(signal_padded)
+    eegpower = zeros(num_freq, div(n_data, 99))  # seems 99 trials in exported mat file
+    find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
+    base_idx = find_idx_start_end(eeg_time, [-500 -200])
+    @inbounds for fi = 1:num_freq
+        wavelet =
+            sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2 * im * pi * freqs[fi] .* time) .*
+            exp.(-time .^ 2 ./ (2 * (s[fi] .^ 2)))
+        wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
+        wavelet_fft = fft(wavelet_padded)
+        # convolution
+        eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
+        eegconv = reshape(eegconv, 640, 99)
+        temppower = mean((abs.(eegconv)) .^ 2, dims = 2)
+        eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]]))
+    end
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale = log10)
+    contourf!(ax, eeg_time, freqs, transpose(eegpower), levels = -4:0.2:4, colormap = :jet)
+    xlims!(ax, -200, 1000)
+    ax.yticks = round.(freqs)
+    ylims!(ax, 2, 80)
+    display(fig)
+    return fig, ax
+end
+fig1, ax = figure_13_11_A(signal)
+
 
 
 signal = DataFrame(CSV.File("data2.csv")).data
-  # Figure 13.11
-function figure_12_5(signal)
-  min_freq = 2;
-  max_freq = 80;
-  num_freq = 30;
-  sample_rate = 256;
-  time = -1:(1/sample_rate):1
-  eeg_time = -1000:(1000/sample_rate):1500-(1000/sample_rate)
-  freqs = exp.(range(log(min_freq), log(max_freq), length=num_freq))
-  s     = exp.(range(log(3),        log(10),       length=num_freq)) ./ (2*pi.*freqs)
-  n_wavelet = length(time)
-  n_data = length(signal)
-  n_convolution = n_wavelet + n_data - 1; 
-  n_conv_pow2 =  nextpow(2, n_convolution)
-  half_of_wavelet_size = floor(Int, (n_wavelet-1)/2)
-  signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
-  eegfft = fft(signal_padded)
-  eegpower = zeros(num_freq, div(n_data, 99))  # seems 99 trials in exported mat file
-  find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
-  base_idx = find_idx_start_end(eeg_time, [-500 -200])
-  @inbounds for fi = 1:num_freq
-    wavelet = sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2*im*pi*freqs[fi].*time) .* exp.(-time .^ 2 ./ (2*(s[fi].^2)))
-    #lines(real.(wavelet))
-    wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
-    wavelet_fft = fft( wavelet_padded)
-    # convolution
-    eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size:end-halfwaveletsize];
-    # eegconv = eegconv[1:n_convolution][half_of_wavelet_size:end-halfwaveletsize];
-    eegconv = reshape(eegconv, 640, 99)
-    temppower = mean((abs.(eegconv)).^2, dims=2)
-    eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]]))
-  end
-  fig = Figure()
-  ax = Axis(fig[1, 1], yscale = log10)
-  contourf!(ax, eeg_time, freqs, transpose(eegpower), levels=-4:0.2:4, colormap = :jet)
-  xlims!(ax, -200, 1000)
-  ax.yticks = round.(freqs)
-  ylims!(ax, 2, 80)
-  #display(fig)
-  return fig, ax
+# Figure 13.11
+function figure_13_11_B(signal)
+    min_freq = 1
+    max_freq = 80
+    num_freq = 30
+    sample_rate = 256
+    time = -1:(1/sample_rate):1
+    eeg_time = -1000:(1000/sample_rate):1500-(1000/sample_rate)
+    freqs = exp.(range(log(min_freq), log(max_freq), length = num_freq))
+    s = exp.(range(log(3), log(10), length = num_freq)) ./ (2 * pi .* freqs) # variable cycles/frequency
+    #s = 7 ./ (2 * pi .* freqs)
+    n_wavelet = length(time)
+    n_data = length(signal)
+    n_convolution = n_wavelet + n_data - 1
+    n_conv_pow2 = nextpow(2, n_convolution)
+    half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
+    signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
+    eegfft = fft(signal_padded)
+    eegpower = zeros(num_freq, div(n_data, 99))  # seems 99 trials in exported mat file
+    base_idx = find_idx_start_end(eeg_time, [-500 -200])
+    @inbounds for fi = 1:num_freq
+        wavelet =
+            sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2 * im * pi * freqs[fi] .* time) .*
+            exp.(-time .^ 2 ./ (2 * (s[fi] .^ 2)))
+        wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
+        wavelet_fft = fft(wavelet_padded)
+        # convolution
+        eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
+        eegconv = reshape(eegconv, 640, 99)
+        temppower = mean((abs.(eegconv)) .^ 2, dims = 2)
+        eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]]))
+    end
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    contourf!(ax, eeg_time, freqs, transpose(eegpower), levels = -4:0.2:4, colormap = :jet)
+    xlims!(ax, -200, 1000)
+    ylims!(ax, 2, 80)
+    display(fig)
+    return fig, ax
 end
+fig1, ax = figure_13_11_B(signal)
 
-fig, ax = figure_12_5(signal)
+
+
+
+signal = DataFrame(CSV.File("dataFlank.csv")).data
+# Figure 13.11
+function dataFlank(signal)
+    min_freq = 1
+    max_freq = 40
+    num_freq = 40
+    sample_rate = 256
+    time = -2:(1/sample_rate):2
+    eeg_time = -1000:(1000/sample_rate):2000
+    #freqs = exp.(range(log(min_freq), log(max_freq), length = num_freq))
+    freqs = 1:40#exp.(range(log(min_freq), log(max_freq), length = num_freq))
+    #s = exp.(range(log(3), log(10), length = num_freq)) ./ (2 * pi .* freqs) # variable cycles/frequency
+    s = 7 ./ (2 * pi .* freqs)
+    n_wavelet = length(time)
+    n_data = length(signal)
+    n_convolution = n_wavelet + n_data - 1
+    n_conv_pow2 = nextpow(2, n_convolution)
+    half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
+    signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
+    eegfft = fft(signal_padded)
+    eegpower = zeros(num_freq, div(n_data, 160))  # seems 99 trials in exported mat file
+    base_idx = find_idx_start_end(eeg_time, [-500 -100])
+    @inbounds for fi = 1:num_freq
+        wavelet =
+            sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2 * im * pi * freqs[fi] .* time) .*
+            exp.(-time .^ 2 ./ (2 * (s[fi] .^ 2)))
+        #lines(real.(wavelet))
+        wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
+        wavelet_fft = fft(wavelet_padded)
+        # convolution
+        eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
+        # eegconv = eegconv[1:n_convolution][half_of_wavelet_size:end-halfwaveletsize];
+        eegconv = reshape(eegconv, 769, 160)
+        temppower = mean((abs.(eegconv)) .^ 2, dims = 2)
+        # eegpower[fi, :] = temppower
+        eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]])) # db baseline
+    end
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    contourf!(ax, eeg_time, freqs, transpose(eegpower), levels = -5:0.2:5, colormap = :jet)
+    # contourf!(ax, eeg_time, freqs, transpose(eegpower), colormap = :jet)
+    ax.yticks = round.(freqs)
+    ylims!(ax, 0, 40)
+    display(fig)
+    return fig, ax
+end
+fig1, ax = dataFlank(signal)
+
+
+# TODO: loop over trials vs. concat data
+# TODO:: polyremoval
+signal = DataFrame(CSV.File("dataFIC.csv")).data
+# Figure 13.11
+function dataFIC(signal)
+    min_freq = 1
+    max_freq = 60
+    num_freq = 119
+    sample_rate = 300
+    time = -100:((1000/sample_rate)/1000):100
+    eeg_time = -1000:(1000/sample_rate):(2000-(1000/sample_rate))
+    freqs = 1:0.5:60
+    s = 5 ./ (2 * pi .* freqs)
+    n_wavelet = length(time)
+    n_data = length(signal)
+    n_convolution = n_wavelet + n_data - 1
+    n_conv_pow2 = nextpow(2, n_convolution)
+    half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
+    signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
+    eegfft = fft(signal_padded)
+    eegpower = zeros(num_freq, div(n_data, 76))  
+    base_idx = find_idx_start_end(eeg_time, [-500 -100])
+    @inbounds for fi = 1:num_freq
+        wavelet =
+            sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2 * im * pi * freqs[fi] .* time) .*
+            exp.(-time .^ 2 ./ (2 * (s[fi] .^ 2)))
+        wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
+        wavelet_fft = fft(wavelet_padded)
+        eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
+        eegconv = reshape(eegconv, 900, 76)
+        temppower = mean((abs.(eegconv)) .^ 2, dims = 2)
+        eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]]))
+    end
+    fig = Figure()
+    ax = Axis(fig[1, 1]) #, yscale = log10)
+    contourf!(ax, eeg_time, freqs, transpose(eegpower), levels = -3:0.1:3, colormap = :jet)
+    xlims!(ax, -500, 1500)
+    #ax.yticks = round.(freqs)
+    #ylims!(ax, 2, 80)
+    display(fig)
+    return fig, ax
+end
+fig1, ax = dataFIC(signal)
+
+
+
+
+
+
 
 
 # Figure 13.12
@@ -411,8 +559,10 @@ frequency_bad = 2
 sample_rate = 500;
 cycles = 4
 time = -0.5:(1/sample_rate):0.5
-wavelet_good = exp.(2*im*pi*frequency_good.*time) .* exp.(-time .^2 ./ (2 .* (cycles/(2*pi*frequency_good)).^2))
-wavelet_bad = exp.(2*im*pi*frequency_bad.*time) .* exp.(-time .^2 ./ (2 .* (cycles/(2*pi*frequency_bad)).^2))
+wavelet_good =
+    exp.(2 * im * pi * frequency_good .* time) .* exp.(-time .^ 2 ./ (2 .* (cycles / (2 * pi * frequency_good)) .^ 2))
+wavelet_bad =
+    exp.(2 * im * pi * frequency_bad .* time) .* exp.(-time .^ 2 ./ (2 .* (cycles / (2 * pi * frequency_bad)) .^ 2))
 lines(real.(wavelet_good))
 lines!(real.(wavelet_bad))
 
@@ -420,26 +570,190 @@ lines!(real.(wavelet_bad))
 # Figure 13.13
 frequency = 10;
 sample_rate = 500;
-time      = -.5:1/sample_rate:.5;
-numcycles = [ 3 7 ];
+t = -0.5:1/sample_rate:0.5;
+numcycles = [3 7];
 fig = Figure()
-for i=1:length(numcycles)
-    # make wavelet
-    wavelet = exp.(2*im*pi*frequency.*time) .* exp.(-time .^2 ./(2*(numcycles[i]/(2*pi*frequency))^2));
-    ax = Axis(fig[1, i])
-    lines!(ax, time, real(wavelet))
-    ax.xlabel = "Time"
-    ax.ylabel = "Amplitude"
-    ax.title = "Wavelet $(frequency) Hz at $(numcycles[i]) cycles"
-    #subplot(2,1,2)
-    #hold on
-    #fft_wav = 2*abs(fft(wavelet));
-    #hz_wav  = linspace(0,srate/2,round(length(wavelet)/2)+1);
-    #plot(hz_wav,fft_wav(1:length(hz_wav)),wavecolors(i))
+# make wavelet
+wavelet1 = exp.(2 * im * pi * frequency .* t) .* exp.(-t .^ 2 ./ (2 * (numcycles[1] / (2 * pi * frequency)) .^ 2));
+ax = Axis(fig[1, 1])
+lines!(ax, t, real(wavelet1))
+ax.xlabel = "Time"
+ax.ylabel = "Amplitude"
+ax.title = "Wavelet $(frequency) Hz at $(numcycles[1]) cycles"
+wavelet2 = exp.(2 * im * pi * frequency .* t) .* exp.(-t .^ 2 ./ (2 * (numcycles[2] / (2 * pi * frequency)) .^ 2));
+ax = Axis(fig[1, 2])
+lines!(ax, t, real(wavelet2))
+ax.xlabel = "Time"
+ax.ylabel = "Amplitude"
+ax.title = "Wavelet $(frequency) Hz at $(numcycles[1]) cycles"
+ax = Axis(fig[2, 1:2])
+hz_wav = LinRange(0, sample_rate / 2, round(Int, length(wavelet1) / 2) + 1)
+fft_wavelet1 = 2 * abs.(fft(wavelet1))
+fft_wavelet2 = 2 * abs.(fft(wavelet2))
+lines!(ax, hz_wav, fft_wavelet1[1:length(hz_wav)])
+lines!(ax, hz_wav, fft_wavelet2[1:length(hz_wav)])
+xlims!(ax, 0, 50)
+
+
+# Figure 15.1
+function detrend(x, y)
+    X = hcat(ones(length(x)), x)  # Design matrix (with intercept)
+    β = X \ y  # Solve for coefficients (m, b)
+    return y - (X * β)
 end
 
-subplot(212)
-xlabel('Frequency (Hz)')
-set(gca,'xlim',[0 50])
-legend({[ num2str(numcycles(1)) ' cycles' ];[ num2str(numcycles(2)) ' cycles' ]})
+signal = DataFrame(CSV.File("data3.csv")).data
+sample_rate = 256
+dsignal = detrend(signal)
+t = -1:1/sample_rate:(1.5-(1/sample_rate));
+fig = Figure()
+ax = Axis(fig[1, 1])
+lines!(ax, t, signal)
+lines!(ax, t, dsignal)
+timewin = 500
+timewinidx = round(Int, timewin / (1000 / sample_rate))
+hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
+# lines(hann_win)
+ax = Axis(fig[2, 1])
+stime = find_idx_start_end(t, -0.050)[1]
+lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)])
+lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)] .* hann_win)
+dfft = fft(dsignal[stime:stime+timewinidx-1] .* hann_win)
+f = LinRange(0, div(sample_rate, 2), floor(Int, length(hann_win) / 2 + 1))
+ax = Axis(fig[3, 1])
+lines!(ax, f[2:end], abs.(dfft[2:floor(Int, length(hann_win) / 2)+1]) .^ 2);
+# create TF matrix and input column of data at selected time point
+tf = zeros(floor(Int, length(hann_win) / 2), length(signal));
+tf[:, stime+div(timewinidx, 2):stime+div(timewinidx, 2)+20] =
+    repeat(abs.(dfft[2:floor(Int, length(hann_win) / 2)+1] .* 2) * 2, 1, 21)
+ax = Axis(fig[4, 1])
+heatmap!(ax, t, f, transpose(log10.(tf .+ 1)))
+
+
+
+
+signal = DataFrame(CSV.File("data3.csv")).data
+sample_rate = 256
+dsignal = detrend(signal)
+t = -1:1/sample_rate:(1.5-(1/sample_rate));
+f = LinRange(0, div(sample_rate, 2), floor(Int, length(hann_win) / 2 + 1))
+fig = Figure()
+ax = Axis(fig[1, 1])
+stime = find_idx_start_end(t, 0)[1]
+hann_win = 0.5 * (1 .- cos.(2 * pi * (0:stime-1) / (timewinidx - 1)))
+stime = find_idx_start_end(t, -0.050)[1]
+dfft = fft(dsignal[stime:stime+timewinidx-1] .* hann_win)
+tf = zeros(floor(Int, length(hann_win) / 2), length(signal));
+tf[:, stime+div(timewinidx, 2):stime+div(timewinidx, 2)+20] =
+    repeat(abs.(dfft[2:floor(Int, length(hann_win) / 2)+1] .* 2) * 2, 1, 21)
+heatmap!(ax, t, f, transpose(log10.(tf .+ 1)))
+
+
+contourf!(ax, eeg_time, freqs, transpose(baselineZ), levels = -10:1:10, colormap = :jet)
+
+
+
+
+# Figure 15.2
+timewin = 400
+times2save = -300:50:1000
+
+
+# Baseline normalisation
+# Decibel conversion
+
+signal = DataFrame(CSV.File("data_baseline.csv")).data
+# wavelet parameters
+min_freq = 2;
+max_freq = 128;
+num_frex = 30;
+sample_rate = 256;
+# other wavelet parameters
+freqs = exp.(range(log(min_freq), log(max_freq), length = num_freq))
+time = -1:(1/sample_rate):1;
+eeg_time = -1:(1/sample_rate):(1.5-(1/sample_rate))
+half_of_wavelet_size = floor(Int, (length(time)-1)/2);
+# FFT parameters (use next-power-of-2)
+n_wavelet     = length(time);
+n_data        = length(signal)
+n_convolution = n_wavelet+n_data-1;
+n_conv_pow2 = nextpow(2, n_convolution)
+wavelet_cycles= 4; 
+# FFT of data (note: this doesn't change on frequency iteration)
+signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
+fft_data = fft(signal_padded);
+# initialize output time-frequency data
+tf_data = zeros(length(freqs), n_data);
+for fi=1:length(freqs)
+    # create wavelet and get its FFT
+    wavelet = (pi*freqs[fi]*sqrt(pi))^-.5 * exp.(2*im*pi*freqs[fi].*time) .* exp.(-time .^2 ./(2*( wavelet_cycles /(2*pi*freqs[fi]))^2))/freqs[fi];
+    wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
+    fft_wavelet = fft(wavelet_padded);
+    # run convolution
+    convolution_result_fft = ifft(fft_wavelet.*fft_data);
+    convolution_result_fft = convolution_result_fft[1:n_convolution]; # note: here we remove the extra points from the power-of-2 FFT
+    convolution_result_fft = convolution_result_fft[half_of_wavelet_size+1:end-half_of_wavelet_size];
+    # put power data into time-frequency matrix
+    tf_data[fi,:] = abs.(convolution_result_fft).^2;
+end
+# plot results
+# dB-correct
+base_idx = find_idx_start_end(eeg_time, [-0.5 -0.2])
+baseline_power = mean(tf_data[:, base_idx[1]:base_idx[2]], dims=2);
+tf_data_db_base = 10 .* log10.(tf_data ./ baseline_power)
+fig = Figure()
+ax = Axis(fig[1, 1], yscale = log10)
+contourf!(ax, eeg_time, freqs, transpose(tf_data_db_base), levels = -25:1:25, colormap = :jet)
+ax.yticks = round.(freqs)
+xlims!(ax, -0.5, 1.5)
+# percentage change
+pctchange = 100 * (tf_data-repeat(baseline_power,1,n_data))./ repeat(baseline_power,1,n_data)
+ax = Axis(fig[1, 2], yscale = log10)
+contourf!(ax, eeg_time, freqs, transpose(pctchange), levels = -1000:100:1000, colormap = :jet)
+ax.yticks = round.(freqs)
+xlims!(ax, -0.5, 1.5)
+# relative
+baselinediv = tf_data ./ repeat(baseline_power, 1, n_data);
+ax = Axis(fig[2, 1], yscale = log10)
+contourf!(ax, eeg_time, freqs, transpose(baselinediv), levels = -10:1:10, colormap = :jet)
+ax.yticks = round.(freqs)
+xlims!(ax, -0.5, 1.5)
+# Z-transform
+baseline_power = tf_data[:, base_idx[1]:base_idx[2]]
+baselineZ = (tf_data-repeat(mean(baseline_power,dims=2), 1, n_data)) ./ repeat(std(baseline_power,dims=2),1, n_data);
+ax = Axis(fig[2, 2], yscale = log10)
+contourf!(ax, eeg_time, freqs, transpose(baselineZ), levels = -10:1:10, colormap = :jet)
+ax.yticks = round.(freqs)
+xlims!(ax, -0.5, 1.5)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# TODO: brush up on filters + plot filter response
+# filters
+fs = 1000
+o = 2
+f = 0.1
+filter = digitalfilter(Highpass(f), Butterworth(o); fs = sample_rate)
+H, w = freqresp(filter::FilterCoefficients)
+lines(abs.(H))
+# filters
+fs = 1000
+o = 20
+f = 30
+filter = digitalfilter(Lowpass(f), Butterworth(o); fs = sample_rate)
+H, w = freqresp(filter::FilterCoefficients)
+lines!(abs.(H))
+
 
