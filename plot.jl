@@ -328,20 +328,14 @@ function add_marker!(markers, ax, data, col; label = nothing, trial = nothing)
     )
 end
 
+
+
+
 function plot_lines(ax, marker, active)
     marker.line.visible = active
     marker.text.visible = active
-    marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time]
+    marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
 end
-
-# function update_markers!(markers)
-#   empty!(markers)
-#   add_marker!(markers, ax, data, :triggers, trial = trial.val)
-#   if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
-#     add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
-#     add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
-#   end
-# end
 
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:AbstractString})
@@ -413,7 +407,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{<:Abstract
     yrange = Observable(-1500:1500)
     nchannels = length(channel_labels)
     channel_labels_original = channel_labels
-    channels_to_plot = Observable(channel_labels)
+
     if nchannels > 1
         offset = Observable(LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1])
     else # just centre
@@ -634,16 +628,16 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
 
     function update_markers!(markers)
-      for marker in markers
-        delete!(ax, marker.line)
-        delete!(ax, marker.text)
-      end
-      empty!(markers)
-      add_marker!(markers, ax, data, :triggers, trial = trial.val)
-      if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
-        add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
-        add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
-      end
+        for marker in markers
+            delete!(ax, marker.line)
+            delete!(ax, marker.text)
+        end
+        empty!(markers)
+        add_marker!(markers, ax, data, :triggers, trial = trial.val)
+        if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
+            add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
+            add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
+        end
     end
 
     function plot_extreme_lines(active)
@@ -713,7 +707,6 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     yrange = Observable(-1500:1500)
     nchannels = length(channel_labels)
     channel_labels_original = channel_labels
-    channels_to_plot = Observable(channel_labels)
 
     if nchannels > 1
         offset = Observable(LinRange(yrange.val[end] * 0.9, yrange.val[1] * 0.9, nchannels + 2)[2:end-1])
@@ -737,7 +730,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         else
             on(toggles[t, 1].active) do _
                 toggles[t, 3](toggles[t, 1].active.val)
-              end
+            end
         end
     end
 
@@ -797,7 +790,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
 
     slider_extreme   = Slider(fig[1, 2], range = 0:5:100, startvalue = 200, width = 100)
-    slider_lp_filter = Slider(fig[1, 2], range = 5:5:60,  startvalue = 20, width = 100)
+    slider_lp_filter = Slider(fig[1, 2], range = 5:5:60, startvalue = 20, width = 100)
 
     crit_val = lift(slider_extreme.value) do x
         x
@@ -1167,7 +1160,22 @@ end
 # #################################################################
 # plot_erp_image: 
 
-function plot_erp_image(dat::EpochData, channels::Vector{Symbol}; colorrange = nothing)
+function plot_erp_image(
+    dat::EpochData,
+    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+    colorrange = nothing,
+    erp_kwargs = Dict(),
+    colorbar_kwargs = Dict(),
+)
+
+    erp_default_kwargs = Dict(:plot_erp => true)
+    erp_kwargs = merge(erp_default_kwargs, erp_kwargs)
+    plot_erp = pop!(erp_kwargs, :plot_erp)
+
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+
     data = zeros(length(dat.data), nrow(dat.data[1]))
     for epoch in eachindex(dat.data)
         data[epoch, :] = colmeans(dat.data[epoch], channels)
@@ -1177,12 +1185,24 @@ function plot_erp_image(dat::EpochData, channels::Vector{Symbol}; colorrange = n
     end
     fig = Figure()
     ax = Axis(fig[1, 1])
-    heatmap!(ax, dat.data[1].time, 1:length(dat.data), data, colorrange = colorrange)
-    ax = Axis(fig[2, 1])
-    lines!(ax, dat.data[1].time, colmeans(data))
+    hm = heatmap!(ax, dat.data[1].time, 1:length(dat.data), transpose(data), colorrange = colorrange)
     xlims!(ax, (-0.5, 2))
+    ax.xlabel = "Time (ms)"
+    ax.ylabel = "Epoch"
+    if plot_colorbar
+        Colorbar(fig[1, 2], hm; colorbar_kwargs...)
+    end
+
+    if plot_erp
+        ax = Axis(fig[2, 1])
+        lines!(ax, dat.data[1].time, colmeans(data))
+        xlims!(ax, (-0.5, 2))
+    end
     display(fig)
     return fig, ax
 end
 
-plot_erp_image(dat::EpochData, channel) = plot_erp_image(dat, [channel])
+
+function plot_erp_image(dat::EpochData, channel::Union{AbstractString,Symbol})
+    plot_erp_image(dat, [channel])
+end
