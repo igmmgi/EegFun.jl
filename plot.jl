@@ -1,4 +1,5 @@
 # TODO: butterfly plot/global field power
+# TODO: spline interpolation for topoplots?
 
 #########################################
 # 2D head shape
@@ -192,7 +193,7 @@ function plot_topoplot(
     # interpolate data
     data = data_interpolation_topo(
         mean.(eachcol(dat.data[xlim_idx, dat.layout.label])),
-        Matrix(dat.layout[!, [:x2, :y2]])',
+        permutedims(Matrix(dat.layout[!, [:x2, :y2]])),
         gridscale,
     )
 
