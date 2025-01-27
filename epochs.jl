@@ -29,13 +29,7 @@ function search_sequence(array, sequence::Array{Int})
     return idx_positions
 
 end
-search_sequence(array, sequence::Int) = intersect(findall(array .== sequence), findall(diff(vcat(0, array)) .>= 1))
 
-find_idx_range(time, start_time, end_time) = findmin(abs.(time .- start_time))[2]:findmin(abs.(time .- end_time))[2]
-find_idx_range(time, limits) = find_idx_range(time, limits[1], limits[end])
-find_idx_start_end(time, start_time, end_time) =
-    findmin(abs.(time .- start_time))[2], findmin(abs.(time .- end_time))[2]
-find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
 
 
 function extract_epochs(dat::ContinuousData, trigger_sequence, start_time, end_time; zero_position = 1)

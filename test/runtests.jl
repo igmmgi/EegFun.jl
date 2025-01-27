@@ -270,63 +270,64 @@ function test_baseline()
     # test baseline
     dat = read_bdf("../Flank_C_3.bdf")
     dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-    baseline!(dat, dat.layout.label, [0.01 0.02])
+
+    baseline!(dat, dat.layout.label, IntervalTime(0.01, 0.02))
 
     dat = read_bdf("../Flank_C_3.bdf")
     dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-    baseline!(dat, [0.01 0.02])
-
-    dat = read_bdf("../Flank_C_3.bdf")
-    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-    epochs = extract_epochs(dat, 1, -0.5, 2)
-    baseline!(epochs, epochs.layout.label, [-0.5 -0.5])
+    baseline!(dat, IntervalTime(0.01, 0.02))
 
     dat = read_bdf("../Flank_C_3.bdf")
     dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
     epochs = extract_epochs(dat, 1, -0.5, 2)
-    baseline!(epochs, [-0.5 -0.5])
+    baseline!(epochs, epochs.layout.label, IntervalTime(-0.5, 0))
 
     dat = read_bdf("../Flank_C_3.bdf")
     dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
     epochs = extract_epochs(dat, 1, -0.5, 2)
-    erp = average_epochs(epochs)
-    baseline!(erp, erp.layout.label, [-0.5 -0.5])
+    baseline!(epochs, IntervalTime(-0.5, 0))
 
     dat = read_bdf("../Flank_C_3.bdf")
     dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
     epochs = extract_epochs(dat, 1, -0.5, 2)
     erp = average_epochs(epochs)
-    baseline!(erp, [-0.5 -0.5])
-
-    dat = read_bdf("../Flank_C_3.bdf")
-    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-    dat1 = baseline(dat, dat.layout.label, [0.01 0.02])
-
-    dat = read_bdf("../Flank_C_3.bdf")
-    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-    dat1 = baseline(dat, [0.01 0.02])
-
-    dat = read_bdf("../Flank_C_3.bdf")
-    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-    epochs = extract_epochs(dat, 1, -0.5, 2)
-    epochs1 = baseline(epochs, epochs.layout.label, [-0.5 -0.5])
-
-    dat = read_bdf("../Flank_C_3.bdf")
-    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-    epochs = extract_epochs(dat, 1, -0.5, 2)
-    epochs1 = baseline(epochs, [-0.5 -0.5])
+    baseline!(erp, erp.layout.label, IntervalTime(-0.5, 0))
 
     dat = read_bdf("../Flank_C_3.bdf")
     dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
     epochs = extract_epochs(dat, 1, -0.5, 2)
     erp = average_epochs(epochs)
-    erp1 = baseline(erp, erp.layout.label, [-0.5 -0.5])
+    baseline!(erp, IntervalTime(-0.5, 0))
+
+    dat = read_bdf("../Flank_C_3.bdf")
+    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+    dat1 = baseline(dat, dat.layout.label, IntervalTime(0.01, 0.02))
+
+    dat = read_bdf("../Flank_C_3.bdf")
+    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+    dat1 = baseline(dat, IntervalTime(0.01, 0.02))
+
+    dat = read_bdf("../Flank_C_3.bdf")
+    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+    epochs = extract_epochs(dat, 1, -0.5, 2)
+    epochs1 = baseline(epochs, epochs.layout.label, IntervalTime(-0.5, 0))
+
+    dat = read_bdf("../Flank_C_3.bdf")
+    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+    epochs = extract_epochs(dat, 1, -0.5, 2)
+    epochs1 = baseline(epochs, IntervalTime(-0.5, 0))
 
     dat = read_bdf("../Flank_C_3.bdf")
     dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
     epochs = extract_epochs(dat, 1, -0.5, 2)
     erp = average_epochs(epochs)
-    erp1 = baseline(erp, [-0.5 -0.5])
+    erp1 = baseline(erp, erp.layout.label, IntervalTime(-0.5, 0))
+
+    dat = read_bdf("../Flank_C_3.bdf")
+    dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
+    epochs = extract_epochs(dat, 1, -0.5, 2)
+    erp = average_epochs(epochs)
+    erp1 = baseline(erp, IntervalTime(-0.5, 0))
 
 end
 

@@ -26,19 +26,33 @@ include("plot.jl")
 include("rereference.jl")
 include("topo.jl")
 include("utils.jl")
+include("ica.jl")
+
+# include("test/runtests.jl")
+# test_baseline()
+# test_filter()
+
+using Logging
+# Show all messages
+global_logger(ConsoleLogger(stderr, Logging.Debug))
+# Show only info and above
+global_logger(ConsoleLogger(stderr, Logging.Info))
+# Show only warnings and errors
+global_logger(ConsoleLogger(stderr, Logging.Warn))
+
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
 head_shape_2d(layout);
-head_shape_3d(layout);
+# head_shape_3d(layout);
 
 # read bdf file
 subject = 3
-dat = read_bdf("../Flank_C_$(subject).bdf")
-dat = create_eeg_dataframe(dat, layout)
+dat = read_bdf("../Flank_C_$(subject).bdf");
+dat = create_eeg_dataframe(dat, layout);
 # basic bdf plot
 # plot_databrowser(dat)
-filter_data!(dat, "hp", 0.1, 2)
+filter_data!(dat, "hp", 1, 2)
 # filter_data!(dat, "lp", 10, 6)
 # include("plot.jl")
 # calculate EOG channels
@@ -49,40 +63,49 @@ detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
 
+# data_whitened = pre_whiten(Float64.(transpose(Matrix(dat.data[!, 3:end-4]))))
+# Run ICA
+# weights = infomax_ica(data_whitened, extended=true)
+# Get independent components
+# components = weights * data_whitened
+
+
 # Continuous Data Browser
 # TODO: Labels position when changing x-range
 # TODO: Improve logic of plotting marker (triggers/EOG) lines?
-plot_databrowser(dat)
-plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
-plot_databrowser(dat, ["vEOG", "hEOG"])
-plot_databrowser(dat, "hEOG")
+# plot_databrowser(dat)
+# plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
+# plot_databrowser(dat, ["vEOG", "hEOG"])
+# plot_databrowser(dat, "hEOG")
 
 # extract epochs
 epochs = extract_epochs(dat, 1, -0.5, 2)
 
 # Epoch Data Browser
-plot_databrowser(epochs)
-plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
-plot_databrowser(epochs, ["hEOG", "vEOG"])
-plot_databrowser(epochs, "hEOG")
+# plot_databrowser(epochs)
+# plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
+# plot_databrowser(epochs, ["hEOG", "vEOG"])
+# plot_databrowser(epochs, "hEOG")
 
-# Plot Epochs (all)
-plot_epochs(epochs, :Fp1)
-plot_epochs(epochs, "Fp1")
-plot_epochs(epochs, ["PO7", "PO8"])
+# # Plot Epochs (all)
+# plot_epochs(epochs, :Fp1)
+# plot_epochs(epochs, "Fp1")
+# plot_epochs(epochs, ["PO7", "PO8"])
 
 # average epochs
 erp = average_epochs(epochs)
 
 # ERP Plot
-f, ax = plot_erp(erp, :Fp1)
-plot_erp(erp, ["Fp1"])
-plot_erp(erp, [:Fp1, :Fp2])
-plot_erp(erp, ["Fp1", "Fp2"])
-plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:yreversed => true))
+# f, ax = plot_erp(erp, :Fp1)
+# plot_erp(erp, ["Fp1"])
+# plot_erp(erp, [:Fp1, :Fp2])
+# plot_erp(erp, ["Fp1", "Fp2"])
+# plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:yreversed => true))
 
 # Topoplot
-plot_topoplot(erp)
+include("topo.jl")
+plot_topoplot(erp )
+plot_topoplot(erp; method = :spherical_splines )
 
 # ERP Image
 plot_erp_image(epochs, :Fp1)
@@ -221,292 +244,3 @@ plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend = false)
 #   close(file)
 #   return dat
 # end
-# 
-# 
-# struct InfoICA
-#   topo
-#   unmixing
-#   label
-# end
-# 
-# 
-# function infomax_ica(dat; extended=true)
-# 
-#   # define some default values
-#   l_rate = 0.001 # initial learning rate
-#   max_iter = 200 # maximum number of iterations
-#   w_change = 1e-12 # change to stop iteration
-#   use_bias = true
-#   anneal_deg = 60.0 # angle at which learning rate reduced
-#   anneal_step = 0.9 # factor by which learning rate reduced
-#   blowup = 1e4 # max difference allowed between two successive estimations of unmixing matrix
-#   blowup_fac = 0.5 # factor by which learning rate will be reduced if "blowup"
-#   n_small_angle = 20
-#   max_weight = 1e8     # larger than this have "blowup"
-#   restart_factor = 0.9 # if weights blowup, restart with lrate
-#   degconst = 180 ./ pi
-# 
-#   # for extended Infomax
-#   ext_blocks = 1
-#   n_subgauss = 1
-#   extmomentum = 0.5
-#   signsbias = 0.02
-#   signcount_threshold = 25
-#   signcount_step = 2
-#   kurt_size = 6000
-# 
-#   # check data shape and get block sizes
-#   n_features, n_samples = size(dat)
-#   n_features_square = n_features^2
-#   block = trunc(Int, sqrt(n_samples / 3.0))
-#   nblock = div(n_samples, block)
-#   lastt = (nblock - 1) * block + 1
-# 
-#   # start ICA
-#   @printf "Computing Infomax ICA\n"
-# 
-#   # initialize training
-#   weights = Matrix{Float64}(I, n_features, n_features) # identity matrix
-#   BI = block * Matrix{Float64}(I, n_features, n_features)
-#   bias = zeros(n_features, 1)
-#   onesrow = ones((1, block))
-#   startweights = copy(weights)
-#   oldweights = copy(startweights)
-#   step = 0
-#   count_small_angle = 0
-#   wts_blowup = false
-#   blockno = 0
-#   signcount = 0
-#   initial_ext_blocks = ext_blocks  # save the initial value in case of reset
-# 
-#   if extended
-#     signs = ones(n_features)
-#     signs[1:n_subgauss] .= -1
-#     kurt_size = min(kurt_size, n_samples)
-#     old_kurt = zeros(n_features)
-#     oldsigns = zeros(n_features)
-#   end
-# 
-#   # trainings loop
-#   olddelta = 1.0
-#   oldchange = 0.0
-#   while step < max_iter
-# 
-#     permute = shuffle(1:n_samples)
-#     permute = 1:n_samples
-# 
-#     for t = 1:block:lastt
-# 
-#       u = *(weights, dat[:, permute[t:t+block-1]]) .+ *(bias, onesrow)
-# 
-#       if extended
-#         # extended ICA update
-#         y = tanh.(u)
-#         weights += l_rate * *(weights, BI .- signs[:] .* *(y, u') - *(u, u'))
-#         if use_bias
-#           bias += (l_rate .* sum(y, dims=2) .* -2.0)
-#         end
-#       else
-#         y = 1 ./ (1 .+ exp.(-u))
-#         weights += l_rate * *(weights, BI + *(u', (1.0 .- 2.0 .* y)))
-#         if use_bias
-#           bias += (l_rate .* sum((1.0 .- 2.0 .* y), dims=1))'
-#         end
-#       end
-# 
-#       # check change limit
-#       if maximum(abs.(weights)) > max_weight
-#         wts_blowup = true
-#         break
-#       end
-# 
-#       blockno += 1
-#       # ICA kurtosis estimation
-#       if extended
-#         if ext_blocks > 0 & blockno % ext_blocks == 0
-#           if kurt_size < n_samples
-#             rp = trunc.(Int, (rand(kurt_size) .* (n_samples - 1))) .+ 1
-#             tpartact = *(weights, dat[:, rp])'
-#           else
-#             tpartact = *(weights, dat)'
-#           end
-#           # estimate kurtosis
-#           kurt = kurtosis.(eachcol(tpartact))
-#           if extmomentum != 0
-#             kurt = extmomentum .* old_kurt .+ (1.0 .- extmomentum) .* kurt
-#             old_kurt = kurt
-#           end
-#           # estimate weighted signs
-#           signs = sign.(kurt .+ signsbias)
-#           ndiff = sum(signs .- oldsigns .!= 0)
-#           ndiff == 0 ? signcount += 1 : signcount = 0
-#           oldsigns = signs
-#           if signcount >= signcount_threshold
-#             ext_blocks = trunc.(ext_blocks .* signcount_step)
-#             signcount = 0
-#           end
-#         end
-#       end
-# 
-#     end
-# 
-#     if !wts_blowup
-#       oldwtchange = weights .- oldweights
-#       step += 1
-#       angledelta = 0.0
-#       delta = oldwtchange[:]
-#       change = sum(delta .* delta)
-#       if step > 2
-#         angledelta = acos(sum(delta .* olddelta) / sqrt(change * oldchange))
-#         angledelta *= degconst
-#       end
-# 
-#       @printf "step %d: lrate %5f, wchange %8.8f, angledelta %4.1f\n" step l_rate change angledelta
-# 
-#       # anneal learning rate
-#       oldweights = copy(weights)
-#       if angledelta > anneal_deg
-#         l_rate *= anneal_step  # anneal learning rate
-#         # accumulate angledelta until anneal_deg reaches l_rate
-#         olddelta = delta
-#         oldchange = change
-#         count_small_angle = 0  # reset count when angledelta is large
-#       else
-#         if step == 1  # on first step only
-#           olddelta = delta  # initialize
-#           oldchange = change
-#         end
-#         if !isnothing(n_small_angle)
-#           count_small_angle += 1
-#           if count_small_angle > n_small_angle
-#             max_iter = step
-#           end
-#         end
-#       end
-# 
-#       # apply stopping rule
-#       if step > 2 && change < w_change
-#         step = max_iter
-#       elseif change > blowup
-#         l_rate *= blowup_fac
-#       end
-# 
-#       # restart if weights blow up (for lowering l_rate)
-#     else
-#       step = 0  # start again
-#       wts_blowup = false  # re-initialize variables
-#       blockno = 1
-#       l_rate *= restart_factor  # with lower learning rate
-#       weights = copy(startweights)
-#       oldweights = copy(startweights)
-#       olddelta = zeros((1, n_features_square))
-#       bias = zeros((n_features, 1))
-# 
-#       ext_blocks = initial_ext_blocks
-# 
-#       # for extended Infomax
-#       if extended
-#         signs = ones(n_features)
-#         signs[1:n_subgauss] .= -1
-#         oldsigns = zeros(n_features)
-#       end
-# 
-#       @printf "lowering learning rate to %g ... re-starting ...\n" l_rate
-# 
-#     end
-#   end
-# 
-#   return weights
-# 
-# end
-# 
-# 
-# 
-# 
-# 
-# function pre_whiten(dat)
-#   return dat ./ std(dat)
-# end
-# 
-# 
-# # pca
-# function pca_reduction(dat)
-#   dat = copy(dat)
-#   dat .-= mean(dat, dims=1)
-# 
-#   U, S, V = LinearAlgebra.svd(dat, full=false)
-#   max_abs_cols = argmax(abs.(U), dims=1)
-#   signs = sign.(U[max_abs_cols])
-#   U .*= signs
-#   V .*= signs
-# 
-#   explained_variance = (S .^ 2) ./ (size(dat)[1] - 1)
-#   # total_var = sum(explained_variance)
-#   # explained_variance_ratio_ = explained_variance / total_var
-# 
-#   U .*= sqrt(size(dat)[1] - 1)
-# 
-#   return U, explained_variance, V
-# 
-# end
-
-
-
-
-
-dat = read_bdf("../Flank_C_3.bdf")
-dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-filter_data!(dat, "hp", 2, 2)
-rereference!(dat, dat.layout.label, collect(1:72));
-
-# dat = Matrix(dat.data[:, 3:end])
-# 
-# dat = pre_whiten(dat)
-# 
-# dat = read_mat_file("../dat_ica.mat")
-# dat = dat["dat_ica"]
-# dat = dat'
-# 
-# dat, explained_variance = pca_reduction(dat)
-# 
-# @time unmixing_matrix = infomax_ica(dat[1:20000, 1:68]', extended=true)
-# @time unmixing_matrix = infomax_ica(dat', extended=true)
-
-using MultivariateStats
-
-model = fit(ICA, Matrix(dat.data[:, 3:end])', 71, maxiter = 2, tol = 0.1)
-
-ic_mw = 68 == size(dat', 1) ? inv(model.W)' : pinv(model.W)'
-ic = MultivariateStats.predict(model, dat')
-
-var(ic, dims = 2)
-
-# f = Figure()
-# ax = GLMakie.Axis(f[1, 1])
-# for i in 1:71
-#   GLMakie.lines!(unmixing_matrix[:, i])
-# end
-
-stable = explained_variance ./ explained_variance[1] .> 1e-6
-norms = explained_variance[1:10]
-norms = sqrt.(norms)
-norms[norms.==0] .= 1.0
-
-unmixing_matrix ./= norms
-
-mixing_matrix = LinearAlgebra.pinv(unmixing_matrix)
-
-# sort
-source_data = dat[1:20000, 1:10]
-var = sum(mixing_matrix^2, dims = 1) .* sum(source_data .^ 2, dims = 1) / (10 * 20000 - 1)
-var ./= sum(var)
-
-order = sortperm(var, dims = 2, rev = true)
-var[order]
-
-unmixing_matrix = unmixing_matrix[order[:], :]
-mixing_matrix = mixing_matrix[order[:], :]
-
-lines(mixing_matrix[1, :])
-
-unmixing_matrix = unmixing_matrix * eye(69, 69) * eigen(:)
