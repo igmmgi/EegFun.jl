@@ -10,7 +10,7 @@ Check if files exist for all given conditions with specified filetype.
 # Returns
 - `Bool`: true if all files exist, false otherwise
 """
-function check_files_exist(conditions::Union{Vector{Int}, Int}, filetype::String)
+function check_files_exist(conditions::Union{Vector{Int},Int}, filetype::String)
     all_files_exist = true
     for condition in conditions
         fname = "$(condition)_$(filetype).jld2"
@@ -35,7 +35,7 @@ Check if files exist for all combinations of subjects and conditions.
 # Returns
 - `Bool`: true if all files exist, false otherwise
 """
-function check_files_exist(subjects::Union{Vector{Int}, Int}, conditions::Union{Vector{Int}, Int}, filetype::String)
+function check_files_exist(subjects::Union{Vector{Int},Int}, conditions::Union{Vector{Int},Int}, filetype::String)
     all_files_exist = true
     for subject in subjects
         for condition in conditions
@@ -61,7 +61,7 @@ Convert channel numbers to their corresponding labels.
 # Returns
 - `Vector{String}`: Channel labels corresponding to the input numbers
 """
-channel_number_to_channel_label(channel_labels, channel_numbers::Int64) =  [channel_labels[channel_numbers]]
+channel_number_to_channel_label(channel_labels, channel_numbers::Int64) = [channel_labels[channel_numbers]]
 channel_number_to_channel_label(channel_labels, channel_numbers::Vector{Int64}) = channel_labels[channel_numbers]
 
 
@@ -113,14 +113,14 @@ Apply function f to consecutive pairs of elements in vector A.
 # Returns
 - `Vector`: Results of applying f to consecutive pairs
 """
-function consecutive(f::Function, A::AbstractVector; step::Int=1)
+function consecutive(f::Function, A::AbstractVector; step::Int = 1)
     if step < 1
         throw(ArgumentError("Step must be positive"))
     end
     if length(A) < step + 1
         throw(ArgumentError("Vector too short for given step size"))
     end
-    return [f(A[i+step], A[i]) for i in 1:length(A)-step]
+    return [f(A[i+step], A[i]) for i = 1:length(A)-step]
 end
 
 """
@@ -135,11 +135,11 @@ function splitgroups(v::AbstractVector{<:Integer})
     if isempty(v)
         return Int64[], Int64[]
     end
-    
+
     start = 1
     start_idx = Int64[]
     end_idx = Int64[]
-    
+
     for stop in [findall(diff(v) .> 1); lastindex(v)]
         push!(start_idx, v[start])
         push!(end_idx, v[stop])
@@ -168,8 +168,7 @@ Get the value range for specified columns.
 # Returns
 - `Vector{Float64}`: [minimum, maximum] across specified columns
 """
-data_limits_y(dat::DataFrame, col) = 
-    [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
+data_limits_y(dat::DataFrame, col) = [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
 
 
 
@@ -223,17 +222,16 @@ Get column indices for specified channel labels.
 # Throws
 - `ArgumentError`: If no matching channels found
 """
-function get_channel_indices(dat::DataFrame, 
-                           channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
+function get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
     if isempty(channel_labels)
         throw(ArgumentError("channel_labels cannot be empty"))
     end
-    
+
     channel_indices = findall(col -> col in channel_labels, names(dat))
     if isempty(channel_indices)
         throw(ArgumentError("No matching channel_labels found in the data frame"))
     end
-    
+
     return channel_indices
 end
 
@@ -246,7 +244,7 @@ Find starting indices of a sequence in an array.
 # Returns
 - `Vector{Int}`: Indices where sequence starts
 """
-search_sequence(array::AbstractVector, sequence::Int) = 
+search_sequence(array::AbstractVector, sequence::Int) =
     intersect(findall(array .== sequence), findall(diff(vcat(0, array)) .>= 1))
 
 
@@ -259,10 +257,9 @@ Find index range corresponding to time interval.
 # Returns
 - `UnitRange{Int}`: Range of indices
 """
-find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) = 
+find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) =
     findmin(abs.(time .- start_time))[2]:findmin(abs.(time .- end_time))[2]
-find_idx_range(time::AbstractVector, limits::AbstractVector) = 
-    find_idx_range(time, limits[1], limits[end])
+find_idx_range(time::AbstractVector, limits::AbstractVector) = find_idx_range(time, limits[1], limits[end])
 
 
 """
@@ -276,6 +273,6 @@ Find start and end indices corresponding to time interval.
 """
 find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
     findmin(abs.(time .- start_time))[2], findmin(abs.(time .- end_time))[2]
-find_idx_start_end(time::AbstractVector, limits::AbstractVector) = 
+find_idx_start_end(time::AbstractVector, limits::AbstractVector) =
     findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
 
