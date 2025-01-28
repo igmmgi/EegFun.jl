@@ -522,7 +522,7 @@ function dataFIC(signal)
     half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
     signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
     eegfft = fft(signal_padded)
-    eegpower = zeros(num_freq, div(n_data, 76))  
+    eegpower = zeros(num_freq, div(n_data, 76))
     base_idx = find_idx_start_end(eeg_time, [-500 -100])
     @inbounds for fi = 1:num_freq
         wavelet =
@@ -604,18 +604,18 @@ end
 
 signal = DataFrame(CSV.File("data3.csv")).data
 sample_rate = 256
-dsignal = detrend(signal)
 t = -1:1/sample_rate:(1.5-(1/sample_rate));
+dsignal = detrend(t, signal)
 fig = Figure()
 ax = Axis(fig[1, 1])
 lines!(ax, t, signal)
 lines!(ax, t, dsignal)
-timewin = 500
+timewin = 1000
 timewinidx = round(Int, timewin / (1000 / sample_rate))
 hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
 # lines(hann_win)
 ax = Axis(fig[2, 1])
-stime = find_idx_start_end(t, -0.050)[1]
+stime = find_idx_start_end(t, [0.50])[1]
 lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)])
 lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)] .* hann_win)
 dfft = fft(dsignal[stime:stime+timewinidx-1] .* hann_win)
@@ -632,24 +632,124 @@ heatmap!(ax, t, f, transpose(log10.(tf .+ 1)))
 
 
 
-signal = DataFrame(CSV.File("data3.csv")).data
+signal = DataFrame(CSV.File("data_hanning.csv")).data
+# reshap into 99 trials
+signal = reshape(signal, 640, 99)
 sample_rate = 256
-dsignal = detrend(signal)
 t = -1:1/sample_rate:(1.5-(1/sample_rate));
-f = LinRange(0, div(sample_rate, 2), floor(Int, length(hann_win) / 2 + 1))
+dsignal = signal #detrend(t, signal)
 fig = Figure()
 ax = Axis(fig[1, 1])
-stime = find_idx_start_end(t, 0)[1]
-hann_win = 0.5 * (1 .- cos.(2 * pi * (0:stime-1) / (timewinidx - 1)))
-stime = find_idx_start_end(t, -0.050)[1]
-dfft = fft(dsignal[stime:stime+timewinidx-1] .* hann_win)
-tf = zeros(floor(Int, length(hann_win) / 2), length(signal));
-tf[:, stime+div(timewinidx, 2):stime+div(timewinidx, 2)+20] =
-    repeat(abs.(dfft[2:floor(Int, length(hann_win) / 2)+1] .* 2) * 2, 1, 21)
-heatmap!(ax, t, f, transpose(log10.(tf .+ 1)))
+timewin = 100
+times2save = -0.5:0.01:1
+times2saveidx = zeros(length(times2save))
+for i = 1:length(times2save)
+    times2saveidx[i] = find_idx_start_end(t, [times2save[i]])[1]
+end
+timewinidx = round(timewin / (1000 / sample_rate))
+hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
+frex = LinRange(0, div(sample_rate, 2), Int(fld(timewinidx, 2) + 1));
+tf = zeros(length(frex), length(times2save));
+for timepointi = 1:length(times2save)
+    tmpdat = dsignal[
+        Int(times2saveidx[timepointi] - fld(timewinidx, 2)):Int(times2saveidx[timepointi] + fld(timewinidx, 2) - 1),
+        :,
+    ]
+    taperdat = tmpdat .* repeat(hann_win, outer = [1, 99])
+    fdat = fft(taperdat, 1) ./ timewinidx
+    tf[:, timepointi] = mean(abs.(fdat[1:Int(fld(timewinidx, 2) + 1), :]) .^ 2, dims = 2) # average over trials
+end
+#heatmap!(ax, times2save, frex, transpose(log10.(tf)))
+contourf!(ax, times2save, frex, transpose(log10.(tf)), levels = -1.75:0.4:1.75)
+#contourf!(ax, times2save, frex, transpose(log10.(tf)))
 
 
-contourf!(ax, eeg_time, freqs, transpose(baselineZ), levels = -10:1:10, colormap = :jet)
+
+signal = DataFrame(CSV.File("dataFIC.csv")).data
+# reshap into 99 trials
+signal = reshape(signal, 900, 76)
+sample_rate = 300
+t = -1:1/sample_rate:(2-(1/sample_rate));
+dsignal = detrend(t, signal)
+fig = Figure()
+ax = Axis(fig[1, 1])
+timewin = 0.75
+timewinidx = find_idx_start_end(t, [0, timewin])
+timewinidx = timewinidx[2] - timewinidx[1]
+times2save = -0.5:0.1:1.5
+times2saveidx = zeros(length(times2save))
+for i = 1:length(times2save)
+    times2saveidx[i] = find_idx_start_end(t, [times2save[i]])[1]
+end
+# timewinidx = round(timewin / (1000 / sample_rate))
+hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
+# frex = LinRange(0, div(sample_rate, 2), Int(fld(timewinidx, 2) + 1));
+frex = 2:1:30
+tf = zeros(length(frex), length(times2save));
+for timepointi = 1:length(times2save)
+    tmpdat = dsignal[
+        Int(times2saveidx[timepointi] - fld(timewinidx, 2)):Int(times2saveidx[timepointi] + fld(timewinidx, 2)),
+        :,
+    ]
+    taperdat = tmpdat .* repeat(hann_win, outer = [1, 76])
+    fdat = fft(taperdat, 1) ./ timewinidx
+    # tf[:, timepointi] = mean(abs.(fdat[1:Int(fld(timewinidx, 2) + 1), :]) .^ 2, dims = 2) # average over trials
+    tf[:, timepointi] = mean(abs.(fdat[1:Int(length(frex)), :]) .^ 2, dims = 2) # average over trials
+    # tf[:, timepointi] = mean(abs.(fdat) .^ 2, dims = 2) # average over trials
+end
+#heatmap!(ax, times2save, frex, transpose(log10.(tf)))
+#contourf!(ax, times2save, frex, transpose(log10.(tf)), levels = -1000:0.4:1000)
+#contourf!(ax, times2save, frex, transpose(log10.(tf)))
+heatmap!(ax, times2save, frex, transpose(log10.(tf)), fxaa = false)
+
+
+
+
+signal = DataFrame(CSV.File("dataFIC.csv")).data
+# reshap into 99 trials
+signal = reshape(signal, 900, 76)
+sample_rate = 300
+t = -1:1/sample_rate:(2-(1/sample_rate));
+dsignal = detrend(t, signal)
+fig = Figure()
+ax = Axis(fig[1, 1])
+timewin = 0.75
+timewinidx = find_idx_start_end(t, [0, timewin])
+timewinidx = timewinidx[2] - timewinidx[1]
+times2save = -0.5:0.1:1.5
+times2saveidx = zeros(length(times2save))
+for i = 1:length(times2save)
+    times2saveidx[i] = find_idx_start_end(t, [times2save[i]])[1]
+end
+# timewinidx = round(timewin / (1000 / sample_rate))
+hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
+# frex = LinRange(0, div(sample_rate, 2), Int(fld(timewinidx, 2) + 1));
+frex = 2:1:30
+t_ftimwin = 2 ./ frex
+tf = zeros(length(frex), length(times2save));
+for timepointi = 1:length(times2save)
+    timewinidx = find_idx_start_end(t, [0, t_ftimwin[timepointi]])
+    timewinidx = timewinidx[2] - timewinidx[1]
+    hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
+    tmpdat = dsignal[
+        Int(times2saveidx[timepointi] - fld(timewinidx, 2)):Int(times2saveidx[timepointi] + fld(timewinidx, 2)),
+        :,
+    ]
+    taperdat = tmpdat .* repeat(hann_win, outer = [1, 76])
+    fdat = fft(taperdat, 1) ./ timewinidx
+    # tf[:, timepointi] = mean(abs.(fdat[1:Int(fld(timewinidx, 2) + 1), :]) .^ 2, dims = 2) # average over trials
+    tf[:, timepointi] = mean(abs.(fdat[1:Int(length(frex)), :]) .^ 2, dims = 2) # average over trials
+    # tf[:, timepointi] = mean(abs.(fdat) .^ 2, dims = 2) # average over trials
+end
+#heatmap!(ax, times2save, frex, transpose(log10.(tf)))
+#contourf!(ax, times2save, frex, transpose(log10.(tf)), levels = -1000:0.4:1000)
+#contourf!(ax, times2save, frex, transpose(log10.(tf)))
+heatmap!(ax, times2save, frex, transpose(log10.(tf)), fxaa = false)
+
+
+
+
+
 
 
 
@@ -672,34 +772,36 @@ sample_rate = 256;
 freqs = exp.(range(log(min_freq), log(max_freq), length = num_freq))
 time = -1:(1/sample_rate):1;
 eeg_time = -1:(1/sample_rate):(1.5-(1/sample_rate))
-half_of_wavelet_size = floor(Int, (length(time)-1)/2);
+half_of_wavelet_size = floor(Int, (length(time) - 1) / 2);
 # FFT parameters (use next-power-of-2)
-n_wavelet     = length(time);
-n_data        = length(signal)
-n_convolution = n_wavelet+n_data-1;
+n_wavelet = length(time);
+n_data = length(signal)
+n_convolution = n_wavelet + n_data - 1;
 n_conv_pow2 = nextpow(2, n_convolution)
-wavelet_cycles= 4; 
+wavelet_cycles = 4;
 # FFT of data (note: this doesn't change on frequency iteration)
 signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
 fft_data = fft(signal_padded);
 # initialize output time-frequency data
 tf_data = zeros(length(freqs), n_data);
-for fi=1:length(freqs)
+for fi = 1:length(freqs)
     # create wavelet and get its FFT
-    wavelet = (pi*freqs[fi]*sqrt(pi))^-.5 * exp.(2*im*pi*freqs[fi].*time) .* exp.(-time .^2 ./(2*( wavelet_cycles /(2*pi*freqs[fi]))^2))/freqs[fi];
+    wavelet =
+        (pi * freqs[fi] * sqrt(pi))^-0.5 * exp.(2 * im * pi * freqs[fi] .* time) .*
+        exp.(-time .^ 2 ./ (2 * (wavelet_cycles / (2 * pi * freqs[fi]))^2)) / freqs[fi]
     wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
-    fft_wavelet = fft(wavelet_padded);
+    fft_wavelet = fft(wavelet_padded)
     # run convolution
-    convolution_result_fft = ifft(fft_wavelet.*fft_data);
-    convolution_result_fft = convolution_result_fft[1:n_convolution]; # note: here we remove the extra points from the power-of-2 FFT
-    convolution_result_fft = convolution_result_fft[half_of_wavelet_size+1:end-half_of_wavelet_size];
+    convolution_result_fft = ifft(fft_wavelet .* fft_data)
+    convolution_result_fft = convolution_result_fft[1:n_convolution] # note: here we remove the extra points from the power-of-2 FFT
+    convolution_result_fft = convolution_result_fft[half_of_wavelet_size+1:end-half_of_wavelet_size]
     # put power data into time-frequency matrix
-    tf_data[fi,:] = abs.(convolution_result_fft).^2;
+    tf_data[fi, :] = abs.(convolution_result_fft) .^ 2
 end
 # plot results
 # dB-correct
 base_idx = find_idx_start_end(eeg_time, [-0.5 -0.2])
-baseline_power = mean(tf_data[:, base_idx[1]:base_idx[2]], dims=2);
+baseline_power = mean(tf_data[:, base_idx[1]:base_idx[2]], dims = 2);
 tf_data_db_base = 10 .* log10.(tf_data ./ baseline_power)
 fig = Figure()
 ax = Axis(fig[1, 1], yscale = log10)
@@ -707,7 +809,7 @@ contourf!(ax, eeg_time, freqs, transpose(tf_data_db_base), levels = -25:1:25, co
 ax.yticks = round.(freqs)
 xlims!(ax, -0.5, 1.5)
 # percentage change
-pctchange = 100 * (tf_data-repeat(baseline_power,1,n_data))./ repeat(baseline_power,1,n_data)
+pctchange = 100 * (tf_data - repeat(baseline_power, 1, n_data)) ./ repeat(baseline_power, 1, n_data)
 ax = Axis(fig[1, 2], yscale = log10)
 contourf!(ax, eeg_time, freqs, transpose(pctchange), levels = -1000:100:1000, colormap = :jet)
 ax.yticks = round.(freqs)
@@ -720,7 +822,8 @@ ax.yticks = round.(freqs)
 xlims!(ax, -0.5, 1.5)
 # Z-transform
 baseline_power = tf_data[:, base_idx[1]:base_idx[2]]
-baselineZ = (tf_data-repeat(mean(baseline_power,dims=2), 1, n_data)) ./ repeat(std(baseline_power,dims=2),1, n_data);
+baselineZ =
+    (tf_data - repeat(mean(baseline_power, dims = 2), 1, n_data)) ./ repeat(std(baseline_power, dims = 2), 1, n_data);
 ax = Axis(fig[2, 2], yscale = log10)
 contourf!(ax, eeg_time, freqs, transpose(baselineZ), levels = -10:1:10, colormap = :jet)
 ax.yticks = round.(freqs)
