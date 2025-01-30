@@ -166,14 +166,16 @@ ax.ylabel = "Frequency (Hz)"
 using CSV, DataFrames, FFTW, DSP, CairoMakie, DimensionalData
 
 # Load data and reshape into trials with labeled dimensions
-signal = CSV.File("dataFIC.csv") |> DataFrame |> x -> x.data
+signal = DataFrame(CSV.File("dataFIC.csv")).data
 n_trials = 76
 signal_2d = reshape(signal, :, n_trials)  # Auto-compute the first dimension
 
 # Define dimensions using DimensionalData
-time_dim = Dim(range(-1, step=1/300, length=size(signal_2d, 1)), :time)
-trial_dim = Dim(1:n_trials, :trial)
+time_dim = Dim{:time}(range(-1, step=1/300, length=size(signal_2d, 1)))
+trial_dim = Dim{:trial}(1:n_trials)
 ds = DimArray(signal_2d, (time_dim, trial_dim); name="signal")
+
+ds[time=Where(x -> x <= 1.0 && x >= 0.0), trial=Where(x -> x <= 10)]
 
 # Detrend along the time dimension
 ds_detrend = detrend(ds[Ti=1:end], dims=1)  # `Ti` is the time dimension selector
