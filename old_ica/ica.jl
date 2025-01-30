@@ -22,10 +22,12 @@ Structure containing ICA algorithm parameters.
 - `l_rate::Float64`: Initial learning rate (default: 0.001)
 - `max_iter::Int`: Maximum number of iterations (default: 512)
 - `w_change::Float64`: Change threshold for stopping (default: 1e-6)
+- `use_bias::Bool`: Whether to use bias term (default: true)
 - `anneal_deg::Float64`: Angle for learning rate reduction (default: 60.0)
 - `anneal_step::Float64`: Learning rate reduction factor (default: 0.9)
 - `blowup::Float64`: Maximum weight change allowed (default: 1e15)
 - `blowup_fac::Float64`: Learning rate reduction on blowup (default: 0.8)
+- `n_small_angle::Int`: Number of angles below threshold (default: 20)
 - `max_weight::Float64`: Maximum weight magnitude (default: 1e8)
 - `restart_factor::Float64`: Learning rate factor on restart (default: 0.9)
 - `degconst::Float64`: Degrees to radians conversion (default: 180.0 / π)
@@ -36,10 +38,12 @@ mutable struct IcaPrms
     l_rate::Float64
     max_iter::Int
     w_change::Float64
+    use_bias::Bool
     anneal_deg::Float64
     anneal_step::Float64
     blowup::Float64
     blowup_fac::Float64
+    n_small_angle::Int
     max_weight::Float64
     restart_factor::Float64
     degconst::Float64
@@ -50,10 +54,12 @@ mutable struct IcaPrms
         l_rate = 0.001,
         max_iter = 512,
         w_change = 1e-6,
+        use_bias = true,
         anneal_deg = 60.0,
         anneal_step = 0.9,
         blowup = 1e15,
         blowup_fac = 0.8,
+        n_small_angle = 20,
         max_weight = 1e8,
         restart_factor = 0.9,
         degconst = 180.0 / π,
@@ -64,10 +70,12 @@ mutable struct IcaPrms
             l_rate,
             max_iter,
             w_change,
+            use_bias,
             anneal_deg,
             anneal_step,
             blowup,
             blowup_fac,
+            n_small_angle,
             max_weight,
             restart_factor,
             degconst,
@@ -125,8 +133,8 @@ Structure containing ICA decomposition results.
 - `label::Vector{String}`: Component labels
 """
 struct InfoIca
-    unmixing::Matrix{Float64}
     topo::Matrix{Float64}
+    unmixing::Matrix{Float64}
     label::Vector{String}
 end
 
@@ -134,8 +142,8 @@ end
     log_progress(step::Int, max_iter::Int, change::Float64, l_rate::Float64, angledelta::Float64)
 Log progress of ICA computation.
 """
-function log_progress(step::Int, change::Float64, l_rate::Float64, angledelta::Float64)
-    @info "Step $step, change = $change, lrate = $l_rate, angle = $angledelta"
+function log_progress(step::Int, max_iter::Int, change::Float64, l_rate::Float64, angledelta::Float64)
+    @info "Step $step/$max_iter: change = $change, lrate = $l_rate, angle = $angledelta"
 end
 
 function compute_sphere_matrix(data::Matrix{Float64})
@@ -183,78 +191,83 @@ function infomax_ica(
     n_components::Union{Nothing,Int} = nothing,
     do_sphering::Bool = true,
 )
-
-    dat_ica = copy(dat)
-
     # Subtract row means from data
-    dat_ica .-= mean(dat_ica, dims = 2)
+    dat .-= mean(dat, dims=2)
 
     # Apply PCA reduction if n_components is specified
     if !isnothing(n_components)
+        # Center the data
+        dat_centered = dat .- mean(dat, dims=2)
+
         # Compute SVD directly on centered data for efficiency
-        F = svd(dat_ica)
+        F = svd(dat_centered)
+
+        # Fix signs of eigenvectors
+        # U = fix_signs!(F.U)
+
         # Take only the first n_components
-        dat_ica = F.U[:, 1:n_components]' * dat_ica
+        dat_reduced = F.U[:, 1:n_components]' * dat_centered
+
         # Store PCA components for later reconstruction
-        pca_components = F.U[:, 1:n_components] # eigenvectors
+        pca_components = F.U[:, 1:n_components]
     else
+        dat_reduced = dat
         pca_components = nothing
     end
 
-    # Sphering 
-    sphere, scale_factors = compute_sphere_matrix(dat_ica)
-    dat_ica = apply_sphering!(dat_ica, sphere)
+    # Apply sphering if requested
+    if do_sphering
+        sphere, scale_factors = compute_sphere_matrix(dat_reduced)
+        dat_sphered = apply_sphering!(dat_reduced, sphere)
+    else
+        dat_sphered = dat_reduced
+        sphere = Matrix{Float64}(I, size(dat_reduced, 1), size(dat_reduced, 1))
+        scale_factors = ones(size(dat_reduced, 1))
+    end
 
-    # Pre-allocate all matrices and temporaries
-    n_channels = size(dat_ica, 1)
-    n_samples = size(dat_ica, 2)
-    n_channels_square = n_channels^2
+    # Initialize ICA variables
+    n_channels = size(dat, 1)
+    n_samples = size(dat, 2)
+    n_comps = isnothing(n_components) ? n_channels : n_components
     block = Int(floor(sqrt(n_samples / 3.0)))
-    nblock = div(n_samples, block)
-    lastt = (nblock - 1) * block + 1
+    lastt = (div(n_samples, block) - 1) * block + 1
 
-    # Pre-allocate workspace arrays
-    weights = Matrix{Float64}(I, n_components, n_components)
-    BI = block * Matrix{Float64}(I, n_channels, n_channels)
-    bias = zeros(n_channels, 1)
-    onesrow = ones(1, block)
-    u = zeros(n_channels, block)
-    y = similar(u)
-    delta_weights = similar(weights)
-    temp_matrix = similar(weights)
-    yu = similar(weights)
-    uu = similar(weights)
-    data_block = zeros(n_channels, block)
-    oldweights = copy(weights)
+    # Initialize workspace arrays
+    weights = Matrix{Float64}(I, n_comps, n_comps)
+    BI = block * Matrix{Float64}(I, n_comps, n_comps)
+    delta = zeros(n_comps^2)
+    changes = Float64[]
+    degconst = 180.0 / π
     startweights = copy(weights)
-    permute_indices = Vector{Int}(undef, n_samples)
+    prevweights = copy(startweights)
+    oldweights = copy(startweights)
+    prevwtchange = zeros(n_comps, n_comps)
+    oldwtchange = zeros(n_comps, n_comps)
+    lrates = zeros(params.max_iter)
+    onesrow = ones(1, block)
+    bias = zeros(n_comps, 1)
 
-    # # For extended ICA - pre-allocate more arrays to avoid allocations
-    # if extended
-    #     signs = ones(n_channels)
-    #     signs[1:ext_params.n_subgauss] .= -1
-    #     signs = Diagonal(signs)
-    #     old_kurt = zeros(n_channels)
-    #     oldsigns = Diagonal(copy(diag(signs)))  # Store as diagonal matrix
-    #     signcount = 0
-    #     partact = zeros(n_channels, min(ext_params.kurt_size, n_samples))
-    #     kk = zeros(n_channels)
-    #     m2 = zeros(n_channels)
-    #     m4 = zeros(n_channels)
-    #     new_signs = zeros(n_channels)
-    # end
+    # Initialize extended ICA variables
+    if extended
+        signs = ones(n_comps)
+        if !isnothing(ext_params) && ext_params.n_subgauss > 0
+            signs[1:ext_params.n_subgauss] .= -1
+        end
+        signs = Diagonal(signs)
+        oldsigns = zeros(size(signs))
+        signcount = 0
+        signcounts = Int[]
+        urextblocks = isnothing(ext_params) ? 1 : ext_params.ext_blocks
+        old_kk = zeros(n_comps)
+    end
 
     # Initialize training variables
     step = 0
     blockno = 1
     wts_blowup = false
     change = 0.0
-    nochange = 1E-7
     oldchange = 0.0
-    degconst = 180.0 / π
     angledelta = 0.0
-    olddelta = zeros(n_channels_square)
-    delta = zeros(n_channels_square)
 
     # Constants for learning rate management
     # MIN_LRATE = 1e-6  # Minimum learning rate
@@ -262,50 +275,143 @@ function infomax_ica(
     DEFAULT_RESTART_FAC = 0.9  # Factor for reducing learning rate on restart
 
     while step < params.max_iter
+        step += 1
+        wts_blowup = false
 
         randperm!(permute_indices)
 
         for t = 1:block:lastt
-
             block_indices = permute_indices[t:min(t + block - 1, end)]
-            @views data_block .= dat_ica[:, block_indices]
-            mul!(u, weights, data_block)
-            @. y = 1 / (1 + exp(-u))
-            weights = weights .+ params.l_rate * (BI + (1 .- 2 * y) * u') .* weights
+            @views data_block .= dat[:, block_indices]
 
-            if maximum(abs.(weights)) > params.max_weight
-                wts_blowup = true
-                change = NaN
-                break
+            mul!(u, weights, data_block)
+            u .+= bias .* onesrow
+
+            if extended
+                # Extended ICA update with stability checks
+                @views @. y = tanh(u)
+                mul!(yu, y, u')
+                mul!(uu, u, u')
+
+                # Modified weight update for extended ICA
+                @views @. temp_matrix = BI - signs * yu - uu
+                mul!(delta_weights, temp_matrix, weights)
+
+                if maximum(abs.(delta_weights)) > params.blowup
+                    wts_blowup = true
+                    break
+                end
+
+                @views @. weights += params.l_rate * delta_weights
+
+                # Update signs periodically using kurtosis
+                if blockno % ext_params.ext_blocks == 0
+                    if ext_params.kurt_size < n_samples
+                        rp = view(permute_indices, 1:ext_params.kurt_size)
+                        @views mul!(partact, weights, dat[:, rp])
+                    else
+                        @views mul!(partact, weights, dat)
+                    end
+
+                    # Compute kurtosis more efficiently
+                    @views for i = 1:n_channels
+                        m2[i] = mean(view(partact, i, :) .^ 2)^2
+                        m4[i] = mean(view(partact, i, :) .^ 4)
+                        kk[i] = (m4[i] / m2[i]) - 3.0
+                    end
+
+                    # Apply momentum to kurtosis estimates
+                    if ext_params.extmomentum > 0
+                        @. kk = ext_params.extmomentum * old_kk + (1.0 - ext_params.extmomentum) * kk
+                        copyto!(old_kk, kk)
+                    end
+
+                    # Update signs and adjust update frequency
+                    @. new_signs = sign(kk + ext_params.signsbias)
+                    new_signs_diag = Diagonal(new_signs)
+
+                    # Compare with oldsigns to track stability
+                    if new_signs_diag == oldsigns
+                        signcount += 1
+                        if signcount >= ext_params.signcount_threshold
+                            ext_params.ext_blocks *= ext_params.signcount_step
+                            signcount = 0
+                            @debug "Extending blocks to $(ext_params.ext_blocks)"
+                        end
+                    else
+                        signcount = 0
+                    end
+
+                    oldsigns = signs  # Store current signs before updating
+                    signs = new_signs_diag
+                end
+            else
+                # Standard ICA update matching MATLAB implementation
+                @. y = 1 / (1 + exp(-u))
+                y .*= -2.0
+                y .+= 1.0
+                mul!(yu, y, u')
+                mul!(delta_weights, (BI + yu), weights)
+
+                if params.use_bias
+                    @views bias .+= sum(y, dims = 2) .* (-2.0 * params.l_rate / block)
+                end
+
+
+                # Add momentum if enabled
+                if params.momentum > 0
+                    @inbounds @. workspace.delta_weights += params.momentum * workspace.old_delta_weights
+                    copyto!(workspace.old_delta_weights, workspace.delta_weights)
+                end
+
+
+                if maximum(abs.(delta_weights)) > params.blowup
+                    wts_blowup = true
+                    break
+                end
+
+                @. weights += params.l_rate * delta_weights
             end
 
+
             blockno += 1
-
-        end
-
-        if !wts_blowup
-
-            oldwtchange = weights - oldweights
-            step += 1
-
-            # Compute and print weight and update angle changes
-            angledelta = 0.0
-            delta = reshape(oldwtchange, 1, n_channels * n_channels)
-            change = dot(delta, delta)
         end
 
         # Handle weight blowup
-        if wts_blowup || isnan(change) || isinf(change)
-            @warn "Weight blowup detected - reducing learning rate and restarting"
-            step = 0
-            change = NaN
+        if wts_blowup
+            @warn "Weight change too large at step $step - reducing learning rate"
+            weights = copy(startweights)  # Reset to starting weights
+            params.l_rate *= DEFAULT_RESTART_FAC
+
+            # if params.l_rate < MIN_LRATE
+            #     @warn "Learning rate too small ($params.l_rate) - terminating"
+            #     break
+            # end
+
+            step = 0  # Reset step count
+            change = params.default_stop
             wts_blowup = false
             blockno = 1
-            params.l_rate *= params.restart_factor
-            weights = copy(startweights)
-            oldweights = copy(startweights)
-            prevweights = copy(startweights)
-            prevwtchange = zeros(size(weights))
+            continue
+        end
+
+        # Compute weight changes matching MATLAB implementation
+        oldwtchange = weights - oldweights
+        delta = reshape(oldwtchange, :)
+        change = dot(delta, delta)
+
+        if !isfinite(change)
+            @warn "Weight change not finite at step $step"
+            weights = copy(startweights)  # Reset to starting weights
+            params.l_rate *= DEFAULT_RESTART_FAC
+
+            # if params.l_rate < MIN_LRATE
+            #     @warn "Learning rate too small ($params.l_rate) - terminating"
+            #     break
+            # end
+
+            step = 0
+            change = params.default_stop
             continue
         end
 
@@ -313,10 +419,9 @@ function infomax_ica(
         if step > 2
             angledelta = acos(dot(delta, olddelta) / sqrt(change * oldchange))
         end
-        log_progress(step, change, params.l_rate, degconst * angledelta)
 
-        # Compute weight changes matching MATLAB implementation
-        oldweights = copy(weights)
+        # Update learning rate with bounds checking
+        lrates[step] = params.l_rate
 
         if step > 2
             if degconst * angledelta > params.anneal_deg
@@ -329,20 +434,33 @@ function infomax_ica(
             oldchange = change
         end
 
-        if step > 2 && change < params.w_change
-            @info "Weights stabilized - stopping at step $step"
+        # Check convergence using default_stop
+        if step > 2 && change < params.default_stop
+            @info "Convergence reached at step $step with change = $change"
             break
-        elseif change > params.blowup      # if weights blow up,
-            params.l_rate = params.l_rate * DEFAULT_BLOWUP_FAC    # keep trying
+        elseif change > params.blowup
+            params.l_rate *= params.blowup_fac
+            # params.l_rate = max(params.l_rate, MIN_LRATE)
         end
+
+        copyto!(oldweights, weights)
+
+
+        log_progress(step, params.max_iter, change, params.l_rate, angledelta)
 
     end
 
-    weights = weights * sphere * pca_components[:, 1:n_components]'
-    sphere = Matrix{Float64}(I, size(weights)[2], size(weights)[2])
-
     # Calculate mixing matrix (topography)
-    topo = pinv(weights * sphere)
+    topo = pinv(weights)
+
+    # If PCA was applied, adjust the mixing/unmixing matrices
+    if !isnothing(n_components)
+        # Adjust mixing matrix (original_channels × n_components)
+        topo = pca_components' * topo
+
+        # Adjust unmixing matrix (n_components × original_channels)
+        weights = weights * pca_components
+    end
 
     # Standardize signs based on maximum absolute value in mixing matrix
     for i = 1:size(topo, 2)
@@ -353,27 +471,35 @@ function infomax_ica(
         end
     end
 
+
+
     # Rescale mixing matrix if sphering was applied
     if do_sphering
-        topo .*= scale_factors'
-        weights ./= scale_factors
+        # If PCA was applied, expand scale_factors to match original data dimensions
+        # if !isnothing(n_components)
+        #     expanded_scale_factors = ones(size(dat, 1))
+        #     expanded_scale_factors[1:n_components] = scale_factors
+        # else
+        #     expanded_scale_factors = scale_factors
+        # end
+        topo .*= scale_factors
+        weights ./= scale_factors'
     end
 
-    meanvar = sum(topo .^ 2, dims = 1) .* sum((dat_ica') .^ 2, dims = 1) ./ ((n_components * size(dat_ica)[2]) - 1)
-    order = sortperm(vec(meanvar), rev = true)  # Get indices in descending order of meanvar
+    # Reorder components based on explained variance
+    proj = weights * dat_sphered  # Get component activations
+    vars = vec(var(proj, dims = 2))  # Calculate variance of each component
+    order = sortperm(vars, rev = true)  # Get indices in descending order
 
     # Reorder matrices and labels
     topo = topo[:, order]
     weights = weights[order, :]
 
-    unmixing = weights * sphere
-    topo = pinv(unmixing)
-
     # Generate labels based on actual number of components
     n_out = size(weights, 1)
     labels = ["IC$i" for i = 1:n_out]
 
-    return InfoIca(unmixing, topo, labels)
+    return InfoIca(topo, weights, labels)
 end
 
 """
@@ -424,12 +550,10 @@ end
 dat = read_mat_file("dat.mat")["dat"]
 
 # @time output = infomax_ica(dat, extended = false, n_components=68)
-@time output = infomax_ica(dat, extended = false, n_components = 68)
 
-# @time output = infomax_ica(dat, extended = false, n_components = 10)
+@time output = infomax_ica(dat, extended = false, n_components = 10)
 #@time output = infomax_ica(dat, extended = true)
 #@time output = infomax_ica(dat, extended = true, n_components = 10)
-
 
 
 

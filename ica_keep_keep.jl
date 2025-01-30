@@ -22,6 +22,7 @@ Structure containing ICA algorithm parameters.
 - `l_rate::Float64`: Initial learning rate (default: 0.001)
 - `max_iter::Int`: Maximum number of iterations (default: 512)
 - `w_change::Float64`: Change threshold for stopping (default: 1e-6)
+- `use_bias::Bool`: Whether to use bias term (default: true)
 - `anneal_deg::Float64`: Angle for learning rate reduction (default: 60.0)
 - `anneal_step::Float64`: Learning rate reduction factor (default: 0.9)
 - `blowup::Float64`: Maximum weight change allowed (default: 1e15)
@@ -36,6 +37,7 @@ mutable struct IcaPrms
     l_rate::Float64
     max_iter::Int
     w_change::Float64
+    use_bias::Bool
     anneal_deg::Float64
     anneal_step::Float64
     blowup::Float64
@@ -50,6 +52,7 @@ mutable struct IcaPrms
         l_rate = 0.001,
         max_iter = 512,
         w_change = 1e-6,
+        use_bias = true,
         anneal_deg = 60.0,
         anneal_step = 0.9,
         blowup = 1e15,
@@ -64,6 +67,7 @@ mutable struct IcaPrms
             l_rate,
             max_iter,
             w_change,
+            use_bias,
             anneal_deg,
             anneal_step,
             blowup,
@@ -329,9 +333,9 @@ function infomax_ica(
             oldchange = change
         end
 
-        if step > 2 && change < params.w_change
-            @info "Weights stabilized - stopping at step $step"
-            break
+        if step > 2 && change < nochange      # apply stopping rule
+            laststep = step
+            step = params.max_iter                  # stop when weights stabilize
         elseif change > params.blowup      # if weights blow up,
             params.l_rate = params.l_rate * DEFAULT_BLOWUP_FAC    # keep trying
         end
@@ -429,6 +433,7 @@ dat = read_mat_file("dat.mat")["dat"]
 # @time output = infomax_ica(dat, extended = false, n_components = 10)
 #@time output = infomax_ica(dat, extended = true)
 #@time output = infomax_ica(dat, extended = true, n_components = 10)
+
 
 
 

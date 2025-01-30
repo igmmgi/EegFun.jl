@@ -104,8 +104,8 @@ erp = average_epochs(epochs)
 
 # Topoplot
 include("topo.jl")
-plot_topoplot(erp )
-plot_topoplot(erp; method = :spherical_splines )
+plot_topoplot(erp)
+plot_topoplot(erp; method = :spherical_splines)
 
 # ERP Image
 plot_erp_image(epochs, :Fp1)
@@ -238,9 +238,3 @@ plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend = false)
 
 
 
-# function read_mat_file(filename)
-#   file = matopen(filename)
-#   dat = read(file)
-#   close(file)
-#   return dat
-# end
