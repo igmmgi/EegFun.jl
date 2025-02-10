@@ -59,6 +59,16 @@ function extract_epochs(dat::ContinuousData, trigger_sequence, start_time, end_t
 
 end
 
+function remove_bad_epochs(dat::EpochData)
+    dat_out = deepcopy(dat)
+    dat_out.data = filter(x -> !any(x[!, :is_extreme]), dat_out.data)
+    @info "Epochs remaining: $(length(dat_out.data)) from $(length(dat.data)) epochs"
+    return dat_out
+end
+
+
+
+
 function average_epochs(dat::EpochData)
     erp = combine(
         groupby(reduce(vcat, dat.data), :time),

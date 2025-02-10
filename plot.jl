@@ -1,6 +1,48 @@
 # TODO: butterfly plot/global field power
 # TODO: spline interpolation for topoplots?
 
+function _trigger_time_count(time, triggers)
+    trigger_values = triggers[findall(diff(triggers) .>= 1).+1]
+    trigger_times = time[findall(diff(triggers) .>= 1).+1]
+    trigger_count = OrderedDict(i => 0 for i in sort!(collect(Set(trigger_values))))
+    for val in trigger_values
+        trigger_count[val] += 1
+    end
+    return trigger_times, trigger_values, trigger_count
+end
+
+function plot_events(dat::BioSemiBDF.BioSemiData)
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
+    plot_events(trigger_times, trigger_values, trigger_count)
+end
+
+function plot_events(dat::ContinuousData)
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
+    plot_events(trigger_times, trigger_values, trigger_count)
+end
+
+function plot_events(trigger_times, trigger_values, trigger_count)
+    fig = Figure()
+    ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
+    for (unique, (key, value)) in enumerate(trigger_count)
+        scatter!(
+            ax,
+            trigger_times[trigger_values.==key],
+            repeat([unique], length(trigger_values[trigger_values.==key])),
+            label = "$key: $(string(value))",
+        )
+    end
+    fig[1, 2] = Legend(fig, ax)
+    ax.ylabel = "Trigger Value"
+    ax.xlabel = "Time (S)"
+    Legend(fig[1, 2], ax)
+    display(fig)
+    return fig, ax
+end
+
+
+
+
 #########################################
 # 2D head shape
 function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
@@ -12,7 +54,8 @@ function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dic
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
 
-    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
+    point_default_kwargs =
+        Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black, :colormap => :jet)
     point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = pop!(point_kwargs, :plot_points)
 
@@ -45,7 +88,7 @@ function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dic
     hidedecorations!(ax)
     hidespines!(ax)
 
-    display(fig)
+    # display(fig)
     return fig, ax
 
 end
@@ -979,7 +1022,14 @@ plot_epochs(dat::EpochData, channels::Union{AbstractString,Symbol}; kwargs...) =
 
 # #################################################################
 # plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
-function plot_erp(dat::ErpData, channels::Union{Vector{<:AbstractString},Vector{Symbol}}; kwargs = Dict())
+function plot_erp(
+    fig,
+    ax,
+    dat::ErpData,
+    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+    average_channels = false,
+    kwargs = Dict(),
+)
 
     default_kwargs = Dict(
         :xlim => nothing,
@@ -987,18 +1037,31 @@ function plot_erp(dat::ErpData, channels::Union{Vector{<:AbstractString},Vector{
         :title => nothing,
         :xlabel => "Time (S)",
         :ylabel => "mV",
-        :linewidth => 2,
+        :linewidth => 4,
         :color => :black,
+        :colormap => :viridis,
         :yreversed => false,
+        :add_topoplot => true,
+        :topoplot_fig => 1,
     )
-
     kwargs = merge(default_kwargs, kwargs)
 
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-
     # plot
-    lines!(ax, dat.data[!, :time], colmeans(dat.data, channels), color = kwargs[:color], linewidth = kwargs[:linewidth])
+    if average_channels
+        colors = kwargs[:color]
+        lines!(
+            ax,
+            dat.data[!, :time],
+            colmeans(dat.data, channels),
+            color = kwargs[:color],
+            linewidth = kwargs[:linewidth],
+        )
+    else
+        colors = Makie.cgrad(kwargs[:colormap], length(channels), categorical = true)
+        for (idx, channel) in enumerate(channels)
+            lines!(ax, dat.data[!, :time], dat.data[!, channel], color = colors[idx], linewidth = kwargs[:linewidth])
+        end
+    end
 
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
     !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
@@ -1011,6 +1074,23 @@ function plot_erp(dat::ErpData, channels::Union{Vector{<:AbstractString},Vector{
     ax.ylabel = kwargs[:ylabel]
     ax.yreversed = kwargs[:yreversed]
 
+    if kwargs[:add_topoplot]
+        # just put in top left
+        topo_ax =
+            Axis(fig[1, kwargs[:topoplot_fig]], width = Relative(0.2), height = Relative(0.2), halign = 0, valign = 1)
+        layout = filter(row -> row.label in String.(channels), erp.layout)
+        if average_channels
+            head_shape_2d(fig, topo_ax, layout, point_kwargs = Dict(:color => kwargs[:color], :markersize => 18))
+        else
+            head_shape_2d(
+                fig,
+                topo_ax,
+                layout,
+                point_kwargs = Dict(:colormap => colors, :color => 1:length(channels), :markersize => 18),
+            )
+        end
+    end
+
     # plot theme adjustments
     fontsize_theme = Theme(fontsize = 24)
     update_theme!(fontsize_theme)
@@ -1020,7 +1100,67 @@ function plot_erp(dat::ErpData, channels::Union{Vector{<:AbstractString},Vector{
 
 end
 
-plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; kwargs...) = plot_erp(dat, [channels]; kwargs...)
+function plot_erp(
+    dat::ErpData,
+    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+    average_channels = false,
+    kwargs = Dict(),
+)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    fig, ax = plot_erp(fig, ax, dat, channels; average_channels = average_channels, kwargs = kwargs)
+    return fig, ax
+end
+
+function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; average_channels = false, kwargs...)
+    plot_erp(dat, [channels], average_channels; kwargs...)
+end
+
+function plot_erp(dat::ErpData; average_channels = false, kwargs...)
+    plot_erp(dat, dat.layout.label; average_channels = average_channels, kwargs...)
+end
+
+
+
+function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData, channels; average_channels = false, kwargs = Dict())
+    fig = Figure()
+    ax1 = Axis(fig[1, 1])
+    plot_erp(fig, ax1, dat_orig, channels; average_channels = average_channels, kwargs = kwargs)
+    ax2 = Axis(fig[2, 1])
+    kwargs = merge(kwargs, kwargs)
+    kwargs[:topoplot_fig] = 2
+    plot_erp(fig, ax2, dat_cleaned, channels; average_channels = average_channels, kwargs = kwargs)
+    linkaxes!(ax1, ax2)
+    display(fig)
+end
+
+
+function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData, channels; average_channels = false, kwargs = Dict())
+    fig = Figure()
+    ax1 = Axis(fig[1, 1])
+    fig, ax1 = plot_erp(fig, ax1, dat_orig, channels; average_channels = average_channels, kwargs = kwargs)
+    ax2 = Axis(fig[1, 1])
+    fig, ax2 = plot_erp(fig, ax2, dat_cleaned, channels; average_channels = average_channels, kwargs = kwargs)
+    fig = Figure()
+    ax3 = Axis(fig[1, 1])
+    ax3 = ax2
+    ax4 = Axis(fig[1, 2])
+    ax4 = ax2
+    linkaxes!(ax3, ax4)
+    display(fig)
+end
+
+function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData; average_channels = false, kwargs...)
+    plot_erp(dat_orig, dat_cleaned, dat_orig.layout.label; average_channels = average_channels, kwargs...)
+end
+
+
+function best_rect(n)
+    dim1 = ceil(Int, sqrt(n))
+    dim2 = ceil(Int, n ./ dim1)
+    return [dim1, dim2]
+end
+
 
 
 # #################################################################
