@@ -7,6 +7,10 @@ using GLMakie
 using FFTW
 using CSV
 using DataFrames
+using StatsBase
+
+include("types.jl")
+include("utils.jl")
 
 a = [1, 2, 3]
 b = [4, 5, 6]
@@ -319,7 +323,7 @@ freqs = LinRange(lowest_freq, highest_freq, num_wavelets)
 for freq in freqs
     # sine_wave = cos.(2 * pi .* freq .* time)
     sine_wave = exp.(2 * im * pi .* freq .* time)
-    println(freq)
+    println("Current frequency: ", freq)
     n = 6 # number of wavelet
     s = n / (2 * pi * freq)
     gaussian_win = exp.(-time .^ 2 ./ (2 * s^2))
@@ -604,149 +608,462 @@ function detrend(x, y)
     return y - (X * β)
 end
 
-signal = DataFrame(CSV.File("data3.csv")).data
-sample_rate = 256
-t = -1:1/sample_rate:(1.5-(1/sample_rate));
-dsignal = detrend(t, signal)
-fig = Figure()
-ax = Axis(fig[1, 1])
-lines!(ax, t, signal)
-lines!(ax, t, dsignal)
-timewin = 1000
-timewinidx = round(Int, timewin / (1000 / sample_rate))
-hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
-# lines(hann_win)
-ax = Axis(fig[2, 1])
-stime = find_idx_start_end(t, [0.50])[1]
-lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)])
-lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)] .* hann_win)
-dfft = fft(dsignal[stime:stime+timewinidx-1] .* hann_win)
-f = LinRange(0, div(sample_rate, 2), floor(Int, length(hann_win) / 2 + 1))
-ax = Axis(fig[3, 1])
-lines!(ax, f[2:end], abs.(dfft[2:floor(Int, length(hann_win) / 2)+1]) .^ 2);
-# create TF matrix and input column of data at selected time point
-tf = zeros(floor(Int, length(hann_win) / 2), length(signal));
-tf[:, stime+div(timewinidx, 2):stime+div(timewinidx, 2)+20] =
-    repeat(abs.(dfft[2:floor(Int, length(hann_win) / 2)+1] .* 2) * 2, 1, 21)
-ax = Axis(fig[4, 1])
-heatmap!(ax, t, f, transpose(log10.(tf .+ 1)))
+# signal = DataFrame(CSV.File("data3.csv")).data
+# sample_rate = 256
+# t = -1:1/sample_rate:(1.5-(1/sample_rate));
+# dsignal = detrend(t, signal)
+# fig = Figure()
+# ax = Axis(fig[1, 1])
+# lines!(ax, t, signal)
+# lines!(ax, t, dsignal)
+# timewin = 1000
+# timewinidx = round(Int, timewin / (1000 / sample_rate))
+# hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
+# # lines(hann_win)
+# ax = Axis(fig[2, 1])
+# stime = find_idx_start_end(t, [0.50])[1]
+# lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)])
+# lines!(ax, t[stime:stime+(timewinidx-1)], dsignal[stime:stime+(timewinidx-1)] .* hann_win)
+# dfft = fft(dsignal[stime:stime+timewinidx-1] .* hann_win)
+# f = LinRange(0, div(sample_rate, 2), floor(Int, length(hann_win) / 2 + 1))
+# ax = Axis(fig[3, 1])
+# lines!(ax, f[2:end], abs.(dfft[2:floor(Int, length(hann_win) / 2)+1]) .^ 2);
+# # create TF matrix and input column of data at selected time point
+# tf = zeros(floor(Int, length(hann_win) / 2), length(signal));
+# tf[:, stime+div(timewinidx, 2):stime+div(timewinidx, 2)+20] =
+#     repeat(abs.(dfft[2:floor(Int, length(hann_win) / 2)+1] .* 2) * 2, 1, 21)
+# ax = Axis(fig[4, 1])
+# heatmap!(ax, t, f, transpose(log10.(tf .+ 1)))
+# display(fig)
 
 
-
-
-signal = DataFrame(CSV.File("data_hanning.csv")).data
-# reshap into 99 trials
-signal = reshape(signal, 640, 99)
-sample_rate = 256
-t = -1:1/sample_rate:(1.5-(1/sample_rate));
-dsignal = signal #detrend(t, signal)
-fig = Figure()
-ax = Axis(fig[1, 1])
-timewin = 100
-times2save = -0.5:0.01:1
-times2saveidx = zeros(length(times2save))
-for i = 1:length(times2save)
-    times2saveidx[i] = find_idx_start_end(t, [times2save[i]])[1]
-end
-timewinidx = round(timewin / (1000 / sample_rate))
-hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
-frex = LinRange(0, div(sample_rate, 2), Int(fld(timewinidx, 2) + 1));
-tf = zeros(length(frex), length(times2save));
-for timepointi = 1:length(times2save)
-    tmpdat = dsignal[
-        Int(times2saveidx[timepointi] - fld(timewinidx, 2)):Int(times2saveidx[timepointi] + fld(timewinidx, 2) - 1),
-        :,
-    ]
-    taperdat = tmpdat .* repeat(hann_win, outer = [1, 99])
-    fdat = fft(taperdat, 1) ./ timewinidx
-    tf[:, timepointi] = mean(abs.(fdat[1:Int(fld(timewinidx, 2) + 1), :]) .^ 2, dims = 2) # average over trials
-end
-#heatmap!(ax, times2save, frex, transpose(log10.(tf)))
-contourf!(ax, times2save, frex, transpose(log10.(tf)), levels = -1.75:0.4:1.75)
-#contourf!(ax, times2save, frex, transpose(log10.(tf)))
-
-
-
-signal = DataFrame(CSV.File("dataFIC.csv")).data
-# reshap into 99 trials
-signal = reshape(signal, 900, 76)
-sample_rate = 300
-t = -1:1/sample_rate:(2-(1/sample_rate));
-dsignal = detrend(t, signal)
-fig = Figure()
-ax = Axis(fig[1, 1])
-timewin = 0.75
-timewinidx = find_idx_start_end(t, [0, timewin])
-timewinidx = timewinidx[2] - timewinidx[1]
-times2save = -0.5:0.1:1.5
-times2saveidx = zeros(length(times2save))
-for i = 1:length(times2save)
-    times2saveidx[i] = find_idx_start_end(t, [times2save[i]])[1]
-end
-# timewinidx = round(timewin / (1000 / sample_rate))
-hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
-# frex = LinRange(0, div(sample_rate, 2), Int(fld(timewinidx, 2) + 1));
-frex = 2:1:30
-tf = zeros(length(frex), length(times2save));
-for timepointi = 1:length(times2save)
-    tmpdat = dsignal[
-        Int(times2saveidx[timepointi] - fld(timewinidx, 2)):Int(times2saveidx[timepointi] + fld(timewinidx, 2)),
-        :,
-    ]
-    taperdat = tmpdat .* repeat(hann_win, outer = [1, 76])
-    fdat = fft(taperdat, 1) ./ timewinidx
-    # tf[:, timepointi] = mean(abs.(fdat[1:Int(fld(timewinidx, 2) + 1), :]) .^ 2, dims = 2) # average over trials
-    tf[:, timepointi] = mean(abs.(fdat[1:Int(length(frex)), :]) .^ 2, dims = 2) # average over trials
-    # tf[:, timepointi] = mean(abs.(fdat) .^ 2, dims = 2) # average over trials
-end
-#heatmap!(ax, times2save, frex, transpose(log10.(tf)))
-#contourf!(ax, times2save, frex, transpose(log10.(tf)), levels = -1000:0.4:1000)
-#contourf!(ax, times2save, frex, transpose(log10.(tf)))
-heatmap!(ax, times2save, frex, transpose(log10.(tf)), fxaa = false)
-
-
-
-
-signal = DataFrame(CSV.File("dataFIC.csv")).data
-# reshap into 99 trials
-signal = reshape(signal, 900, 76)
-sample_rate = 300
-t = -1:1/sample_rate:(2-(1/sample_rate));
-dsignal = detrend(t, signal)
-fig = Figure()
-ax = Axis(fig[1, 1])
-timewin = 0.75
-timewinidx = find_idx_start_end(t, [0, timewin])
-timewinidx = timewinidx[2] - timewinidx[1]
-times2save = -0.5:0.1:1.5
-times2saveidx = zeros(length(times2save))
-for i = 1:length(times2save)
-    times2saveidx[i] = find_idx_start_end(t, [times2save[i]])[1]
-end
-# timewinidx = round(timewin / (1000 / sample_rate))
-hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
-# frex = LinRange(0, div(sample_rate, 2), Int(fld(timewinidx, 2) + 1));
-frex = 2:1:30
-t_ftimwin = 2 ./ frex
-tf = zeros(length(frex), length(times2save));
-for timepointi = 1:length(times2save)
-    timewinidx = find_idx_start_end(t, [0, t_ftimwin[timepointi]])
-    timewinidx = timewinidx[2] - timewinidx[1]
+function tf_hanning(signal, time, sample_rate, frequencies, time_window, time_steps)
+    # Convert time_steps to indices
+    times2saveidx = [findfirst(≈(t), time) for t in time_steps]
+    # Calculate window length in samples
+    timewinidx = round(Int, time_window * sample_rate)
+    # Ensure window length is odd to center the taper
+    if iseven(timewinidx)
+        timewinidx += 1
+    end
+    # Create Hanning taper
     hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
-    tmpdat = dsignal[
-        Int(times2saveidx[timepointi] - fld(timewinidx, 2)):Int(times2saveidx[timepointi] + fld(timewinidx, 2)),
-        :,
-    ]
-    taperdat = tmpdat .* repeat(hann_win, outer = [1, 76])
-    fdat = fft(taperdat, 1) ./ timewinidx
-    # tf[:, timepointi] = mean(abs.(fdat[1:Int(fld(timewinidx, 2) + 1), :]) .^ 2, dims = 2) # average over trials
-    tf[:, timepointi] = mean(abs.(fdat[1:Int(length(frex)), :]) .^ 2, dims = 2) # average over trials
-    # tf[:, timepointi] = mean(abs.(fdat) .^ 2, dims = 2) # average over trials
+    # Preallocate output (n_frequencies × n_time_points × n_trials)
+    n_frex = length(frequencies)
+    n_timepoints = length(time_steps)
+    n_trials = size(signal, 2)
+    tf_trials = zeros(n_frex, n_timepoints, n_trials)
+    # Precompute frequency bins
+    frex_idx = round.(Int, frequencies .* timewinidx ./ sample_rate) .+ 1
+    # Perform time-frequency analysis trial-by-trial
+    for trial in 1:n_trials
+        for (timepointi, center_idx) in enumerate(times2saveidx)
+            # Calculate start and end indices for the window (centered)
+            start_idx = center_idx - fld(timewinidx, 2)
+            end_idx = center_idx + fld(timewinidx, 2)
+            # Handle edge cases (window extends beyond signal boundaries)
+            if start_idx < 1 || end_idx > size(signal, 1)
+                # Zero-pad the data if the window extends beyond the signal
+                pad_left = max(1 - start_idx, 0)
+                pad_right = max(end_idx - size(signal, 1), 0)
+                tmpdat = zeros(timewinidx)
+                valid_start = max(start_idx, 1)
+                valid_end = min(end_idx, size(signal, 1))
+                tmpdat[(pad_left+1):(end_idx-start_idx+1-pad_right)] = signal[valid_start:valid_end, trial]
+            else
+                # Extract data segment for this trial
+                tmpdat = signal[start_idx:end_idx, trial]
+            end
+            # Apply Hanning taper
+            taperdat = tmpdat .* hann_win
+            # Compute FFT
+            fdat = fft(taperdat) ./ timewinidx  # Normalize by window length
+            # Compute power for each frequency
+            tf_trials[:, timepointi, trial] .= abs.(fdat[frex_idx]) .^ 2
+        end
+    end
+    return tf_trials
 end
-#heatmap!(ax, times2save, frex, transpose(log10.(tf)))
-#contourf!(ax, times2save, frex, transpose(log10.(tf)), levels = -1000:0.4:1000)
-#contourf!(ax, times2save, frex, transpose(log10.(tf)))
-heatmap!(ax, times2save, frex, transpose(log10.(tf)), fxaa = false)
+signal = DataFrame(CSV.File("dataFIC.csv")).data
+# # reshap into 99 trials
+signal = reshape(signal, 900, 76)
+function generate_signal(sampling_rate, duration, n_trials, freqs, amps, times, noise)
+    # Parameters
+    t = duration[1]:((1000/sampling_rate)/1000):(duration[2] - ((1000/sampling_rate)/1000))
+    n_samples = length(t)  # 900 samples per trial
+    # Initialize signal (900 samples × 76 trials)
+    signal_trials = zeros(n_samples, n_trials) + (rand(n_samples, n_trials) * noise)
+    # Add frequency components to all trials
+    for trial = 1:n_trials
+        println(trial)
+        for signal in zip(freqs, amps, times)
+            signal_trials[(t.>=signal[3][1]).&(t.<signal[3][2]), trial] .+= signal[2] .* sin.(2 * pi * signal[1] * t[(t.>=signal[3][1]).&(t.<signal[3][2])])
+        end
+    end
+    return signal_trials
+end
+sample_rate = 300
+# signal = generate_signal(sample_rate, [-1, 2.0], 76, [10, 15, 25, 5], [1, 1, 1, 1], [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0], [1.0, 1.5]], 0);
+# time = -1:1/sample_rate:(2-(1/sample_rate));
+time = -1:1/sample_rate:(2-(1/sample_rate));
+frequencies = 1:1:50
+time_window = 0.25
+time_steps = -0.5:0.05:1.5
+tf_trials = tf_hanning(signal, time, sample_rate, frequencies, time_window, time_steps)
+# Average power across trials
+tf = mean(tf_trials, dims = 3)  # Average over trials
+tf = dropdims(tf, dims = 3)  # Remove singleton dimension
+# Debugging: Print TF matrix min/max
+println("TF matrix - Min: ", minimum(tf), " Max: ", maximum(tf))
+# Plot time-frequency results
+fig = Figure()
+ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Frequency (Hz)") 
+heatmap!(ax, time_steps, frequencies, transpose(tf), colormap = :jet, interpolate = false)  # Disable interpolation
+# heatmap!(ax, times2save, frex, transpose(log10.(tf)), colormap = :jet, interpolate = false)  # Disable interpolation
+# Colorbar(fig[1, 2], limits = (minimum(log10.(tf)), maximum(log10.(tf))), label = "Power (dB)")
+#xlims!(ax, -0.5, 1.5)  # Match Fieldtrip's time range
+#ylims!(ax, 1, 31)      # Match Fieldtrip's frequency range
+ax.yticks = frequencies       # Explicitly set frequency ticks to match data points
+display(fig)
+
+
+
+#
+
+
+
+
+
+
+# Frequency-dependent window length (7 cycles per window)
+function tf_hanning_cycles(signal, time, sample_rate, frequencies, time_steps, num_cycles)
+    # Frequency-dependent window length (7 cycles per window)
+    times2saveidx = [findfirst(≈(t), time) for t in time_steps]
+    tf_trials = zeros(length(frequencies), length(time_steps), size(signal, 2))  # Power for each trial
+    # Perform time-frequency analysis trial-by-trial
+    for trial = 1:size(signal, 2)
+        for fi = 1:length(frequencies)
+            # Calculate frequency-dependent window length
+            timewin = num_cycles / frequencies[fi]  # Window length in seconds
+            timewinidx = round(Int, timewin * sample_rate)  # Window length in samples
+            # Ensure window length is odd to center the taper
+            if iseven(timewinidx)
+                timewinidx += 1
+            end
+            hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))  # Hanning taper
+            for timepointi = 1:length(time_steps)
+                # Calculate start and end indices for the window
+                start_idx = Int(times2saveidx[timepointi] - fld(timewinidx, 2))
+                end_idx = Int(times2saveidx[timepointi] + fld(timewinidx, 2))
+                #start_idx = Int(times2saveidx[timepointi])
+                #end_idx = Int(times2saveidx[timepointi] + timewinidx -1)
+                # Handle edge cases (window extends beyond signal boundaries)
+                if start_idx < 1 || end_idx > size(signal_trials, 1)
+                    # Zero-pad the data if the window extends beyond the signal
+                    pad_left = max(1 - start_idx, 0)
+                    pad_right = max(end_idx - size(signal_trials, 1), 0)
+                    tmpdat = zeros(timewinidx)
+                    valid_start = max(start_idx, 1)
+                    valid_end = min(end_idx, size(signal_trials, 1))
+                    tmpdat[(pad_left+1):(end_idx-start_idx+1-pad_right)] = signal_trials[valid_start:valid_end, trial]
+                else
+                    # Extract data segment for this trial
+                    tmpdat = signal_trials[start_idx:end_idx, trial]
+                end
+                # Apply Hanning taper
+                taperdat = tmpdat .* hann_win
+                # Compute FFT
+                fdat = fft(taperdat) ./ timewinidx  # Normalize by window length
+                #fdat = fftshift(fdat, 2)
+                # Map the desired frequency to the correct FFT bin
+                bin = round(Int, frequencies[fi] * timewinidx / sample_rate) + 1
+                # Compute power for this trial
+                tf_trials[fi, timepointi, trial] = abs.(fdat[bin]) .^ 2  # Use th
+            end
+        end
+    end
+    # Average power across trials
+    tf = mean(tf_trials, dims = 3)  # Average over trials
+    tf = dropdims(tf, dims = 3)  # Remove singleton dimension
+    # Debugging: Print TF matrix min/max
+    println("TF matrix - Min: ", minimum(tf), " Max: ", maximum(tf))
+    # Plot time-frequency results
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1],
+        xlabel = "Time (s)",
+        ylabel = "Frequency (Hz)",
+        title = "Time-Frequency Analysis (7 Cycles per Window)",
+    )
+    # heatmap!(ax, times2save, frex, transpose(log10.(tf)), colormap = :jet, interpolate = false)  # Disable interpolation
+    heatmap!(ax, time_steps, frequencies, transpose(tf), colormap = :jet, interpolate = false)  # Disable interpolation
+    #Colorbar(fig[1, 2], limits = (minimum(log10.(tf)), maximum(log10.(tf))), label = "Power (dB)")
+    #xlims!(ax, -0.5, 1.5)  # Match Fieldtrip's time range
+    #ylims!(ax, 2, 30)      # Match Fieldtrip's frequency range
+    ax.yticks = frequencies       # Explicitly set frequency ticks to match data points
+    display(fig)
+end
+signal = DataFrame(CSV.File("dataFIC.csv")).data
+# # reshap into 99 trials
+signal = reshape(signal, 900, 76)
+function generate_signal(sampling_rate, duration, n_trials, freqs, amps, times, noise)
+    # Parameters
+    t = duration[1]:((1000/sampling_rate)/1000):(duration[2] - ((1000/sampling_rate)/1000))
+    n_samples = length(t)  # 900 samples per trial
+    # Initialize signal (900 samples × 76 trials)
+    signal_trials = zeros(n_samples, n_trials) + (rand(n_samples, n_trials) * noise)
+    # Add frequency components to all trials
+    for trial = 1:n_trials
+        println(trial)
+        for signal in zip(freqs, amps, times)
+            signal_trials[(t.>=signal[3][1]).&(t.<signal[3][2]), trial] .+= signal[2] .* sin.(2 * pi * signal[1] * t[(t.>=signal[3][1]).&(t.<signal[3][2])])
+        end
+    end
+    return signal_trials
+end
+sample_rate = 300
+# signal = generate_signal(sample_rate, [-1, 2.0], 76, [10, 15, 25, 5], [1, 1, 1, 1], [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0], [1.0, 1.5]], 0);
+# time = -1:1/sample_rate:(2-(1/sample_rate));
+time = -1:1/sample_rate:(2-(1/sample_rate));
+frequencies = 1:1:50
+time_window = 0.25
+time_steps = -0.5:0.05:1.5
+num_cycles = 10
+tf_hanning_cycles(signal, time, sample_rate, frequencies, time_steps, num_cycles)
+
+
+
+
+function multitaper(
+    signal,
+    time,
+    sample_rate,
+    frequencies;
+    foi = 1:2:30,
+    toi = -0.5:0.05:1.5,
+    tapsmofrq = 0.4,
+    padding = 1,
+    do_detrend = true,
+)
+    # Calculate frequency-specific parameters
+    time_windows = 5 ./ foi  # cfg.t_ftimwin
+    time_bandwidth = tapsmofrq * foi  # cfg.tapsmofrq
+    # Calculate number of tapers based on time-bandwidth product
+    num_tapers = round.(Int, 2 * time_bandwidth .- 1)
+    # Convert time steps to indices
+    times2saveidx = [findfirst(≈(t), time) for t in toi]
+    # Preallocate output
+    n_frex = length(foi)
+    n_timepoints = length(toi)
+    n_trials = size(signal, 2)
+    tf_trials = zeros(n_frex, n_timepoints, n_trials)
+    # Main analysis loop
+    for (fi, freq) in enumerate(foi)
+        # Frequency-specific parameters
+        current_time_bandwidth = time_bandwidth[fi]
+        current_num_tapers = num_tapers[fi]
+        timewinidx = round(Int, time_windows[fi] * sample_rate)
+        # Skip this frequency band if num_tapers < 1
+        if current_num_tapers < 1
+            @warn "Skipping frequency $freq Hz: num_tapers < 1 (NW = $(current_time_bandwidth / 2))"
+            continue
+        end
+        # Ensure odd window size
+        if iseven(timewinidx)
+            timewinidx += 1
+        end
+        # Generate tapers for this frequency using DSP.jl
+        NW = current_time_bandwidth / 2  # NW = (time_window * bandwidth) / 2
+        tapers = DSP.dpss(timewinidx, NW, current_num_tapers)
+        # Time-frequency analysis for this frequency
+        for trial = 1:n_trials
+            for (timepointi, center_idx) in enumerate(times2saveidx)
+                # Extract data segment with bounds checking
+                half_win = fld(timewinidx, 2)
+                start_idx = max(1, center_idx - half_win)
+                end_idx = min(size(signal, 1), center_idx + half_win)
+                tmpdat = signal[start_idx:end_idx, trial]
+                # Handle padding if needed
+                if length(tmpdat) < timewinidx
+                    pad_size = timewinidx - length(tmpdat)
+                    if start_idx == 1
+                        tmpdat = vcat(zeros(pad_size), tmpdat)
+                    else
+                        tmpdat = vcat(tmpdat, zeros(pad_size))
+                    end
+                elseif length(tmpdat) > timewinidx
+                    tmpdat = tmpdat[1:timewinidx]
+                end
+                if do_detrend
+                    tmpdat = detrend(1:length(tmpdat), tmpdat)
+                end
+                # Apply tapers and compute FFT
+                taper_power = 0.0
+                for taper = 1:current_num_tapers
+                    tapered_data = tmpdat .* tapers[:, taper]
+                    # Handle padding
+                    if padding > 1
+                        padded_size = round(Int, padding * length(tapered_data))
+                        tapered_data = vcat(tapered_data, zeros(padded_size - length(tapered_data)))
+                    end
+                    fdat = fft(tapered_data)
+                    frex = (0:(length(fdat)-1)) .* (sample_rate / length(fdat))
+                    idx = argmin(abs.(frex .- freq))
+                    println("Frequency: ", freq, " Hz → FFT bin: ", frex[idx], " Hz")
+                    taper_power += abs2(fdat[idx]) 
+                end
+                tf_trials[fi, timepointi, trial] = taper_power / current_num_tapers
+            end
+        end
+    end
+    return tf_trials
+end
+
+sample_rate = 300
+signal = generate_signal(sample_rate, [-1, 2.0], 76, [10, 10, 20], [1, 1, 1], [[0.0, 0.25], [0, 0.25], [0, 0.25]], 0);
+# time = -1:1/sample_rate:(2-(1/sample_rate));
+time = -1:1/sample_rate:(2-(1/sample_rate));
+time_steps = -0.5:0.05:1.5
+time = -1:1/sample_rate:(2-(1/sample_rate))
+frequencies = 1:2:30
+time_steps = -0.5:0.05:1.5
+@btime tf_trials = multitaper(signal, time, sample_rate, frequencies, toi = time_steps, tapsmofrq = 0.5)
+# Average power across trials
+@btime tf = mean(tf_trials, dims = 3)  # Average over trials
+tf = dropdims(tf, dims = 3)  # Remove singleton dimension
+# Debugging: Print TF matrix min/max
+println("TF matrix - Min: ", minimum(tf), " Max: ", maximum(tf))
+# Plot time-frequency results
+fig = Figure()
+ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Frequency (Hz)") 
+heatmap!(ax, time_steps, frequencies, transpose(tf), colormap = :jet, interpolate = true)  # Disable interpolation
+# heatmap!(ax, times2save, frex, transpose(log10.(tf)), colormap = :jet, interpolate = false)  # Disable interpolation
+# Colorbar(fig[1, 2], limits = (minimum(log10.(tf)), maximum(log10.(tf))), label = "Power (dB)")
+#xlims!(ax, -0.5, 1.5)  # Match Fieldtrip's time range
+ylims!(ax, 0, 30)      # Match Fieldtrip's frequency range
+ax.yticks = frequencies       # Explicitly set frequency ticks to match data points
+display(fig)
+
+
+
+
+
+
+
+function multitaper(
+    signal,
+    time,
+    sample_rate,
+    frequencies;
+    foi = 1:2:30,
+    toi = -0.5:0.05:1.5,
+    tapsmofrq = 0.4,
+    padding = 2,  # Increase padding for better frequency resolution
+    do_detrend = true,
+)
+    # Calculate frequency-specific parameters
+    time_windows = 5 ./ foi  # cfg.t_ftimwin
+    time_bandwidth = tapsmofrq * foi  # cfg.tapsmofrq
+    
+    # Calculate number of tapers based on time-bandwidth product
+    num_tapers = round.(Int, 2 * time_bandwidth .- 1)
+    
+    # Convert time steps to indices
+    times2saveidx = [findfirst(≈(t), time) for t in toi]
+    
+    # Preallocate output
+    n_frex = length(foi)
+    n_timepoints = length(toi)
+    n_trials = size(signal, 2)
+    tf_trials = zeros(n_frex, n_timepoints, n_trials)
+    
+    # Main analysis loop (parallelized over frequencies)
+    for fi = 1:n_frex
+        # Frequency-specific parameters
+        freq = foi[fi]
+        current_time_bandwidth = time_bandwidth[fi]
+        current_num_tapers = num_tapers[fi]
+        timewinidx = round(Int, time_windows[fi] * sample_rate)
+        
+        # Skip this frequency band if num_tapers < 1
+        if current_num_tapers < 1
+            @warn "Skipping frequency $freq Hz: num_tapers < 1 (NW = $(current_time_bandwidth / 2))"
+            continue
+        end
+        
+        # Ensure odd window size
+        if iseven(timewinidx)
+            timewinidx += 1
+        end
+        
+        # Generate tapers for this frequency using DSP.jl
+        NW = current_time_bandwidth / 2  # NW = (time_window * bandwidth) / 2
+        tapers = dpss(timewinidx, NW, current_num_tapers)
+        
+        # Precompute FFT frequencies
+        padded_size = padding > 1 ? round(Int, padding * timewinidx) : timewinidx
+        frex = (0:(padded_size-1)) .* (sample_rate / padded_size)
+        
+        # Time-frequency analysis for this frequency
+        for trial = 1:n_trials
+            for (timepointi, center_idx) in enumerate(times2saveidx)
+                # Extract data segment with bounds checking
+                half_win = fld(timewinidx, 2)
+                start_idx = max(1, center_idx - half_win)
+                end_idx = min(size(signal, 1), center_idx + half_win)
+                tmpdat = signal[start_idx:end_idx, trial]
+                
+                # Ensure tmpdat has the same length as tapers
+                if length(tmpdat) < timewinidx
+                    pad_size = timewinidx - length(tmpdat)
+                    if start_idx == 1
+                        tmpdat = vcat(zeros(pad_size), tmpdat)
+                    else
+                        tmpdat = vcat(tmpdat, zeros(pad_size))
+                    end
+                elseif length(tmpdat) > timewinidx
+                    tmpdat = tmpdat[1:timewinidx]
+                end
+                
+                # Detrend if requested
+                if do_detrend
+                    tmpdat = detrend(1:length(tmpdat), tmpdat)
+                end
+                
+                # Apply all tapers at once
+                tapered_data = tmpdat .* tapers
+                
+                # Apply padding
+                if padding > 1
+                    tapered_data = vcat(tapered_data, zeros(padded_size - timewinidx, current_num_tapers))
+                end
+                
+                # Compute FFT for all tapers
+                fdat = fft(tapered_data, 1)
+                idx = argmin(abs.(frex .- freq))
+                taper_power = mean(abs2.(fdat[idx, :]))  # Average power across tapers
+                
+                tf_trials[fi, timepointi, trial] = taper_power
+            end
+        end
+    end
+    
+    return tf_trials
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

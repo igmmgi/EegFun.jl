@@ -14,6 +14,7 @@ using Random
 using ScatteredInterpolation
 using StatsBase
 
+
 include("types.jl")
 include("utils.jl")
 include("analyse.jl")
@@ -28,31 +29,57 @@ include("topo.jl")
 include("utils.jl")
 include("ica.jl")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # include("test/runtests.jl")
 # test_baseline()
 # test_filter()
 
-using Logging
-# Show all messages
-global_logger(ConsoleLogger(stderr, Logging.Debug))
-# Show only info and above
-global_logger(ConsoleLogger(stderr, Logging.Info))
-# Show only warnings and errors
-global_logger(ConsoleLogger(stderr, Logging.Warn))
-
+# using Logging
+# # Show all messages
+# global_logger(ConsoleLogger(stderr, Logging.Debug))
+# # Show only info and above
+# global_logger(ConsoleLogger(stderr, Logging.Info))
+# # Show only warnings and errors
+# global_logger(ConsoleLogger(stderr, Logging.Warn))
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
-head_shape_2d(layout);
-# head_shape_3d(layout);
+#head_shape_2d(layout)
+#head_shape_2d(layout, point_kwargs = Dict(:markersize => 30), label_kwargs = Dict(:fontsize => 30, :xoffset => 1))
+#layout = filter(row -> row.label in ["PO7", "PO8"], layout)
+#head_shape_2d(layout)
+#head_shape_3d(layout);
 
 # read bdf file
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
+plot_events(dat)
 dat = create_eeg_dataframe(dat, layout);
+filter_data!(dat, "hp", 0.1, 2)
+plot_events(dat)
+
+
+
 # basic bdf plot
 # plot_databrowser(dat)
-filter_data!(dat, "hp", 1, 2)
+rereference!(dat.data, dat.layout.label, dat.layout.label)
+# rereference!(dat.data, dat.layout.label, :Fp1)
+# plot_databrowser(dat)
+
 # filter_data!(dat, "lp", 10, 6)
 # include("plot.jl")
 # calculate EOG channels
@@ -61,7 +88,106 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 ## # autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+
 dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
+
+dat_ica = filter_data(dat, "hp", 1, 2)
+output = infomax_ica(permutedims(Float64.(Matrix(dat_ica.data[:, 3:74]))), dat.layout.label, n_components = 71)
+
+
+
+
+
+plot_ica_topoplot(output, dat.layout, ncomps = 4)
+
+function plot_ica_topoplot(
+    ica,
+    layout;
+    ncomps = nothing,
+    head_kwargs = Dict(),
+    point_kwargs = Dict(),
+    label_kwargs = Dict(),
+    topo_kwargs = Dict(),
+    colorbar_kwargs = Dict(),
+)
+    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+        polar_to_cartesian_xy!(layout)
+    end
+    if isnothing(ncomps)
+        ncomps = size(ica.mixing)[2]
+    end
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+    label_default_kwargs =
+        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+    xoffset = pop!(label_kwargs, :xoffset)
+    yoffset = pop!(label_kwargs, :yoffset)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = pop!(topo_kwargs, :gridscale)
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+    fig = Figure()
+    dims = best_rect(ncomps)
+    count = 1
+    axs = []
+    for dim1 = 1:dims[1]
+        for dim2 = 1:dims[2]
+            ax = Axis(fig[dim1, dim2])
+            push!(axs, ax)
+            count += 1
+            if count > ncomps
+                break
+            end
+        end
+    end
+    count = 1
+    for ax in axs
+        ax.title = ica.ica_label[count]
+        data = data_interpolation_topo(ica.mixing[:, count], permutedims(Matrix(layout[!, [:x2, :y2]])), gridscale)
+        gridscale = gridscale
+        radius = 88 # mm
+        co = contourf!(
+            ax,
+            range(-radius * 2, radius * 2, length = gridscale),
+            range(-radius * 2, radius * 2, length = gridscale),
+            data,
+            colormap = :jet,
+        )
+        # TODO: improve colorbar stuff
+        # if plot_colorbar
+        #     Colorbar(ax, co; colorbar_kwargs...)
+        # end
+        # head shape
+        head_shape_2d(
+            fig,
+            ax,
+            layout,
+            head_kwargs = head_kwargs,
+            point_kwargs = point_kwargs,
+            label_kwargs = label_kwargs,
+        )
+        count += 1
+        if count > ncomps
+            break
+        end
+    end
+    return fig
+end
+
+# interpolate data
+
+
+
+
+
+
+
+# size(dat_ica.data)
 
 # data_whitened = pre_whiten(Float64.(transpose(Matrix(dat.data[!, 3:end-4]))))
 # Run ICA
@@ -73,31 +199,37 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
 # Continuous Data Browser
 # TODO: Labels position when changing x-range
 # TODO: Improve logic of plotting marker (triggers/EOG) lines?
-# plot_databrowser(dat)
+plot_databrowser(dat_ica)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
 # plot_databrowser(dat, "hEOG")
 
 # extract epochs
 epochs = extract_epochs(dat, 1, -0.5, 2)
+epochs_cleaned = remove_bad_epochs(epochs)
 
 # Epoch Data Browser
-# plot_databrowser(epochs)
-# plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
-# plot_databrowser(epochs, ["hEOG", "vEOG"])
+plot_databrowser(epochs)
+plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
+plot_databrowser(epochs, ["hEOG", "vEOG"])
 # plot_databrowser(epochs, "hEOG")
 
+plot_epochs(epochs, [:Fp1])
 # # Plot Epochs (all)
-# plot_epochs(epochs, :Fp1)
+plot_epochs(epochs, :Fp1)
 # plot_epochs(epochs, "Fp1")
-# plot_epochs(epochs, ["PO7", "PO8"])
+plot_epochs(epochs, ["PO7", "PO8"])
 
 # average epochs
 erp = average_epochs(epochs)
+erp_cleaned = average_epochs(epochs_cleaned)
+
+plot_erp(erp)
+plot_erp(erp_cleaned)
 
 # ERP Plot
 # f, ax = plot_erp(erp, :Fp1)
-# plot_erp(erp, ["Fp1"])
+plot_erp(erp, ["Fp1"])
 # plot_erp(erp, [:Fp1, :Fp2])
 # plot_erp(erp, ["Fp1", "Fp2"])
 # plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:yreversed => true))
@@ -122,15 +254,6 @@ diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
 
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-
-function test_plot_eog_detection(dat, xlim, channel, detected)
-    fig = Figure()
-    ax = Axis(fig[1, 1])  # plot layout
-    lines!(ax, dat.data.time[xlim], dat.data[!, channel][xlim])
-    vlines!(ax, dat.data.time[xlim][dat.data[!, detected][xlim]], color = :black)
-    display(fig)
-    return fig, ax
-end
 
 test_plot_eog_detection(dat, 1000:14000, "vEOG", "is_vEOG")
 test_plot_eog_detection(dat, 1000:4000, "hEOG", "is_hEOG")

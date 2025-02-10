@@ -27,12 +27,16 @@ Converts polar coordinates (incidence and azimuth angles) from a layout DataFram
 - Nothing. The function modifies the `layout` DataFrame directly.
 """
 function polar_to_cartesian_xy!(layout::DataFrame)
+    # Validate input columns
+    if !all([col in names(layout) for col in ["inc", "azi"]])
+        throw(ArgumentError("Layout must contain :inc and :azi columns"))
+    end
     radius = 88 # mm
     inc = layout[!, :inc] .* (pi / 180)
     azi = layout[!, :azi] .* (pi / 180)
     layout[!, "x2"] = inc .* cos.(azi) .* radius
     layout[!, "y2"] = inc .* sin.(azi) .* radius
-    return 
+    return
 end
 
 """
@@ -51,14 +55,14 @@ Converts polar coordinates (incidence and azimuth angles) from a layout DataFram
 """
 function polar_to_cartesian_xyz!(layout::DataFrame)
     # Validate input columns
-    if !all(in([:inc, :azi], names(layout)))
+    if !all([col in names(layout) for col in ["inc", "azi"]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
-    
+
     radius = 88.0  # mm
     inc = layout[!, :inc] .* (pi / 180)  # Convert to radians
     azi = layout[!, :azi] .* (pi / 180)  # Convert to radians
-    
+
     layout[!, :x3] = radius .* sin.(inc) .* cos.(azi)
     layout[!, :y3] = radius .* sin.(inc) .* sin.(azi)
     layout[!, :z3] = radius .* cos.(inc)
@@ -114,31 +118,28 @@ function get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real
     if !all(in.([:x2, :y2, :label], names(layout)))
         throw(ArgumentError("Layout must contain :x2, :y2, and :label columns"))
     end
-    
+
     if distance_criterion <= 0
         throw(ArgumentError("Distance criterion must be positive"))
     end
-    
+
     neighbour_dict = OrderedDict{Symbol,Vector{Symbol}}()
-    
+
     for (idx1, label1) in enumerate(layout.label)
         neighbour_dict[Symbol(label1)] = Symbol[]
         for (idx2, label2) in enumerate(layout.label)
             if idx1 == idx2
                 continue
             end
-            
-            distance = calculate_distance_xy(
-                layout.x2[idx1], layout.y2[idx1],
-                layout.x2[idx2], layout.y2[idx2]
-            )
-            
+
+            distance = calculate_distance_xy(layout.x2[idx1], layout.y2[idx1], layout.x2[idx2], layout.y2[idx2])
+
             if distance <= distance_criterion
                 push!(neighbour_dict[Symbol(label1)], Symbol(label2))
             end
         end
     end
-    
+
     return neighbour_dict
 end
 
@@ -161,30 +162,34 @@ function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Rea
     if !all(in.([:x3, :y3, :z3, :label], names(layout)))
         throw(ArgumentError("Layout must contain :x3, :y3, :z3, and :label columns"))
     end
-    
+
     if distance_criterion <= 0
         throw(ArgumentError("Distance criterion must be positive"))
     end
-    
+
     neighbour_dict = OrderedDict{Symbol,Vector{Symbol}}()
-    
+
     for (idx1, label1) in enumerate(layout.label)
         neighbour_dict[Symbol(label1)] = Symbol[]
         for (idx2, label2) in enumerate(layout.label)
             if idx1 == idx2
                 continue
             end
-            
+
             distance = calculate_distance_xyz(
-                layout.x3[idx1], layout.y3[idx1], layout.z3[idx1],
-                layout.x3[idx2], layout.y3[idx2], layout.z3[idx2]
+                layout.x3[idx1],
+                layout.y3[idx1],
+                layout.z3[idx1],
+                layout.x3[idx2],
+                layout.y3[idx2],
+                layout.z3[idx2],
             )
-            
+
             if distance <= distance_criterion
                 push!(neighbour_dict[Symbol(label1)], Symbol(label2))
             end
         end
     end
-    
+
     return neighbour_dict
 end

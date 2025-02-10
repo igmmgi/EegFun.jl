@@ -30,7 +30,6 @@ Structure containing ICA algorithm parameters.
 - `restart_factor::Float64`: Learning rate factor on restart (default: 0.9)
 - `degconst::Float64`: Degrees to radians conversion (default: 180.0 / π)
 - `default_stop::Float64`: Default weight stop criterion (default: 1e-6)
-- `momentum::Float64`: Momentum parameter (default: 0.0)
 """
 mutable struct IcaPrms
     l_rate::Float64
@@ -44,7 +43,6 @@ mutable struct IcaPrms
     restart_factor::Float64
     degconst::Float64
     default_stop::Float64
-    momentum::Float64
 
     function IcaPrms(;
         l_rate = 0.001,
@@ -58,7 +56,6 @@ mutable struct IcaPrms
         restart_factor = 0.9,
         degconst = 180.0 / π,
         default_stop = 1e-6,
-        momentum = 0.0,
     )
         new(
             l_rate,
@@ -72,45 +69,7 @@ mutable struct IcaPrms
             restart_factor,
             degconst,
             default_stop,
-            momentum,
         )
-    end
-end
-
-"""
-    ExtendedIcaPrms
-
-Structure containing extended ICA algorithm parameters.
-
-# Fields
-- `ext_blocks::Int`: Number of blocks between kurtosis estimation (default: 1)
-- `n_subgauss::Int`: Number of sub-gaussian components (default: 1)
-- `extmomentum::Float64`: Momentum for kurtosis averaging (default: 0.5)
-- `signsbias::Float64`: Bias for sign changes (default: 0.02)
-- `signcount_threshold::Int`: Threshold for sign change detection (default: 25)
-- `signcount_step::Int`: Step size for sign change adaptation (default: 2)
-- `kurt_size::Int`: Number of samples for kurtosis estimation (default: min(6000, n_samples))
-"""
-mutable struct ExtendedIcaPrms
-    ext_blocks::Int
-    n_subgauss::Int
-    extmomentum::Float64
-    signsbias::Float64
-    signcount_threshold::Int
-    signcount_step::Int
-    kurt_size::Int
-
-    # default parameters matching MATLAB
-    function ExtendedIcaPrms(;
-        ext_blocks = 1,
-        n_subgauss = 1,
-        extmomentum = 0.5,
-        signsbias = 0.02,
-        signcount_threshold = 25,
-        signcount_step = 2,
-        kurt_size = 6000,
-    )
-        new(ext_blocks, n_subgauss, extmomentum, signsbias, signcount_threshold, signcount_step, kurt_size)
     end
 end
 
@@ -125,10 +84,15 @@ Structure containing ICA decomposition results.
 - `label::Vector{String}`: Component labels
 """
 struct InfoIca
+    weights::Matrix{Float64}
+    sphere::Matrix{Float64}
+    mixing::Matrix{Float64}
     unmixing::Matrix{Float64}
-    topo::Matrix{Float64}
-    label::Vector{String}
+    scale::Float64
+    ica_label::Vector{String}
+    data_label::Vector{String}
 end
+
 
 """
     log_progress(step::Int, max_iter::Int, change::Float64, l_rate::Float64, angledelta::Float64)
@@ -141,23 +105,34 @@ end
 function compute_sphere_matrix(data::Matrix{Float64})
     # Compute the covariance matrix
     cov_matrix = cov(data, dims = 2)
-
     # Compute the sphering matrix
     sphere = 2.0 * inv(sqrt(cov_matrix))
-
     # Compute scale factors (diagonal elements of the inverse sphering matrix)
     scale_factors = diag(inv(sphere))
     return sphere, scale_factors
 end
 
 function apply_sphering!(data::Matrix{Float64}, sphere::Matrix{Float64})
-    # Spher the data
     data .= sphere * data
     return data
 end
 
+function demean(data::Matrix{Float64})
+    return data .- mean(data, dims = 2)
+end
+
+
+function scale_data(data::Matrix{Float64})
+    scale = sqrt(norm((data * data') / size(data, 2)))
+    scaled_data = data / scale
+    println("using scaled data")
+    return scaled_data, scale
+end
+
+
+
 """
-    infomax_ica(data::Matrix{Float64}; params::IcaPrms = IcaPrms(), extended::Bool = false, ext_params::Union{Nothing, ExtendedIcaPrms} = nothing, n_components::Union{Nothing,Int} = nothing, do_sphering::Bool = true)
+    infomax_ica(data::Matrix{Float64}; params::IcaPrms = IcaPrms(), extended::Bool = false, ext_params::Union{Nothing, ExtendedIcaPrms} = nothing, n_components::Union{Nothing,Int} = nothing)
 
 Perform Infomax ICA decomposition on EEG data using the algorithm from EEGLAB's runica.
 
@@ -167,7 +142,6 @@ Perform Infomax ICA decomposition on EEG data using the algorithm from EEGLAB's 
 - `extended::Bool`: Whether to use extended Infomax
 - `ext_params::ExtendedIcaPrms`: Extended ICA parameters
 - `n_components::Union{Nothing,Int}`: Number of components for PCA reduction (default: no reduction)
-- `do_sphering::Bool`: Whether to perform sphering (default: true)
 
 # Returns
 - `InfoICA`: Structure containing:
@@ -176,18 +150,15 @@ Perform Infomax ICA decomposition on EEG data using the algorithm from EEGLAB's 
   - `label`: Component labels
 """
 function infomax_ica(
-    dat::Matrix{Float64};
-    extended::Bool = true,
+    dat::Matrix{Float64},
+    data_labels;
     params::IcaPrms = IcaPrms(),
-    ext_params::ExtendedIcaPrms = ExtendedIcaPrms(),
     n_components::Union{Nothing,Int} = nothing,
-    do_sphering::Bool = true,
 )
 
     dat_ica = copy(dat)
-
-    # Subtract row means from data
-    dat_ica .-= mean(dat_ica, dims = 2)
+    dat_ica = demean(dat_ica)
+    dat_ica, scale = scale_data(dat_ica)
 
     # Apply PCA reduction if n_components is specified
     if !isnothing(n_components)
@@ -199,6 +170,7 @@ function infomax_ica(
         pca_components = F.U[:, 1:n_components] # eigenvectors
     else
         pca_components = nothing
+        n_components = size(dat_ica, 1)
     end
 
     # Sphering 
@@ -216,51 +188,25 @@ function infomax_ica(
     # Pre-allocate workspace arrays
     weights = Matrix{Float64}(I, n_components, n_components)
     BI = block * Matrix{Float64}(I, n_channels, n_channels)
-    bias = zeros(n_channels, 1)
-    onesrow = ones(1, block)
     u = zeros(n_channels, block)
     y = similar(u)
-    delta_weights = similar(weights)
-    temp_matrix = similar(weights)
-    yu = similar(weights)
-    uu = similar(weights)
     data_block = zeros(n_channels, block)
     oldweights = copy(weights)
     startweights = copy(weights)
     permute_indices = Vector{Int}(undef, n_samples)
-
-    # # For extended ICA - pre-allocate more arrays to avoid allocations
-    # if extended
-    #     signs = ones(n_channels)
-    #     signs[1:ext_params.n_subgauss] .= -1
-    #     signs = Diagonal(signs)
-    #     old_kurt = zeros(n_channels)
-    #     oldsigns = Diagonal(copy(diag(signs)))  # Store as diagonal matrix
-    #     signcount = 0
-    #     partact = zeros(n_channels, min(ext_params.kurt_size, n_samples))
-    #     kk = zeros(n_channels)
-    #     m2 = zeros(n_channels)
-    #     m4 = zeros(n_channels)
-    #     new_signs = zeros(n_channels)
-    # end
 
     # Initialize training variables
     step = 0
     blockno = 1
     wts_blowup = false
     change = 0.0
-    nochange = 1E-7
     oldchange = 0.0
     degconst = 180.0 / π
     angledelta = 0.0
     olddelta = zeros(n_channels_square)
     delta = zeros(n_channels_square)
 
-    # Constants for learning rate management
-    # MIN_LRATE = 1e-6  # Minimum learning rate
-    # MAX_LRATE = 0.1   # Maximum learning rate
-    DEFAULT_RESTART_FAC = 0.9  # Factor for reducing learning rate on restart
-
+    # TODO: min/max learning rate?
     while step < params.max_iter
 
         randperm!(permute_indices)
@@ -271,7 +217,7 @@ function infomax_ica(
             @views data_block .= dat_ica[:, block_indices]
             mul!(u, weights, data_block)
             @. y = 1 / (1 + exp(-u))
-            weights = weights .+ params.l_rate * (BI + (1 .- 2 * y) * u') .* weights
+            weights = weights + params.l_rate * (BI + (1 .- 2 * y) * u') * weights
 
             if maximum(abs.(weights)) > params.max_weight
                 wts_blowup = true
@@ -304,8 +250,6 @@ function infomax_ica(
             params.l_rate *= params.restart_factor
             weights = copy(startweights)
             oldweights = copy(startweights)
-            prevweights = copy(startweights)
-            prevwtchange = zeros(size(weights))
             continue
         end
 
@@ -338,97 +282,46 @@ function infomax_ica(
 
     end
 
-    weights = weights * sphere * pca_components[:, 1:n_components]'
-    sphere = Matrix{Float64}(I, size(weights)[2], size(weights)[2])
+    if !isnothing(pca_components)
+        weights = weights * sphere * pca_components[:, 1:n_components]'
+    else
+        weights = weights * sphere
+    end
 
     # Calculate mixing matrix (topography)
-    topo = pinv(weights * sphere)
+    sphere = Matrix{Float64}(I, size(weights)[2], size(weights)[2])
+    winv = pinv(weights * sphere)
 
-    # Standardize signs based on maximum absolute value in mixing matrix
-    for i = 1:size(topo, 2)
-        max_abs_idx = argmax(abs.(topo[:, i]))
-        if topo[max_abs_idx, i] < 0
-            topo[:, i] .*= -1
-            weights[i, :] .*= -1
-        end
-    end
-
-    # Rescale mixing matrix if sphering was applied
-    if do_sphering
-        topo .*= scale_factors'
-        weights ./= scale_factors
-    end
-
-    meanvar = sum(topo .^ 2, dims = 1) .* sum((dat_ica') .^ 2, dims = 1) ./ ((n_components * size(dat_ica)[2]) - 1)
+    meanvar = sum(winv .^ 2, dims = 1) .* sum((dat_ica') .^ 2, dims = 1) ./ ((n_components * size(dat_ica)[2]) - 1)
     order = sortperm(vec(meanvar), rev = true)  # Get indices in descending order of meanvar
 
     # Reorder matrices and labels
-    topo = topo[:, order]
     weights = weights[order, :]
-
     unmixing = weights * sphere
-    topo = pinv(unmixing)
+    mixing = pinv(unmixing)
 
     # Generate labels based on actual number of components
-    n_out = size(weights, 1)
-    labels = ["IC$i" for i = 1:n_out]
+    labels = ["IC$i" for i = 1:size(weights, 1)]
 
-    return InfoIca(unmixing, topo, labels)
-end
-
-"""
-    pre_whiten(dat; return_scale=false)
-
-Whiten the data by standardizing each channel.
-
-# Arguments
-- `dat::Matrix{Float64}`: Data matrix (channels × samples)
-- `return_scale::Bool=false`: Whether to return scaling factors
-
-# Returns
-- If return_scale=false: `Matrix{Float64}`: Whitened data
-- If return_scale=true: `Tuple{Matrix{Float64}, Vector{Float64}}`: (Whitened data, scaling factors)
-"""
-function pre_whiten(dat::Matrix{Float64}; return_scale::Bool = false)
-    scale_factors = std(dat, dims = 2)
-    whitened = dat ./ scale_factors
-
-    return return_scale ? (whitened, scale_factors) : whitened
-end
-
-"""
-    rescale_data(dat::Matrix{Float64}, scale_factors::Vector{Float64})
-
-Rescale the data back to original scale after ICA.
-
-# Arguments
-- `dat::Matrix{Float64}`: Data matrix to rescale (channels × samples)
-- `scale_factors::Vector{Float64}`: Original scaling factors from pre_whiten
-
-# Returns
-- `Matrix{Float64}`: Rescaled data
-"""
-function rescale_data(dat::Matrix{Float64}, scale_factors::Vector{Float64})
-    return dat .* scale_factors
+    return InfoIca(weights, sphere, mixing, unmixing, scale, labels, data_labels)
 end
 
 
 
 
-function read_mat_file(filename)
-    file = matopen(filename)
-    dat = read(file)
-    close(file)
-    return dat
-end
-dat = read_mat_file("dat.mat")["dat"]
+# function read_mat_file(filename)
+#     file = matopen(filename)
+#     dat = read(file)
+#     close(file)
+#     return dat
+# end
+# dat = read_mat_file("dat.mat")["dat"]
+# dat = read_mat_file("dat1.mat")["dat"]
+# # @time output = infomax_ica(dat)
+# @time output = infomax_ica(dat, n_components = 68)
+# @time output = infomax_ica(dat, n_components = 10)
 
-# @time output = infomax_ica(dat, extended = false, n_components=68)
-@time output = infomax_ica(dat, extended = false, n_components = 68)
 
-# @time output = infomax_ica(dat, extended = false, n_components = 10)
-#@time output = infomax_ica(dat, extended = true)
-#@time output = infomax_ica(dat, extended = true, n_components = 10)
 
 
 

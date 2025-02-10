@@ -66,9 +66,11 @@ A DataFrame containing summary statistics (min, max, range, std, mad) for each s
 """
 function channel_summary(dat::DataFrame, channel_labels::Vector{<:AbstractString})::DataFrame
     selected_data = select(dat, channel_labels)
-    summary_df = combine(selected_data, names(selected_data) .=> [
-        minimum, maximum, x -> datarange(x), std, mad
-    ] .=> [:min, :max, :range, :std, :mad])
+    summary_df = combine(
+        selected_data,
+        names(selected_data) .=>
+            [minimum, maximum, x -> datarange(x), std, mad] .=> [:min, :max, :range, :std, :mad],
+    )
     return summary_df
 end
 
@@ -110,7 +112,12 @@ Detects EOG (electrooculogram) onsets in the EEG data based on a specified crite
 Nothing. The function modifies the input data in place.
 
 """
-function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Union{Symbol, <:AbstractString}, channel_out::Union{Symbol, String})
+function detect_eog_onsets!(
+    dat::ContinuousData,
+    criterion::Real,
+    channel_in::Union{Symbol,<:AbstractString},
+    channel_out::Union{Symbol,String},
+)
     step_size = div(dat.sample_rate, 20)
     eog_signal = dat.data[1:step_size:end, channel_in]
     eog_diff = diff(eog_signal)
@@ -135,8 +142,12 @@ Checks if any values in the specified columns exceed a given criterion.
 A Boolean indicating whether any extreme values were found.
 
 """
-function is_extreme_value(dat::DataFrame, columns::Union{Vector{Symbol}, Vector{<:AbstractString}}, criterion::Number)::Bool
-    return any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)))
+function is_extreme_value(
+    dat::DataFrame,
+    columns::Union{Vector{Symbol},Vector{<:AbstractString}},
+    criterion::Number,
+)::Vector{Bool}
+    return any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
 """
@@ -153,7 +164,11 @@ Counts the number of extreme values in the specified columns.
 An integer count of the number of extreme values found.
 
 """
-function n_extreme_value(dat::DataFrame, columns::Union{Vector{Symbol}, Vector{<:AbstractString}}, criterion::Number)::Int
+function n_extreme_value(
+    dat::DataFrame,
+    columns::Union{Vector{Symbol},Vector{<:AbstractString}},
+    criterion::Number,
+)::Int
     return sum(abs.(select(dat, columns)) .>= criterion)
 end
 
