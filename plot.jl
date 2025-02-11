@@ -1347,3 +1347,127 @@ end
 function plot_erp_image(dat::EpochData, channel::Union{AbstractString,Symbol})
     plot_erp_image(dat, [channel])
 end
+
+function plot_correlation_heatmap(corr_df::DataFrame, mask_range::Union{Nothing,Tuple{Float64,Float64}} = nothing)
+    """
+    Plot a heatmap of the correlation matrix using Makie.
+
+    Parameters:
+    - corr_df: A DataFrame containing the correlation matrix with row and column names.
+    """
+    # Extract the correlation matrix (excluding the row names column)
+    corr_matrix = Matrix(corr_df[:, 2:end])
+
+    # Mask values within the specified range
+    if !isnothing(mask_range)
+        min_val, max_val = mask_range
+        corr_matrix[(corr_matrix.>=min_val).&(corr_matrix.<=max_val)] .= NaN
+    end
+
+    # Extract row and column names
+    row_names = corr_df[!, :row]
+    col_names = names(corr_df)[2:end]
+
+    # Create the heatmap
+    fig = Figure()
+    ax = Axis(
+        fig[1, 1],
+        xlabel = "Columns",
+        ylabel = "Rows",
+        xticks = (1:length(col_names), col_names),
+        yticks = (1:length(row_names), row_names),
+    )
+    heatmap!(ax, corr_matrix, colormap = :viridis, colorrange = (-1, 1))
+
+    # Add a colorbar
+    Colorbar(fig[1, 2], limits = (-1, 1), label = "Correlation")
+
+    # Display the figure
+    display(fig)
+    return fig, ax
+end
+
+
+
+
+function plot_ica_topoplot(
+    ica,
+    layout;
+    ncomps = nothing,
+    head_kwargs = Dict(),
+    point_kwargs = Dict(),
+    label_kwargs = Dict(),
+    topo_kwargs = Dict(),
+    colorbar_kwargs = Dict(),
+)
+    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+        polar_to_cartesian_xy!(layout)
+    end
+    if isnothing(ncomps)
+        ncomps = size(ica.mixing)[2]
+    end
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+    label_default_kwargs =
+        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+    xoffset = pop!(label_kwargs, :xoffset)
+    yoffset = pop!(label_kwargs, :yoffset)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = pop!(topo_kwargs, :gridscale)
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+    fig = Figure()
+    dims = best_rect(ncomps)
+    count = 1
+    axs = []
+    for dim1 = 1:dims[1]
+        for dim2 = 1:dims[2]
+            ax = Axis(fig[dim1, dim2])
+            push!(axs, ax)
+            count += 1
+            if count > ncomps
+                break
+            end
+        end
+    end
+    count = 1
+
+    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+
+    for ax in axs
+        ax.title = ica.ica_label[count]
+        data = data_interpolation_topo(ica.mixing[:, count], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+        gridscale = gridscale
+        radius = 88 # mm
+        co = contourf!(
+            ax,
+            range(-radius * 2, radius * 2, length = gridscale),
+            range(-radius * 2, radius * 2, length = gridscale),
+            data,
+            colormap = :jet,
+        )
+        # TODO: improve colorbar stuff
+        # if plot_colorbar
+        #     Colorbar(ax, co; colorbar_kwargs...)
+        # end
+        # head shape
+        head_shape_2d(
+            fig,
+            ax,
+            layout,
+            head_kwargs = head_kwargs,
+            point_kwargs = point_kwargs,
+            label_kwargs = label_kwargs,
+        )
+        count += 1
+        if count > ncomps
+            break
+        end
+    end
+    return fig
+end
