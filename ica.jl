@@ -149,11 +149,36 @@ Perform Infomax ICA decomposition on EEG data using the algorithm from EEGLAB's 
   - `unmixing`: Unmixing matrix (weights)
   - `label`: Component labels
 """
+
+
+function create_ica_data_matrix(dat::ContinuousData; channels_to_include = nothing, samples_to_include = nothing)
+    if isnothing(channels_to_include)
+        channels_to_include = dat.layout.label
+    end
+    if isnothing(samples_to_include)
+        samples_to_include = dat.data.sample
+    end
+    return permutedims(Matrix(dat.data[samples_to_include, intersect(names(dat.data), channels_to_include)]))
+end
+
+
+function infomax_ica(
+    dat::ContinuousData,
+    data_labels;
+    n_components::Union{Nothing,Int} = nothing,
+    params::IcaPrms = IcaPrms(),
+)
+    # select actual eeg data columns
+    dat = permutedims(Matrix(dat.data[!, intersect(names(dat.data), data_labels)]))
+    return infomax_ica(dat, data_labels, params = params, n_components = n_components)
+end
+
+
 function infomax_ica(
     dat::Matrix{Float64},
     data_labels;
-    params::IcaPrms = IcaPrms(),
     n_components::Union{Nothing,Int} = nothing,
+    params::IcaPrms = IcaPrms(),
 )
 
     dat_ica = copy(dat)
@@ -305,26 +330,3 @@ function infomax_ica(
 
     return InfoIca(weights, sphere, mixing, unmixing, scale, labels, data_labels)
 end
-
-
-
-
-# function read_mat_file(filename)
-#     file = matopen(filename)
-#     dat = read(file)
-#     close(file)
-#     return dat
-# end
-# dat = read_mat_file("dat.mat")["dat"]
-# dat = read_mat_file("dat1.mat")["dat"]
-# # @time output = infomax_ica(dat)
-# @time output = infomax_ica(dat, n_components = 68)
-# @time output = infomax_ica(dat, n_components = 10)
-
-
-
-
-
-
-
-

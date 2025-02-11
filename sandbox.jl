@@ -29,21 +29,6 @@ include("topo.jl")
 include("utils.jl")
 include("ica.jl")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # include("test/runtests.jl")
 # test_baseline()
 # test_filter()
@@ -58,27 +43,54 @@ include("ica.jl")
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
+polar_to_cartesian_xy!(layout)
+polar_to_cartesian_xyz!(layout)
+neighbours, nneighbours = get_electrode_neighbours_xy(layout, 50)
+neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40)
+
 #head_shape_2d(layout)
 #head_shape_2d(layout, point_kwargs = Dict(:markersize => 30), label_kwargs = Dict(:fontsize => 30, :xoffset => 1))
 #layout = filter(row -> row.label in ["PO7", "PO8"], layout)
-#head_shape_2d(layout)
+head_shape_2d(layout)
 #head_shape_3d(layout);
 
 # read bdf file
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
-plot_events(dat)
+
+# save / load
+# save_object("$(subject)_continuous_raw.jld2", dat)
+# dat = load_object("3_continuous_raw.jld2")
+
+# plot_events(dat)
 dat = create_eeg_dataframe(dat, layout);
-filter_data!(dat, "hp", 0.1, 2)
-plot_events(dat)
+# save_object("$(subject)_continuous_raw_eegfun.jld2", dat)
+# dat = load_object("3_continuous_raw.jld2")
 
-
-
-# basic bdf plot
-# plot_databrowser(dat)
-rereference!(dat.data, dat.layout.label, dat.layout.label)
 # rereference!(dat.data, dat.layout.label, :Fp1)
-# plot_databrowser(dat)
+rereference!(dat.data, dat.layout.label, dat.layout.label)
+plot_databrowser(dat)
+
+filter_data!(dat, "hp", 0.1, 2)
+plot_databrowser(dat)
+
+
+# plot_events(dat)
+
+# # # search for some bad channels
+channel_data = channel_summary(dat.data, dat.layout.label[1:66])
+channel_data = channel_summary(dat.data, dat.layout.label)
+
+
+# # # bad channels zscore variance
+# # c[!, :channel][c[!, :zvar].>3]
+# c = channel_joint_probability(dat.data, dat.layout.label[1:66])
+# # lines(c[!, :jp])
+cm = correlation_matrix(dat.data, dat.layout.label)
+plot_correlation_heatmap(cm)
+plot_correlation_heatmap(cm, (-0.2, 0.2))
+
+# TODO: add neighbour correlation values
 
 # filter_data!(dat, "lp", 10, 6)
 # include("plot.jl")
@@ -89,154 +101,74 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
-dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 100);
+# TODO: this seems a bit inconsistent with functions above
+dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 500);
 
+
+# ICA "continuous" data
 dat_ica = filter_data(dat, "hp", 1, 2)
-output = infomax_ica(permutedims(Float64.(Matrix(dat_ica.data[:, 3:74]))), dat.layout.label, n_components = 71)
+
+dat_ica = create_ica_data_matrix(dat_ica)
+dat_ica = create_ica_data_matrix(dat_ica; channels_to_include = setdiff(dat_ica.layout.label, ["PO9"]))
+# dat_ica = create_ica_data_matrix(dat, dat.layout.label, 1:10)
 
 
+ica_result = infomax_ica(dat_ica, setdiff(dat.layout.label, ["PO9"]), n_components = 70)
+plot_ica_topoplot(ica_result, dat.layout)
 
-
-
-plot_ica_topoplot(output, dat.layout, ncomps = 4)
-
-function plot_ica_topoplot(
-    ica,
-    layout;
-    ncomps = nothing,
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    topo_kwargs = Dict(),
-    colorbar_kwargs = Dict(),
-)
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-    if isnothing(ncomps)
-        ncomps = size(ica.mixing)[2]
-    end
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    head_kwargs = merge(head_default_kwargs, head_kwargs)
-    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-    label_default_kwargs =
-        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-    xoffset = pop!(label_kwargs, :xoffset)
-    yoffset = pop!(label_kwargs, :yoffset)
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
-    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = pop!(topo_kwargs, :gridscale)
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
-    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
-    fig = Figure()
-    dims = best_rect(ncomps)
-    count = 1
-    axs = []
-    for dim1 = 1:dims[1]
-        for dim2 = 1:dims[2]
-            ax = Axis(fig[dim1, dim2])
-            push!(axs, ax)
-            count += 1
-            if count > ncomps
-                break
-            end
-        end
-    end
-    count = 1
-    for ax in axs
-        ax.title = ica.ica_label[count]
-        data = data_interpolation_topo(ica.mixing[:, count], permutedims(Matrix(layout[!, [:x2, :y2]])), gridscale)
-        gridscale = gridscale
-        radius = 88 # mm
-        co = contourf!(
-            ax,
-            range(-radius * 2, radius * 2, length = gridscale),
-            range(-radius * 2, radius * 2, length = gridscale),
-            data,
-            colormap = :jet,
-        )
-        # TODO: improve colorbar stuff
-        # if plot_colorbar
-        #     Colorbar(ax, co; colorbar_kwargs...)
-        # end
-        # head shape
-        head_shape_2d(
-            fig,
-            ax,
-            layout,
-            head_kwargs = head_kwargs,
-            point_kwargs = point_kwargs,
-            label_kwargs = label_kwargs,
-        )
-        count += 1
-        if count > ncomps
-            break
-        end
-    end
-    return fig
-end
-
-# interpolate data
-
-
-
-
-
-
-
-# size(dat_ica.data)
-
-# data_whitened = pre_whiten(Float64.(transpose(Matrix(dat.data[!, 3:end-4]))))
-# Run ICA
-# weights = infomax_ica(data_whitened, extended=true)
-# Get independent components
-# components = weights * data_whitened
+# or with bad electrode removed
+tmp = dat_ica.data[dat_ica.data[!, "is_extreme"].==false, [4:65; 67:75]]
+ica_result = infomax_ica(permutedims(Float64.(Matrix(tmp))), dat.layout.label[[1:64; 66:72]], n_components = 10)
+plot_ica_topoplot(ica_result, dat.layout)
 
 
 # Continuous Data Browser
 # TODO: Labels position when changing x-range
 # TODO: Improve logic of plotting marker (triggers/EOG) lines?
-plot_databrowser(dat_ica)
+# plot_databrowser(dat_ica)
 # plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
 # plot_databrowser(dat, ["vEOG", "hEOG"])
 # plot_databrowser(dat, "hEOG")
 
 # extract epochs
-epochs = extract_epochs(dat, 1, -0.5, 2)
-epochs_cleaned = remove_bad_epochs(epochs)
+epochs = []
+for (idx, epoch) in enumerate([1, 4, 5, 3])
+    push!(epochs, extract_epochs(dat_ica, idx, epoch, -0.5, 2))
+end
+
+# concat data from all epochs
+tmp = vcat([vcat(epochs[i].data[:]...) for i in eachindex(epochs)]...)
+
+output = infomax_ica(permutedims(Float64.(Matrix(tmp[:, 6:77]))), dat.layout.label, n_components = 71)
+plot_ica_topoplot(output, dat.layout)
+
+# epochs_cleaned = remove_bad_epochs(epochs)
 
 # Epoch Data Browser
-plot_databrowser(epochs)
-plot_databrowser(epochs, [epochs.layout.label; "hEOG"; "vEOG"])
-plot_databrowser(epochs, ["hEOG", "vEOG"])
-# plot_databrowser(epochs, "hEOG")
+plot_databrowser(epochs[1])
+plot_databrowser(epochs[1], [epochs[1].layout.label; "hEOG"; "vEOG"])
 
-plot_epochs(epochs, [:Fp1])
-# # Plot Epochs (all)
-plot_epochs(epochs, :Fp1)
+plot_epochs(epochs[1], [:Fp1])
+plot_epochs(epochs[1], :Fp1)
 # plot_epochs(epochs, "Fp1")
-plot_epochs(epochs, ["PO7", "PO8"])
+plot_epochs(epochs[1], ["PO7", "PO8"])
 
 # average epochs
-erp = average_epochs(epochs)
-erp_cleaned = average_epochs(epochs_cleaned)
-
-plot_erp(erp)
-plot_erp(erp_cleaned)
+erps = []
+for (idx, epoch) in enumerate(epochs)
+    push!(erps, average_epochs(epochs[idx]))
+end
 
 # ERP Plot
 # f, ax = plot_erp(erp, :Fp1)
-plot_erp(erp, ["Fp1"])
+plot_erp(erps[1], ["Fp1", "Fp2"])
 # plot_erp(erp, [:Fp1, :Fp2])
 # plot_erp(erp, ["Fp1", "Fp2"])
-# plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:yreversed => true))
+plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:yreversed => true))
 
 # Topoplot
 include("topo.jl")
-plot_topoplot(erp)
+plot_topoplot(erp, xlim = [0.3, 0.3], ylim = [-10, 10])
 plot_topoplot(erp; method = :spherical_splines)
 
 # ERP Image
@@ -333,12 +265,6 @@ end
 grand_average_erps([3, 4], 1)
 
 
-
-
-dat = read_bdf("../Flank_C_3.bdf")
-dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-epochs = extract_epochs(dat, 1, -0.5, 2)
-plot_epoch(epochs, 1:10, ["Cz", "CPz"], legend = false)
 
 
 ########################################################################
