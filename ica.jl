@@ -1,4 +1,3 @@
-# using CairoMakie
 using BioSemiBDF
 using CSV
 using DataFrames
@@ -6,7 +5,6 @@ using DSP
 using GLMakie
 using LibGEOS
 using LinearAlgebra
-using MAT
 using OrderedCollections
 using Random
 using Statistics
@@ -43,34 +41,35 @@ mutable struct IcaPrms
     restart_factor::Float64
     degconst::Float64
     default_stop::Float64
+end
 
-    function IcaPrms(;
-        l_rate = 0.001,
-        max_iter = 512,
-        w_change = 1e-6,
-        anneal_deg = 60.0,
-        anneal_step = 0.9,
-        blowup = 1e15,
-        blowup_fac = 0.8,
-        max_weight = 1e8,
-        restart_factor = 0.9,
-        degconst = 180.0 / π,
-        default_stop = 1e-6,
+# Outer constructor with default values
+function IcaPrms(;
+    l_rate = 0.001,
+    max_iter = 512,
+    w_change = 1e-6,
+    anneal_deg = 60.0,
+    anneal_step = 0.9,
+    blowup = 1e15,
+    blowup_fac = 0.8,
+    max_weight = 1e8,
+    restart_factor = 0.9,
+    degconst = 180.0 / π,
+    default_stop = 1e-6
+)
+    IcaPrms(
+        l_rate,
+        max_iter,
+        w_change,
+        anneal_deg,
+        anneal_step,
+        blowup,
+        blowup_fac,
+        max_weight,
+        restart_factor,
+        degconst,
+        default_stop
     )
-        new(
-            l_rate,
-            max_iter,
-            w_change,
-            anneal_deg,
-            anneal_step,
-            blowup,
-            blowup_fac,
-            max_weight,
-            restart_factor,
-            degconst,
-            default_stop,
-        )
-    end
 end
 
 """
@@ -150,16 +149,27 @@ Perform Infomax ICA decomposition on EEG data using the algorithm from EEGLAB's 
   - `label`: Component labels
 """
 
-
-function create_ica_data_matrix(dat::ContinuousData; channels_to_include = nothing, samples_to_include = nothing)
-    if isnothing(channels_to_include)
-        channels_to_include = dat.layout.label
-    end
-    if isnothing(samples_to_include)
-        samples_to_include = dat.data.sample
-    end
-    return permutedims(Matrix(dat.data[samples_to_include, intersect(names(dat.data), channels_to_include)]))
+function to_data_frame(dat::EpochData)
+    return vcat(dat.data...)
 end
+
+function to_data_frame(dat::Vector{EpochData})
+    return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
+end
+
+function create_ica_data_matrix(dat::DataFrame, channels; samples_to_include = nothing)
+    if isnothing(samples_to_include)
+        samples_to_include = dat.sample
+    end
+    dat = dat[samples_to_include, :]
+    # need to make sure we have unique samples as with longer epochs there is potential for overlap
+    dat = unique(dat, :sample)
+    # select only the channels we want
+    dat = dat[!, intersect(names(dat), channels)]
+    return permutedims(Matrix(dat))
+end
+
+
 
 
 function infomax_ica(
@@ -180,153 +190,184 @@ function infomax_ica(
     n_components::Union{Nothing,Int} = nothing,
     params::IcaPrms = IcaPrms(),
 )
+    # Preprocessing - minimize copies
+    dat_ica = demean(dat)
+    scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
+    dat_ica ./= scale
 
-    dat_ica = copy(dat)
-    dat_ica = demean(dat_ica)
-    dat_ica, scale = scale_data(dat_ica)
-
-    # Apply PCA reduction if n_components is specified
+    # PCA reduction - optimize memory usage
     if !isnothing(n_components)
-        # Compute SVD directly on centered data for efficiency
         F = svd(dat_ica)
-        # Take only the first n_components
         dat_ica = F.U[:, 1:n_components]' * dat_ica
-        # Store PCA components for later reconstruction
-        pca_components = F.U[:, 1:n_components] # eigenvectors
+        pca_components = view(F.U, :, 1:n_components)
     else
-        pca_components = nothing
         n_components = size(dat_ica, 1)
+        pca_components = nothing
     end
 
-    # Sphering 
-    sphere, scale_factors = compute_sphere_matrix(dat_ica)
-    dat_ica = apply_sphering!(dat_ica, sphere)
+    # Sphering - optimize computation
+    sphere = 2.0 * inv(sqrt(cov(dat_ica, dims=2)))
+    mul!(dat_ica, sphere, dat_ica)
 
-    # Pre-allocate all matrices and temporaries
+    # Pre-allocate with exact sizes
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
-    n_channels_square = n_channels^2
-    block = Int(floor(sqrt(n_samples / 3.0)))
-    nblock = div(n_samples, block)
-    lastt = (nblock - 1) * block + 1
+    block = min(Int(floor(sqrt(n_samples / 3.0))), 512) # Cap block size
+    lastt = block * div(n_samples, block)
 
-    # Pre-allocate workspace arrays
-    weights = Matrix{Float64}(I, n_components, n_components)
-    BI = block * Matrix{Float64}(I, n_channels, n_channels)
-    u = zeros(n_channels, block)
-    y = similar(u)
-    data_block = zeros(n_channels, block)
-    oldweights = copy(weights)
-    startweights = copy(weights)
+    # Pre-allocate all arrays in a single struct for better cache locality
+    mutable struct WorkArrays
+        weights::Matrix{Float64}
+        BI::Matrix{Float64}
+        u::Matrix{Float64}
+        y::Matrix{Float64}
+        data_block::Matrix{Float64}
+        oldweights::Matrix{Float64}
+        startweights::Matrix{Float64}
+        weights_temp::Matrix{Float64}
+        y_temp::Matrix{Float64}
+        bi_weights::Matrix{Float64}
+        wu_term::Matrix{Float64}
+        delta::Matrix{Float64}
+        olddelta::Matrix{Float64}
+    end
+
+    work = WorkArrays(
+        Matrix{Float64}(I, n_components, n_components),  # weights
+        block * Matrix{Float64}(I, n_channels, n_channels),  # BI
+        zeros(n_channels, block),  # u
+        zeros(n_channels, block),  # y
+        zeros(n_channels, block),  # data_block
+        copy(Matrix{Float64}(I, n_components, n_components)),  # oldweights
+        copy(Matrix{Float64}(I, n_components, n_components)),  # startweights
+        similar(Matrix{Float64}(I, n_components, n_components)),  # weights_temp
+        zeros(n_channels, block),  # y_temp
+        similar(Matrix{Float64}(I, n_components, n_components)),  # bi_weights
+        similar(Matrix{Float64}(I, n_components, n_components)),  # wu_term
+        zeros(1, n_channels^2),  # delta
+        zeros(1, n_channels^2)   # olddelta
+    )
+
+    # Pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
 
-    # Initialize training variables
+    # Training variables
     step = 0
-    blockno = 1
     wts_blowup = false
     change = 0.0
     oldchange = 0.0
-    degconst = 180.0 / π
     angledelta = 0.0
-    olddelta = zeros(n_channels_square)
-    delta = zeros(n_channels_square)
 
-    # TODO: min/max learning rate?
-    while step < params.max_iter
-
+    # Main loop with optimizations
+    @inbounds while step < params.max_iter
         randperm!(permute_indices)
 
-        for t = 1:block:lastt
+        @inbounds for t = 1:block:lastt
+            block_end = min(t + block - 1, n_samples)
+            block_size = block_end - t + 1
+            
+            # Use direct indexing instead of views where possible
+            @simd for i in 1:n_channels
+                @simd for j in 1:block_size
+                    work.data_block[i,j] = dat_ica[i, permute_indices[t+j-1]]
+                end
+            end
+            
+            # Optimized matrix operations
+            mul!(work.u, work.weights, work.data_block)
+            
+            # Vectorized operations
+            @simd for i in eachindex(work.u)
+                work.y[i] = 1 / (1 + exp(-work.u[i]))
+                work.y_temp[i] = 1 - 2work.y[i]
+            end
 
-            block_indices = permute_indices[t:min(t + block - 1, end)]
-            @views data_block .= dat_ica[:, block_indices]
-            mul!(u, weights, data_block)
-            @. y = 1 / (1 + exp(-u))
-            weights = weights + params.l_rate * (BI + (1 .- 2 * y) * u') * weights
+            mul!(work.wu_term, work.y_temp, work.u')
+            
+            @simd for i in eachindex(work.bi_weights)
+                work.bi_weights[i] = work.BI[i] + work.wu_term[i]
+            end
+            
+            mul!(work.weights_temp, work.bi_weights, work.weights)
+            
+            @simd for i in eachindex(work.weights)
+                work.weights[i] += params.l_rate * work.weights_temp[i]
+            end
 
-            if maximum(abs.(weights)) > params.max_weight
+            if maximum(abs, work.weights) > params.max_weight
                 wts_blowup = true
                 change = NaN
                 break
             end
-
-            blockno += 1
-
         end
 
+        # Weight updates using pre-allocated arrays
         if !wts_blowup
-
-            oldwtchange = weights - oldweights
+            @. work.oldweights = work.weights - work.oldweights
             step += 1
-
-            # Compute and print weight and update angle changes
-            angledelta = 0.0
-            delta = reshape(oldwtchange, 1, n_channels * n_channels)
-            change = dot(delta, delta)
+            copyto!(work.delta, reshape(work.oldweights, 1, :))
+            change = dot(work.delta, work.delta)
         end
 
-        # Handle weight blowup
+        # Handle blowup with minimal allocations
         if wts_blowup || isnan(change) || isinf(change)
-            @warn "Weight blowup detected - reducing learning rate and restarting"
             step = 0
             change = NaN
             wts_blowup = false
-            blockno = 1
             params.l_rate *= params.restart_factor
-            weights = copy(startweights)
-            oldweights = copy(startweights)
+            copyto!(work.weights, work.startweights)
+            copyto!(work.oldweights, work.startweights)
             continue
         end
 
-        # Compute angle change (matching MATLAB)
+        # Angle calculations with pre-allocated arrays
         if step > 2
-            angledelta = acos(dot(delta, olddelta) / sqrt(change * oldchange))
-        end
-        log_progress(step, change, params.l_rate, degconst * angledelta)
-
-        # Compute weight changes matching MATLAB implementation
-        oldweights = copy(weights)
-
-        if step > 2
-            if degconst * angledelta > params.anneal_deg
+            angledelta = acos(clamp(dot(work.delta, work.olddelta) / sqrt(change * oldchange), -1, 1))
+            if params.degconst * angledelta > params.anneal_deg
                 params.l_rate *= params.anneal_step
-                olddelta = copy(delta)
+                copyto!(work.olddelta, work.delta)
                 oldchange = change
             end
         elseif step == 1
-            olddelta = copy(delta)
+            copyto!(work.olddelta, work.delta)
             oldchange = change
         end
 
+        copyto!(work.oldweights, work.weights)
+
+        # Convergence checks
         if step > 2 && change < params.w_change
-            @info "Weights stabilized - stopping at step $step"
             break
-        elseif change > params.blowup      # if weights blow up,
-            params.l_rate = params.l_rate * DEFAULT_BLOWUP_FAC    # keep trying
+        elseif change > params.blowup
+            params.l_rate *= params.blowup_fac
         end
 
+        log_progress(step, change, params.l_rate, params.degconst * angledelta)
     end
 
+    # Final optimized calculations
     if !isnothing(pca_components)
-        weights = weights * sphere * pca_components[:, 1:n_components]'
+        work.weights = work.weights * sphere * pca_components'
     else
-        weights = weights * sphere
+        work.weights = work.weights * sphere
     end
 
-    # Calculate mixing matrix (topography)
-    sphere = Matrix{Float64}(I, size(weights)[2], size(weights)[2])
-    winv = pinv(weights * sphere)
-
-    meanvar = sum(winv .^ 2, dims = 1) .* sum((dat_ica') .^ 2, dims = 1) ./ ((n_components * size(dat_ica)[2]) - 1)
-    order = sortperm(vec(meanvar), rev = true)  # Get indices in descending order of meanvar
-
-    # Reorder matrices and labels
-    weights = weights[order, :]
-    unmixing = weights * sphere
+    sphere_final = Matrix{Float64}(I, size(work.weights, 2), size(work.weights, 2))
+    unmixing = work.weights * sphere_final
     mixing = pinv(unmixing)
 
-    # Generate labels based on actual number of components
-    labels = ["IC$i" for i = 1:size(weights, 1)]
+    # Optimized variance calculation
+    meanvar = vec(sum(abs2, mixing, dims=1) .* sum(abs2, dat_ica, dims=2)' ./ (n_components * n_samples - 1))
+    order = sortperm(meanvar, rev=true)
 
-    return InfoIca(weights, sphere, mixing, unmixing, scale, labels, data_labels)
+    return InfoIca(
+        work.weights[order, :],
+        sphere_final,
+        mixing[:, order],
+        unmixing[order, :],
+        scale,
+        ["IC$i" for i in 1:size(work.weights, 1)],
+        data_labels
+    )
 end
+

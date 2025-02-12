@@ -3,11 +3,9 @@ using CSV
 using DSP
 using DataFrames
 using GLMakie
-# using CairoMakie
 using JLD2
 using LibGEOS
 using LinearAlgebra
-using MAT
 using OrderedCollections
 using Printf
 using Random
@@ -28,6 +26,7 @@ include("rereference.jl")
 include("topo.jl")
 include("utils.jl")
 include("ica.jl")
+include("viewer.jl")
 
 # include("test/runtests.jl")
 # test_baseline()
@@ -57,6 +56,7 @@ head_shape_2d(layout)
 # read bdf file
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
+viewer(dat)
 
 # save / load
 # save_object("$(subject)_continuous_raw.jld2", dat)
@@ -64,22 +64,25 @@ dat = read_bdf("../Flank_C_$(subject).bdf");
 
 # plot_events(dat)
 dat = create_eeg_dataframe(dat, layout);
+viewer(dat) # requires vscode
+head(dat) # requires vscode
 # save_object("$(subject)_continuous_raw_eegfun.jld2", dat)
 # dat = load_object("3_continuous_raw.jld2")
 
 # rereference!(dat.data, dat.layout.label, :Fp1)
-rereference!(dat.data, dat.layout.label, dat.layout.label)
-plot_databrowser(dat)
+rereference!(dat, dat.layout.label, dat.layout.label)
+# plot_databrowser(dat)
 
 filter_data!(dat, "hp", 0.1, 2)
-plot_databrowser(dat)
+# plot_databrowser(dat)
 
 
 # plot_events(dat)
 
-# # # search for some bad channels
+# search for some bad channels
 channel_data = channel_summary(dat.data, dat.layout.label[1:66])
 channel_data = channel_summary(dat.data, dat.layout.label)
+viewer(channel_data)
 
 
 # # # bad channels zscore variance
@@ -87,8 +90,9 @@ channel_data = channel_summary(dat.data, dat.layout.label)
 # c = channel_joint_probability(dat.data, dat.layout.label[1:66])
 # # lines(c[!, :jp])
 cm = correlation_matrix(dat.data, dat.layout.label)
+# view(cm)
 plot_correlation_heatmap(cm)
-plot_correlation_heatmap(cm, (-0.2, 0.2))
+plot_correlation_heatmap(cm, (-0.9, 0.9))
 
 # TODO: add neighbour correlation values
 
@@ -108,18 +112,14 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 500);
 # ICA "continuous" data
 dat_ica = filter_data(dat, "hp", 1, 2)
 
-dat_ica = create_ica_data_matrix(dat_ica)
-dat_ica = create_ica_data_matrix(dat_ica; channels_to_include = setdiff(dat_ica.layout.label, ["PO9"]))
-# dat_ica = create_ica_data_matrix(dat, dat.layout.label, 1:10)
+good_samples = findall(dat_ica.data[!, :is_extreme] .== false)
+good_channels = setdiff(dat_ica.layout.label, ["PO9"])
 
 
-ica_result = infomax_ica(dat_ica, setdiff(dat.layout.label, ["PO9"]), n_components = 70)
+dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
+@time ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels)-1)
 plot_ica_topoplot(ica_result, dat.layout)
 
-# or with bad electrode removed
-tmp = dat_ica.data[dat_ica.data[!, "is_extreme"].==false, [4:65; 67:75]]
-ica_result = infomax_ica(permutedims(Float64.(Matrix(tmp))), dat.layout.label[[1:64; 66:72]], n_components = 10)
-plot_ica_topoplot(ica_result, dat.layout)
 
 
 # Continuous Data Browser
@@ -131,16 +131,35 @@ plot_ica_topoplot(ica_result, dat.layout)
 # plot_databrowser(dat, "hEOG")
 
 # extract epochs
-epochs = []
+epochs = EpochData[]
 for (idx, epoch) in enumerate([1, 4, 5, 3])
-    push!(epochs, extract_epochs(dat_ica, idx, epoch, -0.5, 2))
+    push!(epochs, extract_epochs(dat_ica, idx, epoch, -2, 4))
 end
 
-# concat data from all epochs
-tmp = vcat([vcat(epochs[i].data[:]...) for i in eachindex(epochs)]...)
+# view(epochs)
+# view(epochs[1])
 
-output = infomax_ica(permutedims(Float64.(Matrix(tmp[:, 6:77]))), dat.layout.label, n_components = 71)
-plot_ica_topoplot(output, dat.layout)
+df = to_data_frame(epochs)
+
+good_samples = findall(df[!, :is_extreme] .== false)
+good_channels = setdiff(dat_ica.layout.label, ["PO9"])
+
+
+dat_for_ica = create_ica_data_matrix(df, good_channels, samples_to_include = good_samples)
+
+
+# Subset the DataFrame where the 'category' column contains an item in the vector
+subset_df = dat.layout[in.(dat.layout.label, Ref(good_channels)), :]
+
+
+
+output = infomax_ica(dat_for_ica, dat.layout.label, n_components = length(good_channels)-1)
+plot_ica_topoplot(output, subset_df)
+
+
+
+
+
 
 # epochs_cleaned = remove_bad_epochs(epochs)
 

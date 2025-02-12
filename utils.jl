@@ -11,7 +11,6 @@ Check if files exist for all given conditions with specified filetype.
 - `Bool`: true if all files exist, false otherwise
 """
 function check_files_exist(conditions::Union{Vector{Int},Int}, filetype::String)
-    all_files_exist = true
     for condition in conditions
         fname = "$(condition)_$(filetype).jld2"
         if !isfile(fname)
