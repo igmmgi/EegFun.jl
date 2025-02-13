@@ -115,9 +115,9 @@ dat_ica = filter_data(dat, "hp", 1, 2)
 good_samples = findall(dat_ica.data[!, :is_extreme] .== false)
 good_channels = setdiff(dat_ica.layout.label, ["PO9"])
 
-
+include("ica.jl")
 dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
-@time ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels)-1)
+@time ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1)
 plot_ica_topoplot(ica_result, dat.layout)
 
 
@@ -153,7 +153,7 @@ subset_df = dat.layout[in.(dat.layout.label, Ref(good_channels)), :]
 
 
 
-output = infomax_ica(dat_for_ica, dat.layout.label, n_components = length(good_channels)-1)
+@time output = infomax_ica(dat_for_ica, dat.layout.label, n_components = length(good_channels) - 1)
 plot_ica_topoplot(output, subset_df)
 
 

@@ -55,3 +55,76 @@
 #     return tf_trials, times[tois_idx], freqs
 # 
 # end
+
+# older implementation
+# function tf_hanning(signal, times, sample_rate, frequencies, time_steps; window_length = nothing, cycles = nothing)
+#     if isnothing(window_length) && isnothing(cycles)
+#         throw(ArgumentError("Must specify either window_length or cycles"))
+#     end
+# 
+#     # Convert time_steps to indices
+#     tois_idx = [findfirst(≈(t, atol = (1000 / sample_rate) / 1000), times) for t in time_steps]
+# 
+#     # Pre-allocate output and temporary arrays
+#     n_frex = length(frequencies)
+#     n_timepoints = length(time_steps)
+#     n_trials = size(signal, 2)
+#     tf_trials = zeros(n_frex, n_timepoints, n_trials)
+# 
+#     # Pre-compute maximum window length for pre-allocation
+#     max_timewinidx = if !isnothing(cycles)
+#         round(Int, cycles / minimum(frequencies) * sample_rate)
+#     else
+#         round(Int, window_length * sample_rate)
+#     end
+#     max_timewinidx += iseven(max_timewinidx)
+# 
+#     # Pre-allocate reusable arrays outside all loops
+#     tmpdat = zeros(max_timewinidx, n_trials)
+#     fdat = zeros(ComplexF64, max_timewinidx, n_trials)
+# 
+#     for (fi, freq) in enumerate(frequencies)
+#         # Calculate frequency-dependent or fixed window length
+#         timewinidx = if !isnothing(cycles)
+#             round(Int, cycles / freq * sample_rate)
+#         else
+#             round(Int, window_length * sample_rate)
+#         end
+#         timewinidx += iseven(timewinidx)
+# 
+#         # Pre-compute window and frequency index for this frequency
+#         hann_win = 0.5 * (1 .- cos.(2π * (0:timewinidx-1) / (timewinidx - 1)))
+#         frex_idx = round(Int, freq * timewinidx / sample_rate) + 1
+# 
+#         for (timepointi, center_idx) in enumerate(tois_idx)
+#             # Calculate window indices
+#             half_win = fld(timewinidx, 2)
+#             start_idx = center_idx - half_win
+#             end_idx = center_idx + half_win
+# 
+#             # Handle edge cases and data extraction in one step
+#             fill!(view(tmpdat, 1:timewinidx, :), 0)
+#             if start_idx < 1 || end_idx > size(signal, 1)
+#                 pad_left = max(1 - start_idx, 0)
+#                 valid_start = max(start_idx, 1)
+#                 valid_end = min(end_idx, size(signal, 1))
+#                 valid_length = valid_end - valid_start + 1
+#                 tmpdat[(pad_left+1):(pad_left+valid_length), :] = view(signal, valid_start:valid_end, :)
+#             else
+#                 tmpdat[1:timewinidx, :] = view(signal, start_idx:end_idx, :)
+#             end
+# 
+#             # Apply Hanning taper and compute FFT in-place
+#             tmpdat[1:timewinidx, :] .*= hann_win
+#             fdat[1:timewinidx, :] = tmpdat[1:timewinidx, :]
+#             fft!(view(fdat, 1:timewinidx, :), 1)  # FFT along time dimension
+# 
+#             # Store power for all trials at once
+#             tf_trials[fi, timepointi, :] = abs2.(fdat[frex_idx, :]) ./ timewinidx^2
+#         end
+#     end
+# 
+#     return tf_trials, times[tois_idx], frequencies
+# end
+
+

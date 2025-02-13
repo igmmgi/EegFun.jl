@@ -275,3 +275,11 @@ find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
 find_idx_start_end(time::AbstractVector, limits::AbstractVector) =
     findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
 
+
+
+function detrend(x, y)
+    X = hcat(ones(length(x)), x)  # Design matrix (with intercept)
+    β = X \ y  # Solve for coefficients (m, b)
+    return y - (X * β)
+end
+
