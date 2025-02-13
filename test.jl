@@ -99,7 +99,6 @@ function myfft(signal)
     end
     return fourier
 end
-
 sample_rate = 1000
 times = 0:(1/sample_rate):2
 amps = [1, 0.5]
@@ -355,176 +354,6 @@ signal_filtered = filtfilt(filter_low, signal_filtered)
 lines!(ax, signal_filtered)
 
 
-
-
-find_idx_start_end(time, limits) = findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
-
-
-
-# Figure 13.11
-function tf_morlet(signal, times, sample_rate, freqs, cycles; tois = nothing)
-
-    # data dimensions
-    n_samples, n_trials = size(signal)
-    n_freq = length(freqs)
-
-    tois_idx = 1:n_samples
-    if !isnothing(tois)
-        tois_idx = [findfirst(≈(t, atol = (1000 / sample_rate) / 1000), times) for t in tois]
-    end
-
-    # reshape signal
-    signal = reshape(signal, length(signal), 1)
-    freqs = exp.(range(log(freqs[1]), log(freqs[end]), length = n_freq))
-
-    wavelet_time = -2:(1/sample_rate):2
-    if length(cycles) == 1
-        cycles = cycles[1] ./ (2 * pi .* freqs) # variable cycles/frequency
-    else
-        cycles = exp.(range(log(cycles[1]), log(cycles[end]), length = n_freq)) ./ (2 * pi .* freqs) # variable cycles/frequency
-    end
-
-    n_convolution = length(wavelet_time) + length(signal) - 1
-    n_conv_pow2 = nextpow(2, n_convolution)
-    half_of_wavelet_size = floor(Int, (length(wavelet_time) - 1) / 2)
-    signal_fft = fft([signal; zeros(n_conv_pow2 - length(signal))])
-
-    tf_trials = zeros(n_freq, length(tois_idx), n_trials)
-    @inbounds for idx_freq in eachindex(freqs)
-        wavelet =
-            sqrt(1 ./ (cycles[idx_freq] .* sqrt(pi))) .* exp.(2 * im * pi * freqs[idx_freq] .* wavelet_time) .*
-            exp.(-wavelet_time .^ 2 ./ (2 * (cycles[idx_freq] .^ 2)))
-
-        wavelet_fft = fft([wavelet; zeros(n_conv_pow2 - length(wavelet))])
-
-        # convolution
-        eegconv = ifft(wavelet_fft .* signal_fft)[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
-
-        # reshape to original signal size
-        eegconv = reshape(eegconv, n_samples, n_trials)
-
-        @views tf_trials[idx_freq, :, :] = abs2.(eegconv)[tois_idx, :]
-    end
-
-    return tf_trials, times[tois_idx], freqs
-
-end
-
-function apply_tf_baseline_db(tf_data, times, baseline_window)
-    base_idx = findall(x -> baseline_window[1] ≤ x ≤ baseline_window[2], times)
-    baseline_power = mean(tf_data[:, base_idx], dims = 2)
-    tf_corrected = 10 .* log10.(tf_data ./ baseline_power)
-    return tf_corrected
-end
-
-# Figure 13.11 Panel A
-signal = DataFrame(CSV.File("data2.csv")).data
-signal = reshape(signal, 640, 99)
-sample_rate = 256
-times = (-1000:(1000/sample_rate):1500-(1000/sample_rate)) ./ 1000
-tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:80, [3, 10])
-tf = mean(tf_trials, dims = 3)  # Average over trials
-tf = dropdims(tf, dims = 3)  # Remove singleton dimension
-tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
-fig = Figure()
-ax = Axis(fig[1, 1], yscale = log10)
-contourf!(ax, times_out, freqs_out, transpose(tf), levels = -5:0.2:5, colormap = :jet)
-xlims!(ax, -0.2, 1.0)
-ylims!(ax, 2, 80)
-ax.yticks = round.(freqs_out)
-display(fig)
-
-
-# Figure 13.11 Panel B
-signal = DataFrame(CSV.File("/home/ian/Desktop/EEGfun/data2.csv")).data
-signal = reshape(signal, 640, 99)
-sample_rate = 256
-times = (-1000:(1000/sample_rate):1500-(1000/sample_rate)) ./ 1000
-tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:80, [3, 10])
-tf = mean(tf_trials, dims = 3)  # Average over trials
-tf = dropdims(tf, dims = 3)  # Remove singleton dimension
-tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
-fig = Figure()
-ax = Axis(fig[1, 1])
-contourf!(ax, times_out, freqs_out, transpose(tf), levels = -4:0.2:4, colormap = :jet)
-xlims!(ax, -0.2, 1.0)
-ylims!(ax, 2, 80)
-ax.yticks = round.(freqs_out)
-display(fig)
-
-
-function generate_signal(time, n_trials, freqs, amps, times, noise)
-    # Parameters
-    n_samples = length(time)  # 900 samples per trial
-    # Initialize signal (900 samples × 76 trials)
-    signal_trials = zeros(n_samples, n_trials) + (rand(n_samples, n_trials) * noise)
-    # Add frequency components to all trials
-    for trial = 1:n_trials
-        for signal in zip(freqs, amps, times)
-            signal_trials[(time.>=signal[3][1]).&(time.<signal[3][2]), trial] .+=
-                signal[2] .* sin.(2 * pi * signal[1] * time[(time.>=signal[3][1]).&(time.<signal[3][2])])
-        end
-    end
-    return signal_trials
-end
-
-# simulated signal
-sampling_rate = 256
-duration = [-2 3]
-times = duration[1]:((1/sampling_rate)):(duration[2]-((1/sampling_rate)))
-signal =
-    generate_signal(times, 1, [10, 15, 25, 40], [1, 1, 1, 1], [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0], [1.0, 1.5]], 0)
-lines(times, vec(mean(signal, dims = 2)))
-tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:80)
-tf = dropdims(mean(tf_trials, dims = 3), dims = 3)  # Average over trials
-# tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
-fig = Figure()
-ax = Axis(fig[1, 1])
-# contourf!(ax, times_out, freqs_out, transpose(tf), levels = -4:0.2:4, colormap = :jet)
-contourf!(ax, times_out, freqs_out, transpose(tf), colormap = :jet)
-xlims!(ax, duration[1], duration[2])
-ylims!(ax, 0, 80)
-ax.yticks = round.(freqs_out)
-display(fig)
-
-
-
-
-# # Figure 13.11 Panel B
-# signal = DataFrame(CSV.File("/home/ian/Desktop/EEGfun/data2.csv")).data
-# signal = reshape(signal, 640, 99)
-# sample_rate = 256
-# times = (-1000:(1000/sample_rate):1500-(1000/sample_rate)) ./ 1000
-# tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:80, [3])
-# tf = mean(tf_trials, dims = 3)  # Average over trials
-# tf = dropdims(tf, dims = 3)  # Remove singleton dimension
-# tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
-# fig = Figure()
-# ax = Axis(fig[1, 1], yscale = log10)
-# contourf!(ax, times_out, freqs_out, transpose(tf), levels = -4:0.2:4, colormap = :jet)
-# xlims!(ax, -0.2, 1.0)
-# ylims!(ax, 2, 80)
-# ax.yticks = round.(freqs_out)
-# display(fig)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Figure 13.12
 # Wavelets
 frequency_good = 6
@@ -570,13 +399,6 @@ lines!(ax, hz_wav, fft_wavelet1[1:length(hz_wav)])
 lines!(ax, hz_wav, fft_wavelet2[1:length(hz_wav)])
 xlims!(ax, 0, 50)
 
-
-# Figure 15.1
-function detrend(x, y)
-    X = hcat(ones(length(x)), x)  # Design matrix (with intercept)
-    β = X \ y  # Solve for coefficients (m, b)
-    return y - (X * β)
-end
 
 # signal = DataFrame(CSV.File("data3.csv")).data
 # sample_rate = 256
@@ -857,16 +679,15 @@ end
 # Figure 15.2
 timewin = 400
 times2save = -300:50:1000
-
-
 # Baseline normalisation
 # Decibel conversion
+
 
 signal = DataFrame(CSV.File("data_baseline.csv")).data
 # wavelet parameters
 min_freq = 2;
 max_freq = 128;
-num_frex = 30;
+num_freq = 30;
 sample_rate = 256;
 # other wavelet parameters
 freqs = exp.(range(log(min_freq), log(max_freq), length = num_freq))
@@ -896,42 +717,8 @@ for fi = 1:length(freqs)
     convolution_result_fft = convolution_result_fft[1:n_convolution] # note: here we remove the extra points from the power-of-2 FFT
     convolution_result_fft = convolution_result_fft[half_of_wavelet_size+1:end-half_of_wavelet_size]
     # put power data into time-frequency matrix
-    tf_data[fi, :] = abs.(convolution_result_fft) .^ 2
+    tf_data[fi, :] = abs2.(convolution_result_fft)
 end
-# plot results
-# dB-correct
-base_idx = find_idx_start_end(eeg_time, [-0.5 -0.2])
-baseline_power = mean(tf_data[:, base_idx[1]:base_idx[2]], dims = 2);
-tf_data_db_base = 10 .* log10.(tf_data ./ baseline_power)
-fig = Figure()
-ax = Axis(fig[1, 1], yscale = log10)
-contourf!(ax, eeg_time, freqs, transpose(tf_data_db_base), levels = -25:1:25, colormap = :jet)
-ax.yticks = round.(freqs)
-xlims!(ax, -0.5, 1.5)
-# percentage change
-pctchange = 100 * (tf_data - repeat(baseline_power, 1, n_data)) ./ repeat(baseline_power, 1, n_data)
-ax = Axis(fig[1, 2], yscale = log10)
-contourf!(ax, eeg_time, freqs, transpose(pctchange), levels = -1000:100:1000, colormap = :jet)
-ax.yticks = round.(freqs)
-xlims!(ax, -0.5, 1.5)
-# relative
-baselinediv = tf_data ./ repeat(baseline_power, 1, n_data);
-ax = Axis(fig[2, 1], yscale = log10)
-contourf!(ax, eeg_time, freqs, transpose(baselinediv), levels = -10:1:10, colormap = :jet)
-ax.yticks = round.(freqs)
-xlims!(ax, -0.5, 1.5)
-# Z-transform
-baseline_power = tf_data[:, base_idx[1]:base_idx[2]]
-baselineZ =
-    (tf_data - repeat(mean(baseline_power, dims = 2), 1, n_data)) ./ repeat(std(baseline_power, dims = 2), 1, n_data);
-ax = Axis(fig[2, 2], yscale = log10)
-contourf!(ax, eeg_time, freqs, transpose(baselineZ), levels = -10:1:10, colormap = :jet)
-ax.yticks = round.(freqs)
-xlims!(ax, -0.5, 1.5)
-
-
-
-
 
 
 

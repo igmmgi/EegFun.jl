@@ -1,3 +1,4 @@
+# TODO:. ENV["TERM_PROGRAM"] == "vscode"
 function viewer(dat)
     vscodedisplay(dat)
 end
