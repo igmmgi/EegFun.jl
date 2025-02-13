@@ -2,7 +2,7 @@
 # Chapter 10
 using LinearAlgebra
 using DSP
-# using BenchmarkTools
+using BenchmarkTools
 using GLMakie
 using FFTW
 using CSV
@@ -86,8 +86,6 @@ lines!(ax, times, signal_sum .+ (rand(length(signal_sum)) .- 0.5) .* 20, color =
 ax.xlabel = "Time (S)"
 ax.ylabel = "Amplitude"
 
-
-
 # Figure 11.4
 # naive implementation
 function myfft(signal)
@@ -150,7 +148,6 @@ xlims!(ax, 0, 10)
 ylims!(ax, 0, 2)
 ax.xlabel = "Frequency (Hz)"
 ax.ylabel = "Amplitude"
-
 
 # Figure 11.4
 sample_rate = 500
@@ -329,7 +326,7 @@ end
 
 
 # Figure 12.5
-signal = DataFrame(CSV.File("/home/ian/Desktop/EEGfun/data1.csv")).data[1:513]
+signal = DataFrame(CSV.File("data1.csv")).data[1:513]
 fig = Figure()
 ax = Axis(fig[1, 1])
 # create wavelet
@@ -413,8 +410,6 @@ function tf_morlet(signal, times, sample_rate, freqs, cycles; tois = nothing)
 
 end
 
-
-
 function apply_tf_baseline_db(tf_data, times, baseline_window)
     base_idx = findall(x -> baseline_window[1] ≤ x ≤ baseline_window[2], times)
     baseline_power = mean(tf_data[:, base_idx], dims = 2)
@@ -423,7 +418,7 @@ function apply_tf_baseline_db(tf_data, times, baseline_window)
 end
 
 # Figure 13.11 Panel A
-signal = DataFrame(CSV.File("/home/ian/Desktop/EEGfun/data2.csv")).data
+signal = DataFrame(CSV.File("data2.csv")).data
 signal = reshape(signal, 640, 99)
 sample_rate = 256
 times = (-1000:(1000/sample_rate):1500-(1000/sample_rate)) ./ 1000
@@ -433,7 +428,7 @@ tf = dropdims(tf, dims = 3)  # Remove singleton dimension
 tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
 fig = Figure()
 ax = Axis(fig[1, 1], yscale = log10)
-contourf!(ax, times_out, freqs_out, transpose(tf), levels = -4:0.2:4, colormap = :jet)
+contourf!(ax, times_out, freqs_out, transpose(tf), levels = -5:0.2:5, colormap = :jet)
 xlims!(ax, -0.2, 1.0)
 ylims!(ax, 2, 80)
 ax.yticks = round.(freqs_out)
@@ -481,8 +476,7 @@ signal =
     generate_signal(times, 1, [10, 15, 25, 40], [1, 1, 1, 1], [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0], [1.0, 1.5]], 0)
 lines(times, vec(mean(signal, dims = 2)))
 tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:80)
-tf = mean(tf_trials, dims = 3)  # Average over trials
-tf = dropdims(tf, dims = 3)  # Remove singleton dimension
+tf = dropdims(mean(tf_trials, dims = 3), dims = 3)  # Average over trials
 # tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
 fig = Figure()
 ax = Axis(fig[1, 1])
@@ -496,22 +490,22 @@ display(fig)
 
 
 
-# Figure 13.11 Panel B
-signal = DataFrame(CSV.File("/home/ian/Desktop/EEGfun/data2.csv")).data
-signal = reshape(signal, 640, 99)
-sample_rate = 256
-times = (-1000:(1000/sample_rate):1500-(1000/sample_rate)) ./ 1000
-tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:80, [3])
-tf = mean(tf_trials, dims = 3)  # Average over trials
-tf = dropdims(tf, dims = 3)  # Remove singleton dimension
-tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
-fig = Figure()
-ax = Axis(fig[1, 1], yscale = log10)
-contourf!(ax, times_out, freqs_out, transpose(tf), levels = -4:0.2:4, colormap = :jet)
-xlims!(ax, -0.2, 1.0)
-ylims!(ax, 2, 80)
-ax.yticks = round.(freqs_out)
-display(fig)
+# # Figure 13.11 Panel B
+# signal = DataFrame(CSV.File("/home/ian/Desktop/EEGfun/data2.csv")).data
+# signal = reshape(signal, 640, 99)
+# sample_rate = 256
+# times = (-1000:(1000/sample_rate):1500-(1000/sample_rate)) ./ 1000
+# tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:80, [3])
+# tf = mean(tf_trials, dims = 3)  # Average over trials
+# tf = dropdims(tf, dims = 3)  # Remove singleton dimension
+# tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.2))
+# fig = Figure()
+# ax = Axis(fig[1, 1], yscale = log10)
+# contourf!(ax, times_out, freqs_out, transpose(tf), levels = -4:0.2:4, colormap = :jet)
+# xlims!(ax, -0.2, 1.0)
+# ylims!(ax, 2, 80)
+# ax.yticks = round.(freqs_out)
+# display(fig)
 
 
 
@@ -523,103 +517,6 @@ display(fig)
 
 
 
-
-
-
-
-
-signal = DataFrame(CSV.File("dataFlank.csv")).data
-# Figure 13.11
-function dataFlank(signal)
-    min_freq = 1
-    max_freq = 40
-    num_freq = 40
-    sample_rate = 256
-    time = -2:(1/sample_rate):2
-    eeg_time = -1000:(1000/sample_rate):2000
-    #freqs = exp.(range(log(min_freq), log(max_freq), length = num_freq))
-    freqs = 1:40#exp.(range(log(min_freq), log(max_freq), length = num_freq))
-    #s = exp.(range(log(3), log(10), length = num_freq)) ./ (2 * pi .* freqs) # variable cycles/frequency
-    s = 7 ./ (2 * pi .* freqs)
-    n_wavelet = length(time)
-    n_data = length(signal)
-    n_convolution = n_wavelet + n_data - 1
-    n_conv_pow2 = nextpow(2, n_convolution)
-    half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
-    signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
-    eegfft = fft(signal_padded)
-    eegpower = zeros(num_freq, div(n_data, 160))  # seems 99 trials in exported mat file
-    base_idx = find_idx_start_end(eeg_time, [-500 -100])
-    @inbounds for fi = 1:num_freq
-        wavelet =
-            sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2 * im * pi * freqs[fi] .* time) .*
-            exp.(-time .^ 2 ./ (2 * (s[fi] .^ 2)))
-        #lines(real.(wavelet))
-        wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
-        wavelet_fft = fft(wavelet_padded)
-        # convolution
-        eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
-        # eegconv = eegconv[1:n_convolution][half_of_wavelet_size:end-halfwaveletsize];
-        eegconv = reshape(eegconv, 769, 160)
-        temppower = mean((abs.(eegconv)) .^ 2, dims = 2)
-        # eegpower[fi, :] = temppower
-        eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]])) # db baseline
-    end
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    contourf!(ax, eeg_time, freqs, transpose(eegpower), levels = -5:0.2:5, colormap = :jet)
-    # contourf!(ax, eeg_time, freqs, transpose(eegpower), colormap = :jet)
-    ax.yticks = round.(freqs)
-    ylims!(ax, 0, 40)
-    display(fig)
-    return fig, ax
-end
-fig1, ax = dataFlank(signal)
-
-
-# TODO: loop over trials vs. concat data
-# TODO:: polyremoval
-signal = DataFrame(CSV.File("dataFIC.csv")).data
-# Figure 13.11
-function dataFIC(signal)
-    min_freq = 1
-    max_freq = 60
-    num_freq = 119
-    sample_rate = 300
-    time = -100:((1000/sample_rate)/1000):100
-    eeg_time = -1000:(1000/sample_rate):(2000-(1000/sample_rate))
-    freqs = 1:0.5:60
-    s = 5 ./ (2 * pi .* freqs)
-    n_wavelet = length(time)
-    n_data = length(signal)
-    n_convolution = n_wavelet + n_data - 1
-    n_conv_pow2 = nextpow(2, n_convolution)
-    half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
-    signal_padded = [signal; zeros(n_conv_pow2 - length(signal))]
-    eegfft = fft(signal_padded)
-    eegpower = zeros(num_freq, div(n_data, 76))
-    base_idx = find_idx_start_end(eeg_time, [-500 -100])
-    @inbounds for fi = 1:num_freq
-        wavelet =
-            sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2 * im * pi * freqs[fi] .* time) .*
-            exp.(-time .^ 2 ./ (2 * (s[fi] .^ 2)))
-        wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
-        wavelet_fft = fft(wavelet_padded)
-        eegconv = ifft(wavelet_fft .* eegfft)[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
-        eegconv = reshape(eegconv, 900, 76)
-        temppower = mean((abs.(eegconv)) .^ 2, dims = 2)
-        eegpower[fi, :] = 10 .* log10.(temppower ./ mean(temppower[base_idx[1]:base_idx[2]]))
-    end
-    fig = Figure()
-    ax = Axis(fig[1, 1]) #, yscale = log10)
-    contourf!(ax, eeg_time, freqs, transpose(eegpower), levels = -3:0.1:3, colormap = :jet)
-    xlims!(ax, -500, 1500)
-    #ax.yticks = round.(freqs)
-    #ylims!(ax, 2, 80)
-    display(fig)
-    return fig, ax
-end
-fig1, ax = dataFIC(signal)
 
 
 
@@ -629,6 +526,7 @@ fig1, ax = dataFIC(signal)
 
 
 # Figure 13.12
+# Wavelets
 frequency_good = 6
 frequency_bad = 2
 sample_rate = 500;
@@ -638,8 +536,11 @@ wavelet_good =
     exp.(2 * im * pi * frequency_good .* time) .* exp.(-time .^ 2 ./ (2 .* (cycles / (2 * pi * frequency_good)) .^ 2))
 wavelet_bad =
     exp.(2 * im * pi * frequency_bad .* time) .* exp.(-time .^ 2 ./ (2 .* (cycles / (2 * pi * frequency_bad)) .^ 2))
-lines(real.(wavelet_good))
-lines!(real.(wavelet_bad))
+fig = Figure()
+ax = Axis(fig[1, 1])
+lines!(ax, real.(wavelet_good))
+lines!(ax, real.(wavelet_bad))
+display(fig)
 
 
 # Figure 13.13
@@ -706,209 +607,10 @@ end
 # display(fig)
 
 
-function tf_hanning(signal, time, sample_rate, frequencies, time_window, time_steps)
-    # Convert time_steps to indices
-    times2saveidx = [findfirst(≈(t), time) for t in time_steps]
-    # Calculate window length in samples
-    timewinidx = round(Int, time_window * sample_rate)
-    # Ensure window length is odd to center the taper
-    if iseven(timewinidx)
-        timewinidx += 1
-    end
-    # Create Hanning taper
-    hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))
-    # Preallocate output (n_frequencies × n_time_points × n_trials)
-    n_frex = length(frequencies)
-    n_timepoints = length(time_steps)
-    n_trials = size(signal, 2)
-    tf_trials = zeros(n_frex, n_timepoints, n_trials)
-    # Precompute frequency bins
-    frex_idx = round.(Int, frequencies .* timewinidx ./ sample_rate) .+ 1
-    # Perform time-frequency analysis trial-by-trial
-    for trial = 1:n_trials
-        for (timepointi, center_idx) in enumerate(times2saveidx)
-            # Calculate start and end indices for the window (centered)
-            start_idx = center_idx - fld(timewinidx, 2)
-            end_idx = center_idx + fld(timewinidx, 2)
-            # Handle edge cases (window extends beyond signal boundaries)
-            if start_idx < 1 || end_idx > size(signal, 1)
-                # Zero-pad the data if the window extends beyond the signal
-                pad_left = max(1 - start_idx, 0)
-                pad_right = max(end_idx - size(signal, 1), 0)
-                tmpdat = zeros(timewinidx)
-                valid_start = max(start_idx, 1)
-                valid_end = min(end_idx, size(signal, 1))
-                tmpdat[(pad_left+1):(end_idx-start_idx+1-pad_right)] = signal[valid_start:valid_end, trial]
-            else
-                # Extract data segment for this trial
-                tmpdat = signal[start_idx:end_idx, trial]
-            end
-            # Apply Hanning taper
-            taperdat = tmpdat .* hann_win
-            # Compute FFT
-            fdat = fft(taperdat) ./ timewinidx  # Normalize by window length
-            # Compute power for each frequency
-            tf_trials[:, timepointi, trial] .= abs.(fdat[frex_idx]) .^ 2
-        end
-    end
-    return tf_trials
-end
-signal = DataFrame(CSV.File("dataFIC.csv")).data
-# # reshap into 99 trials
-signal = reshape(signal, 900, 76)
-function generate_signal(sampling_rate, duration, n_trials, freqs, amps, times, noise)
-    # Parameters
-    t = duration[1]:((1000/sampling_rate)/1000):(duration[2]-((1000/sampling_rate)/1000))
-    n_samples = length(t)  # 900 samples per trial
-    # Initialize signal (900 samples × 76 trials)
-    signal_trials = zeros(n_samples, n_trials) + (rand(n_samples, n_trials) * noise)
-    # Add frequency components to all trials
-    for trial = 1:n_trials
-        println(trial)
-        for signal in zip(freqs, amps, times)
-            signal_trials[(t.>=signal[3][1]).&(t.<signal[3][2]), trial] .+=
-                signal[2] .* sin.(2 * pi * signal[1] * t[(t.>=signal[3][1]).&(t.<signal[3][2])])
-        end
-    end
-    return signal_trials
-end
-sample_rate = 300
-signal = generate_signal(
-    sample_rate,
-    [-1, 2.0],
-    76,
-    [10, 15, 25, 5],
-    [1, 1, 1, 1],
-    [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0], [1.0, 1.5]],
-    0,
-);
-# time = -1:1/sample_rate:(2-(1/sample_rate));
-times = -1:1/sample_rate:(2-(1/sample_rate));
-frequencies = 1:1:50
-time_window = 0.25
-time_steps = -0.5:0.05:1.5
-tf_trials = tf_hanning(signal, times, sample_rate, frequencies, time_window, time_steps)
-# Average power across trials
-tf = mean(tf_trials, dims = 3)  # Average over trials
-tf = dropdims(tf, dims = 3)  # Remove singleton dimension
-# Debugging: Print TF matrix min/max
-println("TF matrix - Min: ", minimum(tf), " Max: ", maximum(tf))
-# Plot time-frequency results
-fig = Figure()
-ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Frequency (Hz)")
-heatmap!(ax, time_steps, frequencies, transpose(tf), colormap = :jet, interpolate = false)  # Disable interpolation
-# heatmap!(ax, times2save, frex, transpose(log10.(tf)), colormap = :jet, interpolate = false)  # Disable interpolation
-# Colorbar(fig[1, 2], limits = (minimum(log10.(tf)), maximum(log10.(tf))), label = "Power (dB)")
-#xlims!(ax, -0.5, 1.5)  # Match Fieldtrip's time range
-#ylims!(ax, 1, 31)      # Match Fieldtrip's frequency range
-ax.yticks = frequencies       # Explicitly set frequency ticks to match data points
-display(fig)
-
-
-
-#
 
 
 
 
-
-
-# Frequency-dependent window length (7 cycles per window)
-function tf_hanning_cycles(signal, time, sample_rate, frequencies, time_steps, num_cycles)
-    # Frequency-dependent window length (7 cycles per window)
-    times2saveidx = [findfirst(≈(t), time) for t in time_steps]
-    tf_trials = zeros(length(frequencies), length(time_steps), size(signal, 2))  # Power for each trial
-    # Perform time-frequency analysis trial-by-trial
-    for trial = 1:size(signal, 2)
-        for fi = 1:length(frequencies)
-            # Calculate frequency-dependent window length
-            timewin = num_cycles / frequencies[fi]  # Window length in seconds
-            timewinidx = round(Int, timewin * sample_rate)  # Window length in samples
-            # Ensure window length is odd to center the taper
-            if iseven(timewinidx)
-                timewinidx += 1
-            end
-            hann_win = 0.5 * (1 .- cos.(2 * pi * (0:timewinidx-1) / (timewinidx - 1)))  # Hanning taper
-            for timepointi = 1:length(time_steps)
-                # Calculate start and end indices for the window
-                start_idx = Int(times2saveidx[timepointi] - fld(timewinidx, 2))
-                end_idx = Int(times2saveidx[timepointi] + fld(timewinidx, 2))
-                #start_idx = Int(times2saveidx[timepointi])
-                #end_idx = Int(times2saveidx[timepointi] + timewinidx -1)
-                # Handle edge cases (window extends beyond signal boundaries)
-                if start_idx < 1 || end_idx > size(signal_trials, 1)
-                    # Zero-pad the data if the window extends beyond the signal
-                    pad_left = max(1 - start_idx, 0)
-                    pad_right = max(end_idx - size(signal_trials, 1), 0)
-                    tmpdat = zeros(timewinidx)
-                    valid_start = max(start_idx, 1)
-                    valid_end = min(end_idx, size(signal_trials, 1))
-                    tmpdat[(pad_left+1):(end_idx-start_idx+1-pad_right)] = signal_trials[valid_start:valid_end, trial]
-                else
-                    # Extract data segment for this trial
-                    tmpdat = signal_trials[start_idx:end_idx, trial]
-                end
-                # Apply Hanning taper
-                taperdat = tmpdat .* hann_win
-                # Compute FFT
-                fdat = fft(taperdat) ./ timewinidx  # Normalize by window length
-                #fdat = fftshift(fdat, 2)
-                # Map the desired frequency to the correct FFT bin
-                bin = round(Int, frequencies[fi] * timewinidx / sample_rate) + 1
-                # Compute power for this trial
-                tf_trials[fi, timepointi, trial] = abs.(fdat[bin]) .^ 2  # Use th
-            end
-        end
-    end
-    # Average power across trials
-    tf = mean(tf_trials, dims = 3)  # Average over trials
-    tf = dropdims(tf, dims = 3)  # Remove singleton dimension
-    # Debugging: Print TF matrix min/max
-    println("TF matrix - Min: ", minimum(tf), " Max: ", maximum(tf))
-    # Plot time-frequency results
-    fig = Figure()
-    ax = Axis(
-        fig[1, 1],
-        xlabel = "Time (s)",
-        ylabel = "Frequency (Hz)",
-        title = "Time-Frequency Analysis (7 Cycles per Window)",
-    )
-    # heatmap!(ax, times2save, frex, transpose(log10.(tf)), colormap = :jet, interpolate = false)  # Disable interpolation
-    heatmap!(ax, time_steps, frequencies, transpose(tf), colormap = :jet, interpolate = false)  # Disable interpolation
-    #Colorbar(fig[1, 2], limits = (minimum(log10.(tf)), maximum(log10.(tf))), label = "Power (dB)")
-    #xlims!(ax, -0.5, 1.5)  # Match Fieldtrip's time range
-    #ylims!(ax, 2, 30)      # Match Fieldtrip's frequency range
-    ax.yticks = frequencies       # Explicitly set frequency ticks to match data points
-    display(fig)
-end
-signal = DataFrame(CSV.File("dataFIC.csv")).data
-# # reshap into 99 trials
-signal = reshape(signal, 900, 76)
-function generate_signal(sampling_rate, duration, n_trials, freqs, amps, times, noise)
-    # Parameters
-    t = duration[1]:((1000/sampling_rate)/1000):(duration[2]-((1000/sampling_rate)/1000))
-    n_samples = length(t)  # 900 samples per trial
-    # Initialize signal (900 samples × 76 trials)
-    signal_trials = zeros(n_samples, n_trials) + (rand(n_samples, n_trials) * noise)
-    # Add frequency components to all trials
-    for trial = 1:n_trials
-        println(trial)
-        for signal in zip(freqs, amps, times)
-            signal_trials[(t.>=signal[3][1]).&(t.<signal[3][2]), trial] .+=
-                signal[2] .* sin.(2 * pi * signal[1] * t[(t.>=signal[3][1]).&(t.<signal[3][2])])
-        end
-    end
-    return signal_trials
-end
-sample_rate = 300
-# signal = generate_signal(sample_rate, [-1, 2.0], 76, [10, 15, 25, 5], [1, 1, 1, 1], [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0], [1.0, 1.5]], 0);
-# time = -1:1/sample_rate:(2-(1/sample_rate));
-time = -1:1/sample_rate:(2-(1/sample_rate));
-frequencies = 1:1:50
-time_window = 0.25
-time_steps = -0.5:0.05:1.5
-num_cycles = 10
-tf_hanning_cycles(signal, time, sample_rate, frequencies, time_steps, num_cycles)
 
 
 
@@ -1257,63 +959,5 @@ filter = digitalfilter(Lowpass(f), Butterworth(o); fs = sample_rate)
 H, w = freqresp(filter::FilterCoefficients)
 lines!(abs.(H))
 
-
-
-function ft_morlet(
-    signal::AbstractMatrix{<:Real};  # Trials in columns (time × trials)
-    sample_rate::Real = 256,
-    foi::AbstractVector{<:Real} = 1:2:30,
-    toi::AbstractVector{<:Real} = -0.5:0.01:1.5,
-    n_cycles::Real = 7,
-)
-    # Create time vector for wavelet
-    time = -2:(1/sample_rate):2
-
-    # Convert toi to sample indices
-    toi_samples = round.(Int, toi .* sample_rate) .+ floor(Int, size(signal, 1) / 2)
-
-    # Calculate wavelet parameters
-    s = n_cycles ./ (2 * pi .* foi)
-    n_wavelet = length(time)
-    n_data = size(signal, 1)
-    n_trials = size(signal, 2)
-    n_convolution = n_wavelet + n_data - 1
-    n_conv_pow2 = nextpow(2, n_convolution)
-    half_of_wavelet_size = floor(Int, (n_wavelet - 1) / 2)
-
-    # Initialize time-frequency matrix (frequencies × time × trials)
-    tf_data = zeros(length(foi), length(toi), n_trials)
-
-    # Main time-frequency decomposition
-    @inbounds for trial = 1:n_trials
-        # Prepare signal for current trial
-        signal_padded = [signal[:, trial]; zeros(n_conv_pow2 - n_data)]
-        eegfft = fft(signal_padded)
-
-        for fi = 1:length(foi)
-            # Create wavelet
-            wavelet =
-                sqrt(1 ./ (s[fi] .* sqrt(pi))) .* exp.(2 * im * pi * foi[fi] .* time) .*
-                exp.(-time .^ 2 ./ (2 * (s[fi] .^ 2)))
-
-            # FFT of wavelet
-            wavelet_padded = [wavelet; zeros(n_conv_pow2 - length(wavelet))]
-            wavelet_fft = fft(wavelet_padded)
-
-            # Convolution
-            eegconv = ifft(wavelet_fft .* eegfft)
-            eegconv = eegconv[1:n_convolution][half_of_wavelet_size+1:end-half_of_wavelet_size]
-
-            # Store power for this frequency and trial
-            tf_data[fi, :, trial] = abs2.(eegconv[toi_samples])
-        end
-    end
-
-    return (;
-        tf_data = tf_data,  # (frequencies × time × trials)
-        frequencies = foi,
-        times = toi,
-    )
-end
 
 

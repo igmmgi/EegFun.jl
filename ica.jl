@@ -9,6 +9,7 @@ using OrderedCollections
 using Random
 using Statistics
 using StatsBase: kurtosis
+using FFTW
 
 
 """
@@ -369,5 +370,148 @@ function infomax_ica(
         ["IC$i" for i in 1:size(work.weights, 1)],
         data_labels
     )
+end
+
+"""
+    tf_morlet(
+        signal::Vector{Float64}, 
+        fs::Real, 
+        freqs::Vector{Float64}; 
+        n_cycles::Union{Int,Vector{Int}}=7,
+        fft_plan=nothing
+    )
+
+Compute time-frequency decomposition using Morlet wavelets with FFT plan optimization.
+
+# Arguments
+- `signal`: Input time series
+- `fs`: Sampling frequency
+- `freqs`: Frequencies to analyze
+- `n_cycles`: Number of cycles for the Morlet wavelet
+- `fft_plan`: Pre-computed FFT plan (optional)
+
+# Returns
+- Time-frequency power matrix
+"""
+function tf_morlet(
+    signal::Vector{Float64}, 
+    fs::Real, 
+    freqs::Vector{Float64}; 
+    n_cycles::Union{Int,Vector{Int}}=7,
+    fft_plan=nothing
+)
+    n_times = length(signal)
+    n_freqs = length(freqs)
+    n_cycles = n_cycles isa Int ? fill(n_cycles, n_freqs) : n_cycles
+    
+    # Pre-allocate output
+    tfr = zeros(Complex{Float64}, n_freqs, n_times)
+    
+    # Create or use FFT plan
+    if isnothing(fft_plan)
+        fft_plan = plan_fft(signal)
+        signal_fft = fft_plan * signal
+    else
+        signal_fft = fft_plan * signal
+    end
+    
+    # Frequency vector for FFT
+    fft_freqs = FFTW.fftfreq(n_times, fs)
+    
+    # Pre-allocate wavelet
+    wavelet = zeros(Complex{Float64}, n_times)
+    
+    # Compute wavelets and multiply with signal in frequency domain
+    @inbounds for f_idx in 1:n_freqs
+        # Create Morlet wavelet in frequency domain
+        f = freqs[f_idx]
+        σ = n_cycles[f_idx] / (2π * f)
+        
+        @simd for i in eachindex(fft_freqs)
+            freq = fft_freqs[i]
+            wavelet[i] = exp(-2im * π * freq * (-n_times/2/fs)) * 
+                        exp(-((2π * freq - 2π * f)^2 * σ^2) / 2)
+        end
+        
+        # Normalize
+        wavelet ./= maximum(abs.(wavelet))
+        
+        # Multiply with signal in frequency domain and inverse FFT
+        @views tfr[f_idx, :] .= ifft(signal_fft .* wavelet)
+    end
+    
+    return abs2.(tfr)  # Return power
+end
+
+# Helper function to create and cache FFT plan
+function create_fft_plan(signal::Vector{Float64})
+    return plan_fft(signal; flags=FFTW.MEASURE)
+end
+
+"""
+    generate_signal(
+        freqs::Vector{Float64}, 
+        amplitudes::Vector{Float64}, 
+        duration::Float64, 
+        fs::Float64; 
+        noise_level::Float64=0.1
+    ) -> Vector{Float64}
+
+Generate a test signal composed of multiple sinusoids with optional noise.
+
+# Arguments
+- `freqs`: Vector of frequencies in Hz
+- `amplitudes`: Vector of amplitudes for each frequency
+- `duration`: Signal duration in seconds
+- `fs`: Sampling frequency in Hz
+- `noise_level`: Standard deviation of Gaussian noise to add (default: 0.1)
+
+# Returns
+- `Vector{Float64}`: Generated signal
+
+# Example
+```julia
+# Generate 1s signal with 10Hz and 20Hz components
+signal = generate_signal([10.0, 20.0], [1.0, 0.5], 1.0, 1000.0)
+```
+"""
+function generate_signal(
+    freqs::Vector{Float64}, 
+    amplitudes::Vector{Float64}, 
+    duration::Float64, 
+    fs::Float64;
+    noise_level::Float64=0.1
+)
+    @assert length(freqs) == length(amplitudes) "Number of frequencies must match number of amplitudes"
+    
+    # Pre-allocate time vector and signal
+    n_samples = Int(round(duration * fs))
+    t = range(0, duration, length=n_samples)
+    signal = zeros(n_samples)
+    
+    # Add sinusoidal components
+    @inbounds for (i, (freq, amp)) in enumerate(zip(freqs, amplitudes))
+        @. signal += amp * sin(2π * freq * t)
+    end
+    
+    # Add noise if requested
+    if noise_level > 0
+        signal .+= randn(n_samples) .* noise_level
+    end
+    
+    return signal
+end
+
+# Convenience method for single frequency
+function generate_signal(
+    freq::Real, 
+    amplitude::Real, 
+    duration::Real, 
+    fs::Real;
+    noise_level::Real=0.1
+)
+    generate_signal([Float64(freq)], [Float64(amplitude)], 
+                   Float64(duration), Float64(fs), 
+                   noise_level=Float64(noise_level))
 end
 
