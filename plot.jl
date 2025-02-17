@@ -1447,7 +1447,7 @@ end
 function plot_ica_topoplot(
     ica,
     layout;
-    ncomps = nothing,
+    comps = nothing,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
@@ -1457,8 +1457,8 @@ function plot_ica_topoplot(
     if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
         polar_to_cartesian_xy!(layout)
     end
-    if isnothing(ncomps)
-        ncomps = size(ica.mixing)[2]
+    if isnothing(comps)
+        comps = 1:size(ica.mixing)[2]
     end
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
@@ -1475,8 +1475,9 @@ function plot_ica_topoplot(
     colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+
     fig = Figure()
-    dims = best_rect(ncomps)
+    dims = best_rect(length(comps))
     count = 1
     axs = []
     for dim1 = 1:dims[1]
@@ -1484,7 +1485,7 @@ function plot_ica_topoplot(
             ax = Axis(fig[dim1, dim2])
             push!(axs, ax)
             count += 1
-            if count > ncomps
+            if count > length(comps)
                 break
             end
         end
@@ -1494,8 +1495,8 @@ function plot_ica_topoplot(
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
 
     for ax in axs
-        ax.title = ica.ica_label[count]
-        data = data_interpolation_topo(ica.mixing[:, count], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+        ax.title = ica.ica_label[comps[count]]
+        data = data_interpolation_topo(ica.mixing[:, comps[count]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
         gridscale = gridscale
         radius = 88 # mm
         co = contourf!(
@@ -1519,9 +1520,161 @@ function plot_ica_topoplot(
             label_kwargs = label_kwargs,
         )
         count += 1
-        if count > ncomps
+        if count > length(comps)
             break
         end
     end
     return fig
 end
+
+# function plot_ica_topoplot(
+#     fig, 
+#     ax,
+#     ica,
+#     layout;
+#     comps = nothing,
+#     head_kwargs = Dict(),
+#     point_kwargs = Dict(),
+#     label_kwargs = Dict(),
+#     topo_kwargs = Dict(),
+#     colorbar_kwargs = Dict(),
+# )
+#     if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+#         polar_to_cartesian_xy!(layout)
+#     end
+#     if isnothing(comps)
+#         comps = 1:size(ica.mixing)[2]
+#     end
+#     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+#     head_kwargs = merge(head_default_kwargs, head_kwargs)
+#     point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
+#     point_kwargs = merge(point_default_kwargs, point_kwargs)
+#     label_default_kwargs =
+#         Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+#     label_kwargs = merge(label_default_kwargs, label_kwargs)
+#     xoffset = pop!(label_kwargs, :xoffset)
+#     yoffset = pop!(label_kwargs, :yoffset)
+#     topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+#     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+#     gridscale = pop!(topo_kwargs, :gridscale)
+#     colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+#     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+#     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+# 
+#     # fig = Figure()
+#     dims = best_rect(length(comps))
+#     count = 1
+#     axs = []
+#     for dim1 = 1:dims[1]
+#         for dim2 = 1:dims[2]
+#             ax = Axis(fig[dim1, dim2])
+#             push!(axs, ax)
+#             count += 1
+#             if count > length(comps)
+#                 break
+#             end
+#         end
+#     end
+#     count = 1
+# 
+#     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+# 
+#     for ax in axs
+#         ax.title = ica.ica_label[comps[count]]
+#         data = data_interpolation_topo(ica.mixing[:, comps[count]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+#         gridscale = gridscale
+#         radius = 88 # mm
+#         co = contourf!(
+#             ax,
+#             range(-radius * 2, radius * 2, length = gridscale),
+#             range(-radius * 2, radius * 2, length = gridscale),
+#             data,
+#             colormap = :jet,
+#         )
+#         # TODO: improve colorbar stuff
+#         # if plot_colorbar
+#         #     Colorbar(ax, co; colorbar_kwargs...)
+#         # end
+#         # head shape
+#         head_shape_2d(
+#             fig,
+#             ax,
+#             layout,
+#             head_kwargs = head_kwargs,
+#             point_kwargs = point_kwargs,
+#             label_kwargs = label_kwargs,
+#         )
+#         count += 1
+#         if count > length(comps)
+#             break
+#         end
+#     end
+#     return fig
+# end
+
+
+
+function plot_ica_topoplot(
+    fig,
+    ax,
+    ica,
+    comp,
+    layout;
+    head_kwargs = Dict(),
+    point_kwargs = Dict(),
+    label_kwargs = Dict(),
+    topo_kwargs = Dict(),
+    colorbar_kwargs = Dict(),
+)
+
+    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+        polar_to_cartesian_xy!(layout)
+    end
+
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+
+    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+
+    label_default_kwargs =
+        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = pop!(topo_kwargs, :gridscale)
+
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+
+    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+
+    if ax.title.val == ""
+    ax.title = ica.ica_label[comp]
+    end
+    data = data_interpolation_topo(ica.mixing[:, comp], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+    gridscale = gridscale
+    radius = 88 # mm
+    co = contourf!(
+        ax,
+        range(-radius * 2, radius * 2, length = gridscale),
+        range(-radius * 2, radius * 2, length = gridscale),
+        data,
+        colormap = :jet,
+    )
+    # TODO: improve colorbar stuff
+    if plot_colorbar
+        Colorbar(fig[1,2], co; colorbar_kwargs...)
+    end
+    # head shape
+    head_shape_2d(fig, ax, layout, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
+    # end
+    return fig
+end
+
+
+fig = Figure()
+ax = Axis(fig[1,1])
+plot_ica_topoplot(fig, ax, ica_result, 1, layout)

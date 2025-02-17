@@ -10,6 +10,7 @@ using Random
 using Statistics
 using StatsBase: kurtosis
 using FFTW
+using Printf
 
 
 """
@@ -94,9 +95,6 @@ struct InfoIca
     mixing::Matrix{Float64}
     scale::Float64
     variance::Vector{Float64}
-    kurtosis::Vector{Float64}
-    spectra::Matrix{Float64}
-    frequencies::Vector{Float64}
     ica_label::Vector{String}
     data_label::Vector{String}
 end
@@ -175,18 +173,19 @@ mutable struct WorkArrays
 end
 
 function create_work_arrays(n_components::Int, block_size::Int)
+    weights = Matrix{Float64}(I, n_components, n_components)  # Initialize as identity matrix
     return WorkArrays(
-        Matrix{Float64}(I, n_components, n_components),  # weights
+        weights,  # weights - start as identity matrix
         block_size * Matrix{Float64}(I, n_components, n_components),  # BI
         zeros(n_components, block_size),  # u
         zeros(n_components, block_size),  # y
         zeros(n_components, block_size),  # data_block
-        Matrix{Float64}(I, n_components, n_components),  # oldweights
-        Matrix{Float64}(I, n_components, n_components),  # startweights
-        similar(Matrix{Float64}(I, n_components, n_components)),  # weights_temp
+        copy(weights),  # oldweights - copy of identity matrix
+        copy(weights),  # startweights - copy of identity matrix
+        zeros(n_components, n_components),  # weights_temp
         zeros(n_components, block_size),  # y_temp
-        similar(Matrix{Float64}(I, n_components, n_components)),  # bi_weights
-        similar(Matrix{Float64}(I, n_components, n_components)),  # wu_term
+        zeros(n_components, n_components),  # bi_weights
+        zeros(n_components, n_components),  # wu_term
         zeros(1, n_components^2),  # delta
         zeros(1, n_components^2)   # olddelta
     )
@@ -198,18 +197,20 @@ function infomax_ica(
     data_labels;
     n_components::Union{Nothing,Int} = nothing,
     params::IcaPrms = IcaPrms(),
+    sample_rate::Int = 256
 )
 
     # demean and scale data
-    dat_ica .-= mean(dat_ica, dims=2)
+    dat_ica .-= mean(dat_ica, dims = 2)
     scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
     dat_ica ./= scale
 
     # PCA reduction
     if !isnothing(n_components)
         F = svd(dat_ica)
-        dat_ica = F.U[:, 1:n_components]' * dat_ica
-        pca_components = view(F.U, :, 1:n_components)
+        # Ensure we're using the correct dimensions for PCA components
+        pca_components = F.U[1:size(dat_ica,1), 1:n_components]  # Explicitly specify both dimensions
+        dat_ica = pca_components' * dat_ica
     else
         n_components = size(dat_ica, 1)
         pca_components = nothing
@@ -242,8 +243,7 @@ function infomax_ica(
             block_size = block_end - t + 1
 
             # extract data block
-            copyto!(view(work.data_block, :, 1:block_size), 
-                   view(dat_ica, :, view(permute_indices, t:block_end)))
+            copyto!(view(work.data_block, :, 1:block_size), view(dat_ica, :, view(permute_indices, t:block_end)))
 
             # forward pass
             mul!(work.u, work.weights, work.data_block)
@@ -301,7 +301,7 @@ function infomax_ica(
             params.l_rate *= params.blowup_fac
         end
 
-    @info "Step $step, change = $change, lrate = $(params.l_rate), angle = $(params.degconst) * $angledelta"
+        @info "Step $step, change = $change, lrate = $(params.l_rate), angle = $((params.degconst) * angledelta)"
 
     end
 
@@ -316,45 +316,393 @@ function infomax_ica(
 
     # Calculate total variance explained
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
-    # Normalize to proportions
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
-
-    # Transform data to component space
-    components = work.weights[order, :] * dat_ica
-    # Calculate kurtosis for each component
-    kurt = [kurtosis(components[i,:]) for i in 1:size(components,1)]
-
-    # Calculate power spectra using Welch's method
-    n_fft = min(4 * sample_rate, size(components, 2))  # 4s windows or signal length
-    n_overlap = div(n_fft, 2)  # 50% overlap
-    n_per_seg = n_fft
-    window = DSP.hanning(n_per_seg)  # Hanning window
-    # Create frequency vector from 1 Hz to Nyquist
-    freqs = 1:1:div(sample_rate, 2)
-    spectra = zeros(length(freqs), size(components, 1))
-    for i in 1:size(components, 1)
-        psd = DSP.welch_pgram(
-            components[i,:],
-            n_per_seg,
-            n_overlap;
-            window=window,
-            fs=sample_rate
-        )
-        # Interpolate to get power at integer frequencies
-        spectra[:, i] = psd.power[round.(Int, freqs .* (length(psd.freq) / (sample_rate/2)))]
-    end
 
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
         scale,
         meanvar_normalized[order],
-        kurt,
-        spectra,
-        freqs,
         ["IC$i" for i = 1:size(work.weights, 1)],
         data_labels,
     )
 end
+
+function plot_ica_component_activation(
+    dat::ContinuousData,
+    ica_result::InfoIca,
+    n_visible_components::Int = 10,  # Number of components visible at once
+)
+    # convert ContinuousData to appropriate matrix
+    dat_matrix = permutedims(Matrix(dat.data[!, ica_result.data_label]))
+
+    # Scale dat matrix the same way as in ICA
+    dat_matrix .-= mean(dat_matrix, dims = 2)
+    dat_matrix ./= ica_result.scale
+
+    # Transform data to component space
+    components = ica_result.unmixing * dat_matrix
+    total_components = size(components, 1)
+
+    # Create figure
+    fig = Figure()
+
+    # Set up observables for interactive plotting
+    window_size = 2000
+    xrange = Observable(1:window_size)  # Initial window
+    xlims = @lift((dat.data.time[first($xrange)], dat.data.time[last($xrange)]))
+    
+    # Initialize y-axis limits based on initial data window
+    initial_range = maximum(abs.(extrema(components[:, 1:window_size])))
+    ylims = Observable((-initial_range, initial_range))
+    
+    # Observable for component range
+    comp_start = Observable(1)
+    
+    # Create all subplots at once
+    axs = []  # Store time series axes
+    lines_obs = []  # Store line observables
+    topo_axs = []  # Store topography axes
+    
+    for i in 1:n_visible_components
+        # Create subplot for topography
+        ax_topo = Axis(
+            fig[i, 1],
+            width = 150,
+            height = 150,
+            title = @sprintf("IC%d (%.1f%%)", i, ica_result.variance[i] * 100)
+        )
+        push!(topo_axs, ax_topo)
+        
+        # Initial topography plot
+        plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
+        
+        hidexdecorations!(ax_topo)
+
+        # Create subplot for time series
+        ax_time = Axis(fig[i, 2], ylabel = "Amplitude")
+        push!(axs, ax_time)
+
+        # Set initial limits
+        xlims!(ax_time, xlims[])
+        ylims!(ax_time, ylims[])
+
+        # Create observable for component data
+        line_obs = Observable(components[i, :])
+        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
+        push!(lines_obs, line_obs)
+
+        # Hide x-axis decorations for all but the last plot
+        if i != n_visible_components
+            hidexdecorations!(ax_time, grid = false)
+        end
+    end
+
+    # Link all time series axes
+    linkaxes!(axs...)
+
+    # Adjust layout
+    colsize!(fig.layout, 1, Auto(150))  # Fixed width for topo plots
+
+    # Function to update component data
+    function update_components(start_idx)
+        for i in 1:n_visible_components
+            comp_idx = start_idx + i - 1
+            if comp_idx <= total_components
+                lines_obs[i][] = components[comp_idx, :]
+                
+                # Clear and redraw topography
+                empty!(topo_axs[i])
+                plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
+                
+                # Update title
+                topo_axs[i].title = @sprintf("IC%d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
+            end
+        end
+    end
+
+    # Add keyboard controls
+    on(events(fig).keyboardbutton) do event
+        if event.action in (Keyboard.press,)
+            if event.key == Keyboard.left || event.key == Keyboard.right
+                # Handle x-axis scrolling
+                current_range = xrange[]
+                if event.key == Keyboard.left
+                    new_start = max(1, first(current_range) - window_size)
+                    xrange[] = new_start:(new_start + window_size - 1)
+                else  # right
+                    new_start = min(size(components, 2) - window_size + 1, first(current_range) + window_size)
+                    xrange[] = new_start:(new_start + window_size - 1)
+                end
+                
+                # Update x-axis limits for all axes
+                new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
+                for ax in axs
+                    xlims!(ax, new_xlims)
+                end
+                
+            elseif event.key == Keyboard.up || event.key == Keyboard.down
+                # Handle y-axis scaling
+                current_range = ylims[][2]  # Just take the positive limit since it's symmetric
+                if event.key == Keyboard.up
+                    # Zoom in - decrease range by 20%
+                    new_range = current_range * 0.8
+                else  # down
+                    # Zoom out - increase range by 20%
+                    new_range = current_range * 1.2
+                end
+                
+                # Keep centered on zero
+                new_ylims = (-new_range, new_range)
+                ylims[] = new_ylims
+                
+                # Update y-axis limits for all axes
+                for ax in axs
+                    ylims!(ax, new_ylims)
+                end
+                
+            elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
+                # Handle component scrolling
+                current_start = comp_start[]
+                if event.key == Keyboard.page_up
+                    new_start = max(1, current_start - n_visible_components)
+                else  # page_down
+                    new_start = min(total_components - n_visible_components + 1, current_start + n_visible_components)
+                end
+                
+                if new_start != current_start
+                    comp_start[] = new_start
+                    update_components(new_start)
+                end
+            end
+        end
+    end
+
+    # Add slider panel at the bottom spanning both columns
+    slider_panel = fig[end+1, 1:2] = GridLayout(tellheight = false)
+    
+    # Create three sliders matching the full width
+    time_group = SliderGrid(
+        slider_panel[1, 1],
+        (label = "Time Position", range = 1:size(components, 2)-window_size+1, startvalue = 1),
+        tellheight = false
+    )
+    
+    scale_group = SliderGrid(
+        slider_panel[2, 1],
+        (label = "Y-Scale", range = 0.1:0.1:5.0, startvalue = 1.0),
+        tellheight = false
+    )
+    
+    component_group = SliderGrid(
+        slider_panel[3, 1],
+        (label = "Components", range = 1:total_components-n_visible_components+1, startvalue = 1),
+        tellheight = false
+    )
+
+    # Get the actual slider objects
+    time_slider = time_group.sliders[1]
+    scale_slider = scale_group.sliders[1]
+    component_slider = component_group.sliders[1]
+
+    # Add spacing between sliders
+    rowgap!(slider_panel, 10)
+
+    # Connect sliders to observables
+    on(time_slider.value) do val
+        start_idx = Int(round(val))
+        # Ensure we don't exceed data bounds
+        end_idx = min(start_idx + window_size - 1, size(components, 2))
+        start_idx = max(1, end_idx - window_size + 1)  # Adjust start if needed
+        
+        xrange[] = start_idx:end_idx
+        # Update all component data
+        for i in 1:n_visible_components
+            comp_idx = comp_start[] + i - 1
+            lines_obs[i][] = components[comp_idx, xrange[]]
+        end
+        # Update xlims for all axes
+        new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
+        for ax in axs
+            xlims!(ax, new_xlims)
+        end
+    end
+
+    on(scale_slider.value) do val
+        new_range = initial_range / val
+        ylims[] = (-new_range, new_range)
+        for ax in axs
+            ylims!(ax, ylims[])
+        end
+    end
+
+    on(component_slider.value) do val
+        new_start = Int(round(val))
+        if new_start != comp_start[]
+            comp_start[] = new_start
+            update_components(new_start)
+        end
+    end
+
+    return fig
+end
+
+
+
+
+
+# function plot_ica_component_activation(
+#     dat::ContinuousData,
+#     ica_result::InfoIca,
+#     n_visible_components::Int = 10,  # Number of components visible at once
+# )
+#     # convert ContinuousData to appropriate matrix
+#     dat_matrix = permutedims(Matrix(dat.data[!, ica_result.data_label]))
+# 
+#     # Scale dat matrix the same way as in ICA
+#     dat_matrix .-= mean(dat_matrix, dims = 2)
+#     dat_matrix ./= ica_result.scale
+# 
+#     # Transform data to component space
+#     components = ica_result.unmixing * dat_matrix
+#     total_components = size(components, 1)
+# 
+#     # Create figure
+#     fig = Figure(size = (1600, 150 * n_visible_components))
+# 
+#     # Set up observables for interactive plotting
+#     window_size = 2000
+#     xrange = Observable(1:window_size)  # Initial window
+#     xlims = @lift((dat.data.time[first($xrange)], dat.data.time[last($xrange)]))
+#     
+#     # Initialize y-axis limits based on initial data window
+#     initial_range = maximum(abs.(extrema(components[:, 1:window_size])))
+#     ylims = Observable((-initial_range, initial_range))
+#     
+#     # Observable for component range
+#     comp_start = Observable(1)
+#     
+#     # Create all subplots at once
+#     axs = []  # Store time series axes
+#     lines_obs = []  # Store line observables
+#     topo_axs = []  # Store topography axes
+#     
+#     for i in 1:n_visible_components
+#         # Create subplot for topography
+#         ax_topo = Axis(
+#             fig[i, 1],
+#             width = 150,
+#             height = 150,
+#             title = @sprintf("IC%d (%.1f%%)", i, ica_result.variance[i] * 100)
+#         )
+#         push!(topo_axs, ax_topo)
+#         
+#         # Initial topography plot
+#         plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
+#         
+#         hidexdecorations!(ax_topo)
+#
+#         # Create subplot for time series
+#         ax_time = Axis(fig[i, 2], ylabel = "Amplitude")
+#         push!(axs, ax_time)
+#
+#         # Set initial limits
+#         xlims!(ax_time, xlims[])
+#         ylims!(ax_time, ylims[])
+#
+#         # Create observable for component data
+#         line_obs = Observable(components[i, :])
+#         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
+#         push!(lines_obs, line_obs)
+#
+#         # Hide x-axis decorations for all but the last plot
+#         if i != n_visible_components
+#             hidexdecorations!(ax_time, grid = false)
+#         end
+#     end
+#
+#     # Link all time series axes
+#     linkaxes!(axs...)
+#
+#     # Adjust layout
+#     colsize!(fig.layout, 1, Auto(150))  # Fixed width for topo plots
+#
+#     # Function to update component data
+#     function update_components(start_idx)
+#         for i in 1:n_visible_components
+#             comp_idx = start_idx + i - 1
+#             if comp_idx <= total_components
+#                 lines_obs[i][] = components[comp_idx, :]
+#                 
+#                 # Clear and redraw topography
+#                 empty!(topo_axs[i])
+#                 plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
+#                 
+#                 # Update title
+#                 topo_axs[i].title = @sprintf("IC%d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
+#             end
+#         end
+#     end
+#
+#     # Add keyboard controls
+#     on(events(fig).keyboardbutton) do event
+#         if event.action in (Keyboard.press,)
+#             if event.key == Keyboard.left || event.key == Keyboard.right
+#                 # Handle x-axis scrolling
+#                 current_range = xrange[]
+#                 if event.key == Keyboard.left
+#                     new_start = max(1, first(current_range) - window_size)
+#                     xrange[] = new_start:(new_start + window_size - 1)
+#                 else  # right
+#                     new_start = min(size(components, 2) - window_size + 1, first(current_range) + window_size)
+#                     xrange[] = new_start:(new_start + window_size - 1)
+#                 end
+#                 
+#                 # Update x-axis limits for all axes
+#                 new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
+#                 for ax in axs
+#                     xlims!(ax, new_xlims)
+#                 end
+#                 
+#             elseif event.key == Keyboard.up || event.key == Keyboard.down
+#                 # Handle y-axis scaling
+#                 current_range = ylims[][2]  # Just take the positive limit since it's symmetric
+#                 if event.key == Keyboard.up
+#                     # Zoom in - decrease range by 20%
+#                     new_range = current_range * 0.8
+#                 else  # down
+#                     # Zoom out - increase range by 20%
+#                     new_range = current_range * 1.2
+#                 end
+#                 
+#                 # Keep centered on zero
+#                 new_ylims = (-new_range, new_range)
+#                 ylims[] = new_ylims
+#                 
+#                 # Update y-axis limits for all axes
+#                 for ax in axs
+#                     ylims!(ax, new_ylims)
+#                 end
+#                 
+#             elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
+#                 # Handle component scrolling
+#                 current_start = comp_start[]
+#                 if event.key == Keyboard.page_up
+#                     new_start = max(1, current_start - n_visible_components)
+#                 else  # page_down
+#                     new_start = min(total_components - n_visible_components + 1, current_start + n_visible_components)
+#                 end
+#                 
+#                 if new_start != current_start
+#                     comp_start[] = new_start
+#                     update_components(new_start)
+#                 end
+#             end
+#         end
+#     end
+#
+#     return fig
+# end
+
 

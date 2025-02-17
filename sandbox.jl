@@ -52,6 +52,7 @@ neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40)
 #layout = filter(row -> row.label in ["PO7", "PO8"], layout)
 head_shape_2d(layout)
 head_shape_2d(layout, neighbours)
+
 # read bdf file
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
@@ -117,8 +118,30 @@ good_channels = setdiff(dat_ica.layout.label, ["PO9"])
 include("ica.jl")
 dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
 
-ica_result = infomax_ica(dat_for_ica, good_channels, sample_rate=256, n_components = length(good_channels) - 1)
+
+
+
+
+
+
+ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms(), sample_rate=256)
+
 plot_ica_topoplot(ica_result, dat.layout)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:5)
+plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
+
+fig = Figure()
+ax = Axis(fig[1,1])
+# plot_ica_topoplot(fig, ax, ica_result, 12, layout)
+
+plot_ica_component_activation(dat, ica_result)
+
+
+
+
+
+
+
 
 
 # Continuous Data Browser
