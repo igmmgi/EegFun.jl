@@ -38,7 +38,20 @@ times = (-1:(1/sample_rate):2-(1/sample_rate))
 tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:50, [7], log_freqs = false, tois = -0.5:0.01:1.5)
 tf = average_over_trials(tf_trials);
 tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.1));
-plot_tf(tf, times_out, freqs_out, log_yscale=false, colorrange=[-2, 1.5], xlim=[-0.5, 1.5], interpolate=false)
+
+
+df = DataFrame(
+    time = repeat(times_out, outer = length(freqs_out)),
+    frequency = repeat(freqs_out, inner = length(times_out)),
+    power = reshape(permutedims(tf), length(times_out) * length(freqs_out)),
+)
+
+
+
+plot_tf(tf, times_out, freqs_out, log_yscale = false, colorrange = [-2, 1.5], xlim = [-0.5, 1.5], interpolate = false)
+
+
+
 
 
 
@@ -53,13 +66,13 @@ times = (-1:(1/sample_rate):1.5-(1/sample_rate))
 tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 2:1:80, [3 10]; log_freqs = true);
 tf = average_over_trials(tf_trials);
 tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.1));
-plot_tf(tf, times_out, freqs_out, log_yscale=true, colorrange=[-3, 3], xlim = [-0.2, 1.0])
+plot_tf(tf, times_out, freqs_out, log_yscale = true, colorrange = [-3, 3], xlim = [-0.2, 1.0])
 
 # Figure B
 tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 2:1:80, [3 10]; log_freqs = true);
 tf = average_over_trials(tf_trials);
 tf = apply_tf_baseline_db(tf, times_out, (-0.5, -0.1));
-plot_tf(tf, times_out, freqs_out, log_yscale=false, colorrange=[-3, 3], xlim = [-0.2, 1.0], interpolate=true)
+plot_tf(tf, times_out, freqs_out, log_yscale = false, colorrange = [-3, 3], xlim = [-0.2, 1.0], interpolate = true)
 
 
 
@@ -117,8 +130,16 @@ tf_perchange_base = apply_tf_baseline_perchange(tf, times_out, (-0.5, -0.2))
 tf_relchange_base = apply_tf_baseline_relchange(tf, times_out, (-0.5, -0.2))
 tf_ztransform_base = apply_tf_baseline_ztransforms(tf, times_out, (-0.5, -0.2))
 
-plot_tf(tf_db_base, times_out, freqs_out, xlim=[-0.5, 1.5], colorrange=[-10, 10], log_yscale=true, interpolate=true)
-plot_tf(tf_perchange_base, times_out, freqs_out, xlim=[-0.5, 1.5], colorrange=[-500, 500], log_yscale=true)
-plot_tf(tf_relchange_base, times_out, freqs_out, xlim=[-0.5, 1.5], colorrange=[-7.5, 7.5], log_yscale=true)
-plot_tf(tf_ztransform_base, times_out, freqs_out, xlim=[-0.5, 1.5], colorrange=[-3.5, 3.5], log_yscale=true)
+plot_tf(
+    tf_db_base,
+    times_out,
+    freqs_out,
+    xlim = [-0.5, 1.5],
+    colorrange = [-10, 10],
+    log_yscale = true,
+    interpolate = true,
+)
+plot_tf(tf_perchange_base, times_out, freqs_out, xlim = [-0.5, 1.5], colorrange = [-500, 500], log_yscale = true)
+plot_tf(tf_relchange_base, times_out, freqs_out, xlim = [-0.5, 1.5], colorrange = [-7.5, 7.5], log_yscale = true)
+plot_tf(tf_ztransform_base, times_out, freqs_out, xlim = [-0.5, 1.5], colorrange = [-3.5, 3.5], log_yscale = true)
 
