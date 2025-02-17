@@ -45,35 +45,49 @@ end
 
 #########################################
 # 2D head shape
-function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
-
+# Base method without neighbors
+function head_shape_2d(fig, ax, layout; 
+    head_kwargs = Dict(), 
+    point_kwargs = Dict(), 
+    label_kwargs = Dict()
+)
     if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
         polar_to_cartesian_xy!(layout)
     end
 
+    # Default kwargs
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
 
-    point_default_kwargs =
-        Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black, :colormap => :jet)
+    point_default_kwargs = Dict(
+        :plot_points => true, 
+        :marker => :circle, 
+        :markersize => 12, 
+        :color => :black
+    )
     point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = pop!(point_kwargs, :plot_points)
 
-    label_default_kwargs =
-        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_default_kwargs = Dict(
+        :plot_labels => true, 
+        :fontsize => 20, 
+        :color => :black, 
+        :xoffset => 0, 
+        :yoffset => 0
+    )
     label_kwargs = merge(label_default_kwargs, label_kwargs)
     plot_labels = pop!(label_kwargs, :plot_labels)
     xoffset = pop!(label_kwargs, :xoffset)
     yoffset = pop!(label_kwargs, :yoffset)
 
-    # head shape
+    # Head shape
     radius = 88 # mm
     arc!(ax, Point2f(0), radius * 2, -π, π; head_kwargs...) # head
     arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2; head_kwargs...) # ear right
     arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2; head_kwargs...) # ear left
     lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4; head_kwargs...) # nose
 
-    # points
+    # Regular points
     if plot_points
         scatter!(ax, layout[!, :x2], layout[!, :y2]; point_kwargs...)
     end
@@ -84,13 +98,60 @@ function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dic
         end
     end
 
-    # hide some plot stuff
     hidedecorations!(ax)
     hidespines!(ax)
 
-    # display(fig)
     return fig, ax
+end
 
+# Method with interactive neighbor visualization
+function head_shape_2d(fig, ax, layout, neighbours::OrderedDict; 
+    head_kwargs = Dict(), 
+    point_kwargs = Dict(), 
+    label_kwargs = Dict()
+)
+    # Draw head shape
+    head_shape_2d(fig, ax, layout; head_kwargs=head_kwargs, point_kwargs=Dict(:plot_points => false), label_kwargs=label_kwargs)
+
+    # Setup interactive points
+    positions = Observable(Point2f.(layout.x2, layout.y2))
+    base_size = 15
+    hover_size = 25
+    sizes = Observable(fill(base_size, length(layout.label)))
+    
+    # Add interactive scatter points
+    p = scatter!(ax, positions; 
+        color = :black, 
+        markersize = sizes, 
+        inspectable = true, 
+        markerspace = :pixel
+    )
+
+    # Initialize line segments
+    linesegments = Observable(Point2f[])
+    lines!(ax, linesegments, color=:gray, linewidth=3)
+
+    # Add hover interaction
+    on(events(fig).mouseposition) do mp
+        plt, i = pick(fig)
+        if plt == p
+            # Reset all sizes to base size
+            new_sizes = fill(base_size, length(layout.label))
+            new_sizes[i] = hover_size
+            sizes[] = new_sizes
+            
+            # Create lines to neighboring electrodes
+            hovered_pos = positions[][i]
+            new_lines = Point2f[]
+            for neighbor in neighbours[Symbol(layout.label[i])].electrodes
+                neighbor_idx = findfirst(==(neighbor), layout.label)
+                push!(new_lines, hovered_pos, positions[][neighbor_idx])
+            end
+            linesegments[] = new_lines
+        end
+    end
+
+    return fig, ax
 end
 
 function head_shape_2d(layout; kwargs...)
@@ -100,6 +161,15 @@ function head_shape_2d(layout; kwargs...)
     display(fig)
     return fig, ax
 end
+
+function head_shape_2d(layout, neighbours; kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    head_shape_2d(fig, ax, layout, neighbours; kwargs...)
+    display(fig)
+    return fig, ax
+end
+
 
 # using LibGEOS package (currently convexhull)
 function point_border(xpos, ypos, border_size)
@@ -1135,25 +1205,9 @@ function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData, channels; average_cha
 end
 
 
-function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData, channels; average_channels = false, kwargs = Dict())
-    fig = Figure()
-    ax1 = Axis(fig[1, 1])
-    fig, ax1 = plot_erp(fig, ax1, dat_orig, channels; average_channels = average_channels, kwargs = kwargs)
-    ax2 = Axis(fig[1, 1])
-    fig, ax2 = plot_erp(fig, ax2, dat_cleaned, channels; average_channels = average_channels, kwargs = kwargs)
-    fig = Figure()
-    ax3 = Axis(fig[1, 1])
-    ax3 = ax2
-    ax4 = Axis(fig[1, 2])
-    ax4 = ax2
-    linkaxes!(ax3, ax4)
-    display(fig)
-end
-
 function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData; average_channels = false, kwargs...)
     plot_erp(dat_orig, dat_cleaned, dat_orig.layout.label; average_channels = average_channels, kwargs...)
 end
-
 
 function best_rect(n)
     dim1 = ceil(Int, sqrt(n))

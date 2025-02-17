@@ -51,8 +51,7 @@ neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40)
 #head_shape_2d(layout, point_kwargs = Dict(:markersize => 30), label_kwargs = Dict(:fontsize => 30, :xoffset => 1))
 #layout = filter(row -> row.label in ["PO7", "PO8"], layout)
 head_shape_2d(layout)
-#head_shape_3d(layout);
-
+head_shape_2d(layout, neighbours)
 # read bdf file
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
@@ -117,9 +116,9 @@ good_channels = setdiff(dat_ica.layout.label, ["PO9"])
 
 include("ica.jl")
 dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
-@time ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1)
-plot_ica_topoplot(ica_result, dat.layout)
 
+ica_result = infomax_ica(dat_for_ica, good_channels, sample_rate=256, n_components = length(good_channels) - 1)
+plot_ica_topoplot(ica_result, dat.layout)
 
 
 # Continuous Data Browser
@@ -135,6 +134,13 @@ epochs = EpochData[]
 for (idx, epoch) in enumerate([1, 4, 5, 3])
     push!(epochs, extract_epochs(dat_ica, idx, epoch, -2, 4))
 end
+
+bad_chans, opt_params = find_bad_channels(epochs[1], AutoRejectParams())
+
+# Visualize results for a specific epoch
+fig = plot_interpolation_comparison(epochs[1], bad_chans, 11)  # Show epoch 1
+
+
 
 # view(epochs)
 # view(epochs[1])

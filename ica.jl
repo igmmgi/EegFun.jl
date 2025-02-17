@@ -74,59 +74,31 @@ function IcaPrms(;
 end
 
 """
-    InfoICA
+    InfoIca
 
 Structure containing ICA decomposition results.
 
 # Fields
-- `topo::Matrix`: Topography matrix (mixing matrix)
-- `unmixing::Matrix`: Unmixing matrix (weights)
-- `label::Vector{String}`: Component labels
+- `unmixing::Matrix{Float64}`: Transforms data to ICs
+- `mixing::Matrix{Float64}`: Transforms ICs back to data
+- `scale::Float64`: Data scaling factor
+- `variance::Vector{Float64}`: Variance explained by each component
+- `kurtosis::Vector{Float64}`: Kurtosis of each component
+- `spectra::Matrix{Float64}`: Power spectra of components (freqs × components)
+- `frequencies::Vector{Float64}`: Frequency bins for spectra
+- `ica_label::Vector{String}`: Component labels
+- `data_label::Vector{String}`: Original data channel labels
 """
 struct InfoIca
-    weights::Matrix{Float64}
-    sphere::Matrix{Float64}
-    mixing::Matrix{Float64}
     unmixing::Matrix{Float64}
+    mixing::Matrix{Float64}
     scale::Float64
+    variance::Vector{Float64}
+    kurtosis::Vector{Float64}
+    spectra::Matrix{Float64}
+    frequencies::Vector{Float64}
     ica_label::Vector{String}
     data_label::Vector{String}
-end
-
-
-"""
-    log_progress(step::Int, max_iter::Int, change::Float64, l_rate::Float64, angledelta::Float64)
-Log progress of ICA computation.
-"""
-function log_progress(step::Int, change::Float64, l_rate::Float64, angledelta::Float64)
-    @info "Step $step, change = $change, lrate = $l_rate, angle = $angledelta"
-end
-
-function compute_sphere_matrix(data::Matrix{Float64})
-    # Compute the covariance matrix
-    cov_matrix = cov(data, dims = 2)
-    # Compute the sphering matrix
-    sphere = 2.0 * inv(sqrt(cov_matrix))
-    # Compute scale factors (diagonal elements of the inverse sphering matrix)
-    scale_factors = diag(inv(sphere))
-    return sphere, scale_factors
-end
-
-function apply_sphering!(data::Matrix{Float64}, sphere::Matrix{Float64})
-    data .= sphere * data
-    return data
-end
-
-function demean(data::Matrix{Float64})
-    return data .- mean(data, dims = 2)
-end
-
-
-function scale_data(data::Matrix{Float64})
-    scale = sqrt(norm((data * data') / size(data, 2)))
-    scaled_data = data / scale
-    println("using scaled data")
-    return scaled_data, scale
 end
 
 
@@ -202,14 +174,34 @@ mutable struct WorkArrays
     olddelta::Matrix{Float64}
 end
 
+function create_work_arrays(n_components::Int, block_size::Int)
+    return WorkArrays(
+        Matrix{Float64}(I, n_components, n_components),  # weights
+        block_size * Matrix{Float64}(I, n_components, n_components),  # BI
+        zeros(n_components, block_size),  # u
+        zeros(n_components, block_size),  # y
+        zeros(n_components, block_size),  # data_block
+        Matrix{Float64}(I, n_components, n_components),  # oldweights
+        Matrix{Float64}(I, n_components, n_components),  # startweights
+        similar(Matrix{Float64}(I, n_components, n_components)),  # weights_temp
+        zeros(n_components, block_size),  # y_temp
+        similar(Matrix{Float64}(I, n_components, n_components)),  # bi_weights
+        similar(Matrix{Float64}(I, n_components, n_components)),  # wu_term
+        zeros(1, n_components^2),  # delta
+        zeros(1, n_components^2)   # olddelta
+    )
+end
+
 
 function infomax_ica(
-    dat::Matrix{Float64},
+    dat_ica::Matrix{Float64},
     data_labels;
     n_components::Union{Nothing,Int} = nothing,
     params::IcaPrms = IcaPrms(),
 )
-    dat_ica = demean(copy(dat))
+
+    # demean and scale data
+    dat_ica .-= mean(dat_ica, dims=2)
     scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
     dat_ica ./= scale
 
@@ -223,60 +215,49 @@ function infomax_ica(
         pca_components = nothing
     end
 
-    # Sphering 
-    sphere = 2.0 * inv(sqrt(cov(dat_ica, dims = 2)))
-    dat_ica .= sphere * dat_ica
+    # sphering 
+    sphere = inv(sqrt(cov(dat_ica, dims = 2)))
+    dat_ica = sphere * dat_ica
 
-    # Initialize
+    # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
     block = min(Int(floor(sqrt(n_samples / 3.0))), 512)
+    work = create_work_arrays(n_channels, block)
     lastt = block * div(n_samples, block)
-
-    # Pre-allocate arrays
-    weights = Matrix{Float64}(I, n_components, n_components)
-    oldweights = copy(weights)
-    startweights = copy(weights)
-    u = zeros(n_channels, block)
-    y = zeros(n_channels, block)
-    y_temp = zeros(n_channels, block)
-    data_block = zeros(n_channels, block)
-    delta = zeros(1, n_channels^2)
-    olddelta = zeros(1, n_channels^2)
-    BI = block * Matrix{Float64}(I, n_channels, n_channels)
-    weights_temp = similar(weights)
-    bi_weights = similar(weights)
-    wu_term = similar(weights)
-
-    # Main loop
     step = 0
     wts_blowup = false
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
 
+    # pre-allocate permutation vector
+    permute_indices = Vector{Int}(undef, n_samples)
+
     @inbounds while step < params.max_iter
-        permute_indices = randperm(n_samples)
+        randperm!(permute_indices)
 
         for t = 1:block:lastt
             block_end = min(t + block - 1, n_samples)
             block_size = block_end - t + 1
 
-            # Extract data block
-            data_block[:, 1:block_size] .= view(dat_ica, :, permute_indices[t:block_end])
+            # extract data block
+            copyto!(view(work.data_block, :, 1:block_size), 
+                   view(dat_ica, :, view(permute_indices, t:block_end)))
 
-            # Forward pass
-            mul!(u, weights, data_block)
-            y .= 1 ./ (1 .+ exp.(-u))
-            y_temp .= 1 .- 2 .* y
+            # forward pass
+            mul!(work.u, work.weights, work.data_block)
+            @. work.y = 1 / (1 + exp(-work.u))
+            @. work.y_temp = 1 - 2 * work.y
 
-            # Weight update
-            mul!(wu_term, y_temp, u')
-            bi_weights .= BI .+ wu_term
-            mul!(weights_temp, bi_weights, weights)
-            weights .+= params.l_rate .* weights_temp
+            # update weights 
+            mul!(work.wu_term, work.y_temp, transpose(work.u))
+            work.bi_weights .= work.BI .+ work.wu_term
+            mul!(work.weights_temp, work.bi_weights, work.weights)
+            @. work.weights += params.l_rate * work.weights_temp
 
-            if maximum(abs, weights) > params.max_weight
+            # boom?
+            if maximum(abs, work.weights) > params.max_weight
                 wts_blowup = true
                 change = NaN
                 break
@@ -284,10 +265,10 @@ function infomax_ica(
         end
 
         if !wts_blowup
-            oldweights .-= weights
+            work.oldweights .-= work.weights
             step += 1
-            delta .= reshape(oldweights, 1, :)
-            change = dot(delta, delta)
+            work.delta .= reshape(work.oldweights, 1, :)
+            change = dot(work.delta, work.delta)
         end
 
         if wts_blowup || isnan(change) || isinf(change)
@@ -295,24 +276,24 @@ function infomax_ica(
             change = NaN
             wts_blowup = false
             params.l_rate *= params.restart_factor
-            weights .= startweights
-            oldweights .= startweights
+            work.weights .= work.startweights
+            work.oldweights .= work.startweights
             continue
         end
 
         if step > 2
-            angledelta = acos(clamp(dot(delta, olddelta) / sqrt(change * oldchange), -1, 1))
+            angledelta = acos(clamp(dot(work.delta, work.olddelta) / sqrt(change * oldchange), -1, 1))
             if params.degconst * angledelta > params.anneal_deg
                 params.l_rate *= params.anneal_step
-                olddelta .= delta
+                work.olddelta .= work.delta
                 oldchange = change
             end
         elseif step == 1
-            olddelta .= delta
+            work.olddelta .= work.delta
             oldchange = change
         end
 
-        oldweights .= weights
+        work.oldweights .= work.weights
 
         if step > 2 && change < params.w_change
             break
@@ -320,30 +301,59 @@ function infomax_ica(
             params.l_rate *= params.blowup_fac
         end
 
-        log_progress(step, change, params.l_rate, params.degconst * angledelta)
+    @info "Step $step, change = $change, lrate = $(params.l_rate), angle = $(params.degconst) * $angledelta"
+
     end
 
     # Final calculations
     if !isnothing(pca_components)
-        weights = weights * sphere * pca_components'
+        work.weights = work.weights * sphere * pca_components'
     else
-        weights = weights * sphere
+        work.weights = work.weights * sphere
     end
 
-    sphere_final = Matrix{Float64}(I, size(weights, 2), size(weights, 2))
-    unmixing = weights * sphere_final
-    mixing = pinv(unmixing)
+    mixing = pinv(work.weights)
 
+    # Calculate total variance explained
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
-    order = sortperm(meanvar, rev = true)
+    # Normalize to proportions
+    meanvar_normalized = meanvar ./ sum(meanvar)
+    order = sortperm(meanvar_normalized, rev = true)
+
+    # Transform data to component space
+    components = work.weights[order, :] * dat_ica
+    # Calculate kurtosis for each component
+    kurt = [kurtosis(components[i,:]) for i in 1:size(components,1)]
+
+    # Calculate power spectra using Welch's method
+    n_fft = min(4 * sample_rate, size(components, 2))  # 4s windows or signal length
+    n_overlap = div(n_fft, 2)  # 50% overlap
+    n_per_seg = n_fft
+    window = DSP.hanning(n_per_seg)  # Hanning window
+    # Create frequency vector from 1 Hz to Nyquist
+    freqs = 1:1:div(sample_rate, 2)
+    spectra = zeros(length(freqs), size(components, 1))
+    for i in 1:size(components, 1)
+        psd = DSP.welch_pgram(
+            components[i,:],
+            n_per_seg,
+            n_overlap;
+            window=window,
+            fs=sample_rate
+        )
+        # Interpolate to get power at integer frequencies
+        spectra[:, i] = psd.power[round.(Int, freqs .* (length(psd.freq) / (sample_rate/2)))]
+    end
 
     return InfoIca(
-        weights[order, :],
-        sphere_final,
+        work.weights[order, :],
         mixing[:, order],
-        unmixing[order, :],
         scale,
-        ["IC$i" for i = 1:size(weights, 1)],
+        meanvar_normalized[order],
+        kurt,
+        spectra,
+        freqs,
+        ["IC$i" for i = 1:size(work.weights, 1)],
         data_labels,
     )
 end
