@@ -329,141 +329,109 @@ function infomax_ica(
     )
 end
 
+
+
+
+
 function plot_ica_component_activation(
     dat::ContinuousData,
     ica_result::InfoIca,
-    n_visible_components::Int = 10,
+    n_visible_components::Int = 10,  # Number of components visible at once
 )
-    # Data preparation
+    # convert ContinuousData to appropriate matrix
     dat_matrix = permutedims(Matrix(dat.data[!, ica_result.data_label]))
+
+    # Scale dat matrix the same way as in ICA
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica_result.scale
+
+    # Transform data to component space
     components = ica_result.unmixing * dat_matrix
     total_components = size(components, 1)
 
     # Create figure
-    fig = Figure(size=(1200, 1000))
-    
+    fig = Figure()
+
     # Create main layout
-    main_layout = fig[1,1] = GridLayout()
+    # main_layout = fig[1,1] = GridLayout()
     
-    # Create plot area (90% of space)
-    plot_area = main_layout[1,1] = GridLayout()
-    rowsize!(main_layout, 1, Relative(0.9))
+    # # Create plot area (90% of space)
+    # plot_area = main_layout[1,1] = GridLayout()
+    # rowsize!(main_layout, 1, Relative(0.9))
     
     # Create slider area (10% of space)
-    slider_area = main_layout[2,2] = GridLayout(tellheight=false)
-
-    # Create slider panel with proper column indexing
-    slider_panel = slider_area[1,1] = GridLayout(3, 1, heights=[Auto(), Auto(), 30])
-
-    # Set column sizes to match time series width
-    colsize!(slider_panel, 1, Relative(1.0))  # Full width for sliders
-
-    # Create button grid
-    button_grid = slider_panel[3,1] = GridLayout(tellheight=false)
-
-    # Create buttons with fixed size
-    back_button = Button(button_grid[1,1], label = "← Previous", width=100, height=30)
-    next_button = Button(button_grid[1,2], label = "Next →", width=100, height=30)
-
-    # Add spacing between buttons
-    colgap!(button_grid, 10)
-
-    # Create plots
-    gl = plot_area[1,1] = GridLayout()
-    topo_grid = gl[1, 1] = GridLayout()
-    time_grid = gl[1, 2] = GridLayout()
+    # slider_area = main_layout[2,1] = GridLayout(tellheight=false)
+    # rowsize!(main_layout, 2, Auto())
     
-    # Store axes and observables
-    axs = []
-    lines_obs = []
-    topo_axs = []
+    # Create plot grids
+    # gl = plot_area[1,1] = GridLayout()
 
-    for i = 1:n_visible_components
-        # Topography plot
+    # Set up observables for interactive plotting
+    window_size = 2000
+    xrange = Observable(1:window_size)  # Initial window
+    xlims = @lift((dat.data.time[first($xrange)], dat.data.time[last($xrange)]))
+    
+    # Initialize y-axis limits based on initial data window
+    initial_range = maximum(abs.(extrema(components[1:n_visible_components, 1:window_size])))
+    ylims = Observable((-initial_range, initial_range))
+    
+    # Observable for component range
+    comp_start = Observable(1)
+    
+    # Create all subplots at once
+    axs = []  # Store time series axes
+    lines_obs = []  # Store line observables
+    v_eogs = []  # Store line observables
+    h_eogs = []  # Store line observables
+    topo_axs = []  # Store topography axes
+    
+    for i in 1:n_visible_components
+        # Create subplot for topography
         ax_topo = Axis(
-            topo_grid[i, 1],
-            width = 70,
-            height = 60,
-            title = @sprintf("IC%d (%.1f%%)", i, ica_result.variance[i] * 100)
+            fig[i, 1],
+            width = 150,
+            height = 150,
+            title = @sprintf("IC %d (%.1f%%)", i, ica_result.variance[i] * 100)
         )
         push!(topo_axs, ax_topo)
-        plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
-        hidexdecorations!(ax_topo)
-        hidedecorations!(ax_topo)
-
-        # Time series plot
-        ax_time = Axis(time_grid[i, 1], ylabel = "Amplitude")
-        push!(axs, ax_time)
         
-        # Set initial limits and create line
+        # Initial topography plot
+        plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
+        
+        hidexdecorations!(ax_topo)
+
+        # Create subplot for time series
+        ax_time = Axis(fig[i, 2], ylabel = "ICA Amplitude")
+        push!(axs, ax_time)
+
+        # Set initial limits
         xlims!(ax_time, xlims[])
         ylims!(ax_time, ylims[])
-        line_obs = Observable(components[i, :])
-        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
-        push!(lines_obs, line_obs)
 
-        # Hide x-axis decorations except for last plot
+        # Create observable for component data
+        line_obs = Observable(components[i, :])
+        v_eog = Observable(dat.data.vEOG)
+        h_eog = Observable(dat.data.hEOG)
+        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
+        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($v_eog[$xrange]))
+        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($h_eog[$xrange]))
+        push!(lines_obs, line_obs)
+        push!(v_eogs, v_eog)
+        push!(h_eogs, h_eog)
+
+        # Hide x-axis decorations for all but the last plot
         if i != n_visible_components
             hidexdecorations!(ax_time, grid = false)
         end
     end
 
     # Link all time series axes
-    linkxaxes!(axs...)
-    linkyaxes!(axs...)
+    linkaxes!(axs...)
 
-    # Set column sizes
-    colsize!(gl, 1, Relative(0.1))  # Topo plots column
-    colsize!(gl, 2, Relative(0.9))  # Time series column
-    
-    # Create sliders in slider_area (aligned with time series)
-    slider_panel = slider_area[1,1] = GridLayout(2, 1, heights=[Auto(), Auto(), 30])
+    # Adjust layout
+    colsize!(fig.layout, 1, Auto(150))  # Fixed width for topo plots
 
-    # Create time slider in first row
-    time_group = SliderGrid(
-        slider_panel[1, 1],
-        (label = "Time", range = 1:size(components, 2)-window_size+1, startvalue = 1),
-        tellheight = false
-    )
-
-    # Create scale slider in second row
-    scale_group = SliderGrid(
-        slider_panel[2, 1],
-        (label = "Y-Scale", range = 0.1:0.1:5.0, startvalue = 1.0),
-        tellheight = false
-    )
-
-    # Get the actual slider objects
-    time_slider = time_group.sliders[1]
-    scale_slider = scale_group.sliders[1]
-
-    # Connect sliders to observables
-    on(time_slider.value) do val
-        start_idx = Int(round(val))
-        # Ensure we don't exceed data bounds
-        end_idx = min(start_idx + window_size - 1, size(components, 2))
-        start_idx = max(1, end_idx - window_size + 1)  # Adjust start if needed
-        
-        xrange[] = start_idx:end_idx
-       
-        # Update xlims for all axes
-        new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
-        for ax in axs
-            xlims!(ax, new_xlims)
-        end
-    end
-
-    on(scale_slider.value) do val
-        new_range = initial_range / val
-        ylims[] = (-new_range, new_range)
-        for ax in axs
-            ylims!(ax, ylims[])
-        end
-    end
-
-    # Add this function before the slider creation
+    # Function to update component data
     function update_components(start_idx)
         for i in 1:n_visible_components
             comp_idx = start_idx + i - 1
@@ -472,208 +440,91 @@ function plot_ica_component_activation(
                 
                 # Clear and redraw topography
                 empty!(topo_axs[i])
-                plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, 
-                                colorbar_kwargs = Dict(:plot_colorbar => false))
+                plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
                 
                 # Update title
-                topo_axs[i].title = @sprintf("IC%d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
+                topo_axs[i].title = @sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
             end
         end
     end
 
-    # Connect button actions
-    on(back_button.clicks) do _
+    # # Add navigation buttons below topo plots
+    topo_nav = GridLayout(fig[end+1,1])
+    prev_topo = Button(topo_nav[1,1], label = "◄ Previous")
+    next_topo = Button(topo_nav[1,2], label = "Next ►")
+
+    # Connect topo navigation buttons
+    on(prev_topo.clicks) do _
         new_start = max(1, comp_start[] - n_visible_components)
-        if new_start != comp_start[]
-            comp_start[] = new_start
-            update_components(new_start)
-        end
+        comp_start[] = new_start
+        update_components(new_start)
     end
 
-    on(next_button.clicks) do _
-        new_start = min(total_components - n_visible_components + 1, 
-                       comp_start[] + n_visible_components)
-        if new_start != comp_start[]
-            comp_start[] = new_start
-            update_components(new_start)
+    on(next_topo.clicks) do _
+        new_start = min(total_components - n_visible_components + 1, comp_start[] + n_visible_components)
+        comp_start[] = new_start
+        update_components(new_start)
+    end
+
+             # Add keyboard controls
+    on(events(fig).keyboardbutton) do event
+        if event.action in (Keyboard.press,)
+            if event.key == Keyboard.left || event.key == Keyboard.right
+                # Handle x-axis scrolling
+                current_range = xrange[]
+                if event.key == Keyboard.left
+                    new_start = max(1, first(current_range) - window_size)
+                    xrange[] = new_start:(new_start + window_size - 1)
+                else  # right
+                    new_start = min(size(components, 2) - window_size + 1, first(current_range) + window_size)
+                    xrange[] = new_start:(new_start + window_size - 1)
+                end
+                
+                # Update x-axis limits for all axes
+                new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
+                for ax in axs
+                    xlims!(ax, new_xlims)
+                end
+                
+            elseif event.key == Keyboard.up || event.key == Keyboard.down
+                # Handle y-axis scaling
+                current_range = ylims[][2]  # Just take the positive limit since it's symmetric
+                if event.key == Keyboard.up
+                    # Zoom in - decrease range by 20%
+                    new_range = current_range * 0.8
+                else  # down
+                    # Zoom out - increase range by 20%
+                    new_range = current_range * 1.2
+                end
+                
+                # Keep centered on zero
+                new_ylims = (-new_range, new_range)
+                ylims[] = new_ylims
+                
+                # Update y-axis limits for all axes
+                for ax in axs
+                    ylims!(ax, new_ylims)
+                end
+                
+            elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
+                # Handle component scrolling
+                current_start = comp_start[]
+                if event.key == Keyboard.page_up
+                    new_start = max(1, current_start - n_visible_components)
+                else  # page_down
+                    new_start = min(total_components - n_visible_components + 1, current_start + n_visible_components)
+                end
+                
+                if new_start != current_start
+                    comp_start[] = new_start
+                    update_components(new_start)
+                end
+            end
         end
     end
 
     return fig
 end
-
-
-# function plot_ica_component_activation(
-#     dat::ContinuousData,
-#     ica_result::InfoIca,
-#     n_visible_components::Int = 10,
-# )
-#     # Data preparation
-#     dat_matrix = permutedims(Matrix(dat.data[!, ica_result.data_label]))
-#     dat_matrix .-= mean(dat_matrix, dims = 2)
-#     dat_matrix ./= ica_result.scale
-#     components = ica_result.unmixing * dat_matrix
-#     total_components = size(components, 1)
-# 
-#     # Create figure with proper size
-#     fig = Figure()
-#     
-#     # Set up observables
-#     window_size = 2000
-#     xrange = Observable(1:window_size)
-#     xlims = @lift((dat.data.time[first($xrange)], dat.data.time[last($xrange)]))
-#     initial_range = maximum(abs.(extrema(components[1:n_visible_components, 1:window_size])))
-#     ylims = Observable((-initial_range, initial_range))
-#     comp_start = Observable(1)
-#     
-#     # Create main layout
-#     main_layout = fig[1,1] = GridLayout()
-#     
-#     # Create plot area (90% of space)
-#     plot_area = main_layout[1,1] = GridLayout()
-#     rowsize!(main_layout, 1, Relative(0.9))
-#     
-#     # Create slider area (10% of space)
-#     slider_area = main_layout[2,1] = GridLayout(tellheight=false)
-#     rowsize!(main_layout, 2, Auto())
-#     
-#     # Create plots
-#     gl = plot_area[1,1] = GridLayout()
-#     topo_grid = gl[1, 1] = GridLayout()
-#     time_grid = gl[1, 2] = GridLayout()
-#     
-#     # Store axes and observables
-#     axs = []
-#     lines_obs = []
-#     topo_axs = []
-# 
-#     for i = 1:n_visible_components
-#         # Topography plot
-#         ax_topo = Axis(
-#             topo_grid[i, 1],
-#             width = 70,
-#             height = 60,
-#             title = @sprintf("IC%d (%.1f%%)", i, ica_result.variance[i] * 100)
-#         )
-#         push!(topo_axs, ax_topo)
-#         plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
-#         hidexdecorations!(ax_topo)
-#         hidedecorations!(ax_topo)
-# 
-#         # Time series plot
-#         ax_time = Axis(time_grid[i, 1], ylabel = "Amplitude")
-#         push!(axs, ax_time)
-#         
-#         # Set initial limits and create line
-#         xlims!(ax_time, xlims[])
-#         ylims!(ax_time, ylims[])
-#         line_obs = Observable(components[i, :])
-#         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
-#         push!(lines_obs, line_obs)
-# 
-#         # Hide x-axis decorations except for last plot
-#         if i != n_visible_components
-#             hidexdecorations!(ax_time, grid = false)
-#         end
-#     end
-# 
-#     # Link all time series axes
-#     linkxaxes!(axs...)
-#     linkyaxes!(axs...)
-# 
-#     # Set column sizes
-#     colsize!(gl, 1, Relative(0.1))  # Fixed width for topo plots
-#     colsize!(gl, 2, Relative(0.9))  # Time series take remaining width
-#     
-#     # Create sliders in slider_area
-#     slider_panel = slider_area[1,1] = GridLayout()
-#     
-#     # Create three sliders matching the full width
-#     time_group = SliderGrid(
-#         slider_panel[1, 1],
-#         (label = "Time", range = 1:size(components, 2)-window_size+1, startvalue = 1),
-#         tellheight = false
-#     )
-# 
-#     scale_group = SliderGrid(
-#         slider_panel[2, 1],
-#         (label = "Y-Scale", range = 0.1:0.1:5.0, startvalue = 1.0),
-#         tellheight = false
-#     )
-# 
-#     component_group = SliderGrid(
-#         slider_panel[3, 1],
-#         (label = "Components", range = 1:total_components-n_visible_components+1, startvalue = 1),
-#         tellheight = false
-#     )
-# 
-#     # Get the actual slider objects
-#     time_slider = time_group.sliders[1]
-#     scale_slider = scale_group.sliders[1]
-#     component_slider = component_group.sliders[1]
-# 
-#     # Add spacing between sliders
-#     rowgap!(slider_panel, 1)
-# 
-#     # Connect sliders to observables
-#     on(time_slider.value) do val
-#         start_idx = Int(round(val))
-#         # Ensure we don't exceed data bounds
-#         end_idx = min(start_idx + window_size - 1, size(components, 2))
-#         start_idx = max(1, end_idx - window_size + 1)  # Adjust start if needed
-#         
-#         xrange[] = start_idx:end_idx
-#        
-#         # Update xlims for all axes
-#         new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
-#         for ax in axs
-#             xlims!(ax, new_xlims)
-#         end
-#     end
-# 
-#     on(scale_slider.value) do val
-#         new_range = initial_range / val
-#         ylims[] = (-new_range, new_range)
-#         for ax in axs
-#             ylims!(ax, ylims[])
-#         end
-#     end
-# 
-#     on(component_slider.value) do val
-#         new_start = Int(round(val))
-#         if new_start != comp_start[]
-#             comp_start[] = new_start
-#             update_components(new_start)
-#         end
-#     end
-# 
-#     # Add this function before the slider creation
-#     function update_components(start_idx)
-#         for i in 1:n_visible_components
-#             comp_idx = start_idx + i - 1
-#             if comp_idx <= total_components
-#                 lines_obs[i][] = components[comp_idx, :]
-#                 
-#                 # Clear and redraw topography
-#                 empty!(topo_axs[i])
-#                 plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, 
-#                                 colorbar_kwargs = Dict(:plot_colorbar => false))
-#                 
-#                 # Update title
-#                 topo_axs[i].title = @sprintf("IC%d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
-#             end
-#         end
-#     end
-# 
-#     return fig
-# end
-
-
-
-
-
-
-
 
 
 # function plot_ica_component_activation(
@@ -693,7 +544,21 @@ end
 #     total_components = size(components, 1)
 # 
 #     # Create figure
-#     fig = Figure(size = (1600, 150 * n_visible_components))
+#     fig = Figure()
+# 
+#     # Create main layout
+#     # main_layout = fig[1,1] = GridLayout()
+#     
+#     # # Create plot area (90% of space)
+#     # plot_area = main_layout[1,1] = GridLayout()
+#     # rowsize!(main_layout, 1, Relative(0.9))
+#     
+#     # Create slider area (10% of space)
+#     # slider_area = main_layout[2,1] = GridLayout(tellheight=false)
+#     # rowsize!(main_layout, 2, Auto())
+#     
+#     # Create plot grids
+#     # gl = plot_area[1,1] = GridLayout()
 # 
 #     # Set up observables for interactive plotting
 #     window_size = 2000
@@ -701,7 +566,7 @@ end
 #     xlims = @lift((dat.data.time[first($xrange)], dat.data.time[last($xrange)]))
 #     
 #     # Initialize y-axis limits based on initial data window
-#     initial_range = maximum(abs.(extrema(components[:, 1:window_size])))
+#     initial_range = maximum(abs.(extrema(components[1:n_visible_components, 1:window_size])))
 #     ylims = Observable((-initial_range, initial_range))
 #     
 #     # Observable for component range
@@ -710,6 +575,8 @@ end
 #     # Create all subplots at once
 #     axs = []  # Store time series axes
 #     lines_obs = []  # Store line observables
+#     v_eogs = []  # Store line observables
+#     h_eogs = []  # Store line observables
 #     topo_axs = []  # Store topography axes
 #     
 #     for i in 1:n_visible_components
@@ -718,7 +585,7 @@ end
 #             fig[i, 1],
 #             width = 150,
 #             height = 150,
-#             title = @sprintf("IC%d (%.1f%%)", i, ica_result.variance[i] * 100)
+#             title = @sprintf("IC %d (%.1f%%)", i, ica_result.variance[i] * 100)
 #         )
 #         push!(topo_axs, ax_topo)
 #         
@@ -726,32 +593,38 @@ end
 #         plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
 #         
 #         hidexdecorations!(ax_topo)
-#
+# 
 #         # Create subplot for time series
-#         ax_time = Axis(fig[i, 2], ylabel = "Amplitude")
+#         ax_time = Axis(fig[i, 2], ylabel = "ICA Amplitude")
 #         push!(axs, ax_time)
-#
+# 
 #         # Set initial limits
 #         xlims!(ax_time, xlims[])
 #         ylims!(ax_time, ylims[])
-#
+# 
 #         # Create observable for component data
 #         line_obs = Observable(components[i, :])
+#         v_eog = Observable(dat.data.vEOG)
+#         h_eog = Observable(dat.data.hEOG)
 #         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
+#         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($v_eog[$xrange]))
+#         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($h_eog[$xrange]))
 #         push!(lines_obs, line_obs)
-#
+#         push!(v_eogs, v_eog)
+#         push!(h_eogs, h_eog)
+# 
 #         # Hide x-axis decorations for all but the last plot
 #         if i != n_visible_components
 #             hidexdecorations!(ax_time, grid = false)
 #         end
 #     end
-#
+# 
 #     # Link all time series axes
 #     linkaxes!(axs...)
-#
+# 
 #     # Adjust layout
 #     colsize!(fig.layout, 1, Auto(150))  # Fixed width for topo plots
-#
+# 
 #     # Function to update component data
 #     function update_components(start_idx)
 #         for i in 1:n_visible_components
@@ -764,12 +637,30 @@ end
 #                 plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
 #                 
 #                 # Update title
-#                 topo_axs[i].title = @sprintf("IC%d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
+#                 topo_axs[i].title = @sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
 #             end
 #         end
 #     end
-#
-#     # Add keyboard controls
+# 
+#     # # Add navigation buttons below topo plots
+#     topo_nav = GridLayout(fig[end+1,1])
+#     prev_topo = Button(topo_nav[1,1], label = "◄ Previous")
+#     next_topo = Button(topo_nav[1,2], label = "Next ►")
+# 
+#     # Connect topo navigation buttons
+#     on(prev_topo.clicks) do _
+#         new_start = max(1, comp_start[] - n_visible_components)
+#         comp_start[] = new_start
+#         update_components(new_start)
+#     end
+# 
+#     on(next_topo.clicks) do _
+#         new_start = min(total_components - n_visible_components + 1, comp_start[] + n_visible_components)
+#         comp_start[] = new_start
+#         update_components(new_start)
+#     end
+# 
+#              # Add keyboard controls
 #     on(events(fig).keyboardbutton) do event
 #         if event.action in (Keyboard.press,)
 #             if event.key == Keyboard.left || event.key == Keyboard.right
@@ -825,8 +716,9 @@ end
 #             end
 #         end
 #     end
-#
+# 
 #     return fig
 # end
+
 
 

@@ -1674,7 +1674,7 @@ function plot_ica_topoplot(
     return fig
 end
 
-function plot_ica_component_activation(ica::ICA, epochs::EpochData, component::Int)
+function plot_ica_component_activation(ica, epochs::EpochData, component::Int)
     fig = Figure()
     
     # Create grid layout and make it fill the figure
