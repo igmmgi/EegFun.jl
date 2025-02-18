@@ -130,10 +130,6 @@ plot_ica_topoplot(ica_result, dat.layout)
 plot_ica_topoplot(ica_result, dat.layout, comps = 1:5)
 plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
 
-fig = Figure()
-ax = Axis(fig[1,1])
-# plot_ica_topoplot(fig, ax, ica_result, 12, layout)
-
 plot_ica_component_activation(dat, ica_result)
 
 
