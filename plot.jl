@@ -1674,7 +1674,45 @@ function plot_ica_topoplot(
     return fig
 end
 
+function plot_ica_component_activation(ica::ICA, epochs::EpochData, component::Int)
+    fig = Figure()
+    
+    # Create grid layout and make it fill the figure
+    gl = fig[1,1] = GridLayout()
+    colsize!(gl, 1, Relative(1.0))
+    
+    # Get data for plotting
+    activation = ica.activation[component, :]
+    projection = ica.mixing[:, component] .* activation'
+    
+    # Calculate y-limits for consistent scaling
+    y_min, y_max = extrema(activation)
+    y_range = y_max - y_min
+    limits = (y_min - 0.1*y_range, y_max + 0.1*y_range)
+    
+    # Plot component activation
+    ax1 = Axis(gl[1, 1], title="Component $component Activation", limits=(nothing, limits))
+    lines!(ax1, epochs.time, activation)
+    
+    # Plot channel projections
+    ax2 = Axis(gl[2, 1], title="Channel Projections")
+    for (i, chan) in enumerate(epochs.layout.label)
+        lines!(ax2, epochs.time, projection[i, :],
+               color=:lightgrey,
+               linewidth=1,
+               alpha=0.5)
+    end
+    
+    # Set row sizes to give equal space to plots
+    rowsize!(gl, 1, Relative(0.5))
+    rowsize!(gl, 2, Relative(0.5))
+    
+    rowgap!(gl, 10)  # Add gap between plots
+    
+    # Link x-axes
+    linkxaxes!(ax1, ax2)
+    
+    return fig
+end
 
-fig = Figure()
-ax = Axis(fig[1,1])
-plot_ica_topoplot(fig, ax, ica_result, 1, layout)
+
