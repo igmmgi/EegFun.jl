@@ -187,7 +187,7 @@ function create_work_arrays(n_components::Int, block_size::Int)
         zeros(n_components, n_components),  # bi_weights
         zeros(n_components, n_components),  # wu_term
         zeros(1, n_components^2),  # delta
-        zeros(1, n_components^2)   # olddelta
+        zeros(1, n_components^2),   # olddelta
     )
 end
 
@@ -197,7 +197,7 @@ function infomax_ica(
     data_labels;
     n_components::Union{Nothing,Int} = nothing,
     params::IcaPrms = IcaPrms(),
-    sample_rate::Int = 256
+    sample_rate::Int = 256,
 )
 
     # demean and scale data
@@ -209,7 +209,7 @@ function infomax_ica(
     if !isnothing(n_components)
         F = svd(dat_ica)
         # Ensure we're using the correct dimensions for PCA components
-        pca_components = F.U[1:size(dat_ica,1), 1:n_components]  # Explicitly specify both dimensions
+        pca_components = F.U[1:size(dat_ica, 1), 1:n_components]  # Explicitly specify both dimensions
         dat_ica = pca_components' * dat_ica
     else
         n_components = size(dat_ica, 1)
@@ -331,394 +331,71 @@ end
 
 
 
+function remove_ica_components(dat::ContinuousData, ica_result::InfoIca, components_to_remove::Vector{Int})
+    dat_out = deepcopy(dat)
 
+    ica_channels = ica_result.data_label
 
-function plot_ica_component_activation(
-    dat::ContinuousData,
-    ica_result::InfoIca,
-    n_visible_components::Int = 10,  # Number of components visible at once
-)
-    # convert ContinuousData to appropriate matrix
-    dat_matrix = permutedims(Matrix(dat.data[!, ica_result.data_label]))
+    # Create transformation matrix for ICA channels
+    tra = Matrix(I, length(ica_channels), length(ica_channels)) - ica_result.mixing[:, components_to_remove] * ica_result.unmixing[components_to_remove, :]
 
-    # Scale dat matrix the same way as in ICA
-    dat_matrix .-= mean(dat_matrix, dims = 2)
-    dat_matrix ./= ica_result.scale
+    # Apply transformation to ICA channels
+    cleaned_ica_data = tra * Matrix(dat_out.data[!, ica_channels])'
 
-    # Transform data to component space
-    components = ica_result.unmixing * dat_matrix
-    total_components = size(components, 1)
+    dat_out.data[!, ica_channels] = cleaned_ica_data'
 
-    # Create figure
-    fig = Figure()
+    return dat_out
 
-    # Create main layout
-    # main_layout = fig[1,1] = GridLayout()
-    
-    # # Create plot area (90% of space)
-    # plot_area = main_layout[1,1] = GridLayout()
-    # rowsize!(main_layout, 1, Relative(0.9))
-    
-    # Create slider area (10% of space)
-    # slider_area = main_layout[2,1] = GridLayout(tellheight=false)
-    # rowsize!(main_layout, 2, Auto())
-    
-    # Create plot grids
-    # gl = plot_area[1,1] = GridLayout()
+end
 
-    # Set up observables for interactive plotting
-    window_size = 2000
-    xrange = Observable(1:window_size)  # Initial window
-    xlims = @lift((dat.data.time[first($xrange)], dat.data.time[last($xrange)]))
-    
-    # Initialize y-axis limits based on initial data window
-    initial_range = maximum(abs.(extrema(components[1:n_visible_components, 1:window_size])))
-    ylims = Observable((-initial_range, initial_range))
-    
-    # Observable for component range
-    comp_start = Observable(1)
-    
-    # Create all subplots at once
-    axs = []  # Store time series axes
-    lines_obs = []  # Store line observables
-    v_eogs = []  # Store line observables
-    h_eogs = []  # Store line observables
-    topo_axs = []  # Store topography axes
-    
-    for i in 1:n_visible_components
-        # Create subplot for topography
-        ax_topo = Axis(
-            fig[i, 1],
-            width = 150,
-            height = 150,
-            title = @sprintf("IC %d (%.1f%%)", i, ica_result.variance[i] * 100)
-        )
-        push!(topo_axs, ax_topo)
-        
-        # Initial topography plot
-        plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
-        
-        hidexdecorations!(ax_topo)
+function remove_ica_components(dat::DataFrame, ica_result::InfoIca, components_to_remove::Vector{Int})
+    dat_out = deepcopy(dat)
 
-        # Create subplot for time series
-        ax_time = Axis(fig[i, 2], ylabel = "ICA Amplitude")
-        push!(axs, ax_time)
+    ica_channels = ica_result.data_label
 
-        # Set initial limits
-        xlims!(ax_time, xlims[])
-        ylims!(ax_time, ylims[])
+    # Create transformation matrix for ICA channels
+    tra = Matrix(I, length(ica_channels), length(ica_channels)) - ica_result.mixing[:, components_to_remove] * ica_result.unmixing[components_to_remove, :]
 
-        # Create observable for component data
-        line_obs = Observable(components[i, :])
-        v_eog = Observable(dat.data.vEOG)
-        h_eog = Observable(dat.data.hEOG)
-        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
-        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($v_eog[$xrange]))
-        lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($h_eog[$xrange]))
-        push!(lines_obs, line_obs)
-        push!(v_eogs, v_eog)
-        push!(h_eogs, h_eog)
+    # Apply transformation to ICA channels
+    cleaned_ica_data = tra * Matrix(dat[!, ica_channels])'
 
-        # Hide x-axis decorations for all but the last plot
-        if i != n_visible_components
-            hidexdecorations!(ax_time, grid = false)
-        end
-    end
+    dat_out[!, ica_channels] = cleaned_ica_data'
 
-    # Link all time series axes
-    linkaxes!(axs...)
+    return dat_out
 
-    # Adjust layout
-    colsize!(fig.layout, 1, Auto(150))  # Fixed width for topo plots
+end
 
-    # Function to update component data
-    function update_components(start_idx)
-        for i in 1:n_visible_components
-            comp_idx = start_idx + i - 1
-            if comp_idx <= total_components
-                lines_obs[i][] = components[comp_idx, :]
-                
-                # Clear and redraw topography
-                empty!(topo_axs[i])
-                plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
-                
-                # Update title
-                topo_axs[i].title = @sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
-            end
-        end
-    end
+function restore_original_data(dat::ContinuousData, ica_result::InfoIca, components_removed::Vector{Int})
+    dat_out = deepcopy(dat)
+    # Reconstruct the full ICA decomposition
+    ica_components = ica_result.mixing[:, components_removed] * ica_result.unmixing[components_removed, :] * Matrix(dat_out.data[!, ica_result.data_label])'
 
-    # # Add navigation buttons below topo plots
-    topo_nav = GridLayout(fig[end+1,1])
-    prev_topo = Button(topo_nav[1,1], label = "◄ Previous")
-    next_topo = Button(topo_nav[1,2], label = "Next ►")
+    # Restore the original data by adding the ICA components
+    dat_out.data[!, ica_result.data_label] .+= ica_components' * ica_result.scale
 
-    # Connect topo navigation buttons
-    on(prev_topo.clicks) do _
-        new_start = max(1, comp_start[] - n_visible_components)
-        comp_start[] = new_start
-        update_components(new_start)
-    end
-
-    on(next_topo.clicks) do _
-        new_start = min(total_components - n_visible_components + 1, comp_start[] + n_visible_components)
-        comp_start[] = new_start
-        update_components(new_start)
-    end
-
-             # Add keyboard controls
-    on(events(fig).keyboardbutton) do event
-        if event.action in (Keyboard.press,)
-            if event.key == Keyboard.left || event.key == Keyboard.right
-                # Handle x-axis scrolling
-                current_range = xrange[]
-                if event.key == Keyboard.left
-                    new_start = max(1, first(current_range) - window_size)
-                    xrange[] = new_start:(new_start + window_size - 1)
-                else  # right
-                    new_start = min(size(components, 2) - window_size + 1, first(current_range) + window_size)
-                    xrange[] = new_start:(new_start + window_size - 1)
-                end
-                
-                # Update x-axis limits for all axes
-                new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
-                for ax in axs
-                    xlims!(ax, new_xlims)
-                end
-                
-            elseif event.key == Keyboard.up || event.key == Keyboard.down
-                # Handle y-axis scaling
-                current_range = ylims[][2]  # Just take the positive limit since it's symmetric
-                if event.key == Keyboard.up
-                    # Zoom in - decrease range by 20%
-                    new_range = current_range * 0.8
-                else  # down
-                    # Zoom out - increase range by 20%
-                    new_range = current_range * 1.2
-                end
-                
-                # Keep centered on zero
-                new_ylims = (-new_range, new_range)
-                ylims[] = new_ylims
-                
-                # Update y-axis limits for all axes
-                for ax in axs
-                    ylims!(ax, new_ylims)
-                end
-                
-            elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
-                # Handle component scrolling
-                current_start = comp_start[]
-                if event.key == Keyboard.page_up
-                    new_start = max(1, current_start - n_visible_components)
-                else  # page_down
-                    new_start = min(total_components - n_visible_components + 1, current_start + n_visible_components)
-                end
-                
-                if new_start != current_start
-                    comp_start[] = new_start
-                    update_components(new_start)
-                end
-            end
-        end
-    end
-
-    return fig
+    return dat_out
 end
 
 
-# function plot_ica_component_activation(
-#     dat::ContinuousData,
-#     ica_result::InfoIca,
-#     n_visible_components::Int = 10,  # Number of components visible at once
-# )
-#     # convert ContinuousData to appropriate matrix
-#     dat_matrix = permutedims(Matrix(dat.data[!, ica_result.data_label]))
-# 
-#     # Scale dat matrix the same way as in ICA
-#     dat_matrix .-= mean(dat_matrix, dims = 2)
-#     dat_matrix ./= ica_result.scale
-# 
-#     # Transform data to component space
-#     components = ica_result.unmixing * dat_matrix
-#     total_components = size(components, 1)
-# 
-#     # Create figure
-#     fig = Figure()
-# 
-#     # Create main layout
-#     # main_layout = fig[1,1] = GridLayout()
-#     
-#     # # Create plot area (90% of space)
-#     # plot_area = main_layout[1,1] = GridLayout()
-#     # rowsize!(main_layout, 1, Relative(0.9))
-#     
-#     # Create slider area (10% of space)
-#     # slider_area = main_layout[2,1] = GridLayout(tellheight=false)
-#     # rowsize!(main_layout, 2, Auto())
-#     
-#     # Create plot grids
-#     # gl = plot_area[1,1] = GridLayout()
-# 
-#     # Set up observables for interactive plotting
-#     window_size = 2000
-#     xrange = Observable(1:window_size)  # Initial window
-#     xlims = @lift((dat.data.time[first($xrange)], dat.data.time[last($xrange)]))
-#     
-#     # Initialize y-axis limits based on initial data window
-#     initial_range = maximum(abs.(extrema(components[1:n_visible_components, 1:window_size])))
-#     ylims = Observable((-initial_range, initial_range))
-#     
-#     # Observable for component range
-#     comp_start = Observable(1)
-#     
-#     # Create all subplots at once
-#     axs = []  # Store time series axes
-#     lines_obs = []  # Store line observables
-#     v_eogs = []  # Store line observables
-#     h_eogs = []  # Store line observables
-#     topo_axs = []  # Store topography axes
-#     
-#     for i in 1:n_visible_components
-#         # Create subplot for topography
-#         ax_topo = Axis(
-#             fig[i, 1],
-#             width = 150,
-#             height = 150,
-#             title = @sprintf("IC %d (%.1f%%)", i, ica_result.variance[i] * 100)
-#         )
-#         push!(topo_axs, ax_topo)
-#         
-#         # Initial topography plot
-#         plot_ica_topoplot(fig, ax_topo, ica_result, i, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
-#         
-#         hidexdecorations!(ax_topo)
-# 
-#         # Create subplot for time series
-#         ax_time = Axis(fig[i, 2], ylabel = "ICA Amplitude")
-#         push!(axs, ax_time)
-# 
-#         # Set initial limits
-#         xlims!(ax_time, xlims[])
-#         ylims!(ax_time, ylims[])
-# 
-#         # Create observable for component data
-#         line_obs = Observable(components[i, :])
-#         v_eog = Observable(dat.data.vEOG)
-#         h_eog = Observable(dat.data.hEOG)
-#         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($line_obs[$xrange]))
-#         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($v_eog[$xrange]))
-#         lines!(ax_time, @lift(dat.data.time[$xrange]), @lift($h_eog[$xrange]))
-#         push!(lines_obs, line_obs)
-#         push!(v_eogs, v_eog)
-#         push!(h_eogs, h_eog)
-# 
-#         # Hide x-axis decorations for all but the last plot
-#         if i != n_visible_components
-#             hidexdecorations!(ax_time, grid = false)
-#         end
-#     end
-# 
-#     # Link all time series axes
-#     linkaxes!(axs...)
-# 
-#     # Adjust layout
-#     colsize!(fig.layout, 1, Auto(150))  # Fixed width for topo plots
-# 
-#     # Function to update component data
-#     function update_components(start_idx)
-#         for i in 1:n_visible_components
-#             comp_idx = start_idx + i - 1
-#             if comp_idx <= total_components
-#                 lines_obs[i][] = components[comp_idx, :]
-#                 
-#                 # Clear and redraw topography
-#                 empty!(topo_axs[i])
-#                 plot_ica_topoplot(fig, topo_axs[i], ica_result, comp_idx, layout, colorbar_kwargs = Dict(:plot_colorbar => false))
-#                 
-#                 # Update title
-#                 topo_axs[i].title = @sprintf("IC %d (%.1f%%)", comp_idx, ica_result.variance[comp_idx] * 100)
-#             end
-#         end
-#     end
-# 
-#     # # Add navigation buttons below topo plots
-#     topo_nav = GridLayout(fig[end+1,1])
-#     prev_topo = Button(topo_nav[1,1], label = "◄ Previous")
-#     next_topo = Button(topo_nav[1,2], label = "Next ►")
-# 
-#     # Connect topo navigation buttons
-#     on(prev_topo.clicks) do _
-#         new_start = max(1, comp_start[] - n_visible_components)
-#         comp_start[] = new_start
-#         update_components(new_start)
-#     end
-# 
-#     on(next_topo.clicks) do _
-#         new_start = min(total_components - n_visible_components + 1, comp_start[] + n_visible_components)
-#         comp_start[] = new_start
-#         update_components(new_start)
-#     end
-# 
-#              # Add keyboard controls
-#     on(events(fig).keyboardbutton) do event
-#         if event.action in (Keyboard.press,)
-#             if event.key == Keyboard.left || event.key == Keyboard.right
-#                 # Handle x-axis scrolling
-#                 current_range = xrange[]
-#                 if event.key == Keyboard.left
-#                     new_start = max(1, first(current_range) - window_size)
-#                     xrange[] = new_start:(new_start + window_size - 1)
-#                 else  # right
-#                     new_start = min(size(components, 2) - window_size + 1, first(current_range) + window_size)
-#                     xrange[] = new_start:(new_start + window_size - 1)
-#                 end
-#                 
-#                 # Update x-axis limits for all axes
-#                 new_xlims = (dat.data.time[first(xrange[])], dat.data.time[last(xrange[])])
-#                 for ax in axs
-#                     xlims!(ax, new_xlims)
-#                 end
-#                 
-#             elseif event.key == Keyboard.up || event.key == Keyboard.down
-#                 # Handle y-axis scaling
-#                 current_range = ylims[][2]  # Just take the positive limit since it's symmetric
-#                 if event.key == Keyboard.up
-#                     # Zoom in - decrease range by 20%
-#                     new_range = current_range * 0.8
-#                 else  # down
-#                     # Zoom out - increase range by 20%
-#                     new_range = current_range * 1.2
-#                 end
-#                 
-#                 # Keep centered on zero
-#                 new_ylims = (-new_range, new_range)
-#                 ylims[] = new_ylims
-#                 
-#                 # Update y-axis limits for all axes
-#                 for ax in axs
-#                     ylims!(ax, new_ylims)
-#                 end
-#                 
-#             elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
-#                 # Handle component scrolling
-#                 current_start = comp_start[]
-#                 if event.key == Keyboard.page_up
-#                     new_start = max(1, current_start - n_visible_components)
-#                 else  # page_down
-#                     new_start = min(total_components - n_visible_components + 1, current_start + n_visible_components)
-#                 end
-#                 
-#                 if new_start != current_start
-#                     comp_start[] = new_start
-#                     update_components(new_start)
-#                 end
-#             end
-#         end
-#     end
-# 
-#     return fig
-# end
+function restore_original_data(dat::DataFrame, ica_result::InfoIca, components_removed::Vector{Int})
+    dat_out = deepcopy(dat)
+    # Reconstruct the full ICA decomposition
+    ica_components = ica_result.mixing[:, components_removed] * ica_result.unmixing[components_removed, :] * Matrix(dat_out[!, ica_result.data_label])'
+
+    # Restore the original data by adding the ICA components
+    dat_out[!, ica_result.data_label] .+= ica_components' * ica_result.scale
+
+    return dat_out
+end
+
+
+
+
+
+
+
+
+
 
 
 

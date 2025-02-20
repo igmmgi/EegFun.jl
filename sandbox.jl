@@ -74,7 +74,9 @@ rereference!(dat, dat.layout.label, dat.layout.label)
 # plot_databrowser(dat)
 
 filter_data!(dat, "hp", 0.1, 2)
-# plot_databrowser(dat)
+
+plot_databrowser(dat)
+
 
 
 # plot_events(dat)
@@ -82,7 +84,7 @@ filter_data!(dat, "hp", 0.1, 2)
 # search for some bad channels
 channel_data = channel_summary(dat.data, dat.layout.label[1:66])
 channel_data = channel_summary(dat.data, dat.layout.label)
-viewer(channel_data)
+# viewer(channel_data)
 
 
 # # # bad channels zscore variance
@@ -121,8 +123,19 @@ ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_
 # plot_ica_topoplot(ica_result, dat.layout)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:5)
 # plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
-
 plot_ica_component_activation(dat, ica_result)
+
+data_ica_removed = remove_ica_components(dat, ica_result, [1, 2])
+reconstructed =  restore_original_data(data_ica_removed, ica_result::InfoIca, [1,2])
+
+plot_databrowser(dat)
+plot_databrowser(dat, "Fp1")
+plot_databrowser(dat, ["Fp1", "Fp2"])
+plot_databrowser(dat, dat.layout.label[1:3])
+plot_databrowser(dat, dat.layout.label[[1,3,5]])
+
+plot_databrowser(dat, ica_result)
+
 
 
 
