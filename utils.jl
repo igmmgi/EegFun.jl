@@ -283,3 +283,8 @@ function detrend(x, y)
     return y - (X * β)
 end
 
+
+function extract_int(s::String)
+    digits_only = filter(isdigit, s)
+    return isempty(digits_only) ? nothing : parse(Int, digits_only)
+end
