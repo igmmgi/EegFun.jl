@@ -1,51 +1,3 @@
-using BioSemiBDF
-using CSV
-using DataFrames
-using DSP
-using GLMakie
-using LibGEOS
-using LinearAlgebra
-using OrderedCollections
-using Random
-using Statistics
-using StatsBase: kurtosis
-using FFTW
-using Printf
-
-
-"""
-    IcaPrms
-
-Structure containing ICA algorithm parameters.
-
-# Fields
-- `l_rate::Float64`: Initial learning rate (default: 0.001)
-- `max_iter::Int`: Maximum number of iterations (default: 512)
-- `w_change::Float64`: Change threshold for stopping (default: 1e-6)
-- `anneal_deg::Float64`: Angle for learning rate reduction (default: 60.0)
-- `anneal_step::Float64`: Learning rate reduction factor (default: 0.9)
-- `blowup::Float64`: Maximum weight change allowed (default: 1e15)
-- `blowup_fac::Float64`: Learning rate reduction on blowup (default: 0.8)
-- `max_weight::Float64`: Maximum weight magnitude (default: 1e8)
-- `restart_factor::Float64`: Learning rate factor on restart (default: 0.9)
-- `degconst::Float64`: Degrees to radians conversion (default: 180.0 / π)
-- `default_stop::Float64`: Default weight stop criterion (default: 1e-6)
-"""
-mutable struct IcaPrms
-    l_rate::Float64
-    max_iter::Int
-    w_change::Float64
-    anneal_deg::Float64
-    anneal_step::Float64
-    blowup::Float64
-    blowup_fac::Float64
-    max_weight::Float64
-    restart_factor::Float64
-    degconst::Float64
-    default_stop::Float64
-end
-
-# Outer constructor with default values
 function IcaPrms(;
     l_rate = 0.001,
     max_iter = 512,
@@ -74,60 +26,6 @@ function IcaPrms(;
     )
 end
 
-"""
-    InfoIca
-
-Structure containing ICA decomposition results.
-
-# Fields
-- `unmixing::Matrix{Float64}`: Transforms data to ICs
-- `mixing::Matrix{Float64}`: Transforms ICs back to data
-- `activation::Matrix{Float64}`: Activation matrix
-- `variance::Vector{Float64}`: Variance explained by each component
-- `scale::Float64`: Data scaling factor
-- `mean::Vector{Float64}`: Mean of the data
-- `ica_label::Vector{String}`: Component labels
-- `data_label::Vector{String}`: Original data channel labels
-"""
-struct InfoIca
-    unmixing::Matrix{Float64}
-    mixing::Matrix{Float64}
-    activation::Matrix{Float64}
-    variance::Vector{Float64}
-    scale::Float64
-    mean::Vector{Float64}
-    ica_label::Vector{String}
-    data_label::Vector{String}
-end
-
-
-
-"""
-    infomax_ica(data::Matrix{Float64}; params::IcaPrms = IcaPrms(), extended::Bool = false, ext_params::Union{Nothing, ExtendedIcaPrms} = nothing, n_components::Union{Nothing,Int} = nothing)
-
-Perform Infomax ICA decomposition on EEG data using the algorithm from EEGLAB's runica.
-
-# Arguments
-- `data::Matrix{Float64}`: Data matrix (channels × samples)
-- `params::IcaPrms`: ICA parameters
-- `extended::Bool`: Whether to use extended Infomax
-- `ext_params::ExtendedIcaPrms`: Extended ICA parameters
-- `n_components::Union{Nothing,Int}`: Number of components for PCA reduction (default: no reduction)
-
-# Returns
-- `InfoICA`: Structure containing:
-  - `topo`: Topography matrix (mixing matrix)
-  - `unmixing`: Unmixing matrix (weights)
-  - `label`: Component labels
-"""
-
-function to_data_frame(dat::EpochData)
-    return vcat(dat.data...)
-end
-
-function to_data_frame(dat::Vector{EpochData})
-    return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
-end
 
 function create_ica_data_matrix(dat::DataFrame, channels; samples_to_include = nothing)
     if isnothing(samples_to_include)
@@ -142,21 +40,6 @@ function create_ica_data_matrix(dat::DataFrame, channels; samples_to_include = n
 end
 
 
-
-
-# function infomax_ica(
-#     dat::ContinuousData,
-#     data_labels;
-#     n_components::Union{Nothing,Int} = nothing,
-#     params::IcaPrms = IcaPrms(),
-# )
-#     # select actual eeg data columns
-#     dat = permutedims(Matrix(dat.data[!, intersect(names(dat.data), data_labels)]))
-#     return infomax_ica(dat, data_labels, params = params, n_components = n_components)
-# end
-
-
-# Pre-allocate all arrays in a single struct for better cache locality
 mutable struct WorkArrays
     weights::Matrix{Float64}
     BI::Matrix{Float64}
@@ -198,7 +81,6 @@ function infomax_ica(
     data_labels;
     n_components::Union{Nothing,Int} = nothing,
     params::IcaPrms = IcaPrms(),
-    sample_rate::Int = 256,
 )
 
     # Store original mean before removing it
@@ -318,7 +200,7 @@ function infomax_ica(
 
     mixing = pinv(work.weights)
 
-    # Calculate total variance explained
+    # calculate total variance explained and order
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
@@ -326,93 +208,95 @@ function infomax_ica(
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
-        work.weights,
+        sphere,
         meanvar_normalized[order],
         scale,
         original_mean,
         ["IC$i" for i = 1:size(work.weights, 1)],
         data_labels,
     )
+
 end
 
 
+function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
 
-function remove_ica_components(dat::ContinuousData, ica_result::InfoIca, components_to_remove::Vector{Int})
+    n_components = size(ica.unmixing, 1)
+    if !all(1 .<= components_to_remove .<= n_components)
+        throw(ArgumentError("Components must be between 1 and $n_components"))
+    end
+    
     dat_out = deepcopy(dat)
+    
+    # Get data dimensions
+    n_channels = length(ica.data_label)
+    
+    # Get data and scale it
+    data = permutedims(Matrix(dat_out[!, ica.data_label]))
+    data .-= ica.mean
+    data ./= ica.scale
+    
+    # Get removed activations before transformation
+    removed_activations = view(ica.unmixing, components_to_remove, :) * data
+    
+    # Pre-compute the transformation matrix
+    tra = Matrix(I, n_channels, n_channels) - 
+          view(ica.mixing, :, components_to_remove) * 
+          view(ica.unmixing, components_to_remove, :)
+    
+    # Apply transformation and restore scaling
+    cleaned_data = tra * data
+    cleaned_data .*= ica.scale
+    cleaned_data .+= ica.mean
+    
+    # Create output DataFrame and assign result
+    dat_out[!, ica.data_label] .= permutedims(cleaned_data)
+    
+    return dat_out, removed_activations
 
-    ica_channels = ica_result.data_label
+end
 
-    # Create transformation matrix for ICA channels
-    tra = Matrix(I, length(ica_channels), length(ica_channels)) - ica_result.mixing[:, components_to_remove] * ica_result.unmixing[components_to_remove, :]
 
-    # Apply transformation to ICA channels
-    cleaned_ica_data = tra * Matrix(dat_out.data[!, ica_channels])'
+function remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
+    remove_ica_components(dat.data, ica, components_to_remove)
+end
 
-    dat_out.data[!, ica_channels] = cleaned_ica_data'
+  
 
+function restore_original_data(dat::DataFrame, ica::InfoIca, components_removed::Vector{Int}, removed_activations::Matrix{Float64})
+    
+
+    n_components = size(ica.unmixing, 1)
+    if !all(1 .<= components_removed .<= n_components)
+        throw(ArgumentError("Components must be between 1 and $n_components"))
+    end
+    
+    dat_out = deepcopy(dat)
+    
+    # Get data and scale it
+    data = permutedims(Matrix(dat_out[!, ica.data_label]))
+    data .-= ica.mean
+    data ./= ica.scale
+    
+    # Get current activations
+    activations = ica.unmixing * data
+    
+    # Restore removed components
+    activations[components_removed, :] .= removed_activations
+    
+    # Back to channel space and restore scaling
+    restored_data = ica.mixing * activations
+    restored_data .*= ica.scale
+    restored_data .+= ica.mean
+    
+    # Create output and assign result
+    dat_out[!, ica.data_label] .= permutedims(restored_data)
+    
     return dat_out
 
 end
 
-function remove_ica_components(dat::DataFrame, ica_result::InfoIca, components_to_remove::Vector{Int})
-    dat_out = deepcopy(dat)
-
-    ica_channels = ica_result.data_label
-
-    # Create transformation matrix for ICA channels
-    tra = Matrix(I, length(ica_channels), length(ica_channels)) - ica_result.mixing[:, components_to_remove] * ica_result.unmixing[components_to_remove, :]
-
-    # Apply transformation to ICA channels
-    cleaned_ica_data = tra * Matrix(dat[!, ica_channels])'
-
-    dat_out[!, ica_channels] = cleaned_ica_data'
-
-    return dat_out
-
+function restore_original_data(dat::ContinuousData, ica::InfoIca, components_removed::Vector{Int}, removed_activations::Matrix{Float64})
+    restore_original_data(dat.data, ica, components_removed, removed_activations)
 end
-
-function restore_original_data(dat::ContinuousData, ica_result::InfoIca, components_removed::Vector{Int})
-    println("Components being restored: ", components_removed)
-    println("Scale factor: ", ica_result.scale)
-    println("Mean values: ", ica_result.mean[1:5])  # First 5 means
-    
-    dat_out = deepcopy(dat)
-    
-    # Reconstruct the full ICA decomposition
-    ica_components = ica_result.mixing[:, components_removed] * ica_result.unmixing[components_removed, :] * Matrix(dat_out.data[!, ica_result.data_label])'
-    
-    # Create new data with components added
-    new_data = Matrix(dat_out.data[!, ica_result.data_label]) .+ ica_components' * ica_result.scale
-    
-    # Add mean
-    new_data .+= ica_result.mean'
-    
-    # Replace the columns in the DataFrame
-    dat_out.data[!, ica_result.data_label] .= new_data
-    
-    return dat_out
-end
-
-
-function restore_original_data(dat::DataFrame, ica_result::InfoIca, components_removed::Vector{Int})
-    dat_out = deepcopy(dat)
-    # Reconstruct the full ICA decomposition
-    ica_components = ica_result.mixing[:, components_removed] * ica_result.unmixing[components_removed, :] * Matrix(dat_out[!, ica_result.data_label])'
-
-    # Restore the original data by adding the ICA components and scaling
-    dat_out[!, ica_result.data_label] .+= ica_components' * ica_result.scale .+ ica_result.mean'
-
-    return dat_out
-end
-
-
-
-
-
-
-
-
-
-
-
 

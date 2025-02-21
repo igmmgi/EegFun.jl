@@ -374,33 +374,6 @@ function xforward!(ax, xrange, data)
     xlims!(ax, data.time[xrange.val[1]], data.time[xrange.val[end]])
 end
 
-function yoffset!(data::DataFrame, channel_labels, offset)
-    for (idx, col) in enumerate(channel_labels)
-        data[!, col] .+= offset.val[idx]
-    end
-end
-
-function ycentre!(data::DataFrame, channel_labels, offset)
-    for (idx, col) in enumerate(channel_labels)
-        data[!, col] .-= offset.val[idx]
-    end
-end
-
-function yoffset!(data, channel_labels, offset)
-    for t in eachindex(data)
-        for (idx, col) in enumerate(channel_labels)
-            data[t][!, col] .+= offset.val[idx]
-        end
-    end
-end
-
-function ycentre!(data, channel_labels, offset)
-    for t in eachindex(data)
-        for (idx, col) in enumerate(channel_labels)
-            data[t][!, col] .-= offset.val[idx]
-        end
-    end
-end
 
 clear_axes(ax, datas) = [delete!(ax, value) for data in datas for (key, value) in data]
 
@@ -441,6 +414,9 @@ function plot_lines(ax, marker, active)
     marker.text.visible = active
     marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
 end
+
+
+
 
 function plot_databrowser(
     dat::ContinuousData,
@@ -518,7 +494,7 @@ function plot_databrowser(
     if nchannels > 1
         offset = LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1]
     else # just centre
-         offset = zeros(length(channel_labels))
+        offset = zeros(length(channel_labels))
     end
 
 
@@ -578,6 +554,9 @@ function plot_databrowser(
 
     # menu for ica selection
     menu_ica = nothing
+    removed_activations = nothing
+    components_to_remove = nothing
+    components_removed = nothing
     if !isnothing(ica)
         menu_ica = hcat(
             Menu(fig, options = vcat(["None"], ica.ica_label), default = "None", direction = :down, fontsize = 18),
@@ -585,12 +564,16 @@ function plot_databrowser(
         )
         on(menu_ica[1].selection) do s
             clear_axes(ax, [channel_data_original, channel_data_labels])
-            component = extract_int(s)
-            if !isnothing(component)
-                data = remove_ica_components(data, ica, [component])
+            components_to_remove = extract_int(s)
+            if !isnothing(components_to_remove)
+                if !isnothing(components_removed)
+                    # go back to original data
+                    data = restore_original_data(data, ica_result, [components_removed], removed_activations)
+                end
+                data, removed_activations = remove_ica_components(data, ica, [components_to_remove])
+                components_removed = components_to_remove
             else
-                println("restoring original data")
-                data = restore_original_data(data, ica_result, [1])
+                data = restore_original_data(data, ica_result, [components_removed], removed_activations)
             end
             draw(plot_labels = true)
         end
@@ -688,7 +671,6 @@ function plot_databrowser(
 
     function draw(; plot_labels = true)
         for (idx, col) in enumerate(channel_labels)
-            # original data
             channel_data_original[col] = lines!(
                 ax,
                 data[!, :time],
@@ -697,16 +679,18 @@ function plot_databrowser(
                 colormap = [:darkgrey, :darkgrey, :red],
                 linewidth = 2,
             )
-            # if plot_labels
-            #     channel_data_labels[col] = text!(
-            #         ax,
-            #         @lift(data[$xrange, :time][1]),
-            #         @lift(data[$xrange, col][1]),
-            #         text = col,
-            #         align = (:left, :center),
-            #         fontsize = 18,
-            #     )
-            # end
+
+            if plot_labels
+                channel_data_labels[col] = text!(
+                    ax,
+                    @lift(data[$xrange, :time][1]),
+                    @lift(data[$xrange, col][1] .+ offset[idx]),
+                    text = col,
+                    align = (:left, :center),
+                    fontsize = 18,
+                )
+            end
+
         end
     end
 
@@ -715,7 +699,6 @@ function plot_databrowser(
     update_theme!(fontsize_theme)
 
     hideydecorations!(ax, label = true)
-    # yoffset!(data, channel_labels, offset)
     draw(plot_labels = true)
     display(fig)
     # DataInspector(fig)
@@ -726,39 +709,39 @@ end
 plot_databrowser(dat::ContinuousData) = plot_databrowser(dat, dat.layout.label)
 plot_databrowser(dat::ContinuousData, ica::InfoIca) = plot_databrowser(dat, dat.layout.label, ica)
 plot_databrowser(dat::ContinuousData, channel_label::AbstractString) = plot_databrowser(dat, [channel_label])
-plot_databrowser(dat::ContinuousData, channel_label::AbstractString, ica::InfoIca) =
-    plot_databrowser(dat, [channel_label], ica)
-
-# plot_databrowser(dat::ContinuousData) = plot_databrowser(dat, dat.layout.label)
-# plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractString,Vector}) = plot_databrowser(dat, [channel_labels])
-# plot_databrowser(dat::ContinuousData, channel_labels::Union{<:AbstractString,Vector}, ica::InfoIca) = plot_databrowser(dat, channel_labels, ica = ica)
-# plot_databrowser(dat::ContinuousData, ica::InfoIca) = plot_databrowser(dat, dat.layout.label, ica = ica)
-
+plot_databrowser(dat::ContinuousData, channel_label::AbstractString, ica::InfoIca) = plot_databrowser(dat, [channel_label], ica)
 
 
 ###########################################################
 
-function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractString})
+function plot_databrowser(
+    dat::EpochData,
+    channel_labels::Vector{<:AbstractString},
+    ica::Union{InfoIca,Nothing} = nothing,
+)
 
     function butterfly_plot(active)
-        clear_axes(ax, [channel_data_original, channel_data_filtered, channel_data_labels])
+        clear_axes(ax, [channel_data_original, channel_data_labels])
         if active
-            ycentre!(data, channel_labels, offset)
+            offset = zeros(length(channel_labels))
             draw(plot_labels = false)
         elseif !active
-            yoffset!(data, channel_labels, offset)
+            offset = LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1]
             draw(plot_labels = true)
         end
     end
 
+
     function apply_lp_filter(active)
-        clear_axes(ax, [channel_data_original, channel_data_filtered, channel_data_labels])
-        data_filtered = nothing
+        clear_axes(ax, [channel_data_original, channel_data_labels])
         if active
-            data_filtered = filter_data(data, channel_labels, "lp", slider_lp_filter.value.val, 6, dat.sample_rate)
+            data = filter_data(data, channel_labels, "lp", slider_lp_filter.value.val, 6, dat.sample_rate)
+        else
+            data = copy(dat.data)
         end
         draw(plot_labels = true)
     end
+
 
     function update_markers!(markers)
         for marker in markers
@@ -797,16 +780,17 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
 
     function step_epoch_forward()
-        clear_axes(ax, [channel_data_original, channel_data_filtered, channel_data_labels])
+        clear_axes(ax, [channel_data_original, channel_data_labels])
         trial[] = min(length(dat.data), trial.val[1] + 1)
         ax.title = "Epoch $(trial.val)/$(length(dat.data))"
+        menu_trial.selection = trial
         update_extreme_spans!()
         update_markers!(markers)
         draw()
     end
 
     function step_epoch_backward()
-        clear_axes(ax, [channel_data_original, channel_data_filtered, channel_data_labels])
+        clear_axes(ax, [channel_data_original, channel_data_labels])
         trial[] = max(1, trial.val[1] - 1)
         ax.title = "Epoch $(trial.val)/$(length(dat.data))"
         update_extreme_spans!()
@@ -830,7 +814,6 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     data_filtered = nothing
 
     channel_data_original = Dict()
-    channel_data_filtered = Dict()
     channel_data_labels = Dict()
 
     # default xrange/yrange
@@ -842,10 +825,11 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     channel_labels_original = channel_labels
 
     if nchannels > 1
-        offset = Observable(LinRange(yrange.val[end] * 0.9, yrange.val[1] * 0.9, nchannels + 2)[2:end-1])
+        offset = LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1]
     else # just centre
-        offset = Observable(0.0)
+        offset = zeros(length(channel_labels))
     end
+
 
     xlims!(ax, data[1].time[xrange.val[1]], data[1].time[xrange.val[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
@@ -889,24 +873,20 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         elseif s == "Central"
             channel_labels = channel_labels_original[findall(occursin.(r"z$", channel_labels_original))]
         end
-        nchannels = length(channel_labels)
-        clear_axes(ax, [channel_data_original, channel_data_filtered, channel_data_labels])
 
-        data = deepcopy(dat.data)
-        if !isnothing(data_filtered)
-            apply_lp_filter(true)
-        end
+        nchannels = length(channel_labels)
+
+        clear_axes(ax, [channel_data_original, channel_data_labels])
+
+        data = copy(dat.data)
         if nchannels > 1
-            offset = Observable(LinRange(yrange.val[end] * 0.9, yrange.val[1] * 0.9, nchannels + 2)[2:end-1])
+            offset = LinRange(yrange.val[end] * 0.9, yrange.val[1] * 0.9, nchannels + 2)[2:end-1]
         else # just centre
-            offset = Observable(0.0)
+            offset = zeros(nchannels)
         end
-        yoffset!(data, channel_labels, offset)
-        if !isnothing(data_filtered)
-            apply_lp_filter(true)
-        else
-            draw(plot_labels = true)
-        end
+        draw(plot_labels = true)
+
+
     end
 
     menu_trial = hcat(
@@ -914,7 +894,7 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
         Label(fig, "Epoch", fontsize = 22, halign = :left),
     )
     on(menu_trial[1].selection) do s
-        clear_axes(ax, [channel_data_original, channel_data_filtered, channel_data_labels])
+        clear_axes(ax, [channel_data_original, channel_data_labels])
         trial[] = s
         ax.title = "Epoch $(trial.val)/$(length(dat.data))"
         update_extreme_spans!()
@@ -996,42 +976,24 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     end
 
     function draw(; plot_labels = true)
-        alpha_orig = 1
-        linewidth_orig = 2
-        plot_filtered_data = !isnothing(data_filtered)
-        if plot_filtered_data
-            alpha_orig = 0.5
-            linewidth_orig = 1
-        end
-        for col in channel_labels
+        for (idx, col) in enumerate(channel_labels)
             # original data
             channel_data_original[col] = lines!(
                 ax,
                 data[trial.val][!, :time],
-                data[trial.val][!, col],
+                data[trial.val][!, col] .+ offset[idx],
                 color = @lift(abs.(data[trial.val][!, col]) .>= $crit_val),
                 colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = linewidth_orig,
-                alpha = alpha_orig,
+                linewidth = 2,
             )
             if plot_labels
                 channel_data_labels[col] = text!(
                     ax,
                     @lift(data[trial.val][$xrange, :time][1]),
-                    @lift(data[trial.val][$xrange, col][1]),
+                    @lift(data[trial.val][$xrange, col][1] .+ offset[idx]),
                     text = col,
                     align = (:left, :center),
                     fontsize = 20,
-                )
-            end
-            # also show filtered data
-            if plot_filtered_data
-                channel_data_filtered[col] = lines!(
-                    ax,
-                    data_filtered[trial.val][!, :time],
-                    data_filtered[trial.val][!, col],
-                    color = :blue,
-                    linewidth = 2,
                 )
             end
         end
@@ -1042,17 +1004,17 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{<:AbstractStrin
     update_theme!(fontsize_theme)
 
     hideydecorations!(ax, label = true)
-    yoffset!(data, channel_labels, offset)
     draw(plot_labels = true)
     display(fig)
     # DataInspector(fig)
 
 end
 
+# Convenience methods
 plot_databrowser(dat::EpochData) = plot_databrowser(dat, dat.layout.label)
-plot_databrowser(dat::EpochData, channel_labels::Union{<:AbstractString,Vector}) =
-    plot_databrowser(dat, [channel_labels])
-
+plot_databrowser(dat::EpochData, ica::InfoIca) = plot_databrowser(dat, dat.layout.label, ica)
+plot_databrowser(dat::EpochData, channel_label::AbstractString) = plot_databrowser(dat, [channel_label])
+plot_databrowser(dat::EpochData, channel_label::AbstractString, ica::InfoIca) = plot_databrowser(dat, [channel_label], ica)
 
 
 # #################################################################
@@ -1549,93 +1511,6 @@ function plot_ica_topoplot(
     end
     return fig
 end
-
-# function plot_ica_topoplot(
-#     fig, 
-#     ax,
-#     ica,
-#     layout;
-#     comps = nothing,
-#     head_kwargs = Dict(),
-#     point_kwargs = Dict(),
-#     label_kwargs = Dict(),
-#     topo_kwargs = Dict(),
-#     colorbar_kwargs = Dict(),
-# )
-#     if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
-#         polar_to_cartesian_xy!(layout)
-#     end
-#     if isnothing(comps)
-#         comps = 1:size(ica.mixing)[2]
-#     end
-#     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-#     head_kwargs = merge(head_default_kwargs, head_kwargs)
-#     point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-#     point_kwargs = merge(point_default_kwargs, point_kwargs)
-#     label_default_kwargs =
-#         Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
-#     label_kwargs = merge(label_default_kwargs, label_kwargs)
-#     xoffset = pop!(label_kwargs, :xoffset)
-#     yoffset = pop!(label_kwargs, :yoffset)
-#     topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
-#     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-#     gridscale = pop!(topo_kwargs, :gridscale)
-#     colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
-#     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-#     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
-# 
-#     # fig = Figure()
-#     dims = best_rect(length(comps))
-#     count = 1
-#     axs = []
-#     for dim1 = 1:dims[1]
-#         for dim2 = 1:dims[2]
-#             ax = Axis(fig[dim1, dim2])
-#             push!(axs, ax)
-#             count += 1
-#             if count > length(comps)
-#                 break
-#             end
-#         end
-#     end
-#     count = 1
-# 
-#     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
-# 
-#     for ax in axs
-#         ax.title = ica.ica_label[comps[count]]
-#         data = data_interpolation_topo(ica.mixing[:, comps[count]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
-#         gridscale = gridscale
-#         radius = 88 # mm
-#         co = contourf!(
-#             ax,
-#             range(-radius * 2, radius * 2, length = gridscale),
-#             range(-radius * 2, radius * 2, length = gridscale),
-#             data,
-#             colormap = :jet,
-#         )
-#         # TODO: improve colorbar stuff
-#         # if plot_colorbar
-#         #     Colorbar(ax, co; colorbar_kwargs...)
-#         # end
-#         # head shape
-#         head_shape_2d(
-#             fig,
-#             ax,
-#             layout,
-#             head_kwargs = head_kwargs,
-#             point_kwargs = point_kwargs,
-#             label_kwargs = label_kwargs,
-#         )
-#         count += 1
-#         if count > length(comps)
-#             break
-#         end
-#     end
-#     return fig
-# end
-
-
 
 function plot_ica_topoplot(
     fig,
