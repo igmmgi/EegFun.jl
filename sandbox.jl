@@ -75,7 +75,7 @@ rereference!(dat, dat.layout.label, dat.layout.label)
 
 filter_data!(dat, "hp", 0.1, 2)
 
-plot_databrowser(dat)
+# plot_databrowser(dat)
 
 
 
@@ -126,7 +126,7 @@ ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_
 plot_ica_component_activation(dat, ica_result)
 
 data_ica_removed = remove_ica_components(dat, ica_result, [1, 2])
-reconstructed =  restore_original_data(data_ica_removed, ica_result::InfoIca, [1,2])
+reconstructed =  restore_original_data(data_ica_removed, ica_result, [1])
 
 plot_databrowser(dat)
 plot_databrowser(dat, "Fp1")
