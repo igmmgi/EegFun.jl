@@ -82,19 +82,20 @@ Structure containing ICA decomposition results.
 # Fields
 - `unmixing::Matrix{Float64}`: Transforms data to ICs
 - `mixing::Matrix{Float64}`: Transforms ICs back to data
-- `scale::Float64`: Data scaling factor
+- `activation::Matrix{Float64}`: Activation matrix
 - `variance::Vector{Float64}`: Variance explained by each component
-- `kurtosis::Vector{Float64}`: Kurtosis of each component
-- `spectra::Matrix{Float64}`: Power spectra of components (freqs × components)
-- `frequencies::Vector{Float64}`: Frequency bins for spectra
+- `scale::Float64`: Data scaling factor
+- `mean::Vector{Float64}`: Mean of the data
 - `ica_label::Vector{String}`: Component labels
 - `data_label::Vector{String}`: Original data channel labels
 """
 struct InfoIca
     unmixing::Matrix{Float64}
     mixing::Matrix{Float64}
-    scale::Float64
+    activation::Matrix{Float64}
     variance::Vector{Float64}
+    scale::Float64
+    mean::Vector{Float64}
     ica_label::Vector{String}
     data_label::Vector{String}
 end
@@ -200,8 +201,11 @@ function infomax_ica(
     sample_rate::Int = 256,
 )
 
-    # demean and scale data
-    dat_ica .-= mean(dat_ica, dims = 2)
+    # Store original mean before removing it
+    original_mean = vec(mean(dat_ica, dims = 2))
+    
+    # Center and scale data
+    dat_ica .-= original_mean
     scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
     dat_ica ./= scale
 
@@ -322,8 +326,10 @@ function infomax_ica(
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
-        scale,
+        work.weights,
         meanvar_normalized[order],
+        scale,
+        original_mean,
         ["IC$i" for i = 1:size(work.weights, 1)],
         data_labels,
     )
@@ -366,13 +372,24 @@ function remove_ica_components(dat::DataFrame, ica_result::InfoIca, components_t
 end
 
 function restore_original_data(dat::ContinuousData, ica_result::InfoIca, components_removed::Vector{Int})
+    println("Components being restored: ", components_removed)
+    println("Scale factor: ", ica_result.scale)
+    println("Mean values: ", ica_result.mean[1:5])  # First 5 means
+    
     dat_out = deepcopy(dat)
+    
     # Reconstruct the full ICA decomposition
     ica_components = ica_result.mixing[:, components_removed] * ica_result.unmixing[components_removed, :] * Matrix(dat_out.data[!, ica_result.data_label])'
-
-    # Restore the original data by adding the ICA components
-    dat_out.data[!, ica_result.data_label] .+= ica_components' * ica_result.scale
-
+    
+    # Create new data with components added
+    new_data = Matrix(dat_out.data[!, ica_result.data_label]) .+ ica_components' * ica_result.scale
+    
+    # Add mean
+    new_data .+= ica_result.mean'
+    
+    # Replace the columns in the DataFrame
+    dat_out.data[!, ica_result.data_label] .= new_data
+    
     return dat_out
 end
 
@@ -382,8 +399,8 @@ function restore_original_data(dat::DataFrame, ica_result::InfoIca, components_r
     # Reconstruct the full ICA decomposition
     ica_components = ica_result.mixing[:, components_removed] * ica_result.unmixing[components_removed, :] * Matrix(dat_out[!, ica_result.data_label])'
 
-    # Restore the original data by adding the ICA components
-    dat_out[!, ica_result.data_label] .+= ica_components' * ica_result.scale
+    # Restore the original data by adding the ICA components and scaling
+    dat_out[!, ica_result.data_label] .+= ica_components' * ica_result.scale .+ ica_result.mean'
 
     return dat_out
 end
