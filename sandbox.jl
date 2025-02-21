@@ -113,27 +113,28 @@ dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 500);
 
 # ICA "continuous" data
 dat_ica = filter_data(dat, "hp", 1, 2)
-
 good_samples = findall(dat_ica.data[!, :is_extreme] .== false)
-good_channels = setdiff(dat_ica.layout.label, ["PO9"])
-
+good_channels = dat_ica.layout.label # setdiff(dat_ica.layout.label, ["PO9"])
 dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
-ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms(), sample_rate=256)
+ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms())
 
 # plot_ica_topoplot(ica_result, dat.layout)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:5)
 # plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
-plot_ica_component_activation(dat, ica_result)
+# plot_ica_component_activation(dat, ica_result)
 
-data_ica_removed = remove_ica_components(dat, ica_result, [1, 2])
-reconstructed =  restore_original_data(data_ica_removed, ica_result, [1])
+dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
+dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
+
+# lines(dat.data[1:1000,:Fp1])
+# lines!(dat_ica_removed.data[1:1000,:Fp1])
+# lines!(dat_ica_reconstructed.data[1:1000,:Fp1])
 
 plot_databrowser(dat)
 plot_databrowser(dat, "Fp1")
 plot_databrowser(dat, ["Fp1", "Fp2"])
 plot_databrowser(dat, dat.layout.label[1:3])
 plot_databrowser(dat, dat.layout.label[[1,3,5]])
-
 plot_databrowser(dat, ica_result)
 
 
@@ -154,11 +155,13 @@ plot_databrowser(dat, ica_result)
 # plot_databrowser(dat, "hEOG")
 
 # extract epochs
-# epochs = EpochData[]
-# for (idx, epoch) in enumerate([1, 4, 5, 3])
-#     push!(epochs, extract_epochs(dat_ica, idx, epoch, -2, 4))
-# end
-# 
+epochs = EpochData[]
+for (idx, epoch) in enumerate([1, 4, 5, 3])
+     push!(epochs, extract_epochs(dat_ica, idx, epoch, -2, 4))
+end
+
+plot_databrowser(epochs[1])
+ 
 # bad_chans, opt_params = find_bad_channels(epochs[1], AutoRejectParams())
 # 
 # # Visualize results for a specific epoch

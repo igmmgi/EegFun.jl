@@ -288,3 +288,12 @@ function extract_int(s::String)
     digits_only = filter(isdigit, s)
     return isempty(digits_only) ? nothing : parse(Int, digits_only)
 end
+
+
+function to_data_frame(dat::EpochData)
+    return vcat(dat.data...)
+end
+
+function to_data_frame(dat::Vector{EpochData})
+    return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
+end

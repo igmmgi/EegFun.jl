@@ -59,3 +59,28 @@ function Base.show(io::IO, dat::ErpData)
     println(io, "Sample Rate: ", dat.sample_rate)
 end
 
+########### ICA ##############
+mutable struct IcaPrms
+    l_rate::Float64
+    max_iter::Int
+    w_change::Float64
+    anneal_deg::Float64
+    anneal_step::Float64
+    blowup::Float64
+    blowup_fac::Float64
+    max_weight::Float64
+    restart_factor::Float64
+    degconst::Float64
+    default_stop::Float64
+end
+
+struct InfoIca
+    unmixing::Matrix{Float64}
+    mixing::Matrix{Float64}
+    sphere::Matrix{Float64}
+    variance::Vector{Float64}
+    scale::Float64
+    mean::Vector{Float64}
+    ica_label::Vector{String}
+    data_label::Vector{String}
+end
