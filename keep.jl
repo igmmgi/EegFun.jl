@@ -128,3 +128,15 @@
 # end
 
 
+# Sample data
+x = 0:0.1:10
+y = sin.(x)
+z = cos.(x)
+fig1 = Figure()
+ax = Axis(fig1[1,1])
+lines!(ax, x, y)
+fig2 = Figure()
+ax = Axis(fig2[1,1])
+lines!(ax, x, z)
+display(GLMakie.Screen(), fig1)
+display(GLMakie.Screen(), fig2)
