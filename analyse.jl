@@ -165,6 +165,20 @@ function is_extreme_value(
     return any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
+function is_extreme_value!(dat::DataFrame, columns::Union{Vector{Symbol},Vector{<:AbstractString}}, criterion::Number)
+    dat[!, "is_extreme"] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
+end
+
+function is_extreme_value!(dat::ContinuousData, columns::Union{Vector{Symbol},Vector{<:AbstractString}}, criterion::Number)
+    is_extreme_value!(dat.data, columns, criterion)
+end
+
+
+
+
+
+
+
 """
     n_extreme_value(dat::DataFrame, columns::Union{Vector{Symbol}, Vector{<:AbstractString}}, criterion::Number)::Int
 

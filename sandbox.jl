@@ -75,7 +75,7 @@ rereference!(dat, dat.layout.label, dat.layout.label)
 
 filter_data!(dat, "hp", 0.1, 2)
 
-# plot_databrowser(dat)
+plot_databrowser(dat)
 
 
 
@@ -107,8 +107,7 @@ diff_channel!(dat, "F9", "F10", "hEOG");
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
-# TODO: this seems a bit inconsistent with functions above
-dat.data[!, "is_extreme"] .= is_extreme_value(dat.data, dat.layout.label, 500);
+is_extreme_value!(dat, dat.layout.label, 500);
 
 
 # ICA "continuous" data
