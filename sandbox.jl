@@ -42,10 +42,30 @@ include("viewer.jl")
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
+
+# 2D layout
 polar_to_cartesian_xy!(layout)
+plot_layout_2d(layout)
+neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80)
+plot_layout_2d(layout, neighbours)
+
+fig, ax = plot_layout_2d(layout)
+add_topo_rois!(ax, layout, [["PO7", "PO3", "P1"], ["PO8", "PO4", "P2"]], border_size = 20)
+# add_topo_rois!(ax, layout, [["Fp1"]], border_size = 20)
+# add_topo_rois!(ax, layout, [["C1", "Cz", "CPz", "C2", "FCz"]], border_size = 5)
+
+p1 = readgeom("POLYGON((0 0,1 0,1 1,0 0))")
+p2 = readgeom("POLYGON((0 0,1 0,1 1,0 1,0 0))")
+p3 = readgeom("POLYGON((2 0,3 0,3 1,2 1,2 0))")
+
+p1
+
+# 3D layout
 polar_to_cartesian_xyz!(layout)
-neighbours, nneighbours = get_electrode_neighbours_xy(layout, 50)
 neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40)
+plot_layout_3d(layout)
+plot_layout_3d(layout, neighbours)
+
 
 #head_shape_2d(layout)
 #head_shape_2d(layout, point_kwargs = Dict(:markersize => 30), label_kwargs = Dict(:fontsize => 30, :xoffset => 1))

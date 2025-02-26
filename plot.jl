@@ -46,7 +46,7 @@ end
 #########################################
 # 2D head shape
 # Base method without neighbors
-function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
+function plot_layout_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
     if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
         polar_to_cartesian_xy!(layout)
     end
@@ -89,18 +89,30 @@ function head_shape_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dic
     return fig, ax
 end
 
+
+function plot_layout_2d(layout; kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    plot_layout_2d(fig, ax, layout; kwargs...)
+    display(fig)
+    return fig, ax
+end
+
+
+
+
+
 # Method with interactive neighbor visualization
-function head_shape_2d(
+function plot_layout_2d(
     fig,
     ax,
     layout,
     neighbours::OrderedDict;
     head_kwargs = Dict(),
-    point_kwargs = Dict(),
     label_kwargs = Dict(),
 )
     # Draw head shape
-    head_shape_2d(
+    plot_layout_2d(
         fig,
         ax,
         layout;
@@ -143,23 +155,83 @@ function head_shape_2d(
     end
 
     return fig, ax
+
 end
 
-function head_shape_2d(layout; kwargs...)
+function plot_layout_2d(layout, neighbours; kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    head_shape_2d(fig, ax, layout; kwargs...)
+    plot_layout_2d(fig, ax, layout, neighbours; kwargs...)
     display(fig)
     return fig, ax
 end
 
-function head_shape_2d(layout, neighbours; kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    head_shape_2d(fig, ax, layout, neighbours; kwargs...)
-    display(fig)
-    return fig, ax
+
+function graham_scan(points::Vector{Point2f})
+    # Need at least 3 points for a hull
+    length(points) < 3 && return points
+    
+    # Find leftmost point
+    start = 1
+    for i in 2:length(points)
+        if points[i][1] < points[start][1]
+            start = i
+        end
+    end
+    p0 = points[start]
+    
+    # Sort by angle from p0
+    other_points = vcat(points[1:start-1], points[start+1:end])
+    sorted = sort(other_points, 
+        by = p -> atan(p[2] - p0[2], p[1] - p0[1]))
+    
+    # Initialize hull with first point
+    hull = [p0]
+    
+    # Build hull
+    for p in sorted
+        while length(hull) > 1
+            v1 = hull[end] - hull[end-1]
+            v2 = p - hull[end]
+            cross = v1[1] * v2[2] - v1[2] * v2[1]
+            if cross > 0  # Left turn
+                break
+            end
+            pop!(hull)
+        end
+        push!(hull, p)
+    end
+    
+    return hull
 end
+
+
+function point_border(xpos, ypos, border_size)
+    # If only one electrode, return a complete circle
+    if length(xpos) == 1
+        circle_points = 0:2π/36:2π
+        return [Point2f(xpos[1] + border_size * sin(θ), ypos[1] + border_size * cos(θ)) for θ in circle_points]
+    end
+    
+    # Create points around each electrode position
+    circle_points = 0:2π/36:2π
+    border_points = Point2f[]
+    for (x, y) in zip(xpos, ypos)
+        for θ in circle_points
+            push!(border_points, Point2f(
+                x + border_size * sin(θ),
+                y + border_size * cos(θ)
+            ))
+        end
+    end
+    
+    # Get hull points
+    hull_points = graham_scan(border_points)
+    push!(hull_points, hull_points[1])  # Close the polygon
+    
+    return hull_points
+end
+
 
 
 # using LibGEOS package (currently convexhull)
@@ -188,9 +260,32 @@ function add_topo_rois!(fig, layout, rois; border_size = 10, roi_kwargs = Dict()
     end
 end
 
+
+function polyxy(p::Polygon)
+    coords = GeoInterface.coordinates(GeoInterface.getexterior(p))
+    return first.(coords), last.(coords)
+   end
+
+
+
+
+function add_topo_rois!(ax, layout, rois; border_size = 10, roi_kwargs = Dict())
+    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+        polar_to_cartesian_xy!(layout)
+    end
+    roi_default_kwargs = Dict(:color => repeat([:black], length(rois)), :linewidth => repeat([2], length(rois)))
+    roi_kwargs = merge(roi_default_kwargs, roi_kwargs)
+    for (idx, roi) in enumerate(rois)
+        xpos = filter(row -> row.label ∈ roi, layout).x2
+        ypos = filter(row -> row.label ∈ roi, layout).y2
+        border = point_border(xpos, ypos, border_size)
+        lines!(ax, border, linewidth = roi_kwargs[:linewidth][idx], color = roi_kwargs[:color][idx])
+    end
+end
+
 #########################################
 # 3D head shape
-function head_shape_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Dict())
+function plot_layout_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Dict())
 
     if (:x3 ∉ names(layout) || :y3 ∉ names(layout) || :z3 ∉ names(layout))
         polar_to_cartesian_xyz!(layout)
@@ -240,14 +335,77 @@ function head_shape_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Di
 
 end
 
-function head_shape_3d(layout; kwargs...)
+function plot_layout_3d(layout; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
-    head_shape_3d(fig, ax, layout; kwargs...)
+    plot_layout_3d(fig, ax, layout; kwargs...)
     display(fig)
     return fig, ax
 end
 
+
+function plot_layout_3d(
+    fig,
+    ax,
+    layout,
+    neighbours::OrderedDict;
+    head_kwargs = Dict(),
+    label_kwargs = Dict(),
+)
+    # Draw head shape
+    plot_layout_3d(
+        fig,
+        ax,
+        layout;
+        head_kwargs = head_kwargs,
+        point_kwargs = Dict(:plot_points => false),
+        label_kwargs = label_kwargs,
+    )
+
+    # Setup interactive points
+    positions = Observable(Point2f.(layout.x2, layout.y2))
+    base_size = 15
+    hover_size = 25
+    sizes = Observable(fill(base_size, length(layout.label)))
+
+    # Add interactive scatter points
+    p = scatter!(ax, positions; color = :black, markersize = sizes, inspectable = true, markerspace = :pixel)
+
+    # Initialize line segments
+    linesegments = Observable(Point2f[])
+    lines!(ax, linesegments, color = :gray, linewidth = 3)
+
+    # Add hover interaction
+    on(events(fig).mouseposition) do mp
+        plt, i = pick(fig)
+        if plt == p
+            # Reset all sizes to base size
+            new_sizes = fill(base_size, length(layout.label))
+            new_sizes[i] = hover_size
+            sizes[] = new_sizes
+
+            # Create lines to neighboring electrodes
+            hovered_pos = positions[][i]
+            new_lines = Point2f[]
+            for neighbor in neighbours[Symbol(layout.label[i])].electrodes
+                neighbor_idx = findfirst(==(neighbor), layout.label)
+                push!(new_lines, hovered_pos, positions[][neighbor_idx])
+            end
+            linesegments[] = new_lines
+        end
+    end
+
+    return fig, ax
+
+end
+
+function plot_layout_3d(layout, neighbours; kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    plot_layout_3d(fig, ax, layout, neighbours; kwargs...)
+    display(fig)
+    return fig, ax
+end
 
 
 
@@ -753,10 +911,7 @@ function plot_databrowser(
             event.key == Keyboard.down && yless!(ax, yrange)
             event.key == Keyboard.up && ymore!(ax, yrange)
 
-            return Consume(true) # Stop event propagation
         end
-
-        return Consume(false)
 
     end
 
