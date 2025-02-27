@@ -49,16 +49,11 @@ plot_layout_2d(layout)
 neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80)
 plot_layout_2d(layout, neighbours)
 
-fig, ax = plot_layout_2d(layout)
-add_topo_rois!(ax, layout, [["PO7", "PO3", "P1"], ["PO8", "PO4", "P2"]], border_size = 20)
-# add_topo_rois!(ax, layout, [["Fp1"]], border_size = 20)
-# add_topo_rois!(ax, layout, [["C1", "Cz", "CPz", "C2", "FCz"]], border_size = 5)
-
-p1 = readgeom("POLYGON((0 0,1 0,1 1,0 0))")
-p2 = readgeom("POLYGON((0 0,1 0,1 1,0 1,0 0))")
-p3 = readgeom("POLYGON((2 0,3 0,3 1,2 1,2 0))")
-
-p1
+# fig, ax = plot_layout_2d(layout)
+# add_topo_rois!(ax, layout, [["PO7", "PO3", "P1"], ["PO8", "PO4", "P2"]], border_size = 10)
+# add_topo_rois!(ax, layout, [["PO7", "PO3", "P1"], ["PO8", "PO4", "P2"]], border_size = 5)
+# add_topo_rois!(ax, layout, [["Fp1"]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
+# add_topo_rois!(ax, layout, [["CPz", "C2", "FCz",  "C1"]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 
 # 3D layout
 polar_to_cartesian_xyz!(layout)
@@ -66,12 +61,6 @@ neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40)
 plot_layout_3d(layout)
 plot_layout_3d(layout, neighbours)
 
-
-#head_shape_2d(layout)
-#head_shape_2d(layout, point_kwargs = Dict(:markersize => 30), label_kwargs = Dict(:fontsize => 30, :xoffset => 1))
-#layout = filter(row -> row.label in ["PO7", "PO8"], layout)
-# head_shape_2d(layout)
-# head_shape_2d(layout, neighbours)
 
 # read bdf file
 subject = 3
@@ -82,15 +71,27 @@ dat = read_bdf("../Flank_C_$(subject).bdf");
 # save_object("$(subject)_continuous_raw.jld2", dat)
 # dat = load_object("3_continuous_raw.jld2")
 
-# plot_events(dat)
+plot_events(dat)
+
+# preprocess the eeg data
 dat = create_eeg_dataframe(dat, layout);
+plot_events(dat)
 # viewer(dat) # requires vscode
 # head(dat) # requires vscode
 # save_object("$(subject)_continuous_raw_eegfun.jld2", dat)
 # dat = load_object("3_continuous_raw.jld2")
 
-# rereference!(dat.data, dat.layout.label, :Fp1)
-rereference!(dat, dat.layout.label, dat.layout.label)
+# rereference!(dat, 1:72)
+# rereference!(dat, ["Fp1"])
+# rereference!(dat, ["M1", "M2"])
+rereference!(dat, dat.layout.label)
+
+# rereference!(dat.data, dat.layout.label, ["Fp1"])
+# rereference!(dat.data, dat.layout.label, ["M1", "M2"])
+# rereference!(dat.data, dat.layout.label, 1:10)
+# rereference!(dat.data, dat.layout.label, [1])
+# rereference!(dat.data, dat.layout.label, [:Fp1])
+
 # plot_databrowser(dat)
 
 filter_data!(dat, "hp", 0.1, 2)
@@ -98,13 +99,11 @@ filter_data!(dat, "hp", 0.1, 2)
 plot_databrowser(dat)
 
 
-
-# plot_events(dat)
-
 # search for some bad channels
-channel_data = channel_summary(dat.data, dat.layout.label[1:66])
-channel_data = channel_summary(dat.data, dat.layout.label)
-# viewer(channel_data)
+channel_summary(dat)
+channel_summary(dat.data, dat.layout.label[1:66])
+channel_summary(dat.data, dat.layout.label)
+viewer(channel_data)
 
 
 # # # bad channels zscore variance
@@ -133,45 +132,26 @@ is_extreme_value!(dat, dat.layout.label, 500);
 # ICA "continuous" data
 dat_ica = filter_data(dat, "hp", 1, 2)
 good_samples = findall(dat_ica.data[!, :is_extreme] .== false)
-good_channels = dat_ica.layout.label # setdiff(dat_ica.layout.label, ["PO9"])
+good_channels = setdiff(dat_ica.layout.label, ["PO9"])
 dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
 ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms())
 
 # plot_ica_topoplot(ica_result, dat.layout)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:5)
+# plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
 # plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
 # plot_ica_component_activation(dat, ica_result)
 
 dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
-# lines(dat.data[1:1000,:Fp1])
-# lines!(dat_ica_removed.data[1:1000,:Fp1])
-# lines!(dat_ica_reconstructed.data[1:1000,:Fp1])
 
-plot_databrowser(dat)
-plot_databrowser(dat, "Fp1")
-plot_databrowser(dat, ["Fp1", "Fp2"])
-plot_databrowser(dat, dat.layout.label[1:3])
-plot_databrowser(dat, dat.layout.label[[1,3,5]])
-plot_databrowser(dat, ica_result)
+# plot_databrowser(dat)
+# plot_databrowser(dat, "Fp1")
+# plot_databrowser(dat, ["Fp1", "Fp2"])
+# plot_databrowser(dat, dat.layout.label[1:3])
+# plot_databrowser(dat, dat.layout.label[[1,3,5]])
+# plot_databrowser(dat, ica_result)
 
-
-
-
-
-
-
-
-
-
-# Continuous Data Browser
-# TODO: Labels position when changing x-range
-# TODO: Improve logic of plotting marker (triggers/EOG) lines?
-# plot_databrowser(dat_ica)
-# plot_databrowser(dat, [dat.layout.label; "hEOG"; "vEOG"])
-# plot_databrowser(dat, ["vEOG", "hEOG"])
-# plot_databrowser(dat, "hEOG")
 
 # extract epochs
 epochs = EpochData[]
@@ -180,40 +160,28 @@ for (idx, epoch) in enumerate([1, 4, 5, 3])
 end
 
 plot_databrowser(epochs[1])
- 
+
+# average epochs
+erps = []
+for (idx, epoch) in enumerate(epochs)
+    push!(erps, average_epochs(epochs[idx]))
+end
+
+# ERP Plot
+plot_erp(erps[1])
+plot_erp(erps[1], :Fp1)
+plot_erp(erps[1], ["Fp1", "Fp2"])
+plot_erp(erps[2], ["Fp1", "Fp2", "Cz"])
+plot_erp(erps[1], ["Fp1", "Fp2"], average_channels = true)
+plot_erp(erps[1], erps[2], ["PO7", "Fp2"])
+
+
 # bad_chans, opt_params = find_bad_channels(epochs[1], AutoRejectParams())
 # 
 # # Visualize results for a specific epoch
 # fig = plot_interpolation_comparison(epochs[1], bad_chans, 11)  # Show epoch 1
-# 
-# 
-# 
-# # view(epochs)
-# # view(epochs[1])
-# 
-# df = to_data_frame(epochs)
-# 
-# good_samples = findall(df[!, :is_extreme] .== false)
-# good_channels = setdiff(dat_ica.layout.label, ["PO9"])
-# 
-# 
-# dat_for_ica = create_ica_data_matrix(df, good_channels, samples_to_include = good_samples)
-# 
-# 
-# # Subset the DataFrame where the 'category' column contains an item in the vector
-# subset_df = dat.layout[in.(dat.layout.label, Ref(good_channels)), :]
-# 
-# 
-# 
-# @time output = infomax_ica(dat_for_ica, dat.layout.label, n_components = length(good_channels) - 1)
-# plot_ica_topoplot(output, subset_df)
-# 
-# 
-# 
-# 
-# 
-# 
-# # epochs_cleaned = remove_bad_epochs(epochs)
+ 
+# epochs_cleaned = remove_bad_epochs(epochs)
 # 
 # # Epoch Data Browser
 # plot_databrowser(epochs[1])
@@ -223,12 +191,6 @@ plot_databrowser(epochs[1])
 # plot_epochs(epochs[1], :Fp1)
 # # plot_epochs(epochs, "Fp1")
 # plot_epochs(epochs[1], ["PO7", "PO8"])
-# 
-# # average epochs
-# erps = []
-# for (idx, epoch) in enumerate(epochs)
-#     push!(erps, average_epochs(epochs[idx]))
-# end
 # 
 # # ERP Plot
 # # f, ax = plot_erp(erp, :Fp1)

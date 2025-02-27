@@ -62,6 +62,19 @@ Convert channel numbers to their corresponding labels.
 """
 channel_number_to_channel_label(channel_labels, channel_numbers::Int64) = [channel_labels[channel_numbers]]
 channel_number_to_channel_label(channel_labels, channel_numbers::Vector{Int64}) = channel_labels[channel_numbers]
+channel_number_to_channel_label(channel_labels, channel_numbers::UnitRange) = channel_labels[channel_numbers]
+
+
+function print_vector_(v::Vector; max_length::Int = 10, n_ends::Int = 5)
+    if length(v) > max_length
+        v = vcat(first(v, n_ends), "...", last(v, n_ends))
+    end
+    return join(v, ", ")
+end
+   
+function print_vector(v::UnitRange; max_length::Int = 10, n_ends::Int = 5)
+    print_vector_(collect(v), max_length=max_length, n_ends=n_ends)
+end
 
 
 """

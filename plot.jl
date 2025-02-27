@@ -25,12 +25,19 @@ function plot_events(trigger_times, trigger_values, trigger_count)
     fig = Figure()
     ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
     for (unique, (key, value)) in enumerate(trigger_count)
+        times = trigger_times[trigger_values.==key]
+        y_pos = repeat([unique], length(trigger_values[trigger_values.==key]))
         scatter!(
             ax,
-            trigger_times[trigger_values.==key],
-            repeat([unique], length(trigger_values[trigger_values.==key])),
+            times,
+            y_pos,
             label = "$key: $(string(value))",
+            markersize = 15,
         )
+         # Add vertical lines
+         for (t, y) in zip(times, y_pos)
+            lines!(ax, [t, t], [y-0.1, y+0.1], color=:black, linewidth=1)
+        end
     end
     fig[1, 2] = Legend(fig, ax)
     ax.ylabel = "Trigger Value"
@@ -41,11 +48,7 @@ function plot_events(trigger_times, trigger_values, trigger_count)
 end
 
 
-
-
-#########################################
-# 2D head shape
-# Base method without neighbors
+# Base 2D layout plotting function
 function plot_layout_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
     if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
         polar_to_cartesian_xy!(layout)
@@ -89,204 +92,8 @@ function plot_layout_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Di
     return fig, ax
 end
 
-
-function plot_layout_2d(layout; kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_layout_2d(fig, ax, layout; kwargs...)
-    display(fig)
-    return fig, ax
-end
-
-
-
-
-
-# Method with interactive neighbor visualization
-function plot_layout_2d(
-    fig,
-    ax,
-    layout,
-    neighbours::OrderedDict;
-    head_kwargs = Dict(),
-    label_kwargs = Dict(),
-)
-    # Draw head shape
-    plot_layout_2d(
-        fig,
-        ax,
-        layout;
-        head_kwargs = head_kwargs,
-        point_kwargs = Dict(:plot_points => false),
-        label_kwargs = label_kwargs,
-    )
-
-    # Setup interactive points
-    positions = Observable(Point2f.(layout.x2, layout.y2))
-    base_size = 15
-    hover_size = 25
-    sizes = Observable(fill(base_size, length(layout.label)))
-
-    # Add interactive scatter points
-    p = scatter!(ax, positions; color = :black, markersize = sizes, inspectable = true, markerspace = :pixel)
-
-    # Initialize line segments
-    linesegments = Observable(Point2f[])
-    lines!(ax, linesegments, color = :gray, linewidth = 3)
-
-    # Add hover interaction
-    on(events(fig).mouseposition) do mp
-        plt, i = pick(fig)
-        if plt == p
-            # Reset all sizes to base size
-            new_sizes = fill(base_size, length(layout.label))
-            new_sizes[i] = hover_size
-            sizes[] = new_sizes
-
-            # Create lines to neighboring electrodes
-            hovered_pos = positions[][i]
-            new_lines = Point2f[]
-            for neighbor in neighbours[Symbol(layout.label[i])].electrodes
-                neighbor_idx = findfirst(==(neighbor), layout.label)
-                push!(new_lines, hovered_pos, positions[][neighbor_idx])
-            end
-            linesegments[] = new_lines
-        end
-    end
-
-    return fig, ax
-
-end
-
-function plot_layout_2d(layout, neighbours; kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_layout_2d(fig, ax, layout, neighbours; kwargs...)
-    display(fig)
-    return fig, ax
-end
-
-
-function graham_scan(points::Vector{Point2f})
-    # Need at least 3 points for a hull
-    length(points) < 3 && return points
-    
-    # Find leftmost point
-    start = 1
-    for i in 2:length(points)
-        if points[i][1] < points[start][1]
-            start = i
-        end
-    end
-    p0 = points[start]
-    
-    # Sort by angle from p0
-    other_points = vcat(points[1:start-1], points[start+1:end])
-    sorted = sort(other_points, 
-        by = p -> atan(p[2] - p0[2], p[1] - p0[1]))
-    
-    # Initialize hull with first point
-    hull = [p0]
-    
-    # Build hull
-    for p in sorted
-        while length(hull) > 1
-            v1 = hull[end] - hull[end-1]
-            v2 = p - hull[end]
-            cross = v1[1] * v2[2] - v1[2] * v2[1]
-            if cross > 0  # Left turn
-                break
-            end
-            pop!(hull)
-        end
-        push!(hull, p)
-    end
-    
-    return hull
-end
-
-
-function point_border(xpos, ypos, border_size)
-    # If only one electrode, return a complete circle
-    if length(xpos) == 1
-        circle_points = 0:2π/36:2π
-        return [Point2f(xpos[1] + border_size * sin(θ), ypos[1] + border_size * cos(θ)) for θ in circle_points]
-    end
-    
-    # Create points around each electrode position
-    circle_points = 0:2π/36:2π
-    border_points = Point2f[]
-    for (x, y) in zip(xpos, ypos)
-        for θ in circle_points
-            push!(border_points, Point2f(
-                x + border_size * sin(θ),
-                y + border_size * cos(θ)
-            ))
-        end
-    end
-    
-    # Get hull points
-    hull_points = graham_scan(border_points)
-    push!(hull_points, hull_points[1])  # Close the polygon
-    
-    return hull_points
-end
-
-
-
-# using LibGEOS package (currently convexhull)
-function point_border(xpos, ypos, border_size)
-    circle_points = 0:2*pi/361:2*pi
-    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
-    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
-    xys = [[xs[i], ys[i]] for i in eachindex(xs)]
-    push!(xys, xys[1])
-    poly = LibGEOS.Polygon([xys])
-    hull = LibGEOS.convexhull(poly)
-    return hull
-end
-
-function add_topo_rois!(fig, layout, rois; border_size = 10, roi_kwargs = Dict())
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-    roi_default_kwargs = Dict(:color => repeat([:black], length(rois)), :linewidth => repeat([2], length(rois)))
-    roi_kwargs = merge(roi_default_kwargs, roi_kwargs)
-    for (idx, roi) in enumerate(rois)
-        xpos = filter(row -> row.label ∈ roi, layout).x2
-        ypos = filter(row -> row.label ∈ roi, layout).y2
-        border = point_border(xpos, ypos, border_size)
-        lines!(border, linewidth = roi_kwargs[:linewidth][idx], color = roi_kwargs[:color][idx])
-    end
-end
-
-
-function polyxy(p::Polygon)
-    coords = GeoInterface.coordinates(GeoInterface.getexterior(p))
-    return first.(coords), last.(coords)
-   end
-
-
-
-
-function add_topo_rois!(ax, layout, rois; border_size = 10, roi_kwargs = Dict())
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-    roi_default_kwargs = Dict(:color => repeat([:black], length(rois)), :linewidth => repeat([2], length(rois)))
-    roi_kwargs = merge(roi_default_kwargs, roi_kwargs)
-    for (idx, roi) in enumerate(rois)
-        xpos = filter(row -> row.label ∈ roi, layout).x2
-        ypos = filter(row -> row.label ∈ roi, layout).y2
-        border = point_border(xpos, ypos, border_size)
-        lines!(ax, border, linewidth = roi_kwargs[:linewidth][idx], color = roi_kwargs[:color][idx])
-    end
-end
-
-#########################################
-# 3D head shape
-function plot_layout_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = Dict())
-
+# Base 3D layout plotting function
+function plot_layout_3d(fig, ax, layout; point_kwargs=Dict(), label_kwargs=Dict())
     if (:x3 ∉ names(layout) || :y3 ∉ names(layout) || :z3 ∉ names(layout))
         polar_to_cartesian_xyz!(layout)
     end
@@ -299,7 +106,6 @@ function plot_layout_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = D
         :plot_labels => true,
         :fontsize => 20,
         :color => :black,
-        :color => :black,
         :xoffset => 0,
         :yoffset => 0,
         :zoffset => 0,
@@ -310,60 +116,25 @@ function plot_layout_3d(fig, ax, layout; point_kwargs = Dict(), label_kwargs = D
     yoffset = pop!(label_kwargs, :yoffset)
     zoffset = pop!(label_kwargs, :zoffset)
 
-    # points
     if plot_points
         scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3]; point_kwargs...)
     end
 
     if plot_labels
         for label in eachrow(layout)
-            text!(
-                ax,
-                position = (label.x3 + xoffset, label.y3 + yoffset, label.z3 + zoffset),
-                label.label;
-                label_kwargs...,
-            )
+            text!(ax, position = (label.x3 + xoffset, label.y3 + yoffset, label.z3 + zoffset),
+                 label.label; label_kwargs...)
         end
     end
 
-    # hide some plot stuff
     hidedecorations!(ax)
     hidespines!(ax)
 
-    display(fig)
-    return fig, ax
-
-end
-
-function plot_layout_3d(layout; kwargs...)
-    fig = Figure()
-    ax = Axis3(fig[1, 1])
-    plot_layout_3d(fig, ax, layout; kwargs...)
-    display(fig)
     return fig, ax
 end
 
-
-function plot_layout_3d(
-    fig,
-    ax,
-    layout,
-    neighbours::OrderedDict;
-    head_kwargs = Dict(),
-    label_kwargs = Dict(),
-)
-    # Draw head shape
-    plot_layout_3d(
-        fig,
-        ax,
-        layout;
-        head_kwargs = head_kwargs,
-        point_kwargs = Dict(:plot_points => false),
-        label_kwargs = label_kwargs,
-    )
-
-    # Setup interactive points
-    positions = Observable(Point2f.(layout.x2, layout.y2))
+# Interactive versions
+function add_interactive_points(fig, ax, layout, neighbours, positions, is_3d=false)
     base_size = 15
     hover_size = 25
     sizes = Observable(fill(base_size, length(layout.label)))
@@ -372,7 +143,7 @@ function plot_layout_3d(
     p = scatter!(ax, positions; color = :black, markersize = sizes, inspectable = true, markerspace = :pixel)
 
     # Initialize line segments
-    linesegments = Observable(Point2f[])
+    linesegments = Observable(is_3d ? Point3f[] : Point2f[])
     lines!(ax, linesegments, color = :gray, linewidth = 3)
 
     # Add hover interaction
@@ -386,7 +157,7 @@ function plot_layout_3d(
 
             # Create lines to neighboring electrodes
             hovered_pos = positions[][i]
-            new_lines = Point2f[]
+            new_lines = is_3d ? Point3f[] : Point2f[]
             for neighbor in neighbours[Symbol(layout.label[i])].electrodes
                 neighbor_idx = findfirst(==(neighbor), layout.label)
                 push!(new_lines, hovered_pos, positions[][neighbor_idx])
@@ -396,16 +167,96 @@ function plot_layout_3d(
     end
 
     return fig, ax
+end
 
+# Wrapper functions
+function plot_layout_2d(layout; kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    plot_layout_2d(fig, ax, layout; kwargs...)
+    display(fig)
+    return fig, ax
+end
+
+function plot_layout_2d(fig, ax, layout, neighbours::OrderedDict; kwargs...)
+    plot_layout_2d(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
+    positions = Observable(Point2f.(layout.x2, layout.y2))
+    add_interactive_points(fig, ax, layout, neighbours, positions)
+    return fig, ax
+end
+
+function plot_layout_2d(layout, neighbours; kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    plot_layout_2d(fig, ax, layout, neighbours; kwargs...)
+    display(fig)
+    return fig, ax
+end
+
+function plot_layout_3d(layout; kwargs...)
+    fig = Figure()
+    ax = Axis3(fig[1, 1])
+    plot_layout_3d(fig, ax, layout; kwargs...)
+    display(fig)
+    return fig, ax
+end
+
+function plot_layout_3d(fig, ax, layout, neighbours::OrderedDict; kwargs...)
+    plot_layout_3d(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
+    positions = Observable(Point3f.(layout.x3, layout.y3, layout.z3))
+    add_interactive_points(fig, ax, layout, neighbours, positions, true)
+    return fig, ax
 end
 
 function plot_layout_3d(layout, neighbours; kwargs...)
     fig = Figure()
-    ax = Axis(fig[1, 1])
+    ax = Axis3(fig[1, 1])
     plot_layout_3d(fig, ax, layout, neighbours; kwargs...)
     display(fig)
     return fig, ax
 end
+
+
+# using LibGEOS package (convexhull)
+# TODO: concave hull?
+function point_border(xpos, ypos, border_size)
+    circle_points = 0:2*pi/361:2*pi
+    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
+    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
+    xys = [[xs[i], ys[i]] for i in eachindex(xs)]
+    push!(xys, xys[1])
+    poly = LibGEOS.Polygon([xys])
+    hull = LibGEOS.convexhull(poly)
+    return hull
+end
+
+function add_topo_rois!(ax, layout, rois; border_size = 10, roi_kwargs = Dict())
+    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+        polar_to_cartesian_xy!(layout)
+    end
+    roi_default_kwargs = Dict(
+        :color => repeat([:black], length(rois)),
+        :linewidth => repeat([2], length(rois)),
+        :fill => repeat([false], length(rois)),
+        :fillcolor => repeat([:black], length(rois)),
+        :fillalpha => repeat([0.2], length(rois)),
+    )
+    roi_kwargs = merge(roi_default_kwargs, roi_kwargs)
+    for (idx, roi) in enumerate(rois)
+        xpos = filter(row -> row.label ∈ roi, layout).x2
+        ypos = filter(row -> row.label ∈ roi, layout).y2
+        border = point_border(xpos, ypos, border_size)
+        lines!(ax, border, linewidth = roi_kwargs[:linewidth][idx], color = roi_kwargs[:color][idx])
+        if roi_kwargs[:fill][idx]
+            poly!(ax, border, color = roi_kwargs[:fillcolor][idx], alpha = roi_kwargs[:fillalpha][idx])
+        end
+    end
+end
+
+
+
+
+
 
 
 
@@ -495,7 +346,7 @@ function plot_topoplot(
     end
 
     # head shape
-    head_shape_2d(
+    plot_layout_2d(
         fig,
         ax,
         layout,
@@ -606,7 +457,7 @@ function plot_databrowser(
             offset[] = LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, length(channel_labels))
         end
         for (_, label) in channel_data_labels
-            label.visible = active
+            label.visible = !active
         end
     end
 
@@ -777,8 +628,6 @@ function plot_databrowser(
         offset = Observable(zeros(length(channel_labels)))
     end
 
-
-
     @lift xlims!(ax, data.time[$xrange[1]], data.time[$xrange[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
     ax.xlabel = "Time (S)"
@@ -825,11 +674,14 @@ function plot_databrowser(
         clear_axes(ax, [channel_data_original, channel_data_labels])
 
         data = copy(dat.data)
-        if nchannels > 1
-            offset = LinRange(yrange.val[end] * 0.9, yrange.val[1] * 0.9, nchannels + 2)[2:end-1]
-        else # just centre
-            offset = zeros(nchannels)
-        end
+
+    if nchannels > 1
+        offset = Observable((LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1]))
+    else # just centre
+        offset = Observable(zeros(length(channel_labels)))
+    end
+
+
         draw(plot_labels = true)
     end
 
@@ -902,17 +754,12 @@ function plot_databrowser(
                     update_selection_rectangle(selection_bounds[][1], selection_bounds[][2])
                 end
             else
-                # left/right x-range
                 event.key == Keyboard.left && xback!(ax, xrange, data)
                 event.key == Keyboard.right && xforward!(ax, xrange, data)
             end
-
-            # up/down y-range
             event.key == Keyboard.down && yless!(ax, yrange)
             event.key == Keyboard.up && ymore!(ax, yrange)
-
         end
-
     end
 
     # position GUI controls
@@ -1434,10 +1281,13 @@ function plot_erp(
         end
     end
 
+    lines!(ax, dat.data[!, :time], std(Matrix(dat.data[!, dat.layout.label]), dims=2)[:], color = :black, linewidth = kwargs[:linewidth]*2)
+
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
     !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
     if isnothing(kwargs[:title])
-        ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
+        # ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
+        ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(print_vector_(channels))"
     else
         ax.title = kwargs[:title]
     end
@@ -1448,12 +1298,12 @@ function plot_erp(
     if kwargs[:add_topoplot]
         # just put in top left
         topo_ax =
-            Axis(fig[1, kwargs[:topoplot_fig]], width = Relative(0.2), height = Relative(0.2), halign = 0, valign = 1)
-        layout = filter(row -> row.label in String.(channels), erp.layout)
+            Axis(fig[kwargs[:topoplot_fig], 1], width = Relative(0.2), height = Relative(0.2), halign = 0, valign = 1)
+        layout = filter(row -> row.label in String.(channels), dat.layout)
         if average_channels
-            head_shape_2d(fig, topo_ax, layout, point_kwargs = Dict(:color => kwargs[:color], :markersize => 18))
+            plot_layout_2d(fig, topo_ax, layout, point_kwargs = Dict(:color => kwargs[:color], :markersize => 18))
         else
-            head_shape_2d(
+            plot_layout_2d(
                 fig,
                 topo_ax,
                 layout,
@@ -1484,7 +1334,7 @@ function plot_erp(
 end
 
 function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; average_channels = false, kwargs...)
-    plot_erp(dat, [channels], average_channels; kwargs...)
+    plot_erp(dat, [channels], average_channels = average_channels; kwargs...)
 end
 
 function plot_erp(dat::ErpData; average_channels = false, kwargs...)
@@ -1494,15 +1344,17 @@ end
 
 
 function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData, channels; average_channels = false, kwargs = Dict())
+    println("plot_erp(dat_orig, dat_cleaned, channels)")
+    kwargs = merge(kwargs, kwargs)
     fig = Figure()
     ax1 = Axis(fig[1, 1])
     plot_erp(fig, ax1, dat_orig, channels; average_channels = average_channels, kwargs = kwargs)
     ax2 = Axis(fig[2, 1])
-    kwargs = merge(kwargs, kwargs)
     kwargs[:topoplot_fig] = 2
     plot_erp(fig, ax2, dat_cleaned, channels; average_channels = average_channels, kwargs = kwargs)
     linkaxes!(ax1, ax2)
     display(fig)
+    return fig, ax1, ax2
 end
 
 
@@ -1816,7 +1668,7 @@ function plot_ica_topoplot(
         #     Colorbar(ax, co; colorbar_kwargs...)
         # end
         # head shape
-        head_shape_2d(
+        plot_layout_2d(
             fig,
             ax,
             layout,
@@ -1887,7 +1739,7 @@ function plot_ica_topoplot(
         Colorbar(fig[1, 2], co; colorbar_kwargs...)
     end
     # head shape
-    head_shape_2d(fig, ax, layout, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
+    plot_layout_2d(fig, ax, layout, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
     # end
     return fig
 end
@@ -2176,13 +2028,3 @@ function plot_ica_component_activation(
 
     return fig
 end
-
-
-
-
-
-
-
-
-
-
