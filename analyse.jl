@@ -53,7 +53,7 @@ end
 
 
 
-function channel_summary(dat::DataFrame, channel_labels::Vector{<:AbstractString})
+function channel_summary(dat::DataFrame, channel_labels::Union{Vector{Symbol}, Vector{<:AbstractString}})
     # Select the specified channels
     selected_data = select(dat, channel_labels)
 
@@ -83,6 +83,35 @@ function channel_summary(dat::DataFrame, channel_labels::Vector{<:AbstractString
 
     return summary_df
 end
+
+function channel_summary(dat::Union{ContinuousData, ErpData})
+    return channel_summary(dat.data, dat.layout.label)
+end
+
+function channel_summary(dat::Union{ContinuousData, ErpData}, channel_numbers::Union{Vector{Int}, UnitRange})
+    channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
+    return channel_summary(dat.data, channel_labels)
+end
+
+function channel_summary(dat::Union{ContinuousData, ErpData}, channel_labels::Union{Vector{Symbol}, Vector{<:AbstractString}})
+    return channel_summary(dat.data, channel_labels)
+end
+
+
+function channel_summary(dat::EpochData)
+    return [channel_summary(dat.data[trial], dat.layout.label) for trial in eachindex(dat.data)]
+end
+
+function channel_summary(dat::EpochData, channel_numbers::Union{Vector{Int}, UnitRange})
+    channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
+    return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
+end
+
+function channel_summary(dat::EpochData, channel_labels::Union{Vector{Symbol}, Vector{<:AbstractString}})
+    return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
+end
+
+
 
 
 
