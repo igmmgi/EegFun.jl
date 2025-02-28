@@ -45,8 +45,8 @@ layout = read_layout("./layouts/biosemi72.csv");
 
 # 2D layout
 polar_to_cartesian_xy!(layout)
-plot_layout_2d(layout)
-neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80)
+plot_layout_2d(layout);
+neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
 plot_layout_2d(layout, neighbours)
 
 # fig, ax = plot_layout_2d(layout)
@@ -57,7 +57,7 @@ plot_layout_2d(layout, neighbours)
 
 # 3D layout
 polar_to_cartesian_xyz!(layout)
-neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40)
+neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40);
 plot_layout_3d(layout)
 plot_layout_3d(layout, neighbours)
 
@@ -95,6 +95,7 @@ rereference!(dat, dat.layout.label)
 # plot_databrowser(dat)
 
 filter_data!(dat, "hp", 0.1, 2)
+
 
 plot_databrowser(dat)
 

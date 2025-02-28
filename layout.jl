@@ -53,11 +53,9 @@ Converts polar coordinates (incidence and azimuth angles) from a layout DataFram
 - Nothing. The function modifies the `layout` DataFrame directly.
 """
 function polar_to_cartesian_xyz!(layout::DataFrame)
-    # Validate input columns
     if !all([col in names(layout) for col in ["inc", "azi"]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
-
     radius = 88.0  # mm
     inc = layout[!, :inc] .* (pi / 180)  # Convert to radians
     azi = layout[!, :azi] .* (pi / 180)  # Convert to radians
