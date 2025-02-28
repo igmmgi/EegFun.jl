@@ -7,10 +7,10 @@ using JLD2
 using LibGEOS
 using LinearAlgebra
 using OrderedCollections
-using Printf
 using Random
 using ScatteredInterpolation
 using StatsBase
+using Printf
 
 
 include("types.jl")
@@ -103,25 +103,19 @@ plot_databrowser(dat)
 channel_summary(dat)
 channel_summary(dat.data, dat.layout.label[1:66])
 channel_summary(dat.data, dat.layout.label)
-viewer(channel_data)
 
+# bad channels
+channel_joint_probability(dat, threshold=5.0, normval=2)
 
-# # # bad channels zscore variance
-# # c[!, :channel][c[!, :zvar].>3]
-# c = channel_joint_probability(dat.data, dat.layout.label[1:66])
-# # lines(c[!, :jp])
-# cm = correlation_matrix(dat.data, dat.layout.label)
-# # view(cm)
-# plot_correlation_heatmap(cm)
-# plot_correlation_heatmap(cm, (-0.9, 0.9))
+cm = correlation_matrix(dat)
+plot_correlation_heatmap(cm)
 
-# TODO: add neighbour correlation values
+filter_data!(dat, "lp", 10, 6)
 
-# filter_data!(dat, "lp", 10, 6)
-# include("plot.jl")
 # calculate EOG channels
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
 diff_channel!(dat, "F9", "F10", "hEOG");
+
 ## # autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
