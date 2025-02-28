@@ -136,6 +136,10 @@ function correlation_matrix(dat::DataFrame, channel_labels)::DataFrame
     return df
 end
 
+function correlation_matrix(dat::ContinuousData)::DataFrame
+    return correlation_matrix(dat.data, dat.layout.label)
+end
+
 
 """
     detect_eog_onsets!(dat::ContinuousData, criterion::Float64, channel_in::Symbol, channel_out::Symbol)
@@ -232,72 +236,75 @@ end
 
 
 
-function channel_joint_probability(dat::DataFrame, channels, threshold::Float64 = 5.0, normval::Int = 2)
-
-    println("Info (pmd_badChanJointProb): Computing probability for channels...")
-
-    # Call the jointprob function
-    data = Float64.(Matrix(select(dat, channels)))
-
-    jp, indelec = joint_probability(permutedims(data), threshold, normval)
-    #badElectrodes = findall(indelec)
-
-    summary_df = DataFrame(channel = channels, jp = jp, rejection = indelec)
-    return summary_df
+function channel_joint_probability(dat::DataFrame, channels; threshold::Float64 = 5.0, normval::Int = 2)
+    @info "channel_joint_probability: Computing probability for channels $(print_vector_(channels))"
+    data = view(Matrix(select(dat, channels)), :, :) # Use view instead of copying
+    jp, indelec = joint_probability(data', threshold, normval)
+    return DataFrame(channel = channels, jp = jp, rejection = indelec)
 end
 
-function joint_probability(signal::Matrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
-    nbchan = size(signal)[1]
+function channel_joint_probability(dat::ContinuousData; threshold::Float64 = 5.0, normval::Int = 2)
+    return channel_joint_probability(dat.data, dat.layout.label; threshold=threshold, normval=normval)
+end
+
+
+function joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
+    nbchan = size(signal, 1)
     jp = zeros(nbchan)
-    for rc = 1:nbchan
-        # Compute the density function
-        dataProba, _ = realproba(signal[rc, :], discret)
-        # Compute joint probability
-        jp[rc] = -sum(log.(dataProba))
+    dataProba = Vector{Float64}(undef, size(signal, 2)) # Pre-allocate
+    
+    @inbounds for rc = 1:nbchan
+        compute_probability!(dataProba, view(signal, rc, :), discret)
+        jp[rc] = -sum(log, dataProba)
     end
+
     # Normalize the joint probability
     if normalize != 0
-        tmpjp = jp
-        if normalize == 2
-            tmpjp = sort(jp)
-            tmpjp = tmpjp[round(Int, length(tmpjp) * 0.1)+1:end-round(Int, length(tmpjp) * 0.1)]
-        end
-        jp = (jp .- mean(tmpjp)) ./ std(tmpjp)
+        tmpjp = normalize == 2 ? trim_extremes(jp) : jp
+        jp .= (jp .- mean(tmpjp)) ./ std(tmpjp)
     end
-    # Reject channels based on threshold
-    if threshold != 0
-        rej = abs.(jp) .> threshold
-    else
-        rej = zeros(Bool, size(jp))
-    end
+
+    rej = threshold != 0 ? abs.(jp) .> threshold : falses(nbchan)
     return jp, rej
 end
 
-function realproba(data::Vector{Float64}, bins::Int = 1000)
+function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)
     if bins > 0
-        # Compute the density function
-        minimum_value = minimum(data)
-        maximum_value = maximum(data)
-        data = floor.((data .- minimum_value) ./ (maximum_value - minimum_value) .* (bins - 1)) .+ 1
-        if any(isnan.(data))
-            @warn "Binning failed - could be due to zeroed out channel"
+        min_val, max_val = extrema(data)
+        range_val = max_val - min_val
+        sortbox = zeros(Int, bins)
+        
+        # Single-pass binning and counting
+        @inbounds for x in data
+            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
+            sortbox[bin] += 1
         end
-        # Compute histogram
-        sortbox = zeros(bins)
-        for d in data
-            if !isnan(d)
-                sortbox[Int(d)] += 1
-            end
+        
+        # Compute probabilities
+        n = length(data)
+        @inbounds for (i, x) in enumerate(data)
+            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
+            probaMap[i] = sortbox[bin] / n
         end
-        probaMap = sortbox[Int.(data)] / length(data)
-        sortbox = sortbox / length(data)
     else
-        # Base over error function (Gaussian approximation)
-        data = (data .- mean(data)) ./ std(data)
-        probaMap = exp.(-0.5 .* (data .* data)) / (2 * π)
-        probaMap = probaMap / sum(probaMap)
-        sortbox = probaMap / sum(probaMap)
+        # Gaussian approximation
+        μ, σ = mean(data), std(data)
+        inv_sqrt2pi = 1 / (√(2π))
+        @inbounds for (i, x) in enumerate(data)
+            z = (x - μ) / σ
+            probaMap[i] = exp(-0.5 * z * z) * inv_sqrt2pi
+        end
+        sum_p = sum(probaMap)
+        probaMap ./= sum_p
     end
-    return probaMap, sortbox
+    return probaMap
+end
+
+# Helper functions
+function trim_extremes(x::Vector{Float64})
+    n = length(x)
+    trim = round(Int, n * 0.1)
+    sorted = sort(x)
+    return view(sorted, trim+1:n-trim)
 end
 
