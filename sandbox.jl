@@ -94,9 +94,11 @@ rereference!(dat, dat.layout.label)
 
 # plot_databrowser(dat)
 
-filter_data!(dat, "hp", 0.1, 2)
-
-
+subject = 3
+dat = read_bdf("../Flank_C_$(subject).bdf");
+dat = create_eeg_dataframe(dat, layout);
+# rereference!(dat, dat.layout.label)
+filter_data!(dat, "hp", "iir", 1, order=2)
 plot_databrowser(dat)
 
 
