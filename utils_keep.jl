@@ -71,13 +71,13 @@ function print_vector_(v::Vector; max_length::Int = 10, n_ends::Int = 5)
     end
     return join(v, ", ")
 end
-
+   
 function print_vector(v::UnitRange; max_length::Int = 10, n_ends::Int = 5)
-    print_vector_(collect(v), max_length = max_length, n_ends = n_ends)
+    print_vector_(collect(v), max_length=max_length, n_ends=n_ends)
 end
-
+  
 function print_vector(v::Vector; max_length::Int = 10, n_ends::Int = 5)
-    print_vector_(collect(v), max_length = max_length, n_ends = n_ends)
+    print_vector_(collect(v), max_length=max_length, n_ends=n_ends)
 end
 
 
@@ -338,55 +338,42 @@ macro add_nonmutating(func)
     # Generate expressions for each method
     exprs = Expr(:block)
     
-    # Collect all method signatures first
-    methods_list = String[]
-    method_exprs = []
-    
-    # Get all methods
+    # Generate method definitions
     for method in methods(eval(func))
         sig = method.sig
         types = sig.parameters[2:end]
         
-        # Get original parameter names
-        params = Base.method_argnames(method)[2:end]
+        # Get original parameter names from method
+        params = Base.method_argnames(method)[2:end]  # Skip first (self) parameter
         if isempty(params) || any(==(nothing), params)
+            # Fallback if parameter names not available
             params = [Symbol("arg", i) for i in 1:length(types)]
         end
         
-        # Create the signature string
-        sig_str = "$non_mut_name(" * join(["$p::$t" for (p,t) in zip(params, types)], ", ") * ")"
-        push!(methods_list, sig_str)
+        # Create the signature string for docstring
+        sig_str = join(["$p::$t" for (p,t) in zip(params, types)], ", ")
         
-        # Create method definition without docstring
+        # Create method expression
         method_expr = quote
+            @doc """
+                $($non_mut_name)($($sig_str))
+
+            Non-mutating version of `$($mut_name)`. Creates a copy of the input data
+            and applies the operation to the copy.
+
+            See also: [`$($func_name)`](@ref)
+            """
             function $non_mut_name($([:($p::$t) for (p,t) in zip(params, types)]...))
                 data_copy = deepcopy($(params[1]))
                 $mut_name(data_copy, $(params[2:end]...))
                 return data_copy
             end
         end
-        push!(method_exprs, method_expr)
+        push!(exprs.args, method_expr)
     end
-    
-    # Create the main docstring
-    doc = """
-        $(join(methods_list, "\n"))
-
-    Non-mutating version of `$mut_name`. Creates a copy of the input data
-    and applies the operation to the copy.
-
-    See also: [`$func_name`](@ref)
-    """
-    
-    # Add docstring first
-    push!(exprs.args, :(Base.@doc $doc $non_mut_name))
-    
-    # Then add all method definitions
-    append!(exprs.args, method_exprs)
     
     return esc(exprs)
 end
-
 
 
 

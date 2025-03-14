@@ -50,10 +50,10 @@ neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
 plot_layout_2d(layout, neighbours)
 
 # fig, ax = plot_layout_2d(layout)
-# add_topo_rois!(ax, layout, [["PO7", "PO3", "P1"], ["PO8", "PO4", "P2"]], border_size = 10)
-# add_topo_rois!(ax, layout, [["PO7", "PO3", "P1"], ["PO8", "PO4", "P2"]], border_size = 5)
-# add_topo_rois!(ax, layout, [["Fp1"]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
-# add_topo_rois!(ax, layout, [["CPz", "C2", "FCz",  "C1"]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
+# add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
+# add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
+# add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
+# add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 
 # 3D layout
 polar_to_cartesian_xyz!(layout)
@@ -81,34 +81,26 @@ plot_events(dat);
 # save_object("$(subject)_continuous_raw_eegfun.jld2", dat)
 # dat = load_object("3_continuous_raw.jld2")
 
-# rereference!(dat, 1:72)
-# rereference!(dat, ["Fp1"])
-# rereference!(dat, ["M1", "M2"])
-dat_out = rereference(dat, dat.layout.label)
 rereference!(dat, :avg)
-
-# rereference!(dat.data, dat.layout.label, ["Fp1"])
-# rereference!(dat.data, dat.layout.label, ["M1", "M2"])
-# rereference!(dat.data, dat.layout.label, 1:10)
-# rereference!(dat.data, dat.layout.label, [1])
+# rereference!(dat.data, dat.layout.label, :mastoid)
 # rereference!(dat.data, dat.layout.label, [:Fp1])
 
-# plot_databrowser(dat)
+plot_databrowser(dat)
 
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 dat = create_eeg_dataframe(dat, layout);
-rereference!(dat, dat.layout.label)
-remove_mean!(dat)
+rereference!(dat, channels(dat))
 filter_data!(dat, "hp", "iir", 1, order=1)
-filter_data!(dat, "lp", "fir", 10)
-plot_databrowser(dat)
+test = filter_data(dat, "hp", "iir", 1, order=1)
+#filter_data!(dat, "lp", "fir", 10)
+#plot_databrowser(dat)
 
 
 # search for some bad channels
 channel_summary(dat)
-channel_summary(dat.data, dat.layout.label[1:66])
-channel_summary(dat.data, dat.layout.label)
+channel_summary(dat.data, channels(dat))
+channel_summary(dat.data, channels(dat)[1:66])
 
 # bad channels
 channel_joint_probability(dat, threshold=5.0, normval=2)
@@ -116,7 +108,6 @@ channel_joint_probability(dat, threshold=5.0, normval=2)
 cm = correlation_matrix(dat)
 plot_correlation_heatmap(cm)
 
-filter_data!(dat, "lp", 10, 6)
 
 # calculate EOG channels
 diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
@@ -130,9 +121,9 @@ is_extreme_value!(dat, dat.layout.label, 500);
 
 
 # ICA "continuous" data
-dat_ica = filter_data(dat, "hp", 1, 2)
+dat_ica = filter_data(dat, "hp", "iir", 1, order=1)
 good_samples = findall(dat_ica.data[!, :is_extreme] .== false)
-good_channels = setdiff(dat_ica.layout.label, ["PO9"])
+good_channels = setdiff(dat_ica.layout.label, [:PO9])
 dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
 ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms())
 

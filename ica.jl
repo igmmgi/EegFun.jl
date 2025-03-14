@@ -35,7 +35,7 @@ function create_ica_data_matrix(dat::DataFrame, channels; samples_to_include = n
     # need to make sure we have unique samples as with longer epochs there is potential for overlap
     dat = unique(dat, :sample)
     # select only the channels we want
-    dat = dat[!, intersect(names(dat), channels)]
+    dat = dat[!, intersect(propertynames(dat), channels)]
     return permutedims(Matrix(dat))
 end
 
