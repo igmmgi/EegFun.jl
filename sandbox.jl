@@ -71,11 +71,11 @@ dat = read_bdf("../Flank_C_$(subject).bdf");
 # save_object("$(subject)_continuous_raw.jld2", dat)
 # dat = load_object("3_continuous_raw.jld2")
 
-plot_events(dat)
+# plot_events(dat)
 
 # preprocess the eeg data
 dat = create_eeg_dataframe(dat, layout);
-plot_events(dat)
+plot_events(dat);
 # viewer(dat) # requires vscode
 # head(dat) # requires vscode
 # save_object("$(subject)_continuous_raw_eegfun.jld2", dat)
@@ -84,7 +84,8 @@ plot_events(dat)
 # rereference!(dat, 1:72)
 # rereference!(dat, ["Fp1"])
 # rereference!(dat, ["M1", "M2"])
-rereference!(dat, dat.layout.label)
+dat_out = rereference(dat, dat.layout.label)
+rereference!(dat, :avg)
 
 # rereference!(dat.data, dat.layout.label, ["Fp1"])
 # rereference!(dat.data, dat.layout.label, ["M1", "M2"])
@@ -97,8 +98,10 @@ rereference!(dat, dat.layout.label)
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 dat = create_eeg_dataframe(dat, layout);
-# rereference!(dat, dat.layout.label)
-filter_data!(dat, "hp", "iir", 1, order=2)
+rereference!(dat, dat.layout.label)
+remove_mean!(dat)
+filter_data!(dat, "hp", "iir", 1, order=1)
+filter_data!(dat, "lp", "fir", 10)
 plot_databrowser(dat)
 
 

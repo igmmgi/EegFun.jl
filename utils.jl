@@ -310,3 +310,27 @@ end
 function to_data_frame(dat::Vector{EpochData})
     return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
 end
+
+macro add_nonmutating(func)
+    # Get the function name without !
+    nonmutating_name = Symbol(string(func)[1:end-1])
+    
+    return quote
+        """
+            $($nonmutating_name)(args...)
+
+        Non-mutating version of `$($func)`. Creates a copy of the input data
+        and applies the mutation to the copy.
+
+        See also: [`$($func)`](@ref)
+        """
+        function $(esc(nonmutating_name))(args...)
+            data_copy = deepcopy(first(args))
+            $(esc(func))(data_copy, Base.tail(args)...)
+            return data_copy
+        end
+    end
+end
+
+
+

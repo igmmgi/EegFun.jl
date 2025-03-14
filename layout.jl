@@ -9,7 +9,12 @@ Reads a layout file in CSV format and returns a DataFrame containing the layout 
 # Returns
 - `DataFrame`: A DataFrame containing the layout data, with columns for electrode labels, incidence angles, azimuth angles, and calculated Cartesian coordinates (if applicable).
 """
-read_layout(layout_file_name) = DataFrame(CSV.File(layout_file_name))::DataFrame
+function read_layout(file)
+    df = DataFrame(CSV.File(file, types=Dict(:label => Symbol)))
+    rename!(df, Symbol.(names(df)))
+    return df
+end
+
 
 """
     polar_to_cartesian_xy!(layout::DataFrame)
@@ -27,15 +32,15 @@ Converts polar coordinates (incidence and azimuth angles) from a layout DataFram
 """
 function polar_to_cartesian_xy!(layout::DataFrame)
     # Validate input columns
-    if !all([col in names(layout) for col in ["inc", "azi"]])
+    if !all([col in propertynames(layout) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
     radius = 88 # mm
     inc = layout[!, :inc] .* (pi / 180)
     azi = layout[!, :azi] .* (pi / 180)
-    layout[!, "x2"] = inc .* cos.(azi) .* radius
-    layout[!, "y2"] = inc .* sin.(azi) .* radius
-    return
+    layout[!, :x2] = inc .* cos.(azi) .* radius
+    layout[!, :y2] = inc .* sin.(azi) .* radius
+    return nothing
 end
 
 """
@@ -53,7 +58,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout DataFram
 - Nothing. The function modifies the `layout` DataFrame directly.
 """
 function polar_to_cartesian_xyz!(layout::DataFrame)
-    if !all([col in names(layout) for col in ["inc", "azi"]])
+    if !all([col in propertynames(layout) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
     radius = 88.0  # mm
@@ -63,6 +68,7 @@ function polar_to_cartesian_xyz!(layout::DataFrame)
     layout[!, :x3] = radius .* sin.(inc) .* cos.(azi)
     layout[!, :y3] = radius .* sin.(inc) .* sin.(azi)
     layout[!, :z3] = radius .* cos.(inc)
+    return nothing
 end
 
 # distances
@@ -113,7 +119,7 @@ Identifies the neighbours of each electrode based on their Cartesian coordinates
 """
 function get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real)
 
-    if !all([col in names(layout) for col in ["x2", "y2", "label"]])
+    if !all([col in propertynames(layout) for col in [:x2, :y2, :label]])
         throw(ArgumentError("Layout must contain x2, y2, and :label columns"))
     end
 
@@ -180,7 +186,7 @@ Identifies the neighbours of each electrode based on their Cartesian coordinates
 """
 
 struct Neighbours
-    electrodes::Vector{String}
+    electrodes::Vector{Symbol}
     distances::Vector{Float64}
     weights::Vector{Float64}
 end
@@ -197,8 +203,8 @@ end
 
 function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Real)
 
-    if !all([col in names(layout) for col in ["x3", "y3", "z3", "label"]])
-        throw(ArgumentError("Layout must contain x3, y3, z3, and :label columns"))
+    if !all([col in propertynames(layout) for col in [:x3, :y3, :z3, :label]])
+        throw(ArgumentError("Layout must contain :x3, :y3, :z3, and :label columns"))
     end
 
     if distance_criterion <= 0

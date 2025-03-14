@@ -313,6 +313,9 @@ function filter_data(
     return dat_out
 end
 
+
+
+
 ############################################################
 """
     get_filter_characteristics(filter, sample_rate::Real, transition_width::Real; npoints::Int=1000)
@@ -621,7 +624,7 @@ end
 # print_filter_characteristics(lp_fir_filter, sample_rate, cutoff_freq, transition_band);
 # plot_filter_response(lp_fir_filter, sample_rate, cutoff_freq, transition_band);
 #  
-# lp_irr_filter = digitalfilter(Lowpass(cutoff_freq+(transition_band/2)), Butterworth(6), fs=sample_rate)
+# lp_irr_filter = digitalfilter(Lowpass(cutoff_freq+(transition_band/2)), Butterworth(12), fs=sample_rate)
 # print_filter_characteristics(lp_irr_filter, sample_rate, cutoff_freq, transition_band);
 # plot_filter_response(lp_irr_filter, sample_rate, cutoff_freq, transition_band);
 # 
@@ -639,8 +642,5 @@ end
 # hp_irr_filter = digitalfilter(Highpass(cutoff_freq-(transition_band/2)), Butterworth(2), fs=sample_rate)
 # print_filter_characteristics(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
 # plot_filter_response(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
-
-
-
 
 
