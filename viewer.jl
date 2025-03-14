@@ -8,29 +8,29 @@ function head(dat::DataFrame, n=nothing)
     viewer(dat[1:n, :])
 end
 
-function viewer(dat::Union{BioSemiBDF.BioSemiData, ContinuousData})
-    viewer(dat.data)
+function viewer(dat::SingleDataFrameEeg)
+    viewer(data(dat))
 end
 
-function head(dat::Union{BioSemiBDF.BioSemiData, ContinuousData}, n=nothing)
+function head(dat::SingleDataFrameEeg, n=nothing)
     isnothing(n) && (n=5)
-    viewer(dat.data[1:n, :])
+    viewer(data(data)[1:n, :])
 end
 
-function viewer(dat::EpochData)
-    viewer(to_data_frame(dat))
-end
-
-function head(dat::EpochData, n=nothing)
-    isnothing(n) && (n=5)
-    viewer(to_data_frame(dat)[1:n, :])
-end
-
-function viewer(dat::Vector{EpochData})
-    viewer(to_data_frame(dat))
-end
-
-function head(dat::Vector{EpochData}, n=nothing)
-    isnothing(n) && (n=5)
-    viewer(to_data_frame(dat)[1:n, :])
-end 
+# function viewer(dat:MultiDataFrameEeg)
+#     viewer(to_data_frame(dat))
+# end
+# 
+# function head(dat::MultiDataFrameEeg, n=nothing)
+#     isnothing(n) && (n=5)
+#     viewer(to_data_frame(dat)[1:n, :])
+# end
+# 
+# function viewer(dat::Vector{EpochData})
+#     viewer(to_data_frame(dat))
+# end
+# 
+# function head(dat::Vector{EpochData}, n=nothing)
+#     isnothing(n) && (n=5)
+#     viewer(to_data_frame(dat)[1:n, :])
+# end 

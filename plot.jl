@@ -123,7 +123,7 @@ function plot_layout_3d(fig, ax, layout; point_kwargs=Dict(), label_kwargs=Dict(
     if plot_labels
         for label in eachrow(layout)
             text!(ax, position = (label.x3 + xoffset, label.y3 + yoffset, label.z3 + zoffset),
-                 label.label; label_kwargs...)
+                 String(label.label); label_kwargs...)
         end
     end
 
@@ -445,7 +445,7 @@ end
 
 function plot_databrowser(
     dat::ContinuousData,
-    channel_labels::Vector{<:AbstractString},
+    channel_labels::Vector{Symbol},
     ica::Union{InfoIca,Nothing} = nothing,
 )
 
@@ -461,13 +461,51 @@ function plot_databrowser(
         end
     end
 
+    # Add state tracking
+    filter_state = Observable((hp=false, lp=false))
+    data_obs = Observable(copy(dat.data))  # Initial copy
+
+    function apply_filters()
+        # If turning off both filters, reset to original
+        if !filter_state[].hp && !filter_state[].lp
+            data_obs[] = copy(dat.data)
+            return
+        end
+        
+        # If turning off one filter, start fresh and apply remaining filter
+        if filter_state[].hp != filter_state[].lp  # Only one filter active
+            data_obs[] = copy(dat.data)
+            if filter_state[].hp
+                data_obs[] = filter_data(data_obs[], channel_labels, "hp", "iir", 
+                                       slider_hp_filter.value.val, sample_rate(dat), order=1)
+            else  # lp is active
+                data_obs[] = filter_data(data_obs[], channel_labels, "lp", "iir", 
+                                       slider_lp_filter.value.val, sample_rate(dat), order=3)
+            end
+        else  # Both filters active - only apply the new filter to current data
+            if filter_state[].lp  # LP was just turned on
+                data_obs[] = filter_data(data_obs[], channel_labels, "lp", "iir", 
+                                       slider_lp_filter.value.val, sample_rate(dat), order=3)
+            else  # HP was just turned on
+                data_obs[] = filter_data(data_obs[], channel_labels, "hp", "iir", 
+                                       slider_hp_filter.value.val, sample_rate(dat), order=1)
+            end
+        end
+        
+        notify(data_obs)
+    end
+
+    function apply_hp_filter(active)
+        clear_axes(ax, [channel_data_original, channel_data_labels])
+        filter_state[] = (hp=active, lp=filter_state[].lp)
+        apply_filters()
+        draw(plot_labels = true)
+    end
+
     function apply_lp_filter(active)
         clear_axes(ax, [channel_data_original, channel_data_labels])
-        if active
-            data = filter_data(data, channel_labels, "lp", slider_lp_filter.value.val, 6, dat.sample_rate)
-        else
-            data = copy(dat.data)
-        end
+        filter_state[] = (hp=filter_state[].hp, lp=active)
+        apply_filters()
         draw(plot_labels = true)
     end
 
@@ -484,6 +522,7 @@ function plot_databrowser(
             ("vEOG", plot_lines, "is_vEOG"),
             ("hEOG", plot_lines, "is_hEOG"),
             ("extreme", plot_extreme_lines, "is_extreme"),
+            ("HP-Filter On/Off", apply_hp_filter),
             ("LP-Filter On/Off", apply_lp_filter),
         ]
 
@@ -586,8 +625,8 @@ function plot_databrowser(
     # Function to get data in selected region
     function get_selected_data()
         x_min, x_max = minmax(selection_bounds[]...)
-        time_mask = (x_min .<= dat.data.time .<= x_max)
-        selected_data = dat.data[time_mask, :]
+        time_mask = (x_min .<= data_obs[].time .<= x_max)
+        selected_data = data_obs[][time_mask, :]
         println(
             "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))",
         )
@@ -663,11 +702,11 @@ function plot_databrowser(
         if s == "All"
             channel_labels = channel_labels_original
         elseif s == "Left"
-            channel_labels = channel_labels_original[findall(occursin.(r"\d*[13579]$", channel_labels_original))]
+            channel_labels = channel_labels_original[findall(occursin.(r"\d*[13579]$", String.(channel_labels_original)))]
         elseif s == "Right"
-            channel_labels = channel_labels_original[findall(occursin.(r"\d*[24680]$", channel_labels_original))]
+            channel_labels = channel_labels_original[findall(occursin.(r"\d*[24680]$", String.(channel_labels_original)))]
         elseif s == "Central"
-            channel_labels = channel_labels_original[findall(occursin.(r"z$", channel_labels_original))]
+            channel_labels = channel_labels_original[findall(occursin.(r"z$", String.(channel_labels_original)))]
         end
         nchannels = length(channel_labels)
 
@@ -714,6 +753,7 @@ function plot_databrowser(
 
 
     slider_extreme = Slider(fig[1, 2], range = 0:5:100, startvalue = 100, width = 100)
+    slider_hp_filter = Slider(fig[1, 2], range = 0.1:0.1:2, startvalue = 0.5, width = 100)
     slider_lp_filter = Slider(fig[1, 2], range = 5:5:60, startvalue = 20, width = 100)
 
     crit_val = lift(slider_extreme.value) do x
@@ -767,6 +807,10 @@ function plot_databrowser(
         fig[1, 2] = grid!(
             vcat(
                 toggles[:, 1:2],
+                hcat(
+                    slider_hp_filter,
+                    Label(fig, @lift("HP-Filter: $($(slider_hp_filter.value)) Hz"), fontsize = 22, halign = :left),
+                ),
                 hcat(
                     slider_lp_filter,
                     Label(fig, @lift("LP-Filter: $($(slider_lp_filter.value)) Hz"), fontsize = 22, halign = :left),
@@ -823,18 +867,18 @@ function plot_databrowser(
         for (idx, col) in enumerate(channel_labels)
             channel_data_original[col] = lines!(
                 ax,
-                data[!, :time],
-                @lift(data[!, $col] .+ $offset[idx]),  # Make y-values reactive to offset
-                color = @lift(abs.(data[!, col]) .>= $crit_val),
+                @lift($data_obs.time),  # Use data_obs
+                @lift($data_obs[!, $col] .+ $offset[idx]),  # Use data_obs
+                color = @lift(abs.($data_obs[!, col]) .>= $crit_val),  # Use data_obs
                 colormap = [:darkgrey, :darkgrey, :red],
                 linewidth = 2,
             )
             if plot_labels
                 channel_data_labels[col] = text!(
                     ax,
-                    @lift(data[$xrange, :time][1]),
-                    @lift(data[$xrange, $col][1] .+ $offset[idx]),  # Make label position reactive to offset
-                    text = col,
+                    @lift($data_obs[$xrange, :time][1]),  # Use data_obs
+                    @lift($data_obs[$xrange, $col][1] .+ $offset[idx]),  # Use data_obs
+                    text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
                 )
@@ -865,7 +909,7 @@ plot_databrowser(dat::ContinuousData, channel_label::AbstractString, ica::InfoIc
 
 function plot_databrowser(
     dat::EpochData,
-    channel_labels::Vector{<:AbstractString},
+    channel_labels::Vector{Symbol},
     ica::Union{InfoIca,Nothing} = nothing,
 )
 
@@ -1179,8 +1223,8 @@ end
 # Convenience methods
 plot_databrowser(dat::EpochData) = plot_databrowser(dat, dat.layout.label)
 plot_databrowser(dat::EpochData, ica::InfoIca) = plot_databrowser(dat, dat.layout.label, ica)
-plot_databrowser(dat::EpochData, channel_label::AbstractString) = plot_databrowser(dat, [channel_label])
-plot_databrowser(dat::EpochData, channel_label::AbstractString, ica::InfoIca) =
+plot_databrowser(dat::EpochData, channel_label::Symbol) = plot_databrowser(dat, [channel_label])
+plot_databrowser(dat::EpochData, channel_label::Symbol, ica::InfoIca) =
     plot_databrowser(dat, [channel_label], ica)
 
 
@@ -1572,8 +1616,8 @@ function plot_correlation_heatmap(corr_df::DataFrame, mask_range::Union{Nothing,
     end
 
     # Extract row and column names
-    row_names = corr_df[!, :row]
-    col_names = names(corr_df)[2:end]
+    row_names = String.(corr_df[!, :row])
+    col_names = String.(propertynames(corr_df)[2:end])
 
     # Create the heatmap
     fig = Figure()

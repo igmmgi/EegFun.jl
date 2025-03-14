@@ -18,7 +18,7 @@ function _apply_rereference!(
     channel_labels::Vector{Symbol}, 
     reference::Vector{Float64}
 )
-    for col in names(dat)
+    for col in propertynames(dat)
         if col in channel_labels
             dat[!, col] .-= reference
         end
@@ -85,10 +85,10 @@ Apply rereferencing to EEG data types.
 - If channel_labels omitted, uses all channels from layout
 """
 
-# Helper function to handle special reference cases
+# helper function to handle special reference cases such as :avg and :mastoid
 function resolve_reference(dat, reference_channel::Symbol)
-    if reference_channel == :avg
-        return dat.layout.label
+    if reference_channel == :avg # all channels
+        return channels(dat) 
     elseif reference_channel == :mastoid
         return [:M1, :M2]
     end
@@ -123,11 +123,11 @@ end
 
 # Methods for default channel labels
 function rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_channel::Union{Symbol,Vector{Symbol}})
-    rereference!(dat, dat.layout.label, reference_channel)
+    rereference!(dat, channels(dat), reference_channel)
     return nothing
 end
 
-# One macro call generates all non-mutating versions
+# generates all non-mutating versions
 @add_nonmutating rereference!
 
 

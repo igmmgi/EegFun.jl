@@ -1,55 +1,27 @@
-# # Abstract types
-# abstract type EegData end
-# abstract type SingleFrameEeg <: EegData end
-# abstract type MultiFrameEeg <: EegData end
-# 
-# # Concrete types with basic fields
-# mutable struct ContinuousData <: SingleFrameEeg
-#     data::DataFrame
-#     layout::Layout
-#     history::Dict{String, Any}
-# end
-# 
-# mutable struct ErpData <: SingleFrameEeg
-#     data::DataFrame
-#     layout::Layout
-#     history::Dict{String, Any}
-# end
-# 
-# mutable struct EpochData <: MultiFrameEeg
-#     data::Vector{DataFrame}
-#     layout::Layout
-#     history::Dict{String, Any}
-# end
-# 
-# # Outer constructors - provide convenient initialization with empty history
-# ContinuousData(data, layout) = ContinuousData(data, layout, Dict{String,Any}())
-# ErpData(data, layout) = ErpData(data, layout, Dict{String,Any}())
-# EpochData(data, layout) = EpochData(data, layout, Dict{String,Any}())
-
-
-
-# Define an abstract type for EEG Data
+# Abstract types
 abstract type EegData end
-
-# Extend existing types to inherit from EEGData
-mutable struct ContinuousData <: EegData
+abstract type SingleDataFrameEeg <: EegData end
+abstract type MultiDataFrameEeg <: EegData end
+ 
+# Concrete types with basic fields
+mutable struct ContinuousData <: SingleDataFrameEeg
     data::DataFrame
     layout::DataFrame
     sample_rate::Int
 end
-
-mutable struct ErpData <: EegData
+ 
+mutable struct ErpData <: SingleDataFrameEeg
     data::DataFrame
     layout::DataFrame
     sample_rate::Int
 end
-
-mutable struct EpochData <: EegData
+ 
+mutable struct EpochData <: MultiDataFrameEeg
     data::Vector{DataFrame}
     layout::DataFrame
     sample_rate::Int
 end
+
 
 struct IntervalIdx
     interval_start::Int
@@ -70,78 +42,36 @@ mutable struct Coord
     coord::Array{CoordXY}
 end
 
-
-function Base.show(io::IO, dat::ContinuousData)
-    println(io, "Data: Rows ($(nrow(dat.data))) x Columns ($(ncol(dat.data))) ")
-    println(io, "Labels: ", join(names(dat.data), ", "))
-    println(io, "Sample Rate: ", dat.sample_rate)
-end
-
-function Base.show(io::IO, dat::EpochData)
-    println(io, "Number of trials: ", length(dat.data))
-    println(io, "Timepoints ($(nrow(dat.data[1]))) x Channels ($(ncol(dat.data[1]))) ")
-    println(io, "Channel Labels: ", join(names(dat.data[1]), ", "))
-    println(io, "Sample Rate: ", dat.sample_rate)
-end
-
-function Base.show(io::IO, dat::ErpData)
-    println(io, "Data: Rows ($(nrow(dat.data))) x Columns ($(ncol(dat.data))) ")
-    println(io, "Labels: ", join(names(dat.data), ", "))
-    println(io, "Sample Rate: ", dat.sample_rate)
-end
-
 # Basic information functions right with the types
 channels(dat::Union{ContinuousData,ErpData,EpochData}) = dat.layout.label
-times(dat::Union{ContinuousData,ErpData}) = dat.times
-times(dat::EpochData) = first(dat.data).times
+times(dat::Union{ContinuousData,ErpData}) = dat.data.time
+times(dat::EpochData) = first(dat.data).times  # assume all epochs are the same
 sample_rate(dat::Union{ContinuousData,ErpData,EpochData}) = dat.sample_rate
-data(dat::Union{ContinuousData,ErpData}) = dat.data
-data(dat::EpochData) = dat.data
+data(dat::Union{ContinuousData,ErpData}) = dat.data # single data frame
+data(dat::EpochData) = dat.data # vector of data frames
 
-
-# Data structure interfaces
-"""Number of time points"""
-n_times(dat::SingleFrameEeg) = length(times(dat))
-n_times(dat::MultiFrameEeg) = length(times(dat))
-
-"""Number of channels"""
+# Timepoints, channel, epoch, and duration 
+n_samples(dat::SingleDataFrameEeg) = nrow(dat.data)
+n_samples(dat::MultiDataFrameEeg) = nrow(first(dat.data))
 n_channels(dat::EegData) = length(channels(dat))
-
-"""Number of epochs (1 for SingleFrameEeg)"""
-n_epochs(dat::SingleFrameEeg) = 1
-n_epochs(dat::MultiFrameEeg) = length(data(dat))
-
-# Validation interfaces
-"""Check if channels exist"""
-has_channels(dat::EegData, chans::Vector{Symbol}) = all(in(channels(dat)), chans)
-
-"""Get channels present in both datasets"""
-common_channels(dat1::EegData, dat2::EegData) = intersect(channels(dat1), channels(dat2))
-
-# Time interfaces
-"""Duration in seconds"""
+n_epochs(dat::SingleDataFrameEeg) = 1
+n_epochs(dat::MultiDataFrameEeg) = length(data(dat))
 duration(dat::EegData) = last(times(dat)) - first(times(dat))
 
-"""Time resolution in seconds"""
-time_resolution(dat::EegData) = 1/sample_rate(dat)
+# channel information
+has_channels(dat::EegData, chans::Vector{Symbol}) = all(in(channels(dat)), chans)
+common_channels(dat1::EegData, dat2::EegData) = intersect(channels(dat1), channels(dat2))
 
-# Layout interfaces
-"""Get channel coordinates"""
-channel_coords(dat::EegData) = (dat.layout.x, dat.layout.y)
-channel_radius(dat::EegData) = dat.layout.radius
 
-# Data access interfaces
-"""Get data for specific channels"""
-function channel_data(dat::SingleFrameEeg, chans::Vector{Symbol})
-    validate_channels(dat, chans)
-    return dat.data[!, chans]
+function Base.show(io::IO, dat::EegData)
+    println(io, "Type: $(typeof(dat))")
+    println(io, "Size: $(n_epochs(dat)) (epoch) x $(n_samples(dat)) (rows) x $(n_channels(dat)) (columns)")
+    println(io, "Labels: ", print_vector(channels(dat)))
+    println(io, "Duration: ", duration(dat), " S")
+    println(io, "Sample Rate: ", sample_rate(dat))
 end
 
-"""Get data at specific time point"""
-function time_point_data(dat::SingleFrameEeg, time::Real)
-    idx = findnearest(times(dat), time)
-    return dat.data[idx, channels(dat)]
-end
+
 
 
 # # Add history field to abstract type interface
@@ -232,11 +162,9 @@ struct InfoIca
     variance::Vector{Float64}
     scale::Float64
     mean::Vector{Float64}
-    ica_label::Vector{String}
-    data_label::Vector{String}
+    ica_label::Vector{Symbol}
+    data_label::Vector{Symbol}
 end
-data(dat::Union{ContinuousData,ErpData}) = dat.data
-data(dat::EpochData) = dat.data
 
 
 
