@@ -50,7 +50,7 @@ end
 
 # Base 2D layout plotting function
 function plot_layout_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Dict(), label_kwargs = Dict())
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
 
@@ -82,7 +82,7 @@ function plot_layout_2d(fig, ax, layout; head_kwargs = Dict(), point_kwargs = Di
 
     if plot_labels
         for label in eachrow(layout)
-            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), label.label; label_kwargs...)
+            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), String(label.label); label_kwargs...)
         end
     end
 
@@ -94,7 +94,7 @@ end
 
 # Base 3D layout plotting function
 function plot_layout_3d(fig, ax, layout; point_kwargs=Dict(), label_kwargs=Dict())
-    if (:x3 ∉ names(layout) || :y3 ∉ names(layout) || :z3 ∉ names(layout))
+    if (:x3 ∉ propertynames(layout) || :y3 ∉ propertynames(layout) || :z3 ∉ propertynames(layout))
         polar_to_cartesian_xyz!(layout)
     end
 
