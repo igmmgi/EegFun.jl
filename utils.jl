@@ -49,21 +49,20 @@ function check_files_exist(subjects::Union{Vector{Int},Int}, conditions::Union{V
 end
 
 """
-    channel_number_to_channel_label(channel_labels::Vector{String}, channel_numbers::Union{Int64,Vector{Int64}}) -> Vector{String}
+    channel_number_to_channel_label(channel_labels::Vector{Symbol}, channel_numbers::Union{Int,Vector{Int},UnitRange}) -> Vector{Symbol}
 
 Convert channel numbers to their corresponding labels.
 
 # Arguments
-- `channel_labels::Vector{String}`: List of all channel labels
-- `channel_numbers::Union{Int64,Vector{Int64}}`: Channel number(s) to convert
+- `channel_labels::Vector{Symbol}`: List of all channel labels
+- `channel_numbers`: Channel number(s) to convert (can be Int, Vector{Int}, or UnitRange)
 
 # Returns
-- `Vector{String}`: Channel labels corresponding to the input numbers
+- `Vector{Symbol}`: Channel labels corresponding to the input numbers
 """
-channel_number_to_channel_label(channel_labels, channel_numbers::Int64) = [channel_labels[channel_numbers]]
-channel_number_to_channel_label(channel_labels, channel_numbers::Vector{Int64}) = channel_labels[channel_numbers]
-channel_number_to_channel_label(channel_labels, channel_numbers::UnitRange) = channel_labels[channel_numbers]
-
+function channel_number_to_channel_label(channel_labels, channel_numbers::Union{Int,Vector{Int},UnitRange})
+    return channel_labels[channel_numbers]
+end
 
 function print_vector_(v::Vector; max_length::Int = 10, n_ends::Int = 5)
     if length(v) > max_length
@@ -356,14 +355,14 @@ macro add_nonmutating(func)
         end
         
         # signature string
-        sig_str = "$non_mut_name(" * join(["$p::$t" for (p,t) in zip(params, types)], ", ") * ")"
+        sig_str = "$non_mut_name(" * join(["$p::$t" for (p,t) in zip(params, types)], ", ") * "; kwargs...)"
         push!(methods_list, sig_str)
         
         # method definition without docstring
         method_expr = quote
-            function $non_mut_name($([:($p::$t) for (p,t) in zip(params, types)]...))
+            function $non_mut_name($([:($p::$t) for (p,t) in zip(params, types)]...); kwargs...)
                 data_copy = deepcopy($(params[1]))
-                $mut_name(data_copy, $(params[2:end]...))
+                $mut_name(data_copy, $(params[2:end]...); kwargs...)
                 return data_copy
             end
         end

@@ -122,4 +122,4 @@ function baseline!(dat::EpochData)
 end
 
 # generates all non-mutating versions
-@add_nonmutating diff_channel!
+@add_nonmutating baseline!
