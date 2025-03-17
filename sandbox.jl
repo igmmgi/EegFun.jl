@@ -92,7 +92,7 @@ dat = read_bdf("../Flank_C_$(subject).bdf");
 dat = create_eeg_dataframe(dat, layout);
 
 # rereference!(dat, channels(dat))
-# filter_data!(dat, "hp", "iir", 1, order=1)
+filter_data(dat, "hp", "iir", 1, order=1)
 # test = filter_data(dat, "hp", "iir", 1, order=1)
 #filter_data!(dat, "lp", "fir", 10)
 #plot_databrowser(dat)
@@ -100,8 +100,9 @@ dat = create_eeg_dataframe(dat, layout);
 
 # search for some bad channels
 channel_summary(dat)
-channel_summary(dat.data, channels(dat))
-channel_summary(dat.data, channels(dat)[1:66])
+channel_summary(dat, channels(dat))
+channel_summary(dat, channels(dat)[1:66])
+channel_summary(dat, 1:5)
 
 # bad channels
 channel_joint_probability(dat, threshold=5.0, normval=2)
@@ -111,8 +112,8 @@ plot_correlation_heatmap(cm)
 
 
 # calculate EOG channels
-diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
-diff_channel!(dat, "F9", "F10", "hEOG");
+diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
+diff_channel!(dat, :F9, :F10, :hEOG);
 
 ## # autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
@@ -148,7 +149,7 @@ dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1],
 # extract epochs
 epochs = EpochData[]
 for (idx, epoch) in enumerate([1, 4, 5, 3])
-     push!(epochs, extract_epochs(dat_ica, idx, epoch, -2, 4))
+     push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
 end
 
 plot_databrowser(epochs[1])
@@ -162,10 +163,10 @@ end
 # ERP Plot
 plot_erp(erps[1])
 plot_erp(erps[1], :Fp1)
-plot_erp(erps[1], ["Fp1", "Fp2"])
-plot_erp(erps[2], ["Fp1", "Fp2", "Cz"])
-plot_erp(erps[1], ["Fp1", "Fp2"], average_channels = true)
-plot_erp(erps[1], erps[2], ["PO7", "Fp2"])
+plot_erp(erps[1], [:Fp1, :Fp2])
+plot_erp(erps[2], [:Fp1, :Fp2, :Cz])
+plot_erp(erps[1], [:Fp1, :Fp2], average_channels = true)
+plot_erp(erps[1], erps[2], [:PO7, :Fp2])
 
 
 # bad_chans, opt_params = find_bad_channels(epochs[1], AutoRejectParams())

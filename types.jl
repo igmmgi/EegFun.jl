@@ -2,24 +2,44 @@
 abstract type EegData end
 abstract type SingleDataFrameEeg <: EegData end
 abstract type MultiDataFrameEeg <: EegData end
- 
+
+"""
+    AnalysisInfo
+
+Basic information about data preprocessing.
+
+# Fields
+- `reference::Symbol`: Reference type used (e.g., :avg, :mastoid, :none)
+- `hp_filter::Float64`: High-pass filter cutoff in Hz (0.0 if none)
+- `lp_filter::Float64`: Low-pass filter cutoff in Hz (0.0 if none)
+"""
+mutable struct AnalysisInfo
+    reference::Symbol
+    hp_filter::Float64
+    lp_filter::Float64
+    AnalysisInfo(; reference=:none, hp_filter=0.0, lp_filter=0.0) = new(reference, hp_filter, lp_filter)
+end
+
 # Concrete types with basic fields
 mutable struct ContinuousData <: SingleDataFrameEeg
     data::DataFrame
     layout::DataFrame
-    sample_rate::Int
+    sample_rate::Int64
+    analysis_info::AnalysisInfo
 end
  
 mutable struct ErpData <: SingleDataFrameEeg
     data::DataFrame
     layout::DataFrame
-    sample_rate::Int
+    sample_rate::Int64
+    analysis_info::AnalysisInfo
 end
  
 mutable struct EpochData <: MultiDataFrameEeg
     data::Vector{DataFrame}
     layout::DataFrame
-    sample_rate::Int
+    sample_rate::Int64
+    analysis_info::AnalysisInfo
 end
 
 
@@ -43,19 +63,22 @@ mutable struct Coord
 end
 
 # Basic information functions right with the types
-channels(dat::Union{ContinuousData,ErpData,EpochData}) = dat.layout.label
-times(dat::Union{ContinuousData,ErpData}) = dat.data.time
-times(dat::EpochData) = first(dat.data).times  # assume all epochs are the same
-sample_rate(dat::Union{ContinuousData,ErpData,EpochData}) = dat.sample_rate
-data(dat::Union{ContinuousData,ErpData}) = dat.data # single data frame
-data(dat::EpochData) = dat.data # vector of data frames
+channels(dat::EegData) = dat.layout.label
+times(dat::SingleDataFrameEeg) = dat.data.time
+times(dat::MultiDataFrameEeg) = first(dat.data).time  # assume all epochs are the same
+sample_rate(dat::EegData) = dat.sample_rate
+reference(dat::EegData) = dat.analysis_info.reference
+reference(dat::AnalysisInfo) = dat.reference
+filter_info(dat::AnalysisInfo) = [dat.hp_filter, dat.lp_filter]
+data(dat::SingleDataFrameEeg) = dat.data # single data frame
+data(dat::MultiDataFrameEeg) = to_data_frame(dat) # single data frame with all epochs
 
 # Timepoints, channel, epoch, and duration 
 n_samples(dat::SingleDataFrameEeg) = nrow(dat.data)
 n_samples(dat::MultiDataFrameEeg) = nrow(first(dat.data))
 n_channels(dat::EegData) = length(channels(dat))
 n_epochs(dat::SingleDataFrameEeg) = 1
-n_epochs(dat::MultiDataFrameEeg) = length(data(dat))
+n_epochs(dat::MultiDataFrameEeg) = length(dat.data)
 duration(dat::EegData) = last(times(dat)) - first(times(dat))
 
 # channel information
@@ -70,6 +93,13 @@ function Base.show(io::IO, dat::EegData)
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
 end
+
+function Base.show(io::IO, dat::AnalysisInfo)
+    print(io, "Reference: ", reference(dat), ", ")
+    print(io, "HP Filter: $(filter_info(dat)[1]), LP Filter: $(filter_info(dat)[2])")
+end
+
+
 
 
 

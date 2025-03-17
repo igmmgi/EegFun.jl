@@ -31,7 +31,7 @@ A ContinuousData object containing the EEG data and layout information.
 
 """
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
-    return ContinuousData(create_eeg_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1])
+    return ContinuousData(create_eeg_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1], AnalysisInfo())
 end
 
 """
@@ -48,7 +48,7 @@ A ContinuousData object containing the EEG data and layout information.
 
 """
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)::ContinuousData
-    return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1])
+    return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 
 
@@ -85,29 +85,31 @@ function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol})::DataFr
 
 end
 
-function channel_summary(dat::Union{ContinuousData, ErpData})::DataFrame
+function channel_summary(dat::SingleDataFrameEeg)::DataFrame
     return channel_summary(dat.data, dat.layout.label)
 end
 
-function channel_summary(dat::Union{ContinuousData, ErpData}, channel_numbers::Union{Vector{Int}, UnitRange})::DataFrame
+function channel_summary(dat::SingleDataFrameEeg, channel_numbers::Union{Vector{Int}, UnitRange})::DataFrame
     channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
     return channel_summary(dat.data, channel_labels)
 end
 
-function channel_summary(dat::Union{ContinuousData, ErpData}, channel_labels::Vector{Symbol})::DataFrame
+function channel_summary(dat::SingleDataFrameEeg, channel_labels::Vector{Symbol})::DataFrame
     return channel_summary(dat.data, channel_labels)
 end
 
-function channel_summary(dat::EpochData)::Vector{DataFrame}
+
+
+function channel_summary(dat::MultiDataFrameEeg)::Vector{DataFrame}
     return [channel_summary(dat.data[trial], dat.layout.label) for trial in eachindex(dat.data)]
 end
 
-function channel_summary(dat::EpochData, channel_numbers::Union{Vector{Int}, UnitRange})::Vector{DataFrame}
+function channel_summary(dat::MultiDataFrameEeg, channel_numbers::Union{Vector{Int}, UnitRange})::Vector{DataFrame}
     channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
     return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
 end
 
-function channel_summary(dat::EpochData, channel_labels::Vector{Symbol})::Vector{DataFrame}
+function channel_summary(dat::MultiDataFrameEeg, channel_labels::Vector{Symbol})::Vector{DataFrame}
     return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
 end
 

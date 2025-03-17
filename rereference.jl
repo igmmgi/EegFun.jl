@@ -64,8 +64,6 @@ function rereference!(
     _apply_rereference!(dat, channel_labels, reference)
 end
 
-
-
 """
     rereference!(dat::Union{ContinuousData,ErpData,EpochData}, channel_labels, reference_channel)
     rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_channel)
@@ -86,39 +84,57 @@ Apply rereferencing to EEG data types.
 # helper function to handle special reference cases such as :avg and :mastoid
 function resolve_reference(dat, reference_channel::Symbol)
     if reference_channel == :avg # all channels
-        return channels(dat) 
+        reference_channel = channels(dat) 
     elseif reference_channel == :mastoid
-        return [:M1, :M2]
+        reference_channel = [:M1, :M2]
+    else
+        reference_channel = [reference_channel]
     end
+    return reference_channel
 end
 
-# Base methods for Vector{Symbol} reference
+# helper function to handle special reference cases such as :avg and :mastoid
+function resolve_reference(dat, reference_channel::Vector{Symbol})
+    if reference_channel[1] == :avg # all channels
+        reference_channel = channels(dat) 
+    elseif reference_channel[1] == :mastoid
+        reference_channel = [:M1, :M2]
+    end
+    dat.analysis_info.reference = reference_channel
+    return reference_channel
+end
+
+# Base methods for all references
 function rereference!(
-    dat::Union{ContinuousData,ErpData},
+    dat::SingleDataFrameEeg,
     channel_labels::Vector{Symbol},
-    reference_channel::Vector{Symbol},
+    reference_channel::Union{Symbol,Vector{Symbol}},
 )
-    rereference!(dat.data, channel_labels, reference_channel)
+    dat.analysis_info.reference = reference_channel
+    ref_channels = resolve_reference(dat, reference_channel)
+    rereference!(dat.data, channel_labels, ref_channels)
+    dat.analysis_info.reference =
+        reference_channel isa Symbol ? reference_channel : Symbol(join(reference_channel, '_'))
     return nothing
 end
 
-function rereference!(dat::EpochData, channel_labels::Vector{Symbol}, reference_channel::Vector{Symbol})
+function rereference!(
+    dat::MultiDataFrameEeg,
+    channel_labels::Vector{Symbol},
+    reference_channel::Union{Symbol,Vector{Symbol}},
+)
+    dat.analysis_info.reference = reference_channel
+    ref_channels = resolve_reference(dat, reference_channel)
     for epoch in dat.data
-        rereference!(epoch, channel_labels, reference_channel)
+        rereference!(epoch, channel_labels, ref_channels)
     end
+    dat.analysis_info.reference =
+        reference_channel isa Symbol ? reference_channel : Symbol(join(reference_channel, '_'))
     return nothing
 end
 
-function rereference!(
-    dat::Union{ContinuousData,ErpData,EpochData},
-    channel_labels::Vector{Symbol},
-    reference_channel::Symbol,
-)
-    rereference!(dat, channel_labels, resolve_reference(dat, reference_channel))
-    return nothing
-end
-
-function rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_channel::Union{Symbol,Vector{Symbol}})
+function rereference!(dat::EegData, reference_channel::Union{Symbol,Vector{Symbol}})
+    dat.analysis_info.reference = reference_channel
     rereference!(dat, channels(dat), reference_channel)
     return nothing
 end

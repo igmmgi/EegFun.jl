@@ -431,24 +431,17 @@ function add_marker!(markers, ax, data, col; label = nothing, trial = nothing)
     )
 end
 
-
-
-
 function plot_lines(ax, marker, active)
     marker.line.visible = active
     marker.text.visible = active
     marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
 end
 
-
-
-
 function plot_databrowser(
     dat::ContinuousData,
     channel_labels::Vector{Symbol},
     ica::Union{InfoIca,Nothing} = nothing,
 )
-
 
     function butterfly_plot(active::Bool)
         if active
@@ -476,23 +469,20 @@ function plot_databrowser(
         if filter_state[].hp != filter_state[].lp  # Only one filter active
             data_obs[] = copy(dat.data)
             if filter_state[].hp
-                data_obs[] = filter_data(data_obs[], channel_labels, "hp", "iir", 
-                                       slider_hp_filter.value.val, sample_rate(dat), order=1)
+                data_obs[] = filter_data(data_obs[], channel_labels, "hp", "iir", slider_hp_filter.value.val, sample_rate(dat), order=1)
             else  # lp is active
-                data_obs[] = filter_data(data_obs[], channel_labels, "lp", "iir", 
-                                       slider_lp_filter.value.val, sample_rate(dat), order=3)
+                data_obs[] = filter_data(data_obs[], channel_labels, "lp", "iir", slider_lp_filter.value.val, sample_rate(dat), order=3)
             end
         else  # Both filters active - only apply the new filter to current data
             if filter_state[].lp  # LP was just turned on
-                data_obs[] = filter_data(data_obs[], channel_labels, "lp", "iir", 
-                                       slider_lp_filter.value.val, sample_rate(dat), order=3)
+                data_obs[] = filter_data(data_obs[], channel_labels, "lp", "iir", slider_lp_filter.value.val, sample_rate(dat), order=3)
             else  # HP was just turned on
-                data_obs[] = filter_data(data_obs[], channel_labels, "hp", "iir", 
-                                       slider_hp_filter.value.val, sample_rate(dat), order=1)
+                data_obs[] = filter_data(data_obs[], channel_labels, "hp", "iir", slider_hp_filter.value.val, sample_rate(dat), order=1)
             end
         end
         
         notify(data_obs)
+
     end
 
     function apply_hp_filter(active)
@@ -508,7 +498,6 @@ function plot_databrowser(
         apply_filters()
         draw(plot_labels = true)
     end
-
 
     function plot_extreme_lines(active)
         extreme_spans.visible = active
@@ -687,7 +676,7 @@ function plot_databrowser(
     end
 
     # menu for electrode/channel selection
-    menu = hcat(
+    labels_menu = hcat(
         Menu(
             fig,
             options = vcat(["All", "Left", "Right", "Central"], channel_labels_original),
@@ -697,14 +686,16 @@ function plot_databrowser(
         ),
         Label(fig, "Labels", fontsize = 22, halign = :left),
     )
-    on(menu[1].selection) do s
+    on(labels_menu[1].selection) do s
         channel_labels = [s]
         if s == "All"
             channel_labels = channel_labels_original
         elseif s == "Left"
-            channel_labels = channel_labels_original[findall(occursin.(r"\d*[13579]$", String.(channel_labels_original)))]
+            channel_labels =
+                channel_labels_original[findall(occursin.(r"\d*[13579]$", String.(channel_labels_original)))]
         elseif s == "Right"
-            channel_labels = channel_labels_original[findall(occursin.(r"\d*[24680]$", String.(channel_labels_original)))]
+            channel_labels =
+                channel_labels_original[findall(occursin.(r"\d*[24680]$", String.(channel_labels_original)))]
         elseif s == "Central"
             channel_labels = channel_labels_original[findall(occursin.(r"z$", String.(channel_labels_original)))]
         end
@@ -714,15 +705,36 @@ function plot_databrowser(
 
         data = copy(dat.data)
 
-    if nchannels > 1
-        offset = Observable((LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1]))
-    else # just centre
-        offset = Observable(zeros(length(channel_labels)))
-    end
-
+        if nchannels > 1
+            offset = Observable((LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1]))
+        else # just centre
+            offset = Observable(zeros(length(channel_labels)))
+        end
 
         draw(plot_labels = true)
+
     end
+
+    # menu for electrode/channel selection
+    reference_menu = hcat(
+        Menu(
+            fig,
+            options = vcat([:none, :avg, :mastoid], channel_labels_original),
+            default = "none",
+            direction = :down,
+            fontsize = 18,
+        ),
+        Label(fig, "Reference", fontsize = 22, halign = :left),
+    )
+    on(reference_menu[1].selection) do s
+        rereference!(data_obs[], channels(dat), resolve_reference(dat, s))
+        notify(data_obs)
+    end
+
+
+
+
+
 
     # menu for ica selection
     menu_ica = nothing
@@ -816,7 +828,8 @@ function plot_databrowser(
                     Label(fig, @lift("LP-Filter: $($(slider_lp_filter.value)) Hz"), fontsize = 22, halign = :left),
                 ),
                 hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)),
-                menu,
+                labels_menu,
+                reference_menu,
             ),
             tellheight = false,
         )
@@ -829,7 +842,8 @@ function plot_databrowser(
                     Label(fig, @lift("LP-Filter: $($(slider_lp_filter.value)) Hz"), fontsize = 22, halign = :left),
                 ),
                 hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)),
-                menu,
+                labels_menu,
+                reference_menu,
                 menu_ica,
             ),
             tellheight = false,
@@ -900,9 +914,8 @@ end
 # Convenience methods
 plot_databrowser(dat::ContinuousData) = plot_databrowser(dat, dat.layout.label)
 plot_databrowser(dat::ContinuousData, ica::InfoIca) = plot_databrowser(dat, dat.layout.label, ica)
-plot_databrowser(dat::ContinuousData, channel_label::AbstractString) = plot_databrowser(dat, [channel_label])
-plot_databrowser(dat::ContinuousData, channel_label::AbstractString, ica::InfoIca) =
-    plot_databrowser(dat, [channel_label], ica)
+plot_databrowser(dat::ContinuousData, channel_label::Symbol) = plot_databrowser(dat, [channel_label])
+plot_databrowser(dat::ContinuousData, channel_label::Symbol, ica::InfoIca) = plot_databrowser(dat, [channel_label], ica)
 
 
 ###########################################################
@@ -1230,7 +1243,7 @@ plot_databrowser(dat::EpochData, channel_label::Symbol, ica::InfoIca) =
 
 # #################################################################
 # plot_epochs: Epoched Data (Single Condition; Single Channel or Average of multiple channels)
-function plot_epochs(dat::EpochData, channels::Union{Vector{<:AbstractString},Vector{Symbol}}; kwargs = Dict())
+function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs = Dict())
 
     default_kwargs = Dict(
         :xlim => nothing,
@@ -1278,8 +1291,7 @@ function plot_epochs(dat::EpochData, channels::Union{Vector{<:AbstractString},Ve
 
 end
 
-plot_epochs(dat::EpochData, channels::Union{AbstractString,Symbol}; kwargs...) =
-    plot_epochs(dat::EpochData, [channels]; kwargs...)
+plot_epochs(dat::EpochData, channels::Symbol; kwargs...) = plot_epochs(dat::EpochData, [channels]; kwargs...)
 
 
 # #################################################################
@@ -1288,7 +1300,7 @@ function plot_erp(
     fig,
     ax,
     dat::ErpData,
-    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+    channels::Vector{Symbol};
     average_channels = false,
     kwargs = Dict(),
 )
@@ -1367,7 +1379,7 @@ end
 
 function plot_erp(
     dat::ErpData,
-    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+    channels::Vector{Symbol};
     average_channels = false,
     kwargs = Dict(),
 )
@@ -1377,7 +1389,7 @@ function plot_erp(
     return fig, ax
 end
 
-function plot_erp(dat::ErpData, channels::Union{AbstractString,Symbol}; average_channels = false, kwargs...)
+function plot_erp(dat::ErpData, channels::Symbol; average_channels = false, kwargs...)
     plot_erp(dat, [channels], average_channels = average_channels; kwargs...)
 end
 
@@ -1554,7 +1566,7 @@ end
 
 function plot_erp_image(
     dat::EpochData,
-    channels::Union{Vector{<:AbstractString},Vector{Symbol}};
+    channels::Vector{Symbol};
     colorrange = nothing,
     erp_kwargs = Dict(),
     colorbar_kwargs = Dict(),
@@ -1595,7 +1607,7 @@ function plot_erp_image(
 end
 
 
-function plot_erp_image(dat::EpochData, channel::Union{AbstractString,Symbol})
+function plot_erp_image(dat::EpochData, channel::Symbol)
     plot_erp_image(dat, [channel])
 end
 

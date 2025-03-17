@@ -131,8 +131,18 @@ function filter_data!(
 end
 
 
+function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Real)
+    if filter_type == "hp"
+        dat.analysis_info.hp_filter = filter_freq
+    elseif filter_type == "lp"
+        dat.analysis_info.lp_filter = filter_freq
+    end
+end
+
+
+
 """
-    filter_data!(dat::Union{ContinuousData,ErpData}, filter_type, filter_method, filter_freq; kwargs...)
+    filter_data!(dat::SingleDataFrameEeg, filter_type, filter_method, filter_freq; kwargs...)
 
 Apply a filter to ContinuousData or ErpData objects. Modifies the data in place.
 
@@ -143,16 +153,17 @@ Arguments:
 - `filter_freq`: Cutoff frequency in Hz
 """
 function filter_data!(
-    dat::Union{ContinuousData,ErpData},
+    dat::SingleDataFrameEeg,
     filter_type,
     filter_method,
     filter_freq;
     order = 3,
     transition_width = 0.25,
     twopass::Bool = true,
-    print_filter= true,
-    plot_filter= false,
+    print_filter = true,
+    plot_filter = false,
 )
+    _update_filter_info!(dat, filter_type, filter_freq)
     filter_data!(
         dat.data,
         dat.layout.label,
@@ -163,19 +174,19 @@ function filter_data!(
         order = order,
         transition_width = transition_width,
         twopass = twopass,
-        print_filter= print_filter,
-        plot_filter= plot_filter,
+        print_filter = print_filter,
+        plot_filter = plot_filter,
     )
 end
 
 
 """
-    filter_data!(dat::EpochData, filter_type, filter_method, filter_freq; kwargs...)
+    filter_data!(dat::MultiDataFrameEeg, filter_type, filter_method, filter_freq; kwargs...)
 
 Apply a filter to each epoch in an EpochData object. Modifies the data in place.
 """
 function filter_data!(
-    dat::EpochData,
+    dat::MultiDataFrameEeg,
     filter_type,
     filter_method,
     filter_freq;  
@@ -185,6 +196,7 @@ function filter_data!(
     print_filter= true,
     plot_filter= false,
 )
+    _update_filter_info!(dat, filter_type, filter_freq)
     for epoch in eachindex(dat.data)
         filter_data!(
             dat.data[epoch],
@@ -202,9 +214,13 @@ function filter_data!(
     end
 end
 
-
 # generates all non-mutating versions
 @add_nonmutating filter_data!
+
+
+
+
+
 
 
 
@@ -535,24 +551,3 @@ end
 # hp_irr_filter = digitalfilter(Highpass(cutoff_freq-(transition_band/2)), Butterworth(2), fs=sample_rate)
 # print_filter_characteristics(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
 # plot_filter_response(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
-
-# Define non-mutating versions explicitly
-function filter_data(dat::DataFrame, args...; kwargs...)
-    dat_copy = deepcopy(dat)
-    filter_data!(dat_copy, args...; kwargs...)
-    return dat_copy
-end
-
-function filter_data(dat::Union{ContinuousData,ErpData}, args...; kwargs...)
-    dat_copy = deepcopy(dat)
-    filter_data!(dat_copy, args...; kwargs...)
-    return dat_copy
-end
-
-function filter_data(dat::EpochData, args...; kwargs...)
-    dat_copy = deepcopy(dat)
-    filter_data!(dat_copy, args...; kwargs...)
-    return dat_copy
-end
-
-
