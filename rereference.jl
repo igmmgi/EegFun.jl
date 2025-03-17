@@ -1,5 +1,3 @@
-const ChannelLabel = Union{Symbol, String}
-
 """
     _apply_rereference!(dat::DataFrame, channel_labels, reference::Vector{<:Real})
 
@@ -111,7 +109,6 @@ function rereference!(dat::EpochData, channel_labels::Vector{Symbol}, reference_
     return nothing
 end
 
-# Methods for Symbol reference (converts to Vector{Symbol})
 function rereference!(
     dat::Union{ContinuousData,ErpData,EpochData},
     channel_labels::Vector{Symbol},
@@ -121,7 +118,6 @@ function rereference!(
     return nothing
 end
 
-# Methods for default channel labels
 function rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_channel::Union{Symbol,Vector{Symbol}})
     rereference!(dat, channels(dat), reference_channel)
     return nothing

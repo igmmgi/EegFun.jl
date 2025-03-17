@@ -130,48 +130,6 @@ function filter_data!(
     end
 end
 
-# """
-#     filter_data(dat::DataFrame, columns, filter_type, filter_method, filter_freq, sample_rate; kwargs...)
-# 
-# Create a filtered copy of the input DataFrame. Returns a new DataFrame with filtered data.
-# 
-# Arguments:
-# - `dat`: DataFrame containing the data to filter
-# - `columns`: Vector of column names to filter
-# - `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-# - `filter_method`: String specifying filter implementation ("iir" or "fir")
-# - `filter_freq`: Cutoff frequency in Hz
-# - `sample_rate`: Sampling rate in Hz
-# """
-# function filter_data(
-#     dat::DataFrame,
-#     columns,
-#     filter_type::String,
-#     filter_method::String,
-#     filter_freq::Real,
-#     sample_rate::Real;
-#     order::Integer = 3,
-#     transition_width::Real = 0.25,
-#     twopass::Bool = true,
-#     print_filter::Bool = true,
-#     plot_filter::Bool = false,
-# )
-#     dat_out = deepcopy(dat)
-#     filter_data!(
-#         dat_out,
-#         columns,
-#         filter_type,
-#         filter_method,
-#         filter_freq,
-#         sample_rate;
-#         order = order,
-#         transition_width = transition_width,
-#         twopass = twopass,
-#         print_filter= print_filter,
-#         plot_filter= plot_filter,
-#     )
-#     return dat_out
-# end
 
 """
     filter_data!(dat::Union{ContinuousData,ErpData}, filter_type, filter_method, filter_freq; kwargs...)
@@ -210,44 +168,6 @@ function filter_data!(
     )
 end
 
-# """
-#     filter_data(dat::Union{ContinuousData,ErpData}, filter_type, filter_method, filter_freq; kwargs...)
-# 
-# Create a filtered copy of ContinuousData or ErpData object.
-# 
-# Arguments:
-# - `dat`: ContinuousData or ErpData object
-# - `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-# - `filter_method`: String specifying filter implementation ("iir" or "fir")
-# - `filter_freq`: Cutoff frequency in Hz
-# """
-# function filter_data(
-#     dat::Union{ContinuousData,ErpData},
-#     filter_type,
-#     filter_method,
-#     filter_freq;
-#     order = 3,
-#     transition_width = 0.25,
-#     twopass::Bool = true,
-#     print_filter= true,
-#     plot_filter= false,
-# )
-#     dat_out = deepcopy(dat)
-#     filter_data!(
-#         dat_out.data,
-#         dat_out.layout.label,
-#         filter_type,
-#         filter_method,
-#         filter_freq,
-#         dat_out.sample_rate;
-#         order = order,
-#         transition_width = transition_width,
-#         twopass = twopass,
-#         print_filter= print_filter,
-#         plot_filter= plot_filter,
-#     )
-#     return dat_out
-# end
 
 """
     filter_data!(dat::EpochData, filter_type, filter_method, filter_freq; kwargs...)
@@ -282,36 +202,6 @@ function filter_data!(
     end
 end
 
-# """
-#     filter_data(dat::EpochData, filter_type, filter_method, filter_freq; kwargs...)
-# 
-# Create a filtered copy of an EpochData object.
-# 
-# Arguments:
-# - `dat`: EpochData object
-# - `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-# - `filter_method`: String specifying filter implementation ("iir" or "fir")
-# - `filter_freq`: Cutoff frequency in Hz
-# """
-# function filter_data(
-#     dat::EpochData,
-#     filter_type,
-#     filter_method,
-#     filter_freq;  
-#     order = 3,
-#     transition_width = 0.25,
-#     twopass::Bool = true,
-#     print_filter= true,
-#     plot_filter= false,
-# )
-#     dat_out = deepcopy(dat)
-#     filter_data!(dat_out, filter_type, filter_method, filter_freq;  # Pass kwargs through
-#                 order = order, transition_width = transition_width,
-#                 twopass = twopass,
-#                 print_filter= print_filter,
-#                 plot_filter= plot_filter)
-#     return dat_out
-# end
 
 # generates all non-mutating versions
 @add_nonmutating filter_data!

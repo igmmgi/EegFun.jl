@@ -13,7 +13,7 @@ A DataFrame with two columns: `time` and `triggers`, combined with channel data 
 function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
     return hcat(
         DataFrame(time = data.time, sample = 1:length(data.time), triggers = data.triggers.raw),
-        DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:end-1])),
+        DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:end-1])),  # assumes last channel is trigger
     )
 end
 
@@ -53,7 +53,8 @@ end
 
 
 
-function channel_summary(dat::DataFrame, channel_labels::Union{Vector{Symbol}, Vector{<:AbstractString}})
+function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol})::DataFrame
+
     # Select the specified channels
     selected_data = select(dat, channel_labels)
 
@@ -62,9 +63,8 @@ function channel_summary(dat::DataFrame, channel_labels::Union{Vector{Symbol}, V
 
     # Compute summary statistics for each column
     for (i, col) in enumerate(channel_labels)
-        col_data = selected_data[!, col]
-        summary_stats[i, :] =
-            [minimum(col_data), maximum(col_data), datarange(col_data), std(col_data), mad(col_data), var(col_data)]
+        col_data = @view selected_data[!, col]
+        summary_stats[i, :] = [minimum(col_data), maximum(col_data), datarange(col_data), std(col_data), mad(col_data), var(col_data)]
     end
 
     # Create a new DataFrame directly from the matrix and channel labels
@@ -82,32 +82,32 @@ function channel_summary(dat::DataFrame, channel_labels::Union{Vector{Symbol}, V
     summary_df[!, :zvar] .= (summary_df[!, :var] .- mean(summary_df[!, :var])) ./ std(summary_df[!, :var])
 
     return summary_df
+
 end
 
-function channel_summary(dat::Union{ContinuousData, ErpData})
+function channel_summary(dat::Union{ContinuousData, ErpData})::DataFrame
     return channel_summary(dat.data, dat.layout.label)
 end
 
-function channel_summary(dat::Union{ContinuousData, ErpData}, channel_numbers::Union{Vector{Int}, UnitRange})
+function channel_summary(dat::Union{ContinuousData, ErpData}, channel_numbers::Union{Vector{Int}, UnitRange})::DataFrame
     channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
     return channel_summary(dat.data, channel_labels)
 end
 
-function channel_summary(dat::Union{ContinuousData, ErpData}, channel_labels::Union{Vector{Symbol}, Vector{<:AbstractString}})
+function channel_summary(dat::Union{ContinuousData, ErpData}, channel_labels::Vector{Symbol})::DataFrame
     return channel_summary(dat.data, channel_labels)
 end
 
-
-function channel_summary(dat::EpochData)
+function channel_summary(dat::EpochData)::Vector{DataFrame}
     return [channel_summary(dat.data[trial], dat.layout.label) for trial in eachindex(dat.data)]
 end
 
-function channel_summary(dat::EpochData, channel_numbers::Union{Vector{Int}, UnitRange})
+function channel_summary(dat::EpochData, channel_numbers::Union{Vector{Int}, UnitRange})::Vector{DataFrame}
     channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
     return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
 end
 
-function channel_summary(dat::EpochData, channel_labels::Union{Vector{Symbol}, Vector{<:AbstractString}})
+function channel_summary(dat::EpochData, channel_labels::Vector{Symbol})::Vector{DataFrame}
     return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
 end
 
@@ -130,7 +130,7 @@ Calculates the correlation matrix for the EEG data.
 A DataFrame containing the correlation matrix of the specified channels.
 
 """
-function correlation_matrix(dat::DataFrame, channel_labels)::DataFrame
+function correlation_matrix(dat::DataFrame, channel_labels::Vector{Symbol})::DataFrame
     df = DataFrame(cor(Matrix(select(dat, channel_labels))), channel_labels)
     insertcols!(df, 1, :row => layout.label)
     return df
@@ -149,10 +149,6 @@ Detects EOG (electrooculogram) onsets in the EEG data based on a specified crite
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Real`: The threshold for detecting EOG onsets.
-- `channel_in::Union{Symbol, String}`: The channel from which to detect EOG onsets.
-- `channel_out::Union{Symbol, String}`: The channel where the detected EOG onsets will be recorded as boolean values, indicating the presence of an EOG event. This parameter can accept both `Symbol` and `String` types.
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `criterion::Float64`: The threshold for detecting EOG onsets.
 - `channel_in::Symbol`: The channel from which to detect EOG onsets.
 - `channel_out::Symbol`: The channel where the detected EOG onsets will be recorded as boolean values, indicating the presence of an EOG event. This parameter can accept both `Symbol` and `String` types.
 
@@ -163,8 +159,8 @@ Nothing. The function modifies the input data in place.
 function detect_eog_onsets!(
     dat::ContinuousData,
     criterion::Real,
-    channel_in::Union{Symbol,<:AbstractString},
-    channel_out::Union{Symbol,String},
+    channel_in::Symbol,
+    channel_out::Symbol,
 )
     step_size = div(dat.sample_rate, 20)
     eog_signal = dat.data[1:step_size:end, channel_in]
@@ -177,7 +173,7 @@ function detect_eog_onsets!(
 end
 
 """
-    is_extreme_value(dat::DataFrame, columns::Union{Vector{Symbol}, Vector{<:AbstractString}}, criterion::Real)::Bool
+    is_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Real)::Bool
 
 Checks if any values in the specified columns exceed a given criterion.
 
@@ -190,30 +186,21 @@ Checks if any values in the specified columns exceed a given criterion.
 A Boolean indicating whether any extreme values were found.
 
 """
-function is_extreme_value(
-    dat::DataFrame,
-    columns::Union{Vector{Symbol},Vector{<:AbstractString}},
-    criterion::Number,
-)::Vector{Bool}
+function is_extreme_value( dat::DataFrame, columns::Vector{Symbol}, criterion::Number,)::Vector{Bool}
     return any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
-function is_extreme_value!(dat::DataFrame, columns::Union{Vector{Symbol},Vector{<:AbstractString}}, criterion::Number)
+function is_extreme_value!(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)
     dat[!, "is_extreme"] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
-function is_extreme_value!(dat::ContinuousData, columns::Union{Vector{Symbol},Vector{<:AbstractString}}, criterion::Number)
+function is_extreme_value!(dat::ContinuousData, columns::Vector{Symbol}, criterion::Number)
     is_extreme_value!(dat.data, columns, criterion)
 end
 
 
-
-
-
-
-
 """
-    n_extreme_value(dat::DataFrame, columns::Union{Vector{Symbol}, Vector{<:AbstractString}}, criterion::Number)::Int
+    n_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Int
 
 Counts the number of extreme values in the specified columns.
 
@@ -226,24 +213,20 @@ Counts the number of extreme values in the specified columns.
 An integer count of the number of extreme values found.
 
 """
-function n_extreme_value(
-    dat::DataFrame,
-    columns::Union{Vector{Symbol},Vector{<:AbstractString}},
-    criterion::Number,
-)::Int
+function n_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Int
     return sum(abs.(select(dat, columns)) .>= criterion)
 end
 
 
 
-function channel_joint_probability(dat::DataFrame, channels; threshold::Float64 = 5.0, normval::Int = 2)
+function channel_joint_probability(dat::DataFrame, channels::Vector{Symbol}; threshold::Float64 = 5.0, normval::Int = 2)::DataFrame
     @info "channel_joint_probability: Computing probability for channels $(print_vector_(channels))"
     data = view(Matrix(select(dat, channels)), :, :) # Use view instead of copying
     jp, indelec = joint_probability(data', threshold, normval)
     return DataFrame(channel = channels, jp = jp, rejection = indelec)
 end
 
-function channel_joint_probability(dat::ContinuousData; threshold::Float64 = 5.0, normval::Int = 2)
+function channel_joint_probability(dat::ContinuousData; threshold::Float64 = 5.0, normval::Int = 2)::DataFrame
     return channel_joint_probability(dat.data, dat.layout.label; threshold=threshold, normval=normval)
 end
 
@@ -268,7 +251,22 @@ function joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, 
     return jp, rej
 end
 
-function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)
+"""
+    compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
+
+Computes the probability of each value in the data vector.
+
+# Arguments
+- `probaMap::Vector{Float64}`: The vector to store the computed probabilities.
+- `data::AbstractVector{Float64}`: The data vector to compute the probabilities for.
+- `bins::Int`: The number of bins to use for the probability computation.
+
+# Returns
+A vector of probabilities.
+
+"""
+function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
+
     if bins > 0
         min_val, max_val = extrema(data)
         range_val = max_val - min_val
@@ -297,10 +295,12 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
         sum_p = sum(probaMap)
         probaMap ./= sum_p
     end
+
     return probaMap
+
 end
 
-# Helper functions
+    
 function trim_extremes(x::Vector{Float64})
     n = length(x)
     trim = round(Int, n * 0.1)
