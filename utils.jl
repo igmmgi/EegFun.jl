@@ -326,38 +326,40 @@ Example:
 @add_nonmutating filter_data!
 """
 macro add_nonmutating(func)
+
     func_name = string(func)
     if !endswith(func_name, "!")
         error("Function name must end with !")
     end
     
-    # Get base names
+    # base names
     non_mut_name = Symbol(func_name[1:end-1])
     mut_name = Symbol(func_name)
     
-    # Generate expressions for each method
+    # expressions for each method
     exprs = Expr(:block)
     
     # Collect all method signatures first
     methods_list = String[]
     method_exprs = []
     
-    # Get all methods
+    # all methods
     for method in methods(eval(func))
+
         sig = method.sig
         types = sig.parameters[2:end]
         
-        # Get original parameter names
+        # original parameter names
         params = Base.method_argnames(method)[2:end]
         if isempty(params) || any(==(nothing), params)
             params = [Symbol("arg", i) for i in 1:length(types)]
         end
         
-        # Create the signature string
+        # signature string
         sig_str = "$non_mut_name(" * join(["$p::$t" for (p,t) in zip(params, types)], ", ") * ")"
         push!(methods_list, sig_str)
         
-        # Create method definition without docstring
+        # method definition without docstring
         method_expr = quote
             function $non_mut_name($([:($p::$t) for (p,t) in zip(params, types)]...))
                 data_copy = deepcopy($(params[1]))
@@ -365,12 +367,14 @@ macro add_nonmutating(func)
                 return data_copy
             end
         end
+
         push!(method_exprs, method_expr)
+
     end
     
-    # Create the main docstring
+    # Create the main docstring 
     doc = """
-        $(join(methods_list, "\n"))
+        $(join(methods_list, "\n    "))
 
     Non-mutating version of `$mut_name`. Creates a copy of the input data
     and applies the operation to the copy.
@@ -378,13 +382,13 @@ macro add_nonmutating(func)
     See also: [`$func_name`](@ref)
     """
     
-    # Add docstring first
     push!(exprs.args, :(Base.@doc $doc $non_mut_name))
     
-    # Then add all method definitions
+    # add all method definitions
     append!(exprs.args, method_exprs)
     
     return esc(exprs)
+
 end
 
 

@@ -45,7 +45,7 @@ Interpolate EEG data using scattered interpolation
 - `points::Matrix{<:AbstractFloat}`: 2×N matrix of electrode coordinates
 - `grid_scale::Int`: Size of the output grid
 """
-function data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<:AbstractFloat}, grid_scale::Int;)
+function data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<:AbstractFloat}, grid_scale::Int)
     # Check input data
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))

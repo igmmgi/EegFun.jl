@@ -90,9 +90,10 @@ plot_databrowser(dat)
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 dat = create_eeg_dataframe(dat, layout);
-rereference!(dat, channels(dat))
-filter_data!(dat, "hp", "iir", 1, order=1)
-test = filter_data(dat, "hp", "iir", 1, order=1)
+
+# rereference!(dat, channels(dat))
+# filter_data!(dat, "hp", "iir", 1, order=1)
+# test = filter_data(dat, "hp", "iir", 1, order=1)
 #filter_data!(dat, "lp", "fir", 10)
 #plot_databrowser(dat)
 

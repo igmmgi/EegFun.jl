@@ -52,7 +52,7 @@ Apply baseline correction in-place to continuous or ERP data.
 """
 function baseline!(
     dat::Union{ContinuousData,ErpData},
-    channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}},
+    channel_labels::Vector{Symbol},
     baseline_interval::Union{IntervalIdx,IntervalTime},
 )
     baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
@@ -61,7 +61,7 @@ function baseline!(
     _apply_baseline!(dat.data, channel_indices, baseline_interval)
 end
 
-function baseline!(dat::Union{ContinuousData,ErpData}, channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}})
+function baseline!(dat::Union{ContinuousData,ErpData}, channel_labels::Vector{Symbol})
     baseline_interval = IntervalIdx(1, nrow(dat.data))
     baseline!(dat, channel_labels, baseline_interval)
 end
@@ -75,47 +75,6 @@ function baseline!(dat::Union{ContinuousData,ErpData})
     baseline!(dat, dat.layout.label, baseline_interval)
 end
 
-"""
-    baseline(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_interval)
-    baseline(dat::Union{ContinuousData,ErpData}, channel_labels)
-    baseline(dat::Union{ContinuousData,ErpData}, baseline_interval)
-    baseline(dat::Union{ContinuousData,ErpData})
-
-Create baseline-corrected copy of continuous or ERP data.
-
-# Arguments
-- `dat::Union{ContinuousData,ErpData}`: The data to baseline correct
-- `channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}}`: Names of channels to correct (optional)
-- `baseline_interval::Union{IntervalIdx,IntervalTime}`: Time interval for baseline calculation (optional)
-
-# Returns
-- New baseline-corrected copy of input data
-- If channel_labels omitted, uses all channels
-- If baseline_interval omitted, uses entire time range
-"""
-function baseline(
-    dat::Union{ContinuousData,ErpData},
-    channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}},
-    baseline_interval::Union{IntervalIdx,IntervalTime},
-)
-    dat_out = deepcopy(dat)
-    baseline!(dat_out, channel_labels, baseline_interval)
-    return dat_out
-end
-
-function baseline(dat::Union{ContinuousData,ErpData}, channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}})
-    baseline_interval = IntervalIdx(1, nrow(dat.data))
-    baseline!(dat, channel_labels, baseline_interval)
-end
-
-function baseline(dat::Union{ContinuousData,ErpData}, baseline_interval::Union{IntervalIdx,IntervalTime})
-    baseline!(dat, dat.layout.label, baseline_interval)
-end
-
-function baseline(dat::Union{ContinuousData,ErpData})
-    baseline_interval = IntervalIdx(1, nrow(dat.data))
-    baseline!(dat, dat.layout.label, baseline_interval)
-end
 
 """
     baseline!(dat::EpochData, channel_labels, baseline_interval)
@@ -137,7 +96,7 @@ Apply baseline correction to epoched data.
 """
 function baseline!(
     dat::EpochData,
-    channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}},
+    channel_labels::Vector{Symbol},
     baseline_interval::Union{IntervalIdx,IntervalTime},
 )
     baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
@@ -149,7 +108,7 @@ function baseline!(
     end
 end
 
-function baseline!(dat::EpochData, channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}})
+function baseline!(dat::EpochData, channel_labels::Vector{Symbol})
     baseline_interval = IntervalIdx(1, nrow(dat.data))
     baseline!(dat, channel_labels, baseline_interval)
 end
@@ -162,50 +121,5 @@ function baseline!(dat::EpochData)
     baseline!(dat, dat.layout.label, IntervalIdx(1, nrow(dat.data)))
 end
 
-"""
-    baseline(dat::EpochData, channel_labels, baseline_interval)
-    baseline(dat::EpochData, channel_labels)
-    baseline(dat::EpochData, baseline_interval)
-    baseline(dat::EpochData)
-
-Create baseline-corrected copy of epoched data.
-
-# Arguments
-- `dat::EpochData`: The epoched data to baseline correct
-- `channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}}`: Names of channels to correct (optional)
-- `baseline_interval::Union{IntervalIdx,IntervalTime}`: Time interval for baseline calculation (optional)
-
-# Returns
-- New baseline-corrected copy of input data
-- If channel_labels omitted, uses all channels
-- If baseline_interval omitted, uses entire time range
-"""
-function baseline(
-    dat::EpochData,
-    channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}},
-    baseline_interval::Union{IntervalIdx,IntervalTime}
-)
-    dat_out = deepcopy(dat)
-    baseline!(dat_out, channel_labels, baseline_interval)
-    return dat_out
-end
-
-function baseline(dat::EpochData, channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}})
-    dat_out = deepcopy(dat)
-    baseline!(dat_out, channel_labels, IntervalIdx(1, nrow(dat_out.data)))
-    return dat_out
-end
-
-function baseline(dat::EpochData, baseline_interval::Union{IntervalIdx,IntervalTime})
-    dat_out = deepcopy(dat)
-    baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
-    baseline!(dat_out, dat_out.layout.label, baseline_interval)
-    return dat_out
-end
-
-function baseline(dat::EpochData)
-    dat_out = deepcopy(dat)
-    baseline!(dat_out, dat_out.layout.label, IntervalIdx(1, nrow(dat_out.data)))
-    return dat_out
-end
-
+# generates all non-mutating versions
+@add_nonmutating diff_channel!
