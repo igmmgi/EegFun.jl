@@ -17,6 +17,8 @@ mutable struct AnalysisInfo
     reference::Symbol
     hp_filter::Float64
     lp_filter::Float64
+
+    # Constructor with defaults
     AnalysisInfo(; reference=:none, hp_filter=0.0, lp_filter=0.0) = new(reference, hp_filter, lp_filter)
 end
 
@@ -64,6 +66,7 @@ end
 
 # Basic information functions right with the types
 channels(dat::EegData) = dat.layout.label
+extra_channels(dat::EegData) = setdiff(propertynames(data(dat)), [channels(dat); :time; :sample; :triggers])
 times(dat::SingleDataFrameEeg) = dat.data.time
 times(dat::MultiDataFrameEeg) = first(dat.data).time  # assume all epochs are the same
 sample_rate(dat::EegData) = dat.sample_rate

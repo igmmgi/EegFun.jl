@@ -423,124 +423,99 @@ function plot_lines(ax, marker, active)
 end
 
 
-mutable struct DataBrowserState
-    # Core data
-    data_obs::Observable{DataFrame}
-    filter_state::Observable{NamedTuple{(:hp, :lp), Tuple{Bool, Bool}}}
-    
-    # View state
-    xrange::Observable{UnitRange{Int}}
-    yrange::Observable{UnitRange{Int}}
-    offset::Observable{Vector{Float64}}
-    
-    # Selection state
-    selection_active::Observable{Bool}
-    selection_bounds::Observable{Tuple{Float64, Float64}}
-    selection_visible::Observable{Bool}
-    selection::Union{Nothing, Observable{Vector{Point2f}}}
-    
-    # Plot elements
-    channel_data_original::Dict{Symbol, Any}
-    channel_data_labels::Dict{Symbol, Any}
-    
-    # Axis reference
-    ax::Axis
-    
-    # Constructor
-    function DataBrowserState(dat::ContinuousData, channel_labels::Vector{Symbol})
-        new(
-            Observable(copy(dat.data)),  # data_obs
-            Observable((hp=false, lp=false)),  # filter_state
-            Observable(1:5000),  # xrange
-            Observable(-1500:1500),  # yrange
-            Observable(zeros(length(channel_labels))),  # offset
-            Observable(false),  # selection_active
-            Observable((0.0, 0.0)),  # selection_bounds
-            Observable(false),  # selection_visible
-            nothing,  # selection (will be set after axis creation)
-            Dict{Symbol, Any}(),  # channel_data_original
-            Dict{Symbol, Any}(),  # channel_data_labels
-            nothing  # ax will be set after Figure creation
-        )
-    end
-end
+
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
-    # Create figure and axis
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    
-    # Initialize state
-    state = DataBrowserState(dat, channel_labels)
-    state.ax = ax
-    state.selection = poly!(state.ax, Point2f[], color = (:blue, 0.3))
-    
+
+    # Function to plot the butterfly plot
+    # This essentially just shifts the data up and down (offset) to plot multiple channels on top of each other
+    function butterfly_plot(active::Bool)
+        if active
+            offset[] = LinRange(0, 0, length(channel_labels))
+        else
+            offset[] = LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, length(channel_labels))
+        end
+        for (_, label) in channel_data_labels
+            label.visible = !active
+        end
+    end
+
+    # We need to keep track of the (potential) filters that are applied to the data via the GUI
+    # NB. The GUI filters are only for visualisation purposes, the actual data is not filtered
+    filter_state = Observable((hp = false, lp = false))
+
+    # The actual data is observed by the GUI
+    data_obs = Observable(copy(dat.data))  # Initial copy
+
     # Function to apply the filters
     function apply_filters()
         # If turning off both filters, reset to original
-        if !state.filter_state[].hp && !state.filter_state[].lp
-            state.data_obs[] = copy(dat.data)
+        if !filter_state[].hp && !filter_state[].lp
+            data_obs[] = copy(dat.data)
             return
         end
-        
+
         # If turning off one filter, start fresh and apply remaining filter
-        if state.filter_state[].hp != state.filter_state[].lp  # Only one filter active
-            state.data_obs[] = copy(dat.data)
-            if state.filter_state[].hp
-                state.data_obs[] = filter_data(
-                    state.data_obs[],
+        if filter_state[].hp != filter_state[].lp  # Only one filter active
+            data_obs[] = copy(dat.data)
+            if filter_state[].hp
+                data_obs[] = filter_data(
+                    data_obs[],
                     channel_labels,
                     "hp",
                     "iir",
                     slider_hp_filter.value.val,
                     sample_rate(dat),
-                    order = 1
+                    order = 1,
                 )
             else  # lp is active
-                state.data_obs[] = filter_data(
-                    state.data_obs[],
+                data_obs[] = filter_data(
+                    data_obs[],
                     channel_labels,
                     "lp",
                     "iir",
                     slider_lp_filter.value.val,
                     sample_rate(dat),
-                    order = 3
+                    order = 3,
+                )
+            end
+        else  # Both filters active - only apply the new filter to current data
+            if filter_state[].lp  # LP was just turned on
+                data_obs[] = filter_data(
+                    data_obs[],
+                    channel_labels,
+                    "lp",
+                    "iir",
+                    slider_lp_filter.value.val,
+                    sample_rate(dat),
+                    order = 3,
+                )
+            else  # HP was just turned on
+                data_obs[] = filter_data(
+                    data_obs[],
+                    channel_labels,
+                    "hp",
+                    "iir",
+                    slider_hp_filter.value.val,
+                    sample_rate(dat),
+                    order = 1,
                 )
             end
         end
-        
-        notify(state.data_obs)
+
+        notify(data_obs)
+
     end
-    
+
     function apply_hp_filter(active)
-        state.filter_state[] = (hp=active, lp=state.filter_state[].lp)
+        filter_state[] = (hp = active, lp = filter_state[].lp)
         apply_filters()
     end
-    
+
     function apply_lp_filter(active)
-        state.filter_state[] = (hp=state.filter_state[].hp, lp=active)
+        filter_state[] = (hp = filter_state[].hp, lp = active)
         apply_filters()
     end
-    
-    # Function to plot the butterfly plot
-    function butterfly_plot(active::Bool)
-        if active
-            state.offset[] = LinRange(0, 0, length(channel_labels))
-        else
-            state.offset[] = LinRange(
-                (state.yrange[][end] * 0.9), 
-                state.yrange[][1] * 0.9, 
-                length(channel_labels)
-            )
-        end
-        for (_, label) in state.channel_data_labels
-            label.visible = !active
-        end
-    end
-    
-    # Remove these since they're now in state
-    # filter_state = Observable((hp = false, lp = false))
-    # data_obs = Observable(copy(dat.data))  # Initial copy
 
     # Create some toggle buttons taking account of the columns in the data and the filters previously applied to the data. 
     # For example, if a high-pass filter has already been applied to the data, remove this toggle button.
@@ -589,9 +564,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
 
     # Function to clear selection
     function clear_selection()
-        state.selection[][1] = Point2f[]
-        state.selection_bounds[] = (0.0, 0.0)
-        state.selection_visible[] = false
+        selection[1] = Point2f[]
+        selection_bounds[] = (0.0, 0.0)
+        selection_visible[] = false
     end
 
     # Function to get precise mouse position
@@ -603,8 +578,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
 
     # Function to update selection rectangle
     function update_selection_rectangle(x1, x2)
-        ylims = state.ax.limits[][2]
-        state.selection[][1] = Point2f[
+        ylims = ax.limits[][2]
+        selection[1] = Point2f[
             Point2f(Float64(x1), Float64(ylims[1])),
             Point2f(Float64(x2), Float64(ylims[1])),
             Point2f(Float64(x2), Float64(ylims[2])),
@@ -660,8 +635,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     # Function to get data in selected region
     function get_selected_data()
         x_min, x_max = minmax(selection_bounds[]...)
-        time_mask = (x_min .<= state.data_obs[].time .<= x_max)
-        selected_data = state.data_obs[][time_mask, :]
+        time_mask = (x_min .<= data_obs[].time .<= x_max)
+        selected_data = data_obs[][time_mask, :]
         println(
             "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))",
         )
@@ -677,8 +652,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         ]
         for btn in menu_buttons
             on(btn.clicks) do n
-                if selection_visible[]
-                    selected_data = get_selected_data()
+                selected_data = get_selected_data()
+                if btn.label[] == "Topoplot"
                     plot_topoplot(selected_data, dat.layout)
                 end
             end
@@ -702,13 +677,13 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         offset = Observable(zeros(length(channel_labels)))
     end
 
-    @lift xlims!(ax, state.data_obs[].time[$xrange[1]], state.data_obs[].time[$xrange[end]])
+    @lift xlims!(ax, data_obs[].time[$xrange[1]], data_obs[].time[$xrange[end]])
     ylims!(ax, yrange.val[1], yrange.val[end])
     ax.xlabel = "Time (S)"
     ax.ylabel = "Amplitude (mV)"
 
     # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
-    toggles = toggle_button_group(fig, names(state.data_obs[]))
+    toggles = toggle_button_group(fig, names(data_obs[]))
     for t = 1:length(toggles[:, 1])
         if toggles[t, 2].text.val ∈ ["Trigger", "vEOG", "hEOG"]
             on(toggles[t, 1].active) do _
@@ -724,142 +699,101 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     ################### vertical line markers ###############################
     # Vertical line markers
     markers = []
-    add_marker!(markers, ax, state.data_obs[], :triggers)
+    add_marker!(markers, ax, data_obs[], :triggers)
     if ("is_vEOG" in names(dat.data) && "is_hEOG" in names(dat.data))
-        add_marker!(markers, ax, state.data_obs[], :is_vEOG, label = "v")
-        add_marker!(markers, ax, state.data_obs[], :is_hEOG, label = "h")
+        add_marker!(markers, ax, data_obs[], :is_vEOG, label = "v")
+        add_marker!(markers, ax, data_obs[], :is_hEOG, label = "h")
     end
 
 
-    # Mouse interactions for selection
-    on(events(fig).mousebutton) do event
-        if event.button == Mouse.left
-            if event.action == Mouse.press
-                mp = events(fig).mouseposition[]
-                pos = mouseposition(state.ax)
-                if !isnothing(pos)
-                    state.selection_active[] = true
-                    state.selection_bounds[] = (pos[1], pos[1])
-                    update_selection_rectangle(pos[1], pos[1])
-                end
-            elseif event.action == Mouse.release
-                state.selection_active[] = false
-            end
-        end
-    end
-
-    on(events(fig).mouseposition) do mp
-        if state.selection_active[]
-            pos = mouseposition(state.ax)
-            if !isnothing(pos)
-                bounds = state.selection_bounds[]
-                update_selection_rectangle(bounds[1], pos[1])
-            end
-        end
-    end
-
-    # Menu for electrode/channel selection
+    # menu for electrode/channel selection
     labels_menu = hcat(
         Menu(
             fig,
-            options = vcat(["All", "Left", "Right", "Central"], channel_labels),
+            options = vcat(["All", "Left", "Right", "Central"], channel_labels_original),
             default = "All",
             direction = :down,
             fontsize = 18,
-            width = 200,
+            width = 200,  # Match width
         ),
         Label(fig, "Labels", fontsize = 22, halign = :left),
     )
-
     on(labels_menu[1].selection) do s
-        selected_labels = [s]
+        channel_labels = [s]
         if s == "All"
-            selected_labels = channel_labels
+            channel_labels = channel_labels_original
         elseif s == "Left"
-            selected_labels = channel_labels[findall(occursin.(r"\d*[13579]$", channel_labels))]
+            channel_labels =
+                channel_labels_original[findall(occursin.(r"\d*[13579]$", String.(channel_labels_original)))]
         elseif s == "Right"
-            selected_labels = channel_labels[findall(occursin.(r"\d*[24680]$", channel_labels))]
+            channel_labels =
+                channel_labels_original[findall(occursin.(r"\d*[24680]$", String.(channel_labels_original)))]
         elseif s == "Central"
-            selected_labels = channel_labels[findall(occursin.(r"z$", channel_labels))]
+            channel_labels = channel_labels_original[findall(occursin.(r"z$", String.(channel_labels_original)))]
         end
+        nchannels = length(channel_labels)
 
-        nchannels = length(selected_labels)
-        clear_axes(state.ax, [state.channel_data_original, state.channel_data_labels])
+        clear_axes(ax, [channel_data_original, channel_data_labels])
+
+        # data = copy(dat.data)
 
         if nchannels > 1
-            state.offset[] = LinRange(state.yrange[][end] * 0.9, state.yrange[][1] * 0.9, nchannels + 2)[2:end-1]
-        else
-            state.offset[] = zeros(nchannels)
+            offset = Observable((LinRange((yrange.val[end] * 0.9), yrange.val[1] * 0.9, nchannels + 2)[2:end-1]))
+        else # just centre
+            offset = Observable(zeros(length(channel_labels)))
         end
+
         draw(plot_labels = true)
+
     end
 
-    # Reference menu
+    # menu for electrode/channel selection
     reference_menu = hcat(
         Menu(
             fig,
-            options = ["None", "Average", "Mastoid", "Cz", "Fz", "Pz", "Oz"],
-            default = "None",
+            options = vcat([:none, :avg, :mastoid], channel_labels_original),
+            default = String(dat.analysis_info.reference),
             direction = :down,
             fontsize = 18,
-            width = 200,
+            width = 200,  # Match width
         ),
         Label(fig, "Reference", fontsize = 22, halign = :left),
     )
-
     on(reference_menu[1].selection) do s
-        if s == "None"
+        if s == :none
             return
         end
-        rereference!(state.data_obs[], channels(dat), resolve_reference(dat, s))
-        notify(state.data_obs)
+        rereference!(data_obs[], channels(dat), resolve_reference(dat, s))
+        notify(data_obs)
     end
 
-    # ICA menu if provided
+    # menu for ica selection
     menu_ica = nothing
+    removed_activations = nothing
+    components_to_remove = nothing
+    components_removed = nothing
     if !isnothing(ica)
         menu_ica = hcat(
-            Menu(
-                fig,
-                options = ["None", string.(ica.ica_label)...],
-                default = "None",
-                direction = :down,
-                fontsize = 18,
-                width = 200,
-            ),
-            Label(fig, "Remove ICA", fontsize = 22, halign = :left),
+            Menu(fig, options = vcat(["None"], ica.ica_label), default = "None", direction = :down, fontsize = 18),
+            Label(fig, "ICA Components", fontsize = 22, halign = :left),
         )
-
-        components_removed = nothing
-        removed_activations = nothing
-
         on(menu_ica[1].selection) do s
-            components_to_remove = s == "None" ? nothing : findfirst(==(Symbol(s)), ica.ica_label)
+            clear_axes(ax, [channel_data_original, channel_data_labels])
+            components_to_remove = extract_int(String(s))
+
             if !isnothing(components_to_remove)
                 if !isnothing(components_removed)
                     # go back to original data
-                    state.data_obs[] = restore_original_data(
-                        state.data_obs[], 
-                        ica_result, 
-                        [components_removed], 
-                        removed_activations
-                    )
+                    data_obs[] =
+                        restore_original_data(data_obs[], ica_result, [components_removed], removed_activations)
                 end
-                state.data_obs[], removed_activations = remove_ica_components(
-                    state.data_obs[], 
-                    ica, 
-                    [components_to_remove]
-                )
+                data_obs[], removed_activations = remove_ica_components(data_obs[], ica, [components_to_remove])
                 components_removed = components_to_remove
             else
-                state.data_obs[] = restore_original_data(
-                    state.data_obs[], 
-                    ica_result, 
-                    [components_removed], 
-                    removed_activations
-                )
+                data_obs[] = restore_original_data(data_obs[], ica_result, [components_removed], removed_activations)
             end
-            notify(state.data_obs)
+
+            notify(data_obs)
             draw(plot_labels = true)
         end
     end
@@ -877,17 +811,17 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     end
 
     slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = xlimit, snap = true)
-    slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data_obs[]), startvalue = 1, snap = true)
+    slider_x = Slider(fig[2, 1], range = 1:50:nrow(data_obs[]), startvalue = 1, snap = true)
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data_obs[]), (x + slider_range.value.val) - 1)
+        new_range = x:min(nrow(data_obs[]), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             xrange[] = new_range
         end
     end
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data_obs[]), x + slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(data_obs[]), x + slider_x.value.val)
         if length(new_range) > 1
             xrange[] = new_range
         end
@@ -895,46 +829,97 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
 
     # keyboard events
     on(events(fig).keyboardbutton) do event
-        if event.action == Keyboard.press
-            if selection_active[]
+        if event.action in (Keyboard.press, Keyboard.repeat)
+            if selection_visible[]
+                # Move selection region
                 if event.key == Keyboard.left
                     width = selection_bounds[][2] - selection_bounds[][1]
-                    new_start = max(state.data_obs[].time[1], selection_bounds[][1] - width / 5)
+                    new_start = max(data_obs[].time[1], selection_bounds[][1] - width / 5)
                     selection_bounds[] = (new_start, new_start + width)
                     update_selection_rectangle(selection_bounds[][1], selection_bounds[][2])
                 elseif event.key == Keyboard.right
                     width = selection_bounds[][2] - selection_bounds[][1]
-                    new_start = min(state.data_obs[].time[end] - width, selection_bounds[][1] + width / 5)
+                    new_start = min(data_obs[].time[end] - width, selection_bounds[][1] + width / 5)
                     selection_bounds[] = (new_start, new_start + width)
                     update_selection_rectangle(selection_bounds[][1], selection_bounds[][2])
                 end
             else
-                event.key == Keyboard.left && xback!(ax, state.xrange, state.data_obs[])
-                event.key == Keyboard.right && xforward!(ax, state.xrange, state.data_obs[])
+                event.key == Keyboard.left && xback!(ax, xrange, data_obs[])
+                event.key == Keyboard.right && xforward!(ax, xrange, data_obs[])
             end
-            event.key == Keyboard.down && yless!(ax, state.yrange)
-            event.key == Keyboard.up && ymore!(ax, state.yrange)
-            event.key == Keyboard.escape && (selection_active[] = false)
-            event.key == Keyboard.m && show_menu()
+            event.key == Keyboard.down && yless!(ax, yrange)
+            event.key == Keyboard.up && ymore!(ax, yrange)
         end
     end
 
     # Menu for plotting potential extra channels
+    # For Boolean channels, the extra channel is a vertical span
+    # For other channels, the extra channel is a line at the standard timepoint * value
+    extra_channel = nothing
+    extra_label = nothing
     extra_menu = hcat(
         Menu(
             fig,
-            options = setdiff(names(state.data_obs[]), channel_labels),
-            default = nothing,
+            options = [:none; extra_channels(dat)],
+            default = "none",
             direction = :down,
             fontsize = 18,
-            width = 200,
+            width = 200,  # Adjust this value to fit your text
         ),
-        Label(fig, "Extra", fontsize = 22, halign = :left),
+        Label(fig, "Extra Channels", fontsize = 22, halign = :left),
     )
-
     on(extra_menu[1].selection) do s
-        if !isnothing(s)
-            plot_extra_channel(s)
+        if !isnothing(extra_channel)
+            delete!(ax, extra_channel)
+        end
+        if !isnothing(extra_label)
+            delete!(ax, extra_label)
+        end
+        if s == :none
+            return
+        end
+
+        # Check if column is boolean type
+        if eltype(data_obs[][!, s]) == Bool
+            highlight_data = @views splitgroups(findall(data_obs[][!, s]))
+            region_offset = 0
+            if all(iszero, highlight_data[2] .- highlight_data[1])
+                region_offset = 5
+            end
+
+            extra_channel = vspan!(
+                ax,
+                data_obs[][highlight_data[1], :time],
+                data_obs[][highlight_data[2].+region_offset, :time],
+                color = "LightGrey",
+                alpha = 0.5,
+                visible = true,
+            )
+        else
+            extra_channel = lines!(
+                ax,
+                @lift($data_obs.time),
+                @lift(begin
+                    # Get current data and offset
+                    df = $data_obs
+                    current_offset = offset.val[end] + mean(diff(offset.val))
+                    df[!, s] .+ current_offset
+                end),
+                color = :black,
+                linewidth = 2,
+            )
+            extra_label = text!(
+                ax,
+                @lift($data_obs.time[$xrange[1]]),  # Use first visible timepoint
+                @lift(begin
+                    df = $data_obs
+                    current_offset = offset.val[end] + mean(diff(offset.val))
+                    df[!, s][$xrange[1]] .+ current_offset  # Use value at first visible timepoint
+                end),
+                text = String(s),
+                align = (:left, :center),
+                fontsize = 18
+            )
         end
     end
 
@@ -990,17 +975,17 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         for (idx, col) in enumerate(channel_labels)
             channel_data_original[col] = lines!(
                 ax,
-                @lift(state.data_obs.time),  # Use data_obs
-                @lift(state.data_obs[!, $col] .+ $offset[idx]),  # Use data_obs
-                color = @lift(abs.($state.data_obs[!, col]) .>= $crit_val),  # Use data_obs
+                @lift($data_obs.time),  # Use data_obs
+                @lift($data_obs[!, $col] .+ $offset[idx]),  # Use data_obs
+                color = @lift(abs.($data_obs[!, col]) .>= $crit_val),  # Use data_obs
                 colormap = [:darkgrey, :darkgrey, :red],
                 linewidth = 2,
             )
             if plot_labels
                 channel_data_labels[col] = text!(
                     ax,
-                    @lift(state.data_obs[$xrange, :time][1]),  # Use data_obs
-                    @lift(state.data_obs[$xrange, $col][1] .+ $offset[idx]),  # Use data_obs
+                    @lift($data_obs[$xrange, :time][1]),  # Use data_obs
+                    @lift($data_obs[$xrange, $col][1] .+ $offset[idx]),  # Use data_obs
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
@@ -1187,13 +1172,11 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{Symbol}, ica::U
         if s == "All"
             channel_labels = channel_labels_original
         elseif s == "Left"
-            channel_labels =
-                channel_labels_original[findall(occursin.(r"\d*[13579]$", String.(channel_labels_original)))]
+            channel_labels = channel_labels_original[findall(occursin.(r"\d*[13579]$", channel_labels_original))]
         elseif s == "Right"
-            channel_labels =
-                channel_labels_original[findall(occursin.(r"\d*[24680]$", String.(channel_labels_original)))]
+            channel_labels = channel_labels_original[findall(occursin.(r"\d*[24680]$", channel_labels_original))]
         elseif s == "Central"
-            channel_labels = channel_labels_original[findall(occursin.(r"z$", String.(channel_labels_original)))]
+            channel_labels = channel_labels_original[findall(occursin.(r"z$", channel_labels_original))]
         end
 
         nchannels = length(channel_labels)
@@ -2179,3 +2162,4 @@ function plot_ica_component_activation(
 
     return fig
 end
+

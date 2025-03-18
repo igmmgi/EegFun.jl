@@ -212,7 +212,7 @@ function infomax_ica(
         meanvar_normalized[order],
         scale,
         original_mean,
-        ["IC$i" for i = 1:size(work.weights, 1)],
+        [Symbol("IC$i") for i = 1:size(work.weights, 1)],
         data_labels,
     )
 

@@ -48,6 +48,7 @@ A ContinuousData object containing the EEG data and layout information.
 
 """
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)::ContinuousData
+    # Initialize with default AnalysisInfo
     return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 
@@ -192,12 +193,12 @@ function is_extreme_value( dat::DataFrame, columns::Vector{Symbol}, criterion::N
     return any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
-function is_extreme_value!(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)
-    dat[!, "is_extreme"] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
+function is_extreme_value!(dat::DataFrame, columns::Vector{Symbol}, criterion::Number; channel_out::Symbol = :is_extreme_value)
+    dat[!, channel_out] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
-function is_extreme_value!(dat::ContinuousData, columns::Vector{Symbol}, criterion::Number)
-    is_extreme_value!(dat.data, columns, criterion)
+function is_extreme_value!(dat::ContinuousData, columns::Vector{Symbol}, criterion::Number; channel_out::Symbol = :is_extreme_value)
+    is_extreme_value!(dat.data, columns, criterion, channel_out = channel_out)
 end
 
 
