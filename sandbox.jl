@@ -75,75 +75,74 @@ dat = read_bdf("../Flank_C_$(subject).bdf");
 
 # preprocess the eeg data
 dat = create_eeg_dataframe(dat, layout);
+plot_databrowser(dat)
+
 plot_events(dat);
 # viewer(dat) # requires vscode
 # head(dat) # requires vscode
 # save_object("$(subject)_continuous_raw_eegfun.jld2", dat)
 # dat = load_object("3_continuous_raw.jld2")
 
-rereference!(dat, :avg)
 # rereference!(dat.data, dat.layout.label, :mastoid)
 # rereference!(dat.data, dat.layout.label, [:Fp1])
 
-plot_databrowser(dat)
 
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 dat = create_eeg_dataframe(dat, layout);
-
-# rereference!(dat, channels(dat))
-filter_data(dat, "hp", "iir", 1, order=1)
-# test = filter_data(dat, "hp", "iir", 1, order=1)
-#filter_data!(dat, "lp", "fir", 10)
-#plot_databrowser(dat)
-
-
-# search for some bad channels
-channel_summary(dat)
-channel_summary(dat, channels(dat))
-channel_summary(dat, channels(dat)[1:66])
-channel_summary(dat, 1:5)
-
+# rereference!(dat, :Fp1)
+# filter_data!(dat, "hp", "iir", 1, order=1)
+# filter_data!(dat, "lp", "iir", 10, order=2)
+# is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
+# is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
+# plot_databrowser(dat)
+# # search for some bad channels
+# channel_summary(dat)
+# channel_summary(dat, channels(dat))
+# channel_summary(dat, channels(dat)[1:66])
+# channel_summary(dat, 1:5)
 # bad channels
-channel_joint_probability(dat, threshold=5.0, normval=2)
-
-cm = correlation_matrix(dat)
-plot_correlation_heatmap(cm)
-
-
+# channel_joint_probability(dat, threshold=5.0, normval=2)
+# cm = correlation_matrix(dat)
+# plot_correlation_heatmap(cm)
+filter_data!(dat, "hp", "fir", 1)
 # calculate EOG channels
 diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
 diff_channel!(dat, :F9, :F10, :hEOG);
-
 ## # autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-
 is_extreme_value!(dat, dat.layout.label, 500);
+plot_databrowser(dat)
+
 
 
 # ICA "continuous" data
 dat_ica = filter_data(dat, "hp", "iir", 1, order=1)
-good_samples = findall(dat_ica.data[!, :is_extreme] .== false)
+good_samples = findall(dat_ica.data[!, :is_extreme_value] .== false)
 good_channels = setdiff(dat_ica.layout.label, [:PO9])
 dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
 ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms())
 
-# plot_ica_topoplot(ica_result, dat.layout)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
-# plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
-# plot_ica_component_activation(dat, ica_result)
+# TODO: head shape size
+plot_ica_topoplot(ica_result, dat.layout)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
+plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
+
+# TODO: subplot y size
+# TODO: data resetting?
+plot_ica_component_activation(dat, ica_result)
 
 dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
 
-# plot_databrowser(dat)
-# plot_databrowser(dat, "Fp1")
-# plot_databrowser(dat, ["Fp1", "Fp2"])
-# plot_databrowser(dat, dat.layout.label[1:3])
-# plot_databrowser(dat, dat.layout.label[[1,3,5]])
-# plot_databrowser(dat, ica_result)
+plot_databrowser(dat)
+plot_databrowser(dat, :Fp1)
+plot_databrowser(dat, [:Fp1, :Fp2])
+plot_databrowser(dat, dat.layout.label[1:3])
+plot_databrowser(dat, dat.layout.label[[1,3,5]])
+ plot_databrowser(dat, ica_result)
 
 
 # extract epochs
@@ -294,6 +293,19 @@ plot_erp(erps[1], erps[2], [:PO7, :Fp2])
 
 
 ########################################################################
+
+# Add this to sandbox.jl
+function debug_analysis_info(dat)
+    println("Analysis Info:")
+    println("  Reference: $(dat.analysis_info.reference)")
+    println("  HP Filter: $(dat.analysis_info.hp_filter)")
+    println("  LP Filter: $(dat.analysis_info.lp_filter)")
+end
+
+# Then use it:
+debug_analysis_info(dat)
+filter_data!(dat, "hp", "fir", 1)
+debug_analysis_info(dat)
 
 
 
