@@ -350,6 +350,11 @@ end
 
 ##################################################################
 # Data Browser: Continuous Data
+struct ToggleButton
+    label::Any
+    fun::Any
+end
+
 struct Marker
     data::Any
     line::Any
@@ -367,16 +372,16 @@ function ymore!(ax, state)
     ylims!(ax, state.yrange.val[1], state.yrange.val[end])
 end
 
-function xback!(ax, state)
+function xback!(ax, state, data)
     state.xrange.val[1] - 200 < 1 && return
     state.xrange.val = state.xrange.val .- 200
-    xlims!(ax, state.data_obs[].time[state.xrange.val[1]], state.data_obs[].time[state.xrange.val[end]])
+    xlims!(ax, data.time[state.xrange.val[1]], data.time[state.xrange.val[end]])
 end
 
-function xforward!(ax, state)
-    state.xrange.val[1] + 200 > nrow(state.data_obs[]) && return
+function xforward!(ax, state, data)
+    state.xrange.val[1] + 200 > nrow(data) && return
     state.xrange.val = state.xrange.val .+ 200
-    xlims!(ax, state.data_obs[].time[state.xrange.val[1]], state.data_obs[].time[state.xrange.val[end]])
+    xlims!(ax, data.time[state.xrange.val[1]], data.time[state.xrange.val[end]])
 end
 
 
@@ -585,11 +590,11 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     # 4. Setup initial axis limits
     @lift xlims!(ax, $(state.data_obs).time[$(state.xrange)[1]], $(state.data_obs).time[$(state.xrange)[end]])
     @lift ylims!(ax, $(state.yrange)[1], $(state.yrange)[end])
-
     # Controls
     # interactions(ax)
     deregister_interaction!(ax, :rectanglezoom)
 
+    # It is possible to select an x-range within the data and then plot the data (e.g., Topoplot) for this range.
     selection_active = Observable(false)
     selection_bounds = Observable((0.0, 0.0))  # (start, end)
     selection_visible = Observable(false)
@@ -600,6 +605,13 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         selection[1] = Point2f[]
         selection_bounds[] = (0.0, 0.0)
         selection_visible[] = false
+    end
+
+    # Function to get precise mouse position
+    function get_mouse_pos(scene_pos)
+        # Convert from screen to data coordinates
+        pos = to_world(ax.scene, scene_pos)
+        return Float64(pos[1])
     end
 
     # Function to update selection rectangle
@@ -622,29 +634,28 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         # Check if position is within bounding box
         if bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) &&
            bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
-            mouse_x = mouseposition(ax)[1]
-
+            world_pos = get_mouse_pos(pos)
             if event.button == Mouse.left
                 if event.action == Mouse.press
                     if selection_visible[] &&
-                       mouse_x >= min(selection_bounds[][1], selection_bounds[][2]) &&
-                       mouse_x <= max(selection_bounds[][1], selection_bounds[][2])
+                       world_pos >= min(selection_bounds[][1], selection_bounds[][2]) &&
+                       world_pos <= max(selection_bounds[][1], selection_bounds[][2])
                         clear_selection()
                     else
                         selection_active[] = true
-                        selection_bounds[] = (mouse_x, mouse_x)
-                        update_selection_rectangle(mouse_x, mouse_x)
+                        selection_bounds[] = (world_pos, world_pos)
+                        update_selection_rectangle(world_pos, world_pos)
                     end
                 elseif event.action == Mouse.release && selection_active[]
                     selection_active[] = false
                     selection_visible[] = true
-                    selection_bounds[] = (selection_bounds[][1], mouse_x)
-                    update_selection_rectangle(selection_bounds[][1], mouse_x)
+                    selection_bounds[] = (selection_bounds[][1], world_pos)
+                    update_selection_rectangle(selection_bounds[][1], world_pos)
                 end
             elseif event.button == Mouse.right && event.action == Mouse.press
                 if selection_visible[] &&
-                   mouse_x >= min(selection_bounds[][1], selection_bounds[][2]) &&
-                   mouse_x <= max(selection_bounds[][1], selection_bounds[][2])
+                   world_pos >= min(selection_bounds[][1], selection_bounds[][2]) &&
+                   world_pos <= max(selection_bounds[][1], selection_bounds[][2])
                     show_menu()
                 end
             end
@@ -654,7 +665,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     # Update selection rectangle while dragging
     on(events(ax).mouseposition) do pos
         if selection_active[]
-            world_pos = mouseposition(ax)[1]
+            world_pos = get_mouse_pos(pos)
             update_selection_rectangle(selection_bounds[][1], world_pos)
         end
     end
@@ -662,8 +673,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     # Function to get data in selected region
     function get_selected_data()
         x_min, x_max = minmax(selection_bounds[]...)
-        time_mask = (x_min .<= state.data_obs[].time .<= x_max)
-        selected_data = state.data_obs[][time_mask, :]
+        time_mask = (x_min .<= data_obs[].time .<= x_max)
+        selected_data = data_obs[][time_mask, :]
         println(
             "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))",
         )
@@ -864,8 +875,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
                     update_selection_rectangle(selection_bounds[][1], selection_bounds[][2])
                 end
             else
-                event.key == Keyboard.left && xback!(ax, state)
-                event.key == Keyboard.right && xforward!(ax, state)
+                event.key == Keyboard.left && xback!(ax, state, state.data_obs[])
+                event.key == Keyboard.right && xforward!(ax, state, state.data_obs[])
             end
             event.key == Keyboard.down && yless!(ax, state)
             event.key == Keyboard.up && ymore!(ax, state)
