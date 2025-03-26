@@ -419,20 +419,46 @@ end
 
 
 # Add this struct before plot_databrowser function
-mutable struct DataBrowserState
-    xrange::Observable{UnitRange{Int64}}
-    yrange::Observable{UnitRange{Int64}}
-    filter_state::Observable{NamedTuple{(:hp, :lp),Tuple{Bool,Bool}}}
-    offset::Observable{Vector{Float64}}
-    crit_val::Observable{Float64}
+mutable struct SelectionState
+    active::Observable{Bool}
+    bounds::Observable{Tuple{Float64,Float64}}
+    visible::Observable{Bool}
+    rectangle::Any  # Makie.Poly
+end
+
+mutable struct FilterState
+    active::Observable{NamedTuple{(:hp, :lp), Tuple{Bool, Bool}}}
     hp_freq::Observable{Float64}
     lp_freq::Observable{Float64}
-    channel_labels::Vector{Symbol}  # No
+end
+
+mutable struct DataBrowserState
+    # Data and display state
+    xrange::Observable{UnitRange{Int64}}
+    yrange::Observable{UnitRange{Int64}}
+    filter_state::FilterState  
+    offset::Observable{Vector{Float64}}
+    crit_val::Observable{Float64}
+    
+    # Channel information
+    channel_labels::Vector{Symbol}  # Current channel labels
     channel_labels_original::Vector{Symbol}  # Original channel labels
+    
+    # Plot elements
     channel_data_labels::Dict{Symbol,Makie.Text}
     channel_data_original::Dict{Symbol,Makie.Lines}
-    data_obs::Observable{DataFrame}  # New field
-    data_original::EegData  # New field for original data
+    
+    # Data
+    data_obs::Observable{DataFrame}  # Observable data
+    data_original::EegData  # Original data
+    
+    # Selection state
+    selection::SelectionState
+end
+
+function setup_axis_limits!(ax, state)
+    @lift xlims!(ax, $(state.data_obs).time[$(state.xrange)[1]], $(state.data_obs).time[$(state.xrange)[end]])
+    @lift ylims!(ax, $(state.yrange)[1], $(state.yrange)[end])
 end
 
 # Function to plot the butterfly plot
@@ -452,21 +478,21 @@ end
 function apply_filters!(state::DataBrowserState)
 
     # If turning off both filters, reset to original
-    if !state.filter_state[].hp && !state.filter_state[].lp
+    if !state.filter_state.active[].hp && !state.filter_state.active[].lp
         state.data_obs[] = copy(state.data_original.data)
         return
     end
 
     # If turning off one filter, start fresh and apply remaining filter
-    if state.filter_state[].hp != state.filter_state[].lp  # Only one filter active
+    if state.filter_state.active[].hp != state.filter_state.active[].lp  # Only one filter active
         state.data_obs[] = copy(state.data_original.data)
-        if state.filter_state[].hp
+        if state.filter_state.active[].hp
             state.data_obs[] = filter_data(
                 state.data_obs[],
                 state.channel_labels,
                 "hp",
                 "iir",
-                state.hp_freq[],
+                state.filter_state.hp_freq[],
                 sample_rate(state.data_original),
                 order = 1,
             )
@@ -476,19 +502,19 @@ function apply_filters!(state::DataBrowserState)
                 state.channel_labels,
                 "lp",
                 "iir",
-                state.lp_freq[],
+                state.filter_state.lp_freq[],
                 sample_rate(state.data_original),
                 order = 3,
             )
         end
     else  # Both filters active - only apply the new filter to current data
-        if state.filter_state[].lp  # LP was just turned on
+        if state.filter_state[].active.lp  # LP was just turned on
             state.data_obs[] = filter_data(
                 state.data_obs[],
                 state.channel_labels,
                 "lp",
                 "iir",
-                state.lp_freq[],
+                state.filter_state.lp_freq[],
                 sample_rate(state.data_original),
                 order = 3,
             )
@@ -498,7 +524,7 @@ function apply_filters!(state::DataBrowserState)
                 state.channel_labels,
                 "hp",
                 "iir",
-                state.hp_freq[],
+                state.filter_state.hp_freq[],
                 sample_rate(state.data_original),
                 order = 1,
             )
@@ -509,111 +535,100 @@ function apply_filters!(state::DataBrowserState)
 
 end
 
+function apply_hp_filter!(state)
+    current_state = state.filter_state.active[]
+    state.filter_state.active[] = (hp = !current_state.hp, lp = current_state.lp)
+    apply_filters!(state)
+end
 
-function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
+function apply_lp_filter!(state)
+    current_state = state.filter_state.active[]
+    state.filter_state.active[] = (hp = current_state.hp, lp = !current_state.lp)
+    apply_filters!(state)
+end
 
-    # We need to keep track of the (potential) filters that are applied to the data via the GUI
-    # NB. The GUI filters are only for visualisation purposes, the actual data is not filtered
-    # And when initializing:
 
-    # default xrange/yrange
-    xlimit = 5000
-    yrange = -1500:1500
-    nchannels = length(channel_labels)
 
-    state = DataBrowserState(
-        Observable(1:xlimit),           # xrange
-        Observable(yrange),         # yrange
-        Observable((hp = false, lp = false)),
-        Observable(
-            nchannels > 1 ? LinRange((yrange[end] * 0.9), yrange[1] * 0.9, nchannels + 2)[2:end-1] :
-            zeros(length(channel_labels)),
-        ),  # offset
-        Observable(1000.0),
-        Observable(0.1),     # hp_freq - default high-pass frequency
-        Observable(40.0),
-        channel_labels,
-        copy(channel_labels),
-        Dict{Symbol,Makie.Text}(),  # channel_data_labels - empty dict to start
-        Dict{Symbol,Makie.Lines}(),   # channel_data_original - empty dict to start
-        Observable(copy(dat.data)),
-        dat,
-    )
+# Function to clear selection
+function clear_selection!(state)
+    state.selection.rectangle[1] = Point2f[]
+    state.selection.bounds[] = (0.0, 0.0)
+    state.selection.visible[] = false
+end
 
-    function apply_hp_filter(active)
-        state.filter_state[] = (hp = active, lp = state.filter_state[].lp)
-        apply_filters!(state)
+
+
+# Create some toggle buttons taking account of the columns in the data and the filters previously applied to the data. 
+# For example, if a high-pass filter has already been applied to the data, remove this toggle button.
+function toggle_button_group(fig, labels)
+
+    toggle_configs = [("Butterfly Plot", butterfly_plot!), ("Trigger", plot_lines, "triggers")]
+    if "is_vEOG" in labels
+        push!(toggle_configs, ("vEOG", plot_lines, "is_vEOG"))
+    end
+    if "is_hEOG" in labels
+        push!(toggle_configs, ("hEOG", plot_lines, "is_hEOG"))
+    end
+    if dat.analysis_info.hp_filter == 0.0
+        push!(toggle_configs, ("HP-Filter On/Off", apply_hp_filter!))
+    end
+    if dat.analysis_info.lp_filter == 0.0
+        push!(toggle_configs, ("LP-Filter On/Off", apply_lp_filter!))
     end
 
-    function apply_lp_filter(active)
-        state.filter_state[] = (hp = state.filter_state[].hp, lp = active)
-        apply_filters!(state)
-    end
+    toggles = [(config[1:2]..., Toggle(fig)) for config in toggle_configs if length(config) == 2 || config[3] in labels]
 
-    # Create some toggle buttons taking account of the columns in the data and the filters previously applied to the data. 
-    # For example, if a high-pass filter has already been applied to the data, remove this toggle button.
-    function toggle_button_group(fig, labels)
+    # Create grid layout
+    grid = [[toggle[3], Label(fig, toggle[1], fontsize = 22, halign = :left), toggle[2]] for toggle in toggles]
 
-        toggle_configs = [("Butterfly Plot", butterfly_plot!), ("Trigger", plot_lines, "triggers")]
-        if "is_vEOG" in labels
-            push!(toggle_configs, ("vEOG", plot_lines, "is_vEOG"))
+    return permutedims(reduce(hcat, grid))  # Return as a proper matrix
+
+end
+
+# Function to update selection rectangle
+function update_selection_rectangle!(ax, state, x1, x2)
+    ylims = ax.limits[][2]
+    state.selection.rectangle[1] = Point2f[
+        Point2f(Float64(x1), Float64(ylims[1])),
+        Point2f(Float64(x2), Float64(ylims[1])),
+        Point2f(Float64(x2), Float64(ylims[2])),
+        Point2f(Float64(x1), Float64(ylims[2])),
+    ]
+end
+
+# Function to get data in selected region
+function get_selected_data(state)
+    x_min, x_max = minmax(state.selection.bounds[]...)
+    time_mask = (x_min .<= state.data_obs[].time .<= x_max)
+    selected_data = state.data_obs[][time_mask, :]
+    println("Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))")
+    return selected_data
+end
+
+
+# Function to create menu window with different plot options for the selected data 
+function show_menu()
+    menu_fig = Figure()
+    menu_buttons = [
+        Button(menu_fig[idx, 1], label = plot_type) for
+        (idx, plot_type) in enumerate(["Topoplot", "Topoplot", "Topoplot"])
+    ]
+    for btn in menu_buttons
+        on(btn.clicks) do n
+            selected_data = get_selected_data()
+            if btn.label[] == "Topoplot"
+                plot_topoplot(selected_data, dat.layout)
+            end
         end
-        if "is_hEOG" in labels
-            push!(toggle_configs, ("hEOG", plot_lines, "is_hEOG"))
-        end
-        if dat.analysis_info.hp_filter == 0.0
-            push!(toggle_configs, ("HP-Filter On/Off", apply_hp_filter))
-        end
-        if dat.analysis_info.lp_filter == 0.0
-            push!(toggle_configs, ("LP-Filter On/Off", apply_lp_filter))
-        end
-
-        toggles =
-            [(config[1:2]..., Toggle(fig)) for config in toggle_configs if length(config) == 2 || config[3] in labels]
-
-        # Create grid layout
-        grid = [[toggle[3], Label(fig, toggle[1], fontsize = 22, halign = :left), toggle[2]] for toggle in toggles]
-
-        return permutedims(reduce(hcat, grid))  # Return as a proper matrix
-
     end
+    display(GLMakie.Screen(), menu_fig)
+end
 
-    # 3. Setup figure and axis
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (mV)")
 
-    # 4. Setup initial axis limits
-    @lift xlims!(ax, $(state.data_obs).time[$(state.xrange)[1]], $(state.data_obs).time[$(state.xrange)[end]])
-    @lift ylims!(ax, $(state.yrange)[1], $(state.yrange)[end])
 
-    # Controls
-    # interactions(ax)
-    deregister_interaction!(ax, :rectanglezoom)
 
-    selection_active = Observable(false)
-    selection_bounds = Observable((0.0, 0.0))  # (start, end)
-    selection_visible = Observable(false)
-    selection = poly!(ax, Point2f[], color = (:blue, 0.3))
+function handle_mouse_events!(ax, state)
 
-    # Function to clear selection
-    function clear_selection()
-        selection[1] = Point2f[]
-        selection_bounds[] = (0.0, 0.0)
-        selection_visible[] = false
-    end
-
-    # Function to update selection rectangle
-    function update_selection_rectangle(x1, x2)
-        ylims = ax.limits[][2]
-        selection[1] = Point2f[
-            Point2f(Float64(x1), Float64(ylims[1])),
-            Point2f(Float64(x2), Float64(ylims[1])),
-            Point2f(Float64(x2), Float64(ylims[2])),
-            Point2f(Float64(x1), Float64(ylims[2])),
-        ]
-    end
-
-    # Modify mouse event handler
     on(events(ax).mousebutton) do event
         # Check if mouse is within axis bounds
         pos = events(ax).mouseposition[]
@@ -626,25 +641,25 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
 
             if event.button == Mouse.left
                 if event.action == Mouse.press
-                    if selection_visible[] &&
-                       mouse_x >= min(selection_bounds[][1], selection_bounds[][2]) &&
-                       mouse_x <= max(selection_bounds[][1], selection_bounds[][2])
-                        clear_selection()
+                    if state.selection.visible[] &&
+                       mouse_x >= min(state.selection.bounds[][1], state.selection.bounds[][2]) &&
+                       mouse_x <= max(state.selection.bounds[][1], state.selection.bounds[][2])
+                        clear_selection!(state)
                     else
-                        selection_active[] = true
-                        selection_bounds[] = (mouse_x, mouse_x)
-                        update_selection_rectangle(mouse_x, mouse_x)
+                        state.selection.active[] = true
+                        state.selection.bounds[] = (mouse_x, mouse_x)
+                        update_selection_rectangle!(ax, state, mouse_x, mouse_x)
                     end
-                elseif event.action == Mouse.release && selection_active[]
-                    selection_active[] = false
-                    selection_visible[] = true
-                    selection_bounds[] = (selection_bounds[][1], mouse_x)
-                    update_selection_rectangle(selection_bounds[][1], mouse_x)
+                elseif event.action == Mouse.release && state.selection.active[]
+                    state.selection.active[] = false
+                    state.selection.visible[] = true
+                    state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
+                    update_selection_rectangle!(ax, state, state.selection.bounds[][1], mouse_x)
                 end
             elseif event.button == Mouse.right && event.action == Mouse.press
-                if selection_visible[] &&
-                   mouse_x >= min(selection_bounds[][1], selection_bounds[][2]) &&
-                   mouse_x <= max(selection_bounds[][1], selection_bounds[][2])
+                if state.selection.visible[] &&
+                   mouse_x >= min(state.selection.bounds[][1], state.selection.bounds[][2]) &&
+                   mouse_x <= max(state.selection.bounds[][1], state.selection.bounds[][2])
                     show_menu()
                 end
             end
@@ -652,43 +667,116 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     end
 
     # Update selection rectangle while dragging
-    on(events(ax).mouseposition) do pos
-        if selection_active[]
+    on(events(ax).mouseposition) do _
+        if state.selection.active[]
             world_pos = mouseposition(ax)[1]
-            update_selection_rectangle(selection_bounds[][1], world_pos)
+            update_selection_rectangle!(ax, state, state.selection.bounds[][1], world_pos)
         end
     end
 
-    # Function to get data in selected region
-    function get_selected_data()
-        x_min, x_max = minmax(selection_bounds[]...)
-        time_mask = (x_min .<= state.data_obs[].time .<= x_max)
-        selected_data = state.data_obs[][time_mask, :]
-        println(
-            "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))",
-        )
-        return selected_data
-    end
+end
 
-    # Function to create menu window with different plot options for the selected data 
-    function show_menu()
-        menu_fig = Figure()
-        menu_buttons = [
-            Button(menu_fig[idx, 1], label = plot_type) for
-            (idx, plot_type) in enumerate(["Topoplot", "Topoplot", "Topoplot"])
-        ]
-        for btn in menu_buttons
-            on(btn.clicks) do n
-                selected_data = get_selected_data()
-                if btn.label[] == "Topoplot"
-                    plot_topoplot(selected_data, dat.layout)
+# keyboard events
+function handle_keyboard_events!(fig, ax, state)
+
+    on(events(fig).keyboardbutton) do event
+        if event.action in (Keyboard.press, Keyboard.repeat)
+            if state.selection.visible[]
+                # Move selection region
+                if event.key == Keyboard.left
+                    width = state.selection.bounds[][2] - state.selection.bounds[][1]
+                    new_start = max(state.data_obs[].time[1], state.selection.bounds[][1] - width / 5)
+                    state.selection.bounds[] = (new_start, new_start + width)
+                    update_selection_rectangle!(ax, state, state.selection.bounds[][1], state.selection.bounds[][2])
+                elseif event.key == Keyboard.right
+                    width = state.selection.bounds[][2] - state.selection.bounds[][1]
+                    new_start = min(state.data_obs[].time[end] - width, state.selection.bounds[][1] + width / 5)
+                    state.selection.bounds[] = (new_start, new_start + width)
+                    update_selection_rectangle!(ax, state, state.selection.bounds[][1], state.selection.bounds[][2])
                 end
+            else
+                event.key == Keyboard.left && xback!(ax, state)
+                event.key == Keyboard.right && xforward!(ax, state)
             end
+            event.key == Keyboard.down && yless!(ax, state)
+            event.key == Keyboard.up && ymore!(ax, state)
         end
-        display(GLMakie.Screen(), menu_fig)
     end
+
+end
+
+# Do the actuall drawing
+function draw(ax, state; plot_labels = true)
+    for (idx, col) in enumerate(state.channel_labels)
+        state.channel_data_original[col] = lines!(
+            ax,
+            @lift($(state.data_obs).time),
+            @lift($(state.data_obs)[!, $col] .+ $(state.offset)[idx]),
+            color = @lift(abs.($(state.data_obs)[!, col]) .>= $(state.crit_val)),
+            colormap = [:darkgrey, :darkgrey, :red],
+            linewidth = 2,
+        )
+        if plot_labels
+            state.channel_data_labels[col] = text!(
+                ax,
+                @lift($(state.data_obs)[$(state.xrange), :time][1]),
+                @lift($(state.data_obs)[$(state.xrange), $col][1] .+ $(state.offset)[idx]),
+                text = String(col),
+                align = (:left, :center),
+                fontsize = 18,
+            )
+        end
+    end
+end
+
+
+
+
+function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
+
+    # Setup figure and axis first
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (mV)")
+
+    state = DataBrowserState(
+        Observable(1:5000),           # xrange
+        Observable(-1500:1500),       # yrange
+        FilterState(                  # New filter state struct
+            Observable((hp = false, lp = false)),
+            Observable(0.1),          # hp_freq
+            Observable(40.0)          # lp_freq
+        ),
+        Observable(
+            length(channel_labels) > 1 ? LinRange((1500 * 0.9), -1500 * 0.9, length(channel_labels) + 2)[2:end-1] :
+            zeros(length(channel_labels)),
+        ),  # offset
+        Observable(1000.0),
+        channel_labels,
+        copy(channel_labels),
+        Dict{Symbol,Makie.Text}(),
+        Dict{Symbol,Makie.Lines}(),
+        Observable(copy(dat.data)),
+        dat,
+        SelectionState(
+            Observable(false),
+            Observable((0.0, 0.0)),
+            Observable(false),
+            poly!(ax, Point2f[], color = (:blue, 0.3))
+        ),
+    )
+    # 4. Setup initial axis limits
+    setup_axis_limits!(ax, state)
+
+    # Controls
+    deregister_interaction!(ax, :rectanglezoom) # interactions(ax)
+
+    # Mouse events
+    handle_mouse_events!(ax, state)
+
+
 
     # toggle buttons for showing events (triggers, vEOG/hEOG, extreme values ...)
+    # TODO: I do not like the way this is implemented.
     toggles = toggle_button_group(fig, names(state.data_obs[]))
     for t = 1:length(toggles[:, 1])
         if toggles[t, 2].text.val ∈ ["Trigger", "vEOG", "hEOG"]
@@ -701,7 +789,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
             end
         else
             on(toggles[t, 1].active) do _
-                toggles[t, 3](toggles[t, 1].active.val)
+                # toggles[t, 3](toggles[t, 1].active.val, state)
+                toggles[t, 3](state)
             end
         end
     end
@@ -728,6 +817,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         ),
         Label(fig, "Labels", fontsize = 22, halign = :left),
     )
+
     on(labels_menu[1].selection) do s
         state.channel_labels = Symbol.([s])
         if s == "All"
@@ -744,18 +834,17 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
             state.channel_labels =
                 state.channel_labels_original[findall(occursin.(r"z$", String.(state.channel_labels_original)))]
         end
-        nchannels = length(state.channel_labels)
 
         clear_axes(ax, [state.channel_data_original, state.channel_data_labels])
 
-        if nchannels > 1
+        if length(state.channel_labels) > 1
             state.offset =
-                Observable((LinRange((state.yrange.val[end] * 0.9), state.yrange.val[1] * 0.9, nchannels + 2)[2:end-1]))
+                Observable((LinRange((state.yrange.val[end] * 0.9), state.yrange.val[1] * 0.9, length(state.channel_labels) + 2)[2:end-1]))
         else # just centre
             state.offset = Observable(zeros(length(state.channel_labels)))
         end
 
-        draw(plot_labels = true)
+        draw(ax, state; plot_labels = true)
 
     end
 
@@ -775,7 +864,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         if s == :none
             return
         end
-        rereference!(state.data_obs[], channels(state.data_original), resolve_reference(state.data_original.data, s))
+        rereference!(state.data_obs[], channels(state.data_original), resolve_reference(state.data_original, s))
         notify(state.data_obs)
     end
 
@@ -808,7 +897,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
             end
 
             notify(state.data_obs)
-            draw(plot_labels = true)
+            draw(ax, state; plot_labels = true)
         end
     end
 
@@ -830,7 +919,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         state.crit_val[] = x
     end
 
-    slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = xlimit, snap = true)
+    slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = state.xrange[][end], snap = true)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data_obs[]), startvalue = 1, snap = true)
 
     on(slider_x.value) do x
@@ -847,30 +936,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         end
     end
 
-    # keyboard events
-    on(events(fig).keyboardbutton) do event
-        if event.action in (Keyboard.press, Keyboard.repeat)
-            if selection_visible[]
-                # Move selection region
-                if event.key == Keyboard.left
-                    width = selection_bounds[][2] - selection_bounds[][1]
-                    new_start = max(state.data_obs[].time[1], selection_bounds[][1] - width / 5)
-                    selection_bounds[] = (new_start, new_start + width)
-                    update_selection_rectangle(selection_bounds[][1], selection_bounds[][2])
-                elseif event.key == Keyboard.right
-                    width = selection_bounds[][2] - selection_bounds[][1]
-                    new_start = min(state.data_obs[].time[end] - width, selection_bounds[][1] + width / 5)
-                    selection_bounds[] = (new_start, new_start + width)
-                    update_selection_rectangle(selection_bounds[][1], selection_bounds[][2])
-                end
-            else
-                event.key == Keyboard.left && xback!(ax, state)
-                event.key == Keyboard.right && xforward!(ax, state)
-            end
-            event.key == Keyboard.down && yless!(ax, state)
-            event.key == Keyboard.up && ymore!(ax, state)
-        end
-    end
+
+    handle_keyboard_events!(fig, ax, state)
 
     # Menu for plotting potential extra channels
     # For Boolean channels, the extra channel is a vertical span
@@ -993,37 +1060,12 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     fig[1, 2] = grid!(vcat(grid_components...), tellheight = false)
     colsize!(fig.layout, 2, Relative(1 / 6))
 
-
-    # Do the actuall drawing
-    function draw(; plot_labels = true)
-        for (idx, col) in enumerate(state.channel_labels)
-            state.channel_data_original[col] = lines!(
-                ax,
-                @lift($(state.data_obs).time),  # Use data_obs
-                @lift($(state.data_obs)[!, $col] .+ $(state.offset)[idx]),  # Use data_obs
-                color = @lift(abs.($(state.data_obs)[!, col]) .>= $(state.crit_val)),  # Use data_obs
-                colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
-            )
-            if plot_labels
-                state.channel_data_labels[col] = text!(
-                    ax,
-                    @lift($(state.data_obs)[$(state.xrange), :time][1]),  # Use data_obs
-                    @lift($(state.data_obs)[$(state.xrange), $col][1] .+ $(state.offset)[idx]),  # Use data_obs
-                    text = String(col),
-                    align = (:left, :center),
-                    fontsize = 18,
-                )
-            end
-        end
-    end
-
     # plot theme adjustments
     fontsize_theme = Theme(fontsize = 24)
     update_theme!(fontsize_theme)
 
     hideydecorations!(ax, label = true)
-    draw(plot_labels = true)
+    draw(ax, state; plot_labels = true)
     display(fig)
     # DataInspector(fig)
 

@@ -28,6 +28,13 @@ include("topo.jl")
 include("utils.jl")
 include("viewer.jl")
 
+
+layout = read_layout("./layouts/biosemi72.csv");
+subject = 3
+dat = read_bdf("../Flank_C_$(subject).bdf");
+dat = create_eeg_dataframe(dat, layout);
+plot_databrowser(dat)
+
 # include("test/runtests.jl")
 # test_baseline()
 # test_filter()
