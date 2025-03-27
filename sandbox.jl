@@ -22,7 +22,7 @@ include("epochs.jl")
 include("filter.jl")
 include("layout.jl")
 include("ica.jl")
-# include("plot.jl")
+include("plot.jl")
 include("plot_databrowser.jl")
 include("rereference.jl")
 include("topo.jl")
@@ -34,7 +34,27 @@ layout = read_layout("./layouts/biosemi72.csv");
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 dat = create_eeg_dataframe(dat, layout);
-plot_databrowser(dat)
+filter_data!(dat, "hp", "iir", 1, order=1)
+rereference!(dat, :avg)
+diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
+diff_channel!(dat, :F9, :F10, :hEOG);
+# autodetect EOG signals
+detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+is_extreme_value!(dat, dat.layout.label, 500);
+# plot_databrowser(dat)
+# extract epochs
+
+epochs = []
+for (idx, epoch) in enumerate([1, 4, 5, 3])
+     push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
+end
+
+plot_databrowser(epochs[1])
+
+
+# plot_databrowser(dat)
+# plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 
 # include("test/runtests.jl")
 # test_baseline()
@@ -150,7 +170,7 @@ plot_databrowser(dat, :Fp1)
 plot_databrowser(dat, [:Fp1, :Fp2])
 plot_databrowser(dat, dat.layout.label[1:3])
 plot_databrowser(dat, dat.layout.label[[1,3,5]])
- plot_databrowser(dat, ica_result)
+plot_databrowser(dat, ica_result)
 
 
 # extract epochs
@@ -158,7 +178,6 @@ epochs = EpochData[]
 for (idx, epoch) in enumerate([1, 4, 5, 3])
      push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
 end
-
 plot_databrowser(epochs[1])
 
 # average epochs
