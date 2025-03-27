@@ -48,7 +48,6 @@ mutable struct DataBrowserState
 
     # Channel information
     channel_labels::Vector{Symbol}  # Current channel labels
-    channel_labels_original::Vector{Symbol}  # Original channel labels
 
     # Plot elements
     channel_data_labels::Dict{Symbol,Makie.Text}
@@ -64,6 +63,8 @@ mutable struct DataBrowserState
     markers::Vector{Marker}
     ica_state::Union{Nothing,IcaState}
     extra_channel_vis::Union{Nothing,ExtraChannelVis}
+
+    channel_visible::Vector{Bool}  # Boolean mask for which channels to show
 end
 
 function clear_axes!(ax, datas)
@@ -156,11 +157,8 @@ function butterfly_plot!(active::Bool, state::DataBrowserState)
 end
 
 function update_channel_offsets!(state)
-    if length(state.channel_labels) > 1
-        state.offset = LinRange((state.yrange.val[end] * 0.9), state.yrange.val[1] * 0.9, length(state.channel_labels))
-    else
-        state.offset = zeros(length(state.channel_labels))
-    end
+    n_visible = count(state.channel_visible)  # Count number of true values
+    state.offset[state.channel_visible] = calculate_channel_offsets(n_visible, state.yrange[])
 end
 
 function apply_filters!(state::DataBrowserState)
@@ -259,6 +257,14 @@ function get_x_region_data(state)
     return selected_data
 end
 
+function calculate_channel_offsets(nchannels::Int, yrange::UnitRange{Int64})
+    if nchannels > 1
+        return LinRange((yrange[end] * 0.9), yrange[1] * 0.9, nchannels + 2)[2:end-1]
+    else
+        return zeros(nchannels)
+    end
+end
+
 function create_toggles(fig, ax, state)
 
     configs = [
@@ -298,10 +304,12 @@ function create_toggles(fig, ax, state)
 
     # Return as grid layout
     return permutedims(reduce(hcat, [[t[2], Label(fig, t[1], fontsize = 22, halign = :left)] for t in toggles]))
+
 end
 
 
 function show_menu()
+
     menu_fig = Figure()
     menu_buttons = [
         Button(menu_fig[idx, 1], label = plot_type) for
@@ -315,7 +323,9 @@ function show_menu()
             end
         end
     end
+
     display(GLMakie.Screen(), menu_fig)
+
 end
 
 function handle_mouse_events!(ax, state)
@@ -401,7 +411,7 @@ function create_labels_menu(fig, ax, state)
 
     menu = Menu(
         fig,
-        options = vcat(["All", "Left", "Right", "Central"], state.channel_labels_original),
+        options = vcat(["All", "Left", "Right", "Central"], state.channel_labels),
         default = "All",
         direction = :down,
         fontsize = 18,
@@ -409,16 +419,16 @@ function create_labels_menu(fig, ax, state)
     )
 
     on(menu.selection) do s
-        state.channel_labels = if s == "All"
-            state.channel_labels_original
+        if s == "All"
+            state.channel_visible .= true
         elseif s == "Left"
-            filter(l -> occursin(r"\d*[13579]$", String(l)), state.channel_labels_original)
+            state.channel_visible .= occursin.(r"\d*[13579]$", String.(state.channel_labels))
         elseif s == "Right"
-            filter(l -> occursin(r"\d*[24680]$", String(l)), state.channel_labels_original)
+            state.channel_visible .= occursin.(r"\d*[24680]$", String.(state.channel_labels))
         elseif s == "Central"
-            filter(l -> occursin(r"z$", String(l)), state.channel_labels_original)
+            state.channel_visible .= occursin.(r"z$", String.(state.channel_labels))
         else
-            Symbol.([s])
+            state.channel_visible .= (state.channel_labels .== Symbol(s))
         end
 
         clear_axes!(ax, [state.channel_data_original, state.channel_data_labels])
@@ -435,7 +445,7 @@ function create_reference_menu(fig, state, dat)
 
     menu = Menu(
         fig,
-        options = vcat([:none, :avg, :mastoid], state.channel_labels_original),
+        options = vcat([:none, :avg, :mastoid], state.channel_labels),
         default = String(dat.analysis_info.reference),
         direction = :down,
         fontsize = 18,
@@ -487,9 +497,11 @@ function create_ica_menu(fig, ax, state, ica)
     end
 
     return hcat(menu, Label(fig, "ICA Components", fontsize = 22, halign = :left))
+
 end
 
 function create_sliders(fig, state, dat)
+
     sliders = []
 
     # Extreme value slider
@@ -534,11 +546,13 @@ function create_sliders(fig, state, dat)
     end
 
     return sliders
+
 end
 
 
 
 function create_extra_channel_menu(fig, ax, state, dat)
+
     menu = Menu(
         fig,
         options = [:none; extra_channels(dat)],
@@ -636,29 +650,32 @@ end
 
 # Do the actuall drawing
 function draw(ax, state; plot_labels = true)
-    for (idx, col) in enumerate(state.channel_labels)
-        state.channel_data_original[col] = lines!(
-            ax,
-            @lift($(state.data_obs).time),
-            @lift($(state.data_obs)[!, $col] .+ state.offset[idx]),
-            color = @lift(abs.($(state.data_obs)[!, col]) .>= $(state.crit_val)),
-            colormap = [:darkgrey, :darkgrey, :red],
-            linewidth = 2,
-        )
-        if plot_labels
-            state.channel_data_labels[col] = text!(
+    for (idx, col) in enumerate(state.channel_visible)
+        if state.channel_visible[idx]  # Only plot if channel is visible
+            col = state.channel_labels[idx]
+            state.channel_data_original[col] = lines!(
                 ax,
-                @lift($(state.data_obs)[$(state.xrange), :time][1]),
-                @lift($(state.data_obs)[$(state.xrange), $col][1] .+ state.offset[idx]),
-                text = String(col),
-                align = (:left, :center),
-                fontsize = 18,
+                @lift($(state.data_obs).time),
+                @lift($(state.data_obs)[!, $col] .+ state.offset[idx]),
+                color = @lift(abs.($(state.data_obs)[!, col]) .>= $(state.crit_val)),
+                colormap = [:darkgrey, :darkgrey, :red],
+                linewidth = 2,
             )
+            if plot_labels
+                state.channel_data_labels[col] = text!(
+                    ax,
+                    @lift($(state.data_obs)[$(state.xrange), :time][1]),
+                    @lift($(state.data_obs)[$(state.xrange), $col][1] .+ state.offset[idx]),
+                    text = String(col),
+                    align = (:left, :center),
+                    fontsize = 18,
+                )
+            end
         end
     end
 end
 
-function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
+function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca, Nothing} = nothing)
 
     # Setup figure and axis first
     fig = Figure()
@@ -673,10 +690,9 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
             Observable(40.0),          # lp_freq
         ),
         length(channel_labels) > 1 ? LinRange((1500 * 0.9), -1500 * 0.9, length(channel_labels) + 2)[2:end-1] :
-        zeros(length(channel_labels)),  # offset
+        Observable(zeros(length(channel_labels))),  # offset
         Observable(0.0),
         channel_labels,
-        copy(channel_labels),
         Dict{Symbol,Makie.Text}(),
         Dict{Symbol,Makie.Lines}(),
         Observable(copy(dat.data)),
@@ -690,6 +706,7 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         Vector{Marker}(),  # Initialize empty markers vecto
         !isnothing(ica) ? IcaState(nothing, nothing, nothing) : nothing,
         nothing,
+        fill(true, length(channel_labels)),  # Initially show all channels
     )
 
     set_axes!(ax, state)
