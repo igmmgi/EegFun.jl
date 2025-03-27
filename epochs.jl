@@ -55,7 +55,7 @@ function extract_epochs(dat::ContinuousData, condition, trigger_sequence, start_
         push!(epochs, epoch_df)
     end
 
-    return EpochData(epochs, dat.layout, dat.sample_rate)
+    return EpochData(epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 
 end
 

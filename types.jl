@@ -13,13 +13,10 @@ Basic information about data preprocessing.
 - `hp_filter::Float64`: High-pass filter cutoff in Hz (0.0 if none)
 - `lp_filter::Float64`: Low-pass filter cutoff in Hz (0.0 if none)
 """
-mutable struct AnalysisInfo
-    reference::Symbol
-    hp_filter::Float64
-    lp_filter::Float64
-
-    # Constructor with defaults
-    AnalysisInfo(; reference=:none, hp_filter=0.0, lp_filter=0.0) = new(reference, hp_filter, lp_filter)
+@kwdef mutable struct AnalysisInfo
+    reference::Symbol = :none
+    hp_filter::Float64 = 0.0
+    lp_filter::Float64 = 0.0
 end
 
 # Concrete types with basic fields
