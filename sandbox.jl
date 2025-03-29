@@ -42,14 +42,13 @@ diff_channel!(dat, :F9, :F10, :hEOG);
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 is_extreme_value!(dat, dat.layout.label, 500);
-# plot_databrowser(dat)
+plot_databrowser(dat)
 # extract epochs
 
 epochs = []
 for (idx, epoch) in enumerate([1, 4, 5, 3])
      push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
 end
-
 plot_databrowser(epochs[1])
 
 
