@@ -183,8 +183,10 @@ function handle_navigation!(ax, state::ContinuousDataBrowserState, action::Symbo
         xback!(ax, state)
     elseif action == :right
         xforward!(ax, state)
-    else
-        handle_navigation!(ax, state, action)
+    elseif action == :up
+        ymore!(ax, state)
+    elseif action == :down
+        yless!(ax, state)
     end
 end
 
@@ -193,8 +195,10 @@ function handle_navigation!(ax, state::EpochedDataBrowserState, action::Symbol)
         step_epoch_backward(ax, state)
     elseif action == :right
         step_epoch_forward(ax, state)
-    else
-        handle_navigation!(ax, state, action)
+    elseif action == :up
+        ymore!(ax, state)
+    elseif action == :down
+        yless!(ax, state)
     end
 end
 
@@ -358,12 +362,12 @@ end
 
 function yless!(ax, state)
     (state.view.yrange.val[1] + 100 >= 0 || state.view.yrange.val[end] - 100 <= 0) && return
-    state.view.yrange.val = state.view.yrange.val[1]+100:state.view.yrange.val[end]-100
+    state.view.yrange[] = state.view.yrange.val[1]+100:state.view.yrange.val[end]-100
     ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
 end
 
 function ymore!(ax, state)
-    state.view.yrange.val = state.view.yrange.val[1]-100:state.view.yrange.val[end]+100
+    state.view.yrange[] = state.view.yrange.val[1]-100:state.view.yrange.val[end]+100
     ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
 end
 
@@ -650,8 +654,9 @@ function handle_selection_movement!(ax, state, action::Symbol)
 end
 
 function create_menu(fig, options, default, label; kwargs...)
-    menu = Menu(fig, options = options, default = default, direction = :down, fontsize = 18, width = 200, kwargs...)
-    return hcat(menu, Label(fig, label, fontsize = 22, halign = :left))
+    menu = Menu(fig, options = options, default = default, direction = :down, 
+               fontsize = 18, width = Auto(), tellwidth = false, kwargs...)
+    return hcat(menu, Label(fig, label, fontsize = 22, halign = :left, tellwidth = false))
 end
 
 function create_labels_menu(fig, ax, state)
@@ -888,9 +893,15 @@ function build_grid_components!(
     !isnothing(extra_menu) && push!(grid_components, extra_menu)
     !isnothing(epoch_menu) && push!(grid_components, epoch_menu)
 
-    fig[1, 2] = grid!(vcat(grid_components...), tellheight = false)
-    colsize!(fig.layout, 2, Relative(1 / 6))
-
+    # Use a Grid with auto-sizing for better responsiveness
+    control_panel = grid!(vcat(grid_components...), tellheight = false)
+    
+    # Make control panel responsive with automatic sizing
+    fig[1, 2] = control_panel
+    
+    # Use relative sizing for the control panel column
+    colsize!(fig.layout, 2, Relative(0.25))
+    rowsize!(fig.layout, 1, Relative(1.0))
 end
 
 # Do the actual drawing
@@ -1050,7 +1061,7 @@ end
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
 
     # Setup figure and axis first
-    fig = Figure()
+    fig = Figure(size = (1200, 800), fontsize = 18)
     ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (mV)")
 
     state = ContinuousDataBrowserState(
@@ -1086,8 +1097,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
     # GUI Control Panel
     build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu)
 
-    # plot theme adjustments
-    update_theme!(Theme(fontsize = 24))
+    # Apply responsive theme
+    update_theme!(Theme(fontsize = 18))
 
     hideydecorations!(ax, label = true)
     draw(ax, state)
@@ -1105,7 +1116,7 @@ plot_databrowser(dat::EegData, channel_label::Symbol, ica::InfoIca) = plot_datab
 function plot_databrowser(dat::EpochData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
 
     # Setup figure and axis first
-    fig = Figure()
+    fig = Figure(size = (1200, 800), fontsize = 18)
     ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (mV)", title = "Epoch 1/$(n_epochs(dat))")
 
     state = EpochedDataBrowserState(
@@ -1142,8 +1153,8 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{Symbol}, ica::U
     # GUI Control Panel
     build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
-    # plot theme adjustments
-    update_theme!(Theme(fontsize = 24))
+    # Apply responsive theme 
+    update_theme!(Theme(fontsize = 18))
 
     hideydecorations!(ax, label = true)
     draw(ax, state)
