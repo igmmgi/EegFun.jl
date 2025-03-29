@@ -2,39 +2,41 @@ using GLMakie
 
 ##################################################################
 # Data Browser: Continuous Data
-struct Marker
+mutable struct Marker
     data::Any
     line::Any
     text::Any
+    name::Symbol
+    visible::Bool
 end
 
-@kwdef mutable struct IcaState
-    removed_activations::Union{Nothing,Any} = nothing
-    components_to_remove::Union{Nothing,Int} = nothing
-    components_removed::Union{Nothing,Int} = nothing
+mutable struct IcaState
+    removed_activations::Union{Nothing,Any}
+    components_to_remove::Union{Nothing,Int}
+    components_removed::Union{Nothing,Int}
+    IcaState() = new(nothing, nothing, nothing)
 end
 
 mutable struct ExtraChannelVis
-    channel::Union{Nothing,Makie.Lines,Makie.PolyElement}
+    visualization::Union{Nothing,Makie.Lines,Makie.PolyElement,Makie.Plot}
     label::Union{Nothing,Makie.Text}
 end
 
-@kwdef mutable struct SelectionState
-    active::Observable{Bool} = Observable(false)
-    bounds::Observable{Tuple{Float64,Float64}} = Observable((0.0, 0.0))
-    visible::Observable{Bool} = Observable(false)
-    rectangle::Any  # Makie.Poly - needs ax to initialize
-
-    function SelectionState(ax; kwargs...)
+mutable struct SelectionState
+    active::Observable{Bool}
+    bounds::Observable{Tuple{Float64,Float64}}
+    visible::Observable{Bool}
+    rectangle::Makie.Poly
+    function SelectionState(ax)
         new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly!(ax, Point2f[], color = (:blue, 0.3)))
     end
-
 end
 
-@kwdef mutable struct FilterState
-    active::Observable{NamedTuple{(:hp, :lp),Tuple{Bool,Bool}}} = Observable((hp = false, lp = false))
-    hp_freq::Observable{Float64} = Observable(0.1)
-    lp_freq::Observable{Float64} = Observable(40.0)
+mutable struct FilterState
+    active::Observable{NamedTuple{(:hp, :lp),Tuple{Bool,Bool}}}
+    hp_freq::Observable{Float64}
+    lp_freq::Observable{Float64}
+    FilterState() = new(Observable((hp = false, lp = false)), Observable(0.1), Observable(40.0))
 end
 
 struct ToggleConfig
@@ -42,148 +44,105 @@ struct ToggleConfig
     action::Function
 end
 
-@kwdef mutable struct ViewState
-    xrange::Observable{UnitRange{Int64}} = Observable(1:5000)
-    yrange::Observable{UnitRange{Int64}} = Observable(-1500:1500)
+mutable struct ViewState
+    xrange::Observable{UnitRange{Int64}}
+    yrange::Observable{UnitRange{Int64}}
     offset::Vector{Float64}
-    crit_val::Observable{Float64} = Observable(0.0)
-    butterfly::Observable{Bool} = Observable(false)
-
-    function ViewState(n_channels::Int; kwargs...)
+    crit_val::Observable{Float64}
+    butterfly::Observable{Bool}
+    function ViewState(n_channels::Int)
         offset = n_channels > 1 ? LinRange(1500 * 0.9, -1500 * 0.9, n_channels + 2)[2:end-1] : zeros(n_channels)
         new(Observable(1:5000), Observable(-1500:1500), offset, Observable(0.0), Observable(false))
     end
-
 end
 
-@kwdef mutable struct ChannelState
-
+mutable struct ChannelState
     labels::Vector{Symbol}
     visible::Vector{Bool}
-    data_labels::Dict{Symbol,Makie.Text} = Dict{Symbol,Makie.Text}()
-    data_lines::Dict{Symbol,Makie.Lines} = Dict{Symbol,Makie.Lines}()
-
-    function ChannelState(channel_labels::Vector{Symbol}; kwargs...)
+    data_labels::Dict{Symbol,Makie.Text}
+    data_lines::Dict{Symbol,Makie.Lines}
+    function ChannelState(channel_labels::Vector{Symbol})
         new(channel_labels, fill(true, length(channel_labels)), Dict{Symbol,Makie.Text}(), Dict{Symbol,Makie.Lines}())
     end
-
 end
 
-@kwdef mutable struct ContinuousDataState
+mutable struct ContinuousDataState
     current::Observable{DataFrame}
     original::EegData
-    filter_state::FilterState = FilterState()
-
-    function ContinuousDataState(data::EegData; kwargs...)
+    filter_state::FilterState
+    function ContinuousDataState(data::EegData)
         new(Observable(copy(data.data)), data, FilterState())
     end
 end
 
-@kwdef mutable struct EpochedDataState
+mutable struct EpochedDataState
     current::Vector{Observable{DataFrame}}
     original::EegData
-    filter_state::FilterState = FilterState()
-    current_epoch::Observable{Int} = Observable(1)
-
-    function EpochedDataState(data::EegData; kwargs...)
+    filter_state::FilterState
+    current_epoch::Observable{Int}
+    function EpochedDataState(data::EegData)
         new([Observable(copy(df)) for df in data.data], data, FilterState(), Observable(1))
     end
 end
 
-@kwdef mutable struct ContinuousDataBrowserState
+mutable struct ExtraChannelInfo
+    channel::Union{Nothing,Symbol}
+    visible::Bool
+    data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Makie.Plot}}
+    data_labels::Dict{Symbol,Makie.Text}
+    ExtraChannelInfo() =
+        new(nothing, false, Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Makie.Plot}}(), Dict{Symbol,Makie.Text}())
+end
+
+mutable struct ContinuousDataBrowserState
     view::ViewState
     channels::ChannelState
     data::ContinuousDataState
     selection::SelectionState
-    markers::Vector{Marker} = Vector{Marker}()
-    ica_state::Union{Nothing,IcaState} = nothing
-    extra_channel_vis::Union{Nothing,ExtraChannelVis} = nothing
+    markers::Vector{Marker}
+    ica_state::Union{Nothing,IcaState}
+    extra_channel::ExtraChannelInfo
+    function ContinuousDataBrowserState(;
+        view::ViewState,
+        channels::ChannelState,
+        data::ContinuousDataState,
+        selection::SelectionState,
+        ica_state::Union{Nothing,IcaState} = nothing,
+        extra_channel::ExtraChannelInfo = ExtraChannelInfo(),
+    )
+        new(view, channels, data, selection, Vector{Marker}(), ica_state, extra_channel)
+    end
 end
 
-@kwdef mutable struct EpochedDataBrowserState
+mutable struct EpochedDataBrowserState
     view::ViewState
     channels::ChannelState
     data::EpochedDataState
     selection::SelectionState
-    markers::Vector{Marker} = Vector{Marker}()
-    ica_state::Union{Nothing,IcaState} = nothing
-    extra_channel_vis::Union{Nothing,ExtraChannelVis} = nothing
-end
-
-# Helper functions for data access
-function get_current_data(state::ContinuousDataState)
-    state.current[]
-end
-
-function get_current_data(state::EpochedDataState)
-    state.current[state.current_epoch[]][]
-end
-
-function get_time_data(state::ContinuousDataState)
-    state.current[].time
-end
-
-function get_time_data(state::EpochedDataState)
-    state.current[state.current_epoch[]][].time
-end
-
-function get_n_samples(state::ContinuousDataState)
-    nrow(state.current[])
-end
-
-function get_n_samples(state::EpochedDataState)
-    nrow(state.current[state.current_epoch[]][])
-end
-
-function get_channel_data(state::ContinuousDataState, col)
-    state.current[][!, col]
-end
-
-function get_channel_data(state::EpochedDataState, col)
-    state.current[state.current_epoch[]][][!, col]
-end
-
-# Common drawing function that works for both types
-function draw_common(ax, state, get_data_func)
-    for (idx, col) in enumerate(state.channels.visible)
-        if state.channels.visible[idx]
-            col = state.channels.labels[idx]
-            data = get_data_func(state)
-            
-            state.channels.data_lines[col] = lines!(
-                ax,
-                @lift($(data).time),
-                @lift($(data)[!, $col] .+ state.view.offset[idx]),
-                color = @lift(abs.($(data)[!, $col]) .>= $(state.view.crit_val)),
-                colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
-            )
-            
-            if !state.view.butterfly[]
-                state.channels.data_labels[col] = text!(
-                    ax,
-                    @lift($(data).time[1]),
-                    @lift($(data)[!, $col][1] .+ state.view.offset[idx]),
-                    text = String(col),
-                    align = (:left, :center),
-                    fontsize = 18,
-                )
-            end
-        end
+    markers::Vector{Marker}
+    ica_state::Union{Nothing,IcaState}
+    extra_channel::ExtraChannelInfo
+    function EpochedDataBrowserState(;
+        view::ViewState,
+        channels::ChannelState,
+        data::EpochedDataState,
+        selection::SelectionState,
+        ica_state::Union{Nothing,IcaState} = nothing,
+        extra_channel::ExtraChannelInfo = ExtraChannelInfo(),
+    )
+        new(view, channels, data, selection, Vector{Marker}(), ica_state, extra_channel)
     end
 end
 
-# Type-specific draw functions that use the common functionality
-function draw(ax, state::ContinuousDataBrowserState)
-    draw_common(ax, state, get_current_data)
-end
-
-function draw(ax, state::EpochedDataBrowserState)
-    current_data = get_current_data(state.data)
-    n_samples = nrow(current_data)
-    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
-    draw_common(ax, state, get_current_data)
-end
+# Helper functions for common data access
+get_current_data(state::ContinuousDataState) = state.current[]
+get_current_data(state::EpochedDataState) = state.current[state.current_epoch[]][]
+get_time_data(state::ContinuousDataState) = state.current[].time
+get_time_data(state::EpochedDataState) = state.current[state.current_epoch[]][].time
+get_n_samples(state::ContinuousDataState) = nrow(state.current[])
+get_n_samples(state::EpochedDataState) = nrow(state.current[state.current_epoch[]][])
+get_channel_data(state::ContinuousDataState, col) = state.current[][!, col]
+get_channel_data(state::EpochedDataState, col) = state.current[state.current_epoch[]][][!, col]
 
 # Common navigation functions
 function handle_navigation!(ax, state, action::Symbol)
@@ -214,11 +173,9 @@ function handle_navigation!(ax, state::EpochedDataBrowserState, action::Symbol)
     end
 end
 
-# Common filter application
-function apply_filter!(state, filter_type, freq)
-    data = get_current_data(state.data)
-    filtered_data = filter_data(
-        data,
+function apply_filter!(state::ContinuousDataBrowserState, filter_type, freq)
+    state.data.current[] = filter_data(
+        state.data.current[],
         state.channels.labels,
         String(filter_type),
         "iir",
@@ -226,32 +183,94 @@ function apply_filter!(state, filter_type, freq)
         sample_rate(state.data.original),
         order = filter_type == :hp ? 1 : 3,
     )
-    
-    if state.data isa ContinuousDataState
-        state.data.current[] = filtered_data
-    else
-        for df in state.data.current
-            df[] = filtered_data
-        end
+end
+
+function apply_filter!(state::EpochedDataBrowserState, filter_type, freq)
+    for df in state.data.current
+        df[] = filter_data(
+            df[],
+            state.channels.labels,
+            String(filter_type),
+            "iir",
+            freq,
+            sample_rate(state.data.original),
+            order = filter_type == :hp ? 1 : 3,
+        )
     end
 end
 
+function apply_filters!(state)
+    # Reset to original if no filters active
+    if !state.data.filter_state.active[].hp && !state.data.filter_state.active[].lp
+        reset_to_original!(state.data)
+        return
+    end
+
+    # Start with fresh data if changing filter configuration
+    if state.data.filter_state.active[].hp != state.data.filter_state.active[].lp
+        reset_to_original!(state.data)
+    end
+
+    # Apply active filters
+    for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
+        if state.data.filter_state.active[][filter_type]
+            apply_filter!(state, filter_type, freq)
+        end
+    end
+
+    notify_data_update(state.data)
+
+end
+
+function apply_hp_filter!(state)
+    current_state = state.data.filter_state.active[]
+    state.data.filter_state.active[] = (hp = !current_state.hp, lp = current_state.lp)
+    apply_filters!(state)
+end
+
+function apply_lp_filter!(state)
+    current_state = state.data.filter_state.active[]
+    state.data.filter_state.active[] = (hp = current_state.hp, lp = !current_state.lp)
+    apply_filters!(state)
+end
+
+
 # Common marker initialization
-function init_markers(ax, state)
+function init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     markers = Marker[]
     data = get_current_data(state.data)
-    add_marker!(markers, ax, data, :triggers)
-    
-    if all(in.(["is_vEOG", "is_hEOG"], Ref(names(data))))
-        add_marker!(markers, ax, data, :is_vEOG, label = "v")
-        add_marker!(markers, ax, data, :is_hEOG, label = "h")
+    if has_column(state.data, "triggers")
+        add_marker!(markers, ax, data, :triggers, visible = get(marker_visible, :triggers, false))
     end
-    
+    if has_column(state.data, "is_vEOG")
+        add_marker!(markers, ax, data, :is_vEOG, label = "v", visible = get(marker_visible, :is_vEOG, false))
+    end
+    if has_column(state.data, "is_hEOG")
+        add_marker!(markers, ax, data, :is_hEOG, label = "h", visible = get(marker_visible, :is_hEOG, false))
+    end
+
     return markers
 end
 
+function update_markers!(ax, state)
+    marker_visible = Dict{Symbol,Bool}()
+    for marker in state.markers
+        marker_visible[marker.name] = marker.visible
+        delete!(ax, marker.line)
+        delete!(ax, marker.text)
+    end
+    empty!(state.markers)
+    state.markers = init_markers(ax, state; marker_visible = marker_visible)
+end
+
+
+
+notify_data_update(state::ContinuousDataState) = notify(state.current)
+notify_data_update(state::EpochedDataState) = notify(state.current[state.current_epoch[]])
+
 function clear_axes!(ax, datas)
     [delete!(ax, value) for data in datas for (key, value) in data]
+    [empty!(data) for data in datas]
 end
 
 function set_axes!(ax, state::ContinuousDataBrowserState)
@@ -281,7 +300,7 @@ end
 
 function xback!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] - 200 < 1 && return
-    state.view.xrange.val = state.view.xrange.val .- 200
+    state.view.xrange[] = state.view.xrange.val .- 200
     xlims!(
         ax,
         state.data.current[].time[state.view.xrange.val[1]],
@@ -291,7 +310,7 @@ end
 
 function xforward!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] + 200 > nrow(state.data.current[]) && return
-    state.view.xrange.val = state.view.xrange.val .+ 200
+    state.view.xrange[] = state.view.xrange.val .+ 200
     xlims!(
         ax,
         state.data.current[].time[state.view.xrange.val[1]],
@@ -303,14 +322,18 @@ function step_epoch_backward(ax, state::EpochedDataBrowserState)
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     state.data.current_epoch[] = max(1, state.data.current_epoch[] - 1)
     ax.title = "Epoch $(state.data.current_epoch[])/$(n_epochs(state.data.original))"
+    update_markers!(ax, state)
     draw(ax, state)
+    draw_extra_channel!(ax, state)
 end
 
 function step_epoch_forward(ax, state::EpochedDataBrowserState)
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     state.data.current_epoch[] = min(n_epochs(state.data.original), state.data.current_epoch[] + 1)
     ax.title = "Epoch $(state.data.current_epoch[])/$(n_epochs(state.data.original))"
+    update_markers!(ax, state)
     draw(ax, state)
+    draw_extra_channel!(ax, state)
 end
 
 function xforward!(ax, state::EpochedDataBrowserState)
@@ -323,7 +346,7 @@ function xforward!(ax, state::EpochedDataBrowserState)
     )
 end
 
-function add_marker!(markers, ax, data, col; label = nothing, trial = nothing)
+function add_marker!(markers, ax, data, col; label = nothing, trial = nothing, visible = false)
     if isnothing(trial)
         marker_data = data[findall(x -> x != 0, data[!, col]), [:time, col]]
     else
@@ -338,15 +361,17 @@ function add_marker!(markers, ax, data, col; label = nothing, trial = nothing)
         markers,
         Marker(
             marker_data,
-            vlines!(marker_data.time, color = :grey, linewidth = 1, visible = false),
+            vlines!(marker_data.time, color = :grey, linewidth = 1, visible = visible),
             text!(
                 label,
                 position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker_data.time],
                 space = :data,
                 align = (:center, :center),
                 fontsize = 22,
-                visible = false,
+                visible = visible,
             ),
+            col,
+            visible,
         ),
     )
 end
@@ -354,6 +379,7 @@ end
 function plot_vertical_lines!(ax, marker, active)
     marker.line.visible = active
     marker.text.visible = active
+    marker.visible = active
     marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
 end
 
@@ -694,7 +720,9 @@ function create_epoch_menu(fig, ax, state)
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
         state.data.current_epoch[] = s
         ax.title = "Epoch $(s)/$(n_epochs(state.data.original))"
+        update_markers!(ax, state)
         draw(ax, state)
+        draw_extra_channel!(ax, state)
     end
 
     return menu
@@ -799,8 +827,9 @@ function create_sliders(fig, state::EpochedDataBrowserState, dat)
 
 end
 
-function create_extra_channel_menu(fig, ax, state, dat)
 
+
+function create_extra_channel_menu(fig, ax, state, dat)
     menu = Menu(
         fig,
         options = [:none; extra_channels(dat)],
@@ -811,61 +840,16 @@ function create_extra_channel_menu(fig, ax, state, dat)
     )
 
     on(menu.selection) do s
-        if !isnothing(state.channels.extra_channel_vis)
-            !isnothing(state.channels.extra_channel_vis.channel) &&
-                delete!(ax, state.channels.extra_channel_vis.channel)
-            !isnothing(state.channels.extra_channel_vis.label) && delete!(ax, state.channels.extra_channel_vis.label)
-        end
-
-        s == :none && return
-
-        if eltype(state.data.current[][!, s]) == Bool
-            highlight_data = @views splitgroups(findall(state.data.current[][!, s]))
-            region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
-
-            state.channels.extra_channel_vis = ExtraChannelVis(
-                vspan!(
-                    ax,
-                    state.data.current[][highlight_data[1], :time],
-                    state.data.current[][highlight_data[2].+region_offset, :time],
-                    color = "LightGrey",
-                    alpha = 0.5,
-                    visible = true,
-                ),
-                nothing,
-            )
-        else
-            state.channels.extra_channel_vis = ExtraChannelVis(
-                lines!(
-                    ax,
-                    @lift($(state.data.current).time),
-                    @lift(begin
-                        df = $(state.data.current)
-                        current_offset = state.channels.offset[end] + mean(diff(state.channels.offset))
-                        df[!, s] .+ current_offset
-                    end),
-                    color = :black,
-                    linewidth = 2,
-                ),
-                text!(
-                    ax,
-                    @lift($(state.data.current).time[$(state.view.xrange)[1]]),
-                    @lift(begin
-                        df = $(state.data.current)
-                        current_offset = state.channels.offset[end] + mean(diff(state.channels.offset))
-                        df[!, s][$(state.view.xrange)[1]] .+ current_offset
-                    end),
-                    text = String(s),
-                    align = (:left, :center),
-                    fontsize = 18,
-                ),
-            )
-        end
+        state.extra_channel.channel = s == :none ? nothing : s
+        state.extra_channel.visible = s != :none
+        draw_extra_channel!(ax, state)
     end
 
     return hcat(menu, Label(fig, "Extra Channels", fontsize = 22, halign = :left))
 
 end
+
+
 
 function build_grid_components!(
     fig,
@@ -897,17 +881,172 @@ function build_grid_components!(
 
 end
 
+
 # Do the actual drawing
 function draw(ax, state::ContinuousDataBrowserState)
-    draw_common(ax, state, get_current_data)
+    for (idx, col) in enumerate(state.channels.visible)
+        if state.channels.visible[idx]  # Only plot if channel is visible
+            col = state.channels.labels[idx]
+            state.channels.data_lines[col] = lines!(
+                ax,
+                @lift($(state.data.current).time),
+                @lift($(state.data.current)[!, $col] .+ state.view.offset[idx]),
+                color = @lift(begin
+                    df = $(state.data.current)
+                    abs.(df[!, $col]) .>= $(state.view.crit_val)
+                end),
+                colormap = [:darkgrey, :darkgrey, :red],
+                linewidth = 2,
+            )
+            if !state.view.butterfly[]
+                state.channels.data_labels[col] = text!(
+                    ax,
+                    @lift($(state.data.current)[$(state.view.xrange), :time][1]),
+                    @lift($(state.data.current)[$(state.view.xrange), $col][1] .+ state.view.offset[idx]),
+                    text = String(col),
+                    align = (:left, :center),
+                    fontsize = 18,
+                )
+            end
+        end
+    end
+
 end
 
-function draw(ax, state::EpochedDataBrowserState)
-    current_data = get_current_data(state.data)
-    n_samples = nrow(current_data)
-    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
-    draw_common(ax, state, get_current_data)
+
+function draw_extra_channel!(ax, state::ContinuousDataBrowserState)
+
+    clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
+
+    if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
+        current_offset = state.view.offset[end] + mean(diff(state.view.offset))
+        channel = state.extra_channel.channel  # Get the channel symbol
+        if eltype(state.data.current[][!, channel]) == Bool
+            highlight_data = @views splitgroups(findall(state.data.current[][!, channel]))
+            region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
+            state.extra_channel.data_lines[channel] = vspan!(
+                ax,
+                state.data.current[][highlight_data[1], :time],
+                state.data.current[][highlight_data[2].+region_offset, :time],
+                color = :LightGrey,
+                alpha = 0.5,
+                visible = true,
+            )
+        else
+            state.extra_channel.data_lines[channel] = lines!(
+                ax,
+                @lift($(state.data.current).time),
+                @lift(begin
+                    df = $(state.data.current)
+                    df[!, $channel] .+ current_offset
+                end),
+                color = :black,
+                linewidth = 2,
+            )
+            state.extra_channel.data_labels[channel] = text!(
+                ax,
+                @lift($(state.data.current).time[$(state.view.xrange)[1]]),
+                @lift(begin
+                    df = $(state.data.current)
+                    df[!, $channel][$(state.view.xrange)[1]] .+ current_offset
+                end),
+                text = String(channel),
+                align = (:left, :center),
+                fontsize = 18,
+            )
+        end
+    end
 end
+
+
+function draw(ax, state::EpochedDataBrowserState)
+    current_epoch = state.data.current_epoch[]  # Get current epoch value
+    current_data = state.data.current[current_epoch]  # Get current DataFrame Observable
+
+    # Ensure view range is within data bounds
+    n_samples = @lift(nrow($(current_data)))
+    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples[])
+
+    for (idx, col) in enumerate(state.channels.visible)
+        if state.channels.visible[idx]  # Only plot if channel is visible
+            col = state.channels.labels[idx]
+
+            state.channels.data_lines[col] = lines!(
+                ax,
+                @lift($(current_data).time),
+                @lift($(current_data)[!, $col] .+ state.view.offset[idx]),
+                color = @lift(begin
+                    df = $(current_data)
+                    abs.(df[!, $col]) .>= $(state.view.crit_val)
+                end),
+                colormap = [:darkgrey, :darkgrey, :red],
+                linewidth = 2,
+            )
+            if !state.view.butterfly[]
+                state.channels.data_labels[col] = text!(
+                    ax,
+                    @lift($(current_data).time[1]),
+                    @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]),
+                    text = String(col),
+                    align = (:left, :center),
+                    fontsize = 18,
+                )
+            end
+        end
+    end
+
+end
+
+
+
+function draw_extra_channel!(ax, state::EpochedDataBrowserState)
+
+    clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
+
+    current_epoch = state.data.current_epoch[]  # Get current epoch value
+    current_data = state.data.current[current_epoch]  # Get current DataFrame Observable
+
+    if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
+        current_offset = state.view.offset[end] + mean(diff(state.view.offset))
+        channel = state.extra_channel.channel  # Get the channel symbol
+        if eltype(current_data[][!, channel]) == Bool
+            highlight_data = @views splitgroups(findall(current_data[][!, channel]))
+            region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
+            state.extra_channel.data_lines[channel] = vspan!(
+                ax,
+                current_data[][highlight_data[1], :time],
+                current_data[][highlight_data[2].+region_offset, :time],
+                color = :LightGrey,
+                alpha = 0.5,
+                visible = true,
+            )
+        else
+            state.extra_channel.data_lines[channel] = lines!(
+                ax,
+                @lift($(current_data).time),
+                @lift(begin
+                    df = $(current_data)
+                    df[!, $channel] .+ current_offset
+                end),
+                color = :black,
+                linewidth = 2,
+            )
+            state.extra_channel.data_labels[channel] = text!(
+                ax,
+                @lift($(current_data).time[1]),
+                @lift(begin
+                    df = $(current_data)
+                    df[!, $channel][1] .+ current_offset
+                end),
+                text = String(channel),
+                align = (:left, :center),
+                fontsize = 18,
+            )
+        end
+    end
+end
+
+
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
 
@@ -920,7 +1059,8 @@ function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, i
         channels = ChannelState(channel_labels),
         data = ContinuousDataState(dat),
         selection = SelectionState(ax),
-        ica_state = !isnothing(ica) ? IcaState(nothing, nothing, nothing) : nothing,
+        ica_state = !isnothing(ica) ? IcaState() : nothing,
+        extra_channel = ExtraChannelInfo(),
     )
 
     # Controls
@@ -974,7 +1114,8 @@ function plot_databrowser(dat::EpochData, channel_labels::Vector{Symbol}, ica::U
         channels = ChannelState(channel_labels),
         data = EpochedDataState(dat),
         selection = SelectionState(ax),
-        ica_state = !isnothing(ica) ? IcaState(nothing, nothing, nothing) : nothing,
+        ica_state = !isnothing(ica) ? IcaState() : nothing,
+        extra_channel = ExtraChannelInfo(),
     )
 
     # Controls
@@ -1019,15 +1160,4 @@ plot_databrowser(dat::EpochData, channel_label::Symbol) = plot_databrowser(dat, 
 plot_databrowser(dat::EpochData, channel_label::Symbol, ica::InfoIca) = plot_databrowser(dat, [channel_label], ica)
 
 
-#     function update_markers!(markers)
-#         for marker in markers
-#             delete!(ax, marker.line)
-#             delete!(ax, marker.text)
-#         end
-#         empty!(markers)
-#         add_marker!(markers, ax, data, :triggers, trial = trial.val)
-#         if ("is_vEOG" in names(dat.data[trial.val]) && "is_hEOG" in names(dat.data[trial.val]))
-#             add_marker!(markers, ax, data, :is_vEOG, trial = trial.val, label = "v")
-#             add_marker!(markers, ax, data, :is_hEOG, trial = trial.val, label = "h")
-#         end
-#
+
