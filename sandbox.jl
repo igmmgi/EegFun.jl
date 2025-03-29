@@ -41,7 +41,7 @@ diff_channel!(dat, :F9, :F10, :hEOG);
 # autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-is_extreme_value!(dat, dat.layout.label, 500);
+is_extreme_value!(dat, dat.layout.label, 50);
 plot_databrowser(dat)
 # extract epochs
 
