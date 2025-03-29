@@ -143,6 +143,48 @@ function get_channel_data(state::EpochedDataState, col)
     state.current[state.current_epoch[]][][!, col]
 end
 
+# Common drawing function that works for both types
+function draw_common(ax, state, get_data_func)
+    for (idx, col) in enumerate(state.channels.visible)
+        if state.channels.visible[idx]
+            col = state.channels.labels[idx]
+            data = get_data_func(state)
+            
+            state.channels.data_lines[col] = lines!(
+                ax,
+                @lift($(data).time),
+                @lift($(data)[!, $col] .+ state.view.offset[idx]),
+                color = @lift(abs.($(data)[!, $col]) .>= $(state.view.crit_val)),
+                colormap = [:darkgrey, :darkgrey, :red],
+                linewidth = 2,
+            )
+            
+            if !state.view.butterfly[]
+                state.channels.data_labels[col] = text!(
+                    ax,
+                    @lift($(data).time[1]),
+                    @lift($(data)[!, $col][1] .+ state.view.offset[idx]),
+                    text = String(col),
+                    align = (:left, :center),
+                    fontsize = 18,
+                )
+            end
+        end
+    end
+end
+
+# Type-specific draw functions that use the common functionality
+function draw(ax, state::ContinuousDataBrowserState)
+    draw_common(ax, state, get_current_data)
+end
+
+function draw(ax, state::EpochedDataBrowserState)
+    current_data = get_current_data(state.data)
+    n_samples = nrow(current_data)
+    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
+    draw_common(ax, state, get_current_data)
+end
+
 # Common navigation functions
 function handle_navigation!(ax, state, action::Symbol)
     if action == :up
@@ -172,9 +214,11 @@ function handle_navigation!(ax, state::EpochedDataBrowserState, action::Symbol)
     end
 end
 
-function apply_filter!(state::ContinuousDataBrowserState, filter_type, freq)
-    state.data.current[] = filter_data(
-        state.data.current[],
+# Common filter application
+function apply_filter!(state, filter_type, freq)
+    data = get_current_data(state.data)
+    filtered_data = filter_data(
+        data,
         state.channels.labels,
         String(filter_type),
         "iir",
@@ -182,72 +226,15 @@ function apply_filter!(state::ContinuousDataBrowserState, filter_type, freq)
         sample_rate(state.data.original),
         order = filter_type == :hp ? 1 : 3,
     )
-end
-
-function apply_filter!(state::EpochedDataBrowserState, filter_type, freq)
-    for df in state.data.current
-        df[] = filter_data(
-            df[],
-            state.channels.labels,
-            String(filter_type),
-            "iir",
-            freq,
-            sample_rate(state.data.original),
-            order = filter_type == :hp ? 1 : 3,
-        )
-    end
-end
-
-function apply_filters!(state)
-    # Reset to original if no filters active
-    if !state.data.filter_state.active[].hp && !state.data.filter_state.active[].lp
-        reset_to_original!(state.data)
-        return
-    end
-
-    # Start with fresh data if changing filter configuration
-    if state.data.filter_state.active[].hp != state.data.filter_state.active[].lp
-        reset_to_original!(state.data)
-    end
-
-    # Apply active filters
-    for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
-        if state.data.filter_state.active[][filter_type]
-            apply_filter!(state, filter_type, freq)
+    
+    if state.data isa ContinuousDataState
+        state.data.current[] = filtered_data
+    else
+        for df in state.data.current
+            df[] = filtered_data
         end
     end
-
-    # # Apply active filters
-    # for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
-    #     if state.data.filter_state.active[][filter_type]
-    #         state.data.current[] = filter_data(
-    #             state.data.current[],
-    #             state.channels.labels,
-    #             String(filter_type),
-    #             "iir",
-    #             freq,
-    #             sample_rate(state.data.original),
-    #             order = filter_type == :hp ? 1 : 3,
-    #         )
-    #     end
-    # end
-
-    notify_data_update(state.data)
-
 end
-
-function apply_hp_filter!(state)
-    current_state = state.data.filter_state.active[]
-    state.data.filter_state.active[] = (hp = !current_state.hp, lp = current_state.lp)
-    apply_filters!(state)
-end
-
-function apply_lp_filter!(state)
-    current_state = state.data.filter_state.active[]
-    state.data.filter_state.active[] = (hp = current_state.hp, lp = !current_state.lp)
-    apply_filters!(state)
-end
-
 
 # Common marker initialization
 function init_markers(ax, state)
@@ -262,9 +249,6 @@ function init_markers(ax, state)
     
     return markers
 end
-
-notify_data_update(state::ContinuousDataState) = notify(state.current)
-notify_data_update(state::EpochedDataState) = notify(state.current[state.current_epoch[]])
 
 function clear_axes!(ax, datas)
     [delete!(ax, value) for data in datas for (key, value) in data]
@@ -913,70 +897,17 @@ function build_grid_components!(
 
 end
 
-
 # Do the actual drawing
 function draw(ax, state::ContinuousDataBrowserState)
-    for (idx, col) in enumerate(state.channels.visible)
-        if state.channels.visible[idx]  # Only plot if channel is visible
-            col = state.channels.labels[idx]
-            state.channels.data_lines[col] = lines!(
-                ax,
-                @lift($(state.data.current).time),
-                @lift($(state.data.current)[!, $col] .+ state.view.offset[idx]),
-                color = @lift(abs.($(state.data.current)[!, col]) .>= $(state.view.crit_val)),
-                colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
-            )
-            if !state.view.butterfly[]
-                state.channels.data_labels[col] = text!(
-                    ax,
-                    @lift($(state.data.current)[$(state.view.xrange), :time][1]),
-                    @lift($(state.data.current)[$(state.view.xrange), $col][1] .+ state.view.offset[idx]),
-                    text = String(col),
-                    align = (:left, :center),
-                    fontsize = 18,
-                )
-            end
-        end
-    end
+    draw_common(ax, state, get_current_data)
 end
 
 function draw(ax, state::EpochedDataBrowserState)
-    current_epoch = state.data.current_epoch[]  # Get current epoch value
-    current_data = state.data.current[current_epoch]  # Get current DataFrame Observable
-
-    # Ensure view range is within data bounds
-    n_samples = @lift(nrow($(current_data)))
-    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples[])
-
-    for (idx, col) in enumerate(state.channels.visible)
-        if state.channels.visible[idx]  # Only plot if channel is visible
-            col = state.channels.labels[idx]
-
-            state.channels.data_lines[col] = lines!(
-                ax,
-                @lift($(current_data).time),
-                @lift($(current_data)[!, $col] .+ state.view.offset[idx]),
-                color = @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val)),
-                colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
-            )
-            if !state.view.butterfly[]
-                state.channels.data_labels[col] = text!(
-                    ax,
-                    @lift($(current_data).time[1]),
-                    @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]),
-                    text = String(col),
-                    align = (:left, :center),
-                    fontsize = 18,
-                )
-            end
-        end
-    end
+    current_data = get_current_data(state.data)
+    n_samples = nrow(current_data)
+    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
+    draw_common(ax, state, get_current_data)
 end
-
-
-
 
 function plot_databrowser(dat::ContinuousData, channel_labels::Vector{Symbol}, ica::Union{InfoIca,Nothing} = nothing)
 
