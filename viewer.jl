@@ -10,4 +10,3 @@ function head(dat::EegData; n=nothing)
     isnothing(n) && (n=5)
     viewer(data(dat)[1:n, :])
 end
-

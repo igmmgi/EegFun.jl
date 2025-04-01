@@ -24,6 +24,8 @@ include("layout.jl")
 include("ica.jl")
 include("plot.jl")
 include("plot_databrowser.jl")
+include("plot_events.jl")
+include("plot_layout.jl")
 include("rereference.jl")
 include("topo.jl")
 include("utils.jl")
@@ -42,7 +44,7 @@ diff_channel!(dat, :F9, :F10, :hEOG);
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 is_extreme_value!(dat, dat.layout.label, 50);
-plot_databrowser(dat)
+ plot_databrowser(dat);
 # extract epochs
 
 epochs = []
@@ -73,6 +75,7 @@ layout = read_layout("./layouts/biosemi72.csv");
 # 2D layout
 polar_to_cartesian_xy!(layout)
 plot_layout_2d(layout);
+
 neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
 plot_layout_2d(layout, neighbours)
 
