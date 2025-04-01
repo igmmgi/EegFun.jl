@@ -1,106 +1,72 @@
 # TODO: butterfly plot/global field power
 # TODO: spline interpolation for topoplots?
 
+# #################################################################
+# plot_epochs: Epoched Data (Single Condition; Single Channel or Average of multiple channels)
+average_channels = true, function plot_epochs(dat::EpochData, channels::Vector{Symbol}; average_channels = true, kwargs = Dict())
 
-
-
-
-
-
-
-
-
-
-##########################################
-
-function plot_topoplot(dat; kwargs...)
-    plot_topoplot(dat, dat.layout; kwargs...)
-end
-
-function plot_topoplot(dat; kwargs...)
-    plot_topoplot(dat.data, dat.layout; kwargs...)
-end
-
-
-# 2D topographic plot
-function plot_topoplot(
-    dat,
-    layout;
-    xlim = nothing,
-    ylim = nothing,
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    topo_kwargs = Dict(),
-    colorbar_kwargs = Dict(),
-)
-
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    head_kwargs = merge(head_default_kwargs, head_kwargs)
-
-    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-
-    label_default_kwargs =
-        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-    xoffset = pop!(label_kwargs, :xoffset)
-    yoffset = pop!(label_kwargs, :yoffset)
-
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
-    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = pop!(topo_kwargs, :gridscale)
-
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
-    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
-
-    if isnothing(xlim)
-        xlim = [dat.time[1], dat.time[end]]
-        xlim_idx = 1:nrow(dat)
-    end
-
-    # convert xlim to index
-    xlim_idx = find_idx_range(dat.time, xlim[1], xlim[2])
-
-    # interpolate data
-    data = data_interpolation_topo(
-        mean.(eachcol(dat[xlim_idx, layout.label])),
-        permutedims(Matrix(layout[!, [:x2, :y2]])),
-        gridscale,
+    default_kwargs = Dict(
+        :xlim => nothing,
+        :ylim => nothing,
+        :title => nothing,
+        :xlabel => "Time (S)",
+        :ylabel => "mV",
+        :linewidth => [1, 3],
+        :color => [:grey, :black],
+        :yreversed => false,
     )
 
-    if isnothing(ylim)
-        ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
-    end
+    kwargs = merge(default_kwargs, kwargs)
 
     fig = Figure()
     ax = Axis(fig[1, 1])
 
-    radius = 88 # mm
-    co = contourf!(
-        range(-radius * 2, radius * 2, length = gridscale),
-        range(-radius * 2, radius * 2, length = gridscale),
-        data,
-        levels = range(ylim[1], ylim[2], div(gridscale, 2));
-        topo_kwargs...,
-    )
-
-    if plot_colorbar
-        Colorbar(fig[1, 2], co; colorbar_kwargs...)
+    # plot each trial (average acrossed electordes if >1) and overall average
+    avg_data = zeros(nrow(dat.data[1]))
+    for trial in eachindex(dat.data)
+        trial_data = colmeans(dat.data[trial], channels)
+        avg_data .+= trial_data
+        lines!(dat.data[trial][!, :time], trial_data, color = kwargs[:color][1], linewidth = kwargs[:linewidth][1])
     end
+    avg_data ./= length(dat.data)
+    lines!(dat.data[1][!, :time], avg_data, color = kwargs[:color][2], linewidth = kwargs[:linewidth][2])
 
-    # head shape
-    plot_layout_2d(fig, ax, layout, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
+    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
+    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
+    if isnothing(kwargs[:title])
+        ax.title = length(channels) == 1 ? "Electrode: $(channels[1])" : "Electrodes Avg: $(""*join(channels,",")*"")"
+    else
+        ax.title = kwargs[:title]
+    end
+    ax.xlabel = kwargs[:xlabel]
+    ax.ylabel = kwargs[:ylabel]
+    ax.yreversed = kwargs[:yreversed]
 
-    display(GLMakie.Screen(), fig)
+    # plot theme adjustments
+    fontsize_theme = Theme(fontsize = 24)
+    update_theme!(fontsize_theme)
+
+    display(fig)
     return fig, ax
 
 end
+
+plot_epochs(dat::EpochData, channels::Symbol; kwargs...) = plot_epochs(dat::EpochData, [channels]; kwargs...)
+
+
+# Basic Tests
+# TODO: Implement proper tests
+layout = read_layout("./layouts/biosemi72.csv");
+subject = 3
+dat = read_bdf("../Flank_C_$(subject).bdf");
+dat = create_eeg_dataframe(dat, layout);
+filter_data!(dat, "hp", "iir", 1, order=1)
+
+# Epoch Data
+epoch = extract_epochs(dat, 1, 1, -2, 4)
+plot_epochs(epoch, :Fp1) 
+plot_epochs(epoch, [:Fp1, :Fp2]) 
+
 
 
 
@@ -277,11 +243,7 @@ function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData; average_channels = fa
     plot_erp(dat_orig, dat_cleaned, dat_orig.layout.label; average_channels = average_channels, kwargs...)
 end
 
-function best_rect(n)
-    dim1 = ceil(Int, sqrt(n))
-    dim2 = ceil(Int, n ./ dim1)
-    return [dim1, dim2]
-end
+
 
 
 

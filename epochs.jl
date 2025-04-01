@@ -66,13 +66,10 @@ function remove_bad_epochs(dat::EpochData)
     return dat_out
 end
 
-
-
-
 function average_epochs(dat::EpochData)
     erp = combine(
         groupby(reduce(vcat, dat.data), :time),
         Not([:time, :triggers, :epoch, :sample]) .=> mean .=> Not([:time, :triggers, :epoch, :sample]),
     )
-    return ErpData(erp, dat.layout, dat.sample_rate)
+    return ErpData(erp, dat.layout, dat.sample_rate, dat.analysis_info)
 end

@@ -391,6 +391,10 @@ macro add_nonmutating(func)
 end
 
 
-
+function best_rect(n)
+    dim1 = ceil(Int, sqrt(n))
+    dim2 = ceil(Int, n ./ dim1)
+    return [dim1, dim2]
+end
 
 
