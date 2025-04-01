@@ -71,6 +71,7 @@ plot_databrowser(epochs[1])
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
+layout = read_layout("./layouts/biosemi64.csv");
 
 # 2D layout
 polar_to_cartesian_xy!(layout)
