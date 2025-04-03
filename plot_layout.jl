@@ -50,8 +50,8 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame;
     # Head shape
     radius = 88 # mm
     arc!(ax, Point2f(0), radius * 2, -π, π; head_kwargs...) # head
-    arc!(Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2; head_kwargs...) # ear right
-    arc!(Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2; head_kwargs...) # ear left
+    arc!(ax, Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2; head_kwargs...) # ear right
+    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2; head_kwargs...) # ear left
     lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4; head_kwargs...) # nose
 
     # Regular points

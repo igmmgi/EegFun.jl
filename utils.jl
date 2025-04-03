@@ -174,7 +174,7 @@ Get the time range of the data.
 # Returns
 - `Tuple{Float64,Float64}`: Minimum and maximum time values
 """
-data_limits_x(dat::DataFrame) = extrema(dat.time)
+data_limits_x(dat::DataFrame; col = :time) = extrema(dat[!, col])
 
 """
     data_limits_y(dat::DataFrame, col) -> Vector{Float64}
