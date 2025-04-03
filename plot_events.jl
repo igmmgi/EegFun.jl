@@ -1,3 +1,17 @@
+"""
+    _trigger_time_count(time, triggers)
+
+Internal function to process trigger data and count occurrences.
+
+# Arguments
+- `time`: Vector of time points
+- `triggers`: Vector of trigger values
+
+# Returns
+- `trigger_times`: Vector of times when triggers occurred
+- `trigger_values`: Vector of trigger values at those times
+- `trigger_count`: OrderedDict mapping trigger values to their counts
+"""
 function _trigger_time_count(time, triggers)
     trigger_indices = findall(diff(triggers) .>= 1)
 
@@ -14,17 +28,20 @@ function _trigger_time_count(time, triggers)
     return trigger_times, trigger_values, trigger_count
 end
 
+"""
+    plot_events(trigger_times, trigger_values, trigger_count)
 
-function plot_events(dat::BioSemiBDF.BioSemiData)
-    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
-    return plot_events(trigger_times, trigger_values, trigger_count)
-end
+Plot trigger events as a scatter plot with vertical lines.
 
-function plot_events(dat::ContinuousData)
-    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
-    return plot_events(trigger_times, trigger_values, trigger_count)
-end
+# Arguments
+- `trigger_times`: Vector of times when triggers occurred
+- `trigger_values`: Vector of trigger values at those times
+- `trigger_count`: OrderedDict mapping trigger values to their counts
 
+# Returns
+- `fig`: The Makie Figure object
+- `ax`: The Axis object containing the plot
+"""
 function plot_events(trigger_times, trigger_values, trigger_count)
     if isempty(trigger_count)
         @warn "No triggers found in the data"
@@ -49,3 +66,43 @@ function plot_events(trigger_times, trigger_values, trigger_count)
     display(fig)
     return fig, ax
 end
+
+"""
+    plot_events(dat::BioSemiBDF.BioSemiData)
+
+Plot trigger events from BioSemi BDF data.
+
+# Arguments
+- `dat`: BioSemiData object containing the EEG data
+
+# Returns
+- `fig`: The Makie Figure object
+- `ax`: The Axis object containing the plot
+"""
+function plot_events(dat::BioSemiBDF.BioSemiData)
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
+    return plot_events(trigger_times, trigger_values, trigger_count)
+end
+
+"""
+    plot_events(dat::ContinuousData)
+
+Plot trigger events from ContinuousData object.
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+
+# Returns
+- `fig`: The Makie Figure object
+- `ax`: The Axis object containing the plot
+"""
+function plot_events(dat::ContinuousData)
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
+    return plot_events(trigger_times, trigger_values, trigger_count)
+end
+
+# layout = read_layout("./layouts/biosemi72.csv");
+# dat = read_bdf("../Flank_C_3.bdf");
+# plot_events(dat)
+# dat = create_eeg_dataframe(dat, layout);
+# plot_events(dat)

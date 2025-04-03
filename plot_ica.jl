@@ -11,7 +11,7 @@ function plot_ica_topoplot(
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
 )
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
     if isnothing(comps)
@@ -26,7 +26,7 @@ function plot_ica_topoplot(
     label_kwargs = merge(label_default_kwargs, label_kwargs)
     xoffset = pop!(label_kwargs, :xoffset)
     yoffset = pop!(label_kwargs, :yoffset)
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :size => 1)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = pop!(topo_kwargs, :gridscale)
     colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
@@ -39,7 +39,13 @@ function plot_ica_topoplot(
     axs = []
     for dim1 = 1:dims[1]
         for dim2 = 1:dims[2]
-            ax = Axis(fig[dim1, dim2])
+            ax = Axis(
+                fig[dim1, dim2],
+                width = Relative(topo_kwargs[:size]),
+                height = Relative(topo_kwargs[:size]),
+                halign = 0.5,
+                valign = 0.5,
+            )
             push!(axs, ax)
             count += 1
             if count > length(comps)
@@ -70,7 +76,7 @@ function plot_ica_topoplot(
         # TODO: improve colorbar stuff
         # if plot_colorbar
         #     Colorbar(ax, co; colorbar_kwargs...)
-        # end
+        #  end
         # head shape
         plot_layout_2d!(
             fig,
@@ -105,7 +111,7 @@ function plot_ica_topoplot(
     colorbar_kwargs = Dict(),
 )
 
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
 
@@ -158,6 +164,39 @@ function plot_ica_topoplot(
     # end
     return fig
 end
+
+
+
+# layout = read_layout("./layouts/biosemi72.csv");
+# dat = read_bdf("../Flank_C_3.bdf");
+# dat = create_eeg_dataframe(dat, layout);
+# filter_data!(dat, "hp", "iir", 1, order=1)
+# rereference!(dat, :avg)
+# diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
+# diff_channel!(dat, :F9, :F10, :hEOG);
+# # autodetect EOG signals
+# detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+# detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+# is_extreme_value!(dat, dat.layout.label, 50);
+# dat_ica = filter_data(dat, "hp", "iir", 1, order=1)
+# good_samples = findall(dat_ica.data[!, :is_extreme_value] .== false)
+# good_channels = setdiff(dat_ica.layout.label, [:PO9])
+# dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
+# ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms())
+
+# TODO: head shape size
+plot_ica_topoplot(ica_result, dat.layout)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:10)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:2)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
+# plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
+
+
+
+
+
+
 
 
 

@@ -38,6 +38,7 @@ plot_epochs(epoch, [:Fp1, :Fp2, :Fpz, :C1], average_channels=false)
 ```
 """
 function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
+
     # Validate inputs
     isempty(channels) && throw(ArgumentError("At least one channel must be specified"))
     invalid_channels = setdiff(channels, dat.layout.label)
@@ -61,13 +62,20 @@ function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
     fig = Figure()
     
     if kwargs[:average_channels]
+
         # Single plot averaging across channels
         ax = Axis(fig[1, 1])
         _plot_epochs!(ax, dat, channels, kwargs)
-        
+
         # Set axis properties
-        _set_axis_properties!(ax, kwargs, "Avg: $(join(channels, ", "))")
+        if length(channels) == 1
+            _set_axis_properties!(ax, kwargs, "$(channels[1])")
+        else
+            _set_axis_properties!(ax, kwargs, "Avg: $(print_vector_(channels, max_length = 8, n_ends = 3))")
+        end
+
     else
+
         # Separate subplot for each channel
         n_channels = length(channels)
         rows, cols = isnothing(kwargs[:layout]) ? best_rect(n_channels) : kwargs[:layout]
@@ -90,12 +98,15 @@ function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
             # Only add x and y labels to outer left column and bottom row
             if col != 1
                 axis_kwargs = merge(axis_kwargs, Dict(:ylabel => ""))
+                ax.yticklabelsvisible = false
             end
             if row != rows
                 axis_kwargs = merge(axis_kwargs, Dict(:xlabel => ""))
+                ax.xticklabelsvisible = false
             end
             
             _set_axis_properties!(ax, axis_kwargs, "$channel")
+
         end
     end
 
@@ -105,6 +116,7 @@ function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
 
     display(fig)
     return fig, ax
+
 end
 
 """
@@ -129,8 +141,8 @@ function _plot_epochs!(ax, dat, channels, kwargs)
     end
     
     avg_data ./= length(dat.data)
-    lines!(ax, dat.data[1][!, :time], avg_data, 
-           color=kwargs[:color][2], linewidth=kwargs[:linewidth][2])
+    lines!(ax, dat.data[1][!, :time], avg_data, color=kwargs[:color][2], linewidth=kwargs[:linewidth][2])
+
 end
 
 """
@@ -181,14 +193,14 @@ Calculate the global y-range across all specified channels.
 # Arguments
 - `dat::EpochData`: The epoched EEG data.
 - `channels::Vector{Symbol}`: List of channels to include.
+- `buffer::Float64`: Buffer to add to the range (default: 0.1)
 
 # Returns
 - `Tuple{Float64, Float64}`: The minimum and maximum values across all channels.
 """
-function _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol})
-    min_val = Inf
-    max_val = -Inf
-    
+function _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol}; buffer::Float64 = 0.1)
+
+    min_val, max_val = Inf, -Inf
     for channel in channels
         for trial in eachindex(dat.data)
             trial_data = dat.data[trial][!, channel]
@@ -198,21 +210,22 @@ function _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol})
     end
     
     # Add a small buffer to the range
-    buffer = 0.1 * (max_val - min_val)
+    buffer = buffer * (max_val - min_val)
     return (min_val - buffer, max_val + buffer)
+
 end
 
-# # Basic Tests
-# # TODO: Implement proper tests
-# layout = read_layout("./layouts/biosemi72.csv");
-# subject = 3
-# dat = read_bdf("../Flank_C_$(subject).bdf");
-# dat = create_eeg_dataframe(dat, layout);
-# filter_data!(dat, "hp", "iir", 1, order=1)
+# Basic Tests
+# TODO: Implement proper tests
+layout = read_layout("./layouts/biosemi72.csv");
+dat = read_bdf("../Flank_C_3.bdf");
+dat = create_eeg_dataframe(dat, layout);
+filter_data!(dat, "hp", "iir", 1, order=1)
 
-# # Epoch Data
-# epoch = extract_epochs(dat, 1, 1, -2, 4)
+# Epoch Data
+epoch = extract_epochs(dat, 1, 1, -2, 4)
 plot_epochs(epoch, :Fp1) 
-plot_epochs(epoch, [:Fp1, :Fp2, :Fpz, :C1], kwargs = Dict(:average_channels => false, :ylim => [-100, 100])) 
+plot_epochs(epoch, [:Fp1, :Fp2, :Fpz, :C1, :Cz, :Pz, :O1, :O2, :Oz], kwargs = Dict(:average_channels => true, :ylim => [-100, 100])) 
 plot_epochs(epoch, epoch.layout.label, kwargs = Dict(:average_channels => false, :ylim => [-100, 100])) 
+plot_epochs(epoch, epoch.layout.label[1:20], kwargs = Dict(:average_channels => false, :ylim => [-100, 100])) 
 
