@@ -74,8 +74,8 @@ function plot_ica_topoplot(
             colormap = :jet,
         )
         # TODO: improve colorbar stuff
-        # if plot_colorbar
-        #     Colorbar(ax, co; colorbar_kwargs...)
+        #if plot_colorbar
+            Colorbar(ax, co; colorbar_kwargs...)
         #  end
         # head shape
         plot_layout_2d!(
@@ -95,78 +95,6 @@ function plot_ica_topoplot(
 end
 
 
-
-
-
-function plot_ica_topoplot(
-    fig,
-    ax,
-    ica,
-    comp,
-    layout;
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    topo_kwargs = Dict(),
-    colorbar_kwargs = Dict(),
-)
-
-    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    head_kwargs = merge(head_default_kwargs, head_kwargs)
-
-    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-
-    label_default_kwargs =
-        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
-    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = pop!(topo_kwargs, :gridscale)
-
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
-    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
-
-    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
-
-    if ax.title.val == ""
-        ax.title = ica.ica_label[comp]
-    end
-    data = data_interpolation_topo(ica.mixing[:, comp], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
-    gridscale = gridscale
-    radius = 88 # mm
-    co = contourf!(
-        ax,
-        range(-radius * 2, radius * 2, length = gridscale),
-        range(-radius * 2, radius * 2, length = gridscale),
-        data,
-        colormap = :jet,
-    )
-    # TODO: improve colorbar stuff
-    if plot_colorbar
-        Colorbar(fig[1, 2], co; colorbar_kwargs...)
-    end
-    # head shape
-    plot_layout_2d!(
-        fig,
-        ax,
-        layout,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
-    )
-    # end
-    return fig
-end
-
-
-
 # layout = read_layout("./layouts/biosemi72.csv");
 # dat = read_bdf("../Flank_C_3.bdf");
 # dat = create_eeg_dataframe(dat, layout);
@@ -184,9 +112,9 @@ end
 # dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
 # ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params = IcaPrms())
 
-# plot_ica_topoplot(ica_result, dat.layout)
+plot_ica_topoplot(ica_result, dat.layout)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:10)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:3)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:3)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
 # plot_ica_topoplot(ica_result, dat.layout, comps = [1,3, 10])
@@ -257,6 +185,9 @@ mutable struct IcaComponentState
     show_channel::Observable{Bool}
     channel_yscale::Observable{Float64}
     
+    # New field for specific components
+    specific_components::Union{Nothing, Vector{Int}}
+    
     # Plot elements
     axs::Vector{Axis}
     channel_axs::Vector{Axis}  # Store channel axes separately
@@ -266,7 +197,7 @@ mutable struct IcaComponentState
     # New field for boolean indicators
     channel_bool_indicators::Dict{Int, Any}
     
-    function IcaComponentState(dat, ica_result, n_visible_components, window_size)
+    function IcaComponentState(dat, ica_result, n_visible_components, window_size, specific_components=nothing)
         # Prepare data matrix
         dat_matrix = prepare_ica_data_matrix(dat, ica_result)
         components = ica_result.unmixing * dat_matrix
@@ -274,19 +205,29 @@ mutable struct IcaComponentState
         
         # Create observables
         comp_start = Observable(1)
+        
         # Find index closest to time 0 to center the initial view
         time_zero_idx = findmin(abs.(dat.data.time))[2]
         half_window = div(window_size, 2)
         start_idx = 1 #max(1, time_zero_idx - half_window)
         end_idx = min(size(components, 2), start_idx + window_size - 1)
+        
         # Adjust start_idx if end_idx reached the boundary
         if end_idx == size(components, 2)
             start_idx = max(1, end_idx - window_size + 1)
         end
-        println(start_idx, end_idx)
+        
         xrange = Observable(start_idx:end_idx)
         
-        initial_range = maximum(abs.(extrema(components[1:n_visible_components, 1:window_size])))
+        # Set initial range based on specific components if provided
+        if !isnothing(specific_components)
+            comps_to_use = specific_components
+        else
+            comps_to_use = 1:n_visible_components
+        end
+        
+        # Calculate initial y-range based on components we'll show
+        initial_range = maximum(abs.(extrema(components[comps_to_use, 1:window_size])))
         ylims = Observable((-initial_range, initial_range))
         channel_data = Observable(zeros(size(dat.data, 1)))
         show_channel = Observable(false)
@@ -303,6 +244,7 @@ mutable struct IcaComponentState
             dat, ica_result, components, total_components,
             n_visible_components, window_size,
             comp_start, xrange, ylims, channel_data, show_channel, channel_yscale,
+            specific_components,
             axs, channel_axs, topo_axs, lines_obs, channel_bool_indicators
         )
     end
@@ -330,10 +272,16 @@ function plot_ica_component_activation(
     ica_result::InfoIca;
     n_visible_components::Int = 10,
     window_size::Int = 2000,
-    topo_kwargs = Dict()
+    topo_kwargs = Dict(),
+    specific_components = nothing
 )
-    # Create state
-    state = IcaComponentState(dat, ica_result, n_visible_components, window_size)
+    # Create state, using specific components if provided
+    if !isnothing(specific_components)
+        # Make sure n_visible_components matches the length of specific_components
+        n_visible_components = length(specific_components)
+    end
+    
+    state = IcaComponentState(dat, ica_result, n_visible_components, window_size, specific_components)
     
     # Create figure
     fig = Figure()
@@ -377,19 +325,27 @@ function create_component_plots!(fig, state, topo_kwargs)
     # Force immediate calculation of xlims to ensure proper initial view
     initial_xlims = (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])])
     
+    # Determine which components to show
+    comp_indices = state.specific_components === nothing ? 
+                  (state.comp_start[]:(state.comp_start[] + state.n_visible_components - 1)) :
+                  state.specific_components
+    
     # Create plots for each component
     for i = 1:state.n_visible_components
+        # Get actual component index
+        comp_idx = comp_indices[i]
+        
         # Create topoplot
         ax_topo = Axis(
             fig[i, 1],
             width = Relative(1),
             height = Relative(1),
-            title = @sprintf("IC %d (%.1f%%)", i, state.ica_result.variance[i] * 100)
+            title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
         )
         push!(state.topo_axs, ax_topo)
         
         # Add topoplot
-        plot_ica_topoplot(fig, ax_topo, state.ica_result, i, state.dat.layout, 
+        plot_ica_topoplot(fig, ax_topo, state.ica_result, comp_idx, state.dat.layout, 
                            colorbar_kwargs = Dict(:plot_colorbar => false))
         hidexdecorations!(ax_topo)
         hideydecorations!(ax_topo)
@@ -421,24 +377,22 @@ function create_component_plots!(fig, state, topo_kwargs)
             ax_time.xticklabelsvisible = false
             hidexdecorations!(ax_channel, grid = false)
         end   
+        
         # Force immediate calculation of xlims to ensure proper initial view
-        initial_xlims = (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])])
-
         xlims!(ax_channel, initial_xlims)
         
         push!(state.axs, ax_time)
         push!(state.channel_axs, ax_channel)
         
         # Create observable for component data and add plot
-        line_obs = Observable(state.components[i, :])
+        line_obs = Observable(state.components[comp_idx, :])
         lines!(ax_time, 
                @lift(state.dat.data.time[$(state.xrange)]), 
                @lift($(line_obs)[$(state.xrange)]), 
                color = :black, 
                linewidth = 2)
         
-        # For the additional channel, just create a standard line that will be updated
-        # We'll handle Boolean channels separately when a channel is selected
+        # For the additional channel, just create a standard line
         channel_line = lines!(
             ax_channel,
             @lift(state.dat.data.time[$(state.xrange)]),
@@ -473,6 +427,10 @@ function add_navigation_controls!(fig, state)
     prev_topo = Button(topo_nav[1, 1], label = "◄ Previous")
     next_topo = Button(topo_nav[1, 2], label = "Next ►")
     
+    # Add component selection text box
+    text_label = Label(topo_nav[2, 1], "Components:")
+    text_input = Textbox(topo_nav[2, 2], placeholder = "e.g. 1,3-5,8")
+    
     # Connect navigation buttons
     on(prev_topo.clicks) do _
         new_start = max(1, state.comp_start[] - state.n_visible_components)
@@ -486,6 +444,108 @@ function add_navigation_controls!(fig, state)
         state.comp_start[] = new_start
         update_components!(state)
     end
+    
+    # Add a submit button next to the textbox to explicitly apply changes
+    apply_button = Button(topo_nav[2, 3], label = "Apply")
+    on(apply_button.clicks) do _
+        # Get the raw string value directly from the textbox
+        text_value = text_input.displayed_string[]
+        
+        # Only process if we have a valid text input
+        if !isempty(text_value)
+            # Convert to component indices
+            comps = parse_component_input(text_value, state.total_components)
+            
+            if !isempty(comps)
+                println("Creating new plot with components: $comps")
+                
+                # Close current figure and create a new one with just these components
+                # Get current settings to preserve them
+                current_channel = state.channel_data[]
+                show_channel = state.show_channel[]
+                
+                # Create a new figure with exactly these components
+                new_fig = plot_ica_component_activation(
+                    state.dat, 
+                    state.ica_result,
+                    specific_components=comps, 
+                    n_visible_components=length(comps),
+                    window_size=state.window_size
+                )
+                
+                # The current figure will be replaced by the new one in the display
+            else
+                println("No valid components found in input: $text_value")
+            end
+        else
+            println("Empty text input")
+        end
+    end
+end
+
+# Function to parse component input text into a list of component indices
+function parse_component_input(text::String, total_components::Int)
+    components = Int[]
+    if isempty(text)
+        return components
+    end
+    
+    try
+        # Split by comma
+        parts = strip.(split(text, ','))
+        for part in parts
+            if occursin('-', part)
+                # Handle ranges like "1-5"
+                range_parts = strip.(split(part, '-'))
+                if length(range_parts) == 2
+                    start_num = parse(Int, range_parts[1])
+                    end_num = parse(Int, range_parts[2])
+                    if 1 <= start_num <= end_num <= total_components
+                        append!(components, start_num:end_num)
+                    end
+                end
+            else
+                # Handle single numbers
+                num = parse(Int, part)
+                if 1 <= num <= total_components
+                    push!(components, num)
+                end
+            end
+        end
+    catch e
+        # Silently handle parsing errors
+    end
+    
+    # Remove duplicates and sort
+    unique!(sort!(components))
+    return components
+end
+
+# Update specific components based on user input
+function update_specific_components!(state, comp_indices)
+    for i = 1:state.n_visible_components
+        if i <= length(comp_indices)
+            comp_idx = comp_indices[i]
+            if comp_idx <= state.total_components
+                # Update component data
+                state.lines_obs[i][] = state.components[comp_idx, :]
+                
+                # Clear and redraw topography
+                empty!(state.topo_axs[i])
+                plot_ica_topoplot(
+                    state.topo_axs[i].parent,
+                    state.topo_axs[i],
+                    state.ica_result,
+                    comp_idx,
+                    state.dat.layout,
+                    colorbar_kwargs = Dict(:plot_colorbar => false),
+                )
+                
+                # Update title
+                state.topo_axs[i].title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
+            end
+        end
+    end
 end
 
 # Add navigation sliders for x-axis movement
@@ -493,96 +553,123 @@ function add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
     slider_row = state.n_visible_components + 3
     
-    # Create x-position slider - align with the time series plots (column 2 only)
+    # Use a more consistent style matching plot_databrowser
     x_slider = Slider(
         fig[slider_row, 2], 
         range = 1:max(1, div(length(state.dat.data.time), 100)):length(state.dat.data.time),
         startvalue = first(state.xrange[]),
-        tellwidth = false
+        tellwidth = false,
+        width = Auto()
     )
     
-    # Connect slider to state
+    # Connect slider to state using the same pattern as in plot_databrowser
     on(x_slider.value) do x
-        start_pos = Int(round(x))
-        # Ensure we stay within data bounds
-        if start_pos + state.window_size > length(state.dat.data.time)
-            start_pos = length(state.dat.data.time) - state.window_size + 1
-        end
-        end_pos = start_pos + state.window_size - 1
-        
-        # Update range
-        state.xrange[] = start_pos:end_pos
-        
-        # Update axis limits
-        first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
-        last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
-        new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
-        for ax in state.axs
-            xlims!(ax, new_xlims)
-        end
+        # Update view range
+        update_view_range!(state, Int(round(x)))
+    end
+end
+
+# Helper function to update view range (similar to plot_databrowser style)
+function update_view_range!(state, start_pos)
+    # Ensure we stay within data bounds
+    if start_pos + state.window_size > length(state.dat.data.time)
+        start_pos = length(state.dat.data.time) - state.window_size + 1
+    end
+    end_pos = start_pos + state.window_size - 1
+    
+    # Update range
+    state.xrange[] = start_pos:end_pos
+    
+    # Update axis limits
+    first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
+    last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
+    new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
+    for ax in state.axs
+        xlims!(ax, new_xlims)
     end
 end
 
 # Add channel selection menu
 function add_channel_menu!(fig, state)
-    # Create a new row in the figure layout for the menu
-    menu_row = fig[state.n_visible_components+2, 1]  # Add new row at the bottom
-    menu_layout = GridLayout(menu_row)  # Create layout for the menu
-    Label(menu_layout[1, 1], "Additional Channel", tellwidth = true)  # Label
-    available_channels = names(state.dat.data)
-    channel_menu = Menu(menu_layout[2, 1], options = ["None"; available_channels], default = "None")
+    # Create a menu layout in column 2
+    menu_row = state.n_visible_components + 2
     
-    # Menu selection callback
+    # Create a simple grid layout
+    menu_layout = GridLayout(fig[menu_row, 2])
+    
+    # Create a simple label and menu
+    Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18)
+    
+    # Use a standard menu without fixed width
+    channel_menu = Menu(
+        menu_layout[1, 2],
+        options = ["None"; names(state.dat.data)],
+        default = "None",
+
+    )
+    
+    # Connect menu selection callback
     on(channel_menu.selection) do selected
-        # Clear previous channel visualizations from all axes
-        for i = 1:state.n_visible_components
-            if i <= length(state.channel_axs) && haskey(state.channel_bool_indicators, i) && 
-               !isnothing(state.channel_bool_indicators[i])
-                delete!(state.channel_axs[i], state.channel_bool_indicators[i])
-                state.channel_bool_indicators[i] = nothing
-            end
-        end
-        
-        if selected == "None"
-            state.show_channel[] = false
-            state.channel_data[] = zeros(size(state.dat.data, 1))
-        else
-            state.show_channel[] = true
-            selected_sym = Symbol(selected)
-            state.channel_data[] = state.dat.data[!, selected_sym]
-            
-            # Handle Boolean channels directly
-            if eltype(state.dat.data[!, selected_sym]) == Bool
-                # For each component axis, create a vertical line at each true position
-                for i = 1:state.n_visible_components
-                    if i <= length(state.channel_axs)
-                        ax_channel = state.channel_axs[i]
-                        
-                        # Find all time points where the boolean is true
-                        true_indices = findall(state.dat.data[!, selected_sym])
-                        
-                        if !isempty(true_indices)
-                            # Get the time values for the true positions
-                            true_times = state.dat.data.time[true_indices]
-                            
-                            # Create vertical lines at each true position
-                            lines = vlines!(
-                                ax_channel,
-                                true_times,
-                                color = :red,
-                                linewidth = 1
-                            )
-                            
-                            # Store the reference to the lines
-                            state.channel_bool_indicators[i] = lines
-                        end
-                    end
-                end
-            end
-        end
+        update_channel_selection!(state, selected)
     end
 
     return menu_layout
+end
+
+# Helper function to update channel selection (matches databrowser pattern)
+function update_channel_selection!(state, selected)
+    # Clear previous channel visualizations from all axes
+    for i = 1:state.n_visible_components
+        if i <= length(state.channel_axs) && 
+           haskey(state.channel_bool_indicators, i) && 
+           !isnothing(state.channel_bool_indicators[i])
+            delete!(state.channel_axs[i], state.channel_bool_indicators[i])
+            state.channel_bool_indicators[i] = nothing
+        end
+    end
+    
+    if selected == "None"
+        state.show_channel[] = false
+        state.channel_data[] = zeros(size(state.dat.data, 1))
+    else
+        state.show_channel[] = true
+        selected_sym = Symbol(selected)
+        state.channel_data[] = state.dat.data[!, selected_sym]
+        
+        # Handle Boolean channels directly
+        if eltype(state.dat.data[!, selected_sym]) == Bool
+            add_boolean_indicators!(state, selected_sym)
+        end
+    end
+end
+
+# Helper function to add boolean indicators (matching databrowser pattern)
+function add_boolean_indicators!(state, channel_sym)
+    # For each component axis, create a vertical line at each true position
+    for i = 1:state.n_visible_components
+        if i <= length(state.channel_axs)
+            ax_channel = state.channel_axs[i]
+            
+            # Find all time points where the boolean is true
+            true_indices = findall(state.dat.data[!, channel_sym])
+            
+            if !isempty(true_indices)
+                # Get the time values for the true positions
+                true_times = state.dat.data.time[true_indices]
+                
+                # Create vertical lines at each true position
+                lines = vlines!(
+                    ax_channel,
+                    true_times,
+                    color = :red,
+                    linewidth = 1
+                )
+                
+                # Store the reference to the lines
+                state.channel_bool_indicators[i] = lines
+            end
+        end
+    end
 end
 
 # Setup keyboard interactions

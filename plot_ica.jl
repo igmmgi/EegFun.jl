@@ -5,66 +5,106 @@ function plot_ica_topoplot(
     ica,
     layout;
     comps = nothing,
+    dims = nothing,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
 )
+
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
     if isnothing(comps)
         comps = 1:size(ica.mixing)[2]
     end
+    
+    # Setup parameters with defaults
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
+    
     point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
     point_kwargs = merge(point_default_kwargs, point_kwargs)
-    label_default_kwargs =
-        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    
+    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
     label_kwargs = merge(label_default_kwargs, label_kwargs)
-    xoffset = pop!(label_kwargs, :xoffset)
-    yoffset = pop!(label_kwargs, :yoffset)
+    
     topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :size => 1)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = pop!(topo_kwargs, :gridscale)
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 10, :height => Relative(0.8), :ticklabelsize => 10)
     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
 
+    # Create figure
     fig = Figure()
-    dims = best_rect(length(comps))
-    count = 1
+    
+    # Calculate layout dimensions
+    if isnothing(dims)
+        dims = best_rect(length(comps))
+    end
+    
+    # Create a master grid for each topoplot with its colorbar
+    # This stores the subplot layout for each component
+    subplot_layouts = []
+    
+    # Create all the layouts
+    for i = 1:length(comps)
+        # Calculate grid position
+        row = ceil(Int, i/dims[2])
+        col = ((i-1) % dims[2]) + 1
+        
+        # Create a layout for this component that will hold both plot and colorbar
+        if plot_colorbar
+            # Create a GridLayout with 2 columns (plot + colorbar)
+            gl = GridLayout(fig[row, col])
+            # Store for later reference
+            push!(subplot_layouts, gl)
+        else
+            push!(subplot_layouts, nothing)  # Placeholder if not using colorbars
+        end
+    end
+    
+    # Create axes in these layouts
     axs = []
-    for dim1 = 1:dims[1]
-        for dim2 = 1:dims[2]
+    for i = 1:length(comps)
+        if plot_colorbar && !isnothing(subplot_layouts[i])
+            # If using colorbars, create axis in first column of subplot layout
             ax = Axis(
-                fig[dim1, dim2],
+                subplot_layouts[i][1, 1],
+                width = Relative(1.0),
+                height = Relative(1.0),
+                halign = 0.5,
+                valign = 0.5,
+            )
+        else
+            # If no colorbars, create axis directly in the figure grid
+            row = ceil(Int, i/dims[2])
+            col = ((i-1) % dims[2]) + 1
+            ax = Axis(
+                fig[row, col],
                 width = Relative(topo_kwargs[:size]),
                 height = Relative(topo_kwargs[:size]),
                 halign = 0.5,
                 valign = 0.5,
             )
-            push!(axs, ax)
-            count += 1
-            if count > length(comps)
-                break
-            end
         end
+        push!(axs, ax)
     end
-    count = 1
 
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
 
-    for ax in axs
-        ax.title = String(ica.ica_label[comps[count]])
+    # Plot each component
+    for (i, ax) in enumerate(axs)
+        ax.title = String(ica.ica_label[comps[i]])
         data = data_interpolation_topo(
-            ica.mixing[:, comps[count]],
+            ica.mixing[:, comps[i]],
             permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
             gridscale,
         )
-        gridscale = gridscale
+        
         radius = 88 # mm
         co = contourf!(
             ax,
@@ -73,11 +113,8 @@ function plot_ica_topoplot(
             data,
             colormap = :jet,
         )
-        # TODO: improve colorbar stuff
-        # if plot_colorbar
-        #     Colorbar(ax, co; colorbar_kwargs...)
-        #  end
-        # head shape
+        
+        # Add head shape
         plot_layout_2d!(
             fig,
             ax,
@@ -86,85 +123,25 @@ function plot_ica_topoplot(
             point_kwargs = point_kwargs,
             label_kwargs = label_kwargs,
         )
-        count += 1
-        if count > length(comps)
-            break
+        
+        # Add colorbar if requested and we have a valid subplot layout
+        if plot_colorbar && i <= length(subplot_layouts) && !isnothing(subplot_layouts[i]) && i == 1
+            cb = Colorbar(
+                subplot_layouts[i][1, 2],  # Place in second column of this subplot's layout
+                co;
+                width = colorbar_kwargs[:width],
+                height = colorbar_kwargs[:height],
+                ticklabelsize = colorbar_kwargs[:ticklabelsize]
+            )
+            
+            # Set column sizes within this subplot's grid
+            colsize!(subplot_layouts[i], 1, Relative(0.85))  # Plot column
+            colsize!(subplot_layouts[i], 2, Relative(0.15))  # Colorbar column
         end
     end
+    
     return fig
 end
-
-
-
-
-
-function plot_ica_topoplot(
-    fig,
-    ax,
-    ica,
-    comp,
-    layout;
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    topo_kwargs = Dict(),
-    colorbar_kwargs = Dict(),
-)
-
-    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    head_kwargs = merge(head_default_kwargs, head_kwargs)
-
-    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-
-    label_default_kwargs =
-        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
-    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = pop!(topo_kwargs, :gridscale)
-
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
-    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
-
-    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
-
-    if ax.title.val == ""
-        ax.title = ica.ica_label[comp]
-    end
-    data = data_interpolation_topo(ica.mixing[:, comp], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
-    gridscale = gridscale
-    radius = 88 # mm
-    co = contourf!(
-        ax,
-        range(-radius * 2, radius * 2, length = gridscale),
-        range(-radius * 2, radius * 2, length = gridscale),
-        data,
-        colormap = :jet,
-    )
-    # TODO: improve colorbar stuff
-    if plot_colorbar
-        Colorbar(fig[1, 2], co; colorbar_kwargs...)
-    end
-    # head shape
-    plot_layout_2d!(
-        fig,
-        ax,
-        layout,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
-    )
-    # end
-    return fig
-end
-
 
 
 # layout = read_layout("./layouts/biosemi72.csv");
@@ -184,9 +161,10 @@ end
 # dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
 # ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params = IcaPrms())
 
-# plot_ica_topoplot(ica_result, dat.layout)
+plot_ica_topoplot(ica_result, dat.layout, dims = (2, 3))
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:10)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:3)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:3)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:3, dims = (1, 3))
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
 # plot_ica_topoplot(ica_result, dat.layout, comps = [1,3, 10])
@@ -625,96 +603,123 @@ function add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
     slider_row = state.n_visible_components + 3
     
-    # Create x-position slider - align with the time series plots (column 2 only)
+    # Use a more consistent style matching plot_databrowser
     x_slider = Slider(
         fig[slider_row, 2], 
         range = 1:max(1, div(length(state.dat.data.time), 100)):length(state.dat.data.time),
         startvalue = first(state.xrange[]),
-        tellwidth = false
+        tellwidth = false,
+        width = Auto()
     )
     
-    # Connect slider to state
+    # Connect slider to state using the same pattern as in plot_databrowser
     on(x_slider.value) do x
-        start_pos = Int(round(x))
-        # Ensure we stay within data bounds
-        if start_pos + state.window_size > length(state.dat.data.time)
-            start_pos = length(state.dat.data.time) - state.window_size + 1
-        end
-        end_pos = start_pos + state.window_size - 1
-        
-        # Update range
-        state.xrange[] = start_pos:end_pos
-        
-        # Update axis limits
-        first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
-        last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
-        new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
-        for ax in state.axs
-            xlims!(ax, new_xlims)
-        end
+        # Update view range
+        update_view_range!(state, Int(round(x)))
+    end
+end
+
+# Helper function to update view range (similar to plot_databrowser style)
+function update_view_range!(state, start_pos)
+    # Ensure we stay within data bounds
+    if start_pos + state.window_size > length(state.dat.data.time)
+        start_pos = length(state.dat.data.time) - state.window_size + 1
+    end
+    end_pos = start_pos + state.window_size - 1
+    
+    # Update range
+    state.xrange[] = start_pos:end_pos
+    
+    # Update axis limits
+    first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
+    last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
+    new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
+    for ax in state.axs
+        xlims!(ax, new_xlims)
     end
 end
 
 # Add channel selection menu
 function add_channel_menu!(fig, state)
-    # Create a new row in the figure layout for the menu
-    menu_row = fig[state.n_visible_components+2, 1]  # Add new row at the bottom
-    menu_layout = GridLayout(menu_row)  # Create layout for the menu
-    Label(menu_layout[1, 1], "Additional Channel", tellwidth = true)  # Label
-    available_channels = names(state.dat.data)
-    channel_menu = Menu(menu_layout[2, 1], options = ["None"; available_channels], default = "None")
+    # Create a menu layout in column 2
+    menu_row = state.n_visible_components + 2
     
-    # Menu selection callback
+    # Create a simple grid layout
+    menu_layout = GridLayout(fig[menu_row, 2])
+    
+    # Create a simple label and menu
+    Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18)
+    
+    # Use a standard menu without fixed width
+    channel_menu = Menu(
+        menu_layout[1, 2],
+        options = ["None"; names(state.dat.data)],
+        default = "None",
+
+    )
+    
+    # Connect menu selection callback
     on(channel_menu.selection) do selected
-        # Clear previous channel visualizations from all axes
-        for i = 1:state.n_visible_components
-            if i <= length(state.channel_axs) && haskey(state.channel_bool_indicators, i) && 
-               !isnothing(state.channel_bool_indicators[i])
-                delete!(state.channel_axs[i], state.channel_bool_indicators[i])
-                state.channel_bool_indicators[i] = nothing
-            end
-        end
-        
-        if selected == "None"
-            state.show_channel[] = false
-            state.channel_data[] = zeros(size(state.dat.data, 1))
-        else
-            state.show_channel[] = true
-            selected_sym = Symbol(selected)
-            state.channel_data[] = state.dat.data[!, selected_sym]
-            
-            # Handle Boolean channels directly
-            if eltype(state.dat.data[!, selected_sym]) == Bool
-                # For each component axis, create a vertical line at each true position
-                for i = 1:state.n_visible_components
-                    if i <= length(state.channel_axs)
-                        ax_channel = state.channel_axs[i]
-                        
-                        # Find all time points where the boolean is true
-                        true_indices = findall(state.dat.data[!, selected_sym])
-                        
-                        if !isempty(true_indices)
-                            # Get the time values for the true positions
-                            true_times = state.dat.data.time[true_indices]
-                            
-                            # Create vertical lines at each true position
-                            lines = vlines!(
-                                ax_channel,
-                                true_times,
-                                color = :red,
-                                linewidth = 1
-                            )
-                            
-                            # Store the reference to the lines
-                            state.channel_bool_indicators[i] = lines
-                        end
-                    end
-                end
-            end
-        end
+        update_channel_selection!(state, selected)
     end
 
     return menu_layout
+end
+
+# Helper function to update channel selection (matches databrowser pattern)
+function update_channel_selection!(state, selected)
+    # Clear previous channel visualizations from all axes
+    for i = 1:state.n_visible_components
+        if i <= length(state.channel_axs) && 
+           haskey(state.channel_bool_indicators, i) && 
+           !isnothing(state.channel_bool_indicators[i])
+            delete!(state.channel_axs[i], state.channel_bool_indicators[i])
+            state.channel_bool_indicators[i] = nothing
+        end
+    end
+    
+    if selected == "None"
+        state.show_channel[] = false
+        state.channel_data[] = zeros(size(state.dat.data, 1))
+    else
+        state.show_channel[] = true
+        selected_sym = Symbol(selected)
+        state.channel_data[] = state.dat.data[!, selected_sym]
+        
+        # Handle Boolean channels directly
+        if eltype(state.dat.data[!, selected_sym]) == Bool
+            add_boolean_indicators!(state, selected_sym)
+        end
+    end
+end
+
+# Helper function to add boolean indicators (matching databrowser pattern)
+function add_boolean_indicators!(state, channel_sym)
+    # For each component axis, create a vertical line at each true position
+    for i = 1:state.n_visible_components
+        if i <= length(state.channel_axs)
+            ax_channel = state.channel_axs[i]
+            
+            # Find all time points where the boolean is true
+            true_indices = findall(state.dat.data[!, channel_sym])
+            
+            if !isempty(true_indices)
+                # Get the time values for the true positions
+                true_times = state.dat.data.time[true_indices]
+                
+                # Create vertical lines at each true position
+                lines = vlines!(
+                    ax_channel,
+                    true_times,
+                    color = :red,
+                    linewidth = 1
+                )
+                
+                # Store the reference to the lines
+                state.channel_bool_indicators[i] = lines
+            end
+        end
+    end
 end
 
 # Setup keyboard interactions
