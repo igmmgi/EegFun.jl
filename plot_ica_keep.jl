@@ -5,66 +5,106 @@ function plot_ica_topoplot(
     ica,
     layout;
     comps = nothing,
+    dims = nothing,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
 )
+
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
     if isnothing(comps)
         comps = 1:size(ica.mixing)[2]
     end
+    
+    # Setup parameters with defaults
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
+    
     point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
     point_kwargs = merge(point_default_kwargs, point_kwargs)
-    label_default_kwargs =
-        Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    
+    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
     label_kwargs = merge(label_default_kwargs, label_kwargs)
-    xoffset = pop!(label_kwargs, :xoffset)
-    yoffset = pop!(label_kwargs, :yoffset)
+    
     topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :size => 1)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = pop!(topo_kwargs, :gridscale)
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 10, :height => Relative(0.8), :ticklabelsize => 10)
     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
 
+    # Create figure
     fig = Figure()
-    dims = best_rect(length(comps))
-    count = 1
+    
+    # Calculate layout dimensions
+    if isnothing(dims)
+        dims = best_rect(length(comps))
+    end
+    
+    # Create a master grid for each topoplot with its colorbar
+    # This stores the subplot layout for each component
+    subplot_layouts = []
+    
+    # Create all the layouts
+    for i = 1:length(comps)
+        # Calculate grid position
+        row = ceil(Int, i/dims[2])
+        col = ((i-1) % dims[2]) + 1
+        
+        # Create a layout for this component that will hold both plot and colorbar
+        if plot_colorbar
+            # Create a GridLayout with 2 columns (plot + colorbar)
+            gl = GridLayout(fig[row, col])
+            # Store for later reference
+            push!(subplot_layouts, gl)
+        else
+            push!(subplot_layouts, nothing)  # Placeholder if not using colorbars
+        end
+    end
+    
+    # Create axes in these layouts
     axs = []
-    for dim1 = 1:dims[1]
-        for dim2 = 1:dims[2]
+    for i = 1:length(comps)
+        if plot_colorbar && !isnothing(subplot_layouts[i])
+            # If using colorbars, create axis in first column of subplot layout
             ax = Axis(
-                fig[dim1, dim2],
+                subplot_layouts[i][1, 1],
+                width = Relative(1.0),
+                height = Relative(1.0),
+                halign = 0.5,
+                valign = 0.5,
+            )
+        else
+            # If no colorbars, create axis directly in the figure grid
+            row = ceil(Int, i/dims[2])
+            col = ((i-1) % dims[2]) + 1
+            ax = Axis(
+                fig[row, col],
                 width = Relative(topo_kwargs[:size]),
                 height = Relative(topo_kwargs[:size]),
                 halign = 0.5,
                 valign = 0.5,
             )
-            push!(axs, ax)
-            count += 1
-            if count > length(comps)
-                break
-            end
         end
+        push!(axs, ax)
     end
-    count = 1
 
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
 
-    for ax in axs
-        ax.title = String(ica.ica_label[comps[count]])
+    # Plot each component
+    for (i, ax) in enumerate(axs)
+        ax.title = String(ica.ica_label[comps[i]])
         data = data_interpolation_topo(
-            ica.mixing[:, comps[count]],
+            ica.mixing[:, comps[i]],
             permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
             gridscale,
         )
-        gridscale = gridscale
+        
         radius = 88 # mm
         co = contourf!(
             ax,
@@ -73,11 +113,8 @@ function plot_ica_topoplot(
             data,
             colormap = :jet,
         )
-        # TODO: improve colorbar stuff
-        #if plot_colorbar
-            Colorbar(ax, co; colorbar_kwargs...)
-        #  end
-        # head shape
+        
+        # Add head shape
         plot_layout_2d!(
             fig,
             ax,
@@ -86,11 +123,23 @@ function plot_ica_topoplot(
             point_kwargs = point_kwargs,
             label_kwargs = label_kwargs,
         )
-        count += 1
-        if count > length(comps)
-            break
+        
+        # Add colorbar if requested and we have a valid subplot layout
+        if plot_colorbar && i <= length(subplot_layouts) && !isnothing(subplot_layouts[i]) && i == 1
+            cb = Colorbar(
+                subplot_layouts[i][1, 2],  # Place in second column of this subplot's layout
+                co;
+                width = colorbar_kwargs[:width],
+                height = colorbar_kwargs[:height],
+                ticklabelsize = colorbar_kwargs[:ticklabelsize]
+            )
+            
+            # Set column sizes within this subplot's grid
+            colsize!(subplot_layouts[i], 1, Relative(0.85))  # Plot column
+            colsize!(subplot_layouts[i], 2, Relative(0.15))  # Colorbar column
         end
     end
+    
     return fig
 end
 
@@ -115,6 +164,7 @@ end
 plot_ica_topoplot(ica_result, dat.layout)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:10)
 plot_ica_topoplot(ica_result, dat.layout, comps = 1:3)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:3, dims = (1, 3))
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1)
 # plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
 # plot_ica_topoplot(ica_result, dat.layout, comps = [1,3, 10])
