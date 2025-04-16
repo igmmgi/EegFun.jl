@@ -1,5 +1,82 @@
-# TODO: butterfly plot/global field power
-# TODO: spline interpolation for topoplots?
+function plot_ica_topoplot_single(
+    fig,
+    position,
+    ica,
+    comp_idx,
+    layout;
+    show_colorbar = false,
+    colorbar_kwargs = Dict(),
+    head_kwargs = Dict(),
+    point_kwargs = Dict(),
+    label_kwargs = Dict()
+)
+    # Create a consistent GridLayout at this position - always the same structure
+    gl = fig[position...] = GridLayout()
+    
+    # Create main axis in the first column
+    ax = Axis(gl[1, 1], title = String(ica.ica_label[comp_idx]))
+    
+    # Extract layout data
+    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+    
+    # Create the topo data
+    gridscale = 300  # Default gridscale
+    data = data_interpolation_topo(
+        ica.mixing[:, comp_idx],
+        permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
+        gridscale
+    )
+    
+    # Create the plot
+    radius = 88 # mm
+    co = contourf!(
+        ax,
+        range(-radius * 2, radius * 2, length = gridscale),
+        range(-radius * 2, radius * 2, length = gridscale),
+        data,
+        colormap = :jet
+    )
+    
+    # Add head shape
+    plot_layout_2d!(
+        fig,
+        ax,
+        layout,
+        head_kwargs = head_kwargs,
+        point_kwargs = point_kwargs,
+        label_kwargs = label_kwargs
+    )
+    
+    # Hide decorations for cleaner look
+    hidexdecorations!(ax, grid=false)
+    hideydecorations!(ax, grid=false)
+    
+    # Add colorbar if requested
+    if show_colorbar
+        # Default values
+        width = get(colorbar_kwargs, :width, 10)
+        height = get(colorbar_kwargs, :height, Relative(0.8))
+        ticksize = get(colorbar_kwargs, :ticklabelsize, 10)
+        
+        # Create colorbar in second column
+        Colorbar(
+            gl[1, 2],
+            co;
+            width = width,
+            height = height,
+            ticklabelsize = ticksize
+        )
+        
+        # Set column sizes
+        colsize!(gl, 1, Relative(0.85))  # Plot column
+        colsize!(gl, 2, Relative(0.15))  # Colorbar column
+    else
+        # If no colorbar, make the plot take the full width
+        colsize!(gl, 1, Relative(1.0))
+    end
+    
+    return ax, co
+end
 
 function plot_ica_topoplot(
     ica,
@@ -12,32 +89,18 @@ function plot_ica_topoplot(
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
 )
-
+    # Process inputs
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
+    
     if isnothing(comps)
         comps = 1:size(ica.mixing)[2]
     end
     
-    # Setup parameters with defaults
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    head_kwargs = merge(head_default_kwargs, head_kwargs)
+    # Get colorbar setting
+    plot_colorbar = get(colorbar_kwargs, :plot_colorbar, true)
     
-    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-    
-    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-    
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :size => 1)
-    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = pop!(topo_kwargs, :gridscale)
-    
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 10, :height => Relative(0.8), :ticklabelsize => 10)
-    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
-
     # Create figure
     fig = Figure()
     
@@ -46,72 +109,74 @@ function plot_ica_topoplot(
         dims = best_rect(length(comps))
     end
     
-    # Create a master grid for each topoplot with its colorbar
-    # This stores the subplot layout for each component
-    subplot_layouts = []
+    # Extract layout data once for all plots
+    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+    gridscale = 300
+    radius = 88
     
-    # Create all the layouts
+    # Calculate global min/max for consistent colors across plots
+    all_data = []
+    for i in 1:length(comps)
+        data = data_interpolation_topo(
+            ica.mixing[:, comps[i]],
+            permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
+            gridscale
+        )
+        push!(all_data, data)
+    end
+    
+    # Find global min/max, safely handling NaN values
+    all_values = [v for data in all_data for v in data if !isnan(v)]
+    
+    # If we have valid values, use them; otherwise use defaults
+    if !isempty(all_values)
+        data_min = minimum(all_values)
+        data_max = maximum(all_values)
+    else
+        data_min = -1.0
+        data_max = 1.0
+    end
+    
+    # Ensure min != max to avoid range error
+    if data_min == data_max
+        data_min -= 0.1
+        data_max += 0.1
+    end
+    
+    # Create consistent levels for all plots
+    levels = range(data_min, data_max, length=20)
+    
+    # First create all the GridLayouts for consistent sizing
+    grids = []
     for i = 1:length(comps)
         # Calculate grid position
         row = ceil(Int, i/dims[2])
         col = ((i-1) % dims[2]) + 1
         
-        # Create a layout for this component that will hold both plot and colorbar
-        if plot_colorbar
-            # Create a GridLayout with 2 columns (plot + colorbar)
-            gl = GridLayout(fig[row, col])
-            # Store for later reference
-            push!(subplot_layouts, gl)
-        else
-            push!(subplot_layouts, nothing)  # Placeholder if not using colorbars
-        end
+        # Create a GridLayout for each plot
+        gl = fig[row, col] = GridLayout()
+        push!(grids, gl)
     end
     
-    # Create axes in these layouts
-    axs = []
+    # Now add the plots and colorbars
     for i = 1:length(comps)
-        if plot_colorbar && !isnothing(subplot_layouts[i])
-            # If using colorbars, create axis in first column of subplot layout
-            ax = Axis(
-                subplot_layouts[i][1, 1],
-                width = Relative(1.0),
-                height = Relative(1.0),
-                halign = 0.5,
-                valign = 0.5,
-            )
-        else
-            # If no colorbars, create axis directly in the figure grid
-            row = ceil(Int, i/dims[2])
-            col = ((i-1) % dims[2]) + 1
-            ax = Axis(
-                fig[row, col],
-                width = Relative(topo_kwargs[:size]),
-                height = Relative(topo_kwargs[:size]),
-                halign = 0.5,
-                valign = 0.5,
-            )
-        end
-        push!(axs, ax)
-    end
-
-    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
-
-    # Plot each component
-    for (i, ax) in enumerate(axs)
-        ax.title = String(ica.ica_label[comps[i]])
-        data = data_interpolation_topo(
-            ica.mixing[:, comps[i]],
-            permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
-            gridscale,
-        )
+        gl = grids[i]
         
-        radius = 88 # mm
+        # Create main axis in the first column
+        ax = Axis(gl[1, 1], title = String(ica.ica_label[comps[i]]))
+        
+        # Get pre-calculated data
+        data = all_data[i]
+        
+        # Create the plot with consistent levels
         co = contourf!(
             ax,
             range(-radius * 2, radius * 2, length = gridscale),
             range(-radius * 2, radius * 2, length = gridscale),
             data,
             colormap = :jet,
+            levels = levels,
+            nan_color = :transparent
         )
         
         # Add head shape
@@ -121,53 +186,130 @@ function plot_ica_topoplot(
             layout,
             head_kwargs = head_kwargs,
             point_kwargs = point_kwargs,
-            label_kwargs = label_kwargs,
+            label_kwargs = label_kwargs
         )
         
-        # Add colorbar if requested and we have a valid subplot layout
-        if plot_colorbar && i <= length(subplot_layouts) && !isnothing(subplot_layouts[i]) && i == 1
-            cb = Colorbar(
-                subplot_layouts[i][1, 2],  # Place in second column of this subplot's layout
-                co;
-                width = colorbar_kwargs[:width],
-                height = colorbar_kwargs[:height],
-                ticklabelsize = colorbar_kwargs[:ticklabelsize]
-            )
-            
-            # Set column sizes within this subplot's grid
-            colsize!(subplot_layouts[i], 1, Relative(0.85))  # Plot column
-            colsize!(subplot_layouts[i], 2, Relative(0.15))  # Colorbar column
+        # Hide decorations for cleaner look
+        hidexdecorations!(ax, grid=false)
+        hideydecorations!(ax, grid=false)
+        
+        # Set up colorbar space for ALL plots for consistent sizing
+        # Default values
+        width = get(colorbar_kwargs, :width, 10)
+        height = get(colorbar_kwargs, :height, Relative(0.8))
+        ticksize = get(colorbar_kwargs, :ticklabelsize, 10)
+        
+        # Set column sizes for all - ensures consistent layout
+        colsize!(gl, 1, Relative(0.85))  # Plot column
+        
+        if plot_colorbar
+            if i == 1 || i == 3
+                # Only create visible colorbar for the first plot
+                Colorbar(
+                    gl[1, 2],
+                    co;
+                    width = width,
+                    height = height,
+                    ticklabelsize = ticksize
+                )
+            else
+                # For other plots, create an empty colorbar placeholder
+                # Create an empty axis with the same dimensions but no content
+                placeholder = Axis(gl[1, 2];
+                    width = width,
+                    height = height,
+                    rightspinevisible = false,
+                    leftspinevisible = false,
+                    topspinevisible = false,
+                    bottomspinevisible = false,
+                    xticklabelsvisible = false,
+                    yticklabelsvisible = false,
+                    xticksvisible = false,
+                    yticksvisible = false,
+                    xgridvisible = false,
+                    ygridvisible = false
+                )
+                # Hide everything to make it truly empty
+                hidexdecorations!(placeholder)
+                hideydecorations!(placeholder)
+            end
+            colsize!(gl, 2, Relative(0.15))  # Colorbar column
+        else
+            # If no colorbar wanted at all, just use the full width
+            colsize!(gl, 1, Relative(1.0))
         end
+    end
+    
+    # Apply consistent sizing to all grid rows and columns
+    # This ensures alignment across the entire figure
+    for i = 1:dims[1]
+        rowsize!(fig.layout, i, Relative(1/dims[1]))
+    end
+    
+    for j = 1:dims[2]
+        colsize!(fig.layout, j, Relative(1/dims[2]))
     end
     
     return fig
 end
 
+# Version for the component viewer to use
+function plot_ica_topoplot(
+    fig,
+    ax,
+    ica,
+    comp_idx,
+    layout;
+    colorbar_kwargs = Dict(),
+    head_kwargs = Dict(),
+    point_kwargs = Dict(),
+    label_kwargs = Dict()
+)
+    # Clear the axis before drawing
+    empty!(ax)
+    
+    # Extract layout data
+    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+    
+    # Create the topo data
+    gridscale = 300  # Default gridscale
+    data = data_interpolation_topo(
+        ica.mixing[:, comp_idx],
+        permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
+        gridscale
+    )
+    
+    # Create the plot directly on the existing axis
+    radius = 88 # mm
+    co = contourf!(
+        ax,
+        range(-radius * 2, radius * 2, length = gridscale),
+        range(-radius * 2, radius * 2, length = gridscale),
+        data,
+        colormap = :jet
+    )
+    
+    # Add head shape
+    plot_layout_2d!(
+        fig,
+        ax,
+        layout,
+        head_kwargs = head_kwargs,
+        point_kwargs = point_kwargs,
+        label_kwargs = label_kwargs
+    )
+    
+    # Set title - for component viewer
+    ax.title = string(ica.ica_label[comp_idx])
+    
+    # Hide decorations for cleaner look
+    hidexdecorations!(ax, grid=false)
+    hideydecorations!(ax, grid=false)
+    
+    return co
+end
 
-# layout = read_layout("./layouts/biosemi72.csv");
-# dat = read_bdf("../Flank_C_3.bdf");
-# dat = create_eeg_dataframe(dat, layout);
-# filter_data!(dat, "hp", "iir", 1, order = 1)
-# rereference!(dat, :avg)
-# diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
-# diff_channel!(dat, :F9, :F10, :hEOG);
-# # autodetect EOG signals
-# detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-# detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-# is_extreme_value!(dat, dat.layout.label, 50);
-# dat_ica = filter_data(dat, "hp", "iir", 1, order = 1)
-# good_samples = findall(dat_ica.data[!, :is_extreme_value] .== false)
-# good_channels = setdiff(dat_ica.layout.label, [:PO9])
-# dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
-# ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params = IcaPrms())
 
-plot_ica_topoplot(ica_result, dat.layout)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:10)
-plot_ica_topoplot(ica_result, dat.layout, comps = 1:3)
-plot_ica_topoplot(ica_result, dat.layout, comps = 1:3, dims = (1, 3))
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
-# plot_ica_topoplot(ica_result, dat.layout, comps = [1,3, 10])
 
 # function plot_ica_component_activation(ica, epochs::EpochData, component::Int)
 #     fig = Figure()
@@ -259,7 +401,7 @@ mutable struct IcaComponentState
         # Find index closest to time 0 to center the initial view
         time_zero_idx = findmin(abs.(dat.data.time))[2]
         half_window = div(window_size, 2)
-        start_idx = 1 #max(1, time_zero_idx - half_window)
+        start_idx = max(1, time_zero_idx - half_window)
         end_idx = min(size(components, 2), start_idx + window_size - 1)
         
         # Adjust start_idx if end_idx reached the boundary
@@ -363,117 +505,136 @@ function prepare_ica_data_matrix(dat::ContinuousData, ica_result::InfoIca)
     return dat_matrix
 end
 
-# Create the component plots (topoplots and time series)
-function create_component_plots!(fig, state, topo_kwargs)
-    # Set defaults for topo plots
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :size => 1)
-    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+# Create a simpler override specifically for the component viewer
+function plot_topoplot_in_viewer!(
+    fig,
+    topo_ax, 
+    ica_result, 
+    comp_idx, 
+    layout
+)
+    # Clear the axis
+    empty!(topo_ax)
     
-    # Runtime calculated values
-    xlims = @lift((state.dat.data.time[first($(state.xrange))], state.dat.data.time[last($(state.xrange))]))
+    # Extract layout data and prepare the plot
+    tmp_layout = layout[(layout.label.∈Ref(ica_result.data_label)), :]
     
-    # Force immediate calculation of xlims to ensure proper initial view
-    initial_xlims = (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])])
+    # Create the topo data
+    gridscale = 300
+    data = data_interpolation_topo(
+        ica_result.mixing[:, comp_idx],
+        permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
+        gridscale
+    )
     
-    # Determine which components to show
-    comp_indices = state.specific_components === nothing ? 
-                  (state.comp_start[]:(state.comp_start[] + state.n_visible_components - 1)) :
-                  state.specific_components
+    # Plot directly on the provided axis
+    radius = 88 # mm
+    co = contourf!(
+        topo_ax,
+        range(-radius * 2, radius * 2, length = gridscale),
+        range(-radius * 2, radius * 2, length = gridscale),
+        data,
+        colormap = :jet
+    )
     
-    # Create plots for each component
-    for i = 1:state.n_visible_components
-        # Get actual component index
-        comp_idx = comp_indices[i]
-        
-        # Create topoplot
-        ax_topo = Axis(
-            fig[i, 1],
-            width = Relative(1),
-            height = Relative(1),
-            title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
-        )
-        push!(state.topo_axs, ax_topo)
-        
-        # Add topoplot
-        plot_ica_topoplot(fig, ax_topo, state.ica_result, comp_idx, state.dat.layout, 
-                           colorbar_kwargs = Dict(:plot_colorbar => false))
-        hidexdecorations!(ax_topo)
-        hideydecorations!(ax_topo)
-
-        # Create time series plot with two y-axes
-        ax_time = Axis(fig[i, 2], ylabel = "ICA Amplitude")
-        ax_channel = Axis(
-            fig[i, 2],
-            ylabel = "Channel Amplitude",
-            yaxisposition = :right,
-            yticklabelcolor = :grey,
-            ytickcolor = :grey,
-            xgridvisible = false,
-            ygridvisible = false,
-        )
-        
-        # Link x-axes
-        linkxaxes!(ax_time, ax_channel)
-        
-        # Hide the right axis' spine
-        hidespines!(ax_channel, :l, :t, :b)
-        
-        # Only add x-axis title and tick labels to bottom plot
-        if i == state.n_visible_components
-            ax_time.xlabel = "Time"
-            ax_time.xticklabelsvisible = true
-            ax_time.yticklabelsvisible = true
-        else
-            ax_time.xticklabelsvisible = false
-            hidexdecorations!(ax_channel, grid = false)
-        end   
-        
-        # Force immediate calculation of xlims to ensure proper initial view
-        xlims!(ax_channel, initial_xlims)
-        
-        push!(state.axs, ax_time)
-        push!(state.channel_axs, ax_channel)
-        
-        # Create observable for component data and add plot
-        line_obs = Observable(state.components[comp_idx, :])
-        lines!(ax_time, 
-               @lift(state.dat.data.time[$(state.xrange)]), 
-               @lift($(line_obs)[$(state.xrange)]), 
-               color = :black, 
-               linewidth = 2)
-        
-        # For the additional channel, just create a standard line
-        channel_line = lines!(
-            ax_channel,
-            @lift(state.dat.data.time[$(state.xrange)]),
-            @lift($(state.show_channel) ? 
-                 $(state.channel_data)[$(state.xrange)] * $(state.channel_yscale) : 
-                 fill(NaN, length($(state.xrange)))),
-            color = :grey,
-        )
-        
-        # Initialize an empty placeholder for Boolean indicators
-        state.channel_bool_indicators[i] = nothing
-        
-        push!(state.lines_obs, line_obs)
-        
-        # Set initial limits
-        xlims!(ax_time, initial_xlims)
-        ylims!(ax_time, state.ylims[])
-        ylims!(ax_channel, state.ylims[])
-    end
+    # Add head shape with default settings
+    plot_layout_2d!(fig, topo_ax, layout)
     
-    # Link all time series axes
-    linkaxes!(state.axs...)
+    # Hide decorations
+    hidexdecorations!(topo_ax, grid=false)
+    hideydecorations!(topo_ax, grid=false)
     
-    # Adjust layout
-    colsize!(fig.layout, 1, Auto(150))  # Fixed width for topo plots
+    return co
 end
 
-# Add navigation buttons
+# Update create_component_plots! to use our new function
+function create_component_plots!(fig, state, topo_kwargs = Dict())
+    # Create axes for the time series plots
+    for i = 1:state.n_visible_components
+        # Create topo plot axis first (now on the left)
+        topo_ax = Axis(fig[i, 1])
+        push!(state.topo_axs, topo_ax)
+        
+        # Get the actual component number
+        comp_idx = if !isnothing(state.specific_components) && i <= length(state.specific_components)
+            state.specific_components[i]
+        else
+            state.comp_start[] + i - 1
+        end
+        
+        # Time series axis creation (now on the right)
+        ax = Axis(
+            fig[i, 2],
+            ylabel = @sprintf("IC %d", comp_idx),
+            yaxisposition = :left,
+            yticklabelsvisible = false,  # Hide y-axis tick labels
+            yticksvisible = true  # Keep the tick marks themselves
+        )
+        push!(state.axs, ax)
+        
+        # Channel overlay axis (unchanged)
+        ax_channel = Axis(
+            fig[i, 2],
+            yticklabelsvisible = false,
+            yticksvisible = false,
+            yaxisposition = :right,
+            xaxisposition = :top  # Add this to ensure proper time axis alignment
+        )
+        push!(state.channel_axs, ax_channel)
+        
+        # Link axes (unchanged)
+        linkyaxes!(ax, ax_channel)
+        linkxaxes!(ax, ax_channel)  # Add this to ensure time axis stays synchronized
+        
+        # Observable creation (unchanged)
+        lines_obs = Observable(state.components[comp_idx, :])
+        push!(state.lines_obs, lines_obs)
+        
+        # Component line plot (unchanged)
+        lines!(
+            ax,
+            @lift(state.dat.data.time[$(state.xrange)]),
+            @lift($(lines_obs)[$(state.xrange)])
+        )
+        
+        # Channel overlay plot (unchanged)
+        lines!(
+            ax_channel,
+            @lift(state.dat.data.time[$(state.xrange)]),
+            @lift($(state.show_channel) ? $(state.channel_data)[$(state.xrange)] .* $(state.channel_yscale) : zeros(length($(state.xrange)))),
+            color = :red
+        )
+        
+        # Set initial x-axis limits to start at 0
+        xlims!(ax, (0.0, state.dat.data.time[last(state.xrange[])]))
+        xlims!(ax_channel, (0.0, state.dat.data.time[last(state.xrange[])]))
+        
+        # Hide x-axis decorations for all plots except bottom axis of last plot
+        if i != state.n_visible_components
+            hidexdecorations!(ax, grid=false)
+        end
+        # Always hide x-axis decorations for channel overlay axes
+        hidexdecorations!(ax_channel, grid=false)
+        
+        # Create the topo plot using our new simpler function
+        if comp_idx <= state.total_components
+            # Use the simpler function that avoids gridposition issues
+            plot_topoplot_in_viewer!(fig, topo_ax, state.ica_result, comp_idx, state.dat.layout)
+            
+            # Update title
+            topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
+        end
+    end
+    
+    # Set column sizes to give more space to the time series plots
+    colsize!(fig.layout, 1, Relative(0.15))  # Topoplots - now narrower
+    colsize!(fig.layout, 2, Relative(0.85))  # Time series - now wider
+end
+
+# Update add_navigation_controls! to match new layout
 function add_navigation_controls!(fig, state)
-    # Add navigation buttons below topo plots
-    topo_nav = GridLayout(fig[state.n_visible_components+1, 1])
+    # Add navigation buttons below topo plots in column 1
+    topo_nav = GridLayout(fig[state.n_visible_components+1, 1])  # Only in column 1
     prev_topo = Button(topo_nav[1, 1], label = "◄ Previous")
     next_topo = Button(topo_nav[1, 2], label = "Next ►")
     
@@ -580,6 +741,9 @@ function update_specific_components!(state, comp_indices)
                 # Update component data
                 state.lines_obs[i][] = state.components[comp_idx, :]
                 
+                # Update y-axis label to show actual component number
+                state.axs[i].ylabel = @sprintf("IC %d", comp_idx)
+                
                 # Clear and redraw topography
                 empty!(state.topo_axs[i])
                 plot_ica_topoplot(
@@ -598,15 +762,18 @@ function update_specific_components!(state, comp_indices)
     end
 end
 
-# Add navigation sliders for x-axis movement
+# Update add_navigation_sliders! to match new layout
 function add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
     slider_row = state.n_visible_components + 3
     
+    # Calculate the step size for the slider (1% of the data length)
+    step_size = max(1, div(length(state.dat.data.time), 100))
+    
     # Use a more consistent style matching plot_databrowser
     x_slider = Slider(
-        fig[slider_row, 2], 
-        range = 1:max(1, div(length(state.dat.data.time), 100)):length(state.dat.data.time),
+        fig[slider_row, 2],  # Now in column 2 where the time series are
+        range = 1:step_size:length(state.dat.data.time),
         startvalue = first(state.xrange[]),
         tellwidth = false,
         width = Auto()
@@ -630,22 +797,52 @@ function update_view_range!(state, start_pos)
     # Update range
     state.xrange[] = start_pos:end_pos
     
-    # Update axis limits
+    # Update axis limits based on the current view range
     first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
     last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
     new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
+    
+    # Update all axes including channel axes
     for ax in state.axs
         xlims!(ax, new_xlims)
     end
+    for ax in state.channel_axs
+        xlims!(ax, new_xlims)
+    end
+    
+    # If we have a boolean channel selected, update its indicators
+    if state.show_channel[] && !isempty(state.channel_bool_indicators)
+        # Clear existing indicators
+        for (i, indicator) in state.channel_bool_indicators
+            if !isnothing(indicator)
+                delete!(state.channel_axs[i], indicator)
+            end
+        end
+        empty!(state.channel_bool_indicators)
+        
+        # Find the current channel
+        current_channel = nothing
+        for col in names(state.dat.data)
+            if state.dat.data[!, col] == state.channel_data[]
+                current_channel = Symbol(col)
+                break
+            end
+        end
+        
+        # If we found a boolean channel, redraw its indicators
+        if !isnothing(current_channel) && eltype(state.dat.data[!, current_channel]) == Bool
+            add_boolean_indicators!(state, current_channel)
+        end
+    end
 end
 
-# Add channel selection menu
+# Update add_channel_menu! to match new layout
 function add_channel_menu!(fig, state)
     # Create a menu layout in column 2
     menu_row = state.n_visible_components + 2
     
     # Create a simple grid layout
-    menu_layout = GridLayout(fig[menu_row, 2])
+    menu_layout = GridLayout(fig[menu_row, 2])  # Now in column 2 where the time series are
     
     # Create a simple label and menu
     Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18)
@@ -655,7 +852,6 @@ function add_channel_menu!(fig, state)
         menu_layout[1, 2],
         options = ["None"; names(state.dat.data)],
         default = "None",
-
     )
     
     # Connect menu selection callback
@@ -677,6 +873,7 @@ function update_channel_selection!(state, selected)
             state.channel_bool_indicators[i] = nothing
         end
     end
+    empty!(state.channel_bool_indicators)
     
     if selected == "None"
         state.show_channel[] = false
@@ -708,15 +905,22 @@ function add_boolean_indicators!(state, channel_sym)
                 true_times = state.dat.data.time[true_indices]
                 
                 # Create vertical lines at each true position
-                lines = vlines!(
-                    ax_channel,
-                    true_times,
-                    color = :red,
-                    linewidth = 1
-                )
+                # Only create lines within the current view range
+                current_range = state.xrange[]
+                visible_times = true_times[true_times .>= state.dat.data.time[first(current_range)] .&& 
+                                         true_times .<= state.dat.data.time[last(current_range)]]
                 
-                # Store the reference to the lines
-                state.channel_bool_indicators[i] = lines
+                if !isempty(visible_times)
+                    lines = vlines!(
+                        ax_channel,
+                        visible_times,
+                        color = :red,
+                        linewidth = 1
+                    )
+                    
+                    # Store the reference to the lines
+                    state.channel_bool_indicators[i] = lines
+                end
             end
         end
     end
@@ -828,4 +1032,3 @@ function update_components!(state)
     end
 end
 
-plot_ica_component_activation(dat, ica_result, n_visible_components = 10)
