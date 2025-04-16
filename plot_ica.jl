@@ -1,6 +1,3 @@
-# TODO: butterfly plot/global field power
-# TODO: spline interpolation for topoplots?
-
 function plot_ica_topoplot_single(
     fig,
     position,
@@ -312,30 +309,7 @@ function plot_ica_topoplot(
     return co
 end
 
-# layout = read_layout("./layouts/biosemi72.csv");
-# dat = read_bdf("../Flank_C_3.bdf");
-# dat = create_eeg_dataframe(dat, layout);
-# filter_data!(dat, "hp", "iir", 1, order = 1)
-# rereference!(dat, :avg)
-# diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
-# diff_channel!(dat, :F9, :F10, :hEOG);
-# # autodetect EOG signals
-# detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-# detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-# is_extreme_value!(dat, dat.layout.label, 50);
-# dat_ica = filter_data(dat, "hp", "iir", 1, order = 1)
-# good_samples = findall(dat_ica.data[!, :is_extreme_value] .== false)
-# good_channels = setdiff(dat_ica.layout.label, [:PO9])
-# dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
-# ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params = IcaPrms())
 
-plot_ica_topoplot(ica_result, dat.layout)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:10)
-plot_ica_topoplot(ica_result, dat.layout, comps = 1:3)
-plot_ica_topoplot(ica_result, dat.layout, comps = 1:3, dims = (1, 3))
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1)
-# plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
-# plot_ica_topoplot(ica_result, dat.layout, comps = [1,3, 10])
 
 # function plot_ica_component_activation(ica, epochs::EpochData, component::Int)
 #     fig = Figure()
@@ -408,7 +382,7 @@ mutable struct IcaComponentState
     
     # Plot elements
     axs::Vector{Axis}
-    channel_axs::Vector{Axis}  # Store channel axes separately
+    channel_axs::Vector{Union{Axis, Nothing}}  # Allow for nothing values
     topo_axs::Vector{Axis}
     lines_obs::Vector{Observable{Vector{Float64}}}
     
@@ -427,7 +401,7 @@ mutable struct IcaComponentState
         # Find index closest to time 0 to center the initial view
         time_zero_idx = findmin(abs.(dat.data.time))[2]
         half_window = div(window_size, 2)
-        start_idx = 1 #max(1, time_zero_idx - half_window)
+        start_idx = max(1, time_zero_idx - half_window)
         end_idx = min(size(components, 2), start_idx + window_size - 1)
         
         # Adjust start_idx if end_idx reached the boundary
@@ -453,7 +427,7 @@ mutable struct IcaComponentState
         
         # Initialize empty plot element arrays
         axs = Vector{Axis}()
-        channel_axs = Vector{Axis}()
+        channel_axs = Vector{Union{Axis, Nothing}}()  # Allow for nothing values
         topo_axs = Vector{Axis}()
         lines_obs = Vector{Observable{Vector{Float64}}}()
         channel_bool_indicators = Dict{Int, Any}()
@@ -577,51 +551,79 @@ end
 function create_component_plots!(fig, state, topo_kwargs = Dict())
     # Create axes for the time series plots
     for i = 1:state.n_visible_components
-        # Time series axis creation (unchanged)
+        # Create topo plot axis first (now on the left)
+        topo_ax = Axis(fig[i, 1])
+        push!(state.topo_axs, topo_ax)
+        
+        # Get the actual component number
+        comp_idx = if !isnothing(state.specific_components) && i <= length(state.specific_components)
+            state.specific_components[i]
+        else
+            state.comp_start[] + i - 1
+        end
+        
+        # Time series axis creation (now on the right)
         ax = Axis(
-            fig[i, 1],
-            ylabel = @sprintf("IC %d", state.comp_start[] + i - 1),
-            yaxisposition = :right
+            fig[i, 2],
+            ylabel = @sprintf("IC %d", comp_idx),
+            yaxisposition = :left,
+            yticklabelsvisible = false,  # Hide y-axis tick labels
+            yticksvisible = true  # Keep the tick marks themselves
         )
         push!(state.axs, ax)
         
-        # Channel overlay axis (unchanged)
-        ax_channel = Axis(
-            fig[i, 1],
-            yticklabelsvisible = false,
-            yticksvisible = false,
-            yaxisposition = :left
-        )
-        push!(state.channel_axs, ax_channel)
+        # Channel overlay axis (only created when needed)
+        ax_channel = nothing
+        if state.show_channel[] && !isnothing(state.channel_data[]) && 
+           !isempty(state.channel_data[]) && eltype(state.channel_data[]) != Bool
+            ax_channel = Axis(
+                fig[i, 2],
+                yticklabelsvisible = false,
+                yticksvisible = false,
+                yaxisposition = :right,
+                xaxisposition = :top  # Add this to ensure proper time axis alignment
+            )
+            push!(state.channel_axs, ax_channel)
+            
+            # Link axes
+            linkyaxes!(ax, ax_channel)
+            linkxaxes!(ax, ax_channel)  # Add this to ensure time axis stays synchronized
+            
+            # Channel overlay plot
+            lines!(
+                ax_channel,
+                @lift(state.dat.data.time[$(state.xrange)]),
+                @lift($(state.show_channel) ? $(state.channel_data)[$(state.xrange)] .* $(state.channel_yscale) : zeros(length($(state.xrange)))),
+                color = :red
+            )
+            
+            # Set initial x-axis limits
+            xlims!(ax_channel, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
+        else
+            # Push a placeholder nothing for consistency
+            push!(state.channel_axs, nothing)
+        end
         
-        # Link axes (unchanged)
-        linkyaxes!(ax, ax_channel)
-        
-        # Create topo plot axis
-        topo_ax = Axis(fig[i, 2])
-        push!(state.topo_axs, topo_ax)
-        
-        # Observable creation (unchanged)
-        lines_obs = Observable(state.components[state.comp_start[] + i - 1, :])
+        # Observable creation
+        lines_obs = Observable(state.components[comp_idx, :])
         push!(state.lines_obs, lines_obs)
         
-        # Component line plot (unchanged)
+        # Component line plot
         lines!(
             ax,
             @lift(state.dat.data.time[$(state.xrange)]),
             @lift($(lines_obs)[$(state.xrange)])
         )
         
-        # Channel overlay plot (unchanged)
-        lines!(
-            ax_channel,
-            @lift(state.dat.data.time[$(state.xrange)]),
-            @lift($(state.show_channel) ? $(state.channel_data)[$(state.xrange)] .* $(state.channel_yscale) : zeros(length($(state.xrange)))),
-            color = :red
-        )
+        # Set initial x-axis limits
+        xlims!(ax, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
+        
+        # Hide x-axis decorations for all plots except bottom axis of last plot
+        if i != state.n_visible_components
+            hidexdecorations!(ax, grid=false)
+        end
         
         # Create the topo plot using our new simpler function
-        comp_idx = state.comp_start[] + i - 1
         if comp_idx <= state.total_components
             # Use the simpler function that avoids gridposition issues
             plot_topoplot_in_viewer!(fig, topo_ax, state.ica_result, comp_idx, state.dat.layout)
@@ -630,12 +632,16 @@ function create_component_plots!(fig, state, topo_kwargs = Dict())
             topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
         end
     end
+    
+    # Set column sizes to give more space to the time series plots
+    colsize!(fig.layout, 1, Relative(0.15))  # Topoplots - now narrower
+    colsize!(fig.layout, 2, Relative(0.85))  # Time series - now wider
 end
 
-# Add navigation buttons
+# Update add_navigation_controls! to match new layout
 function add_navigation_controls!(fig, state)
-    # Add navigation buttons below topo plots
-    topo_nav = GridLayout(fig[state.n_visible_components+1, 1])
+    # Add navigation buttons below topo plots in column 1
+    topo_nav = GridLayout(fig[state.n_visible_components+1, 1])  # Only in column 1
     prev_topo = Button(topo_nav[1, 1], label = "◄ Previous")
     next_topo = Button(topo_nav[1, 2], label = "Next ►")
     
@@ -742,6 +748,9 @@ function update_specific_components!(state, comp_indices)
                 # Update component data
                 state.lines_obs[i][] = state.components[comp_idx, :]
                 
+                # Update y-axis label to show actual component number
+                state.axs[i].ylabel = @sprintf("IC %d", comp_idx)
+                
                 # Clear and redraw topography
                 empty!(state.topo_axs[i])
                 plot_ica_topoplot(
@@ -760,15 +769,18 @@ function update_specific_components!(state, comp_indices)
     end
 end
 
-# Add navigation sliders for x-axis movement
+# Update add_navigation_sliders! to match new layout
 function add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
     slider_row = state.n_visible_components + 3
     
+    # Calculate the step size for the slider (1% of the data length)
+    step_size = max(1, div(length(state.dat.data.time), 100))
+    
     # Use a more consistent style matching plot_databrowser
     x_slider = Slider(
-        fig[slider_row, 2], 
-        range = 1:max(1, div(length(state.dat.data.time), 100)):length(state.dat.data.time),
+        fig[slider_row, 2],  # Now in column 2 where the time series are
+        range = 1:step_size:length(state.dat.data.time),
         startvalue = first(state.xrange[]),
         tellwidth = false,
         width = Auto()
@@ -792,22 +804,54 @@ function update_view_range!(state, start_pos)
     # Update range
     state.xrange[] = start_pos:end_pos
     
-    # Update axis limits
+    # Update axis limits based on the current view range
     first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
     last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
     new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
+    
+    # Update all axes including channel axes
     for ax in state.axs
         xlims!(ax, new_xlims)
     end
+    for ax in state.channel_axs
+        if !isnothing(ax)  # Only update if the axis exists
+            xlims!(ax, new_xlims)
+        end
+    end
+    
+    # If we have a boolean channel selected, update its indicators
+    if state.show_channel[] && !isempty(state.channel_bool_indicators)
+        # Clear existing indicators
+        for (i, indicator) in state.channel_bool_indicators
+            if !isnothing(indicator)
+                delete!(state.channel_axs[i], indicator)
+            end
+        end
+        empty!(state.channel_bool_indicators)
+        
+        # Find the current channel
+        current_channel = nothing
+        for col in names(state.dat.data)
+            if state.dat.data[!, col] == state.channel_data[]
+                current_channel = Symbol(col)
+                break
+            end
+        end
+        
+        # If we found a boolean channel, redraw its indicators
+        if !isnothing(current_channel) && eltype(state.dat.data[!, current_channel]) == Bool
+            add_boolean_indicators!(state, current_channel)
+        end
+    end
 end
 
-# Add channel selection menu
+# Update add_channel_menu! to match new layout
 function add_channel_menu!(fig, state)
     # Create a menu layout in column 2
     menu_row = state.n_visible_components + 2
     
     # Create a simple grid layout
-    menu_layout = GridLayout(fig[menu_row, 2])
+    menu_layout = GridLayout(fig[menu_row, 2])  # Now in column 2 where the time series are
     
     # Create a simple label and menu
     Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18)
@@ -817,7 +861,6 @@ function add_channel_menu!(fig, state)
         menu_layout[1, 2],
         options = ["None"; names(state.dat.data)],
         default = "None",
-
     )
     
     # Connect menu selection callback
@@ -839,18 +882,21 @@ function update_channel_selection!(state, selected)
             state.channel_bool_indicators[i] = nothing
         end
     end
+    empty!(state.channel_bool_indicators)
     
     if selected == "None"
         state.show_channel[] = false
         state.channel_data[] = zeros(size(state.dat.data, 1))
     else
-        state.show_channel[] = true
         selected_sym = Symbol(selected)
         state.channel_data[] = state.dat.data[!, selected_sym]
         
-        # Handle Boolean channels directly
+        # Only show overlay plot for non-Boolean channels
         if eltype(state.dat.data[!, selected_sym]) == Bool
+            state.show_channel[] = false
             add_boolean_indicators!(state, selected_sym)
+        else
+            state.show_channel[] = true
         end
     end
 end
@@ -870,15 +916,22 @@ function add_boolean_indicators!(state, channel_sym)
                 true_times = state.dat.data.time[true_indices]
                 
                 # Create vertical lines at each true position
-                lines = vlines!(
-                    ax_channel,
-                    true_times,
-                    color = :red,
-                    linewidth = 1
-                )
+                # Only create lines within the current view range
+                current_range = state.xrange[]
+                visible_times = true_times[true_times .>= state.dat.data.time[first(current_range)] .&& 
+                                         true_times .<= state.dat.data.time[last(current_range)]]
                 
-                # Store the reference to the lines
-                state.channel_bool_indicators[i] = lines
+                if !isempty(visible_times)
+                    lines = vlines!(
+                        ax_channel,
+                        visible_times,
+                        color = :red,
+                        linewidth = 1
+                    )
+                    
+                    # Store the reference to the lines
+                    state.channel_bool_indicators[i] = lines
+                end
             end
         end
     end
@@ -989,5 +1042,3 @@ function update_components!(state)
         end
     end
 end
-
-plot_ica_component_activation(dat, ica_result, n_visible_components = 10)

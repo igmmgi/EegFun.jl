@@ -713,14 +713,35 @@ function handle_keyboard_events!(fig, ax, state)
 end
 
 function handle_selection_movement!(ax, state, action::Symbol)
+    if action in (:left, :right)
+        _handle_selection_movement_impl(ax, state, action)
+    elseif action in (:up, :down)
+        handle_navigation!(ax, state, action)
+    end
+end
+
+function _handle_selection_movement_impl(ax, state::ContinuousDataBrowserState, action::Symbol)
     width = state.selection.bounds[][2] - state.selection.bounds[][1]
     time_start, time_end = get_time_bounds(state.data)
     if action == :left
         new_start = max(time_start, state.selection.bounds[][1] - width / 5)
-    elseif action == :right
+    else  # :right
         new_start = min(time_end - width, state.selection.bounds[][1] + width / 5)
-    else
-        return
+    end
+    state.selection.bounds[] = (new_start, new_start + width)
+    update_x_region_selection!(ax, state, state.selection.bounds[][1], state.selection.bounds[][2])
+end
+
+function _handle_selection_movement_impl(ax, state::EpochedDataBrowserState, action::Symbol)
+    width = state.selection.bounds[][2] - state.selection.bounds[][1]
+    current_epoch = state.data.current_epoch[]
+    current_data = state.data.current[current_epoch][]
+    time_start, time_end = current_data.time[1], current_data.time[end]
+    
+    if action == :left
+        new_start = max(time_start, state.selection.bounds[][1] - width / 5)
+    else  # :right
+        new_start = min(time_end - width, state.selection.bounds[][1] + width / 5)
     end
     state.selection.bounds[] = (new_start, new_start + width)
     update_x_region_selection!(ax, state, state.selection.bounds[][1], state.selection.bounds[][2])
@@ -742,13 +763,25 @@ function clear_x_region_selection!(state)
     state.selection.visible[] = false
 end
 
-function get_x_region_data(state)
+function get_x_region_data(state::ContinuousDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
     time_mask = (x_min .<= state.data.current[].time .<= x_max)
     selected_data = state.data.current[][time_mask, :]
     println("Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))")
     return selected_data
 end
+
+function get_x_region_data(state::EpochedDataBrowserState)
+    x_min, x_max = minmax(state.selection.bounds[]...)
+    current_epoch = state.data.current_epoch[]
+    current_data = state.data.current[current_epoch][]
+    time_mask = (x_min .<= current_data.time .<= x_max)
+    selected_data = current_data[time_mask, :]
+    println("Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))")
+    return selected_data
+end
+
+
 
 ############
 # Filtering
