@@ -1,3 +1,75 @@
+function run_ica(
+    dat::ContinuousData;
+    n_components::Union{Nothing,Int} = nothing,
+    exclude_channels::Vector{Symbol} = Symbol[],
+    exclude_samples::Vector{Symbol} = Symbol[],
+    include_samples::Vector{Symbol} = Symbol[],
+    hp_filter::Bool = true,
+    lp_filter::Bool = false,
+    hp_freq::Float64 = 1.0,
+    lp_freq::Float64 = 30.0,
+    params::IcaPrms = IcaPrms(),
+)
+    # Create a copy of the data to avoid modifying the original
+    dat_ica = deepcopy(dat)
+    
+    # Apply filters if requested
+    if hp_filter
+        @info "Applying high-pass filter"
+        dat_ica = filter_data(dat_ica, "hp", "iir", hp_freq, order = 1)
+    end
+    if lp_filter
+        @info "Applying low-pass filter"
+        dat_ica = filter_data(dat_ica, "lp", "iir", lp_freq, order = 3)
+    end
+
+    # Get channels to use
+    channels = setdiff(dat_ica.layout.label, exclude_channels)
+    if isempty(channels)
+        error("No channels available after excluding specified channels")
+    end
+
+    # Get samples to use
+    samples = trues(size(dat_ica.data, 1))  # Start with all samples
+    
+    # Apply exclude_samples filters
+    for col in exclude_samples
+        if hasproperty(dat_ica.data, col)
+            samples .&= .!dat_ica.data[!, col]
+        end
+    end
+    
+    # Apply include_samples filters
+    for col in include_samples
+        if hasproperty(dat_ica.data, col)
+            samples .&= dat_ica.data[!, col]
+        end
+    end
+    
+    # Convert to indices
+    sample_indices = findall(samples)
+    if isempty(sample_indices)
+        error("No samples available after applying sample filters")
+    end
+
+    # Set n_components if not specified
+    if isnothing(n_components)
+        n_components = length(channels) - 1
+    elseif n_components > length(channels)
+        @warn "Requested $n_components components but only $(length(channels)) channels available. Using $(length(channels) - 1) components instead."
+        n_components = length(channels) - 1
+    end
+
+    @info "\nRunning ICA with $(length(channels)) channels and $(length(sample_indices)) samples, $(n_components) components"
+
+    # Create data matrix and run ICA
+    dat_for_ica = create_ica_data_matrix(dat_ica.data, channels, sample_indices)
+    ica_result = infomax_ica(dat_for_ica, channels, n_components = n_components, params = params)
+
+    return ica_result
+end
+
+
 function IcaPrms(;
     l_rate = 0.001,
     max_iter = 512,
@@ -27,11 +99,8 @@ function IcaPrms(;
 end
 
 
-function create_ica_data_matrix(dat::DataFrame, channels; samples_to_include = nothing)
-    if isnothing(samples_to_include)
-        samples_to_include = dat.sample
-    end
-    dat = dat[samples_to_include, :]
+function create_ica_data_matrix(dat::DataFrame, channels, samples)
+    dat = dat[samples, :]
     # need to make sure we have unique samples as with longer epochs there is potential for overlap
     dat = unique(dat, :sample)
     # select only the channels we want

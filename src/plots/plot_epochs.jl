@@ -214,18 +214,3 @@ function _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol}; buff
     return (min_val - buffer, max_val + buffer)
 
 end
-
-# Basic Tests
-# TODO: Implement proper tests
-layout = read_layout("./layouts/biosemi72.csv");
-dat = read_bdf("../Flank_C_3.bdf");
-dat = create_eeg_dataframe(dat, layout);
-filter_data!(dat, "hp", "iir", 1, order=1)
-
-# Epoch Data
-epoch = extract_epochs(dat, 1, 1, -2, 4)
-plot_epochs(epoch, :Fp1) 
-plot_epochs(epoch, [:Fp1, :Fp2, :Fpz, :C1, :Cz, :Pz, :O1, :O2, :Oz], kwargs = Dict(:average_channels => true, :ylim => [-100, 100])) 
-plot_epochs(epoch, epoch.layout.label, kwargs = Dict(:average_channels => false, :ylim => [-100, 100])) 
-plot_epochs(epoch, epoch.layout.label[1:20], kwargs = Dict(:average_channels => false, :ylim => [-100, 100])) 
-

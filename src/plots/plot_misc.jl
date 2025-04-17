@@ -36,9 +36,3 @@ function plot_correlation_heatmap(corr_df::DataFrame, mask_range::Union{Nothing,
     display(fig)
     return fig, ax
 end
-
-dat = read_bdf("../Flank_C_$(subject).bdf");
-dat = create_eeg_dataframe(dat, layout);
-
-cm = correlation_matrix(dat)
-plot_correlation_heatmap(cm)
