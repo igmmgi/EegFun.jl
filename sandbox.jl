@@ -14,7 +14,6 @@ using Printf
 
 
 include("types.jl")
-include("utils.jl")
 include("analyse.jl")
 include("baseline.jl")
 include("channel_difference.jl")
@@ -22,17 +21,22 @@ include("epochs.jl")
 include("filter.jl")
 include("layout.jl")
 include("ica.jl")
-include("plot.jl")
-include("plot_databrowser.jl")
-include("plot_events.jl")
-include("plot_layout.jl")
-include("plot_topo.jl")
-include("plot_ica.jl")
 include("rereference.jl")
-include("topo.jl")
-include("utils.jl")
-include("viewer.jl")
+include("./utils/utils.jl")
 
+
+# plotting function
+include("./plots/plot_databrowser.jl")
+include("./plots/plot_epochs.jl")
+include("./plots/plot_erp.jl")
+include("./plots/plot_erp_grid.jl")
+include("./plots/plot_erp_image.jl")
+include("./plots/plot_events.jl")
+include("./plots/plot_grid_topo.jl")
+include("./plots/plot_ica.jl")
+include("./plots/plot_layout.jl")
+include("./plots/plot_misc.jl")
+include("./plots/plot_topo.jl")
 
 layout = read_layout("./layouts/biosemi72.csv");
 subject = 3
@@ -53,7 +57,15 @@ epochs = []
 for (idx, epoch) in enumerate([1, 4, 5, 3])
      push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
 end
-plot_databrowser(epochs[1]);
+plot_databrowser(epochs[1])
+
+
+# plot_databrowser(dat)
+# plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
+
+# include("test/runtests.jl")
+# test_baseline()
+# test_filter()
 
 # using Logging
 # # Show all messages
@@ -65,7 +77,7 @@ plot_databrowser(epochs[1]);
 
 # basic layouts
 layout = read_layout("./layouts/biosemi72.csv");
-# layout = read_layout("./layouts/biosemi64.csv");
+layout = read_layout("./layouts/biosemi64.csv");
 
 # 2D layout
 polar_to_cartesian_xy!(layout)
@@ -115,8 +127,7 @@ plot_events(dat);
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 dat = create_eeg_dataframe(dat, layout);
-filter_data!(dat, "hp", "fir", 1)
-rereference!(dat, :avg)
+# rereference!(dat, :Fp1)
 # filter_data!(dat, "hp", "iir", 1, order=1)
 # filter_data!(dat, "lp", "iir", 10, order=2)
 # is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
@@ -131,7 +142,7 @@ rereference!(dat, :avg)
 # channel_joint_probability(dat, threshold=5.0, normval=2)
 # cm = correlation_matrix(dat)
 # plot_correlation_heatmap(cm)
-# filter_data!(dat, "hp", "fir", 1)
+filter_data!(dat, "hp", "fir", 1)
 # calculate EOG channels
 diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
 diff_channel!(dat, :F9, :F10, :hEOG);
