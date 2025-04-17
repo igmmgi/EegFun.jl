@@ -1,4 +1,78 @@
 """
+    mark_epoch_windows!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; 
+                         channel_out::Symbol = :epoch_window)
+
+Mark samples that are within a specified time window of triggers of interest.
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+- `triggers_of_interest`: Vector of trigger values to mark windows around
+- `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
+- `channel_out`: Symbol for the output column name (default: :epoch_window)
+
+# Returns
+- The modified ContinuousData object with a new column indicating samples within trigger windows
+
+# Examples
+```julia
+# Asymmetric window: 1 second before to 2 seconds after trigger
+mark_epoch_windows!(dat, [1, 3], [-1.0, 2.0])
+
+# Custom column name
+mark_epoch_windows!(dat, [1, 3], [-1.0, 2.0], channel_out = :near_trigger)
+```
+"""
+function mark_epoch_windows!(
+    dat::ContinuousData,
+    triggers_of_interest::Vector{Int},
+    time_window::Vector{<:Real};
+    channel_out::Symbol = :epoch_window,
+)
+
+    # Input validation
+    @assert length(time_window) == 2 "Time window must have exactly 2 elements"
+    @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
+    @assert !isempty(triggers_of_interest) "Must specify at least one trigger of interest"
+    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
+    @assert hasproperty(dat.data, :time) "Data must have a time column"
+
+    # Initialize result vector with false
+    dat.data[!, channel_out] .= false
+
+    # Get unique triggers in data
+    unique_triggers = unique(dat.data.triggers)
+
+    # For each trigger of interest
+    for trigger in triggers_of_interest
+        # Check if trigger exists in data
+        if !(trigger in unique_triggers)
+            @warn "Trigger $trigger not found in data"
+            continue
+        end
+
+        # Find all samples where this trigger occurs
+        trigger_indices = findall(dat.data.triggers .== trigger)
+
+        # For each trigger occurrence
+        for idx in trigger_indices
+            trigger_time = dat.data.time[idx]
+
+            # Find all samples within the time window
+            window_start = trigger_time + time_window[1]
+            window_end = trigger_time + time_window[2]
+
+            # Mark samples within the window
+            in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
+            dat.data[in_window, channel_out] .= true
+        end
+    end
+
+    return dat
+end
+
+
+
+"""
     create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
 
 Creates a DataFrame containing EEG data from a BioSemiBDF object.
@@ -31,7 +105,12 @@ A ContinuousData object containing the EEG data and layout information.
 
 """
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
-    return ContinuousData(create_eeg_dataframe(dat), DataFrame(CSV.File(layout_file_name)), dat.header.sample_rate[1], AnalysisInfo())
+    return ContinuousData(
+        create_eeg_dataframe(dat),
+        DataFrame(CSV.File(layout_file_name)),
+        dat.header.sample_rate[1],
+        AnalysisInfo(),
+    )
 end
 
 """
@@ -54,10 +133,21 @@ end
 
 
 
-function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol})::DataFrame
+function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol}; filter_samples = nothing)::DataFrame
 
     # Select the specified channels
     selected_data = select(dat, channel_labels)
+
+    # Filter samples if requested
+    if filter_samples !== nothing
+        if filter_samples isa Symbol && hasproperty(dat, filter_samples)
+            # If filter_samples is a column name, use that column
+            selected_data = selected_data[dat[!, filter_samples], :]
+        else
+            # Otherwise assume it's a boolean vector
+            selected_data = selected_data[filter_samples, :]
+        end
+    end
 
     # Initialize a matrix to store summary statistics
     summary_stats = Matrix{Float64}(undef, length(channel_labels), 6)  # 6 statistics: min, max, range, std, mad, var
@@ -65,7 +155,8 @@ function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol})::DataFr
     # Compute summary statistics for each column
     for (i, col) in enumerate(channel_labels)
         col_data = @view selected_data[!, col]
-        summary_stats[i, :] = [minimum(col_data), maximum(col_data), datarange(col_data), std(col_data), mad(col_data), var(col_data)]
+        summary_stats[i, :] =
+            [minimum(col_data), maximum(col_data), datarange(col_data), std(col_data), mad(col_data), var(col_data)]
     end
 
     # Create a new DataFrame directly from the matrix and channel labels
@@ -86,32 +177,30 @@ function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol})::DataFr
 
 end
 
-function channel_summary(dat::SingleDataFrameEeg)::DataFrame
-    return channel_summary(dat.data, dat.layout.label)
+function channel_summary(dat::SingleDataFrameEeg; filter_samples = nothing)::DataFrame
+    return channel_summary(dat.data, dat.layout.label; filter_samples = filter_samples)
 end
 
-function channel_summary(dat::SingleDataFrameEeg, channel_numbers::Union{Vector{Int}, UnitRange})::DataFrame
+function channel_summary(dat::SingleDataFrameEeg, channel_numbers::Union{Vector{Int},UnitRange}; filter_samples = nothing)::DataFrame
     channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
-    return channel_summary(dat.data, channel_labels)
+    return channel_summary(dat.data, channel_labels; filter_samples = filter_samples)
 end
 
-function channel_summary(dat::SingleDataFrameEeg, channel_labels::Vector{Symbol})::DataFrame
-    return channel_summary(dat.data, channel_labels)
+function channel_summary(dat::SingleDataFrameEeg, channel_labels::Vector{Symbol}; filter_samples = nothing)::DataFrame
+    return channel_summary(dat.data, channel_labels; filter_samples = filter_samples)
 end
 
-
-
-function channel_summary(dat::MultiDataFrameEeg)::Vector{DataFrame}
-    return [channel_summary(dat.data[trial], dat.layout.label) for trial in eachindex(dat.data)]
+function channel_summary(dat::MultiDataFrameEeg; filter_samples = nothing)::Vector{DataFrame}
+    return [channel_summary(dat.data[trial], dat.layout.label; filter_samples = filter_samples) for trial in eachindex(dat.data)]
 end
 
-function channel_summary(dat::MultiDataFrameEeg, channel_numbers::Union{Vector{Int}, UnitRange})::Vector{DataFrame}
+function channel_summary(dat::MultiDataFrameEeg, channel_numbers::Union{Vector{Int},UnitRange}; filter_samples = nothing)::Vector{DataFrame}
     channel_labels = channel_number_to_channel_label(dat.layout.label, channel_numbers)
-    return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
+    return [channel_summary(dat.data[trial], channel_labels; filter_samples = filter_samples) for trial in eachindex(dat.data)]
 end
 
-function channel_summary(dat::MultiDataFrameEeg, channel_labels::Vector{Symbol})::Vector{DataFrame}
-    return [channel_summary(dat.data[trial], channel_labels) for trial in eachindex(dat.data)]
+function channel_summary(dat::MultiDataFrameEeg, channel_labels::Vector{Symbol}; filter_samples = nothing)::Vector{DataFrame}
+    return [channel_summary(dat.data[trial], channel_labels; filter_samples = filter_samples) for trial in eachindex(dat.data)]
 end
 
 
@@ -133,14 +222,29 @@ Calculates the correlation matrix for the EEG data.
 A DataFrame containing the correlation matrix of the specified channels.
 
 """
-function correlation_matrix(dat::DataFrame, channel_labels::Vector{Symbol})::DataFrame
-    df = DataFrame(cor(Matrix(select(dat, channel_labels))), channel_labels)
-    insertcols!(df, 1, :row => layout.label)
+function correlation_matrix(dat::DataFrame, channel_labels::Vector{Symbol}; filter_samples = nothing)::DataFrame
+    # Select the specified channels
+    data = select(dat, channel_labels)
+    
+    # Filter samples if requested
+    if filter_samples !== nothing
+        if filter_samples isa Symbol && hasproperty(dat, filter_samples)
+            # If filter_samples is a column name, use that column
+            data = data[dat[!, filter_samples], :]
+        else
+            # Otherwise assume it's a boolean vector
+            data = data[filter_samples, :]
+        end
+    end
+    
+    # Compute correlation matrix
+    df = DataFrame(cor(Matrix(data)), channel_labels)
+    insertcols!(df, 1, :row => channel_labels)
     return df
 end
 
-function correlation_matrix(dat::ContinuousData)::DataFrame
-    return correlation_matrix(dat.data, dat.layout.label)
+function correlation_matrix(dat::ContinuousData; filter_samples = nothing)::DataFrame
+    return correlation_matrix(dat.data, dat.layout.label; filter_samples = filter_samples)
 end
 
 
@@ -159,12 +263,7 @@ Detects EOG (electrooculogram) onsets in the EEG data based on a specified crite
 Nothing. The function modifies the input data in place.
 
 """
-function detect_eog_onsets!(
-    dat::ContinuousData,
-    criterion::Real,
-    channel_in::Symbol,
-    channel_out::Symbol,
-)
+function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
     step_size = div(dat.sample_rate, 20)
     eog_signal = dat.data[1:step_size:end, channel_in]
     eog_diff = diff(eog_signal)
@@ -189,15 +288,25 @@ Checks if any values in the specified columns exceed a given criterion.
 A Boolean indicating whether any extreme values were found.
 
 """
-function is_extreme_value( dat::DataFrame, columns::Vector{Symbol}, criterion::Number,)::Vector{Bool}
+function is_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Vector{Bool}
     return any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
-function is_extreme_value!(dat::DataFrame, columns::Vector{Symbol}, criterion::Number; channel_out::Symbol = :is_extreme_value)
+function is_extreme_value!(
+    dat::DataFrame,
+    columns::Vector{Symbol},
+    criterion::Number;
+    channel_out::Symbol = :is_extreme_value,
+)
     dat[!, channel_out] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
 end
 
-function is_extreme_value!(dat::ContinuousData, columns::Vector{Symbol}, criterion::Number; channel_out::Symbol = :is_extreme_value)
+function is_extreme_value!(
+    dat::ContinuousData,
+    columns::Vector{Symbol},
+    criterion::Number;
+    channel_out::Symbol = :is_extreme_value,
+)
     is_extreme_value!(dat.data, columns, criterion, channel_out = channel_out)
 end
 
@@ -222,15 +331,36 @@ end
 
 
 
-function channel_joint_probability(dat::DataFrame, channels::Vector{Symbol}; threshold::Float64 = 5.0, normval::Int = 2)::DataFrame
+function channel_joint_probability(
+    dat::DataFrame,
+    channels::Vector{Symbol};
+    threshold::Float64 = 5.0,
+    normval::Int = 2,
+    filter_samples = nothing,
+)::DataFrame
     @info "channel_joint_probability: Computing probability for channels $(print_vector_(channels))"
-    data = view(Matrix(select(dat, channels)), :, :) # Use view instead of copying
-    jp, indelec = joint_probability(data', threshold, normval)
+    
+    # Select the specified channels
+    data = select(dat, channels)
+    
+    # Filter samples if requested
+    if filter_samples !== nothing
+        if filter_samples isa Symbol && hasproperty(dat, filter_samples)
+            # If filter_samples is a column name, use that column
+            data = data[dat[!, filter_samples], :]
+        else
+            # Otherwise assume it's a boolean vector
+            data = data[filter_samples, :]
+        end
+    end
+    
+    # Convert to matrix and compute joint probability
+    jp, indelec = joint_probability(Matrix(data)', threshold, normval)
     return DataFrame(channel = channels, jp = jp, rejection = indelec)
 end
 
-function channel_joint_probability(dat::ContinuousData; threshold::Float64 = 5.0, normval::Int = 2)::DataFrame
-    return channel_joint_probability(dat.data, dat.layout.label; threshold=threshold, normval=normval)
+function channel_joint_probability(dat::ContinuousData; threshold::Float64 = 5.0, normval::Int = 2, filter_samples = nothing)::DataFrame
+    return channel_joint_probability(dat.data, dat.layout.label; threshold = threshold, normval = normval, filter_samples = filter_samples)
 end
 
 
@@ -238,7 +368,7 @@ function joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, 
     nbchan = size(signal, 1)
     jp = zeros(nbchan)
     dataProba = Vector{Float64}(undef, size(signal, 2)) # Pre-allocate
-    
+
     @inbounds for rc = 1:nbchan
         compute_probability!(dataProba, view(signal, rc, :), discret)
         jp[rc] = -sum(log, dataProba)
@@ -274,13 +404,13 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
         min_val, max_val = extrema(data)
         range_val = max_val - min_val
         sortbox = zeros(Int, bins)
-        
+
         # Single-pass binning and counting
         @inbounds for x in data
             bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
             sortbox[bin] += 1
         end
-        
+
         # Compute probabilities
         n = length(data)
         @inbounds for (i, x) in enumerate(data)
@@ -303,7 +433,7 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
 
 end
 
-    
+
 function trim_extremes(x::Vector{Float64})
     n = length(x)
     trim = round(Int, n * 0.1)

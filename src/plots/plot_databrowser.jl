@@ -1,5 +1,3 @@
-using GLMakie
-
 # Base type for data states
 abstract type AbstractDataState end
 

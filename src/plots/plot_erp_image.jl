@@ -46,18 +46,4 @@ function plot_erp_image(dat::EpochData, channel::Symbol)
 end
 
 
-# Basic Tests
-# TODO: Implement proper tests
-layout = read_layout("./layouts/biosemi72.csv");
-dat = read_bdf("../Flank_C_3.bdf");
-dat = create_eeg_dataframe(dat, layout);
-filter_data!(dat, "hp", "iir", 1, order=1)
-
-# Epoch Data
-epoch = extract_epochs(dat, 1, 1, -2, 4)
-
-plot_erp_image(epoch, :Fp1)
-plot_erp_image(epoch, [:Fp1, :IO1] )
-
-
 

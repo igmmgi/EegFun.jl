@@ -120,33 +120,3 @@ end
 
 
 
-# # Basic Tests
-# # TODO: Implement proper tests
-# layout = read_layout("./layouts/biosemi72.csv");
-# dat = read_bdf("../Flank_C_3.bdf");
-# dat = create_eeg_dataframe(dat, layout);
-# filter_data!(dat, "hp", "iir", 1, order = 1)
-
-# # Epoch Data
-# epoch = extract_epochs(dat, 1, 1, -2, 4)
-
-# # ERP Data
-# erp = average_epochs(epoch)
-# fig, ax = plot_erp(erp, [:Fp1, :Fp2])
-# plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:average_channels => true))
-
-
-# fig, ax = plot_erp(erp, [:Fp1, :Fp2], kwargs = Dict(:add_topoplot => false))
-# topo_ax = Axis(fig[1,1], 
-#                width=Relative(0.2),
-#                height=Relative(0.2),
-#                halign=0.5,
-#                valign=0.5)
-# layout = filter(row -> row.label in [:Fp1, :Fp2], erp.layout)
-# plot_layout_2d!(fig, topo_ax, layout, 
-#                 point_kwargs=Dict(:colormap => :jet, 
-#                                  :color => 1:2, 
-#                                  :markersize => 18))
-
-
-plot_erp(erp, erp)

@@ -63,18 +63,3 @@ function plot_grid_rect(dat::ErpData; channels = nothing, kwargs = Dict())
     return fig, ax
 end
 
-
-# # Basic Tests
-# # TODO: Implement proper tests
-# layout = read_layout("./layouts/biosemi72.csv");
-# dat = read_bdf("../Flank_C_3.bdf");
-# dat = create_eeg_dataframe(dat, layout);
-# filter_data!(dat, "hp", "iir", 1, order = 1)
-
-# # Epoch Data
-# epoch = extract_epochs(dat, 1, 1, -2, 4)
-
-# # ERP Data
-# erp = average_epochs(epoch)
-
-plot_grid_rect(erp, channels = [:F8, :Fp1, :Fp2, :Fpz, :Fz, :F3, :F4, :F7, :F8])

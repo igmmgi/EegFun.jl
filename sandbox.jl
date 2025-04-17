@@ -1,72 +1,3 @@
-using BioSemiBDF
-using CSV
-using DSP
-using DataFrames
-using GLMakie
-using JLD2
-using LibGEOS
-using LinearAlgebra
-using OrderedCollections
-using Random
-using ScatteredInterpolation
-using StatsBase
-using Printf
-
-
-include("types.jl")
-include("analyse.jl")
-include("baseline.jl")
-include("channel_difference.jl")
-include("epochs.jl")
-include("filter.jl")
-include("layout.jl")
-include("ica.jl")
-include("rereference.jl")
-include("./utils/utils.jl")
-
-
-# plotting function
-include("./plots/plot_databrowser.jl")
-include("./plots/plot_epochs.jl")
-include("./plots/plot_erp.jl")
-include("./plots/plot_erp_grid.jl")
-include("./plots/plot_erp_image.jl")
-include("./plots/plot_events.jl")
-include("./plots/plot_grid_topo.jl")
-include("./plots/plot_ica.jl")
-include("./plots/plot_layout.jl")
-include("./plots/plot_misc.jl")
-include("./plots/plot_topo.jl")
-
-layout = read_layout("./layouts/biosemi72.csv");
-subject = 3
-dat = read_bdf("../Flank_C_$(subject).bdf");
-dat = create_eeg_dataframe(dat, layout);
-filter_data!(dat, "hp", "iir", 1, order=1)
-rereference!(dat, :avg)
-diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
-diff_channel!(dat, :F9, :F10, :hEOG);
-# autodetect EOG signals
-detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-is_extreme_value!(dat, dat.layout.label, 50);
-plot_databrowser(dat);
-# extract epochs
-
-epochs = []
-for (idx, epoch) in enumerate([1, 4, 5, 3])
-     push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
-end
-plot_databrowser(epochs[1])
-
-
-# plot_databrowser(dat)
-# plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
-
-# include("test/runtests.jl")
-# test_baseline()
-# test_filter()
-
 # using Logging
 # # Show all messages
 # global_logger(ConsoleLogger(stderr, Logging.Debug))
@@ -75,17 +6,19 @@ plot_databrowser(epochs[1])
 # # Show only warnings and errors
 # global_logger(ConsoleLogger(stderr, Logging.Warn))
 
-# basic layouts
-layout = read_layout("./layouts/biosemi72.csv");
-layout = read_layout("./layouts/biosemi64.csv");
+# package
+include("src/eegfun.jl")
+
+# load layout
+layout = read_layout("./data/layouts/biosemi72.csv");
 
 # 2D layout
 polar_to_cartesian_xy!(layout)
-plot_layout_2d(layout);
-
-neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
-plot_layout_2d(layout, neighbours)
-
+# plot_layout_2d(layout);
+# 
+# neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
+# plot_layout_2d(layout, neighbours)
+# 
 # fig, ax = plot_layout_2d(layout)
 # add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
 # add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
@@ -93,82 +26,104 @@ plot_layout_2d(layout, neighbours)
 # add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 
 # 3D layout
-polar_to_cartesian_xyz!(layout)
-neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40);
-plot_layout_3d(layout)
-plot_layout_3d(layout, neighbours)
-
-
-# read bdf file
-subject = 3
-dat = read_bdf("../Flank_C_$(subject).bdf");
-# viewer(dat)
-
-# save / load
-# save_object("$(subject)_continuous_raw.jld2", dat)
-# dat = load_object("3_continuous_raw.jld2")
-
-# plot_events(dat)
-
-# preprocess the eeg data
-dat = create_eeg_dataframe(dat, layout);
-plot_databrowser(dat)
-
-plot_events(dat);
-# viewer(dat) # requires vscode
-# head(dat) # requires vscode
-# save_object("$(subject)_continuous_raw_eegfun.jld2", dat)
-# dat = load_object("3_continuous_raw.jld2")
-
-# rereference!(dat.data, dat.layout.label, :mastoid)
-# rereference!(dat.data, dat.layout.label, [:Fp1])
+# polar_to_cartesian_xyz!(layout)
+# neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40);
+# plot_layout_3d(layout)
+# plot_layout_3d(layout, neighbours)
 
 
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
+
+plot_events(dat)
+
+
 dat = create_eeg_dataframe(dat, layout);
-# rereference!(dat, :Fp1)
-# filter_data!(dat, "hp", "iir", 1, order=1)
-# filter_data!(dat, "lp", "iir", 10, order=2)
-# is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
-# is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
-# plot_databrowser(dat)
-# # search for some bad channels
-# channel_summary(dat)
-# channel_summary(dat, channels(dat))
-# channel_summary(dat, channels(dat)[1:66])
-# channel_summary(dat, 1:5)
-# bad channels
-# channel_joint_probability(dat, threshold=5.0, normval=2)
-# cm = correlation_matrix(dat)
-# plot_correlation_heatmap(cm)
-filter_data!(dat, "hp", "fir", 1)
-# calculate EOG channels
+plot_events(dat)
+viewer(dat)
+head(dat)
+
+# rereference
+rereference!(dat, :avg)
+# rereference!(dat, :mastoid)
+
+# initial high-pass filter to remove slow drifts
+filter_data!(dat, "hp", "iir", 0.1, order=1)
+
+# caculate EOG channels
 diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
 diff_channel!(dat, :F9, :F10, :hEOG);
-## # autodetect EOG signals
+
+# autodetect EOG signals
 detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-is_extreme_value!(dat, dat.layout.label, 500);
-plot_databrowser(dat)
+
+# detect extreme values
+is_extreme_value!(dat, dat.layout.label, 100);
+# is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
+# is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
+
+# mark trigger windows
+mark_epoch_windows!(dat, [1, 4, 5, 3], [-0.5, 1.0])
+
+# plot databrowser
+plot_databrowser(dat);
+plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
+
+summary = channel_summary(dat)
+summary = channel_summary(dat, filter_samples = :epoch_window)
+viewer(summary)
+# channel_summary(dat, channels(dat)[1:66])
+# channel_summary(dat, 1:5)
+
+# bad channels
+channel_joint_probability(dat, threshold=5.0, normval=2)
+channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
+
+# cm = correlation_matrix(dat)
+# plot_correlation_heatmap(cm)
+# cm = correlation_matrix(dat, filter_samples = :epoch_window)
+# plot_correlation_heatmap(cm)
 
 
+# # save / load
+# save_object("$(subject)_continuous.jld2", dat)
+# dat1 = load_object("3_continuous.jld2")
 
 # ICA "continuous" data
-dat_ica = filter_data(dat, "hp", "iir", 1, order=1)
-good_samples = findall(dat_ica.data[!, :is_extreme_value] .== false)
-good_channels = setdiff(dat_ica.layout.label, [:PO9])
-dat_for_ica = create_ica_data_matrix(dat_ica.data, good_channels, samples_to_include = good_samples)
-ica_result = infomax_ica(dat_for_ica, good_channels, n_components = length(good_channels) - 1, params=IcaPrms())
+ica_result =
+    run_ica(dat; exclude_channels = [:PO9], exclude_samples = [:is_extreme_value], include_samples = [:epoch_window])
+# ICA "continuous" data
+ica_result =
+    run_ica(dat; exclude_channels = [:PO9], exclude_samples = [:is_extreme_value])
 
-# TODO: head shape size
+
+
+# plot ICA components
 plot_ica_topoplot(ica_result, dat.layout)
+plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
 plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
+plot_ica_topoplot(ica_result, dat.layout, comps = 1:15; use_global_scale = true)
 plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
+plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
 
-# TODO: subplot y size
-# TODO: data resetting?
 plot_ica_component_activation(dat, ica_result)
+
+
+# select/create epochs
+epochs = []
+for (idx, epoch) in enumerate([1, 4, 5, 3])
+     push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
+end
+plot_databrowser(epochs[1])
+plot_databrowser(epochs[2])
+
+
+
+
+
+
+
 
 dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
