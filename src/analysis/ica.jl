@@ -325,13 +325,6 @@ function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remov
 
 end
 
-
-function remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
-    remove_ica_components(dat.data, ica, components_to_remove)
-end
-
-  
-
 function restore_original_data(dat::DataFrame, ica::InfoIca, components_removed::Vector{Int}, removed_activations::Matrix{Float64})
     
 
@@ -365,7 +358,7 @@ function restore_original_data(dat::DataFrame, ica::InfoIca, components_removed:
 
 end
 
-function restore_original_data(dat::ContinuousData, ica::InfoIca, components_removed::Vector{Int}, removed_activations::Matrix{Float64})
-    restore_original_data(dat.data, ica, components_removed, removed_activations)
+function ica(dat::ContinuousData; kwargs...) 
+    run_ica(dat; kwargs...)
 end
 

@@ -12,8 +12,8 @@ end
 
 mutable struct IcaState
     removed_activations::Union{Nothing,Any}
-    components_to_remove::Union{Nothing,Int}
-    components_removed::Union{Nothing,Int}
+    components_to_remove::Union{Nothing,Vector{Int}}
+    components_removed::Union{Nothing,Vector{Int}}
     IcaState() = new(nothing, nothing, nothing)
 end
 
@@ -334,32 +334,42 @@ function create_ica_menu(fig, ax, state, ica)
 
     on(menu[1].selection) do s
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        state.ica_state.components_to_remove = extract_int(String(s))
+        component_to_remove_int = extract_int(String(s))
+        state.ica_state.components_to_remove = isnothing(component_to_remove_int) ? nothing : [component_to_remove_int]
 
         if !isnothing(state.ica_state.components_to_remove)
+            # Restore previous state if necessary before applying new removal
             if !isnothing(state.ica_state.components_removed)
-                state.data.current[] = restore_original_data(
-                    state.data.current[],
-                    ica,
-                    [state.ica_state.components_removed],
-                    state.ica_state.removed_activations,
-                )
+                 apply_ica_restore!(
+                    state.data, 
+                    ica, 
+                    state.ica_state.components_removed, 
+                    state.ica_state.removed_activations
+                 )
             end
-            state.data.current[], state.ica_state.removed_activations =
-                remove_ica_components(state.data.current[], ica, [state.ica_state.components_to_remove])
-            state.ica_state.components_removed = state.ica_state.components_to_remove
-        else
-            state.data.current[] = restore_original_data(
-                state.data.current[],
-                ica,
-                [state.ica_state.components_removed],
-                state.ica_state.removed_activations,
+            # Apply removal using the helper function
+            state.ica_state.removed_activations = apply_ica_removal!(
+                state.data, 
+                ica, 
+                state.ica_state.components_to_remove
             )
-            state.ica_state.removed_activations = nothing
-            state.ica_state.components_removed = nothing
+            state.ica_state.components_removed = state.ica_state.components_to_remove
+        else # Selected "None"
+             # Restore previous state if components were removed
+             if !isnothing(state.ica_state.components_removed)
+                 apply_ica_restore!(
+                    state.data, 
+                    ica, 
+                    state.ica_state.components_removed, 
+                    state.ica_state.removed_activations
+                 )
+                 # Reset ICA state tracking
+                 state.ica_state.removed_activations = nothing 
+                 state.ica_state.components_removed = nothing
+            end
         end
 
-        notify_data_update(state.data)
+        notify_data_update(state.data) 
         draw(ax, state)
     end
 
@@ -863,6 +873,51 @@ function rereference!(state::EpochedDataState, dat, ref)
         rereference!(df[], channels(dat), resolve_reference(dat, ref))
     end
 end
+
+########################
+# ICA Component Application Helpers
+########################
+
+# Apply ICA component removal based on state type
+function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
+    df_new, activations = remove_ica_components(state.current[], ica, components_to_remove)
+    state.current[] = df_new # Update observable
+    return activations
+end
+
+function apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
+    first_epoch_activations = nothing
+    for (i, df_obs) in enumerate(state.current)
+        df_new, activations = remove_ica_components(df_obs[], ica, components_to_remove)
+        df_obs[] = df_new # Update observable
+        if i == 1
+            first_epoch_activations = activations
+        end
+    end
+    return first_epoch_activations
+end
+
+# Apply ICA component restoration based on state type
+function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
+    if isnothing(removed_activations)
+         @warn "Cannot restore ICA components: No previous activations stored."
+         return
+    end
+    df_new = restore_original_data(state.current[], ica, components_removed, removed_activations)
+    state.current[] = df_new # Update observable
+end
+
+function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
+    if isnothing(removed_activations)
+         @warn "Cannot restore ICA components: No previous activations stored."
+         return
+    end
+    for df_obs in state.current
+        df_new = restore_original_data(df_obs[], ica, components_removed, removed_activations)
+        df_obs[] = df_new # Update observable
+    end
+end
+
 
 ########################
 # Drawing

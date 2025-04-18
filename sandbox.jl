@@ -88,10 +88,6 @@ plot_joint_probability(jp)
 # plot_correlation_heatmap(cm)
 
 
-
-
-
-
 # # save / load
 # save_object("$(subject)_continuous.jld2", dat)
 # dat1 = load_object("3_continuous.jld2")
@@ -117,41 +113,19 @@ plot_ica_component_activation(dat, ica_result)
 
 plot_databrowser(dat, ica_result)
 
+dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
+dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
 
-# select/create epochs
+# EPOCHS
 epochs = []
 for (idx, epoch) in enumerate([1, 4, 5, 3])
      push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
 end
 plot_databrowser(epochs[1])
 plot_databrowser(epochs[2])
+plot_databrowser(epochs[2], ica_result)
 
-
-
-
-
-
-
-
-dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
-dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
-
-
-plot_databrowser(dat)
-plot_databrowser(dat, :Fp1)
-plot_databrowser(dat, [:Fp1, :Fp2])
-plot_databrowser(dat, dat.layout.label[1:3])
-plot_databrowser(dat, dat.layout.label[[1,3,5]])
-plot_databrowser(dat, ica_result)
-
-
-# extract epochs
-epochs = EpochData[]
-for (idx, epoch) in enumerate([1, 4, 5, 3])
-     push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
-end
-plot_databrowser(epochs[1])
 
 # average epochs
 erps = []
