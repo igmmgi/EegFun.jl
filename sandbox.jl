@@ -1,5 +1,5 @@
 # using Logging
-# # Show all messages
+# Show all messages
 # global_logger(ConsoleLogger(stderr, Logging.Debug))
 # # Show only info and above
 # global_logger(ConsoleLogger(stderr, Logging.Info))
@@ -73,17 +73,23 @@ plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 summary = channel_summary(dat)
 summary = channel_summary(dat, filter_samples = :epoch_window)
 viewer(summary)
+plot_channel_summary(summary, :range)
 # channel_summary(dat, channels(dat)[1:66])
 # channel_summary(dat, 1:5)
 
 # bad channels
-channel_joint_probability(dat, threshold=5.0, normval=2)
-channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
+jp = channel_joint_probability(dat, threshold=5.0, normval=2)
+# channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
+plot_joint_probability(jp)
 
 # cm = correlation_matrix(dat)
 # plot_correlation_heatmap(cm)
 # cm = correlation_matrix(dat, filter_samples = :epoch_window)
 # plot_correlation_heatmap(cm)
+
+
+
+
 
 
 # # save / load
@@ -108,6 +114,9 @@ plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
 plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
 
 plot_ica_component_activation(dat, ica_result)
+
+plot_databrowser(dat, ica_result)
+
 
 
 # select/create epochs

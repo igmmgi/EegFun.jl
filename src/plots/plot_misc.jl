@@ -36,3 +36,27 @@ function plot_correlation_heatmap(corr_df::DataFrame, mask_range::Union{Nothing,
     display(fig)
     return fig, ax
 end
+
+
+function plot_joint_probability(dat::DataFrame)
+    fig = Figure()
+    ax = Axis(fig[1, 1], xticks = (1:length(dat.channel), String.(dat.channel)), xticklabelrotation = pi / 4)
+    barplot!(ax, 1:nrow(dat), dat[!, :jp])
+    ax.xlabel = "Electrode"
+    ax.ylabel = "Joint Probability"
+    display(fig)
+    return fig, ax
+end
+
+
+function plot_channel_summary(dat::DataFrame, col::Symbol)
+    fig = Figure()
+    ax = Axis(fig[1, 1], xticks = (1:length(dat.channel), String.(dat.channel)), xticklabelrotation = pi / 4)
+    barplot!(ax, 1:nrow(dat), dat[!, col])
+    ax.xlabel = "Electrode"
+    ax.ylabel = String(col)
+    display(fig)
+    return fig, ax
+end
+
+
