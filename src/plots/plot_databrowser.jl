@@ -333,12 +333,12 @@ function create_ica_menu(fig, ax, state, ica)
     menu = create_menu(fig, options, "None", "ICA Components")
 
     on(menu[1].selection) do s
-        clear_axes!(ax, [state.channels.channel_data_original, state.channels.channel_data_labels])
+        clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
         state.ica_state.components_to_remove = extract_int(String(s))
 
         if !isnothing(state.ica_state.components_to_remove)
             if !isnothing(state.ica_state.components_removed)
-                state.current[] = restore_original_data(
+                state.data.current[] = restore_original_data(
                     state.data.current[],
                     ica,
                     [state.ica_state.components_removed],
@@ -349,15 +349,17 @@ function create_ica_menu(fig, ax, state, ica)
                 remove_ica_components(state.data.current[], ica, [state.ica_state.components_to_remove])
             state.ica_state.components_removed = state.ica_state.components_to_remove
         else
-            state.data.current[], state.ica_state.removed_activations = restore_original_data(
+            state.data.current[] = restore_original_data(
                 state.data.current[],
                 ica,
                 [state.ica_state.components_removed],
                 state.ica_state.removed_activations,
             )
+            state.ica_state.removed_activations = nothing
+            state.ica_state.components_removed = nothing
         end
 
-        notify_data_update(state)
+        notify_data_update(state.data)
         draw(ax, state)
     end
 
