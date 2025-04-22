@@ -100,7 +100,6 @@ ica_result =
     run_ica(dat; exclude_channels = [:PO9], exclude_samples = [:is_extreme_value])
 
 
-
 # plot ICA components
 plot_ica_topoplot(ica_result, dat.layout)
 plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
@@ -126,6 +125,7 @@ plot_databrowser(epochs[1])
 plot_databrowser(epochs[2])
 plot_databrowser(epochs[2], ica_result)
 
+plot_epochs(epochs[1], :Cz)
 
 # average epochs
 erps = []
@@ -179,36 +179,8 @@ plot_erp(erps[1], erps[2], [:PO7, :Fp2])
 # save_object("$(subject)_$(cond)_epochs.jld2", epochs)
 # save_object("$(subject)_$(cond)_erp.jld2", erp)
 # 
-# diff_channel!(dat, "F9", "F10", "hEOG");
-# diff_channel!(dat, ["Fp1", "Fp2"], ["IO1", "IO2"], "vEOG");
-# 
-# 
-# detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-# detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-# 
 # test_plot_eog_detection(dat, 1000:14000, "vEOG", "is_vEOG")
 # test_plot_eog_detection(dat, 1000:4000, "hEOG", "is_hEOG")
-# 
-# 
-# 
-# function test_analysis()
-#     for subject = 3:4
-#         for condition in [1, 3]
-#             println("Reading file: Flank_C_$(subject).bdf")
-#             dat = read_bdf("../test_data/Flank_C_$(subject).bdf")
-#             dat = create_eeg_dataframe(dat, "/home/ian/Documents/Julia/EEGfun/layouts/biosemi72.csv")
-#             filter_data!(dat, "hp", 1, 2)
-#             epochs = extract_epochs(dat, condition, -0.5, 2)
-#             erp = average_epochs(epochs)
-#             save_object("$(subject)_$(condition)_epochs.jld2", epochs)
-#             save_object("$(subject)_$(condition)_erp.jld2", erp)
-#         end
-#     end
-# end
-# 
-# @time test_analysis()
-# 
-# 
 # 
 # 
 # function grand_average_erps(subjects, conditions)
@@ -268,34 +240,16 @@ plot_erp(erps[1], erps[2], [:PO7, :Fp2])
 
 ########################################################################
 
-# Add this to sandbox.jl
-function debug_analysis_info(dat)
-    println("Analysis Info:")
-    println("  Reference: $(dat.analysis_info.reference)")
-    println("  HP Filter: $(dat.analysis_info.hp_filter)")
-    println("  LP Filter: $(dat.analysis_info.lp_filter)")
-end
+# # Add this to sandbox.jl
+# function debug_analysis_info(dat)
+#     println("Analysis Info:")
+#     println("  Reference: $(dat.analysis_info.reference)")
+#     println("  HP Filter: $(dat.analysis_info.hp_filter)")
+#     println("  LP Filter: $(dat.analysis_info.lp_filter)")
+# end
 
-# Then use it:
-debug_analysis_info(dat)
-filter_data!(dat, "hp", "fir", 1)
-debug_analysis_info(dat)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# # Then use it:
+# debug_analysis_info(dat)
+# filter_data!(dat, "hp", "fir", 1)
+# debug_analysis_info(dat)
 
