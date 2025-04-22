@@ -1,6 +1,6 @@
 # #################################################################
 # plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
-function plot_erp(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dict())
+function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dict())
 
     default_kwargs = Dict(
         :xlim => nothing,
@@ -10,17 +10,22 @@ function plot_erp(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dict
         :ylabel => "mV",
         :linewidth => 2,
         :color => :black,
+        :linestyle => :solid,
         :colormap => :jet,
         :yreversed => false,
         :add_topoplot => true,
         :topoplot_fig => 1,
+        :topoplot_size => 0.2,
+        :topoplot_position => (0, 0),
+        :topoplot_color => :black,
         :average_channels => false,
+        :legend => true,
+        :legend_label => "",
     )
     kwargs = merge(default_kwargs, kwargs)
 
     # plot
     if kwargs[:average_channels]
-        println("averaging")
         colors = kwargs[:color]
         lines!(
             ax,
@@ -28,11 +33,21 @@ function plot_erp(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dict
             colmeans(dat.data, channels),
             color = kwargs[:color],
             linewidth = kwargs[:linewidth],
+            linestyle = kwargs[:linestyle],
+            label = kwargs[:legend_label],
         )
     else
         colors = Makie.cgrad(kwargs[:colormap], length(channels), categorical = true)
         for (idx, channel) in enumerate(channels)
-            lines!(ax, dat.data[!, :time], dat.data[!, channel], color = colors[idx], linewidth = kwargs[:linewidth])
+            lines!(
+                ax,
+                dat.data[!, :time],
+                dat.data[!, channel],
+                color = colors[idx],
+                linewidth = kwargs[:linewidth],
+                linestyle = kwargs[:linestyle],
+                label = string(kwargs[:legend_label], " ", channel),
+            )
         end
     end
 
@@ -47,13 +62,28 @@ function plot_erp(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dict
     ax.ylabel = kwargs[:ylabel]
     ax.yreversed = kwargs[:yreversed]
 
+    # TODO: improve options for legend position
+    if kwargs[:legend]
+        axislegend(ax, framevisible = false, position = :lt)
+    end
+
+
     if kwargs[:add_topoplot]
-        # just put in top left
-        topo_ax =
-            Axis(fig[kwargs[:topoplot_fig], 1], width = Relative(0.2), height = Relative(0.2), halign = 0, valign = 0)
+        topo_ax = Axis(
+            fig[1, 1],
+            width = Relative(kwargs[:topoplot_size]),
+            height = Relative(kwargs[:topoplot_size]),
+            halign = kwargs[:topoplot_position][1],
+            valign = kwargs[:topoplot_position][2],
+        )
         layout = filter(row -> row.label in channels, dat.layout)
         if kwargs[:average_channels]
-            plot_layout_2d!(fig, topo_ax, layout, point_kwargs = Dict(:color => kwargs[:color], :markersize => 18))
+            plot_layout_2d!(
+                fig,
+                topo_ax,
+                layout,
+                point_kwargs = Dict(:color => kwargs[:topoplot_color], :markersize => 18),
+            )
         else
             plot_layout_2d!(
                 fig,
@@ -63,6 +93,7 @@ function plot_erp(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dict
             )
         end
     end
+
 
     # # x/y limits
     # isnothing(kwargs[:xlim]) && (kwargs[:xlim] = data_limits_x(dat.data))
@@ -87,7 +118,7 @@ end
 function plot_erp(dat::ErpData, channels::Vector{Symbol}; kwargs = Dict())
     fig = Figure()
     ax = Axis(fig[1, 1])
-    fig, ax = plot_erp(fig, ax, dat, channels; kwargs = kwargs)
+    fig, ax = plot_erp!(fig, ax, dat, channels; kwargs = kwargs)
     return fig, ax
 end
 
@@ -105,10 +136,13 @@ function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData, channels; kwargs = Di
     kwargs = merge(kwargs, kwargs)
     fig = Figure()
     ax1 = Axis(fig[1, 1])
-    plot_erp(fig, ax1, dat_orig, channels; kwargs = kwargs)
+    ax1.xlabelvisible = false
+    ax1.xticklabelsvisible = false
+    plot_erp!(fig, ax1, dat_orig, channels; kwargs = kwargs)
     ax2 = Axis(fig[2, 1])
     kwargs[:topoplot_fig] = 2
-    plot_erp(fig, ax2, dat_cleaned, channels; kwargs = kwargs)
+    plot_erp!(fig, ax2, dat_cleaned, channels; kwargs = kwargs)
+    ax2.title = ""
     linkaxes!(ax1, ax2)
     display(fig)
     return fig, ax1, ax2
@@ -120,3 +154,28 @@ end
 
 
 
+function plot_erp(dat_orig::Vector{ErpData}, channels; kwargs = Dict{Symbol,Any}())
+    fig = Figure()
+    ax1 = Axis(fig[1, 1])
+
+    average_channels = get(kwargs, :average_channels, false)
+    colormap = get(kwargs, :colormap, :jet)
+
+    linestyles = [:solid, :dot, :dash, :dashdot, :dashdotdot]
+    colors = Makie.cgrad(colormap, length(dat_orig), categorical = true)
+
+    # Convert kwargs to Dict{Symbol,Any} if it's not already
+    kwargs = Dict{Symbol,Any}(kwargs)
+
+    for (idx, dat) in enumerate(dat_orig)
+        plot_kwargs = copy(kwargs)
+        plot_kwargs[:legend_label] = string("Cond: ", idx)
+        if length(dat_orig) > 1 && !average_channels
+            plot_kwargs[:linestyle] = linestyles[(idx-1)%length(linestyles)+1]
+        elseif length(dat_orig) > 1 && average_channels
+            plot_kwargs[:color] = colors[idx]
+        end
+        plot_erp!(fig, ax1, dat, channels; kwargs = plot_kwargs)
+    end
+    return fig, ax1
+end
