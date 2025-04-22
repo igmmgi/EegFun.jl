@@ -19,7 +19,7 @@ Mark samples that are within a specified time window of triggers of interest.
 mark_epoch_windows!(dat, [1, 3], [-1.0, 2.0])
 
 # Custom column name
-mark_epoch_windows!(dat, [1, 3], [-1.0, 2.0], channel_out = :near_trigger)
+mark_epoch_windows!(dat, [1, 3], [-0.5, 0.5], channel_out = :near_trigger)
 ```
 """
 function mark_epoch_windows!(
@@ -39,12 +39,12 @@ function mark_epoch_windows!(
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
 
-    # Get unique triggers in data
+    # Only need unique trigers
     unique_triggers = unique(dat.data.triggers)
 
     # For each trigger of interest
     for trigger in triggers_of_interest
-        # Check if trigger exists in data
+
         if !(trigger in unique_triggers)
             @warn "Trigger $trigger not found in data"
             continue
@@ -65,9 +65,9 @@ function mark_epoch_windows!(
             in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
             dat.data[in_window, channel_out] .= true
         end
+
     end
 
-    return dat
 end
 
 
@@ -91,6 +91,8 @@ function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
     )
 end
 
+
+
 """
     create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
 
@@ -113,6 +115,8 @@ function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::Str
     )
 end
 
+
+
 """
     create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)::ContinuousData
 
@@ -127,7 +131,6 @@ A ContinuousData object containing the EEG data and layout information.
 
 """
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)::ContinuousData
-    # Initialize with default AnalysisInfo
     return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 
@@ -135,12 +138,13 @@ end
 
 function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol}; filter_samples = nothing)::DataFrame
 
-    # Select the specified channels
+    # select the specified channels
     selected_data = select(dat, channel_labels)
 
-    # Filter samples if requested
+    # filter samples if requested
     if filter_samples !== nothing
         if filter_samples isa Symbol && hasproperty(dat, filter_samples)
+            # # TODO: I want this version only
             # If filter_samples is a column name, use that column
             selected_data = selected_data[dat[!, filter_samples], :]
         else
@@ -150,7 +154,8 @@ function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol}; filter_
     end
 
     # Initialize a matrix to store summary statistics
-    summary_stats = Matrix{Float64}(undef, length(channel_labels), 6)  # 6 statistics: min, max, range, std, mad, var
+    # 6 statistics: min, max, range, std, mad, var
+    summary_stats = Matrix{Float64}(undef, length(channel_labels), 6)
 
     # Compute summary statistics for each column
     for (i, col) in enumerate(channel_labels)
