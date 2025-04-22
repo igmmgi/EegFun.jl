@@ -79,7 +79,7 @@ plot_channel_summary(summary, :range)
 
 # bad channels
 jp = channel_joint_probability(dat, threshold=5.0, normval=2)
-# channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
+# jp = channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
 plot_joint_probability(jp)
 
 # cm = correlation_matrix(dat)
@@ -93,11 +93,9 @@ plot_joint_probability(jp)
 # dat1 = load_object("3_continuous.jld2")
 
 # ICA "continuous" data
-ica_result =
-    run_ica(dat; exclude_channels = [:PO9], exclude_samples = [:is_extreme_value], include_samples = [:epoch_window])
+ica_result = run_ica(dat; exclude_samples = [:is_extreme_value], include_samples = [:epoch_window])
 # ICA "continuous" data
-ica_result =
-    run_ica(dat; exclude_channels = [:PO9], exclude_samples = [:is_extreme_value])
+ica_result = run_ica(dat; exclude_samples = [:is_extreme_value])
 
 
 # plot ICA components
@@ -138,8 +136,17 @@ plot_erp(erps[1])
 plot_erp(erps[1], :Fp1)
 plot_erp(erps[1], [:Fp1, :Fp2])
 plot_erp(erps[2], [:Fp1, :Fp2, :Cz])
-plot_erp(erps[1], [:Fp1, :Fp2], average_channels = true)
-plot_erp(erps[1], erps[2], [:PO7, :Fp2])
+plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => true))
+
+plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => true))
+
+
+
+plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => false, :add_topoplot => true))
+
+plot_erp(erps[1], erps[3], [:PO7, :PO8])
+
+plot_erp([erps[1], erps[2],erps[3]], [:PO7, :PO8], kwargs = Dict(:average_channels => true, :add_topoplot => true))
 
 
 # bad_chans, opt_params = find_bad_channels(epochs[1], AutoRejectParams())
