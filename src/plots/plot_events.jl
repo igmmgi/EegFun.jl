@@ -13,6 +13,7 @@ Internal function to process trigger data and count occurrences.
 - `trigger_count`: OrderedDict mapping trigger values to their counts
 """
 function _trigger_time_count(time, triggers)
+
     trigger_indices = findall(diff(triggers) .>= 1)
 
     if isempty(trigger_indices)
@@ -25,7 +26,9 @@ function _trigger_time_count(time, triggers)
     for val in trigger_values
         trigger_count[val] += 1
     end
+
     return trigger_times, trigger_values, trigger_count
+
 end
 
 """
@@ -43,12 +46,14 @@ Plot trigger events as a scatter plot with vertical lines.
 - `ax`: The Axis object containing the plot
 """
 function plot_events(trigger_times, trigger_values, trigger_count)
+
     if isempty(trigger_count)
         @warn "No triggers found in the data"
         fig = Figure()
         ax = Axis(fig[1, 1])
         return fig, ax
     end
+
     fig = Figure()
     ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
     for (unique, (key, value)) in enumerate(trigger_count)
@@ -63,8 +68,9 @@ function plot_events(trigger_times, trigger_values, trigger_count)
     fig[1, 2] = Legend(fig, ax)
     ax.ylabel = "Trigger Value"
     ax.xlabel = "Time (S)"
-    display(fig)
+
     return fig, ax
+
 end
 
 """

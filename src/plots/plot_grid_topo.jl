@@ -196,7 +196,7 @@ function plot_grid_topo(
     end
     
     linkaxes!(filter(x -> x isa Axis, fig.content)...)
-     display(GLMakie.Screen(), fig)
+    display(GLMakie.Screen(), fig)
     return fig, position_channel_map
 end
 

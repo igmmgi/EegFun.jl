@@ -35,7 +35,7 @@ plot_layout_2d(layout);
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 
-plot_events(dat)
+fig, ax = plot_events(dat)
 
 
 dat = create_eeg_dataframe(dat, layout);
@@ -87,9 +87,9 @@ jp = channel_joint_probability(dat, threshold=5.0, normval=2)
 plot_joint_probability(jp)
 
 cm = correlation_matrix(dat)
-plot_correlation_heatmap(cm)
+fig, ax = plot_correlation_heatmap(cm)
 cm = correlation_matrix(dat, filter_samples = :epoch_window)
-plot_correlation_heatmap(cm)
+fig, ax = plot_correlation_heatmap(cm)
 
 
 # # save / load
