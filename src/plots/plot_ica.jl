@@ -510,9 +510,9 @@ function plot_ica_component_activation(
 
     state = IcaComponentState(dat, ica_result, n_visible_components, window_size, specific_components)
 
-    # Create figure with reduced margins
+    # Create figure with padding on the right for margin
     fig = Figure(
-        figure_padding = 0,
+        figure_padding = (0, 60, 0, 0), # (left, right, bottom, top) - Increased right padding to 60px
         backgroundcolor = :white
     )
 
@@ -531,13 +531,14 @@ function plot_ica_component_activation(
     # Add keyboard interactions
     setup_keyboard_interactions!(fig, state)
 
-    # Set column sizes to give more space to the time series plots
-    colsize!(fig.layout, 1, Relative(0.15))  # Topoplots - now narrower
-    colsize!(fig.layout, 2, Relative(0.85))  # Time series - now wider
+    # --- Layout Adjustments ---
+    # Set main column sizes
+    colsize!(fig.layout, 1, Relative(0.15))  # Topoplots
+    colsize!(fig.layout, 2, Relative(0.85))  # Time series
 
-    # Reduce spacing between plot rows AND add space before controls
-    rowgap!(fig.layout, 0) # Keep 0 gap between plot rows
-    rowgap!(fig.layout, state.n_visible_components, 20) # Add 20px gap after last plot row
+    # Add gap *only* between plots and controls
+    rowgap!(fig.layout, state.n_visible_components, 30) # Increased gap after last plot row to 30px
+    # --- End Layout Adjustments ---
 
     display(fig)
     return fig
@@ -630,45 +631,49 @@ function create_component_plots!(fig, state, topo_kwargs = Dict())
         end
 
         # Time series axis creation (now on the right)
+        # Remove spine settings from constructor
         ax = Axis(
             fig[i, 2],
             ylabel = @sprintf("IC %d", comp_idx),
             yaxisposition = :left,
-            yticklabelsvisible = false,  # Hide y-axis tick labels
-            yticksvisible = true,  # Keep the tick marks themselves
-            xticklabelsvisible = (i == state.n_visible_components),  # Only show x-tick labels on last plot
-            xticksvisible = (i == state.n_visible_components),  # Only show x-ticks on last plot
-            xgridvisible = false,  # Hide x grid
-            ygridvisible = false,  # Hide y grid
-            xminorgridvisible = false,  # Hide x minor grid
-            yminorgridvisible = false,  # Hide y minor grid
-            bottomspinevisible = true,  # Show bottom spine
-            topspinevisible = true,  # Show top spine
-            rightspinevisible = false,  # Hide right spine
-            leftspinevisible = true,  # Show left spine
-            ylabelpadding = 0.0,  # Reduce y-label padding
-            yticklabelpad = 0.0,  # Reduce y-tick label padding
-            yticklabelspace = 0.0,  # Reduce y-tick label space
+            yticklabelsvisible = false,
+            yticksvisible = true,
+            xticklabelsvisible = (i == state.n_visible_components),
+            xticksvisible = (i == state.n_visible_components),
+            xgridvisible = false,
+            ygridvisible = false,
+            xminorgridvisible = false,
+            yminorgridvisible = false,
+            ylabelpadding = 0.0,
+            yticklabelpad = 0.0,
+            yticklabelspace = 0.0,
         )
         push!(state.axs, ax)
 
-        # Always create channel overlay axis
+        # --- Explicitly set spine visibility AFTER creation ---
+        ax.topspinevisible = true
+        ax.bottomspinevisible = true
+        ax.leftspinevisible = true
+        ax.rightspinevisible = true # Keep right spine hidden
+        # --- End spine visibility ---
+
+        # Always create channel overlay axis (keep spines hidden)
         ax_channel = Axis(
             fig[i, 2],
             yticklabelsvisible = false,
             yticksvisible = false,
             yaxisposition = :right,
             xaxisposition = :top,
-            xticklabelsvisible = false,  # Hide x-tick labels
-            xticksvisible = false,  # Hide x-ticks
-            xgridvisible = false,  # Hide x grid
-            ygridvisible = false,  # Hide y grid
-            xminorgridvisible = false,  # Hide x minor grid
-            yminorgridvisible = false,  # Hide y minor grid
-            bottomspinevisible = false,  # Hide bottom spine
-            topspinevisible = false,  # Hide top spine
-            rightspinevisible = false,  # Hide right spine
-            leftspinevisible = false,  # Hide left spine
+            xticklabelsvisible = false,
+            xticksvisible = false,
+            xgridvisible = false,
+            ygridvisible = false,
+            xminorgridvisible = false,
+            yminorgridvisible = false,
+            bottomspinevisible = false,
+            topspinevisible = false,
+            rightspinevisible = false,
+            leftspinevisible = false,
         )
         push!(state.channel_axs, ax_channel)
 
@@ -711,34 +716,39 @@ end
 # Update add_navigation_controls! to include the global scale checkbox
 function add_navigation_controls!(fig, state)
     # Add navigation buttons below topo plots in column 1
+    # Remove padding here
     topo_nav = GridLayout(fig[state.n_visible_components+1, 1], tellheight = false)
 
-    # Navigation buttons in first row
-    prev_topo = Button(topo_nav[1, 1], label = "◄ Previous", tellheight = false)
-    next_topo = Button(topo_nav[1, 2], label = "Next ►", tellheight = false)
+    # --- Add an empty column 1 for spacing ---
+    colsize!(topo_nav, 1, 40) # Set width of the empty first column
 
-    # Component selection in second row
-    text_label = Label(topo_nav[2, 1], "Components:", tellheight = false, halign = :right) # Align label right
-    text_input = Textbox(topo_nav[2, 2], placeholder = "e.g. 1,3-5,8", tellheight = false)
-    apply_button = Button(topo_nav[2, 3], label = "Apply", tellheight = false)
+    # --- Shift all widgets one column to the right ---
+    # Navigation buttons now in row 1, columns 2 & 3
+    prev_topo = Button(topo_nav[1, 2], label = "◄ Previous", tellheight = false)
+    next_topo = Button(topo_nav[1, 3], label = "Next ►", tellheight = false)
 
-    # Global scale checkbox in third row
-    global_scale_check = Checkbox(topo_nav[3, 1], checked = state.use_global_scale[], tellheight = false)
-    Label(topo_nav[3, 2], "Use Global Scale", tellwidth = false, tellheight = false)
+    # Component selection now in row 2, columns 2, 3, 4
+    text_label = Label(topo_nav[2, 2], "Components:", tellheight = false, halign = :right)
+    text_input = Textbox(topo_nav[2, 3], placeholder = "e.g. 1,3-5,8", tellheight = false)
+    apply_button = Button(topo_nav[2, 4], label = "Apply", tellheight = false)
 
-    # Invert scale checkbox in fourth row
-    invert_scale_check = Checkbox(topo_nav[4, 1], checked = state.invert_scale[], tellheight = false)
-    Label(topo_nav[4, 2], "Invert Scale", tellwidth = false, tellheight = false)
+    # Global scale checkbox now in row 3, columns 2 & 3
+    global_scale_check = Checkbox(topo_nav[3, 2], checked = state.use_global_scale[], tellheight = false)
+    Label(topo_nav[3, 3], "Use Global Scale", tellwidth = false, tellheight = false)
 
-    # --- Gap settings ---
-    # Add column gaps for better spacing (horizontal - unchanged)
-    colgap!(topo_nav, 1, 10)
-    colgap!(topo_nav, 2, 5)
+    # Invert scale checkbox now in row 4, columns 2 & 3
+    invert_scale_check = Checkbox(topo_nav[4, 2], checked = state.invert_scale[], tellheight = false)
+    Label(topo_nav[4, 3], "Invert Scale", tellwidth = false, tellheight = false)
 
-    # Add row gaps for vertical spacing (slightly more increased)
-    rowgap!(topo_nav, 1, 35) # Increased gap after navigation buttons
-    rowgap!(topo_nav, 2, 45) # Increased gap after component selection
-    rowgap!(topo_nav, 3, 35) # Increased gap after Global Scale checkbox
+    # --- Gap settings (adjust column indices) ---
+    # Add column gaps for better spacing
+    colgap!(topo_nav, 2, 10) # Gap after the *new* column 2 (was 1)
+    colgap!(topo_nav, 3, 5)  # Gap after the *new* column 3 (was 2)
+
+    # Add row gaps for vertical spacing (unchanged values, indices okay)
+    rowgap!(topo_nav, 1, 35)
+    rowgap!(topo_nav, 2, 45)
+    rowgap!(topo_nav, 3, 35)
     # --- End Gap settings ---
 
 
