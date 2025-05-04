@@ -535,8 +535,9 @@ function plot_ica_component_activation(
     colsize!(fig.layout, 1, Relative(0.15))  # Topoplots - now narrower
     colsize!(fig.layout, 2, Relative(0.85))  # Time series - now wider
 
-    # Reduce spacing between rows
-    rowgap!(fig.layout, 0)
+    # Reduce spacing between plot rows AND add space before controls
+    rowgap!(fig.layout, 0) # Keep 0 gap between plot rows
+    rowgap!(fig.layout, state.n_visible_components, 20) # Add 20px gap after last plot row
 
     display(fig)
     return fig
@@ -711,13 +712,13 @@ end
 function add_navigation_controls!(fig, state)
     # Add navigation buttons below topo plots in column 1
     topo_nav = GridLayout(fig[state.n_visible_components+1, 1], tellheight = false)
-    
+
     # Navigation buttons in first row
     prev_topo = Button(topo_nav[1, 1], label = "◄ Previous", tellheight = false)
     next_topo = Button(topo_nav[1, 2], label = "Next ►", tellheight = false)
 
     # Component selection in second row
-    text_label = Label(topo_nav[2, 1], "Components:", tellheight = false, width = 100)  # Fixed width for label
+    text_label = Label(topo_nav[2, 1], "Components:", tellheight = false, halign = :right) # Align label right
     text_input = Textbox(topo_nav[2, 2], placeholder = "e.g. 1,3-5,8", tellheight = false)
     apply_button = Button(topo_nav[2, 3], label = "Apply", tellheight = false)
 
@@ -728,6 +729,18 @@ function add_navigation_controls!(fig, state)
     # Invert scale checkbox in fourth row
     invert_scale_check = Checkbox(topo_nav[4, 1], checked = state.invert_scale[], tellheight = false)
     Label(topo_nav[4, 2], "Invert Scale", tellwidth = false, tellheight = false)
+
+    # --- Gap settings ---
+    # Add column gaps for better spacing (horizontal - unchanged)
+    colgap!(topo_nav, 1, 10)
+    colgap!(topo_nav, 2, 5)
+
+    # Add row gaps for vertical spacing (slightly more increased)
+    rowgap!(topo_nav, 1, 35) # Increased gap after navigation buttons
+    rowgap!(topo_nav, 2, 45) # Increased gap after component selection
+    rowgap!(topo_nav, 3, 35) # Increased gap after Global Scale checkbox
+    # --- End Gap settings ---
+
 
     # Connect checkboxes to state
     on(global_scale_check.checked) do checked
