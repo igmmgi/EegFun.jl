@@ -2,8 +2,8 @@
 # 2D layout
 ########################################################
 """
-    plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame; 
-                  head_kwargs::Dict=Dict(), point_kwargs::Dict=Dict(), 
+    plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame;
+                  head_kwargs::Dict=Dict(), point_kwargs::Dict=Dict(),
                   label_kwargs::Dict=Dict())
 
 Plot a 2D EEG electrode layout with customizable head shape, electrode points, and labels.
@@ -13,8 +13,8 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 - `ax`: The axis to plot on
 - `layout`: DataFrame containing electrode positions with columns x2, y2, and label
 - `head_kwargs`: Keyword arguments for head shape rendering (color, linewidth, etc.)
-- `point_kwargs`: Keyword arguments for electrode points (marker, size, etc.)
-- `label_kwargs`: Keyword arguments for electrode labels (fontsize, color, etc.)
+- `point_kwargs`: Keyword arguments for electrode points (plot_points, marker, size, color etc.)
+- `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, etc.)
 
 # Returns
 - The figure and axis objects
@@ -22,46 +22,54 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 # Example
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xy!(layout)
+    fig = Figure()
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout)
 """
-function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame; 
-                        head_kwargs::Dict = Dict(), 
-                        point_kwargs::Dict = Dict(), 
-                        label_kwargs::Dict = Dict())
+function plot_layout_2d!(
+    fig::Figure,
+    ax::Axis,
+    layout::DataFrame;
+    head_kwargs::Dict = Dict(),
+    point_kwargs::Dict = Dict(),
+    label_kwargs::Dict = Dict(),
+)
+
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
 
     # Default kwargs
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    head_kwargs = merge(head_default_kwargs, head_kwargs)
+    merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
 
     point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-    plot_points = pop!(point_kwargs, :plot_points)
+    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
+    plot_points = merged_point_kwargs[:plot_points]
+    point_plot_kwargs = filter(p -> p.first != :plot_points, merged_point_kwargs)
 
     label_default_kwargs = Dict(:plot_labels => true, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-    plot_labels = pop!(label_kwargs, :plot_labels)
-    xoffset = pop!(label_kwargs, :xoffset)
-    yoffset = pop!(label_kwargs, :yoffset)
+    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
+    plot_labels = merged_label_kwargs[:plot_labels]
+    xoffset = merged_label_kwargs[:xoffset]
+    yoffset = merged_label_kwargs[:yoffset]
+    label_plot_kwargs = filter(p -> p.first ∉ (:plot_labels, :xoffset, :yoffset), merged_label_kwargs)
 
-    # Head shape
+    # Head shape - Use hardcoded radius
     radius = 88 # mm
-    arc!(ax, Point2f(0), radius * 2, -π, π; head_kwargs...) # head
-    arc!(ax, Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2; head_kwargs...) # ear right
-    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2; head_kwargs...) # ear left
-    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4; head_kwargs...) # nose
+    arc!(ax, Point2f(0), radius * 2, -π, π; merged_head_kwargs...) # head
+    arc!(ax, Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2; merged_head_kwargs...) # ear right
+    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2; merged_head_kwargs...) # ear left
+    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4; merged_head_kwargs...) # nose
 
     # Regular points
     if plot_points
-        scatter!(ax, layout[!, :x2], layout[!, :y2]; point_kwargs...)
+        scatter!(ax, layout[!, :x2], layout[!, :y2]; point_plot_kwargs...)
     end
 
     if plot_labels
         for label in eachrow(layout)
-            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), String(label.label); label_kwargs...)
+            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), String(label.label); label_plot_kwargs...)
         end
     end
 
@@ -146,8 +154,7 @@ Create a 2D EEG electrode layout with interactive points showing electrode conne
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout, neighbours)
 """
-function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, 
-                        neighbours::OrderedDict; kwargs...)
+function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_2d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
     positions = Observable(Point2f.(layout.x2, layout.y2))
     add_interactive_points!(fig, ax, layout, neighbours, positions)
@@ -182,17 +189,17 @@ function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_s
 end
 
 """
-    add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbol}}; 
+    add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbol}};
                   border_size::Real=10, roi_kwargs::Dict=Dict())
 
 Add regions of interest (ROIs) to a topographic plot based on groups of electrodes.
 
 # Arguments
 - `ax`: The axis to add ROIs to
-- `layout`: DataFrame containing electrode positions
+- `layout`: DataFrame containing electrode positions (needs x2, y2)
 - `rois`: Array of arrays, where each inner array contains electrode labels for a ROI
 - `border_size`: Size of the border around ROI points (default: 10)
-- `roi_kwargs`: Keyword arguments for ROI styling (color, fill, etc.)
+- `roi_kwargs`: Keyword arguments for ROI styling (color, linewidth, fill, fillcolor, fillalpha)
 
 # Example
     layout = read_layout("./layouts/biosemi64.csv")
@@ -201,15 +208,22 @@ Add regions of interest (ROIs) to a topographic plot based on groups of electrod
     # Add ROIs for two electrode groups
     add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
     # Add a filled ROI
-    add_topo_rois!(ax, layout, [[:Fp1]], border_size = 10, 
+    add_topo_rois!(ax, layout, [[:Fp1]], border_size = 10,
                   roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 
 """
-function add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbol}}; 
-                       border_size::Real = 10, roi_kwargs::Dict = Dict())
-    if (:x2 ∉ names(layout) || :y2 ∉ names(layout))
+function add_topo_rois!(
+    ax::Axis,
+    layout::DataFrame,
+    rois::Vector{<:Vector{Symbol}};
+    border_size::Real = 10,
+    roi_kwargs::Dict = Dict(),
+)
+
+    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end
+
     roi_default_kwargs = Dict(
         :color => repeat([:black], length(rois)),
         :linewidth => repeat([2], length(rois)),
@@ -217,14 +231,15 @@ function add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbo
         :fillcolor => repeat([:black], length(rois)),
         :fillalpha => repeat([0.2], length(rois)),
     )
-    roi_kwargs = merge(roi_default_kwargs, roi_kwargs)
+
+    merged_roi_kwargs = merge(roi_default_kwargs, roi_kwargs)
     for (idx, roi) in enumerate(rois)
         xpos = filter(row -> row.label ∈ roi, layout).x2
         ypos = filter(row -> row.label ∈ roi, layout).y2
         border = create_convex_hull(xpos, ypos, border_size)
-        lines!(ax, border, linewidth = roi_kwargs[:linewidth][idx], color = roi_kwargs[:color][idx])
-        if roi_kwargs[:fill][idx]
-            poly!(ax, border, color = roi_kwargs[:fillcolor][idx], alpha = roi_kwargs[:fillalpha][idx])
+        lines!(ax, border, linewidth = merged_roi_kwargs[:linewidth][idx], color = merged_roi_kwargs[:color][idx])
+        if merged_roi_kwargs[:fill][idx]
+            poly!(ax, border, color = merged_roi_kwargs[:fillcolor][idx], alpha = merged_roi_kwargs[:fillalpha][idx])
         end
     end
 end
@@ -233,7 +248,7 @@ end
 # 3D layout
 ########################################################
 """
-    plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame; 
+    plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame;
                   point_kwargs::Dict=Dict(), label_kwargs::Dict=Dict())
 
 Plot a 3D EEG electrode layout with customizable electrode points and labels.
@@ -242,8 +257,8 @@ Plot a 3D EEG electrode layout with customizable electrode points and labels.
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
 - `layout`: DataFrame containing electrode positions with columns x3, y3, z3, and label
-- `point_kwargs`: Keyword arguments for electrode points (marker, size, etc.)
-- `label_kwargs`: Keyword arguments for electrode labels (fontsize, color, etc.)
+- `point_kwargs`: Keyword arguments for electrode points (plot_points, marker, size, color etc.)
+- `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, zoffset etc.)
 
 # Returns
 - The figure and axis objects
@@ -255,27 +270,35 @@ Plot a 3D EEG electrode layout with customizable electrode points and labels.
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout)
 """
-function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame; 
-                        point_kwargs::Dict = Dict(), 
-                        label_kwargs::Dict = Dict())
+function plot_layout_3d!(
+    fig::Figure,
+    ax::Axis3,
+    layout::DataFrame;
+    point_kwargs::Dict = Dict(),
+    label_kwargs::Dict = Dict(),
+)
+
     if (:x3 ∉ propertynames(layout) || :y3 ∉ propertynames(layout) || :z3 ∉ propertynames(layout))
         polar_to_cartesian_xyz!(layout)
     end
 
     point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-    plot_points = pop!(point_kwargs, :plot_points)
+    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
+    plot_points = merged_point_kwargs[:plot_points]
+    point_plot_kwargs = filter(p -> p.first != :plot_points, merged_point_kwargs)
 
     label_default_kwargs =
         Dict(:plot_labels => true, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0, :zoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-    plot_labels = pop!(label_kwargs, :plot_labels)
-    xoffset = pop!(label_kwargs, :xoffset)
-    yoffset = pop!(label_kwargs, :yoffset)
-    zoffset = pop!(label_kwargs, :zoffset)
+    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
+    plot_labels = merged_label_kwargs[:plot_labels]
+
+    xoffset = merged_label_kwargs[:xoffset]
+    yoffset = merged_label_kwargs[:yoffset]
+    zoffset = merged_label_kwargs[:zoffset]
+    label_plot_kwargs = filter(p -> p.first ∉ (:plot_labels, :xoffset, :yoffset, :zoffset), merged_label_kwargs)
 
     if plot_points
-        scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3]; point_kwargs...)
+        scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3]; point_plot_kwargs...)
     end
 
     if plot_labels
@@ -284,7 +307,7 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame;
                 ax,
                 position = (label.x3 + xoffset, label.y3 + yoffset, label.z3 + zoffset),
                 String(label.label);
-                label_kwargs...,
+                label_plot_kwargs...,
             )
         end
     end
@@ -344,8 +367,7 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout, neighbours)
 """
-function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, 
-                        neighbours::OrderedDict; kwargs...)
+function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_3d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
     positions = Observable(Point3f.(layout.x3, layout.y3, layout.z3))
     add_interactive_points!(fig, ax, layout, neighbours, positions, true)

@@ -109,6 +109,10 @@ plot_ica_topoplot(ica_result, dat.layout, comps = 1:15; use_global_scale = true)
 plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
 plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
 
+plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5];
+                  use_global_scale = true,
+                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
+
 plot_ica_component_activation(dat, ica_result)
 
 plot_databrowser(dat, ica_result)
