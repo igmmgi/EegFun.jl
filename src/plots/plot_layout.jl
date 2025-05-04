@@ -53,7 +53,7 @@ function plot_layout_2d!(
     plot_labels = merged_label_kwargs[:plot_labels]
     xoffset = merged_label_kwargs[:xoffset]
     yoffset = merged_label_kwargs[:yoffset]
-    label_plot_kwargs = filter(p -> p.first ∉ (:plot_labels, :xoffset, :yoffset), merged_label_kwargs)
+    merged_label_kwargs = filter(p -> p.first ∉ (:plot_labels, :xoffset, :yoffset), merged_label_kwargs)
 
     # Head shape - Use hardcoded radius
     radius = 88 # mm
@@ -69,7 +69,7 @@ function plot_layout_2d!(
 
     if plot_labels
         for label in eachrow(layout)
-            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), String(label.label); label_plot_kwargs...)
+            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), String(label.label); merged_label_kwargs...)
         end
     end
 
@@ -101,7 +101,6 @@ function plot_layout_2d(layout::DataFrame; kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout; kwargs...)
-    display(fig)
     return fig, ax
 end
 
@@ -127,7 +126,6 @@ function plot_layout_2d(layout, neighbours; kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout, neighbours; kwargs...)
-    display(fig)
     return fig, ax
 end
 
@@ -339,7 +337,6 @@ function plot_layout_3d(layout; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout; kwargs...)
-    display(fig)
     return fig, ax
 end
 
@@ -378,7 +375,6 @@ function plot_layout_3d(layout::DataFrame, neighbours::OrderedDict; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout, neighbours; kwargs...)
-    display(fig)
     return fig, ax
 end
 
