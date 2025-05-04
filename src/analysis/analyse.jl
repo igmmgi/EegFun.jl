@@ -315,6 +315,14 @@ function is_extreme_value!(
     is_extreme_value!(dat.data, columns, criterion, channel_out = channel_out)
 end
 
+function is_extreme_value!(
+    dat::ContinuousData,
+    criterion::Number;
+    channel_out::Symbol = :is_extreme_value,
+)
+    is_extreme_value!(dat.data, dat.layout.label, criterion, channel_out = channel_out)
+end
+
 
 """
     n_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Int
@@ -331,8 +339,26 @@ An integer count of the number of extreme values found.
 
 """
 function n_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Int
-    return sum(abs.(select(dat, columns)) .>= criterion)
+    return sum(sum.(eachcol(abs.(select(dat, columns)) .>= criterion)))
 end
+
+function n_extreme_value(dat::DataFrame, columns::Symbol, criterion::Number)::Int
+    return n_extreme_value(dat, [columns], criterion)
+end
+
+function n_extreme_value(dat::ContinuousData, columns::Vector{Symbol}, criterion::Number)::Int 
+    return n_extreme_value(dat.data, columns, criterion)
+end
+
+function n_extreme_value(dat::ContinuousData, columns::Symbol, criterion::Number)::Int 
+    return n_extreme_value(dat, [columns], criterion)
+end
+
+function n_extreme_value(dat::ContinuousData, criterion::Number)::Int
+    return n_extreme_value(dat.data, dat.layout.label, criterion)
+end
+
+
 
 
 

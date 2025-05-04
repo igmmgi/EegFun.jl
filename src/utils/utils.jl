@@ -412,3 +412,8 @@ function head(dat::EegData; n=nothing)
     viewer(data(dat)[1:n, :])
 end
 
+function tail(dat::EegData; n=nothing)
+    isnothing(n) && (n=5)
+    viewer(data(dat)[end-n+1:end, :])
+end
+
