@@ -14,7 +14,7 @@ layout = read_layout("./data/layouts/biosemi72.csv");
 
 # 2D layout
 polar_to_cartesian_xy!(layout)
-# plot_layout_2d(layout);
+plot_layout_2d(layout);
 # 
 # neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
 # plot_layout_2d(layout, neighbours)
@@ -42,6 +42,7 @@ dat = create_eeg_dataframe(dat, layout);
 plot_events(dat)
 viewer(dat)
 head(dat)
+tail(dat)
 
 # rereference
 rereference!(dat, :avg)
@@ -63,6 +64,9 @@ is_extreme_value!(dat, dat.layout.label, 100);
 # is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
 # is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
 
+# n_extreme_value(dat.data, [:Fp1], 100)
+# n_extreme_value(dat,  100)
+
 # mark trigger windows
 mark_epoch_windows!(dat, [1, 4, 5, 3], [-0.5, 1.0])
 
@@ -82,10 +86,10 @@ jp = channel_joint_probability(dat, threshold=5.0, normval=2)
 # jp = channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
 plot_joint_probability(jp)
 
-# cm = correlation_matrix(dat)
-# plot_correlation_heatmap(cm)
-# cm = correlation_matrix(dat, filter_samples = :epoch_window)
-# plot_correlation_heatmap(cm)
+cm = correlation_matrix(dat)
+plot_correlation_heatmap(cm)
+cm = correlation_matrix(dat, filter_samples = :epoch_window)
+plot_correlation_heatmap(cm)
 
 
 # # save / load
@@ -93,8 +97,7 @@ plot_joint_probability(jp)
 # dat1 = load_object("3_continuous.jld2")
 
 # ICA "continuous" data
-ica_result = run_ica(dat; exclude_samples = [:is_extreme_value], include_samples = [:epoch_window])
-# ICA "continuous" data
+# ica_result = run_ica(dat; exclude_samples = [:is_extreme_value], include_samples = [:epoch_window])
 ica_result = run_ica(dat; exclude_samples = [:is_extreme_value])
 
 

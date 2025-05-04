@@ -4,12 +4,30 @@ function plot_ica_topoplot_single(
     ica,
     comp_idx,
     layout;
-    show_colorbar = false,
     colorbar_kwargs = Dict(),
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
+    topo_kwargs = Dict(),
 )
+
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+
+    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+
+    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = pop!(topo_kwargs, :gridscale)
+
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+
     # Create a consistent GridLayout at this position - always the same structure
     gl = fig[position...] = GridLayout()
 
@@ -20,21 +38,17 @@ function plot_ica_topoplot_single(
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
 
     # Create the topo data
-    gridscale = 300  # Default gridscale
     data = data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
 
     # Create the plot
     radius = 88 # mm
-    kwargs = Dict{Symbol,Any}(
-        :colormap => :jet,
-        :nan_color => :transparent
-    )
     co = contourf!(
         ax,
         range(-radius * 2, radius * 2, length = gridscale),
         range(-radius * 2, radius * 2, length = gridscale),
         data;
-        kwargs...
+        colormap = topo_kwargs[:colormap],
+        nan_color = :transparent,
     )
 
     # Add head shape
@@ -52,7 +66,7 @@ function plot_ica_topoplot_single(
     hideydecorations!(ax, grid = false)
 
     # Add colorbar if requested
-    if show_colorbar
+    if plot_colorbar
         # Default values
         width = get(colorbar_kwargs, :width, 10)
         height = get(colorbar_kwargs, :height, Relative(0.8))
@@ -84,6 +98,25 @@ function plot_ica_topoplot(
     colorbar_kwargs = Dict(),
     use_global_scale = false,
 )
+
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+
+    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+
+    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = pop!(topo_kwargs, :gridscale)
+
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30, :colorbar_plot_numbers => [])
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+    colorbar_plot_numbers = pop!(colorbar_kwargs, :colorbar_plot_numbers)
+
     # Process inputs
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
@@ -92,10 +125,6 @@ function plot_ica_topoplot(
     if isnothing(comps)
         comps = 1:size(ica.mixing)[2]
     end
-
-    # Get colorbar setting
-    plot_colorbar = get(colorbar_kwargs, :plot_colorbar, false)
-    colorbar_plot_numbers = get(colorbar_kwargs, :colorbar_plot_numbers, [])
 
     # Create figure
     fig = Figure()
@@ -107,7 +136,6 @@ function plot_ica_topoplot(
 
     # Extract layout data once for all plots
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
-    gridscale = 300
     radius = 88
 
     # Calculate all data first
@@ -276,11 +304,31 @@ function plot_ica_topoplot(
     ica,
     comp_idx,
     layout;
-    colorbar_kwargs = Dict(),
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
+    topo_kwargs = Dict(),
+    colorbar_kwargs = Dict(),
 )
+
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
+
+    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
+
+    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
+
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = pop!(topo_kwargs, :gridscale)
+
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30, :colorbar_plot_numbers => [])
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+    colorbar_plot_numbers = pop!(colorbar_kwargs, :colorbar_plot_numbers)
+
     # Clear the axis before drawing
     empty!(ax)
 
@@ -288,21 +336,17 @@ function plot_ica_topoplot(
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
 
     # Create the topo data
-    gridscale = 300  # Default gridscale
     data = data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
 
     # Create the plot directly on the existing axis
     radius = 88 # mm
-    kwargs = Dict{Symbol,Any}(
-        :colormap => :jet,
-        :nan_color => :transparent
-    )
     co = contourf!(
         ax,
         range(-radius * 2, radius * 2, length = gridscale),
         range(-radius * 2, radius * 2, length = gridscale),
         data;
-        kwargs...
+        colormap = topo_kwargs[:colormap],
+        nan_color = :transparent,
     )
 
     # Add head shape
@@ -324,53 +368,6 @@ function plot_ica_topoplot(
 
     return co
 end
-
-
-
-# function plot_ica_component_activation(ica, epochs::EpochData, component::Int)
-#     fig = Figure()
-# 
-#     # Create grid layout and make it fill the figure
-#     gl = fig[1, 1] = GridLayout()
-#     colsize!(gl, 1, Relative(1.0))
-# 
-#     # Get data for plotting
-#     activation = ica.activation[component, :]
-#     projection = ica.mixing[:, component] .* activation'
-# 
-#     # Calculate y-limits for consistent scaling
-#     y_min, y_max = extrema(activation)
-#     y_range = y_max - y_min
-#     limits = (y_min - 0.1 * y_range, y_max + 0.1 * y_range)
-# 
-#     # Plot component activation
-#     ax1 = Axis(gl[1, 1], title = "Component $component Activation", limits = (nothing, limits))
-#     lines!(ax1, epochs.time, activation)
-# 
-#     # Plot channel projections
-#     ax2 = Axis(gl[2, 1], title = "Channel Projections")
-#     for (i, chan) in enumerate(epochs.layout.label)
-#         lines!(ax2, epochs.time, projection[i, :], color = :lightgrey, linewidth = 1, alpha = 0.5)
-#     end
-# 
-#     # Set row sizes to give equal space to plots
-#     rowsize!(gl, 1, Relative(0.5))
-#     rowsize!(gl, 2, Relative(0.5))
-# 
-#     rowgap!(gl, 10)  # Add gap between plots
-# 
-#     # Link x-axes
-#     linkxaxes!(ax1, ax2)
-# 
-#     return fig
-# end
-
-# epoch = extract_epochs(dat, 1, 1, -2, 4)
-# plot_ica_component_activation(ica_result, epoch, 1)
-
-
-
-
 
 
 # Create a state structure to hold the visualization state
@@ -580,26 +577,21 @@ function plot_topoplot_in_viewer!(fig, topo_ax, ica_result, comp_idx, layout; us
         data_max += 0.1
     end
 
-    # Create levels
-    levels = range(data_min, data_max, length = 20)
 
     # Plot directly on the provided axis
     radius = 88 # mm
-    kwargs = Dict{Symbol,Any}(
-        :colormap => :jet,
-        :nan_color => :transparent,
-        :levels => levels
-    )
     co = contourf!(
         topo_ax,
         range(-radius * 2, radius * 2, length = gridscale),
         range(-radius * 2, radius * 2, length = gridscale),
         data;
-        kwargs...
+        colormap = :jet,
+        nan_color = :transparent, 
+        levels = range(data_min, data_max, length=20)
     )
 
     # Add head shape with default settings
-    plot_layout_2d!(fig, topo_ax, layout)
+    plot_layout_2d!(fig, topo_ax, layout, label_kwargs = Dict(:plot_labels => false), point_kwargs = Dict(:plot_points => false))
 
     # Hide decorations
     hidexdecorations!(topo_ax, grid = false)
@@ -630,6 +622,12 @@ function create_component_plots!(fig, state, topo_kwargs = Dict())
             yaxisposition = :left,
             yticklabelsvisible = false,  # Hide y-axis tick labels
             yticksvisible = true,  # Keep the tick marks themselves
+            xticklabelsvisible = (i == state.n_visible_components),  # Only show x-tick labels on last plot
+            xticksvisible = (i == state.n_visible_components),  # Only show x-ticks on last plot
+            xgridvisible = false,  # Hide x grid
+            ygridvisible = false,  # Hide y grid
+            xminorgridvisible = false,  # Hide x minor grid
+            yminorgridvisible = false,  # Hide y minor grid
         )
         push!(state.axs, ax)
 
@@ -640,6 +638,12 @@ function create_component_plots!(fig, state, topo_kwargs = Dict())
             yticksvisible = false,
             yaxisposition = :right,
             xaxisposition = :top,
+            xticklabelsvisible = false,  # Hide x-tick labels
+            xticksvisible = false,  # Hide x-ticks
+            xgridvisible = false,  # Hide x grid
+            ygridvisible = false,  # Hide y grid
+            xminorgridvisible = false,  # Hide x minor grid
+            yminorgridvisible = false,  # Hide y minor grid
         )
         push!(state.channel_axs, ax_channel)
 
