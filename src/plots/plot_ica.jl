@@ -126,8 +126,11 @@ function plot_ica_topoplot(
         comps = 1:size(ica.mixing)[2]
     end
 
-    # Create figure
-    fig = Figure()
+    # Create figure with reduced margins
+    fig = Figure(
+        figure_padding = 0,
+        backgroundcolor = :white
+    )
 
     # Calculate layout dimensions
     if isnothing(dims)
@@ -507,8 +510,11 @@ function plot_ica_component_activation(
 
     state = IcaComponentState(dat, ica_result, n_visible_components, window_size, specific_components)
 
-    # Create figure
-    fig = Figure()
+    # Create figure with reduced margins
+    fig = Figure(
+        figure_padding = 0,
+        backgroundcolor = :white
+    )
 
     # Setup plots
     create_component_plots!(fig, state, topo_kwargs)
@@ -524,6 +530,13 @@ function plot_ica_component_activation(
 
     # Add keyboard interactions
     setup_keyboard_interactions!(fig, state)
+
+    # Set column sizes to give more space to the time series plots
+    colsize!(fig.layout, 1, Relative(0.15))  # Topoplots - now narrower
+    colsize!(fig.layout, 2, Relative(0.85))  # Time series - now wider
+
+    # Reduce spacing between rows
+    rowgap!(fig.layout, 0)
 
     display(fig)
     return fig
@@ -628,6 +641,13 @@ function create_component_plots!(fig, state, topo_kwargs = Dict())
             ygridvisible = false,  # Hide y grid
             xminorgridvisible = false,  # Hide x minor grid
             yminorgridvisible = false,  # Hide y minor grid
+            bottomspinevisible = true,  # Show bottom spine
+            topspinevisible = true,  # Show top spine
+            rightspinevisible = false,  # Hide right spine
+            leftspinevisible = true,  # Show left spine
+            ylabelpadding = 0.0,  # Reduce y-label padding
+            yticklabelpad = 0.0,  # Reduce y-tick label padding
+            yticklabelspace = 0.0,  # Reduce y-tick label space
         )
         push!(state.axs, ax)
 
@@ -644,6 +664,10 @@ function create_component_plots!(fig, state, topo_kwargs = Dict())
             ygridvisible = false,  # Hide y grid
             xminorgridvisible = false,  # Hide x minor grid
             yminorgridvisible = false,  # Hide y minor grid
+            bottomspinevisible = false,  # Hide bottom spine
+            topspinevisible = false,  # Hide top spine
+            rightspinevisible = false,  # Hide right spine
+            leftspinevisible = false,  # Hide left spine
         )
         push!(state.channel_axs, ax_channel)
 
@@ -675,57 +699,45 @@ function create_component_plots!(fig, state, topo_kwargs = Dict())
         # Set initial x-axis limits
         xlims!(ax, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
 
-        # Hide x-axis decorations for all plots except bottom axis of last plot
-        if i != state.n_visible_components
-            hidexdecorations!(ax, grid = false)
-        end
-
-        # Create the topo plot using our new simpler function
+        # Create the topo plot
         if comp_idx <= state.total_components
-            # Use the simpler function that avoids gridposition issues
             plot_topoplot_in_viewer!(fig, topo_ax, state.ica_result, comp_idx, state.dat.layout, use_global_scale = state.use_global_scale[])
-
-            # Update title
             topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
         end
     end
-
-    # Set column sizes to give more space to the time series plots
-    colsize!(fig.layout, 1, Relative(0.15))  # Topoplots - now narrower
-    colsize!(fig.layout, 2, Relative(0.85))  # Time series - now wider
 end
 
 # Update add_navigation_controls! to include the global scale checkbox
 function add_navigation_controls!(fig, state)
     # Add navigation buttons below topo plots in column 1
-    topo_nav = GridLayout(fig[state.n_visible_components+1, 1])  # Only in column 1
+    topo_nav = GridLayout(fig[state.n_visible_components+1, 1], tellheight = false)
     
     # Navigation buttons in first row
-    prev_topo = Button(topo_nav[1, 1], label = "◄ Previous")
-    next_topo = Button(topo_nav[1, 2], label = "Next ►")
+    prev_topo = Button(topo_nav[1, 1], label = "◄ Previous", tellheight = false)
+    next_topo = Button(topo_nav[1, 2], label = "Next ►", tellheight = false)
 
     # Component selection in second row
-    text_label = Label(topo_nav[2, 1], "Components:")
-    text_input = Textbox(topo_nav[2, 2], placeholder = "e.g. 1,3-5,8")
-    apply_button = Button(topo_nav[2, 3], label = "Apply")
+    text_label = Label(topo_nav[2, 1], "Components:", tellheight = false, width = 100)  # Fixed width for label
+    text_input = Textbox(topo_nav[2, 2], placeholder = "e.g. 1,3-5,8", tellheight = false)
+    apply_button = Button(topo_nav[2, 3], label = "Apply", tellheight = false)
 
     # Global scale checkbox in third row
-    global_scale_check = Checkbox(topo_nav[3, 1], checked = state.use_global_scale[])
-    Label(topo_nav[3, 2], "Use Global Scale", tellwidth = false)
+    global_scale_check = Checkbox(topo_nav[3, 1], checked = state.use_global_scale[], tellheight = false)
+    Label(topo_nav[3, 2], "Use Global Scale", tellwidth = false, tellheight = false)
 
     # Invert scale checkbox in fourth row
-    invert_scale_check = Checkbox(topo_nav[4, 1], checked = state.invert_scale[])
-    Label(topo_nav[4, 2], "Invert Scale", tellwidth = false)
+    invert_scale_check = Checkbox(topo_nav[4, 1], checked = state.invert_scale[], tellheight = false)
+    Label(topo_nav[4, 2], "Invert Scale", tellwidth = false, tellheight = false)
 
     # Connect checkboxes to state
     on(global_scale_check.checked) do checked
         state.use_global_scale[] = checked
-        update_components!(state)  # Update the plots when scale changes
+        update_components!(state)
     end
 
     on(invert_scale_check.checked) do checked
         state.invert_scale[] = checked
-        update_components!(state)  # Update the plots when scale changes
+        update_components!(state)
     end
 
     # Connect navigation buttons
@@ -746,25 +758,15 @@ function add_navigation_controls!(fig, state)
 
     # Connect apply button
     on(apply_button.clicks) do _
-        # Get the raw string value directly from the textbox
         text_value = text_input.displayed_string[]
-
-        # Only process if we have a valid text input
         if !isempty(text_value)
-            # Convert to component indices
             comps = parse_component_input(text_value, state.total_components)
-
             if !isempty(comps)
                 println("Creating new plot with components: $comps")
-
-                # Close current figure and create a new one with just these components
-                # Get current settings to preserve them
                 current_channel = state.channel_data[]
                 show_channel = state.show_channel[]
                 use_global = state.use_global_scale[]
-                invert = state.invert_scale[]  # Preserve invert scale setting
-
-                # Create a new figure with exactly these components
+                invert = state.invert_scale[]
                 new_fig = plot_ica_component_activation(
                     state.dat,
                     state.ica_result,
@@ -772,13 +774,7 @@ function add_navigation_controls!(fig, state)
                     n_visible_components = length(comps),
                     window_size = state.window_size,
                 )
-
-                # The current figure will be replaced by the new one in the display
-            else
-                println("No valid components found in input: $text_value")
             end
-        else
-            println("Empty text input")
         end
     end
 end
@@ -855,23 +851,22 @@ end
 # Update add_navigation_sliders! to match new layout
 function add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
-    slider_row = state.n_visible_components + 3
+    slider_row = state.n_visible_components + 3  # Move slider to a new row
 
     # Calculate the step size for the slider (1% of the data length)
     step_size = max(1, div(length(state.dat.data.time), 100))
 
-    # Use a more consistent style matching plot_databrowser
+    # Use a more compact style
     x_slider = Slider(
-        fig[slider_row, 2],  # Now in column 2 where the time series are
+        fig[slider_row, 2],
         range = 1:step_size:length(state.dat.data.time),
         startvalue = first(state.xrange[]),
         tellwidth = false,
+        tellheight = false,
         width = Auto(),
     )
 
-    # Connect slider to state using the same pattern as in plot_databrowser
     on(x_slider.value) do x
-        # Update view range
         update_view_range!(state, Int(round(x)))
     end
 end
@@ -931,18 +926,15 @@ end
 # Update add_channel_menu! to match new layout
 function add_channel_menu!(fig, state)
     # Create a menu layout in column 2
-    menu_row = state.n_visible_components + 2
+    menu_row = state.n_visible_components + 2  # Keep menu in its own row
 
     # Create a simple grid layout
-    menu_layout = GridLayout(fig[menu_row, 2])  # Now in column 2 where the time series are
+    menu_layout = GridLayout(fig[menu_row, 2], tellheight = false)
 
     # Create a simple label and menu
-    Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18)
+    Label(menu_layout[1, 1], "Additional Channel:", fontsize = 18, tellheight = false, width = 150)  # Fixed width for label
+    channel_menu = Menu(menu_layout[1, 2], options = ["None"; names(state.dat.data)], default = "None", tellheight = false)
 
-    # Use a standard menu without fixed width
-    channel_menu = Menu(menu_layout[1, 2], options = ["None"; names(state.dat.data)], default = "None")
-
-    # Connect menu selection callback
     on(channel_menu.selection) do selected
         update_channel_selection!(state, selected)
     end
