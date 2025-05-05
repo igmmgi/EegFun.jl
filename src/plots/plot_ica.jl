@@ -327,7 +327,7 @@ function plot_ica_topoplot(
     merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
 
     point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
+    merged_point_kwargs = merge(point_defaults, point_kwargs)
 
     label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0) # Removed duplicate :color
     merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
@@ -1466,41 +1466,46 @@ function update_components!(state)
 end
 
 """
-    identify_eye_components(ica_result::InfoIca, dat::ContinuousData; 
-                          v_eog_channel::Symbol=:vEOG, 
+    identify_eye_components(ica_result::InfoIca, dat::ContinuousData;
+                          v_eog_channel::Symbol=:vEOG,
                           h_eog_channel::Symbol=:hEOG,
-                          z_threshold::Float64=3.5,
-                          min_correlation::Float64=0.3)
+                          z_threshold::Float64=3.0)
 
-Identify ICA components related to eye movements using FASTER's methodology with
-additional spatial features specific to EOG patterns.
+Identify ICA components potentially related to eye movements based on z-scored correlation.
+
+Calculates the absolute correlation between each ICA component and the specified vertical
+and horizontal EOG channels. Z-scores these correlations and identifies all components
+where the absolute z-score exceeds `z_threshold`.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object
-- `dat::ContinuousData`: The continuous data containing EOG channels
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data containing EOG channels.
 
 # Keyword Arguments
-- `v_eog_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG)
-- `h_eog_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG)
-- `z_threshold::Float64`: Z-score threshold for identifying eye components (default: 3.5)
-- `min_correlation::Float64`: Minimum correlation coefficient required (default: 0.3)
+- `v_eog_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG).
+- `h_eog_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG).
+- `z_threshold::Float64`: Absolute Z-score threshold for identification (default: 3.0).
 
 # Returns
-- `Dict{Symbol,Any}`: Dictionary containing:
-  - `:vertical_eye`: Vector of component indices related to vertical eye movements
-  - `:horizontal_eye`: Vector of component indices related to horizontal eye movements
-  - `:z_scores`: Matrix of z-scores for all components
-  - `:features`: Dictionary of feature values used for z-score calculation
+- `Dict{Symbol, Vector{Int}}`: Dictionary containing:
+  - `:vertical_eye`: Vector of indices identified for vertical eye movements.
+  - `:horizontal_eye`: Vector of indices identified for horizontal eye movements.
+- `DataFrame`: DataFrame containing detailed correlation metrics per component:
+  - `:Component`: Component index (1 to n).
+  # Note: Remaining column names are dynamic, based on input channel symbols.
+  - Column 2: `Symbol("\$(v_eog_channel)_corr")` - Absolute correlation with vertical EOG.
+  - Column 3: `Symbol("\$(v_eog_channel)_zscore")` - Z-score of vertical EOG correlation.
+  - Column 4: `Symbol("\$(h_eog_channel)_corr")` - Absolute correlation with horizontal EOG.
+  - Column 5: `Symbol("\$(h_eog_channel)_zscore")` - Z-score of horizontal EOG correlation.
 """
 function identify_eye_components(
     ica_result::InfoIca,
     dat::ContinuousData;
     v_eog_channel::Symbol = :vEOG,
     h_eog_channel::Symbol = :hEOG,
-    z_threshold::Float64 = 3.5,
-    min_correlation::Float64 = 0.3,
+    z_threshold::Float64 = 3.0,
 )
-    # Check if EOG channels exist
+    # --- Input Validation ---
     if !(v_eog_channel in propertynames(dat.data))
         error("Vertical EOG channel $v_eog_channel not found in data")
     end
@@ -1508,257 +1513,336 @@ function identify_eye_components(
         error("Horizontal EOG channel $h_eog_channel not found in data")
     end
 
-    # Get EOG signals
+    # --- Data Preparation ---
     v_eog = dat.data[!, v_eog_channel]
     h_eog = dat.data[!, h_eog_channel]
-
-    # Prepare data matrix for ICA
     dat_matrix = prepare_ica_data_matrix(dat, ica_result)
-    
-    # Calculate component activations
-    components = ica_result.unmixing * dat_matrix
+    components = ica_result.unmixing * dat_matrix 
     n_components = size(components, 1)
 
-    # Calculate features for each component
-    features = Dict{Symbol,Vector{Float64}}()
-    
-    # 1. Correlation with EOG channels
-    v_eog_corr = zeros(n_components)
-    h_eog_corr = zeros(n_components)
-    for i in 1:n_components
-        v_eog_corr[i] = abs(cor(components[i, :], v_eog))
-        h_eog_corr[i] = abs(cor(components[i, :], h_eog))
-    end
-    features[:v_eog_corr] = v_eog_corr
-    features[:h_eog_corr] = h_eog_corr
-
-    # 2. Spatial features
-    # Front-back gradient
-    front_channels = findall(ica_result.data_label .∈ Ref([:Fp1, :Fp2, :F7, :F3, :Fz, :F4, :F8]))
-    back_channels = findall(ica_result.data_label .∈ Ref([:O1, :Oz, :O2, :P7, :P3, :Pz, :P4, :P8]))
-    
-    # Left-right symmetry (for horizontal EOG)
-    left_channels = findall(ica_result.data_label .∈ Ref([:F7, :T7, :P7, :O1]))
-    right_channels = findall(ica_result.data_label .∈ Ref([:F8, :T8, :P8, :O2]))
-    
-    # Top-bottom symmetry (for vertical EOG)
-    top_channels = findall(ica_result.data_label .∈ Ref([:Fp1, :Fp2, :F7, :F3, :Fz, :F4, :F8]))
-    bottom_channels = findall(ica_result.data_label .∈ Ref([:T7, :T8, :P7, :P8]))
-    
-    # Calculate spatial features
-    front_back_ratio = zeros(n_components)
-    left_right_sym = zeros(n_components)
-    top_bottom_sym = zeros(n_components)
-    max_weight_loc = zeros(n_components)
-    
-    for i in 1:n_components
-        weights = ica_result.mixing[:, i]
-        
-        # Front-back ratio
-        if !isempty(front_channels) && !isempty(back_channels)
-            front_var = var(weights[front_channels])
-            back_var = var(weights[back_channels])
-            front_back_ratio[i] = front_var / (back_var + eps())
+    # Function to calculate correlations for all components
+    function calculate_correlations(eog_signal)
+        corrs = zeros(n_components)
+        for comp_idx = 1:n_components 
+             corrs[comp_idx] = abs(cor(components[comp_idx, :], eog_signal))
         end
-        
-        # Left-right symmetry (should be high for horizontal EOG)
-        if !isempty(left_channels) && !isempty(right_channels)
-            left_weights = weights[left_channels]
-            right_weights = weights[right_channels]
-            # Ensure arrays are the same size by padding with zeros if necessary
-            max_len = max(length(left_weights), length(right_weights))
-            left_padded = vcat(left_weights, zeros(max_len - length(left_weights)))
-            right_padded = vcat(right_weights, zeros(max_len - length(right_weights)))
-            left_right_sym[i] = 1.0 - mean(abs.(left_padded .+ right_padded)) / (mean(abs.(left_padded)) + mean(abs.(right_padded)) + eps())
-        end
-        
-        # Top-bottom symmetry (should be high for vertical EOG)
-        if !isempty(top_channels) && !isempty(bottom_channels)
-            top_weights = weights[top_channels]
-            bottom_weights = weights[bottom_channels]
-            # Ensure arrays are the same size by padding with zeros if necessary
-            max_len = max(length(top_weights), length(bottom_weights))
-            top_padded = vcat(top_weights, zeros(max_len - length(top_weights)))
-            bottom_padded = vcat(bottom_weights, zeros(max_len - length(bottom_weights)))
-            top_bottom_sym[i] = 1.0 - mean(abs.(top_padded .+ bottom_padded)) / (mean(abs.(top_padded)) + mean(abs.(bottom_padded)) + eps())
-        end
-        
-        # Maximum weight location (should be near eyes for EOG)
-        max_idx = argmax(abs.(weights))
-        max_weight_loc[i] = abs(ica_result.data_label[max_idx] in [:Fp1, :Fp2, :F7, :F8]) ? 1.0 : 0.0
+        return corrs
     end
+
+    identified_vEOG = Int[]
+    identified_hEOG = Int[]
+    v_eog_corr_z = Float64[]
+    h_eog_corr_z = Float64[]
+    v_eog_corrs = Float64[]
+    h_eog_corrs = Float64[]
+
+    # --- Vertical EOG --- 
+    v_eog_corrs = calculate_correlations(v_eog)
+    v_eog_corr_z = StatsBase.zscore(v_eog_corrs)
+    identified_vEOG = findall(abs.(v_eog_corr_z) .> z_threshold)
+
+    # --- Horizontal EOG --- 
+    h_eog_corrs = calculate_correlations(h_eog)
+    h_eog_corr_z = StatsBase.zscore(h_eog_corrs)
+    identified_hEOG = findall(abs.(h_eog_corr_z) .> z_threshold)
+
+    # --- Construct Results --- 
+    sort!(identified_vEOG)
+    sort!(identified_hEOG)
+
+    result_dict = Dict{Symbol,Vector{Int}}( 
+        :vertical_eye => identified_vEOG,
+        :horizontal_eye => identified_hEOG,
+    )
     
-    features[:front_back_ratio] = front_back_ratio
-    features[:left_right_sym] = left_right_sym
-    features[:top_bottom_sym] = top_bottom_sym
-    features[:max_weight_loc] = max_weight_loc
-
-    # Calculate z-scores for each feature
-    z_scores = Dict{Symbol,Vector{Float64}}()
-    for (feature_name, feature_values) in features
-        mean_val = mean(feature_values)
-        std_val = std(feature_values)
-        z_scores[feature_name] = (feature_values .- mean_val) ./ std_val
-    end
-
-    # Combine z-scores for eye movement detection with feature-specific weights
-    combined_z = zeros(n_components)
-    for i in 1:n_components
-        # Vertical EOG features
-        v_score = (
-            2.0 * z_scores[:v_eog_corr][i] +    # Double weight for vertical EOG correlation
-            z_scores[:front_back_ratio][i] +    # Front-back gradient
-            z_scores[:top_bottom_sym][i] +      # Top-bottom symmetry
-            z_scores[:max_weight_loc][i]        # Maximum weight location
-        ) / 5.0
-
-        # Horizontal EOG features
-        h_score = (
-            2.0 * z_scores[:h_eog_corr][i] +    # Double weight for horizontal EOG correlation
-            z_scores[:front_back_ratio][i] +    # Front-back gradient
-            z_scores[:left_right_sym][i] +      # Left-right symmetry
-            z_scores[:max_weight_loc][i]        # Maximum weight location
-        ) / 5.0
-
-        # Take the maximum of vertical and horizontal scores
-        combined_z[i] = max(v_score, h_score)
-    end
-
-    # Find components that exceed threshold AND have sufficient correlation
-    vertical_eye = findall((z_scores[:v_eog_corr] .> z_threshold) .& (v_eog_corr .> min_correlation))
-    horizontal_eye = findall((z_scores[:h_eog_corr] .> z_threshold) .& (h_eog_corr .> min_correlation))
-    combined_eye = findall(combined_z .> z_threshold)
-
-    # Create result dictionary
-    result = Dict{Symbol,Any}(
-        :vertical_eye => vertical_eye,
-        :horizontal_eye => horizontal_eye,
-        :combined_eye => combined_eye,
-        :z_scores => z_scores,
-        :combined_z => combined_z,
-        :features => features
+    metrics_df = DataFrame(
+        :Component => 1:n_components,
+        :v_eog_channel_corr => v_eog_corrs,
+        :v_eog_channel_zscore => v_eog_corr_z,
+        :h_eog_channel_corr => h_eog_corrs,
+        :h_eog_channel_zscore => h_eog_corr_z
     )
 
-    return result
+    return result_dict, metrics_df 
+
 end
 
 """
-    plot_eye_component_correlations(ica_result::InfoIca, dat::ContinuousData; 
-                                  v_eog_channel::Symbol=:vEOG, 
-                                  h_eog_channel::Symbol=:hEOG,
-                                  z_threshold::Float64=3.0)
+    plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
 
-Plot z-scores of features used to identify eye movement components.
+Plot z-scores of EOG correlations from the metrics DataFrame and highlight identified components.
+
+Uses the results from `identify_eye_components`.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object
-- `dat::ContinuousData`: The continuous data containing EOG channels
-
-# Keyword Arguments
-- `v_eog_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG)
-- `h_eog_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG)
-- `z_threshold::Float64`: Z-score threshold (default: 3.0)
+- `identified_comps::Dict`: Dictionary returned by `identify_eye_components` (containing `:vertical_eye`, `:horizontal_eye`).
+- `metrics_df::DataFrame`: DataFrame returned by `identify_eye_components`. Expected to have columns like `:vEOG_zscore`, `:hEOG_zscore` (based on the `v_eog_channel` and `h_eog_channel` arguments) and `:Component`.
+- `v_eog_channel::Symbol`: Symbol of the vertical EOG channel used. Defaults to `:vEOG`. (Used to find column `Symbol("\$(v_eog_channel)_zscore")` in `metrics_df`).
+- `h_eog_channel::Symbol`: Symbol of the horizontal EOG channel used. Defaults to `:hEOG`. (Used to find column `Symbol("\$(h_eog_channel)_zscore")` in `metrics_df`).
+- `z_threshold::Float64`: Z-score threshold to draw lines on the plot (default: 3.0).
 
 # Returns
-- `fig::Figure`: The Makie Figure containing the z-score plots
+- `fig::Figure`: The Makie Figure containing the z-score plots.
 """
-function plot_eye_component_correlations(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    v_eog_channel::Symbol = :vEOG,
-    h_eog_channel::Symbol = :hEOG,
-    z_threshold::Float64 = 3.0,
-)
-    # Get z-scores
-    result = identify_eye_components(
-        ica_result,
-        dat;
-        v_eog_channel = v_eog_channel,
-        h_eog_channel = h_eog_channel,
-        z_threshold = z_threshold,
+function plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
+
+    # Extract data from inputs
+    v_eog_corr_z = metrics_df.v_eog_channel_zscore
+    h_eog_corr_z = metrics_df.h_eog_channel_zscore
+    final_vEOG = identified_comps[:vertical_eye] 
+    final_hEOG = identified_comps[:horizontal_eye]
+    
+    # Check if data is empty
+    if isempty(metrics_df) || isempty(v_eog_corr_z) || isempty(h_eog_corr_z)
+        println("Warning: Could not plot eye component features, input DataFrame or z-scores are empty.")
+        return Figure() # Return empty figure
+    end
+    
+    n_components = nrow(metrics_df)
+
+    fig = Figure(size=(800, 400)) 
+
+    # Plot Vertical EOG Correlation Z-Scores
+    ax_v = Axis(
+        fig[1, 1],
+        xlabel = "Component Number",
+        ylabel = "Z-Score",
+        title = "Vertical EOG Correlation Z-Scores"
     )
-    z_scores = result[:z_scores]
-    combined_z = result[:combined_z]
+    # Use component indices from DataFrame for x-axis
+    scatter!(ax_v, metrics_df.Component, v_eog_corr_z, color = :gray, markersize = 5)
+    hlines!(ax_v, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
+    # Highlight all identified components
+    if !isempty(final_vEOG)
+         # Get z-scores only for the identified components
+        v_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_vEOG)), :v_eog_channel_zscore]
+        scatter!(ax_v, final_vEOG, v_z_scores_highlight, color = :blue, markersize = 8)
+        for comp_idx in final_vEOG # Annotate each identified component
+            text!(ax_v, comp_idx, metrics_df[comp_idx, :v_eog_channel_zscore], text=string(comp_idx), color=:blue, align=(:center,:bottom), fontsize=10)
+        end
+    end
 
-    # Create figure with subplots for each feature
-    fig = Figure()
-    n_features = length(z_scores) + 1  # +1 for combined z-score
-    n_cols = 2
-    n_rows = ceil(Int, n_features / n_cols)
+    # Plot Horizontal EOG Correlation Z-Scores
+    ax_h = Axis(
+         fig[1, 2],
+        xlabel = "Component Number",
+        ylabel = "Z-Score",
+        title = "Horizontal EOG Correlation Z-Scores"
+    )
+     # Use component indices from DataFrame for x-axis
+    scatter!(ax_h, metrics_df.Component, h_eog_corr_z, color = :gray, markersize = 5)
+    hlines!(ax_h, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
+     # Highlight all identified components
+    if !isempty(final_hEOG)
+        # Get z-scores only for the identified components
+        h_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_hEOG)), :h_eog_channel_zscore]
+        scatter!(ax_h, final_hEOG, h_z_scores_highlight, color = :blue, markersize = 8)
+         for comp_idx in final_hEOG # Annotate each identified component
+            text!(ax_h, comp_idx, metrics_df[comp_idx, :h_eog_channel_zscore], text=string(comp_idx), color=:blue, align=(:center,:bottom), fontsize=10)
+        end
+    end
 
-    # Plot each feature
-    for (i, (feature_name, scores)) in enumerate(z_scores)
-        row = div(i-1, n_cols) + 1
-        col = mod(i-1, n_cols) + 1
-        
-        ax = Axis(
-            fig[row, col],
-            xlabel = "Component Number",
-            ylabel = "Z-Score",
-            title = string(feature_name)
-        )
+    return fig
+end
 
-        # Plot z-scores
-        scatter!(
-            ax,
-            1:length(scores),
-            scores,
-            color = :blue,
-            markersize = 8
-        )
+# --- EKG Artifact Identification ---
 
-        # Add threshold lines
-        hlines!(ax, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
+# Helper function (assuming similar logic needed elsewhere, or define inline)
+function _get_samples_to_use(dat::ContinuousData, include_list, exclude_list)
+    n_samples = size(dat.data, 1)
+    keep = trues(n_samples) # Start with all true
 
-        # Add annotations for components above threshold
-        for (comp, score) in enumerate(scores)
-            if abs(score) > z_threshold
-                text!(
-                    ax,
-                    comp,
-                    score,
-                    text = string(comp),
-                    color = :red,
-                    align = (:center, :bottom)
-                )
+    # Apply exclusions
+    if !isnothing(exclude_list)
+        for col in exclude_list
+            if col in propertynames(dat.data) && eltype(dat.data[!, col]) == Bool
+                keep .&= .!dat.data[!, col] # Set to false where exclude is true
+            else
+                @warn "Exclude column '$col' not found or not Bool type."
             end
         end
     end
 
-    # Plot combined z-score
-    ax = Axis(
-        fig[n_rows, 1],
-        xlabel = "Component Number",
-        ylabel = "Z-Score",
-        title = "Combined Z-Score"
-    )
-
-    scatter!(
-        ax,
-        1:length(combined_z),
-        combined_z,
-        color = :green,
-        markersize = 8
-    )
-
-    hlines!(ax, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
-
-    for (comp, score) in enumerate(combined_z)
-        if abs(score) > z_threshold
-            text!(
-                ax,
-                comp,
-                score,
-                text = string(comp),
-                color = :red,
-                align = (:center, :bottom)
-            )
+    # Apply inclusions (if specified, overrides excludes implicitly)
+    if !isnothing(include_list)
+        include_mask = falses(n_samples)
+        for col in include_list
+             if col in propertynames(dat.data) && eltype(dat.data[!, col]) == Bool
+                include_mask .|= dat.data[!, col] # Set to true where include is true
+            else
+                @warn "Include column '$col' not found or not Bool type."
+            end
         end
+        keep .&= include_mask # Keep only where include is true (within remaining)
     end
 
-    # Adjust layout
-    rowgap!(fig.layout, 20)
-    colgap!(fig.layout, 20)
+    return findall(keep)
+end
 
-    return fig
+"""
+    _simple_findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
+
+Basic peak finder. Finds indices where data point is greater than its
+immediate neighbors and exceeds mean + min_prominence_std * std(data).
+Returns indices of peaks.
+"""
+function _simple_findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
+    if length(data) < 3
+        return Int[]
+    end
+    peaks = Int[]
+    mean_val = mean(data)
+    std_val = std(data)
+    # Handle zero std deviation case
+    threshold = (std_val ≈ 0) ? mean_val : mean_val + min_prominence_std * std_val
+
+    for i in 2:(length(data)-1)
+        if data[i] > data[i-1] && data[i] > data[i+1] && data[i] > threshold
+            push!(peaks, i)
+        end
+    end
+    return peaks
+end
+
+"""
+    identify_ekg_components(ica_result::InfoIca, dat::ContinuousData;
+                              min_bpm::Real=40, max_bpm::Real=120,
+                              min_prominence_std::Real=2.5,
+                              min_peaks::Int=10,
+                              max_ibi_std_s::Real=0.05,
+                              include_samples::Union{Nothing,Vector{Symbol}} = nothing,
+                              exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value])
+
+Identify ICA components potentially related to EKG artifacts based on peak detection
+and interval regularity, using only samples consistent with ICA calculation.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data (needed for sampling rate `fs` and sample selection columns).
+
+# Keyword Arguments
+- `min_bpm::Real`: Minimum plausible heart rate in beats per minute (default: 40).
+- `max_bpm::Real`: Maximum plausible heart rate in beats per minute (default: 120).
+- `min_prominence_std::Real`: Minimum peak prominence in standard deviations above mean (default: 2.5).
+- `min_peaks::Int`: Minimum number of prominent peaks required within plausible heart rate range (default: 10).
+- `max_ibi_std_s::Real`: Maximum standard deviation of the inter-beat intervals (in seconds) for component to be flagged (default: 0.05).
+- `include_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to *include*. Defaults to `nothing` (include all unless excluded).
+- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to *exclude*. Defaults to `[:is_extreme_value]`.
+
+# Returns
+- `Vector{Int}`: Sorted vector of indices identified as potential EKG components.
+- `DataFrame`: DataFrame containing metrics for each component (calculated on the included samples):
+  - `:Component`: Component index (1 to n).
+  - `:num_peaks`: Number of detected prominent peaks.
+  - `:num_valid_ibis`: Number of inter-beat intervals within the plausible BPM range.
+  - `:mean_ibi_s`: Mean inter-beat interval in seconds (if num_valid_ibis > 0).
+  - `:std_ibi_s`: Standard deviation of inter-beat intervals in seconds (if num_valid_ibis > 1).
+  - `:is_ekg_artifact`: Boolean flag indicating if component met the criteria.
+"""
+function identify_ecg_components( # Renamed from identify_ecg_components
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    min_bpm::Real=40,
+    max_bpm::Real=120,
+    min_prominence_std::Real=2.5,
+    min_peaks::Int=10,
+    max_ibi_std_s::Real=0.15,
+    include_samples::Union{Nothing,Vector{Symbol}} = nothing, # New arg
+    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value] # New arg
+)
+    # --- Data Preparation ---
+
+    # 1. Determine samples to use, consistent with run_ica
+    samples_to_use = _get_samples_to_use(dat, include_samples, exclude_samples)
+    if isempty(samples_to_use)
+        @warn "No samples remaining after applying include/exclude criteria. Cannot identify EKG components."
+        # Return empty results
+        return Int[], DataFrame(Component=Int[], num_peaks=Int[], num_valid_ibis=Int[], mean_ibi_s=Float64[], std_ibi_s=Float64[], is_ekg_artifact=Bool[])
+    end
+
+    # 2. Extract relevant data *only for these samples*
+    relevant_cols = vcat(ica_result.data_label)
+    data_subset_df = dat.data[samples_to_use, relevant_cols]
+
+    # 3. Prepare matrix for unmixing (on the subset)
+    dat_matrix_subset = permutedims(Matrix(data_subset_df)) 
+    dat_matrix_subset .-= mean(dat_matrix_subset, dims=2)
+    dat_matrix_subset ./= ica_result.scale
+
+    # 4. Calculate components activations *only for these samples*
+    components_subset = ica_result.unmixing * dat_matrix_subset 
+    # Note: n_components is the total number of components from ICA result
+    n_components_total = size(ica_result.unmixing, 1)
+    fs = dat.sample_rate 
+
+    # Convert BPM to plausible IBI range in seconds
+    min_ibi_s = 60.0 / max_bpm
+    max_ibi_s = 60.0 / min_bpm
+
+    # Store results
+    metrics = []
+    identified_ekg = Int[]
+
+    # Loop through components, analyzing the activations *from the subset*
+    for comp_idx in 1:n_components_total # Iterate through all component indices
+        ts = components_subset[comp_idx, :] # Time series from *filtered* samples
+
+        # Find prominent peaks in the absolute signal magnitude
+        peak_indices = _simple_findpeaks(abs.(ts); min_prominence_std=min_prominence_std)
+        
+        num_peaks = length(peak_indices)
+        mean_ibi = NaN
+        std_ibi = NaN
+        num_valid_ibis = 0
+        is_ekg = false
+
+        if num_peaks >= 2
+            # Calculate Inter-Beat Intervals (IBIs) in seconds
+            ibis_s = diff(peak_indices) ./ fs
+
+            # Filter IBIs based on plausible heart rate range
+            valid_ibi_mask = (ibis_s .>= min_ibi_s) .& (ibis_s .<= max_ibi_s)
+            valid_ibis = ibis_s[valid_ibi_mask]
+            num_valid_ibis = length(valid_ibis)
+
+            if num_valid_ibis > 1 
+                mean_ibi = mean(valid_ibis)
+                std_ibi = std(valid_ibis)
+
+                # Check criteria
+                if num_valid_ibis >= (min_peaks - 1) && 
+                   std_ibi <= max_ibi_std_s
+                    is_ekg = true
+                    push!(identified_ekg, comp_idx)
+                end
+            elseif num_valid_ibis == 1 
+                 mean_ibi = valid_ibis[1]
+                 std_ibi = 0.0 
+                 if num_valid_ibis >= (min_peaks - 1) && std_ibi <= max_ibi_std_s
+                     is_ekg = true
+                     push!(identified_ekg, comp_idx)
+                 end
+            end
+        end
+
+        # Store metrics for this component
+        push!(metrics, (
+            Component=comp_idx,
+            num_peaks=num_peaks,
+            num_valid_ibis=num_valid_ibis,
+            mean_ibi_s=mean_ibi,
+            std_ibi_s=std_ibi,
+            is_ekg_artifact=is_ekg
+        ))
+    end
+
+    # --- Construct Results ---
+    metrics_df = DataFrame(metrics)
+    # Ensure Component column matches 1:n_components_total if metrics is empty
+    if isempty(metrics)
+         metrics_df = DataFrame(Component=1:n_components_total, num_peaks=0, num_valid_ibis=0, mean_ibi_s=NaN, std_ibi_s=NaN, is_ekg_artifact=false)
+    end
+    sort!(identified_ekg)
+
+    return identified_ekg, metrics_df
 end
