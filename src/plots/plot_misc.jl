@@ -86,7 +86,7 @@ Assumes the DataFrame `dat` contains at least two columns:
 """
 function plot_joint_probability(dat::DataFrame)
     # Basic validation
-    if :channel ∉ names(dat) || :jp ∉ names(dat)
+    if :channel ∉ propertynames(dat) || :jp ∉ propertynames(dat)
         error("DataFrame must contain :channel and :jp columns.")
     end
     channel_names = String.(dat.channel)
@@ -96,7 +96,9 @@ function plot_joint_probability(dat::DataFrame)
     barplot!(ax, 1:nrow(dat), dat[!, :jp])
     ax.xlabel = "Electrode"
     ax.ylabel = "Joint Probability"
+
     return fig, ax
+
 end
 
 """
@@ -127,7 +129,7 @@ Assumes the DataFrame `dat` contains at least two columns:
 """
 function plot_channel_summary(dat::DataFrame, col::Symbol; sort_values=false)
     # Check if required columns exist
-    if :channel ∉ names(dat) || col ∉ names(dat)
+    if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
         error("DataFrame must contain :channel and :$col columns.")
     end
 
@@ -148,4 +150,5 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; sort_values=false)
     ax.ylabel = String(col) # Use column name directly
 
     return fig, ax
+
 end
