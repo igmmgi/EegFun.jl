@@ -123,17 +123,11 @@ plot_databrowser(dat, ica_result)
 dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
-eye_components = identify_eye_components(ica_result, dat)
+eye_components, metrics_df = identify_eye_components(ica_result, dat)
+fig = plot_eye_component_features(eye_components, metrics_df)
 
-# To see which components are related to vertical eye movements
-println("Vertical eye components: ", eye_components[:vertical_eye])
-
-# To see which components are related to horizontal eye movements
-println("Horizontal eye components: ", eye_components[:horizontal_eye])
-
-# To visualize the correlations
-fig = plot_eye_component_correlations(ica_result, dat)
-
+ecg_components, metrics_df = identify_ecg_components(ica_result, dat; exclude_samples = [:is_extreme_value])
+viewer(metrics_df)
 
 
 
