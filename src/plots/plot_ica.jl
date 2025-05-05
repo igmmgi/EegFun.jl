@@ -1464,3 +1464,301 @@ function update_components!(state)
         end
     end
 end
+
+"""
+    identify_eye_components(ica_result::InfoIca, dat::ContinuousData; 
+                          v_eog_channel::Symbol=:vEOG, 
+                          h_eog_channel::Symbol=:hEOG,
+                          z_threshold::Float64=3.5,
+                          min_correlation::Float64=0.3)
+
+Identify ICA components related to eye movements using FASTER's methodology with
+additional spatial features specific to EOG patterns.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object
+- `dat::ContinuousData`: The continuous data containing EOG channels
+
+# Keyword Arguments
+- `v_eog_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG)
+- `h_eog_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG)
+- `z_threshold::Float64`: Z-score threshold for identifying eye components (default: 3.5)
+- `min_correlation::Float64`: Minimum correlation coefficient required (default: 0.3)
+
+# Returns
+- `Dict{Symbol,Any}`: Dictionary containing:
+  - `:vertical_eye`: Vector of component indices related to vertical eye movements
+  - `:horizontal_eye`: Vector of component indices related to horizontal eye movements
+  - `:z_scores`: Matrix of z-scores for all components
+  - `:features`: Dictionary of feature values used for z-score calculation
+"""
+function identify_eye_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    v_eog_channel::Symbol = :vEOG,
+    h_eog_channel::Symbol = :hEOG,
+    z_threshold::Float64 = 3.5,
+    min_correlation::Float64 = 0.3,
+)
+    # Check if EOG channels exist
+    if !(v_eog_channel in propertynames(dat.data))
+        error("Vertical EOG channel $v_eog_channel not found in data")
+    end
+    if !(h_eog_channel in propertynames(dat.data))
+        error("Horizontal EOG channel $h_eog_channel not found in data")
+    end
+
+    # Get EOG signals
+    v_eog = dat.data[!, v_eog_channel]
+    h_eog = dat.data[!, h_eog_channel]
+
+    # Prepare data matrix for ICA
+    dat_matrix = prepare_ica_data_matrix(dat, ica_result)
+    
+    # Calculate component activations
+    components = ica_result.unmixing * dat_matrix
+    n_components = size(components, 1)
+
+    # Calculate features for each component
+    features = Dict{Symbol,Vector{Float64}}()
+    
+    # 1. Correlation with EOG channels
+    v_eog_corr = zeros(n_components)
+    h_eog_corr = zeros(n_components)
+    for i in 1:n_components
+        v_eog_corr[i] = abs(cor(components[i, :], v_eog))
+        h_eog_corr[i] = abs(cor(components[i, :], h_eog))
+    end
+    features[:v_eog_corr] = v_eog_corr
+    features[:h_eog_corr] = h_eog_corr
+
+    # 2. Spatial features
+    # Front-back gradient
+    front_channels = findall(ica_result.data_label .∈ Ref([:Fp1, :Fp2, :F7, :F3, :Fz, :F4, :F8]))
+    back_channels = findall(ica_result.data_label .∈ Ref([:O1, :Oz, :O2, :P7, :P3, :Pz, :P4, :P8]))
+    
+    # Left-right symmetry (for horizontal EOG)
+    left_channels = findall(ica_result.data_label .∈ Ref([:F7, :T7, :P7, :O1]))
+    right_channels = findall(ica_result.data_label .∈ Ref([:F8, :T8, :P8, :O2]))
+    
+    # Top-bottom symmetry (for vertical EOG)
+    top_channels = findall(ica_result.data_label .∈ Ref([:Fp1, :Fp2, :F7, :F3, :Fz, :F4, :F8]))
+    bottom_channels = findall(ica_result.data_label .∈ Ref([:T7, :T8, :P7, :P8]))
+    
+    # Calculate spatial features
+    front_back_ratio = zeros(n_components)
+    left_right_sym = zeros(n_components)
+    top_bottom_sym = zeros(n_components)
+    max_weight_loc = zeros(n_components)
+    
+    for i in 1:n_components
+        weights = ica_result.mixing[:, i]
+        
+        # Front-back ratio
+        if !isempty(front_channels) && !isempty(back_channels)
+            front_var = var(weights[front_channels])
+            back_var = var(weights[back_channels])
+            front_back_ratio[i] = front_var / (back_var + eps())
+        end
+        
+        # Left-right symmetry (should be high for horizontal EOG)
+        if !isempty(left_channels) && !isempty(right_channels)
+            left_weights = weights[left_channels]
+            right_weights = weights[right_channels]
+            # Ensure arrays are the same size by padding with zeros if necessary
+            max_len = max(length(left_weights), length(right_weights))
+            left_padded = vcat(left_weights, zeros(max_len - length(left_weights)))
+            right_padded = vcat(right_weights, zeros(max_len - length(right_weights)))
+            left_right_sym[i] = 1.0 - mean(abs.(left_padded .+ right_padded)) / (mean(abs.(left_padded)) + mean(abs.(right_padded)) + eps())
+        end
+        
+        # Top-bottom symmetry (should be high for vertical EOG)
+        if !isempty(top_channels) && !isempty(bottom_channels)
+            top_weights = weights[top_channels]
+            bottom_weights = weights[bottom_channels]
+            # Ensure arrays are the same size by padding with zeros if necessary
+            max_len = max(length(top_weights), length(bottom_weights))
+            top_padded = vcat(top_weights, zeros(max_len - length(top_weights)))
+            bottom_padded = vcat(bottom_weights, zeros(max_len - length(bottom_weights)))
+            top_bottom_sym[i] = 1.0 - mean(abs.(top_padded .+ bottom_padded)) / (mean(abs.(top_padded)) + mean(abs.(bottom_padded)) + eps())
+        end
+        
+        # Maximum weight location (should be near eyes for EOG)
+        max_idx = argmax(abs.(weights))
+        max_weight_loc[i] = abs(ica_result.data_label[max_idx] in [:Fp1, :Fp2, :F7, :F8]) ? 1.0 : 0.0
+    end
+    
+    features[:front_back_ratio] = front_back_ratio
+    features[:left_right_sym] = left_right_sym
+    features[:top_bottom_sym] = top_bottom_sym
+    features[:max_weight_loc] = max_weight_loc
+
+    # Calculate z-scores for each feature
+    z_scores = Dict{Symbol,Vector{Float64}}()
+    for (feature_name, feature_values) in features
+        mean_val = mean(feature_values)
+        std_val = std(feature_values)
+        z_scores[feature_name] = (feature_values .- mean_val) ./ std_val
+    end
+
+    # Combine z-scores for eye movement detection with feature-specific weights
+    combined_z = zeros(n_components)
+    for i in 1:n_components
+        # Vertical EOG features
+        v_score = (
+            2.0 * z_scores[:v_eog_corr][i] +    # Double weight for vertical EOG correlation
+            z_scores[:front_back_ratio][i] +    # Front-back gradient
+            z_scores[:top_bottom_sym][i] +      # Top-bottom symmetry
+            z_scores[:max_weight_loc][i]        # Maximum weight location
+        ) / 5.0
+
+        # Horizontal EOG features
+        h_score = (
+            2.0 * z_scores[:h_eog_corr][i] +    # Double weight for horizontal EOG correlation
+            z_scores[:front_back_ratio][i] +    # Front-back gradient
+            z_scores[:left_right_sym][i] +      # Left-right symmetry
+            z_scores[:max_weight_loc][i]        # Maximum weight location
+        ) / 5.0
+
+        # Take the maximum of vertical and horizontal scores
+        combined_z[i] = max(v_score, h_score)
+    end
+
+    # Find components that exceed threshold AND have sufficient correlation
+    vertical_eye = findall((z_scores[:v_eog_corr] .> z_threshold) .& (v_eog_corr .> min_correlation))
+    horizontal_eye = findall((z_scores[:h_eog_corr] .> z_threshold) .& (h_eog_corr .> min_correlation))
+    combined_eye = findall(combined_z .> z_threshold)
+
+    # Create result dictionary
+    result = Dict{Symbol,Any}(
+        :vertical_eye => vertical_eye,
+        :horizontal_eye => horizontal_eye,
+        :combined_eye => combined_eye,
+        :z_scores => z_scores,
+        :combined_z => combined_z,
+        :features => features
+    )
+
+    return result
+end
+
+"""
+    plot_eye_component_correlations(ica_result::InfoIca, dat::ContinuousData; 
+                                  v_eog_channel::Symbol=:vEOG, 
+                                  h_eog_channel::Symbol=:hEOG,
+                                  z_threshold::Float64=3.0)
+
+Plot z-scores of features used to identify eye movement components.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object
+- `dat::ContinuousData`: The continuous data containing EOG channels
+
+# Keyword Arguments
+- `v_eog_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG)
+- `h_eog_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG)
+- `z_threshold::Float64`: Z-score threshold (default: 3.0)
+
+# Returns
+- `fig::Figure`: The Makie Figure containing the z-score plots
+"""
+function plot_eye_component_correlations(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    v_eog_channel::Symbol = :vEOG,
+    h_eog_channel::Symbol = :hEOG,
+    z_threshold::Float64 = 3.0,
+)
+    # Get z-scores
+    result = identify_eye_components(
+        ica_result,
+        dat;
+        v_eog_channel = v_eog_channel,
+        h_eog_channel = h_eog_channel,
+        z_threshold = z_threshold,
+    )
+    z_scores = result[:z_scores]
+    combined_z = result[:combined_z]
+
+    # Create figure with subplots for each feature
+    fig = Figure()
+    n_features = length(z_scores) + 1  # +1 for combined z-score
+    n_cols = 2
+    n_rows = ceil(Int, n_features / n_cols)
+
+    # Plot each feature
+    for (i, (feature_name, scores)) in enumerate(z_scores)
+        row = div(i-1, n_cols) + 1
+        col = mod(i-1, n_cols) + 1
+        
+        ax = Axis(
+            fig[row, col],
+            xlabel = "Component Number",
+            ylabel = "Z-Score",
+            title = string(feature_name)
+        )
+
+        # Plot z-scores
+        scatter!(
+            ax,
+            1:length(scores),
+            scores,
+            color = :blue,
+            markersize = 8
+        )
+
+        # Add threshold lines
+        hlines!(ax, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
+
+        # Add annotations for components above threshold
+        for (comp, score) in enumerate(scores)
+            if abs(score) > z_threshold
+                text!(
+                    ax,
+                    comp,
+                    score,
+                    text = string(comp),
+                    color = :red,
+                    align = (:center, :bottom)
+                )
+            end
+        end
+    end
+
+    # Plot combined z-score
+    ax = Axis(
+        fig[n_rows, 1],
+        xlabel = "Component Number",
+        ylabel = "Z-Score",
+        title = "Combined Z-Score"
+    )
+
+    scatter!(
+        ax,
+        1:length(combined_z),
+        combined_z,
+        color = :green,
+        markersize = 8
+    )
+
+    hlines!(ax, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
+
+    for (comp, score) in enumerate(combined_z)
+        if abs(score) > z_threshold
+            text!(
+                ax,
+                comp,
+                score,
+                text = string(comp),
+                color = :red,
+                align = (:center, :bottom)
+            )
+        end
+    end
+
+    # Adjust layout
+    rowgap!(fig.layout, 20)
+    colgap!(fig.layout, 20)
+
+    return fig
+end

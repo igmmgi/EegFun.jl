@@ -14,8 +14,8 @@ layout = read_layout("./data/layouts/biosemi72.csv");
 
 # 2D layout
 polar_to_cartesian_xy!(layout)
-plot_layout_2d(layout);
-# 
+fig, ax = plot_layout_2d(layout);
+ 
 # neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
 # plot_layout_2d(layout, neighbours)
 # 
@@ -31,7 +31,6 @@ plot_layout_2d(layout);
 # plot_layout_3d(layout)
 # plot_layout_3d(layout, neighbours)
 
-
 subject = 3
 dat = read_bdf("../Flank_C_$(subject).bdf");
 
@@ -39,7 +38,7 @@ fig, ax = plot_events(dat)
 
 
 dat = create_eeg_dataframe(dat, layout);
-plot_events(dat)
+fig, ax = plot_events(dat)
 viewer(dat)
 head(dat)
 tail(dat)
@@ -77,14 +76,14 @@ plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 summary = channel_summary(dat)
 summary = channel_summary(dat, filter_samples = :epoch_window)
 viewer(summary)
-plot_channel_summary(summary, :range)
+fig, ax = plot_channel_summary(summary, :range)
 # channel_summary(dat, channels(dat)[1:66])
 # channel_summary(dat, 1:5)
 
 # bad channels
 jp = channel_joint_probability(dat, threshold=5.0, normval=2)
 # jp = channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
-plot_joint_probability(jp)
+fig, ax = plot_joint_probability(jp)
 
 cm = correlation_matrix(dat)
 fig, ax = plot_correlation_heatmap(cm)
@@ -112,13 +111,30 @@ plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = tru
 plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5];
                   use_global_scale = true,
                   colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
+plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5, 7, 9]; dims = (2, 3),
+                  use_global_scale = true,
+                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
+
 
 plot_ica_component_activation(dat, ica_result)
 
 plot_databrowser(dat, ica_result)
 
 dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
-dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
+# dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
+
+eye_components = identify_eye_components(ica_result, dat)
+
+# To see which components are related to vertical eye movements
+println("Vertical eye components: ", eye_components[:vertical_eye])
+
+# To see which components are related to horizontal eye movements
+println("Horizontal eye components: ", eye_components[:horizontal_eye])
+
+# To visualize the correlations
+fig = plot_eye_component_correlations(ica_result, dat)
+
+
 
 
 # EPOCHS
