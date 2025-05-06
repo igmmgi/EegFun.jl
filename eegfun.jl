@@ -120,14 +120,24 @@ plot_ica_component_activation(dat, ica_result)
 
 plot_databrowser(dat, ica_result)
 
-dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
+# dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
-eye_components, metrics_df = identify_eye_components(ica_result, dat)
+eye_components, metrics_df = identify_eye_components(ica_result, dat; exclude_samples = [:is_extreme_value])
 fig = plot_eye_component_features(eye_components, metrics_df)
 
 ecg_components, metrics_df = identify_ecg_components(ica_result, dat; exclude_samples = [:is_extreme_value])
-viewer(metrics_df)
+fig = plot_ecg_component_features(ecg_components, metrics_df)
+
+high_kurtosis_comps, metrics_df = identify_spatial_kurtosis_components(ica_result, dat; exclude_samples = [:is_extreme_value])
+fig = plot_spatial_kurtosis_components(ica_result, dat)
+
+line_noise_comps, metrics_df = identify_line_noise_components(ica_result, dat)
+fig = plot_line_noise_components(ica_result, dat)
+fig = plot_component_spectrum(ica_result, dat, 1)
+fig = plot_channel_spectrum(dat, :P2)
+fig = plot_channel_spectrum(dat)
+fig = plot_channel_spectrum(dat, [:P2, :P1])
 
 
 
