@@ -393,9 +393,8 @@ function create_epoch_menu(fig, ax, state)
 end
 
 function show_additional_menu(state)
-
     menu_fig = Figure()
-    plot_types = ["Topoplot", "Plot2", "Plot3"]  # Could be expanded based on data type
+    plot_types = ["Topoplot", "Spectrum", "Plot3"]  # Added Spectrum option
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
@@ -404,8 +403,9 @@ function show_additional_menu(state)
             selected_data = get_x_region_data(state)
             if btn.label[] == "Topoplot"
                 plot_topoplot(selected_data, state.data.original.layout)
-            elseif btn.label[] == "Plot2"
-                println("Plot2: TODO")
+            elseif btn.label[] == "Spectrum"
+                selected_channel = state.channels.labels[state.channels.visible]
+                plot_selected_spectrum(selected_data, selected_channel)
             elseif btn.label[] == "Plot3"
                 println("Plot3: TODO")
             end
@@ -413,7 +413,6 @@ function show_additional_menu(state)
     end
 
     display(GLMakie.Screen(), menu_fig)
-
 end
 
 # Create common sliders for both continuous and epoched data
