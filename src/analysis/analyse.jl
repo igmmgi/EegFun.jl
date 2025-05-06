@@ -472,3 +472,154 @@ function trim_extremes(x::Vector{Float64})
     return view(sorted, trim+1:n-trim)
 end
 
+
+
+"""
+    get_mean_amplitude(erp_data::ErpData, time_window::Tuple{<:Real, <:Real})
+
+Calculates the mean amplitude for each electrode within a specified time window.
+
+# Arguments
+- `erp_data::ErpData`: ERP data structure
+- `time_window::Tuple{<:Real, <:Real}`: Time window as (start_time, end_time) in seconds
+
+# Returns
+- `DataFrame`: A DataFrame with electrode labels as column names and corresponding mean amplitudes
+"""
+function get_mean_amplitude(erp_data::ErpData, time_window::Tuple{<:Real, <:Real})
+    # Unpack time window values
+    start_time, end_time = time_window
+    
+    # Get time column name (assuming first column is time)
+    time_col = first(names(erp_data.data))
+    
+    # Find indices corresponding to the time window
+    time_indices = findall(t -> start_time <= t <= end_time, erp_data.data[:, time_col])
+    
+    if isempty(time_indices)
+        throw(ArgumentError("No data points found in the specified time window ($start_time, $end_time)"))
+    end
+    
+    # Get electrode names (all columns except the time column)
+    electrode_names = filter(col -> col != time_col, names(erp_data.data))
+    
+    # Calculate mean amplitudes for each electrode
+    mean_amplitudes = Dict{String, Float64}()
+    for electrode in electrode_names
+        mean_amplitudes[electrode] = mean(erp_data.data[time_indices, electrode])
+    end
+    
+    # Return results as DataFrame
+    return DataFrame(mean_amplitudes)
+end
+
+"""
+    get_peak_latency(erp_data::ErpData, time_window::Tuple{<:Real, <:Real}; 
+                    peak_type::Symbol=:positive)
+
+Finds the latency (time point) of peaks for each electrode within a time window.
+
+# Arguments
+- `erp_data::ErpData`: ERP data structure
+- `time_window::Tuple{<:Real, <:Real}`: Time window as (start_time, end_time) in seconds
+- `peak_type::Symbol=:positive`: Type of peak to find (:positive for maximum, :negative for minimum)
+
+# Returns
+- `DataFrame`: A DataFrame with electrode labels as column names and corresponding peak latencies
+"""
+function get_peak_latency(
+    erp_data::ErpData, 
+    time_window::Tuple{<:Real, <:Real}; 
+    peak_type::Symbol=:positive
+)
+    # Get time column name (assuming first column is time)
+    time_col = first(names(erp_data.data))
+    
+    # Find indices corresponding to the time window
+    time_values = erp_data.data[:, time_col]
+    time_indices = findall(t -> time_window[1] <= t <= time_window[2], time_values)
+    
+    if isempty(time_indices)
+        throw(ArgumentError("No data points found in the specified time window $(time_window)"))
+    end
+    
+    # Get electrode names (all columns except the time column)
+    electrode_names = filter(col -> col != time_col, names(erp_data.data))
+    
+    # Calculate peak latencies for each electrode
+    peak_latencies = Dict{String, Float64}()
+    
+    for electrode in electrode_names
+        data_window = erp_data.data[time_indices, electrode]
+        
+        # Find peak index
+        peak_idx = if peak_type == :positive
+            argmax(data_window)
+        elseif peak_type == :negative
+            argmin(data_window)
+        else
+            throw(ArgumentError("peak_type must be :positive or :negative"))
+        end
+        
+        # Get the time value at the peak
+        peak_time = time_values[time_indices[peak_idx]]
+        peak_latencies[electrode] = peak_time
+    end
+    
+    # Return results as DataFrame (same format as get_mean_amplitude)
+    return DataFrame(peak_latencies)
+end
+
+"""
+    get_peak_amplitude(erp_data::ErpData, time_window::Tuple{<:Real, <:Real}; 
+                      peak_type::Symbol=:positive)
+
+Finds the peak amplitude for each electrode within a time window.
+
+# Arguments
+- `erp_data::ErpData`: ERP data structure
+- `time_window::Tuple{<:Real, <:Real}`: Time window as (start_time, end_time) in seconds
+- `peak_type::Symbol=:positive`: Type of peak to find (:positive for maximum, :negative for minimum)
+
+# Returns
+- `DataFrame`: A DataFrame with electrode labels as column names and corresponding peak amplitudes
+"""
+function get_peak_amplitude(
+    erp_data::ErpData, 
+    time_window::Tuple{<:Real, <:Real}; 
+    peak_type::Symbol=:positive
+)
+    # Get time column name (assuming first column is time)
+    time_col = first(names(erp_data.data))
+    
+    # Find indices corresponding to the time window
+    time_indices = findall(t -> time_window[1] <= t <= time_window[2], erp_data.data[:, time_col])
+    
+    if isempty(time_indices)
+        throw(ArgumentError("No data points found in the specified time window $(time_window)"))
+    end
+    
+    # Get electrode names (all columns except the time column)
+    electrode_names = filter(col -> col != time_col, names(erp_data.data))
+    
+    # Calculate peak amplitudes for each electrode
+    peak_amplitudes = Dict{String, Float64}()
+    
+    for electrode in electrode_names
+        data_window = erp_data.data[time_indices, electrode]
+        
+        # Find peak
+        peak_value = if peak_type == :positive
+            maximum(data_window)
+        elseif peak_type == :negative
+            minimum(data_window)
+        else
+            throw(ArgumentError("peak_type must be :positive or :negative"))
+        end
+        
+        peak_amplitudes[electrode] = peak_value
+    end
+    
+    # Return results as DataFrame (same format as get_mean_amplitude)
+    return DataFrame(peak_amplitudes)
+end

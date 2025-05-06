@@ -1,6 +1,4 @@
 # Add imports at the top of the file
-using FFTW
-
 """
     plot_ica_topoplot_single(fig, position, ica, comp_idx, layout; ...)
 

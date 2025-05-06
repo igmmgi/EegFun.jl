@@ -16,7 +16,9 @@ layout = read_layout("./data/layouts/biosemi72.csv");
 polar_to_cartesian_xy!(layout)
 fig, ax = plot_layout_2d(layout);
  
-# neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
+neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
+
+
 # plot_layout_2d(layout, neighbours)
 # 
 # fig, ax = plot_layout_2d(layout)
@@ -38,6 +40,10 @@ fig, ax = plot_events(dat)
 
 
 dat = create_eeg_dataframe(dat, layout);
+
+
+
+
 fig, ax = plot_events(dat)
 viewer(dat)
 head(dat)
@@ -49,6 +55,14 @@ rereference!(dat, :avg)
 
 # initial high-pass filter to remove slow drifts
 filter_data!(dat, "hp", "iir", 0.1, order=1)
+
+
+# @btime dat1 = repair_bad_channels(dat, [:Fp1], neighbours)
+# polar_to_cartesian_xyz!(layout)
+# @btime dat2 = repair_channels_spherical_spline(dat, [:Fp1])
+# lines(dat.data[:, :Fp1])
+# lines!(dat1.data[:, :Fp1], color = :red)
+# lines!(dat2.data[:, :Fp1], color = :green)
 
 # caculate EOG channels
 diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
@@ -73,22 +87,22 @@ mark_epoch_windows!(dat, [1, 4, 5, 3], [-0.5, 1.0])
 plot_databrowser(dat);
 plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 
-summary = channel_summary(dat)
-summary = channel_summary(dat, filter_samples = :epoch_window)
-viewer(summary)
-fig, ax = plot_channel_summary(summary, :range)
-# channel_summary(dat, channels(dat)[1:66])
-# channel_summary(dat, 1:5)
+# summary = channel_summary(dat)
+# summary = channel_summary(dat, filter_samples = :epoch_window)
+# viewer(summary)
+# fig, ax = plot_channel_summary(summary, :range)
+# # channel_summary(dat, channels(dat)[1:66])
+# # channel_summary(dat, 1:5)
 
-# bad channels
-jp = channel_joint_probability(dat, threshold=5.0, normval=2)
-# jp = channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
-fig, ax = plot_joint_probability(jp)
+# # bad channels
+# jp = channel_joint_probability(dat, threshold=5.0, normval=2)
+# # jp = channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
+# fig, ax = plot_joint_probability(jp)
 
-cm = correlation_matrix(dat)
-fig, ax = plot_correlation_heatmap(cm)
-cm = correlation_matrix(dat, filter_samples = :epoch_window)
-fig, ax = plot_correlation_heatmap(cm)
+# cm = correlation_matrix(dat)
+# fig, ax = plot_correlation_heatmap(cm)
+# cm = correlation_matrix(dat, filter_samples = :epoch_window)
+# fig, ax = plot_correlation_heatmap(cm)
 
 
 # # save / load
