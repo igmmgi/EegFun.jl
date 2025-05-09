@@ -4,6 +4,7 @@ using BioSemiBDF
 using CSV
 using DataFrames
 using JLD2
+using TOML
 
 # Signal processing
 using DSP
@@ -32,6 +33,7 @@ include("utils/utils.jl")
 include("layouts/layout.jl")
 
 # Analysis functions
+include("config/config.jl")
 include("analysis/tf.jl")
 include("analysis/channel_difference.jl")
 include("analysis/epochs.jl")
