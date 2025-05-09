@@ -9,6 +9,8 @@
 # package
 include("src/eegfun.jl")
 
+config = load_config("pipeline.toml")
+
 # load layout
 layout = read_layout("./data/layouts/biosemi72.csv");
 

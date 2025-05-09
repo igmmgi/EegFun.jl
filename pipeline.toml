@@ -1,0 +1,5 @@
+[something]
+a = 1
+
+[filtering]
+lowpass =1 
