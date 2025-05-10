@@ -1,4 +1,15 @@
 [filtering]
-highpass = { value = 0.1, type = "float", min = 0.0, max = 30.0, description = "High-pass filter cutoff in Hz" }
-lowpass = { value = 40.0, type = "float", min = 1.0, max = 100.0, description = "Low-pass filter cutoff in Hz" }
-notch = { value = -1.0, type = "float_or_null", values = [50.0, 60.0, -1.0], description = "Notch filter frequency (Hz); -1 means disabled" }
+highpass = { 
+    value = 0.1, 
+    type = "number", 
+    min = 0.01, 
+    max = 20, 
+    description = "High-pass filter cutoff in Hz"
+    }
+lowpass = {
+    value = 40.0, 
+    type = "number", 
+    min = 1.0, 
+    max = 100.0, 
+    description = "Low-pass filter cutoff in Hz"
+    }
