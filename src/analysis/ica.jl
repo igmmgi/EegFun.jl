@@ -362,3 +362,568 @@ function ica(dat::ContinuousData; kwargs...)
     run_ica(dat; kwargs...)
 end
 
+"""
+    identify_eye_components(ica_result::InfoIca, dat::ContinuousData;
+                          vEOG_channel::Symbol=:vEOG,
+                          hEOG_channel::Symbol=:hEOG,
+                          z_threshold::Float64=3.0,
+                          exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value])
+
+Identify ICA components potentially related to eye movements based on z-scored correlation.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data containing EOG channels.
+
+# Keyword Arguments
+- `vEOG_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG).
+- `hEOG_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG).
+- `z_threshold::Float64`: Absolute Z-score threshold for identification (default: 3.0).
+- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
+
+# Returns
+- `Dict{Symbol, Vector{Int}}`: Dictionary containing:
+  - `:vEOG`: Vector of indices identified for vertical eye movements.
+  - `:hEOG`: Vector of indices identified for horizontal eye movements.
+- `DataFrame`: DataFrame containing detailed correlation metrics per component.
+"""
+function identify_eye_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    vEOG_channel::Symbol = :vEOG,
+    hEOG_channel::Symbol = :hEOG,
+    z_threshold::Float64 = 3.0,
+    exclude_samples::Union{Nothing, Vector{Symbol}} = nothing
+)
+
+    # Check basic inputs
+    if !(vEOG_channel in propertynames(dat.data))
+        error("Vertical EOG channel $vEOG_channel not found in data")
+    end
+    if !(hEOG_channel in propertynames(dat.data))
+        error("Horizontal EOG channel $hEOG_channel not found in data")
+    end
+
+    # Get samples to use
+    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
+    if isempty(samples_to_use)
+        @warn "No samples remaining after applying exclude criteria. Cannot identify eye components."
+        return Dict(:vEOG => Int[], :hEOG => Int[]), DataFrame()
+    end
+
+    # Get EOG signals for valid samples only
+    vEOG = dat.data[samples_to_use, vEOG_channel]
+    hEOG = dat.data[samples_to_use, hEOG_channel]
+
+    # Prepare data matrix for valid samples
+    relevant_cols = vcat(ica_result.data_label)
+    data_subset_df = dat.data[samples_to_use, relevant_cols]
+    dat_matrix = permutedims(Matrix(data_subset_df))
+    dat_matrix .-= mean(dat_matrix, dims=2)
+    dat_matrix ./= ica_result.scale
+
+    # Calculate components for valid samples
+    components = ica_result.unmixing * dat_matrix
+    n_components = size(components, 1)
+
+    # Function to calculate correlations for all components
+    function calculate_correlations(eog_signal)
+        corrs = zeros(n_components)
+        for comp_idx = 1:n_components 
+             corrs[comp_idx] = abs(cor(components[comp_idx, :], eog_signal))
+        end
+        return corrs
+    end
+
+    identified_vEOG = Int[]
+    identified_hEOG = Int[]
+    vEOG_corr_z = Float64[]
+    hEOG_corr_z = Float64[]
+    vEOG_corrs = Float64[]
+    hEOG_corrs = Float64[]
+
+    # vEOG
+    vEOG_corrs = calculate_correlations(vEOG)
+    vEOG_corr_z = StatsBase.zscore(vEOG_corrs)
+    identified_vEOG = findall(abs.(vEOG_corr_z) .> z_threshold)
+
+    # hEOG
+    hEOG_corrs = calculate_correlations(hEOG)
+    hEOG_corr_z = StatsBase.zscore(hEOG_corrs)
+    identified_hEOG = findall(abs.(hEOG_corr_z) .> z_threshold)
+
+    sort!(identified_vEOG)
+    sort!(identified_hEOG)
+
+    result_dict = Dict{Symbol, Vector{Int}}( 
+        :vEOG => identified_vEOG,
+        :hEOG => identified_hEOG,
+    )
+    
+    metrics_df = DataFrame(
+        :Component => 1:n_components,
+        :vEOG_corr => vEOG_corrs,
+        :vEOG_zscore => vEOG_corr_z,
+        :hEOG_corr => hEOG_corrs,
+        :hEOG_zscore => hEOG_corr_z
+    )
+
+    return result_dict, metrics_df 
+end
+
+
+"""
+    identify_ekg_components(ica_result::InfoIca, dat::ContinuousData;
+                              min_bpm::Real=40, max_bpm::Real=120,
+                              min_prominence_std::Real=2.5,
+                              min_peaks::Int=10,
+                              max_ibi_std_s::Real=0.05,
+                              include_samples::Union{Nothing,Vector{Symbol}} = nothing,
+                              exclude_samples::Union{Nothing,Vector{Symbol}} = nothing
+
+Identify ICA components potentially related to EKG artifacts based on peak detection
+and interval regularity, using only samples consistent with ICA calculation.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data (needed for sampling rate `fs` and sample selection columns).
+
+# Keyword Arguments
+- `min_bpm::Real`: Minimum plausible heart rate in beats per minute (default: 40).
+- `max_bpm::Real`: Maximum plausible heart rate in beats per minute (default: 120).
+- `min_prominence_std::Real`: Minimum peak prominence in standard deviations above mean (default: 2.5).
+- `min_peaks::Int`: Minimum number of prominent peaks required within plausible heart rate range (default: 10).
+- `max_ibi_std_s::Real`: Maximum standard deviation of the inter-beat intervals (in seconds) for component to be flagged (default: 0.05).
+- `include_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to *include*. Defaults to `nothing` (include all unless excluded).
+- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to *exclude*. Defaults to `[:is_extreme_value]`.
+
+# Returns
+- `Vector{Int}`: Sorted vector of indices identified as potential EKG components.
+- `DataFrame`: DataFrame containing metrics for each component (calculated on the included samples):
+  - `:Component`: Component index (1 to n).
+  - `:num_peaks`: Number of detected prominent peaks.
+  - `:num_valid_ibis`: Number of inter-beat intervals within the plausible BPM range.
+  - `:mean_ibi_s`: Mean inter-beat interval in seconds (if num_valid_ibis > 0).
+  - `:std_ibi_s`: Standard deviation of inter-beat intervals in seconds (if num_valid_ibis > 1).
+  - `:is_ekg_artifact`: Boolean flag indicating if component met the criteria.
+"""
+function identify_ecg_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    min_bpm::Real=40,
+    max_bpm::Real=120,
+    min_prominence_std::Real=3,      
+    min_peaks::Int=10,                
+    max_ibi_std_s::Real=0.2,         
+    min_peak_ratio::Real=0.7,         
+    include_samples::Union{Nothing,Vector{Symbol}} = nothing,
+    exclude_samples::Union{Nothing,Vector{Symbol}} = nothing, 
+)
+
+    # Data Preparation 
+    samples_to_use = _get_samples_to_use(dat, include_samples, exclude_samples)
+    if isempty(samples_to_use)
+        @warn "No samples remaining after applying exclude criteria."
+        return Int[], DataFrame(Component=Int[], num_peaks=Int[], num_valid_ibis=Int[], mean_ibi_s=Float64[], std_ibi_s=Float64[], peak_ratio=Float64[], is_ecg_artifact=Bool[])
+    end
+
+    # Process data
+    relevant_cols = ica_result.data_label
+    data_subset_df = dat.data[samples_to_use, relevant_cols]
+    dat_matrix_subset = permutedims(Matrix(data_subset_df)) 
+    dat_matrix_subset .-= mean(dat_matrix_subset, dims=2)
+    dat_matrix_subset ./= ica_result.scale
+    
+    components_subset = ica_result.unmixing * dat_matrix_subset 
+    n_components = size(ica_result.unmixing, 1)
+
+    # Convert BPM to plausible IBI range
+    min_ibi_s = 60.0 / max_bpm
+    max_ibi_s = 60.0 / min_bpm
+
+    # Store results
+    metrics = []
+    identified_ecg = Int[]
+
+    # Loop through components
+    for comp_idx in 1:n_components
+        ts = components_subset[comp_idx, :]
+
+        # Find prominent peaks - apply stricter criteria
+        # 1. Use a higher threshold
+        peak_indices = _findpeaks((ts .* -1); min_prominence_std=min_prominence_std)
+
+        num_peaks = length(peak_indices)
+        mean_ibi = NaN
+        std_ibi = NaN
+        num_valid_ibis = 0
+        peak_ratio = 0.0  
+        is_ecg = false
+
+        if num_peaks >= 2
+            # Calculate IBIs
+            ibis_s = diff(peak_indices) ./ dat.sample_rate
+
+            # Filter valid IBIs
+            valid_ibi_mask = (ibis_s .>= min_ibi_s) .& (ibis_s .<= max_ibi_s)
+            valid_ibis = ibis_s[valid_ibi_mask]
+            num_valid_ibis = length(valid_ibis)
+            
+            # Calculate peak ratio (new metric)
+            peak_ratio = num_valid_ibis / (num_peaks - 1)
+
+            if num_valid_ibis > 1 
+                mean_ibi = mean(valid_ibis)
+                std_ibi = std(valid_ibis)
+                
+                # Apply stricter criteria
+                if num_valid_ibis >= (min_peaks - 1) && 
+                   std_ibi <= max_ibi_std_s && 
+                   peak_ratio >= min_peak_ratio  # Add peak ratio criterion
+                    is_ecg = true
+                    push!(identified_ecg, comp_idx)
+                end
+            elseif num_valid_ibis == 1 
+                mean_ibi = valid_ibis[1]
+                std_ibi = 0.0
+            end
+        end
+
+        # Store metrics 
+        push!(metrics, (
+            Component=comp_idx,
+            num_peaks=num_peaks,
+            num_valid_ibis=num_valid_ibis,
+            mean_ibi_s=mean_ibi,
+            std_ibi_s=std_ibi,
+            peak_ratio=peak_ratio,
+            is_ecg_artifact=is_ecg
+        ))
+    end
+
+    # Finalize results
+    metrics_df = DataFrame(metrics)
+    if isempty(metrics)
+         metrics_df = DataFrame(Component=1:n_components, num_peaks=0, num_valid_ibis=0, 
+                                mean_ibi_s=NaN, std_ibi_s=NaN, peak_ratio=0.0, is_ecg_artifact=false)
+    end
+    sort!(identified_ecg)
+
+    return identified_ecg, metrics_df
+end
+
+"""
+    identify_spatial_kurtosis_components(ica_result::InfoIca, dat::ContinuousData;
+                                      exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+                                      z_threshold::Float64 = 3.0)
+
+Identify ICA components with high spatial kurtosis (localized, spot-like activity).
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data.
+
+# Keyword Arguments
+- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
+- `z_threshold::Float64`: Z-score threshold for identifying high spatial kurtosis components (default: 3.0).
+
+# Returns
+- `Vector{Int}`: Indices of components with high spatial kurtosis.
+- `DataFrame`: DataFrame containing spatial kurtosis values and z-scores for all components.
+"""
+function identify_spatial_kurtosis_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+    z_threshold::Float64 = 3.0
+)
+    # Calculate spatial kurtosis for each component's weights
+    n_components = size(ica_result.mixing, 2)
+    spatial_kurtosis = Float64[]
+    
+    for i in 1:n_components
+        # Get component weights
+        weights = ica_result.mixing[:, i]
+        # Calculate kurtosis of the weights
+        k = kurtosis(weights)
+        push!(spatial_kurtosis, k)
+    end
+
+    # Calculate z-scores of spatial kurtosis values
+    spatial_kurtosis_z = StatsBase.zscore(spatial_kurtosis)
+
+    # Identify components with high spatial kurtosis (using z-scores)
+    high_kurtosis_comps = findall(spatial_kurtosis_z .> z_threshold)  # Only positive deviations (localized activity)
+    sort!(high_kurtosis_comps)
+
+    # Create metrics DataFrame
+    metrics_df = DataFrame(
+        :Component => 1:n_components,
+        :SpatialKurtosis => spatial_kurtosis,
+        :SpatialKurtosisZScore => spatial_kurtosis_z
+    )
+
+    return high_kurtosis_comps, metrics_df
+end
+
+
+"""
+    identify_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
+                                 exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+                                 line_freq::Real=50.0,
+                                 freq_bandwidth::Real=1.0,
+                                 z_threshold::Float64=3.0,
+                                 min_harmonic_power::Real=0.5)
+
+Identify ICA components with strong line noise characteristics.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data.
+
+# Keyword Arguments
+- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
+- `line_freq::Real`: Line frequency in Hz (default: 50.0 for European power).
+- `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
+- `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
+- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
+
+# Returns
+- `Vector{Int}`: Indices of components with strong line noise characteristics.
+- `DataFrame`: DataFrame containing spectral metrics for all components.
+"""
+function identify_line_noise_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+    line_freq::Real=50.0,
+    freq_bandwidth::Real=1.0,
+    z_threshold::Float64=3.0,
+    min_harmonic_power::Real=0.5
+)
+    # Get samples to use
+    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
+    if isempty(samples_to_use)
+        @warn "No samples remaining after applying exclude criteria. Cannot identify line noise components."
+        return Int[], DataFrame()
+    end
+
+    # Prepare data matrix for valid samples
+    relevant_cols = vcat(ica_result.data_label)
+    data_subset_df = dat.data[samples_to_use, relevant_cols]
+    dat_matrix = permutedims(Matrix(data_subset_df))
+    dat_matrix .-= mean(dat_matrix, dims=2)
+    dat_matrix ./= ica_result.scale
+
+    # Calculate components for valid samples
+    components = ica_result.unmixing * dat_matrix
+    n_components = size(components, 1)
+    fs = dat.sample_rate
+
+    # Calculate power spectrum for each component
+    # Use a reasonable FFT size (power of 2, but not too large)
+    nfft = min(nextpow(2, size(components, 2)), 2^16)  # Cap at 2^16 points
+    freqs = FFTW.rfftfreq(nfft, fs)
+    psd = zeros(length(freqs), n_components)
+    
+    for i in 1:n_components
+        # Zero-pad or truncate to nfft points
+        signal = components[i, :]
+        if length(signal) > nfft
+            signal = signal[1:nfft]
+        elseif length(signal) < nfft
+            signal = [signal; zeros(nfft - length(signal))]
+        end
+        psd[:, i] = abs2.(FFTW.rfft(signal))
+    end
+
+    # Find indices for line frequency and harmonics
+    line_idx = findmin(abs.(freqs .- line_freq))[2]
+    line_band = findall(abs.(freqs .- line_freq) .<= freq_bandwidth)
+    
+    # Calculate metrics for each component
+    metrics = []
+    for i in 1:n_components
+        # Get power at line frequency and surrounding band
+        line_power = mean(psd[line_band, i])
+        
+        # Calculate power in surrounding bands (excluding line frequency)
+        surrounding_bands = setdiff(1:length(freqs), line_band)
+        surrounding_power = mean(psd[surrounding_bands, i])
+        
+        # Calculate power ratio
+        power_ratio = line_power / (surrounding_power + eps())
+        
+        # Check for harmonics (2x and 3x line frequency)
+        harmonic_powers = Float64[]
+        for h in 2:3
+            harmonic_freq = line_freq * h
+            harmonic_idx = findmin(abs.(freqs .- harmonic_freq))[2]
+            harmonic_band = findall(abs.(freqs .- harmonic_freq) .<= freq_bandwidth)
+            harmonic_power = mean(psd[harmonic_band, i])
+            push!(harmonic_powers, harmonic_power / line_power)
+        end
+        
+        # Store metrics
+        push!(metrics, (
+            Component=i,
+            LinePower=line_power,
+            SurroundingPower=surrounding_power,
+            PowerRatio=power_ratio,
+            Harmonic2Ratio=harmonic_powers[1],
+            Harmonic3Ratio=harmonic_powers[2]
+        ))
+    end
+
+    # Create metrics DataFrame
+    metrics_df = DataFrame(metrics)
+    
+    # Calculate z-scores of power ratios
+    power_ratio_z = StatsBase.zscore(metrics_df.PowerRatio)
+    metrics_df[!, :PowerRatioZScore] = power_ratio_z
+
+    # Identify components with strong line noise characteristics
+    line_noise_comps = findall(power_ratio_z .> z_threshold)
+    
+    # Additional check for harmonics
+    if !isempty(line_noise_comps)
+        harmonic_mask = (metrics_df.Harmonic2Ratio .> min_harmonic_power) .| 
+                       (metrics_df.Harmonic3Ratio .> min_harmonic_power)
+        line_noise_comps = intersect(line_noise_comps, findall(harmonic_mask))
+    end
+    
+    sort!(line_noise_comps)
+
+    return line_noise_comps, metrics_df
+end
+
+
+"""
+    identify_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
+                                 exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+                                 line_freq::Real=50.0,
+                                 freq_bandwidth::Real=1.0,
+                                 z_threshold::Float64=3.0,
+                                 min_harmonic_power::Real=0.5)
+
+Identify ICA components with strong line noise characteristics.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data.
+
+# Keyword Arguments
+- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
+- `line_freq::Real`: Line frequency in Hz (default: 50.0 for European power).
+- `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
+- `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
+- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
+
+# Returns
+- `Vector{Int}`: Indices of components with strong line noise characteristics.
+- `DataFrame`: DataFrame containing spectral metrics for all components.
+"""
+function identify_line_noise_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+    line_freq::Real=50.0,
+    freq_bandwidth::Real=1.0,
+    z_threshold::Float64=3.0,
+    min_harmonic_power::Real=0.5
+)
+    # Get samples to use
+    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
+    if isempty(samples_to_use)
+        @warn "No samples remaining after applying exclude criteria. Cannot identify line noise components."
+        return Int[], DataFrame()
+    end
+
+    # Prepare data matrix for valid samples
+    relevant_cols = vcat(ica_result.data_label)
+    data_subset_df = dat.data[samples_to_use, relevant_cols]
+    dat_matrix = permutedims(Matrix(data_subset_df))
+    dat_matrix .-= mean(dat_matrix, dims=2)
+    dat_matrix ./= ica_result.scale
+
+    # Calculate components for valid samples
+    components = ica_result.unmixing * dat_matrix
+    n_components = size(components, 1)
+    fs = dat.sample_rate
+
+    # Calculate power spectrum for each component
+    # Use a reasonable FFT size (power of 2, but not too large)
+    nfft = min(nextpow(2, size(components, 2)), 2^16)  # Cap at 2^16 points
+    freqs = FFTW.rfftfreq(nfft, fs)
+    psd = zeros(length(freqs), n_components)
+    
+    for i in 1:n_components
+        # Zero-pad or truncate to nfft points
+        signal = components[i, :]
+        if length(signal) > nfft
+            signal = signal[1:nfft]
+        elseif length(signal) < nfft
+            signal = [signal; zeros(nfft - length(signal))]
+        end
+        psd[:, i] = abs2.(FFTW.rfft(signal))
+    end
+
+    # Find indices for line frequency and harmonics
+    line_idx = findmin(abs.(freqs .- line_freq))[2]
+    line_band = findall(abs.(freqs .- line_freq) .<= freq_bandwidth)
+    
+    # Calculate metrics for each component
+    metrics = []
+    for i in 1:n_components
+        # Get power at line frequency and surrounding band
+        line_power = mean(psd[line_band, i])
+        
+        # Calculate power in surrounding bands (excluding line frequency)
+        surrounding_bands = setdiff(1:length(freqs), line_band)
+        surrounding_power = mean(psd[surrounding_bands, i])
+        
+        # Calculate power ratio
+        power_ratio = line_power / (surrounding_power + eps())
+        
+        # Check for harmonics (2x and 3x line frequency)
+        harmonic_powers = Float64[]
+        for h in 2:3
+            harmonic_freq = line_freq * h
+            harmonic_idx = findmin(abs.(freqs .- harmonic_freq))[2]
+            harmonic_band = findall(abs.(freqs .- harmonic_freq) .<= freq_bandwidth)
+            harmonic_power = mean(psd[harmonic_band, i])
+            push!(harmonic_powers, harmonic_power / line_power)
+        end
+        
+        # Store metrics
+        push!(metrics, (
+            Component=i,
+            LinePower=line_power,
+            SurroundingPower=surrounding_power,
+            PowerRatio=power_ratio,
+            Harmonic2Ratio=harmonic_powers[1],
+            Harmonic3Ratio=harmonic_powers[2]
+        ))
+    end
+
+    # Create metrics DataFrame
+    metrics_df = DataFrame(metrics)
+    
+    # Calculate z-scores of power ratios
+    power_ratio_z = StatsBase.zscore(metrics_df.PowerRatio)
+    metrics_df[!, :PowerRatioZScore] = power_ratio_z
+
+    # Identify components with strong line noise characteristics
+    line_noise_comps = findall(power_ratio_z .> z_threshold)
+    
+    # Additional check for harmonics
+    if !isempty(line_noise_comps)
+        harmonic_mask = (metrics_df.Harmonic2Ratio .> min_harmonic_power) .| 
+                       (metrics_df.Harmonic3Ratio .> min_harmonic_power)
+        line_noise_comps = intersect(line_noise_comps, findall(harmonic_mask))
+    end
+    
+    sort!(line_noise_comps)
+
+    return line_noise_comps, metrics_df
+end
