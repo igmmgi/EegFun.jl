@@ -43,7 +43,9 @@ fig, ax = plot_events(dat)
 
 dat = create_eeg_dataframe(dat, layout);
 
-
+fig, ax = plot_channel_spectrum(dat; y_scale = :log10)
+fig, ax = plot_channel_spectrum(dat,:P2)
+fig, ax = plot_channel_spectrum(dat,[:P2,:P1])
 
 
 fig, ax = plot_events(dat)

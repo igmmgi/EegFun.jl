@@ -58,6 +58,7 @@ include("plots/plot_erp_grid.jl")
 include("plots/plot_erp_image.jl")
 include("plots/plot_events.jl")
 include("plots/plot_grid_topo.jl")
+include("plots/plot_power_spectrum.jl")
 
 # # Miscellaneous functions
 # include("misc/keep.jl")
