@@ -1,4 +1,3 @@
-
 function _plot_power_spectrum_implementation(
     df::DataFrame,
     channels_to_plot::Vector{Symbol},
@@ -8,6 +7,9 @@ function _plot_power_spectrum_implementation(
     window_size::Int,
     overlap::Real,
     max_freq::Real,
+    x_scale::Symbol = :linear,
+    y_scale::Symbol = :linear,
+    window_function::Function = DSP.hanning,
 )
     # Check if we have enough data and adjust window size if needed
     if size(df, 1) < window_size
@@ -17,6 +19,17 @@ function _plot_power_spectrum_implementation(
             @warn "Selected region is too short for meaningful spectral analysis. Minimum window size of 32 samples required."
             return Figure(), Axis()
         end
+    end
+
+    # Validate scale parameters
+    valid_scales = [:linear, :log10]
+    if !(x_scale in valid_scales)
+        @warn "Invalid x_scale '$x_scale'. Using :linear instead."
+        x_scale = :linear
+    end
+    if !(y_scale in valid_scales)
+        @warn "Invalid y_scale '$y_scale'. Using :linear instead."
+        y_scale = :linear
     end
 
     # Prepare signals dictionary
@@ -31,22 +44,90 @@ function _plot_power_spectrum_implementation(
 
     for ch in channels_to_plot
         signal = signals[ch]
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = fs)
+        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = fs, window = window_function)
         spectra[ch] = (DSP.freq(pgram), DSP.power(pgram))
     end
 
-    # Create figure with appropriate title
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel = "Frequency (Hz)", ylabel = "Power Spectral Density (μV²/Hz)", title = "Channel Power Spectrum")
+    # Create figure with a layout for plot and controls
+    fig = Figure(size = (900, 600))
+    
+    # Create main grid layout with plot area and control area
+    gl = fig[1, 1] = GridLayout()
+    
+    # Create a toggle grid for the controls
+    control_grid = fig[2, 1] = GridLayout()
+    
+    # Initialize with the specified scales
+    is_xlog10 = x_scale == :log10
+    is_ylog10 = y_scale == :log10
+    
+    # Create axis with default linear scales first
+    ax = Axis(gl[1, 1]; 
+        xlabel = "Frequency (Hz)",
+        ylabel = "Power Spectral Density (μV²/Hz)",
+        title = "Channel Power Spectrum"
+    )
+    
+    # Apply initial scale settings and limits separately, in the correct order
+    if is_xlog10
+        xlims!(ax, (0.1, max_freq))
+        ax.xscale = log10
+    else
+        xlims!(ax, (0, max_freq))
+    end
+    
+    # Add the same initialization for y-scale
+    # Calculate max y-value for limits
+    max_power = maximum([maximum(psd) for (_, psd) in values(spectra)])
+    if is_ylog10
+        ylims!(ax, (1e-10, max_power))
+        ax.yscale = log10
+    else
+        ylims!(ax, (0, max_power))
+    end
+
+    # Add scale menus for each axis
+    Label(control_grid[1, 1], "X-axis scale:")
+    x_scale_options = ["linear", "log10"]
+    x_scale_menu = Menu(control_grid[1, 2], 
+                        options = x_scale_options,
+                        default = x_scale == :log10 ? "log10" : "linear")
+    
+    Label(control_grid[2, 1], "Y-axis scale:")
+    y_scale_options = ["linear", "log10"]
+    y_scale_menu = Menu(control_grid[2, 2], 
+                        options = y_scale_options,
+                        default = y_scale == :log10 ? "log10" : "linear")
+    
+    # Connect menu selection to axis scales
+    on(x_scale_menu.selection) do selection
+        if selection == "linear"
+            # Apply linear scale
+            ax.xscale = identity
+            xlims!(ax, (0, max_freq))
+        else # "log10"
+            # Apply log10 scale
+            xlims!(ax, (0.1, max_freq))
+            ax.xscale = log10
+        end
+    end
+    
+    on(y_scale_menu.selection) do selection
+        if selection == "linear"
+            # Apply linear scale
+            ax.yscale = identity
+            ylims!(ax, (0, max_power))
+        else # "log10"
+            # Apply log10 scale
+            ylims!(ax, (1e-10, max_power))
+            ax.yscale = log10
+        end
+    end
 
     # Plot spectra for all channels
     for ch in channels_to_plot
         freqs, psd = spectra[ch]
-        if length(channels_to_plot) > 1
-            lines!(ax, freqs, psd, label = string(ch))
-        else
-            lines!(ax, freqs, psd, color = :black)
-        end
+        lines!(ax, freqs, psd, label = string(ch))
     end
 
     # Calculate max value for vertical lines
@@ -62,7 +143,6 @@ function _plot_power_spectrum_implementation(
                 [freq],
                 color = :red,
                 linestyle = :dash,
-                label = h == 1 && length(channels_to_plot) == 1 ? "Line Frequency" : "",
             )
 
             # Add shaded region
@@ -79,21 +159,20 @@ function _plot_power_spectrum_implementation(
                 color = (:red, 0.1),
             )
 
-            # Add frequency label
-            text!(ax, freq, max_power, text = "$freq Hz", color = :red, align = (:center, :bottom))
         end
     end
-
-    # Set x-axis limits
-    xlims!(ax, (0, max_freq))
 
     # Add legend for multiple channels
     if length(channels_to_plot) > 1
         axislegend(ax, position = (1.0, 1.0))
     end
 
+    display(fig)
+
     return fig, ax
 end
+
+
 
 """
     plot_channel_spectrum(df::DataFrame, channel::Union{Symbol,Vector{Symbol}},
@@ -103,7 +182,8 @@ end
                          window_size::Int=1024,
                          overlap::Real=0.5,
                          max_freq::Real=100.0,
-                         display_plot::Bool=false)
+                         x_scale::Symbol=:linear,
+                         y_scale::Symbol=:linear)
 
 Plot the power spectrum of one or more channels from a DataFrame.
 
@@ -118,8 +198,11 @@ Plot the power spectrum of one or more channels from a DataFrame.
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
 - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
+- `x_scale::Symbol`: Scale for x-axis, one of :linear, :log10, or :log (default: :linear).
+- `y_scale::Symbol`: Scale for y-axis, one of :linear, :log10, or :log (default: :linear).
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+  Common options include DSP.hamming, DSP.blackman, DSP.bartlett, DSP.rect (rectangular window).
 - `include_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in the DataFrame marking samples to include.
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in the DataFrame marking samples to exclude.
 - `display_plot::Bool`: Whether to display the plot immediately (default: false).
 
 # Returns
@@ -134,6 +217,9 @@ function plot_channel_spectrum(
     window_size::Int = 1024,
     overlap::Real = 0.5,
     max_freq::Real = 100.0,
+    x_scale::Symbol = :linear,
+    y_scale::Symbol = :linear,
+    window_function::Function = DSP.hanning,
 )
 
     # Process channel input to get vector of channels to plot
@@ -155,6 +241,9 @@ function plot_channel_spectrum(
         window_size,
         overlap,
         max_freq,
+        x_scale,
+        y_scale,
+        window_function,
     )
 end
 
@@ -164,7 +253,9 @@ end
                          freq_bandwidth::Real=1.0,
                          window_size::Int=1024,
                          overlap::Real=0.5,
-                         max_freq::Real=100.0)
+                         max_freq::Real=100.0,
+                         x_scale::Symbol=:linear,
+                         y_scale::Symbol=:linear)
 
 Plot the power spectrum of one or more EEG channels from ContinuousData.
 
@@ -181,13 +272,24 @@ Plot the power spectrum of one or more EEG channels from ContinuousData.
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
 - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
+- `x_scale::Symbol`: Scale for x-axis, one of :linear, :log10, or :log (default: :linear).
+- `y_scale::Symbol`: Scale for y-axis, one of :linear, :log10, or :log (default: :linear).
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+  Common options include DSP.hamming, DSP.blackman, DSP.bartlett, DSP.rect (rectangular window).
 
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
 """
 function plot_channel_spectrum( dat::ContinuousData; kwargs...)
-    return plot_channel_spectrum(dat.data, kwargs...)
+    return plot_channel_spectrum(dat.data, dat.layout.label; kwargs...)
 end
+
+function plot_channel_spectrum( dat::ContinuousData, channel::Union{Symbol,Vector{Symbol}}; kwargs...)
+    return plot_channel_spectrum(dat.data, channel; kwargs...)
+end
+
+
+
 
 """
     plot_selected_spectrum(selected_data::DataFrame, channel::Union{Symbol,Vector{Symbol}};
@@ -195,7 +297,9 @@ end
                           freq_bandwidth::Real=1.0,
                           window_size::Int=1024,
                           overlap::Real=0.5,
-                          max_freq::Real=100.0)
+                          max_freq::Real=100.0,
+                          x_scale::Symbol=:linear,
+                          y_scale::Symbol=:linear)
 
 Plot the power spectrum of a selected time region for specific channel(s).
 
@@ -209,6 +313,10 @@ Plot the power spectrum of a selected time region for specific channel(s).
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
 - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
+- `x_scale::Symbol`: Scale for x-axis, one of :linear, :log10, or :log (default: :linear).
+- `y_scale::Symbol`: Scale for y-axis, one of :linear, :log10, or :log (default: :linear).
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+  Common options include DSP.hamming, DSP.blackman, DSP.bartlett, DSP.rect (rectangular window).
 
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
@@ -221,18 +329,25 @@ function plot_selected_spectrum(
     freq_bandwidth::Real = 1.0,
     window_size::Int = 1024,
     overlap::Real = 0.5,
-    max_freq::Real = 100.0,
+    max_freq::Real = 200.0,
+    x_scale::Symbol = :linear,
+    y_scale::Symbol = :linear,
+    window_function::Function = DSP.hanning,
 )
-    # Delegate to the main plotting function with display_plot=true
+   
+
+    # Delegate to the main plotting function
     fig, ax = plot_channel_spectrum(
         selected_data,
         channel;
-        fs = fs,
         line_freq = line_freq,
         freq_bandwidth = freq_bandwidth,
         window_size = window_size,
         overlap = overlap,
         max_freq = max_freq,
+        x_scale = x_scale,
+        y_scale = y_scale,
+        window_function = window_function,
     )
 
     return fig, ax
@@ -243,82 +358,195 @@ end
 
 
 
-# """
-#     plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int;
-#                           exclude_samples::Union{Nothing,Vector{Symbol}} = nothing,
-#                           line_freq::Real=50.0,
-#                           freq_bandwidth::Real=1.0,
-#                           window_size::Int=1024,
-#                           overlap::Real=0.5,
-#                           max_freq::Real=100.0)
-# 
-# Plot the power spectrum of a specific ICA component.
-# 
-# # Arguments
-# - `ica_result::InfoIca`: The ICA result object.
-# - `dat::ContinuousData`: The continuous data.
-# - `comp_idx::Int`: Index of the component to plot.
-# 
-# # Keyword Arguments
-# - `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude.
-# - `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
-# - `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
-# - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
-# - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
-# - `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-# 
-# # Returns
-# - `fig::Figure`: The Makie Figure containing the power spectrum plot.
-# """
-# function plot_component_spectrum(
-#     ica_result::InfoIca,
-#     dat::ContinuousData,
-#     comp_idx::Int;
-#     exclude_samples::Union{Nothing,Vector{Symbol}} = nothing,
-#     line_freq::Real = 50.0,
-#     freq_bandwidth::Real = 1.0,
-#     window_size::Int = 1024,
-#     overlap::Real = 0.5,
-#     max_freq::Real = 100.0,
-# )
-#     # Get samples to use
-#     samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
-#     if isempty(samples_to_use)
-#         @warn "No samples remaining after applying exclude criteria. Cannot plot component spectrum."
-#         return Figure()
-#     end
-# 
-#     # Prepare data matrix for valid samples
-#     relevant_cols = vcat(ica_result.data_label)
-#     data_subset_df = dat.data[samples_to_use, relevant_cols]
-#     dat_matrix = permutedims(Matrix(data_subset_df))
-#     dat_matrix .-= mean(dat_matrix, dims = 2)
-#     dat_matrix ./= ica_result.scale
-# 
-#     # Calculate component activation
-#     components = ica_result.unmixing * dat_matrix
-#     fs = dat.sample_rate
-# 
-#     # Get the component time series and create a temporary DataFrame
-#     signal = components[comp_idx, :]
-#     component_name = Symbol("Component_$(comp_idx)")
-#     component_df = DataFrame(component_name => signal, :time => dat.data.time[samples_to_use])
-# 
-#     # Create a custom title
-#     title = "Power Spectrum of Component $comp_idx"
-#     
-#     # Call the implementation function directly
-#     fig, ax = _plot_power_spectrum_implementation(
-#         component_df,
-#         [component_name],
-#         fs,
-#         line_freq,
-#         freq_bandwidth,
-#         window_size,
-#         overlap,
-#         max_freq,
-#     )
-# 
-#     return fig
-# end
+"""
+    plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int;
+                         line_freq::Real=50.0,
+                         freq_bandwidth::Real=1.0,
+                         window_size::Int=1024,
+                         overlap::Real=0.5,
+                         max_freq::Real=100.0,
+                         x_scale::Symbol=:linear,
+                         y_scale::Symbol=:linear,
+                         window_function::Function = DSP.hanning)
+
+Plot the power spectrum of a specific ICA component.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data.
+- `comp_idx::Int`: Index of the component to plot.
+
+# Keyword Arguments
+- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
+- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
+- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
+- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
+- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
+- `x_scale::Symbol`: Scale for x-axis, one of :linear or :log10 (default: :linear).
+- `y_scale::Symbol`: Scale for y-axis, one of :linear or :log10 (default: :linear).
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+
+# Returns
+- `fig::Figure`: The Makie Figure containing the power spectrum plot.
+- `ax::Axis`: The axis containing the plot.
+"""
+function plot_component_spectrum(
+    ica_result::InfoIca,
+    dat::ContinuousData,
+    comp_idx::Int;
+    line_freq::Real = 50.0,
+    freq_bandwidth::Real = 1.0,
+    window_size::Int = 1024,
+    overlap::Real = 0.5,
+    max_freq::Real = 100.0,
+    x_scale::Symbol = :linear,
+    y_scale::Symbol = :linear,
+    window_function::Function = DSP.hanning,
+)
+    # Prepare data matrix for valid samples
+    relevant_cols = vcat(ica_result.data_label)
+    dat_matrix = permutedims(Matrix(dat.data[:, relevant_cols]))
+    dat_matrix .-= mean(dat_matrix, dims = 2)
+    dat_matrix ./= ica_result.scale
+
+    # Calculate component activation
+    components = ica_result.unmixing * dat_matrix
+    fs = dat.sample_rate
+
+    # Get the component time series and create a temporary DataFrame
+    signal = components[comp_idx, :]
+    component_name = Symbol("Component_$(comp_idx)")
+    time_values = dat.data.time
+    component_df = DataFrame(component_name => signal, :time => dat.data.time)
+
+    # Custom title for the component
+    variance_pct = ica_result.variance[comp_idx] * 100
+    title_text = @sprintf("Power Spectrum of Component %d (%.1f%% variance)", comp_idx, variance_pct)
+    
+    # Call the implementation function with the component data
+    fig, ax = _plot_power_spectrum_implementation(
+        component_df,
+        [component_name],
+        fs,
+        line_freq,
+        freq_bandwidth,
+        window_size,
+        overlap,
+        max_freq,
+        x_scale,
+        y_scale,
+        window_function,
+    )
+    
+    # Update the plot title with component-specific information
+    ax.title = title_text
+
+    return fig, ax
+end
+
+"""
+    plot_components_spectra(ica_result::InfoIca, dat::ContinuousData, comp_indices::Vector{Int}=Int[];
+                          line_freq::Real=50.0,
+                          freq_bandwidth::Real=1.0,
+                          window_size::Int=1024,
+                          overlap::Real=0.5,
+                          max_freq::Real=100.0,
+                          x_scale::Symbol=:linear,
+                          y_scale::Symbol=:linear,
+                          window_function::Function=DSP.hanning)
+
+Plot power spectra of multiple ICA components on the same axis.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data.
+- `comp_indices::Vector{Int}`: Vector of component indices to plot. If empty, plots all components.
+
+# Keyword Arguments
+- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
+- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
+- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
+- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
+- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
+- `x_scale::Symbol`: Scale for x-axis, one of :linear or :log10 (default: :linear).
+- `y_scale::Symbol`: Scale for y-axis, one of :linear or :log10 (default: :linear).
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+
+# Returns
+- `fig::Figure`: The Makie Figure containing the power spectrum plot.
+- `ax::Axis`: The axis containing the plot.
+"""
+function plot_components_spectra(
+    ica_result::InfoIca,
+    dat::ContinuousData,
+    comp_indices::Vector{Int}=Int[];
+    line_freq::Real=50.0,
+    freq_bandwidth::Real=1.0,
+    window_size::Int=1024,
+    overlap::Real=0.5,
+    max_freq::Real=100.0,
+    x_scale::Symbol=:linear,
+    y_scale::Symbol=:linear,
+    window_function::Function=DSP.hanning
+)
+    # If no components specified, use all components
+    if isempty(comp_indices)
+        comp_indices = 1:size(ica_result.unmixing, 1)
+    end
+    
+    # Prepare data matrix
+    relevant_cols = vcat(ica_result.data_label)
+    dat_matrix = permutedims(Matrix(dat.data[:, relevant_cols]))
+    dat_matrix .-= mean(dat_matrix, dims=2)
+    dat_matrix ./= ica_result.scale
+
+    # Calculate component activations
+    components = ica_result.unmixing * dat_matrix
+    fs = dat.sample_rate
+    
+    # Create a DataFrame to store all component signals
+    component_df = DataFrame(:time => dat.data.time)
+    
+    # Add each component to the DataFrame with appropriate names
+    for comp_idx in comp_indices
+        component_name = Symbol("IC_$(comp_idx)")
+        component_df[!, component_name] = components[comp_idx, :]
+    end
+    
+    # Create list of component symbols to plot
+    components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in comp_indices]
+    
+    # Use the implementation function to create the plot
+    fig, ax = _plot_power_spectrum_implementation(
+        component_df,
+        components_to_plot,
+        fs,
+        line_freq,
+        freq_bandwidth,
+        window_size,
+        overlap,
+        max_freq,
+        x_scale,
+        y_scale,
+        window_function
+    )
+    
+    # Add component variance percentage to the legend
+    if length(comp_indices) <= 10  # Only customize legend for a reasonable number of components
+        component_labels = []
+        for comp_idx in comp_indices
+            variance_pct = ica_result.variance[comp_idx] * 100
+            push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
+        end
+        
+        # Create a new legend with the custom labels
+        legend_entries = [LineElement(color=ax.scene.plots[i].color) for i in 1:length(comp_indices)]
+        Legend(fig[1, 2], legend_entries, component_labels, "Components")
+    end
+    
+    # Set a more descriptive title
+    ax.title = "ICA Component Power Spectra"
+    
+    return fig, ax
+end
 
