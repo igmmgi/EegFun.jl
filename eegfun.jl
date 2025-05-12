@@ -140,10 +140,11 @@ plot_databrowser(dat, ica_result)
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
 eye_components, metrics_df = identify_eye_components(ica_result, dat; exclude_samples = [:is_extreme_value])
+
 fig = plot_eye_component_features(eye_components, metrics_df)
 
 ecg_components, metrics_df = identify_ecg_components(ica_result, dat; exclude_samples = [:is_extreme_value])
-fig = plot_ecg_component_features(ecg_components, metrics_df)
+fig = plot_ecg_component_features_(ecg_components, metrics_df)
 
 high_kurtosis_comps, metrics_df = identify_spatial_kurtosis_components(ica_result, dat; exclude_samples = [:is_extreme_value])
 fig = plot_spatial_kurtosis_components(ica_result, dat)
@@ -151,9 +152,15 @@ fig = plot_spatial_kurtosis_components(ica_result, dat)
 line_noise_comps, metrics_df = identify_line_noise_components(ica_result, dat)
 fig = plot_line_noise_components(ica_result, dat)
 fig = plot_component_spectrum(ica_result, dat, 1)
+
 fig = plot_channel_spectrum(dat, :P2)
 fig = plot_channel_spectrum(dat)
 fig = plot_channel_spectrum(dat, [:P2, :P1])
+
+
+
+
+
 
 
 
@@ -302,4 +309,112 @@ plot_erp([erps[1], erps[2],erps[3]], [:PO7, :PO8], kwargs = Dict(:average_channe
 # debug_analysis_info(dat)
 # filter_data!(dat, "hp", "fir", 1)
 # debug_analysis_info(dat)
+
+
+function identify_ecg_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    min_bpm::Real=40,
+    max_bpm::Real=120,
+    min_peaks::Int=8,
+    max_ibi_std_s::Real=0.15,
+    include_samples::Union{Nothing,Vector{Symbol}} = nothing,
+    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value]
+)
+    # --- Data Preparation ---
+    # Get samples to use
+    samples_to_use = _get_samples_to_use(dat, include_samples, exclude_samples)
+    if isempty(samples_to_use)
+        @warn "No samples remaining after applying include/exclude criteria. Cannot identify ECG components."
+        # Return empty results
+        return Int[], DataFrame(Component=Int[], num_peaks=Int[], num_valid_ibis=Int[], mean_ibi_s=Float64[], std_ibi_s=Float64[], is_ekg_artifact=Bool[])
+    end
+
+    # Extract relevant data *only for these samples*
+    relevant_cols = vcat(ica_result.data_label)
+    data_subset_df = dat.data[samples_to_use, relevant_cols]
+
+    # Prepare matrix for unmixing (on the subset)
+    dat_matrix_subset = permutedims(Matrix(data_subset_df)) 
+    dat_matrix_subset .-= mean(dat_matrix_subset, dims=2)
+    dat_matrix_subset ./= ica_result.scale
+
+    # Calculate components activations *only for these samples*
+    components_subset = ica_result.unmixing * dat_matrix_subset 
+    
+    # Get the number of components
+    n_components = size(ica_result.unmixing, 1)  # Changed variable name
+    fs = dat.sample_rate 
+
+    # Convert BPM to plausible IBI range in seconds
+    min_ibi_s = 60.0 / max_bpm
+    max_ibi_s = 60.0 / min_bpm
+
+    # Store results
+    metrics = []
+    identified_ecg = Int[]
+
+    # Loop through components, analyzing the activations *from the subset*
+    for comp_idx in 1:n_components  # Using n_components instead of n_components_total
+        ts = components_subset[comp_idx, :] # Time series from *filtered* samples
+
+        # Find prominent peaks using the cardiac-specific detector
+        r_peaks = detect_cardiac_peaks_in_ica(ts, fs; min_bpm=min_bpm, max_bpm=max_bpm)
+        
+        num_peaks = length(r_peaks)
+        mean_ibi = NaN
+        std_ibi = NaN
+        num_valid_ibis = 0
+        is_ecg = false
+
+        if num_peaks >= 2
+            # Calculate Inter-Beat Intervals (IBIs) in seconds
+            ibis_s = diff(r_peaks) ./ fs
+
+            # Filter IBIs based on plausible heart rate range
+            valid_ibi_mask = (ibis_s .>= min_ibi_s) .& (ibis_s .<= max_ibi_s)
+            valid_ibis = ibis_s[valid_ibi_mask]
+            num_valid_ibis = length(valid_ibis)
+
+            if num_valid_ibis > 1 
+                mean_ibi = mean(valid_ibis)
+                std_ibi = std(valid_ibis)
+
+                # Check criteria
+                if num_valid_ibis >= (min_peaks - 1) && 
+                   std_ibi <= max_ibi_std_s
+                    is_ecg = true
+                    push!(identified_ecg, comp_idx)
+                end
+            elseif num_valid_ibis == 1 
+                 mean_ibi = valid_ibis[1]
+                 std_ibi = 0.0 
+                 if num_valid_ibis >= (min_peaks - 1) && std_ibi <= max_ibi_std_s
+                     is_ecg = true
+                     push!(identified_ecg, comp_idx)
+                 end
+            end
+        end
+
+        # Store metrics for this component
+        push!(metrics, (
+            Component=comp_idx,
+            num_peaks=num_peaks,
+            num_valid_ibis=num_valid_ibis,
+            mean_ibi_s=mean_ibi,
+            std_ibi_s=std_ibi,
+            is_ecg_artifact=is_ecg
+        ))
+    end
+
+    # --- Construct Results ---
+    metrics_df = DataFrame(metrics)
+    # Ensure Component column matches 1:n_components if metrics is empty
+    if isempty(metrics)
+         metrics_df = DataFrame(Component=1:n_components, num_peaks=0, num_valid_ibis=0, mean_ibi_s=NaN, std_ibi_s=NaN, is_ecg_artifact=false)
+    end
+    sort!(identified_ecg)
+
+    return identified_ecg, metrics_df
+end
 

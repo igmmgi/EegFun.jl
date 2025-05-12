@@ -9,6 +9,7 @@ using TOML
 # Signal processing
 using DSP
 using LinearAlgebra
+using FFTW
 
 # Plotting and visualization
 using GLMakie

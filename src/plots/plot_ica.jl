@@ -1467,115 +1467,8 @@ function update_components!(state)
     end
 end
 
-"""
-    identify_eye_components(ica_result::InfoIca, dat::ContinuousData;
-                          v_eog_channel::Symbol=:vEOG,
-                          h_eog_channel::Symbol=:hEOG,
-                          z_threshold::Float64=3.0,
-                          exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value])
 
-Identify ICA components potentially related to eye movements based on z-scored correlation.
 
-# Arguments
-- `ica_result::InfoIca`: The ICA result object.
-- `dat::ContinuousData`: The continuous data containing EOG channels.
-
-# Keyword Arguments
-- `v_eog_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG).
-- `h_eog_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG).
-- `z_threshold::Float64`: Absolute Z-score threshold for identification (default: 3.0).
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-
-# Returns
-- `Dict{Symbol, Vector{Int}}`: Dictionary containing:
-  - `:vertical_eye`: Vector of indices identified for vertical eye movements.
-  - `:horizontal_eye`: Vector of indices identified for horizontal eye movements.
-- `DataFrame`: DataFrame containing detailed correlation metrics per component.
-"""
-function identify_eye_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    v_eog_channel::Symbol = :vEOG,
-    h_eog_channel::Symbol = :hEOG,
-    z_threshold::Float64 = 3.0,
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value]
-)
-    # --- Input Validation ---
-    if !(v_eog_channel in propertynames(dat.data))
-        error("Vertical EOG channel $v_eog_channel not found in data")
-    end
-    if !(h_eog_channel in propertynames(dat.data))
-        error("Horizontal EOG channel $h_eog_channel not found in data")
-    end
-
-    # --- Data Preparation ---
-    # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot identify eye components."
-        return Dict(:vertical_eye => Int[], :horizontal_eye => Int[]), DataFrame()
-    end
-
-    # Get EOG signals for valid samples only
-    v_eog = dat.data[samples_to_use, v_eog_channel]
-    h_eog = dat.data[samples_to_use, h_eog_channel]
-
-    # Prepare data matrix for valid samples
-    relevant_cols = vcat(ica_result.data_label)
-    data_subset_df = dat.data[samples_to_use, relevant_cols]
-    dat_matrix = permutedims(Matrix(data_subset_df))
-    dat_matrix .-= mean(dat_matrix, dims=2)
-    dat_matrix ./= ica_result.scale
-
-    # Calculate components for valid samples
-    components = ica_result.unmixing * dat_matrix
-    n_components = size(components, 1)
-
-    # Function to calculate correlations for all components
-    function calculate_correlations(eog_signal)
-        corrs = zeros(n_components)
-        for comp_idx = 1:n_components 
-             corrs[comp_idx] = abs(cor(components[comp_idx, :], eog_signal))
-        end
-        return corrs
-    end
-
-    identified_vEOG = Int[]
-    identified_hEOG = Int[]
-    v_eog_corr_z = Float64[]
-    h_eog_corr_z = Float64[]
-    v_eog_corrs = Float64[]
-    h_eog_corrs = Float64[]
-
-    # --- Vertical EOG --- 
-    v_eog_corrs = calculate_correlations(v_eog)
-    v_eog_corr_z = StatsBase.zscore(v_eog_corrs)
-    identified_vEOG = findall(abs.(v_eog_corr_z) .> z_threshold)
-
-    # --- Horizontal EOG --- 
-    h_eog_corrs = calculate_correlations(h_eog)
-    h_eog_corr_z = StatsBase.zscore(h_eog_corrs)
-    identified_hEOG = findall(abs.(h_eog_corr_z) .> z_threshold)
-
-    # --- Construct Results --- 
-    sort!(identified_vEOG)
-    sort!(identified_hEOG)
-
-    result_dict = Dict{Symbol,Vector{Int}}( 
-        :vertical_eye => identified_vEOG,
-        :horizontal_eye => identified_hEOG,
-    )
-    
-    metrics_df = DataFrame(
-        :Component => 1:n_components,
-        :v_eog_channel_corr => v_eog_corrs,
-        :v_eog_channel_zscore => v_eog_corr_z,
-        :h_eog_channel_corr => h_eog_corrs,
-        :h_eog_channel_zscore => h_eog_corr_z
-    )
-
-    return result_dict, metrics_df 
-end
 
 """
     plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
@@ -1587,8 +1480,8 @@ Uses the results from `identify_eye_components`.
 # Arguments
 - `identified_comps::Dict`: Dictionary returned by `identify_eye_components` (containing `:vertical_eye`, `:horizontal_eye`).
 - `metrics_df::DataFrame`: DataFrame returned by `identify_eye_components`. Expected to have columns like `:vEOG_zscore`, `:hEOG_zscore` (based on the `v_eog_channel` and `h_eog_channel` arguments) and `:Component`.
-- `v_eog_channel::Symbol`: Symbol of the vertical EOG channel used. Defaults to `:vEOG`. (Used to find column `Symbol("\$(v_eog_channel)_zscore")` in `metrics_df`).
-- `h_eog_channel::Symbol`: Symbol of the horizontal EOG channel used. Defaults to `:hEOG`. (Used to find column `Symbol("\$(h_eog_channel)_zscore")` in `metrics_df`).
+- `vEOG_channel::Symbol`: Symbol of the vertical EOG channel used. Defaults to `:vEOG`. (Used to find column `Symbol("\$(v_eog_channel)_zscore")` in `metrics_df`).
+- `hEOG_channel::Symbol`: Symbol of the horizontal EOG channel used. Defaults to `:hEOG`. (Used to find column `Symbol("\$(h_eog_channel)_zscore")` in `metrics_df`).
 - `z_threshold::Float64`: Z-score threshold to draw lines on the plot (default: 3.0).
 
 # Returns
@@ -1597,67 +1490,71 @@ Uses the results from `identify_eye_components`.
 function plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
 
     # Extract data from inputs
-    v_eog_corr_z = metrics_df.v_eog_channel_zscore
-    h_eog_corr_z = metrics_df.h_eog_channel_zscore
-    final_vEOG = identified_comps[:vertical_eye] 
-    final_hEOG = identified_comps[:horizontal_eye]
+    vEOG_corr_z = metrics_df.vEOG_zscore
+    hEOG_corr_z = metrics_df.hEOG_zscore
+    final_vEOG = identified_comps[:vEOG] 
+    final_hEOG = identified_comps[:hEOG]
     
     # Check if data is empty
-    if isempty(metrics_df) || isempty(v_eog_corr_z) || isempty(h_eog_corr_z)
+    if isempty(metrics_df) || isempty(vEOG_corr_z) || isempty(hEOG_corr_z)
         println("Warning: Could not plot eye component features, input DataFrame or z-scores are empty.")
         return Figure() # Return empty figure
     end
     
     n_components = nrow(metrics_df)
 
-    fig = Figure(size=(800, 400)) 
-
-    # Plot Vertical EOG Correlation Z-Scores
-    ax_v = Axis(
-        fig[1, 1],
-        xlabel = "Component Number",
-        ylabel = "Z-Score",
-        title = "Vertical EOG Correlation Z-Scores"
-    )
+    # Plot vEOG/hEOG Correlation Z-Scores
+    fig = Figure() 
+    ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = "vEOG Correlation Z-Scores")
     # Use component indices from DataFrame for x-axis
-    scatter!(ax_v, metrics_df.Component, v_eog_corr_z, color = :gray, markersize = 5)
+    scatter!(ax_v, metrics_df.Component, vEOG_corr_z, color = :gray, markersize = 5)
     hlines!(ax_v, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
     # Highlight all identified components
     if !isempty(final_vEOG)
-         # Get z-scores only for the identified components
-        v_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_vEOG)), :v_eog_channel_zscore]
-        scatter!(ax_v, final_vEOG, v_z_scores_highlight, color = :blue, markersize = 8)
+        # Get z-scores only for the identified components
+        vEOG_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_vEOG)), :vEOG_zscore]
+        scatter!(ax_v, final_vEOG, vEOG_z_scores_highlight, color = :blue, markersize = 8)
         for comp_idx in final_vEOG # Annotate each identified component
-            text!(ax_v, comp_idx, metrics_df[comp_idx, :v_eog_channel_zscore], text=string(comp_idx), color=:blue, align=(:center,:bottom), fontsize=10)
+            text!(
+                ax_v,
+                comp_idx,
+                metrics_df[comp_idx, :vEOG_zscore],
+                text = string(comp_idx),
+                color = :blue,
+                align = (:center, :bottom),
+                fontsize = 10,
+            )
         end
     end
 
-    # Plot Horizontal EOG Correlation Z-Scores
-    ax_h = Axis(
-         fig[1, 2],
-        xlabel = "Component Number",
-        ylabel = "Z-Score",
-        title = "Horizontal EOG Correlation Z-Scores"
-    )
-     # Use component indices from DataFrame for x-axis
-    scatter!(ax_h, metrics_df.Component, h_eog_corr_z, color = :gray, markersize = 5)
+    ax_h = Axis(fig[1, 2], xlabel = "Component Number", ylabel = "Z-Score", title = "hEOG Correlation Z-Scores")
+    # Use component indices from DataFrame for x-axis
+    scatter!(ax_h, metrics_df.Component, hEOG_corr_z, color = :gray, markersize = 5)
     hlines!(ax_h, [z_threshold, -z_threshold], color = :gray, linestyle = :dash)
-     # Highlight all identified components
+    # Highlight all identified components
     if !isempty(final_hEOG)
         # Get z-scores only for the identified components
-        h_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_hEOG)), :h_eog_channel_zscore]
-        scatter!(ax_h, final_hEOG, h_z_scores_highlight, color = :blue, markersize = 8)
-         for comp_idx in final_hEOG # Annotate each identified component
-            text!(ax_h, comp_idx, metrics_df[comp_idx, :h_eog_channel_zscore], text=string(comp_idx), color=:blue, align=(:center,:bottom), fontsize=10)
+        hEOG_z_scores_highlight = metrics_df[in.(metrics_df.Component, Ref(final_hEOG)), :hEOG_zscore]
+        scatter!(ax_h, final_hEOG, hEOG_z_scores_highlight, color = :blue, markersize = 8)
+        for comp_idx in final_hEOG # Annotate each identified component
+            text!(
+                ax_h,
+                comp_idx,
+                metrics_df[comp_idx, :hEOG_zscore],
+                text = string(comp_idx),
+                color = :blue,
+                align = (:center, :bottom),
+                fontsize = 10,
+            )
         end
     end
 
     return fig
+
 end
 
 # --- EKG Artifact Identification ---
 
-# Helper function (assuming similar logic needed elsewhere, or define inline)
 function _get_samples_to_use(dat::ContinuousData, include_list, exclude_list)
     n_samples = size(dat.data, 1)
     keep = trues(n_samples) # Start with all true
@@ -1689,14 +1586,15 @@ function _get_samples_to_use(dat::ContinuousData, include_list, exclude_list)
     return findall(keep)
 end
 
+
 """
-    _simple_findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
+    _findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
 
 Basic peak finder. Finds indices where data point is greater than its
 immediate neighbors and exceeds mean + min_prominence_std * std(data).
 Returns indices of peaks.
 """
-function _simple_findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
+function _findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
     if length(data) < 3
         return Int[]
     end
@@ -1714,204 +1612,8 @@ function _simple_findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
     return peaks
 end
 
-"""
-    identify_ekg_components(ica_result::InfoIca, dat::ContinuousData;
-                              min_bpm::Real=40, max_bpm::Real=120,
-                              min_prominence_std::Real=2.5,
-                              min_peaks::Int=10,
-                              max_ibi_std_s::Real=0.05,
-                              include_samples::Union{Nothing,Vector{Symbol}} = nothing,
-                              exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value])
-
-Identify ICA components potentially related to EKG artifacts based on peak detection
-and interval regularity, using only samples consistent with ICA calculation.
-
-# Arguments
-- `ica_result::InfoIca`: The ICA result object.
-- `dat::ContinuousData`: The continuous data (needed for sampling rate `fs` and sample selection columns).
-
-# Keyword Arguments
-- `min_bpm::Real`: Minimum plausible heart rate in beats per minute (default: 40).
-- `max_bpm::Real`: Maximum plausible heart rate in beats per minute (default: 120).
-- `min_prominence_std::Real`: Minimum peak prominence in standard deviations above mean (default: 2.5).
-- `min_peaks::Int`: Minimum number of prominent peaks required within plausible heart rate range (default: 10).
-- `max_ibi_std_s::Real`: Maximum standard deviation of the inter-beat intervals (in seconds) for component to be flagged (default: 0.05).
-- `include_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to *include*. Defaults to `nothing` (include all unless excluded).
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to *exclude*. Defaults to `[:is_extreme_value]`.
-
-# Returns
-- `Vector{Int}`: Sorted vector of indices identified as potential EKG components.
-- `DataFrame`: DataFrame containing metrics for each component (calculated on the included samples):
-  - `:Component`: Component index (1 to n).
-  - `:num_peaks`: Number of detected prominent peaks.
-  - `:num_valid_ibis`: Number of inter-beat intervals within the plausible BPM range.
-  - `:mean_ibi_s`: Mean inter-beat interval in seconds (if num_valid_ibis > 0).
-  - `:std_ibi_s`: Standard deviation of inter-beat intervals in seconds (if num_valid_ibis > 1).
-  - `:is_ekg_artifact`: Boolean flag indicating if component met the criteria.
-"""
-function identify_ecg_components( # Renamed from identify_ecg_components
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    min_bpm::Real=40,
-    max_bpm::Real=120,
-    min_prominence_std::Real=2.5,
-    min_peaks::Int=10,
-    max_ibi_std_s::Real=0.15,
-    include_samples::Union{Nothing,Vector{Symbol}} = nothing, # New arg
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value] # New arg
-)
-    # --- Data Preparation ---
-
-    # 1. Determine samples to use, consistent with run_ica
-    samples_to_use = _get_samples_to_use(dat, include_samples, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying include/exclude criteria. Cannot identify EKG components."
-        # Return empty results
-        return Int[], DataFrame(Component=Int[], num_peaks=Int[], num_valid_ibis=Int[], mean_ibi_s=Float64[], std_ibi_s=Float64[], is_ekg_artifact=Bool[])
-    end
-
-    # 2. Extract relevant data *only for these samples*
-    relevant_cols = vcat(ica_result.data_label)
-    data_subset_df = dat.data[samples_to_use, relevant_cols]
-
-    # 3. Prepare matrix for unmixing (on the subset)
-    dat_matrix_subset = permutedims(Matrix(data_subset_df)) 
-    dat_matrix_subset .-= mean(dat_matrix_subset, dims=2)
-    dat_matrix_subset ./= ica_result.scale
-
-    # 4. Calculate components activations *only for these samples*
-    components_subset = ica_result.unmixing * dat_matrix_subset 
-    # Note: n_components is the total number of components from ICA result
-    n_components_total = size(ica_result.unmixing, 1)
-    fs = dat.sample_rate 
-
-    # Convert BPM to plausible IBI range in seconds
-    min_ibi_s = 60.0 / max_bpm
-    max_ibi_s = 60.0 / min_bpm
-
-    # Store results
-    metrics = []
-    identified_ekg = Int[]
-
-    # Loop through components, analyzing the activations *from the subset*
-    for comp_idx in 1:n_components_total # Iterate through all component indices
-        ts = components_subset[comp_idx, :] # Time series from *filtered* samples
-
-        # Find prominent peaks in the absolute signal magnitude
-        peak_indices = _simple_findpeaks(abs.(ts); min_prominence_std=min_prominence_std)
-        
-        num_peaks = length(peak_indices)
-        mean_ibi = NaN
-        std_ibi = NaN
-        num_valid_ibis = 0
-        is_ekg = false
-
-        if num_peaks >= 2
-            # Calculate Inter-Beat Intervals (IBIs) in seconds
-            ibis_s = diff(peak_indices) ./ fs
-
-            # Filter IBIs based on plausible heart rate range
-            valid_ibi_mask = (ibis_s .>= min_ibi_s) .& (ibis_s .<= max_ibi_s)
-            valid_ibis = ibis_s[valid_ibi_mask]
-            num_valid_ibis = length(valid_ibis)
-
-            if num_valid_ibis > 1 
-                mean_ibi = mean(valid_ibis)
-                std_ibi = std(valid_ibis)
-
-                # Check criteria
-                if num_valid_ibis >= (min_peaks - 1) && 
-                   std_ibi <= max_ibi_std_s
-                    is_ekg = true
-                    push!(identified_ekg, comp_idx)
-                end
-            elseif num_valid_ibis == 1 
-                 mean_ibi = valid_ibis[1]
-                 std_ibi = 0.0 
-                 if num_valid_ibis >= (min_peaks - 1) && std_ibi <= max_ibi_std_s
-                     is_ekg = true
-                     push!(identified_ekg, comp_idx)
-                 end
-            end
-        end
-
-        # Store metrics for this component
-        push!(metrics, (
-            Component=comp_idx,
-            num_peaks=num_peaks,
-            num_valid_ibis=num_valid_ibis,
-            mean_ibi_s=mean_ibi,
-            std_ibi_s=std_ibi,
-            is_ekg_artifact=is_ekg
-        ))
-    end
-
-    # --- Construct Results ---
-    metrics_df = DataFrame(metrics)
-    # Ensure Component column matches 1:n_components_total if metrics is empty
-    if isempty(metrics)
-         metrics_df = DataFrame(Component=1:n_components_total, num_peaks=0, num_valid_ibis=0, mean_ibi_s=NaN, std_ibi_s=NaN, is_ekg_artifact=false)
-    end
-    sort!(identified_ekg)
-
-    return identified_ekg, metrics_df
-end
 
 
-
-"""
-    identify_spatial_kurtosis_components(ica_result::InfoIca, dat::ContinuousData;
-                                      exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                                      z_threshold::Float64 = 3.0)
-
-Identify ICA components with high spatial kurtosis (localized, spot-like activity).
-
-# Arguments
-- `ica_result::InfoIca`: The ICA result object.
-- `dat::ContinuousData`: The continuous data.
-
-# Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-- `z_threshold::Float64`: Z-score threshold for identifying high spatial kurtosis components (default: 3.0).
-
-# Returns
-- `Vector{Int}`: Indices of components with high spatial kurtosis.
-- `DataFrame`: DataFrame containing spatial kurtosis values and z-scores for all components.
-"""
-function identify_spatial_kurtosis_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-    z_threshold::Float64 = 3.0
-)
-    # Calculate spatial kurtosis for each component's weights
-    n_components = size(ica_result.mixing, 2)
-    spatial_kurtosis = Float64[]
-    
-    for i in 1:n_components
-        # Get component weights
-        weights = ica_result.mixing[:, i]
-        # Calculate kurtosis of the weights
-        k = kurtosis(weights)
-        push!(spatial_kurtosis, k)
-    end
-
-    # Calculate z-scores of spatial kurtosis values
-    spatial_kurtosis_z = StatsBase.zscore(spatial_kurtosis)
-
-    # Identify components with high spatial kurtosis (using z-scores)
-    high_kurtosis_comps = findall(spatial_kurtosis_z .> z_threshold)  # Only positive deviations (localized activity)
-    sort!(high_kurtosis_comps)
-
-    # Create metrics DataFrame
-    metrics_df = DataFrame(
-        :Component => 1:n_components,
-        :SpatialKurtosis => spatial_kurtosis,
-        :SpatialKurtosisZScore => spatial_kurtosis_z
-    )
-
-    return high_kurtosis_comps, metrics_df
-end
 
 """
     plot_spatial_kurtosis_components(ica_result::InfoIca, dat::ContinuousData;
@@ -1997,228 +1699,120 @@ Plot metrics used for ECG component identification.
 # Returns
 - `fig::Figure`: The Makie Figure containing the ECG metrics plots.
 """
-function plot_ecg_component_features(
+function plot_ecg_component_features_(
     identified_comps::Vector{Int},
     metrics_df::DataFrame;
     min_bpm::Real=40,
-    max_bpm::Real=120
+    max_bpm::Real=120,
+    max_ibi_std_s::Real=0.2,         
+    min_peak_ratio::Real=0.7,         
 )
-    # Create figure with two subplots
-    fig = Figure(size=(1000, 400))
+    # Create figure with two panels
+    fig = Figure()
     
-    # Plot 1: Number of peaks and valid IBIs
-    ax1 = Axis(
-        fig[1, 1],
-        xlabel = "Component",
-        ylabel = "Count",
-        title = "Peak and IBI Counts"
-    )
+    # Calculate heart rates
+    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
+    metrics_df[!, :heart_rate_bpm] = heart_rates
     
-    # Plot number of peaks
-    scatter!(ax1, metrics_df.Component, metrics_df.num_peaks, 
-             color=:gray, label="Total Peaks")
+    # Left panel: Heart Rate vs Peak Ratio
+    ax1 = Axis( fig[1, 1], xlabel = "Heart Rate (BPM)", ylabel = "Peak Ratio (valid/total)")
+    # Right panel: Heart Rate vs IBI Regularity (std)
+    ax2 = Axis( fig[1, 2], xlabel = "Heart Rate (BPM)", ylabel = "IBI Std Dev (seconds)")
     
-    # Plot number of valid IBIs
-    scatter!(ax1, metrics_df.Component, metrics_df.num_valid_ibis,
-             color=:blue, label="Valid IBIs")
+    # Plot non-ECG components
+    non_ecg_idx = setdiff(1:nrow(metrics_df), identified_comps)
+    non_ecg_df = metrics_df[non_ecg_idx, :]
     
-    # Highlight identified components
-    if !isempty(identified_comps)
-        # Get metrics for identified components
-        identified_metrics = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
+    # Filter out NaNs for plotting
+    valid_non_ecg = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.peak_ratio))
+    if !isempty(valid_non_ecg)
+        scatter!(
+            ax1, 
+            non_ecg_df.heart_rate_bpm[valid_non_ecg], 
+            non_ecg_df.peak_ratio[valid_non_ecg], 
+            color = :gray,
+            markersize = 10,
+        )
+    end
+    
+    # Filter valid points for second plot
+    valid_non_ecg2 = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.std_ibi_s))
+    if !isempty(valid_non_ecg2)
+        scatter!(
+            ax2, 
+            non_ecg_df.heart_rate_bpm[valid_non_ecg2], 
+            non_ecg_df.std_ibi_s[valid_non_ecg2], 
+            color = :gray,
+            markersize = 10,
+        )
+    end
+    
+    # Plot ECG components
+    ecg_df = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
+    
+    # Filter out NaNs
+    valid_ecg = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.peak_ratio))
+    if !isempty(valid_ecg)
+        scatter!(
+            ax1, 
+            ecg_df.heart_rate_bpm[valid_ecg], 
+            ecg_df.peak_ratio[valid_ecg], 
+            color = :black,
+            markersize = 16,
+        )
         
-        # Plot identified components with larger markers
-        scatter!(ax1, identified_metrics.Component, identified_metrics.num_peaks,
-                color=:red, markersize=8, label="Identified Components (Peaks)")
-        scatter!(ax1, identified_metrics.Component, identified_metrics.num_valid_ibis,
-                color=:red, markersize=8, label="Identified Components (IBIs)")
-        
-        # Add component numbers as labels
-        for (i, comp) in enumerate(identified_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
-            text!(ax1, comp, row.num_peaks[1], text=string(comp),
-                  color=:red, align=(:center,:bottom), fontsize=10)
+        # Add component labels
+        for i in valid_ecg
+            text!(
+                ax1,
+                ecg_df.heart_rate_bpm[i],
+                ecg_df.peak_ratio[i],
+                text = string(ecg_df.Component[i]),
+                align = (:center, :bottom),
+                offset = (0, 3),
+                fontsize = 12
+            )
         end
     end
     
-    # Add legend
-    axislegend(ax1, position=(1.0, 1.0))
-    
-    # Plot 2: IBI Statistics
-    ax2 = Axis(
-        fig[1, 2],
-        xlabel = "Component",
-        ylabel = "Seconds",
-        title = "Inter-Beat Interval Statistics"
-    )
-    
-    # Plot mean IBI
-    scatter!(ax2, metrics_df.Component, metrics_df.mean_ibi_s,
-             color=:blue, label="Mean IBI")
-    
-    # Plot IBI standard deviation
-    scatter!(ax2, metrics_df.Component, metrics_df.std_ibi_s,
-             color=:green, label="IBI Std Dev")
-    
-    # Add reference lines for plausible heart rate range
-    min_ibi = 60.0 / max_bpm  # Convert BPM to seconds
-    max_ibi = 60.0 / min_bpm
-    hlines!(ax2, [min_ibi, max_ibi], color=:gray, linestyle=:dash,
-            label="Plausible IBI Range")
-    
-    # Highlight identified components
-    if !isempty(identified_comps)
-        identified_metrics = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
+    # Plot ECG components in second panel
+    valid_ecg2 = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.std_ibi_s))
+    if !isempty(valid_ecg2)
+        scatter!(
+            ax2, 
+            ecg_df.heart_rate_bpm[valid_ecg2], 
+            ecg_df.std_ibi_s[valid_ecg2], 
+            color = :black,
+            markersize = 16,
+        )
         
-        # Plot identified components with larger markers
-        scatter!(ax2, identified_metrics.Component, identified_metrics.mean_ibi_s,
-                color=:red, markersize=8, label="Identified Components (Mean)")
-        scatter!(ax2, identified_metrics.Component, identified_metrics.std_ibi_s,
-                color=:red, markersize=8, label="Identified Components (Std)")
-        
-        # Add component numbers as labels
-        for (i, comp) in enumerate(identified_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
-            text!(ax2, comp, row.mean_ibi_s[1], text=string(comp),
-                  color=:red, align=(:center,:bottom), fontsize=10)
+        # Add component labels
+        for i in valid_ecg2
+            text!(
+                ax2,
+                ecg_df.heart_rate_bpm[i],
+                ecg_df.std_ibi_s[i],
+                text = string(ecg_df.Component[i]),
+                align = (:center, :bottom),
+                offset = (0, 3),
+                fontsize = 12
+            )
         end
     end
     
-    # Add legend
-    axislegend(ax2, position=(1.0, 1.0))
+    # Add reference ranges for normal heart boundary and selection criterion
+    vlines!(ax1, [min_bpm, max_bpm], color = (:black, 0.5), linestyle = :dash)
+    vlines!(ax2, [min_bpm, max_bpm], color = (:black, 0.5), linestyle = :dash)
+    hlines!(ax1, [min_peak_ratio], color = (:black, 0.5), linestyle = :dash)
+    hlines!(ax2, [max_ibi_std_s], color = (:black, 0.5), linestyle = :dash)
     
     return fig
 end
 
-"""
-    identify_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
-                                 exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                                 line_freq::Real=50.0,
-                                 freq_bandwidth::Real=1.0,
-                                 z_threshold::Float64=3.0,
-                                 min_harmonic_power::Real=0.5)
 
-Identify ICA components with strong line noise characteristics.
 
-# Arguments
-- `ica_result::InfoIca`: The ICA result object.
-- `dat::ContinuousData`: The continuous data.
 
-# Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-- `line_freq::Real`: Line frequency in Hz (default: 50.0 for European power).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
-- `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
-- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
 
-# Returns
-- `Vector{Int}`: Indices of components with strong line noise characteristics.
-- `DataFrame`: DataFrame containing spectral metrics for all components.
-"""
-function identify_line_noise_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    z_threshold::Float64=3.0,
-    min_harmonic_power::Real=0.5
-)
-    # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot identify line noise components."
-        return Int[], DataFrame()
-    end
-
-    # Prepare data matrix for valid samples
-    relevant_cols = vcat(ica_result.data_label)
-    data_subset_df = dat.data[samples_to_use, relevant_cols]
-    dat_matrix = permutedims(Matrix(data_subset_df))
-    dat_matrix .-= mean(dat_matrix, dims=2)
-    dat_matrix ./= ica_result.scale
-
-    # Calculate components for valid samples
-    components = ica_result.unmixing * dat_matrix
-    n_components = size(components, 1)
-    fs = dat.sample_rate
-
-    # Calculate power spectrum for each component
-    # Use a reasonable FFT size (power of 2, but not too large)
-    nfft = min(nextpow(2, size(components, 2)), 2^16)  # Cap at 2^16 points
-    freqs = FFTW.rfftfreq(nfft, fs)
-    psd = zeros(length(freqs), n_components)
-    
-    for i in 1:n_components
-        # Zero-pad or truncate to nfft points
-        signal = components[i, :]
-        if length(signal) > nfft
-            signal = signal[1:nfft]
-        elseif length(signal) < nfft
-            signal = [signal; zeros(nfft - length(signal))]
-        end
-        psd[:, i] = abs2.(FFTW.rfft(signal))
-    end
-
-    # Find indices for line frequency and harmonics
-    line_idx = findmin(abs.(freqs .- line_freq))[2]
-    line_band = findall(abs.(freqs .- line_freq) .<= freq_bandwidth)
-    
-    # Calculate metrics for each component
-    metrics = []
-    for i in 1:n_components
-        # Get power at line frequency and surrounding band
-        line_power = mean(psd[line_band, i])
-        
-        # Calculate power in surrounding bands (excluding line frequency)
-        surrounding_bands = setdiff(1:length(freqs), line_band)
-        surrounding_power = mean(psd[surrounding_bands, i])
-        
-        # Calculate power ratio
-        power_ratio = line_power / (surrounding_power + eps())
-        
-        # Check for harmonics (2x and 3x line frequency)
-        harmonic_powers = Float64[]
-        for h in 2:3
-            harmonic_freq = line_freq * h
-            harmonic_idx = findmin(abs.(freqs .- harmonic_freq))[2]
-            harmonic_band = findall(abs.(freqs .- harmonic_freq) .<= freq_bandwidth)
-            harmonic_power = mean(psd[harmonic_band, i])
-            push!(harmonic_powers, harmonic_power / line_power)
-        end
-        
-        # Store metrics
-        push!(metrics, (
-            Component=i,
-            LinePower=line_power,
-            SurroundingPower=surrounding_power,
-            PowerRatio=power_ratio,
-            Harmonic2Ratio=harmonic_powers[1],
-            Harmonic3Ratio=harmonic_powers[2]
-        ))
-    end
-
-    # Create metrics DataFrame
-    metrics_df = DataFrame(metrics)
-    
-    # Calculate z-scores of power ratios
-    power_ratio_z = StatsBase.zscore(metrics_df.PowerRatio)
-    metrics_df[!, :PowerRatioZScore] = power_ratio_z
-
-    # Identify components with strong line noise characteristics
-    line_noise_comps = findall(power_ratio_z .> z_threshold)
-    
-    # Additional check for harmonics
-    if !isempty(line_noise_comps)
-        harmonic_mask = (metrics_df.Harmonic2Ratio .> min_harmonic_power) .| 
-                       (metrics_df.Harmonic3Ratio .> min_harmonic_power)
-        line_noise_comps = intersect(line_noise_comps, findall(harmonic_mask))
-    end
-    
-    sort!(line_noise_comps)
-
-    return line_noise_comps, metrics_df
-end
 
 """
     plot_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
@@ -2331,6 +1925,10 @@ function plot_line_noise_components(
     return fig
 end
 
+
+
+
+
 """
     plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int;
                           exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
@@ -2442,465 +2040,295 @@ function plot_component_spectrum(
     return fig
 end
 
-"""
-    plot_channel_spectrum(dat::ContinuousData, channel::Symbol;
-                         exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                         line_freq::Real=50.0,
-                         freq_bandwidth::Real=1.0,
-                         window_size::Int=1024,
-                         overlap::Real=0.5,
-                         max_freq::Real=100.0)
 
-Plot the power spectrum of a specific EEG channel.
+
+"""
+    plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df::DataFrame)
+
+Create a simplified visualization of ECG component detection metrics.
 
 # Arguments
-- `dat::ContinuousData`: The continuous data.
-- `channel::Symbol`: The channel to plot (must be a column name in dat.data).
-
-# Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
-- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
-- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
-- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
+- `identified_comps::Vector{Int64}`: Vector of component indices identified as ECG artifacts
+- `metrics_df::DataFrame`: DataFrame with component metrics
 
 # Returns
-- `fig::Figure`: The Makie Figure containing the power spectrum plot.
+- `fig::Figure`: The Makie Figure containing the plot
 """
-function plot_channel_spectrum(
-    dat::ContinuousData,
-    channel::Symbol;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    window_size::Int=1024,
-    overlap::Real=0.5,
-    max_freq::Real=100.0
-)
-    # Check if channel exists
-    if !(channel in propertynames(dat.data))
-        error("Channel $channel not found in data")
-    end
-
-    # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot plot channel spectrum."
-        return Figure()
-    end
-
-    # Get the channel data
-    signal = dat.data[samples_to_use, channel]
-    fs = dat.sample_rate
-
-    # Calculate power spectrum using Welch's method
-    noverlap = Int(round(window_size * overlap))
-    pgram = DSP.welch_pgram(signal, window_size, noverlap; fs=fs)
-    freqs = DSP.freq(pgram)
-    psd = DSP.power(pgram)
-
-    # Create figure
-    fig = Figure(size=(800, 400))
+function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df::DataFrame)
+    # Create figure with two panels
+    fig = Figure(size=(1000, 600))
     
-    # Plot power spectrum
-    ax = Axis(
+    # Calculate heart rates
+    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
+    metrics_df[!, :heart_rate_bpm] = heart_rates
+    
+    # Left panel: Heart Rate vs Peak Ratio
+    ax1 = Axis(
         fig[1, 1],
-        xlabel = "Frequency (Hz)",
-        ylabel = "Power Spectral Density (μV²/Hz)",
-        title = "Power Spectrum of Channel $channel"
+        xlabel = "Heart Rate (BPM)",
+        ylabel = "Peak Ratio (valid/total)",
+        title = "ECG Detection Metrics"
     )
     
-    # Plot the spectrum
-    lines!(ax, freqs, psd, color=:black, label="Power Spectrum")
+    # Right panel: Heart Rate vs IBI Regularity (std)
+    ax2 = Axis(
+        fig[1, 2],
+        xlabel = "Heart Rate (BPM)",
+        ylabel = "IBI Std Dev (seconds)",
+        title = "Heart Rate Regularity"
+    )
     
-    # Highlight line frequency and harmonics
-    for h in 1:3
-        freq = line_freq * h
-        if freq <= max_freq
-            # Add vertical line
-            vlines!(ax, [freq], color=:red, linestyle=:dash, 
-                   label=h==1 ? "Line Frequency" : "Harmonic")
-            
-            # Add shaded region around the frequency
-            band_x = [freq-freq_bandwidth, freq+freq_bandwidth]
-            band_y = [0, maximum(psd)]
-            poly!(ax, [Point2f(band_x[1], band_y[1]), 
-                      Point2f(band_x[2], band_y[1]),
-                      Point2f(band_x[2], band_y[2]),
-                      Point2f(band_x[1], band_y[2])],
-                  color=(:red, 0.1))
-            
-            # Add frequency label
-            text!(ax, freq, maximum(psd), text="$freq Hz",
-                  color=:red, align=(:center, :bottom))
+    # Plot non-ECG components
+    non_ecg_idx = setdiff(1:nrow(metrics_df), identified_comps)
+    non_ecg_df = metrics_df[non_ecg_idx, :]
+    
+    # Filter out NaNs for plotting
+    valid_non_ecg = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.peak_ratio))
+    if !isempty(valid_non_ecg)
+        scatter!(
+            ax1, 
+            non_ecg_df.heart_rate_bpm[valid_non_ecg], 
+            non_ecg_df.peak_ratio[valid_non_ecg], 
+            color = :gray,
+            markersize = 8,
+            label = "Non-ECG"
+        )
+    end
+    
+    # Filter valid points for second plot
+    valid_non_ecg2 = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.std_ibi_s))
+    if !isempty(valid_non_ecg2)
+        scatter!(
+            ax2, 
+            non_ecg_df.heart_rate_bpm[valid_non_ecg2], 
+            non_ecg_df.std_ibi_s[valid_non_ecg2], 
+            color = :gray,
+            markersize = 8,
+            label = "Non-ECG"
+        )
+    end
+    
+    # Plot ECG components
+    ecg_df = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
+    
+    # Filter out NaNs
+    valid_ecg = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.peak_ratio))
+    if !isempty(valid_ecg)
+        ecg_scatter1 = scatter!(
+            ax1, 
+            ecg_df.heart_rate_bpm[valid_ecg], 
+            ecg_df.peak_ratio[valid_ecg], 
+            color = :red,
+            markersize = 12,
+            marker = :diamond,
+            label = "ECG"
+        )
+        
+        # Add component labels
+        for i in valid_ecg
+            text!(
+                ax1,
+                ecg_df.heart_rate_bpm[i],
+                ecg_df.peak_ratio[i],
+                text = string(ecg_df.Component[i]),
+                align = (:center, :bottom),
+                offset = (0, 3),
+                fontsize = 12
+            )
         end
     end
     
-    # Set x-axis limits
-    xlims!(ax, (0, max_freq))
+    # Plot ECG components in second panel
+    valid_ecg2 = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.std_ibi_s))
+    if !isempty(valid_ecg2)
+        scatter!(
+            ax2, 
+            ecg_df.heart_rate_bpm[valid_ecg2], 
+            ecg_df.std_ibi_s[valid_ecg2], 
+            color = :red,
+            markersize = 12,
+            marker = :diamond,
+            label = "ECG"
+        )
+        
+        # Add component labels
+        for i in valid_ecg2
+            text!(
+                ax2,
+                ecg_df.heart_rate_bpm[i],
+                ecg_df.std_ibi_s[i],
+                text = string(ecg_df.Component[i]),
+                align = (:center, :bottom),
+                offset = (0, 3),
+                fontsize = 12
+            )
+        end
+    end
+    
+    # Add reference ranges using pre-defined values 
+    # Normal heart rate range (typical values)
+    vlines!(ax1, [60, 100], color = (:green, 0.5), linestyle = :dash, label = "Normal HR Range")
+    vlines!(ax2, [60, 100], color = (:green, 0.5), linestyle = :dash)
+    
+    # Get threshold values from actual data when possible
+    min_peak_ratio = 0.7  # Default if no components found
+    max_std = 0.12        # Default if no components found
+    
+    if any(ecg_df.is_ecg_artifact)
+        # Get actual values from data
+        min_peak_ratio = minimum(ecg_df.peak_ratio[ecg_df.is_ecg_artifact])
+        max_std = maximum(ecg_df.std_ibi_s[ecg_df.is_ecg_artifact])
+    end
+    
+    # Add threshold lines
+    hlines!(ax1, [min_peak_ratio], color = (:red, 0.5), linestyle = :dash, label = "Min Peak Ratio")
+    hlines!(ax2, [max_std], color = (:red, 0.5), linestyle = :dash, label = "Max StdDev")
+    
+    # Add legends
+    axislegend(ax1, position = :rt)
+    axislegend(ax2, position = :rt)
+    
+    # Calculate BPM range from actual data
+    min_hr = 40   # Default minimum heart rate
+    max_hr = 120  # Default maximum heart rate
+    if !isempty(ecg_df) && any(.!isnan.(ecg_df.heart_rate_bpm))
+        # Use the actual range from identified components
+        valid_hrs = filter(!isnan, ecg_df.heart_rate_bpm)
+        if !isempty(valid_hrs)
+            min_hr = floor(Int, minimum(valid_hrs))
+            max_hr = ceil(Int, maximum(valid_hrs))
+        end
+    end
+    
+    # Display summary text
+    Label(
+        fig[2, 1:2], 
+        "Found $(length(identified_comps)) ECG components: $(join(identified_comps, ", "))\n" *
+        "Criteria: Heart rate $min_hr-$max_hr BPM, StdDev ≤ $(round(max_std, digits=3))s, Peak Ratio ≥ $(round(min_peak_ratio, digits=2))",
+        fontsize = 14,
+        tellwidth = false
+    )
+    
+    return fig
+end
+
+
+
+
+
+
+"""
+    plot_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
+                             exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+                             line_freq::Real=50.0,
+                             freq_bandwidth::Real=1.0,
+                             z_threshold::Float64=3.0,
+                             min_harmonic_power::Real=0.5)
+
+Plot spectral metrics used for line noise component identification.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object.
+- `dat::ContinuousData`: The continuous data.
+
+# Keyword Arguments
+- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
+- `line_freq::Real`: Line frequency in Hz (default: 50.0).
+- `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
+- `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
+- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
+
+# Returns
+- `fig::Figure`: The Makie Figure containing the line noise metrics plots.
+"""
+function plot_line_noise_components(
+    ica_result::InfoIca,
+    dat::ContinuousData;
+    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+    line_freq::Real=50.0,
+    freq_bandwidth::Real=1.0,
+    z_threshold::Float64=3.0,
+    min_harmonic_power::Real=0.5
+)
+    # Get line noise components and metrics
+    line_noise_comps, metrics_df = identify_line_noise_components(
+        ica_result, dat;
+        exclude_samples=exclude_samples,
+        line_freq=line_freq,
+        freq_bandwidth=freq_bandwidth,
+        z_threshold=z_threshold,
+        min_harmonic_power=min_harmonic_power
+    )
+
+    # Create figure with two subplots
+    fig = Figure(size=(1000, 400))
+    
+    # Plot 1: Power Ratio Z-Scores
+    ax1 = Axis(
+        fig[1, 1],
+        xlabel = "Component",
+        ylabel = "Power Ratio Z-Score",
+        title = "Line Frequency Power Ratio Z-Scores"
+    )
+    
+    # Plot all components with label
+    scatter!(ax1, metrics_df.Component, metrics_df.PowerRatioZScore, 
+             color=:gray, label="All Components")
+    
+    # Highlight identified components with label
+    if !isempty(line_noise_comps)
+        identified_metrics = metrics_df[in.(metrics_df.Component, Ref(line_noise_comps)), :]
+        scatter!(ax1, identified_metrics.Component, identified_metrics.PowerRatioZScore,
+                color=:red, markersize=8, label="Line Noise Components")
+        
+        # Add component numbers as labels
+        for (i, comp) in enumerate(line_noise_comps)
+            row = metrics_df[metrics_df.Component .== comp, :]
+            text!(ax1, comp, row.PowerRatioZScore[1], text=string(comp),
+                  color=:red, align=(:center,:bottom), fontsize=10)
+        end
+    end
+    
+    # Add threshold line with label
+    hlines!(ax1, [z_threshold], color=:red, linestyle=:dash, label="Threshold")
     
     # Add legend
-    axislegend(ax, position=(1.0, 1.0))
+    axislegend(ax1, position=(1.0, 1.0))
+    
+    # Plot 2: Harmonic Ratios
+    ax2 = Axis(
+        fig[1, 2],
+        xlabel = "Component",
+        ylabel = "Power Ratio",
+        title = "Harmonic Power Ratios"
+    )
+    
+    # Plot harmonic ratios with labels
+    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic2Ratio,
+             color=:blue, label="2nd Harmonic")
+    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic3Ratio,
+             color=:green, label="3rd Harmonic")
+    
+    # Add reference line for minimum harmonic power with label
+    hlines!(ax2, [min_harmonic_power], color=:gray, linestyle=:dash,
+            label="Min Harmonic Power")
+    
+    # Highlight identified components with label
+    if !isempty(line_noise_comps)
+        identified_metrics = metrics_df[in.(metrics_df.Component, Ref(line_noise_comps)), :]
+        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic2Ratio,
+                color=:red, markersize=8, label="Line Noise Components")
+        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic3Ratio,
+                color=:red, markersize=8)
+    end
+    
+    # Add legend
+    axislegend(ax2, position=(1.0, 1.0))
     
     return fig
 end
 
-"""
-    plot_channel_spectrum(dat::ContinuousData, channel::Union{Symbol,Nothing}=nothing;
-                         exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                         line_freq::Real=50.0,
-                         freq_bandwidth::Real=1.0,
-                         window_size::Int=1024,
-                         overlap::Real=0.5,
-                         max_freq::Real=100.0)
-
-Plot the power spectrum of EEG channel(s).
-
-# Arguments
-- `dat::ContinuousData`: The continuous data.
-- `channel::Union{Symbol,Nothing}`: The channel to plot (must be a column name in dat.data). If nothing, plots all EEG channels.
-
-# Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
-- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
-- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
-- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-
-# Returns
-- `fig::Figure`: The Makie Figure containing the power spectrum plot(s).
-"""
-function plot_channel_spectrum(
-    dat::ContinuousData,
-    channel::Union{Symbol,Nothing}=nothing;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    window_size::Int=1024,
-    overlap::Real=0.5,
-    max_freq::Real=100.0
-)
-    println("Plotting channel spectrum")
-    # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot plot channel spectrum."
-        return Figure()
-    end
-
-    # Get channels to plot
-    channels_to_plot = if isnothing(channel)
-        dat.layout.label
-    else
-        # Check if specified channel exists
-        if !(channel in propertynames(dat.data))
-            error("Channel $channel not found in data")
-        end
-        [channel]
-    end
-
-    # Calculate power spectra for all channels
-    fs = dat.sample_rate
-    noverlap = Int(round(window_size * overlap))
-    spectra = Dict{Symbol, Tuple{Vector{Float64}, Vector{Float64}}}()
-    
-    for ch in channels_to_plot
-        signal = dat.data[samples_to_use, ch]
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs=fs)
-        spectra[ch] = (DSP.freq(pgram), DSP.power(pgram))
-    end
-
-    # Create figure
-    fig = Figure(size=(1000, 600))
-    ax = Axis(
-        fig[1, 1],
-        xlabel = "Frequency (Hz)",
-        ylabel = "Power Spectral Density (μV²/Hz)",
-        title = isnothing(channel) ? "Power Spectra of All Channels" : "Power Spectrum of Channel $channel"
-    )
-    
-    # Plot spectra for all channels
-    for (i, ch) in enumerate(channels_to_plot)
-        freqs, psd = spectra[ch]
-        if length(channels_to_plot) > 1
-            lines!(ax, freqs, psd, label=string(ch))
-        else
-            lines!(ax, freqs, psd)
-        end
-    end
-    
-    # Highlight line frequency and harmonics
-    for h in 1:3
-        freq = line_freq * h
-        if freq <= max_freq
-            # Add vertical line without label
-            vlines!(ax, [freq], color=:red, linestyle=:dash, label="")
-            
-            # Add shaded region around the frequency
-            band_x = [freq-freq_bandwidth, freq+freq_bandwidth]
-            band_y = [0, maximum([maximum(psd) for (_, psd) in values(spectra)])]
-            poly!(ax, [Point2f(band_x[1], band_y[1]), 
-                      Point2f(band_x[2], band_y[1]),
-                      Point2f(band_x[2], band_y[2]),
-                      Point2f(band_x[1], band_y[2])],
-                  color=(:red, 0.1))
-            
-            # Add frequency label
-            text!(ax, freq, band_y[2], text="$freq Hz",
-                  color=:red, align=(:center, :bottom))
-        end
-    end
-    
-    # Set x-axis limits
-    xlims!(ax, (0, max_freq))
-    
-    # Add legend only if we have multiple channels
-    if length(channels_to_plot) > 1
-        axislegend(ax, position=(1.0, 1.0))
-    end
-    
-    return fig
-end
-
-# Helper function to plot spectrum in an axis
-function _plot_spectrum!(ax::Axis, freqs::Vector{Float64}, psd::Vector{Float64}, 
-                        line_freq::Real, freq_bandwidth::Real, max_freq::Real)
-    # Plot the spectrum
-    lines!(ax, freqs, psd, color=:black, label="Power Spectrum")
-    
-    # Highlight line frequency and harmonics
-    for h in 1:3
-        freq = line_freq * h
-        if freq <= max_freq
-            # Add vertical line without label
-            vlines!(ax, [freq], color=:red, linestyle=:dash)
-            
-            # Add shaded region around the frequency
-            band_x = [freq-freq_bandwidth, freq+freq_bandwidth]
-            band_y = [0, maximum(psd)]
-            poly!(ax, [Point2f(band_x[1], band_y[1]), 
-                      Point2f(band_x[2], band_y[1]),
-                      Point2f(band_x[2], band_y[2]),
-                      Point2f(band_x[1], band_y[2])],
-                  color=(:red, 0.1))
-            
-            # Add frequency label
-            text!(ax, freq, maximum(psd), text="$freq Hz",
-                  color=:red, align=(:center, :bottom))
-        end
-    end
-    
-    # Set x-axis limits
-    xlims!(ax, (0, max_freq))
-end
-
-"""
-    plot_selected_spectrum(selected_data::DataFrame, channel::Symbol; 
-        line_freq::Real=50.0,
-        freq_bandwidth::Real=1.0,
-        window_size::Int=1024,
-        overlap::Real=0.5,
-        max_freq::Real=100.0
-    )
-
-Plot the power spectrum of a selected time region for a specific channel.
-
-# Arguments
-- `selected_data::DataFrame`: The selected time region data
-- `channel::Symbol`: The channel to plot
-- `line_freq::Real`: Line frequency (default: 50.0 Hz)
-- `freq_bandwidth::Real`: Bandwidth around line frequency (default: 1.0 Hz)
-- `window_size::Int`: Window size for Welch's method (default: 1024)
-- `overlap::Real`: Overlap between windows (default: 0.5)
-- `max_freq::Real`: Maximum frequency to plot (default: 100.0 Hz)
-
-# Returns
-- `fig::Figure`: The figure containing the plot
-"""
-function plot_selected_spectrum(
-    selected_data::DataFrame,
-    channel::Vector{Symbol};
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    window_size::Int=1024,
-    overlap::Real=0.5,
-    max_freq::Real=100.0
-)
-    # Get sampling rate from time column
-    fs = 1 / mean(diff(selected_data.time))
-    
-    # Calculate minimum required samples
-    min_samples = window_size  # Minimum samples needed for one window
-    
-    # Check if we have enough data
-    if size(selected_data, 1) < min_samples
-        @warn "Selected region is too short for the specified window size. Adjusting window size..."
-        # Adjust window size to be half the data length, but ensure it's a power of 2
-        window_size = 2^floor(Int, log2(size(selected_data, 1) / 2))
-        if window_size < 32  # Set a minimum window size
-            @warn "Selected region is too short for meaningful spectral analysis. Minimum window size of 32 samples required."
-            return Figure(), Axis()
-        end
-    end
-    
-    # Get signal data for each channel
-    spectra = Dict{Symbol, Tuple{Vector{Float64}, Vector{Float64}}}()
-    
-    for ch in channel
-        # Extract vector data from DataFrame
-        signal = Vector{Float64}(selected_data[!, ch])
-        
-        # Calculate power spectrum using Welch's method
-        noverlap = Int(round(window_size * overlap))
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs=fs)
-        spectra[ch] = (DSP.freq(pgram), DSP.power(pgram))
-    end
-    
-    # Create figure
-    fig = Figure(size=(800, 400))
-    ax = Axis(fig[1, 1],
-        xlabel="Frequency (Hz)",
-        ylabel="Power Spectral Density (μV²/Hz)",
-        title="Power Spectrum of Selected Region"
-    )
-    
-    # Plot spectra for all channels
-    for (i, ch) in enumerate(channel)
-        freqs, psd = spectra[ch]
-        if length(channel) > 1
-            lines!(ax, freqs, psd, label=string(ch))
-        else
-            lines!(ax, freqs, psd)
-        end
-    end
-    
-    # Add vertical lines for line frequency and harmonics
-    for i in 1:3
-        freq = i * line_freq
-        if freq <= max_freq
-            # Add vertical line without label
-            vlines!(ax, [freq], color=:red, linestyle=:dash)
-            
-            # Add shaded region
-            band_x = [freq - freq_bandwidth, freq + freq_bandwidth]
-            band_y = [0, maximum([maximum(psd) for (_, psd) in values(spectra)])]
-            vertices = [
-                Point2f(band_x[1], band_y[1]),
-                Point2f(band_x[2], band_y[1]),
-                Point2f(band_x[2], band_y[2]),
-                Point2f(band_x[1], band_y[2])
-            ]
-            poly!(ax, vertices, color=(:red, 0.2))
-            
-            # Add frequency label
-            text!(ax, freq, band_y[2], text="$(Int(freq)) Hz", align=(:center, :bottom))
-        end
-    end
-    
-    # Set x-axis limits
-    xlims!(ax, (0, max_freq))
-    
-    # Add legend if multiple channels
-    if length(channel) > 1
-        axislegend(ax, position=(1.0, 1.0))
-    end
-    display(GLMakie.Screen(), fig)
-    return fig, ax
-end
 
 
-"""
-    plot_selected_spectrum(selected_data::DataFrame, channel::Symbol;
-                          line_freq::Real=50.0,
-                          freq_bandwidth::Real=1.0,
-                          window_size::Int=1024,
-                          overlap::Real=0.5,
-                          max_freq::Real=100.0)
-
-Plot the power spectrum of a selected time region for a specific channel.
-
-# Arguments
-- `selected_data::DataFrame`: The selected time region data.
-- `channel::Symbol`: The channel to plot (must be a column name in selected_data).
-
-# Keyword Arguments
-- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
-- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
-- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
-- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-
-# Returns
-- `fig::Figure`: The Makie Figure containing the power spectrum plot.
-"""
-function plot_selected_spectrum(
-    selected_data::DataFrame,
-    channel::Symbol;
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    window_size::Int=1024,
-    overlap::Real=0.5,
-    max_freq::Real=100.0
-)
-    # Check if channel exists
-    if !(channel in propertynames(selected_data))
-        error("Channel $channel not found in data")
-    end
-
-    # Get the channel data as a vector
-    signal = Vector{Float64}(selected_data[!, channel])
-    
-    # Calculate sampling rate from time column
-    fs = 1 / mean(diff(selected_data.time))
-
-    # Calculate power spectrum using Welch's method
-    noverlap = Int(round(window_size * overlap))
-    pgram = DSP.welch_pgram(signal, window_size, noverlap; fs=fs)
-    freqs = DSP.freq(pgram)
-    psd = DSP.power(pgram)
-
-    # Create figure
-    fig = Figure(size=(800, 400))
-    
-    # Plot power spectrum
-    ax = Axis(
-        fig[1, 1],
-        xlabel = "Frequency (Hz)",
-        ylabel = "Power Spectral Density (μV²/Hz)",
-        title = "Power Spectrum of Channel $channel"
-    )
-    
-    # Plot the spectrum
-    lines!(ax, freqs, psd, color=:black)
-    
-    # Highlight line frequency and harmonics
-    for h in 1:3
-        freq = line_freq * h
-        if freq <= max_freq
-            # Add vertical line without label
-            vlines!(ax, [freq], color=:red, linestyle=:dash)
-            
-            # Add shaded region around the frequency
-            band_x = [freq-freq_bandwidth, freq+freq_bandwidth]
-            band_y = [0, maximum(psd)]
-            poly!(ax, [Point2f(band_x[1], band_y[1]), 
-                      Point2f(band_x[2], band_y[1]),
-                      Point2f(band_x[2], band_y[2]),
-                      Point2f(band_x[1], band_y[2])],
-                  color=(:red, 0.1))
-            
-            # Add frequency label
-            text!(ax, freq, maximum(psd), text="$freq Hz",
-                  color=:red, align=(:center, :bottom))
-        end
-    end
-    
-    # Set x-axis limits
-    xlims!(ax, (0, max_freq))
-    display(GLMakie.Screen(), fig)
-    return fig, ax
-end
 
 
