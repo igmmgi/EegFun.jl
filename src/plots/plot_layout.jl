@@ -33,6 +33,7 @@ function plot_layout_2d!(
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
+    display_plot = true,
 )
 
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
@@ -75,6 +76,10 @@ function plot_layout_2d!(
 
     hidedecorations!(ax)
     hidespines!(ax)
+
+    if display_plot
+        display(fig)
+    end
 
     return fig, ax
 end

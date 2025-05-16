@@ -1,15 +1,17 @@
 function _plot_power_spectrum_implementation(
     df::DataFrame,
     channels_to_plot::Vector{Symbol},
-    fs::Real,
-    line_freq::Real,
-    freq_bandwidth::Real,
-    window_size::Int,
-    overlap::Real,
-    max_freq::Real,
+    fs::Real;
+    line_freq::Real = 50.0,
+    freq_bandwidth::Real = 1.0,
+    window_size::Int = 1024,
+    overlap::Real = 0.5,
+    max_freq::Real = 200.0,
     x_scale::Symbol = :linear,
     y_scale::Symbol = :linear,
     window_function::Function = DSP.hanning,
+    show_legend::Bool = true,
+    display_plot::Bool = true,
 )
     # Check if we have enough data and adjust window size if needed
     if size(df, 1) < window_size
@@ -49,7 +51,7 @@ function _plot_power_spectrum_implementation(
     end
 
     # Create figure with a layout for plot and controls
-    fig = Figure(size = (900, 600))
+    fig = Figure()
     
     # Create main grid layout with plot area and control area
     gl = fig[1, 1] = GridLayout()
@@ -162,12 +164,15 @@ function _plot_power_spectrum_implementation(
         end
     end
 
-    # Add legend for multiple channels
-    if length(channels_to_plot) > 1
-        axislegend(ax, position = (1.0, 1.0))
+    if show_legend
+        # Calculate number of columns for the legend based on the number of entries
+        ncols = length(channels_to_plot) > 10 ? ceil(Int, length(channels_to_plot) / 10) : 1
+        axislegend(ax, position = (1.0, 1.0), nbanks = ncols)
     end
 
-    display(fig)
+    if display_plot
+        display(fig)
+    end
 
     return fig, ax
 end
@@ -212,14 +217,7 @@ Plot the power spectrum of one or more channels from a DataFrame.
 function plot_channel_spectrum(
     df::DataFrame,
     channel::Union{Symbol,Vector{Symbol}};
-    line_freq::Real = 50.0,
-    freq_bandwidth::Real = 1.0,
-    window_size::Int = 1024,
-    overlap::Real = 0.5,
-    max_freq::Real = 100.0,
-    x_scale::Symbol = :linear,
-    y_scale::Symbol = :linear,
-    window_function::Function = DSP.hanning,
+    kwargs...
 )
 
     # Process channel input to get vector of channels to plot
@@ -235,15 +233,8 @@ function plot_channel_spectrum(
     return _plot_power_spectrum_implementation(
         df,
         channels_to_plot,
-        sample_rate(df),
-        line_freq,
-        freq_bandwidth,
-        window_size,
-        overlap,
-        max_freq,
-        x_scale,
-        y_scale,
-        window_function,
+        sample_rate(df);
+        kwargs...
     )
 end
 
@@ -532,15 +523,22 @@ function plot_components_spectra(
     )
     
     # Add component variance percentage to the legend
-    if length(comp_indices) <= 10  # Only customize legend for a reasonable number of components
-        component_labels = []
-        for comp_idx in comp_indices
-            variance_pct = ica_result.variance[comp_idx] * 100
-            push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
-        end
-        
-        # Create a new legend with the custom labels
-        legend_entries = [LineElement(color=ax.scene.plots[i].color) for i in 1:length(comp_indices)]
+    component_labels = []
+    for comp_idx in comp_indices
+        variance_pct = ica_result.variance[comp_idx] * 100
+        push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
+    end
+    
+    # Create a new legend with the custom labels
+    legend_entries = [LineElement(color=ax.scene.plots[i].color) for i in 1:length(comp_indices)]
+    
+    # Calculate number of columns based on number of components
+    ncols = length(comp_indices) > 10 ? ceil(Int, length(comp_indices) / 10) : 1
+    
+    # Place legend - use multi-column for many components
+    if ncols > 1
+        Legend(fig[1, 2], legend_entries, component_labels, "Components", nbanks=ncols)
+    else
         Legend(fig[1, 2], legend_entries, component_labels, "Components")
     end
     
