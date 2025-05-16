@@ -1,12 +1,20 @@
 [filtering]
-highpass.value = 0.1
-highpass.type = "number"
-highpass.min = 0.01
-highpass.max = 20
-highpass.description = "High-pass filter cutoff in Hz"
-    
-lowpass.value = 40.0
-lowpass.type = "number"
-lowpass.min = 1.0 
-lowpass.max = 100.0 
-lowpass.description = "Low-pass filter cutoff in Hz"
+highpass.cutoff.value = 0.1
+highpass.cutoff.type = "number"
+highpass.cutoff.min = 0.01
+highpass.cutoff.max = 20
+highpass.cutoff.description = "High-pass filter cutoff in Hz"
+
+highpass.type.value = "firfifififi"
+highpass.type.values = ["fir", "iir"]
+highpass.type.type = "string"
+highpass.type.description = "High-pass filter type (fir, iir)"
+ 
+
+
+
+lowpass.cutoff.value = 40.0
+lowpass.cutoff.type = "number"
+lowpass.cutoff.min = 1.0 
+lowpass.cutoff.max = 100.0 
+lowpass.cutoff.description = "Low-pass filter cutoff in Hz"

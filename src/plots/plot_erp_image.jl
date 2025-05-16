@@ -4,6 +4,7 @@ function plot_erp_image(
     colorrange = nothing,
     erp_kwargs = Dict(),
     colorbar_kwargs = Dict(),
+    display_plot::Bool = true,
 )
 
     erp_default_kwargs = Dict(:plot_erp => true)
@@ -36,13 +37,18 @@ function plot_erp_image(
         lines!(ax, dat.data[1].time, colmeans(data))
         xlims!(ax, (-0.5, 2))
     end
-    display(fig)
+
+    if display_plot
+        display(fig)
+    end
+
     return fig, ax
+
 end
 
 
-function plot_erp_image(dat::EpochData, channel::Symbol)
-    plot_erp_image(dat, [channel])
+function plot_erp_image(dat::EpochData, channel::Symbol; kwargs...)
+    plot_erp_image(dat, [channel]; kwargs...)
 end
 
 

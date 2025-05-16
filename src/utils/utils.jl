@@ -11,6 +11,7 @@ Check if files exist for all given conditions with specified filetype.
 - `Bool`: true if all files exist, false otherwise
 """
 function check_files_exist(conditions::Union{Vector{Int},Int}, filetype::String)
+    all_files_exist = true
     for condition in conditions
         fname = "$(condition)_$(filetype).jld2"
         if !isfile(fname)
@@ -20,6 +21,79 @@ function check_files_exist(conditions::Union{Vector{Int},Int}, filetype::String)
     end
     return all_files_exist
 end
+
+
+"""
+    print_config(config, [io=stdout]; [indent=0])
+    print_config(config, filename::String; [indent=0])
+
+Print configuration in a readable format.
+
+# Arguments
+- `config`: Configuration dictionary (typically loaded from TOML)
+- `io=stdout`: Optional IO object to print to (default: standard output)
+- `filename`: Optional filename to write output to
+- `indent=0`: Indentation level (used internally for recursive calls)
+
+# Example
+```julia
+# Print to console
+print_config(config)
+
+# Print to file
+print_config(config, "config_dump.txt")
+```
+"""
+function print_config(config, io::IO=stdout; indent::Int=0)
+    # Sort just the keys, not the key-value pairs
+    for key in sort(collect(keys(config)))
+        value = config[key]
+        if value isa Dict
+            println(io, " "^indent, "$(key):")
+            print_config(value, io; indent=indent+2)
+        else
+            # Format based on value type
+            val_str = if value isa AbstractArray
+                "[" * join(string.(value), ", ") * "]"
+            else
+                string(value)
+            end
+            println(io, " "^indent, "$(key): $(val_str)")
+        end
+    end
+end
+
+# Convenience method for printing to a file
+function print_config(config, filename::String; indent::Int=0)
+    open(filename, "w") do file
+        print_config(config, file; indent=indent)
+    end
+    println("Configuration written to: $filename")
+end
+
+
+function check_files_exist(files::Vector{String})
+    all_files_exist = true
+    for fname in files
+        if !isfile(fname)
+            @warn "File not found: $(fname)"
+            all_files_exist = false
+        end
+    end
+    return all_files_exist
+end
+
+function get_files(directory::String, files::String)
+    # replace common wildcard with regex syntax
+    files =  filter(f -> occursin(Regex(files), f), readdir(directory))
+    return [joinpath(directory, file) for file in files]
+end
+
+function get_files(directory::String, files::Vector{String})
+    return [joinpath(directory, file) for file in files]
+end
+
+
 
 """
     check_files_exist(subjects::Union{Vector{Int}, Int}, conditions::Union{Vector{Int}, Int},, filetype::String) -> Bool
@@ -417,3 +491,37 @@ function tail(dat::EegData; n=nothing)
     viewer(data(dat)[end-n+1:end, :])
 end
 
+
+"""
+    @minimal_error message
+    
+Print an error message without location information or stacktrace.
+"""
+# macro minimal_error(msg)
+#     return quote
+#         @error $(esc(msg)) _module=nothing _file=nothing _line=nothing
+#         error("")  
+#         #return nothing
+#     end
+# end
+
+# Custom exception type with cleaner error display
+struct MinimalError <: Exception
+    msg::String
+end
+
+# Custom display method to avoid printing a stacktrace
+function Base.showerror(io::IO, e::MinimalError)
+    print(io, "Configuration Error: ", e.msg)
+end
+
+"""
+    @minimal_error(msg)
+
+Displays an error message and stops execution without showing a full stacktrace.
+"""
+macro minimal_error(msg)
+    quote
+        throw(MinimalError($(esc(msg))))
+    end
+end

@@ -11,8 +11,15 @@ include("src/eegfun.jl")
 
 config = load_config("pipeline.toml")
 
+config = load_config("src/config/default.toml")
+print_config(config)
+
+
+preprocess_eeg_data("pipeline.toml")
+
+
 # load layout
-layout = read_layout("./data/layouts/biosemi72.csv");
+layout = read_layout("./data/layouts/biosemi7.csv");
 
 # 2D layout
 polar_to_cartesian_xy!(layout)
@@ -43,7 +50,7 @@ fig, ax = plot_events(dat)
 
 dat = create_eeg_dataframe(dat, layout);
 
-fig, ax = plot_channel_spectrum(dat; y_scale = :log10)
+fig, ax = plot_channel_spectrum(dat )
 fig, ax = plot_channel_spectrum(dat,:P2)
 fig, ax = plot_channel_spectrum(dat,[:P2,:P1])
 
@@ -58,7 +65,7 @@ rereference!(dat, :avg)
 # rereference!(dat, :mastoid)
 
 # initial high-pass filter to remove slow drifts
-filter_data!(dat, "hp", "iir", 0.1, order=1)
+filter_data!(dat, "hp", "fir", 1, order=1)
 
 
 # @btime dat1 = repair_bad_channels(dat, [:Fp1], neighbours)
@@ -154,6 +161,7 @@ fig = plot_spatial_kurtosis_components(ica_result, dat)
 line_noise_comps, metrics_df = identify_line_noise_components(ica_result, dat)
 fig = plot_line_noise_components(ica_result, dat)
 fig = plot_component_spectrum(ica_result, dat, 1)
+fig = plot_component_spectrum(ica_result, dat, 1:10) 
 
 fig = plot_channel_spectrum(dat, :P2)
 fig = plot_channel_spectrum(dat)

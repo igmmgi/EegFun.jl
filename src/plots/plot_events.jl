@@ -45,7 +45,7 @@ Plot trigger events as a scatter plot with vertical lines.
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
 """
-function plot_events(trigger_times, trigger_values, trigger_count)
+function plot_events(trigger_times, trigger_values, trigger_count; display_plot = true)
 
     if isempty(trigger_count)
         @warn "No triggers found in the data"
@@ -69,6 +69,10 @@ function plot_events(trigger_times, trigger_values, trigger_count)
     ax.ylabel = "Trigger Value"
     ax.xlabel = "Time (S)"
 
+    if display_plot
+        display(fig)
+    end
+
     return fig, ax
 
 end
@@ -85,9 +89,9 @@ Plot trigger events from BioSemi BDF data.
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
 """
-function plot_events(dat::BioSemiBDF.BioSemiData)
+function plot_events(dat::BioSemiBDF.BioSemiData; display_plot = true)
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
-    return plot_events(trigger_times, trigger_values, trigger_count)
+    return plot_events(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
 end
 
 """
@@ -102,9 +106,9 @@ Plot trigger events from ContinuousData object.
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
 """
-function plot_events(dat::ContinuousData)
+function plot_events(dat::ContinuousData; display_plot = true)
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
-    return plot_events(trigger_times, trigger_values, trigger_count)
+    return plot_events(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
 end
 
 # layout = read_layout("./layouts/biosemi72.csv");
