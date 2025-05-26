@@ -1,20 +1,14 @@
-[filtering]
-highpass.cutoff.value = 0.1
-highpass.cutoff.type = "number"
-highpass.cutoff.min = 0.01
-highpass.cutoff.max = 20
-highpass.cutoff.description = "High-pass filter cutoff in Hz"
+# File paths and settings
+[files.input]
+raw_data_directory = "."
+raw_data_files = ""
+layout_file = ""
 
-highpass.type.value = "firfifififi"
-highpass.type.values = ["fir", "iir"]
-highpass.type.type = "string"
-highpass.type.description = "High-pass filter type (fir, iir)"
- 
-
-
-
-lowpass.cutoff.value = 40.0
-lowpass.cutoff.type = "number"
-lowpass.cutoff.min = 1.0 
-lowpass.cutoff.max = 100.0 
-lowpass.cutoff.description = "Low-pass filter cutoff in Hz"
+[files.output]
+output_data_directory = "data/processed"
+save_continuous_data = true
+save_ica_data = true
+save_epoch_data = true
+save_erp_data = true
+exit_early = false
+delete_current_files = true

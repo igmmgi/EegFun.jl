@@ -9,7 +9,8 @@
 # package
 include("src/eegfun.jl")
 
-config = load_config("pipeline.toml")
+config = load_config("pipeline.toml");
+print_config(config)
 
 config = load_config("src/config/default.toml")
 print_config(config)
