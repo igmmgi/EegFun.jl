@@ -1,126 +1,3 @@
-"""
-    check_files_exist(conditions::Union{Vector{Int}, Int} filetype::String) -> Bool
-
-Check if files exist for all given conditions with specified filetype.
-
-# Arguments
-- `conditions::Vector{String}`: List of condition names
-- `filetype::String`: Type of file to check
-
-# Returns
-- `Bool`: true if all files exist, false otherwise
-"""
-function check_files_exist(conditions::Union{Vector{Int},Int}, filetype::String)
-    all_files_exist = true
-    for condition in conditions
-        fname = "$(condition)_$(filetype).jld2"
-        if !isfile(fname)
-            @warn "File not found: $(fname)"
-            all_files_exist = false
-        end
-    end
-    return all_files_exist
-end
-
-
-"""
-    print_config(config, [io=stdout]; [indent=0])
-    print_config(config, filename::String; [indent=0])
-
-Print configuration in a readable format.
-
-# Arguments
-- `config`: Configuration dictionary (typically loaded from TOML)
-- `io=stdout`: Optional IO object to print to (default: standard output)
-- `filename`: Optional filename to write output to
-- `indent=0`: Indentation level (used internally for recursive calls)
-
-# Example
-```julia
-# Print to console
-print_config(config)
-
-# Print to file
-print_config(config, "config_dump.txt")
-```
-"""
-function print_config(config, io::IO=stdout; indent::Int=0)
-    # Sort just the keys, not the key-value pairs
-    for key in sort(collect(keys(config)))
-        value = config[key]
-        if value isa Dict
-            println(io, " "^indent, "$(key):")
-            print_config(value, io; indent=indent+2)
-        else
-            # Format based on value type
-            val_str = if value isa AbstractArray
-                "[" * join(string.(value), ", ") * "]"
-            else
-                string(value)
-            end
-            println(io, " "^indent, "$(key): $(val_str)")
-        end
-    end
-end
-
-# Convenience method for printing to a file
-function print_config(config, filename::String; indent::Int=0)
-    open(filename, "w") do file
-        print_config(config, file; indent=indent)
-    end
-    println("Configuration written to: $filename")
-end
-
-
-function check_files_exist(files::Vector{String})
-    all_files_exist = true
-    for fname in files
-        if !isfile(fname)
-            @warn "File not found: $(fname)"
-            all_files_exist = false
-        end
-    end
-    return all_files_exist
-end
-
-function get_files(directory::String, files::String)
-    # replace common wildcard with regex syntax
-    files =  filter(f -> occursin(Regex(files), f), readdir(directory))
-    return [joinpath(directory, file) for file in files]
-end
-
-function get_files(directory::String, files::Vector{String})
-    return [joinpath(directory, file) for file in files]
-end
-
-
-
-"""
-    check_files_exist(subjects::Union{Vector{Int}, Int}, conditions::Union{Vector{Int}, Int},, filetype::String) -> Bool
-
-Check if files exist for all combinations of subjects and conditions.
-
-# Arguments
-- `subjects::Vector{String}`: List of subject identifiers
-- `conditions::Vector{String}`: List of condition names
-- `filetype::String`: Type of file to check
-
-# Returns
-- `Bool`: true if all files exist, false otherwise
-"""
-function check_files_exist(subjects::Union{Vector{Int},Int}, conditions::Union{Vector{Int},Int}, filetype::String)
-    all_files_exist = true
-    for subject in subjects
-        for condition in conditions
-            fname = "$(subject)_$(condition)_$(filetype).jld2"
-            if !isfile(fname)
-                @warn "File not found: $(fname)"
-                all_files_exist = false
-            end
-        end
-    end
-    return all_files_exist
-end
 
 """
     channel_number_to_channel_label(channel_labels::Vector{Symbol}, channel_numbers::Union{Int,Vector{Int},UnitRange}) -> Vector{Symbol}
@@ -138,56 +15,7 @@ function channel_number_to_channel_label(channel_labels, channel_numbers::Union{
     return channel_labels[channel_numbers]
 end
 
-function print_vector_(v::Vector; max_length::Int = 10, n_ends::Int = 5)
-    if length(v) > max_length
-        v = vcat(first(v, n_ends), "...", last(v, n_ends))
-    end
-    return join(v, ", ")
-end
 
-function print_vector(v::UnitRange; max_length::Int = 10, n_ends::Int = 5)
-    print_vector_(collect(v), max_length = max_length, n_ends = n_ends)
-end
-
-function print_vector(v::Vector; max_length::Int = 10, n_ends::Int = 5)
-    print_vector_(collect(v), max_length = max_length, n_ends = n_ends)
-end
-
-
-
-"""
-    datarange(x::AbstractVector) -> Float64
-
-Calculate the range of data (maximum - minimum).
-
-# Returns
-- `Float64`: Difference between maximum and minimum values
-
-# Example
-```julia
-datarange([1.0, 2.0, 3.0]) # returns 2.0
-```
-"""
-datarange(x::AbstractVector) = -(-(extrema(x)...))
-
-
-"""
-    colmeans(df::DataFrame, cols) -> Vector{Float64}
-    colmeans(df::Matrix) -> Vector{Float64}
-    colmeans(df::Matrix, cols) -> Vector{Float64}
-
-Calculate the mean of specified columns in a DataFrame.
-
-# Arguments
-- `df::DataFrame`: The DataFrame containing the data.
-- `cols`: The columns for which to calculate the mean. This can be a vector of column names or indices.
-
-# Returns
-- `Vector{Float64}`: A vector containing the mean of each specified column.
-"""
-colmeans(df::DataFrame, cols) = reduce(+, eachcol(df[!, cols])) ./ length(cols)
-colmeans(df::Matrix) = reduce(+, eachrow(df)) ./ size(df)[1]
-colmeans(df::Matrix, cols) = reduce(+, eachrow(df[:, cols])) ./ size(df)[1]
 
 
 """
@@ -240,25 +68,6 @@ end
 
 # data limits
 
-"""
-    data_limits_x(dat::DataFrame) -> Tuple{Float64,Float64}
-
-Get the time range of the data.
-
-# Returns
-- `Tuple{Float64,Float64}`: Minimum and maximum time values
-"""
-data_limits_x(dat::DataFrame; col = :time) = extrema(dat[!, col])
-
-"""
-    data_limits_y(dat::DataFrame, col) -> Vector{Float64}
-
-Get the value range for specified columns.
-
-# Returns
-- `Vector{Float64}`: [minimum, maximum] across specified columns
-"""
-data_limits_y(dat::DataFrame, col) = [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
 
 
 
@@ -381,13 +190,6 @@ function extract_int(s::String)
 end
 
 
-function to_data_frame(dat::EpochData)
-    return vcat(dat.data...)
-end
-
-function to_data_frame(dat::Vector{EpochData})
-    return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
-end
 
 """
     @add_nonmutating function_name!
@@ -472,56 +274,3 @@ function best_rect(n)
 end
 
 
-
-function viewer(dat)
-    ENV["TERM_PROGRAM"] == "vscode" ? vscodedisplay(dat) : display(dat)
-end
-
-function viewer(dat::EegData)
-    viewer(data(dat))
-end
-
-function head(dat::EegData; n=nothing)
-    isnothing(n) && (n=5)
-    viewer(data(dat)[1:n, :])
-end
-
-function tail(dat::EegData; n=nothing)
-    isnothing(n) && (n=5)
-    viewer(data(dat)[end-n+1:end, :])
-end
-
-
-"""
-    @minimal_error message
-    
-Print an error message without location information or stacktrace.
-"""
-# macro minimal_error(msg)
-#     return quote
-#         @error $(esc(msg)) _module=nothing _file=nothing _line=nothing
-#         error("")  
-#         #return nothing
-#     end
-# end
-
-# Custom exception type with cleaner error display
-struct MinimalError <: Exception
-    msg::String
-end
-
-# Custom display method to avoid printing a stacktrace
-function Base.showerror(io::IO, e::MinimalError)
-    print(io, "Configuration Error: ", e.msg)
-end
-
-"""
-    @minimal_error(msg)
-
-Displays an error message and stops execution without showing a full stacktrace.
-"""
-macro minimal_error(msg)
-    quote
-        throw(MinimalError($(esc(msg))))
-    end
-end

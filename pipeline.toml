@@ -1,7 +1,7 @@
 [files.input]
 raw_data_directory = ".."
-# raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf", "Flank_C_5.bdf"]
-raw_data_files = "\\.bdf$"
+raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf", "Flank_C_5.bdf"]
+# raw_data_files = "\\.bdf$"
 layout_file = "biosemi72.csv"
 
 [files.output]
@@ -17,3 +17,6 @@ reference_electrode = "avg"
 
 [ica]
 ica_run = false
+
+[filtering]
+highpass.cutoff = 0.1

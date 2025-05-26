@@ -4,7 +4,6 @@ using BioSemiBDF
 using CSV
 using DataFrames
 using JLD2
-using TOML
 
 # Signal processing
 using DSP
@@ -22,13 +21,19 @@ using OrderedCollections
 using Printf
 using StatsBase
 using Random
+using Dates
+using TOML
 
 # eegfun.jl
 # Core types
 include("types/types.jl")
 
 # Utility functions
-include("utils/utils.jl")
+include("utils/misc.jl")
+include("utils/data.jl")
+include("utils/error.jl")
+include("utils/files.jl")
+include("utils/print.jl")
 
 # Layout handling
 include("layouts/layout.jl")

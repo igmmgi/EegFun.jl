@@ -1,0 +1,51 @@
+# EEG Processing Configuration Template
+# Generated on 2025-05-26 14:23:34
+
+
+# Whether to save ICA results
+
+[files]
+
+# Whether to save ICA results
+
+[files.input]
+
+# Electrode layout file name
+# Type: String
+layout_file = ""
+
+# Directory containing raw data files
+# Type: String
+raw_data_directory = "."
+
+# Pattern for raw data files to process
+# Type: Union{String, Vector{String}}
+raw_data_files = ""
+
+# Whether to save ICA results
+
+[files.output]
+
+# Whether to delete existing files in output directory
+# Type: Bool
+delete_current_files = true
+
+# Directory for processed data output
+# Type: String
+output_data_directory = "data/processed"
+
+# Whether to save continuous data
+# Type: Bool
+save_continuous_data = true
+
+# Whether to save epoched data
+# Type: Bool
+save_epoch_data = true
+
+# Whether to save ERP data
+# Type: Bool
+save_erp_data = true
+
+# Whether to save ICA results
+# Type: Bool
+save_ica_data = true

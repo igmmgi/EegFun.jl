@@ -1,0 +1,104 @@
+# EEG Processing Configuration Template
+# Generated on 2025-05-26 15:01:25
+
+# This template shows all available configuration options.
+# Required fields are marked with [REQUIRED]
+# Default values are shown where available
+
+
+# files Settings
+[files]
+
+# input Settings
+[files.input]
+
+# Electrode layout file name
+# Type: String
+# [REQUIRED]
+layout_file = ""
+
+# Directory containing raw data files
+# Type: String
+# [REQUIRED]
+raw_data_directory = "."
+
+# Pattern for raw data files to process
+# Type: Union{String, Vector{String}}
+# [REQUIRED]
+raw_data_files = ""
+
+# output Settings
+[files.output]
+
+# Whether to delete existing files in output directory
+# Type: Bool
+# [REQUIRED]
+delete_current_files = true
+
+# Directory for processed data output
+# Type: String
+# [REQUIRED]
+output_data_directory = "data/processed"
+
+# Whether to save continuous data
+# Type: Bool
+# [REQUIRED]
+save_continuous_data = true
+
+# Whether to save epoched data
+# Type: Bool
+# [REQUIRED]
+save_epoch_data = true
+
+# Whether to save ERP data
+# Type: Bool
+# [REQUIRED]
+save_erp_data = true
+
+# Whether to save ICA results
+# Type: Bool
+# [REQUIRED]
+save_ica_data = true
+
+# filtering Settings
+[filtering]
+
+# highpass Settings
+[filtering.highpass]
+
+# High-pass filter cutoff in Hz
+# Type: Float64
+# Range: 0.01 ≤ value ≤ 20.0
+cutoff = 0
+
+# Filter order
+# Type: Int64
+# Range: 1 ≤ value ≤ 8
+order = 0
+
+# Type of highpass filter
+# Type: String
+# Allowed values: butterworth, fir, iir
+# [REQUIRED]
+type = ""
+
+# ica Settings
+[ica]
+
+# ica_run Settings
+[ica.ica_run]
+
+# Whether to run ICA
+# Type: Bool
+ica_run = 0
+
+# preprocessing Settings
+[preprocessing]
+
+# reference_electrode Settings
+[preprocessing.reference_electrode]
+
+# Electrode to use as reference
+# Type: String
+# [REQUIRED]
+reference_electrode = ""
