@@ -64,9 +64,9 @@ function preprocess_eeg_data(config::String)
         filter_data!(
             dat,
             "hp",
-            config["filtering"]["highpass"]["type"]["value"],
-            config["filtering"]["highpass"]["cutoff"]["value"],
-            order = config["filtering"]["highpass"]["order"]["value"],
+            "fir", #config["filtering"]["highpass"]["type"]["value"],
+            1, #config["filtering"]["highpass"]["cutoff"]["value"],
+            order = 1
         )
 
         # caculate EOG channels
