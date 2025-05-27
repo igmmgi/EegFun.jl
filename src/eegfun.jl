@@ -34,6 +34,7 @@ include("utils/data.jl")
 include("utils/error.jl")
 include("utils/files.jl")
 include("utils/print.jl")
+include("utils/logging.jl")
 
 # Layout handling
 include("layouts/layout.jl")
