@@ -94,6 +94,24 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # ICA settings
     "ica.ica_run" => ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to run ICA", nothing, true),
+
+    # Performance settings
+    "performance.use_threading" => ConfigParameter{Bool}(
+        Bool,
+        nothing,
+        nothing,
+        "Whether to use threading for parallel processing",
+        nothing,
+        true,
+    ),
+    "performance.thread_count" => ConfigParameter{Int}(
+        Int,
+        1,
+        nothing,
+        "Number of threads to use for parallel processing (set to 0 to use all available threads)",
+        nothing,
+        0,
+    ),
 )
 
 # Used for some validation stuff

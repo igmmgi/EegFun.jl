@@ -1,4 +1,6 @@
-function preprocess_eeg_data(config::String)
+using Base.Threads
+
+function preprocess_eeg_data(config::String; log_file::String = "preprocess.log")
 
     # check if config file exists and load
     if !isfile(config)
@@ -40,7 +42,7 @@ function preprocess_eeg_data(config::String)
     # delete current files in output directory
     if config["files"]["output"]["delete_current_files"]
         @info "Deleting current files in output directory: $output_data_directory"
-        rm.(readdir(output_data_directory, join=true), recursive=true)
+        rm.(readdir(output_data_directory, join = true), recursive = true)
     end
 
     # print config to output directory
@@ -50,75 +52,87 @@ function preprocess_eeg_data(config::String)
     polar_to_cartesian_xy!(layout)
     polar_to_cartesian_xyz!(layout)
 
-    for file in raw_data_files
-        @info "Processing $file"
+    # Process files in parallel
+    @threads for file in raw_data_files
+        # Per file log file
+        log_file = joinpath(output_data_directory, splitext(basename(file))[1] * ".log")
+        setup_logging(log_file)
+        
+        try
+            @info "Processing $file"
 
-        # read raw data file and create our Julia DataFrame
-        dat = read_bdf(file)
-        dat = create_eeg_dataframe(dat, layout)
+            # read raw data file and create our Julia DataFrame
+            dat = read_bdf(file)
+            dat = create_eeg_dataframe(dat, layout)
 
-        # rereference the data
-        rereference!(dat, Symbol(config["preprocessing"]["reference_electrode"]))
+            # rereference the data
+            rereference!(dat, Symbol(config["preprocessing"]["reference_electrode"]))
 
-        # initial high-pass filter to remove slow drifts
-        filter_data!(
-            dat,
-            "hp",
-            "fir", #config["filtering"]["highpass"]["type"]["value"],
-            1, #config["filtering"]["highpass"]["cutoff"]["value"],
-            order = 1
-        )
+            # initial high-pass filter to remove slow drifts
+            filter_data!(
+                dat,
+                "hp",
+                "fir", #config["filtering"]["highpass"]["type"]["value"],
+                1, #config["filtering"]["highpass"]["cutoff"]["value"],
+                order = 1,
+            )
 
-        # caculate EOG channels
-        diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG)
-        diff_channel!(dat, :F9, :F10, :hEOG)
+            # caculate EOG channels
+            diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG)
+            diff_channel!(dat, :F9, :F10, :hEOG)
 
-        # autodetect EOG signals
-        detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-        detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+            # autodetect EOG signals
+            detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+            detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
-        # detect extreme values
-        is_extreme_value!(dat, dat.layout.label, 100)
+            # detect extreme values
+            is_extreme_value!(dat, dat.layout.label, 100)
 
-        # run ica
-        if config["ica"]["ica_run"]
-            ica_result = run_ica(dat; exclude_samples = [:is_extreme_value])
+            # run ica
+            if config["ica"]["ica_run"]
+                ica_result = run_ica(dat; exclude_samples = [:is_extreme_value])
 
-            # save ica results
-            if config["files"]["output"]["save_ica_data"]
-                save_object("$(output_data_directory)/$(splitext(basename(file))[1])_ica.jld2", ica_result)
+                # save ica results
+                if config["files"]["output"]["save_ica_data"]
+                    save_object("$(output_data_directory)/$(splitext(basename(file))[1])_ica.jld2", ica_result)
+                end
             end
 
-        end
+            # Save the results
+            if config["files"]["output"]["save_continuous_data"]
+                save_object("$(output_data_directory)/$(splitext(basename(file))[1])_continuous.jld2", dat)
+            end
 
-        # Save the results
-        if config["files"]["output"]["save_continuous_data"]
-            save_object("$(output_data_directory)/$(splitext(basename(file))[1])_continuous.jld2", dat)
-        end
+            # epoch data
+            epochs = []
+            for (idx, epoch) in enumerate([1, 4, 5, 3])
+                push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
+            end
 
-        # epoch data
-        epochs = []
-        for (idx, epoch) in enumerate([1, 4, 5, 3])
-            push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
-        end
+            # save epochs
+            if config["files"]["output"]["save_epoch_data"]
+                save_object("$(output_data_directory)/$(splitext(basename(file))[1])_epochs.jld2", epochs)
+            end
 
-        # save epochs
-        if config["files"]["output"]["save_epoch_data"]
-            save_object("$(output_data_directory)/$(splitext(basename(file))[1])_epochs.jld2", epochs)
-        end
+            # average epochs
+            erps = []
+            for (idx, epoch) in enumerate(epochs)
+                push!(erps, average_epochs(epochs[idx]))
+            end
 
-        # average epochs
-        erps = []
-        for (idx, epoch) in enumerate(epochs)
-            push!(erps, average_epochs(epochs[idx]))
-        end
+            # save erps
+            if config["files"]["output"]["save_erp_data"]
+                save_object("$(output_data_directory)/$(splitext(basename(file))[1])_erps.jld2", erps)
+            end
 
-        # save erps
-        if config["files"]["output"]["save_erp_data"]
-            save_object("$(output_data_directory)/$(splitext(basename(file))[1])_erps.jld2", erps)
+            @info "Successfully processed $file"
+
+        catch e
+            @error "Error processing $file" exception=(e, catch_backtrace())
+        finally
+            close_logging()
         end
 
     end
-
 end
 
