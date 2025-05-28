@@ -1,0 +1,32 @@
+Date: 28-05-2025 15:41:31
+
+Loading config file: pipeline.toml
+Loading config file: /home/ian/Documents/Julia/EEGfun/src/analysis/../../src/config/default.toml
+Found 2 raw data files: ../Flank_C_3.bdf, ../Flank_C_4.bdf
+Deleting current files in output directory: ../output_data
+Processing ../Flank_C_3.bdf
+Rereferencing using channel(s): Fp1, AF7, AF3, F1, F3, ..., F10, IO1, IO2, M1, M2
+--------------------------------------------------------------------------------
+Filter Characteristics: HP 1 Hz
+Cutoff: -3 dB = [0.91] Hz, -6 dB = [0.87] Hz
+Transition width: 0.2 Hz
+Stopband attenuation: -76.9 dB
+Single-pass characteristics: Group delay = 2537.0 ms, Phase delay = 1.8 ms 
+Computing channel difference for ContinuousData vEOG
+Adding new channel 'vEOG' as difference between [:Fp1, :Fp2] and [:IO1, :IO2]
+Computing channel difference for ContinuousData hEOG
+Adding new channel 'hEOG' as difference between [:F9] and [:F10]
+Processing ../Flank_C_4.bdf
+Rereferencing using channel(s): Fp1, AF7, AF3, F1, F3, ..., F10, IO1, IO2, M1, M2
+--------------------------------------------------------------------------------
+Filter Characteristics: HP 1 Hz
+Cutoff: -3 dB = [0.91] Hz, -6 dB = [0.87] Hz
+Transition width: 0.2 Hz
+Stopband attenuation: -76.9 dB
+Single-pass characteristics: Group delay = 2537.0 ms, Phase delay = 1.8 ms 
+Computing channel difference for ContinuousData vEOG
+Adding new channel 'vEOG' as difference between [:Fp1, :Fp2] and [:IO1, :IO2]
+Computing channel difference for ContinuousData hEOG
+Adding new channel 'hEOG' as difference between [:F9] and [:F10]
+
+Duration: 12 seconds
