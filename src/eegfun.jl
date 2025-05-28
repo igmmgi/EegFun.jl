@@ -17,6 +17,7 @@ using ScatteredInterpolation
 
 # Utilities
 using Logging
+using LoggingExtras
 using OrderedCollections
 using Printf
 using StatsBase
