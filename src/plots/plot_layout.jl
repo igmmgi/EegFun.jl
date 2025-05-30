@@ -1,3 +1,8 @@
+using GLMakie
+using DataFrames
+using OrderedCollections
+using ConcaveHull
+
 ########################################################
 # 2D layout
 ########################################################
@@ -164,12 +169,10 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, neighbours::O
     return fig, ax
 end
 
-# using LibGEOS package for convexhull
-# TODO: concave hull?
 """
-    create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
+    create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
 
-Create a convex hull around a set of 2D points with a specified border size.
+Create a convex hull around a set of 2D points with a specified border size using Graham's Scan algorithm.
 
 # Arguments
 - `xpos`: Array of x-coordinates
@@ -177,18 +180,64 @@ Create a convex hull around a set of 2D points with a specified border size.
 - `border_size`: Size of the border around points
 
 # Returns
-- A LibGEOS convex hull polygon
-
+- A Vector of 2D points forming the convex hull
 """
-function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
-    circle_points = 0:2*pi/361:2*pi
+function create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
+    # Generate points around each electrode with the border
+    circle_points = 0:2π/361:2π
     xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
     ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
-    xys = [[xs[i], ys[i]] for i in eachindex(xs)]
-    push!(xys, xys[1])
-    poly = LibGEOS.Polygon([xys])
-    hull = LibGEOS.convexhull(poly)
-    return hull
+    
+    # Convert to array of points
+    points = [[xs[i], ys[i]] for i in eachindex(xs)]
+    n = length(points)
+    
+    # Find the bottommost point (and leftmost if tied)
+    ymin = minimum(p -> p[2], points)
+    p0 = points[findfirst(p -> p[2] == ymin, points)]
+    
+    # Sort points by polar angle with respect to p0
+    sort!(points, by = p -> begin
+        if p == p0
+            return -Inf
+        end
+        return atan(p[2] - p0[2], p[1] - p0[1])
+    end)
+    
+    # Initialize stack for Graham's scan
+    stack = Vector{Vector{Float64}}()
+    push!(stack, points[1])
+    push!(stack, points[2])
+    
+    # Process remaining points
+    for i in 3:n
+        while length(stack) > 1 && orientation(stack[end-1], stack[end], points[i]) != 2
+            pop!(stack)
+        end
+        push!(stack, points[i])
+    end
+    
+    # Close the hull by connecting back to the first point
+    push!(stack, stack[1])
+    
+    return stack
+end
+
+"""
+    orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
+
+Helper function to find orientation of triplet (p, q, r).
+Returns:
+ 0 --> p, q and r are collinear
+ 1 --> Clockwise
+ 2 --> Counterclockwise
+"""
+function orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
+    val = (q[2] - p[2]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[2] - q[2])
+    if val ≈ 0
+        return 0
+    end
+    return val > 0 ? 1 : 2
 end
 
 """
@@ -196,6 +245,7 @@ end
                   border_size::Real=10, roi_kwargs::Dict=Dict())
 
 Add regions of interest (ROIs) to a topographic plot based on groups of electrodes.
+Uses Graham's Scan algorithm to create convex hulls around electrode groups.
 
 # Arguments
 - `ax`: The axis to add ROIs to
@@ -208,12 +258,11 @@ Add regions of interest (ROIs) to a topographic plot based on groups of electrod
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xy!(layout)
     fig, ax = plot_layout_2d(layout)
-    # Add ROIs for two electrode groups
-    add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
-    # Add a filled ROI
-    add_topo_rois!(ax, layout, [[:Fp1]], border_size = 10,
+    # Add simple ROI
+    add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1]], border_size=10)
+    # Add filled ROI
+    add_topo_rois!(ax, layout, [[:Fp1]], border_size=5,
                   roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
-
 """
 function add_topo_rois!(
     ax::Axis,
@@ -222,27 +271,73 @@ function add_topo_rois!(
     border_size::Real = 10,
     roi_kwargs::Dict = Dict(),
 )
-
-    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-
-    roi_default_kwargs = Dict(
-        :color => repeat([:black], length(rois)),
-        :linewidth => repeat([2], length(rois)),
-        :fill => repeat([false], length(rois)),
-        :fillcolor => repeat([:black], length(rois)),
-        :fillalpha => repeat([0.2], length(rois)),
+    # Default kwargs
+    default_kwargs = Dict(
+        :color => :black,
+        :linewidth => 2,
+        :fill => false,
+        :fillcolor => :gray,
+        :fillalpha => 0.2,
     )
-
-    merged_roi_kwargs = merge(roi_default_kwargs, roi_kwargs)
-    for (idx, roi) in enumerate(rois)
-        xpos = filter(row -> row.label ∈ roi, layout).x2
-        ypos = filter(row -> row.label ∈ roi, layout).y2
-        border = create_convex_hull(xpos, ypos, border_size)
-        lines!(ax, border, linewidth = merged_roi_kwargs[:linewidth][idx], color = merged_roi_kwargs[:color][idx])
-        if merged_roi_kwargs[:fill][idx]
-            poly!(ax, border, color = merged_roi_kwargs[:fillcolor][idx], alpha = merged_roi_kwargs[:fillalpha][idx])
+    
+    # Handle multiple ROIs with different styles
+    n_rois = length(rois)
+    
+    # Expand single values to arrays if needed
+    for (key, value) in roi_kwargs
+        if !isa(value, Vector)
+            roi_kwargs[key] = fill(value, n_rois)
+        elseif length(value) != n_rois
+            throw(ArgumentError("Length of $(key) ($(length(value))) must match number of ROIs ($n_rois)"))
+        end
+    end
+    
+    # Merge with defaults, ensuring all values are vectors
+    merged_kwargs = Dict{Symbol,Vector}()
+    for (key, default_value) in default_kwargs
+        if haskey(roi_kwargs, key)
+            merged_kwargs[key] = roi_kwargs[key]
+        else
+            merged_kwargs[key] = fill(default_value, n_rois)
+        end
+    end
+    
+    # Create ROIs
+    for (i, roi) in enumerate(rois)
+        # Get coordinates for ROI electrodes
+        roi_idx = findall(in(roi), layout.label)
+        if isempty(roi_idx)
+            @warn "No electrodes found for ROI $i"
+            continue
+        end
+        
+        # Create convex hull
+        hull_points = create_convex_hull_graham(
+            layout.x2[roi_idx],
+            layout.y2[roi_idx],
+            border_size
+        )
+        xs = [p[1] for p in hull_points]
+        ys = [p[2] for p in hull_points]
+        
+        # Draw the ROI
+        if merged_kwargs[:fill][i]
+            poly!(
+                ax,
+                xs,
+                ys;
+                color = (merged_kwargs[:fillcolor][i], merged_kwargs[:fillalpha][i]),
+                strokecolor = merged_kwargs[:color][i],
+                strokewidth = merged_kwargs[:linewidth][i]
+            )
+        else
+            lines!(
+                ax,
+                xs,
+                ys;
+                color = merged_kwargs[:color][i],
+                linewidth = merged_kwargs[:linewidth][i]
+            )
         end
     end
 end
@@ -363,8 +458,7 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
 
 # Example
     layout = read_layout("./layouts/biosemi64.csv")
-    polar_to_cartesian_xyz!(layout)
-    neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40)
+    neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 80)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout, neighbours)
@@ -372,104 +466,6 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
 function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_3d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
     positions = Observable(Point3f.(layout.x3, layout.y3, layout.z3))
-    add_interactive_points!(fig, ax, layout, neighbours, positions, true)
+    add_interactive_points!(fig, ax, layout, neighbours, positions)
     return fig, ax
 end
-
-function plot_layout_3d(layout::DataFrame, neighbours::OrderedDict; kwargs...)
-    fig = Figure()
-    ax = Axis3(fig[1, 1])
-    plot_layout_3d!(fig, ax, layout, neighbours; kwargs...)
-    return fig, ax
-end
-
-
-"""
-    add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,
-                          neighbours::OrderedDict, positions::Observable, is_3d::Bool=false)
-
-Add interactive electrode points that highlight and show connections to neighboring electrodes on hover.
-
-# Arguments
-- `fig`: The figure to add interactivity to
-- `ax`: The axis to add interactivity to (can be 2D or 3D)
-- `layout`: DataFrame containing electrode information
-- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
-- `positions`: Observable containing point positions (Point2f or Point3f)
-- `is_3d`: Boolean indicating if the plot is 3D (default: false)
-
-# Returns
-- The figure and axis objects
-
-"""
-function add_interactive_points!(
-    fig::Figure,
-    ax::Union{Axis,Axis3},
-    layout::DataFrame,
-    neighbours::OrderedDict,
-    positions::Observable,
-    is_3d::Bool = false,
-)
-    base_size = 15
-    hover_size = 25
-    sizes = Observable(fill(base_size, length(layout.label)))
-
-    # Add interactive scatter points
-    p = scatter!(ax, positions; color = :black, markersize = sizes, inspectable = true, markerspace = :pixel)
-
-    # Initialize line segments
-    linesegments = Observable(is_3d ? Point3f[] : Point2f[])
-    lines!(ax, linesegments, color = :gray, linewidth = 3)
-
-    # Add hover interaction
-    on(events(fig).mouseposition) do mp
-        plt, i = pick(fig)
-        if plt == p
-            # Reset all sizes to base size
-            new_sizes = fill(base_size, length(layout.label))
-            new_sizes[i] = hover_size
-            sizes[] = new_sizes
-
-            # Create lines to neighboring electrodes
-            hovered_pos = positions[][i]
-            new_lines = is_3d ? Point3f[] : Point2f[]
-            for neighbor in neighbours[Symbol(layout.label[i])].electrodes
-                neighbor_idx = findfirst(==(neighbor), layout.label)
-                push!(new_lines, hovered_pos, positions[][neighbor_idx])
-            end
-            linesegments[] = new_lines
-        end
-    end
-
-    return fig, ax
-end
-
-# Basic Tests
-# TODO: Implement proper tests
-#
-# basic layouts
-# layout = read_layout("./layouts/biosemi72.csv");
-# layout = read_layout("./layouts/biosemi64.csv");
-#  
-# # 2D layout
-# polar_to_cartesian_xy!(layout)
-# plot_layout_2d(layout);
-# 
-# # 2D layout with ROIs
-# fig, ax = plot_layout_2d(layout)
-# add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
-# add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
-# add_topo_rois!(ax, layout, [[:Fp1]], border_size = 10, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
-# add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
-# 
-# # 2D layout with neighbours
-# neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
-# plot_layout_2d(layout, neighbours)
-# 
-# # 3D layout
-# polar_to_cartesian_xyz!(layout)
-# plot_layout_3d(layout)
-# 
-# # 3D layout with neighbours
-# neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40);
-# plot_layout_3d(layout, neighbours)

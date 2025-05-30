@@ -12,7 +12,6 @@ using FFTW
 
 # Plotting and visualization
 using GLMakie
-using LibGEOS
 using ScatteredInterpolation
 
 # Utilities
@@ -52,6 +51,7 @@ include("analysis/rereference.jl")
 include("analysis/analyse.jl")
 include("analysis/autoreject.jl")
 include("analysis/baseline.jl")
+include("analysis/preprocess.jl")
 
 # Plotting functions
 include("plots/plot_ica.jl")
