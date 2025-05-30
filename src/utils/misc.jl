@@ -1,4 +1,3 @@
-
 """
     channel_number_to_channel_label(channel_labels::Vector{Symbol}, channel_numbers::Union{Int,Vector{Int},UnitRange}) -> Vector{Symbol}
 
@@ -271,6 +270,78 @@ function best_rect(n)
     dim1 = ceil(Int, sqrt(n))
     dim2 = ceil(Int, n ./ dim1)
     return [dim1, dim2]
+end
+
+"""
+    orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
+
+Helper function to find orientation of triplet (p, q, r).
+Returns:
+ 0 --> p, q and r are collinear
+ 1 --> Clockwise
+ 2 --> Counterclockwise
+"""
+function orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
+    val = (q[2] - p[2]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[2] - q[2])
+    if val ≈ 0
+        return 0
+    end
+    return val > 0 ? 1 : 2
+end
+
+"""
+    create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
+
+Create a convex hull around a set of 2D points with a specified border size.
+Uses Graham's Scan algorithm for convex hull computation.
+
+# Arguments
+- `xpos`: Array of x-coordinates
+- `ypos`: Array of y-coordinates
+- `border_size`: Size of the border around points
+
+# Returns
+- A Vector of 2D points forming the convex hull
+"""
+function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
+    # Generate points around each electrode with the border
+    circle_points = 0:2π/361:2π
+    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
+    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
+    
+    # Convert to array of points
+    points = [[xs[i], ys[i]] for i in eachindex(xs)]
+    n = length(points)
+    
+    # Find the bottommost point (and leftmost if tied)
+    ymin = minimum(p -> p[2], points)
+    p0 = points[findfirst(p -> p[2] == ymin, points)]
+    
+    # Sort points by polar angle with respect to p0
+    sort!(points, by = p -> begin
+        if p == p0
+            return -Inf
+        end
+        return atan(p[2] - p0[2], p[1] - p0[1])
+    end)
+    
+    # Initialize stack for Graham's scan
+    stack = Vector{Vector{Float64}}()
+    push!(stack, points[1])
+    push!(stack, points[2])
+    
+    # Process remaining points
+    for i in 3:n
+        while length(stack) > 1 && orientation(stack[end-1], stack[end], points[i]) != 2
+            pop!(stack)
+        end
+        push!(stack, points[i])
+    end
+    
+    # Close the hull by connecting back to the first point
+    push!(stack, stack[1])
+    
+    return stack
 end
 
 
