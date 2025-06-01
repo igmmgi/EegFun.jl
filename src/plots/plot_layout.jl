@@ -1,8 +1,3 @@
-using GLMakie
-using DataFrames
-using OrderedCollections
-using ConcaveHull
-
 ########################################################
 # 2D layout
 ########################################################

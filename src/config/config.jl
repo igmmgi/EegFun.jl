@@ -1,10 +1,23 @@
 # configuration parameter
+"""
+    ConfigParameter{T}
+
+A struct to define configuration parameters with type and validation constraints.
+
+# Fields
+- `type::Type{T}`: The Julia type of the parameter
+- `min::Union{Nothing,T}`: Minimum value for numeric parameters (or nothing)
+- `max::Union{Nothing,T}`: Maximum value for numeric parameters (or nothing)
+- `description::String`: Human-readable description of the parameter
+- `values::Union{Nothing,Vector{T}}`: List of allowed values (or nothing if any value is allowed)
+- `default::Union{Nothing,T}`: Default value (or nothing if required)
+"""
 struct ConfigParameter{T}
     type::Type{T}
     min::Union{Nothing,T}
     max::Union{Nothing,T}
     description::String
-    values::Union{Nothing,Vector{String}}
+    values::Union{Nothing,Vector{T}}
     default::Union{Nothing,T}
 end
 
@@ -90,7 +103,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     ),
     "filtering.lowpass.cutoff" =>
         ConfigParameter{Float64}(Float64, 5, 200, "High-pass filter cutoff in Hz", nothing, 40),
-    "filtering.highpass.order" => ConfigParameter{Int}(Int, 1, 8, "Filter order", nothing, 3),
+    "filtering.lowpass.order" => ConfigParameter{Int}(Int, 1, 8, "Filter order", nothing, 3),
 
     # ICA settings
     "ica.ica_run" => ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to run ICA", nothing, true),
@@ -115,6 +128,20 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 )
 
 # Used for some validation stuff
+"""
+    ValidationResult
+
+A struct to track validation results for configuration parameters.
+
+# Fields
+- `success::Bool`: Whether the validation was successful
+- `error::Union{Nothing,String}`: Error message if validation failed, nothing otherwise
+- `path::Union{Nothing,String}`: Path to the parameter that failed validation, nothing if validation succeeded
+
+# Constructors
+- `ValidationResult(success::Bool)`: Create a successful validation result
+- `ValidationResult(success::Bool, error::String, path::String)`: Create a validation result with error details
+"""
 struct ValidationResult
     success::Bool
     error::Union{Nothing,String}
@@ -140,12 +167,12 @@ Load and merge configuration from a TOML file with defaults.
 function load_config(config_file::String)
     # Load default config
     default_config = TOML.parsefile(joinpath(@__DIR__, "default.toml"))
-
+    
     # Check if user config exists
     if !isfile(config_file)
         @minimal_error "Configuration file not found: $config_file"
     end
-
+    
     # Load user config
     user_config = Dict()
     @info "Loading config file: $config_file"
@@ -154,21 +181,20 @@ function load_config(config_file::String)
     catch e
         @minimal_error "Error parsing TOML file: $(e.msg)"
     end
-
+    
     # Merge and validate
-    config = merge_configs(default_config, user_config)
-    validation_result = validate_config(config)
+    config = _merge_configs(default_config, user_config)
+    validation_result = _validate_config(config)
     if !validation_result.success
         @minimal_error validation_result.error
     end
-
-    return extract_values(config)
-
+    
+    return _extract_values(config)
 end
 
 
 """
-    merge_configs(default_config::Dict, user_config::Dict)
+    _merge_configs(default_config::Dict, user_config::Dict)
 
 Merge user config onto defaults, maintaining simple value structure.
 
@@ -179,7 +205,7 @@ Merge user config onto defaults, maintaining simple value structure.
 # Returns
 - `Dict`: The merged configuration
 """
-function merge_configs(default_config::Dict, user_config::Dict)
+function _merge_configs(default_config::Dict, user_config::Dict)
     result = deepcopy(default_config)
 
     function merge_nested!(target::Dict, source::Dict)
@@ -205,19 +231,16 @@ function merge_configs(default_config::Dict, user_config::Dict)
 end
 
 """
-    extract_values(config::Dict)
+    _extract_values(config::Dict)
 
 Extract final values from config.
 """
-function extract_values(config::Dict)
+function _extract_values(config::Dict)
     result = Dict()
-
     for (key, value) in config
-        if isa(value, Dict)
-            # Nested section
-            result[key] = extract_values(value)
-        else
-            # Simple value
+        if isa(value, Dict) # nested 
+            result[key] = _extract_values(value)
+        else # simple value
             result[key] = value
         end
     end
@@ -225,7 +248,7 @@ function extract_values(config::Dict)
 end
 
 """
-    validate_config(config::Dict, path="")
+    _validate_config(config::Dict, path="")
 
 Validate config values against their metadata definitions.
 
@@ -236,7 +259,7 @@ Validate config values against their metadata definitions.
 # Returns
 - `ValidationResult`: Result of the validation
 """
-function validate_config(config::Dict, path = "")
+function _validate_config(config::Dict, path = "")
     # Use a stack to track nested dictionaries to validate
     stack = [(config, path)]
 
@@ -312,7 +335,17 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
 
     # Check allowed values if they exist
     if !isnothing(parameter_spec.values)
-        value in parameter_spec.values || return ValidationResult(
+        value_in_allowed = false
+        
+        # Convert value to string for comparison if needed
+        for allowed_value in parameter_spec.values
+            if isequal(value, allowed_value)
+                value_in_allowed = true
+                break
+            end
+        end
+        
+        value_in_allowed || return ValidationResult(
             false,
             "$parameter_name ($value) must be one of: $(join(parameter_spec.values, ", "))",
             parameter_name,
@@ -452,22 +485,8 @@ function generate_config_template(filename::String="config_template.toml")
             println(io)
 
             # Group parameters by section and subsection
-            sections = Dict{String,Dict{String,Vector{Tuple{String,ConfigParameter}}}}()
+            sections = _group_parameters_by_section()
             
-            for (path, parameter_spec) in PARAMETERS
-                parts = split(path, ".")
-                section = parts[1]
-                subsection = length(parts) > 1 ? parts[2] : ""
-                
-                if !haskey(sections, section)
-                    sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
-                end
-                if !haskey(sections[section], subsection)
-                    sections[section][subsection] = Tuple{String,ConfigParameter}[]
-                end
-                push!(sections[section][subsection], (path, parameter_spec))
-            end
-
             # Sort sections
             sorted_sections = sort(collect(keys(sections)))
 
@@ -492,72 +511,13 @@ function generate_config_template(filename::String="config_template.toml")
                         param_name = last(split(path, "."))
                         
                         # Write parameter documentation
-                        println(io, "\n# $(parameter_spec.description)")
-                        println(io, "# Type: $(parameter_spec.type)")
+                        _write_parameter_docs(io, parameter_spec)
                         
-                        if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
-                            range_str = "# Range: "
-                            if !isnothing(parameter_spec.min)
-                                range_str *= "$(parameter_spec.min) ≤ "
-                            end
-                            range_str *= "value"
-                            if !isnothing(parameter_spec.max)
-                                range_str *= " ≤ $(parameter_spec.max)"
-                            end
-                            println(io, range_str)
-                        end
+                        # Get value from default config or use appropriate empty value
+                        value = _get_default_value(default_config, section, subsection, param_name, parameter_spec)
                         
-                        if !isnothing(parameter_spec.values)
-                            println(io, "# Allowed values: $(join(parameter_spec.values, ", "))")
-                        end
-                        
-                        # Mark required fields
-                        if isnothing(parameter_spec.default)
-                            println(io, "# [REQUIRED]")
-                        end
-                        
-                        # Write the actual value
-                        if haskey(default_config, section) && 
-                           (isempty(subsection) || 
-                            (haskey(default_config[section], subsection) && 
-                             haskey(default_config[section][subsection], param_name)))
-                            value = isempty(subsection) ? 
-                                   default_config[section][param_name] : 
-                                   default_config[section][subsection][param_name]
-                            
-                            if isa(value, String)
-                                println(io, "$param_name = \"$value\"")
-                            elseif isa(value, Vector)
-                                if isempty(value)
-                                    println(io, "$param_name = []")
-                                else
-                                    println(io, "$param_name = [")
-                                    for item in value
-                                        if isa(item, String)
-                                            println(io, "    \"$item\",")
-                                        else
-                                            println(io, "    $item,")
-                                        end
-                                    end
-                                    println(io, "]")
-                                end
-                            else
-                                println(io, "$param_name = $value")
-                            end
-                        else
-                            # No default value, use empty value based on type
-                            if parameter_spec.type <: String
-                                println(io, "$param_name = \"\"")
-                            elseif parameter_spec.type <: Vector
-                                println(io, "$param_name = []")
-                            elseif parameter_spec.type <: Number
-                                println(io, "$param_name = 0")
-                            elseif parameter_spec.type <: Bool
-                                println(io, "$param_name = false")
-                            else
-                                println(io, "$param_name = null")
-                            end
-                        end
+                        # Write parameter value in appropriate format
+                        _write_parameter_value(io, param_name, value)
                     end
                 end
             end
@@ -565,5 +525,125 @@ function generate_config_template(filename::String="config_template.toml")
         @info "Configuration template saved to: $filename"
     catch e
         @minimal_error "Failed to save configuration template: $(e.msg)"
+    end
+end
+
+"""
+    _group_parameters_by_section()
+
+Group configuration parameters by section and subsection.
+
+# Returns
+- `Dict`: A nested dictionary mapping sections and subsections to parameter specs
+"""
+function _group_parameters_by_section()
+    sections = Dict{String,Dict{String,Vector{Tuple{String,ConfigParameter}}}}()
+    
+    for (path, parameter_spec) in PARAMETERS
+        parts = split(path, ".")
+        section = parts[1]
+        subsection = length(parts) > 1 ? parts[2] : ""
+        
+        if !haskey(sections, section)
+            sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
+        end
+        if !haskey(sections[section], subsection)
+            sections[section][subsection] = Tuple{String,ConfigParameter}[]
+        end
+        push!(sections[section][subsection], (path, parameter_spec))
+    end
+    
+    return sections
+end
+
+"""
+    _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
+
+Write parameter documentation to the given IO stream.
+"""
+function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
+    println(io, "\n# $(parameter_spec.description)")
+    println(io, "# Type: $(parameter_spec.type)")
+    
+    if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
+        range_str = "# Range: "
+        if !isnothing(parameter_spec.min)
+            range_str *= "$(parameter_spec.min) ≤ "
+        end
+        range_str *= "value"
+        if !isnothing(parameter_spec.max)
+            range_str *= " ≤ $(parameter_spec.max)"
+        end
+        println(io, range_str)
+    end
+    
+    if !isnothing(parameter_spec.values)
+        println(io, "# Allowed values: $(join(parameter_spec.values, ", "))")
+    end
+    
+    # Mark required fields
+    if isnothing(parameter_spec.default)
+        println(io, "# [REQUIRED]")
+    end
+end
+
+"""
+    _get_default_value(default_config::Dict, section::String, subsection::String, param_name::String, parameter_spec::ConfigParameter)
+
+Get a parameter's default value from the configuration or use a type-appropriate empty value.
+"""
+function _get_default_value(default_config::Dict, section::String, subsection::String, param_name::String, parameter_spec::ConfigParameter)
+    # Check if the value exists in the default config
+    if haskey(default_config, section)
+        if isempty(subsection)
+            # Direct section parameter
+            if haskey(default_config[section], param_name)
+                return default_config[section][param_name]
+            end
+        elseif haskey(default_config[section], subsection) && 
+               haskey(default_config[section][subsection], param_name)
+            # Nested subsection parameter
+            return default_config[section][subsection][param_name]
+        end
+    end
+    
+    # Value not found in default config, return a type-appropriate empty value
+    if parameter_spec.type <: String
+        return ""
+    elseif parameter_spec.type <: Vector
+        return []
+    elseif parameter_spec.type <: Number
+        return 0
+    elseif parameter_spec.type <: Bool
+        return false
+    else
+        return nothing
+    end
+end
+
+"""
+    _write_parameter_value(io::IO, param_name::String, value)
+
+Write a parameter value to the given IO stream in the appropriate TOML format.
+"""
+function _write_parameter_value(io::IO, param_name::String, value)
+    if isa(value, String)
+        println(io, "$param_name = \"$value\"")
+    elseif isa(value, Vector)
+        if isempty(value)
+            println(io, "$param_name = []")
+        else
+            println(io, "$param_name = [")
+            for item in value
+                if isa(item, String)
+                    println(io, "    \"$item\",")
+                else
+                    println(io, "    $item,")
+                end
+            end
+            println(io, "]")
+        end
+    else
+        println(io, "$param_name = $value")
     end
 end

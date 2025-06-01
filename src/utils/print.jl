@@ -1,4 +1,3 @@
-
 function print_vector_(v::Vector; max_length::Int = 10, n_ends::Int = 5)
     if length(v) > max_length
         v = vcat(first(v, n_ends), "...", last(v, n_ends))
@@ -46,12 +45,25 @@ function print_config(config, io::IO=stdout; indent::Int=0)
         else
             # Format based on value type
             val_str = if value isa AbstractArray
-                "[" * join(string.(value), ", ") * "]"
+                "[" * join([format_value(v) for v in value], ", ") * "]"
             else
-                string(value)
+                format_value(value)
             end
             println(io, " "^indent, "$(key): $(val_str)")
         end
+    end
+end
+
+"""
+    format_value(value)
+
+Format a value for display, adding quotes around strings.
+"""
+function format_value(value)
+    if value isa AbstractString
+        return "\"$(value)\""
+    else
+        return string(value)
     end
 end
 

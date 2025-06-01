@@ -1,7 +1,11 @@
-
-# Keep track of the open file handle and start time
+# Keep track of the open file handles and start times
 const log_file_handle = Ref{Union{Nothing,IO}}(nothing)
 const log_start_time = Ref{Union{Nothing,DateTime}}(nothing)
+const global_log_handle = Ref{Union{Nothing,IO}}(nothing)
+const global_log_start_time = Ref{Union{Nothing,DateTime}}(nothing)
+const saved_logger = Ref{Any}(ConsoleLogger(stdout))
+const is_file_logging = Ref{Bool}(false)
+const is_global_logging = Ref{Bool}(false)
 
 """
     format_duration(duration::Millisecond)
@@ -26,13 +30,94 @@ function format_duration(duration::Millisecond)
 end
 
 """
+    setup_global_logging(log_file::String)
+
+Set up a global log file that will persist throughout the session. This is meant to be used
+for overall program logging, while individual file processing can use setup_logging.
+
+# Arguments
+- `log_file::String`: Path to the global log file
+
+# Returns
+- The opened file handle for direct writing (using write/println)
+
+# Example
+```julia
+global_log = setup_global_logging("global_analysis.log")
+@info "This is logged to the global log and stdout"
+write(global_log, "Direct write to global log\\n")
+```
+"""
+function setup_global_logging(log_file::String)
+    # Close any existing global log file
+    if !isnothing(global_log_handle[])
+        close(global_log_handle[])
+    end
+    
+    # Open new global log file
+    global_log_handle[] = open(log_file, "w")
+    
+    # Record start time
+    global_log_start_time[] = now()
+    
+    # Write timestamp as first line
+    println(global_log_handle[], "Global Log Started: ", Dates.format(global_log_start_time[], "dd-mm-yyyy HH:MM:SS\n"))
+    
+    # Set up the global logger, but only if we're not already file logging
+    if !is_file_logging[]
+        # Create a logger that writes to both stdout and file
+        console_logger = ConsoleLogger(stdout)
+        file_logger = FormatLogger(global_log_handle[]) do io, args
+            println(io, args.message)
+        end
+        
+        # Save current logger before replacing
+        saved_logger[] = global_logger()
+        
+        # Combine both loggers and set as global
+        logger = TeeLogger(console_logger, file_logger)
+        global_logger(logger)
+    end
+    
+    # Mark that global logging is active
+    is_global_logging[] = true
+    
+    return global_log_handle[]
+end
+
+"""
+    close_global_logging()
+
+Close the global log file and add a closing timestamp with duration.
+"""
+function close_global_logging()
+    if !isnothing(global_log_handle[])
+        duration = now() - global_log_start_time[]
+        println(global_log_handle[], "\nGlobal Log Duration: ", format_duration(duration))
+        close(global_log_handle[])
+        global_log_handle[] = nothing
+        global_log_start_time[] = nothing
+        
+        # Only restore logger if we're not in file logging mode
+        if !is_file_logging[] && is_global_logging[]
+            global_logger(saved_logger[])
+        end
+        
+        is_global_logging[] = false
+    end
+end
+
+"""
     setup_logging(log_file::String)
 
-Set up logging to both stdout and a file. Use standard Julia logging macros (@info, @warn, etc.)
-and messages will be written to both places. Creates a new log file each time it's called.
+Set up logging to both stdout and a file for processing an individual file.
+This temporarily replaces any global logger and restores it when close_logging is called.
 
 # Arguments
 - `log_file::String`: Path to the log file
+
+# Returns
+- Nothing (use standard logging macros: @info, @warn, @error)
 
 # Example
 ```julia
@@ -53,7 +138,12 @@ function setup_logging(log_file::String)
     log_start_time[] = now()
     
     # Write timestamp as first line
-    println(log_file_handle[], "Date: ", Dates.format(log_start_time[], "dd-mm-yyyy HH:MM:SS\n"))
+    println(log_file_handle[], "File Processing Started: ", Dates.format(log_start_time[], "dd-mm-yyyy HH:MM:SS\n"))
+    
+    # Only save logger if we're not already in file logging mode
+    if !is_file_logging[]
+        saved_logger[] = global_logger()
+    end
     
     # Create a logger that writes to both stdout and file
     console_logger = ConsoleLogger(stdout)
@@ -64,20 +154,41 @@ function setup_logging(log_file::String)
     # Combine both loggers
     logger = TeeLogger(console_logger, file_logger)
     global_logger(logger)
+    
+    # Mark that file logging is active
+    is_file_logging[] = true
+    
+    return nothing
 end
 
 """
     close_logging()
 
-Close the log file and add a closing timestamp with duration. This should be called when you're done logging.
+Close the individual log file and add a closing timestamp with duration.
+Restores the previous logger (which may be the global logger).
 """
 function close_logging()
     if !isnothing(log_file_handle[])
         duration = now() - log_start_time[]
-        println(log_file_handle[], "\nDuration: ", format_duration(duration))
+        println(log_file_handle[], "\nFile Processing Duration: ", format_duration(duration))
         close(log_file_handle[])
         log_file_handle[] = nothing
         log_start_time[] = nothing
+        
+        # Mark that file logging is inactive
+        is_file_logging[] = false
+        
+        # Restore the appropriate logger
+        if is_global_logging[]
+            # Recreate global logger
+            console_logger = ConsoleLogger(stdout)
+            file_logger = FormatLogger(global_log_handle[]) do io, args
+                println(io, args.message)
+            end
+            global_logger(TeeLogger(console_logger, file_logger))
+        else
+            # No global logging, restore saved logger
+            global_logger(saved_logger[])
+        end
     end
-    global_logger(ConsoleLogger(stdout))
 end 
