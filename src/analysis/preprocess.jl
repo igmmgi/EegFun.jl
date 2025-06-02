@@ -1,3 +1,30 @@
+using Base.Threads
+using JLD2
+
+"""
+    make_output_filename(output_dir::String, input_file::String, suffix::String)
+
+Create an output filename from input file path with given suffix.
+
+# Arguments
+- `output_dir::String`: Output directory path
+- `input_file::String`: Input file path
+- `suffix::String`: Suffix to add (e.g., "_ica", "_continuous")
+
+# Returns
+- `String`: Full output filename path
+
+# Example
+```julia
+filename = make_output_filename("/output", "data/file.bdf", "_ica")
+# Returns: "/output/file_ica.jld2"
+```
+"""
+function make_output_filename(output_dir::String, input_file::String, suffix::String)
+    base_name = splitext(basename(input_file))[1]
+    return joinpath(output_dir, "$(base_name)$(suffix).jld2")
+end
+
 """
     preprocess_eeg_data(config::String; log::Bool = true, global_log_file::String = "")
 
@@ -120,13 +147,15 @@ function preprocess_eeg_data(config::String)
 
                     # save ica results
                     if config_data["files"]["output"]["save_ica_data"]
-                        save_object("$(output_data_directory)/$(splitext(basename(file))[1])_ica.jld2", ica_result)
+                        @info "Saving ica data"
+                        jldsave(make_output_filename(output_data_directory, file, "_ica"); ica_result=ica_result)
                     end
                 end
 
                 # Save the results
                 if config_data["files"]["output"]["save_continuous_data"]
-                    save_object("$(output_data_directory)/$(splitext(basename(file))[1])_continuous.jld2", dat)
+                    @info "Saving continuous data"
+                    jldsave(make_output_filename(output_data_directory, file, "_continuous"); dat=dat)
                 end
 
                 # epoch data
@@ -137,7 +166,8 @@ function preprocess_eeg_data(config::String)
 
                 # save epochs
                 if config_data["files"]["output"]["save_epoch_data"]
-                    save_object("$(output_data_directory)/$(splitext(basename(file))[1])_epochs.jld2", epochs)
+                    @info "Saving epoch data"
+                    jldsave(make_output_filename(output_data_directory, file, "_epochs"); epochs=epochs)
                 end
 
                 # average epochs
@@ -148,7 +178,8 @@ function preprocess_eeg_data(config::String)
 
                 # save erps
                 if config_data["files"]["output"]["save_erp_data"]
-                    save_object("$(output_data_directory)/$(splitext(basename(file))[1])_erps.jl2", erps)
+                    @info "Saving erp data"
+                    jldsave(make_output_filename(output_data_directory, file, "_erps"); erps=erps)
                 end
 
                 @info "Successfully processed $file"
