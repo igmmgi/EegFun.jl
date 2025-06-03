@@ -32,6 +32,7 @@ mutable struct ErpData <: SingleDataFrameEeg
     layout::DataFrame
     sample_rate::Int64
     analysis_info::AnalysisInfo
+    n_epochs::Int64
 end
  
 mutable struct EpochData <: MultiDataFrameEeg
@@ -82,6 +83,8 @@ n_channels(dat::EegData) = length(channels(dat))
 n_epochs(dat::SingleDataFrameEeg) = 1
 n_epochs(dat::MultiDataFrameEeg) = length(dat.data)
 duration(dat::EegData) = last(times(dat)) - first(times(dat))
+
+n_average(dat::ErpData) = dat.n_epochs
 
 # channel information
 has_channels(dat::EegData, chans::Vector{Symbol}) = all(in(channels(dat)), chans)

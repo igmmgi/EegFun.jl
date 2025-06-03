@@ -71,7 +71,7 @@ function filter_data!(
     order::Integer = 3,
     transition_width::Real = 0.25,
     twopass::Bool = true,
-    print_filter::Bool = true,
+    print_filter::Bool = false,
     plot_filter::Bool = false,
 )
 
@@ -160,7 +160,7 @@ function filter_data!(
     order = 3,
     transition_width = 0.25,
     twopass::Bool = true,
-    print_filter = true,
+    print_filter = false,
     plot_filter = false,
 )
     _update_filter_info!(dat, filter_type, filter_freq)
@@ -193,7 +193,7 @@ function filter_data!(
     order = 3,
     transition_width = 0.25,
     twopass::Bool = true,
-    print_filter= true,
+    print_filter= false,
     plot_filter= false,
 )
     _update_filter_info!(dat, filter_type, filter_freq)

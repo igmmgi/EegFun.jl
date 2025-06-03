@@ -214,3 +214,65 @@ function _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol}; buff
     return (min_val - buffer, max_val + buffer)
 
 end
+
+"""
+    plot_epochs_table(epochs::Vector{EpochData})
+
+Create a table showing the number of epochs for each condition.
+
+# Arguments
+- `epochs::Vector{EpochData}`: Vector of EpochData objects, one for each condition
+
+# Returns
+- `fig::Figure`: The Figure object containing the table
+"""
+function plot_epochs_table(epochs::Vector{EpochData})
+    # Create figure
+    fig = Figure()
+    
+    # Create table data
+    conditions = [1, 4, 5, 3]  # The conditions used in your code
+    n_epochs = [length(epoch.data) for epoch in epochs]
+    
+    # Create table
+    table = Table(fig[1, 1])
+    
+    # Add headers
+    header = ["Condition", "Number of Epochs"]
+    for (i, h) in enumerate(header)
+        Label(table[1, i], h, fontsize=16, font=:bold)
+    end
+    
+    # Add data rows
+    for (i, (cond, n)) in enumerate(zip(conditions, n_epochs))
+        Label(table[i+1, 1], string(cond), fontsize=14)
+        Label(table[i+1, 2], string(n), fontsize=14)
+    end
+    
+    # Adjust table properties
+    table.halign = :center
+    table.valign = :center
+    
+    return fig
+end
+
+"""
+    epochs_to_dataframe(epochs::Vector{EpochData})
+
+Create a DataFrame showing the number of epochs for each condition.
+
+# Arguments
+- `epochs::Vector{EpochData}`: Vector of EpochData objects, one for each condition
+
+# Returns
+- `DataFrame`: DataFrame with condition numbers and epoch counts
+"""
+function epochs_to_dataframe(epochs::Vector{EpochData})
+    conditions = [1, 4, 5, 3]  # The conditions used in your code
+    n_epochs = [length(epoch.data) for epoch in epochs]
+    
+    return DataFrame(
+        condition = conditions,
+        n_epochs = n_epochs
+    )
+end
