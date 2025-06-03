@@ -345,32 +345,63 @@ function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_s
 end
 
 
-# For ContinuousData
-function Base.copy(dat::ContinuousData)
-    ContinuousData(
-        copy(dat.data, copycols=true),  # copy DataFrame with columns
-        copy(dat.layout, copycols=true), # copy layout DataFrame with columns
-        dat.sample_rate,                 # immutable, no need to copy
-        copy(dat.analysis_info)          # assuming this needs copying based on its type
+# Custom copy functions for main types to avoid deepcopy
+"""
+    Base.copy(dat::ContinuousData) -> ContinuousData
+
+Create a copy of ContinuousData with copied DataFrames and analysis info.
+The data and layout DataFrames are copied with `copycols=true` to ensure 
+independence, while immutable fields are shared.
+"""
+function Base.copy(dat::ContinuousData)::ContinuousData
+    return ContinuousData(
+        copy(dat.data, copycols=true),  
+        copy(dat.layout, copycols=true), 
+        dat.sample_rate,                 
+        copy(dat.analysis_info)          
     )
 end
 
-# For EpochData
-function Base.copy(dat::EpochData)
-    EpochData(
-        copy.(dat.data),                 # copy each epoch DataFrame
-        copy(dat.layout, copycols=true), # copy layout DataFrame with columns
-        dat.sample_rate,                 # immutable, no need to copy
-        copy(dat.analysis_info)          # assuming this needs copying based on its type
+"""
+    Base.copy(dat::EpochData) -> EpochData
+
+Create a copy of EpochData with copied epoch DataFrames and analysis info.
+Each epoch DataFrame in the data vector is copied independently.
+"""
+function Base.copy(dat::EpochData)::EpochData
+    return EpochData(
+        [copy(epoch, copycols=true) for epoch in dat.data],  
+        copy(dat.layout, copycols=true), 
+        dat.sample_rate,                 
+        copy(dat.analysis_info)          
     )
 end
 
-function Base.copy(dat::ErpData)
-    ErpData(
-        copy(dat.data, copycols=true),   # copy DataFrame with columns
-        copy(dat.layout, copycols=true),  # copy layout DataFrame with columns
-        dat.sample_rate,                  # immutable Int64, no need to copy
-        copy(dat.analysis_info),          # copy analysis info
-        dat.n_epochs                      # immutable Int64, no need to copy
+"""
+    Base.copy(dat::ErpData) -> ErpData
+
+Create a copy of ErpData with copied data DataFrame and analysis info.
+"""
+function Base.copy(dat::ErpData)::ErpData
+    return ErpData(
+        copy(dat.data, copycols=true),   
+        copy(dat.layout, copycols=true), 
+        dat.sample_rate,                 
+        copy(dat.analysis_info),         
+        dat.n_epochs                     
+    )
+end
+
+"""
+    Base.copy(info::AnalysisInfo) -> AnalysisInfo
+
+Create a copy of AnalysisInfo. Since all fields are immutable (Symbol and Float64),
+this creates a new instance with the same field values.
+"""
+function Base.copy(info::AnalysisInfo)::AnalysisInfo
+    return AnalysisInfo(
+        info.reference,  
+        info.hp_filter,  
+        info.lp_filter   
     )
 end

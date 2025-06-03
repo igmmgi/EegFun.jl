@@ -43,7 +43,7 @@ add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 5, roi_kwarg
 
 
 # First, read your layout file
-layout = read_layout("./data/layouts/biosemi64.csv")
+layout = read_layout("./data/layouts/biosemi72.csv")
 
 # Convert to 2D Cartesian coordinates
 polar_to_cartesian_xy!(layout)
