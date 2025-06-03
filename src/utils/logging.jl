@@ -149,6 +149,11 @@ function setup_logging(log_file::String)
     console_logger = ConsoleLogger(stdout)
     file_logger = FormatLogger(log_file_handle[]) do io, args
         println(io, args.message)
+        if !isempty(args.kwargs)
+            for (key, val) in args.kwargs
+                println(io, "$key = $val")
+            end
+        end
     end
     
     # Combine both loggers

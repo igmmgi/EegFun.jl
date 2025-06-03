@@ -1,5 +1,6 @@
 using Base.Threads
 using JLD2
+using PrettyTables
 
 """
     make_output_filename(output_dir::String, input_file::String, suffix::String)
@@ -39,6 +40,7 @@ function preprocess_eeg_data(config::String)
     
     # Initialize variable for outer scope
     output_data_directory = ""
+    all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
     
     try
         @info "EEG Preprocessing started at $(now())"
@@ -59,6 +61,7 @@ function preprocess_eeg_data(config::String)
         @info "Configuration loaded successfully"
 
         # check if all requested raw data files exist
+        @info "Checking if raw data files exist"
         raw_data_files =
             get_files(config_data["files"]["input"]["raw_data_directory"], config_data["files"]["input"]["raw_data_files"])
         raw_data_files_exist = check_files_exist(raw_data_files)
@@ -164,6 +167,11 @@ function preprocess_eeg_data(config::String)
                     push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
                 end
 
+                # Log epoch counts
+                df = DataFrame(file = basename(file), condition = 1:length(epochs), n_epochs_total = n_epochs.(epochs))
+                push!(all_epoch_counts, df)  # Store the DataFrame
+                @info "Epoch counts per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
+
                 # save epochs
                 if config_data["files"]["output"]["save_epoch_data"]
                     @info "Saving epoch data"
@@ -175,6 +183,11 @@ function preprocess_eeg_data(config::String)
                 for (idx, epoch) in enumerate(epochs)
                     push!(erps, average_epochs(epochs[idx]))
                 end
+
+                df.n_epochs_erp = n_average.(erps)
+                # calculate the percentage of epochs that went into the ERP
+                df.n_epochs_erp_percentage = (df.n_epochs_erp ./ df.n_epochs_total) .* 100
+                @info "Epoch counts per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
 
                 # save erps
                 if config_data["files"]["output"]["save_erp_data"]
@@ -201,7 +214,14 @@ function preprocess_eeg_data(config::String)
             @info "Failed files: $(join(failed_files, ", "))"
         end
         
+        # Print combined epoch counts
+        if !isempty(all_epoch_counts)
+            combined_counts = vcat(all_epoch_counts...)
+            @info "Combined epoch counts across all files:\n$(pretty_table(String, combined_counts, show_row_number=false, show_subheader=false))"
+        end
+        
     finally
+       
         # Close global logging
         close_global_logging()
         

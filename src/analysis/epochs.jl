@@ -66,10 +66,40 @@ function remove_bad_epochs(dat::EpochData)
     return dat_out
 end
 
+"""
+    average_epochs(dat::EpochData)
+
+Average epochs to create an ERP. This function:
+1. Concatenates all epochs
+2. Groups by time point and condition
+3. Averages the EEG channels at each time point
+4. Adds a count of how many epochs went into each average
+
+# Arguments
+- `dat::EpochData`: The epoched data to average
+
+# Returns
+- `ErpData`: The averaged ERP data with epoch counts
+"""
 function average_epochs(dat::EpochData)
+    # Get all EEG channels (excluding metadata columns)
+    eeg_channels = setdiff(propertynames(first(dat.data)), [:time, :triggers, :epoch, :sample])
+    
+    # Concatenate all epochs
+    all_epochs = reduce(vcat, dat.data)
+    
+    # Group by time and condition, then average EEG channels and count epochs
     erp = combine(
-        groupby(reduce(vcat, dat.data), :time),
-        Not([:time, :triggers, :epoch, :sample]) .=> mean .=> Not([:time, :triggers, :epoch, :sample]),
+        groupby(all_epochs, [:time, :condition]),
+        :epoch => length => :n_epochs,      # Add epoch count
+        eeg_channels .=> mean .=> eeg_channels  # Average EEG channels
     )
-    return ErpData(erp, dat.layout, dat.sample_rate, dat.analysis_info)
+    
+    # Get the maximum number of epochs at any time point
+    n_epochs = maximum(erp.n_epochs)
+    
+    return ErpData(erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
 end
+
+# Add n_average function to get the number of epochs used in averaging
+n_average(erp::ErpData) = erp.analysis_info.n_epochs
