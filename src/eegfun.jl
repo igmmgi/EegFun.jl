@@ -23,6 +23,7 @@ using StatsBase
 using Random
 using Dates
 using TOML
+using PrettyTables
 
 # eegfun.jl
 # Core types
