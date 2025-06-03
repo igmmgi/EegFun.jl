@@ -230,3 +230,52 @@ function preprocess_eeg_data(config::String)
     end
 end
 
+"""
+    generate_trial_summary(output_dir::String, file_pattern::String, conditions::Vector{Int})
+
+Generate a summary table of trial numbers from epochs and ERPs files.
+
+# Arguments
+- `output_dir::String`: Directory containing the epochs and ERPs files
+- `file_pattern::String`: Pattern to match files (e.g., "subject1" for "subject1_epochs.jld2" and "subject1_erps.jld2")
+- `conditions::Vector{Int}`: Vector of condition numbers to include in the summary
+
+# Returns
+- `DataFrame`: Summary table with trial counts and percentages
+"""
+function generate_trial_summary(output_dir::String, file_pattern::String, conditions::Vector{Int})
+    # Load epochs and ERPs files
+    epochs_file = joinpath(output_dir, "$(file_pattern)_epochs.jld2")
+    erps_file = joinpath(output_dir, "$(file_pattern)_erps.jld2")
+    
+    if !isfile(epochs_file) || !isfile(erps_file)
+        error("Could not find epochs or ERPs files for pattern: $file_pattern")
+    end
+    
+    # Load data
+    epochs = load(epochs_file, "epochs")
+    erps = load(erps_file, "erps")
+    
+    # Verify we have the right number of conditions
+    if length(epochs) != length(conditions)
+        error("Number of conditions ($(length(conditions))) does not match number of epochs ($(length(epochs)))")
+    end
+    
+    # Create summary DataFrame
+    n_epochs_total = [length(epoch.data) for epoch in epochs]
+    n_epochs_erp = [n_average(erp) for erp in erps]
+    n_epochs_erp_percentage = (n_epochs_erp ./ n_epochs_total) .* 100
+    
+    df = DataFrame(
+        condition = conditions,
+        n_epochs_total = n_epochs_total,
+        n_epochs_erp = n_epochs_erp,
+        n_epochs_erp_percentage = n_epochs_erp_percentage
+    )
+    
+    # Print table
+    @info "Trial summary for $file_pattern:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
+    
+    return df
+end
+

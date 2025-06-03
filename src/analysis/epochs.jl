@@ -102,4 +102,4 @@ function average_epochs(dat::EpochData)
 end
 
 # Add n_average function to get the number of epochs used in averaging
-n_average(erp::ErpData) = erp.analysis_info.n_epochs
+n_average(erp::ErpData) = erp.n_epochs[1]
