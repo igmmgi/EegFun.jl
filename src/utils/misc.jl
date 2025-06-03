@@ -345,3 +345,32 @@ function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_s
 end
 
 
+# For ContinuousData
+function Base.copy(dat::ContinuousData)
+    ContinuousData(
+        copy(dat.data, copycols=true),  # copy DataFrame with columns
+        copy(dat.layout, copycols=true), # copy layout DataFrame with columns
+        dat.sample_rate,                 # immutable, no need to copy
+        copy(dat.analysis_info)          # assuming this needs copying based on its type
+    )
+end
+
+# For EpochData
+function Base.copy(dat::EpochData)
+    EpochData(
+        copy.(dat.data),                 # copy each epoch DataFrame
+        copy(dat.layout, copycols=true), # copy layout DataFrame with columns
+        dat.sample_rate,                 # immutable, no need to copy
+        copy(dat.analysis_info)          # assuming this needs copying based on its type
+    )
+end
+
+function Base.copy(dat::ErpData)
+    ErpData(
+        copy(dat.data, copycols=true),   # copy DataFrame with columns
+        copy(dat.layout, copycols=true),  # copy layout DataFrame with columns
+        dat.sample_rate,                  # immutable Int64, no need to copy
+        copy(dat.analysis_info),          # copy analysis info
+        dat.n_epochs                      # immutable Int64, no need to copy
+    )
+end
