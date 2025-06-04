@@ -122,15 +122,22 @@ function preprocess_eeg_data(config::String)
                 dat = create_eeg_dataframe(dat, layout)
 
                 # rereference the data
+                # Why does this not work?
                 rereference!(dat, Symbol(config_data["preprocessing"]["reference_electrode"]))
+
+                # Save the results
+                if config_data["files"]["output"]["save_continuous_data"]
+                    @info "Saving continuous data"
+                    jldsave(make_output_filename(output_data_directory, file, "_continuous"); dat=dat)
+                end
 
                 # initial high-pass filter to remove slow drifts
                 filter_data!(
                     dat,
                     "hp",
-                    "fir", #config_data["filtering"]["highpass"]["type"]["value"],
-                    1, #config_data["filtering"]["highpass"]["cutoff"]["value"],
-                    order = 1,
+                    config_data["filtering"]["highpass"]["type"],
+                    config_data["filtering"]["highpass"]["cutoff"],
+                    order = config_data["filtering"]["highpass"]["order"],
                 )
 
                 # caculate EOG channels
@@ -144,10 +151,10 @@ function preprocess_eeg_data(config::String)
                 # detect extreme values
                 is_extreme_value!(dat, dat.layout.label, 100)
 
-                # run ica
+
+                # run ica on clean sections of "continuous" data
                 if config_data["ica"]["ica_run"]
                     ica_result = run_ica(dat; exclude_samples = [:is_extreme_value])
-
                     # save ica results
                     if config_data["files"]["output"]["save_ica_data"]
                         @info "Saving ica data"
@@ -155,11 +162,6 @@ function preprocess_eeg_data(config::String)
                     end
                 end
 
-                # Save the results
-                if config_data["files"]["output"]["save_continuous_data"]
-                    @info "Saving continuous data"
-                    jldsave(make_output_filename(output_data_directory, file, "_continuous"); dat=dat)
-                end
 
                 # epoch data
                 epochs = []
@@ -218,6 +220,7 @@ function preprocess_eeg_data(config::String)
         if !isempty(all_epoch_counts)
             combined_counts = vcat(all_epoch_counts...)
             @info "Combined epoch counts across all files:\n$(pretty_table(String, combined_counts, show_row_number=false, show_subheader=false))"
+            jldsave(joinpath(output_data_directory, "epoch_summary.jld2"); df=combined_counts)
         end
         
     finally
@@ -229,53 +232,3 @@ function preprocess_eeg_data(config::String)
         mv("preprocess_eeg_data.log", joinpath(output_data_directory, "preprocess_eeg_data.log"), force=true)
     end
 end
-
-"""
-    generate_trial_summary(output_dir::String, file_pattern::String, conditions::Vector{Int})
-
-Generate a summary table of trial numbers from epochs and ERPs files.
-
-# Arguments
-- `output_dir::String`: Directory containing the epochs and ERPs files
-- `file_pattern::String`: Pattern to match files (e.g., "subject1" for "subject1_epochs.jld2" and "subject1_erps.jld2")
-- `conditions::Vector{Int}`: Vector of condition numbers to include in the summary
-
-# Returns
-- `DataFrame`: Summary table with trial counts and percentages
-"""
-function generate_trial_summary(output_dir::String, file_pattern::String, conditions::Vector{Int})
-    # Load epochs and ERPs files
-    epochs_file = joinpath(output_dir, "$(file_pattern)_epochs.jld2")
-    erps_file = joinpath(output_dir, "$(file_pattern)_erps.jld2")
-    
-    if !isfile(epochs_file) || !isfile(erps_file)
-        error("Could not find epochs or ERPs files for pattern: $file_pattern")
-    end
-    
-    # Load data
-    epochs = load(epochs_file, "epochs")
-    erps = load(erps_file, "erps")
-    
-    # Verify we have the right number of conditions
-    if length(epochs) != length(conditions)
-        error("Number of conditions ($(length(conditions))) does not match number of epochs ($(length(epochs)))")
-    end
-    
-    # Create summary DataFrame
-    n_epochs_total = [length(epoch.data) for epoch in epochs]
-    n_epochs_erp = [n_average(erp) for erp in erps]
-    n_epochs_erp_percentage = (n_epochs_erp ./ n_epochs_total) .* 100
-    
-    df = DataFrame(
-        condition = conditions,
-        n_epochs_total = n_epochs_total,
-        n_epochs_erp = n_epochs_erp,
-        n_epochs_erp_percentage = n_epochs_erp_percentage
-    )
-    
-    # Print table
-    @info "Trial summary for $file_pattern:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
-    
-    return df
-end
-
