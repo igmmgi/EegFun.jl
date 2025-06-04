@@ -23,6 +23,7 @@ end
 
 # Store parameter definitions as a constant
 const PARAMETERS = Dict{String,ConfigParameter}(
+
     # File paths and settings
     "files.input.raw_data_directory" =>
         ConfigParameter{String}(String, nothing, nothing, "Directory containing raw data files", nothing, "."),
@@ -51,7 +52,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         "./preprocessed_files",
     ),
     "files.output.save_continuous_data" =>
-        ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to save continuous data", nothing, true),
+        ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to save continuous data", nothing, false),
     "files.output.save_ica_data" =>
         ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to save ICA results", nothing, true),
     "files.output.save_epoch_data" =>
@@ -106,7 +107,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "filtering.lowpass.order" => ConfigParameter{Int}(Int, 1, 8, "Filter order", nothing, 3),
 
     # ICA settings
-    "ica.ica_run" => ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to run ICA", nothing, true),
+    "ica.ica_run" => ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to run ICA", nothing, false),
 
     # Performance settings
     "performance.use_threading" => ConfigParameter{Bool}(
@@ -115,7 +116,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         nothing,
         "Whether to use threading for parallel processing",
         nothing,
-        true,
+        false,
     ),
     "performance.thread_count" => ConfigParameter{Int}(
         Int,
@@ -123,7 +124,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         nothing,
         "Number of threads to use for parallel processing (set to 0 to use all available threads)",
         nothing,
-        0,
+        1,
     ),
 )
 
@@ -470,8 +471,7 @@ Generate and save a template TOML configuration file with all available paramete
 """
 function generate_config_template(filename::String="config_template.toml")
     try
-        # Start with default config
-        default_config = TOML.parsefile(joinpath(@__DIR__, "default.toml"))
+        @info "Starting config template generation"
         
         # Open file for writing
         open(filename, "w") do io
@@ -513,8 +513,8 @@ function generate_config_template(filename::String="config_template.toml")
                         # Write parameter documentation
                         _write_parameter_docs(io, parameter_spec)
                         
-                        # Get value from default config or use appropriate empty value
-                        value = _get_default_value(default_config, section, subsection, param_name, parameter_spec)
+                        # Use the default value from parameter_spec
+                        value = parameter_spec.default
                         
                         # Write parameter value in appropriate format
                         _write_parameter_value(io, param_name, value)
@@ -524,7 +524,12 @@ function generate_config_template(filename::String="config_template.toml")
         end
         @info "Configuration template saved to: $filename"
     catch e
-        @minimal_error "Failed to save configuration template: $(e.msg)"
+        @error "Error in generate_config_template" exception=(e, catch_backtrace())
+        if e isa MethodError
+            @minimal_error "Failed to save configuration template: Method error occurred"
+        else
+            @minimal_error "Failed to save configuration template: $e"
+        end
     end
 end
 
@@ -542,7 +547,7 @@ function _group_parameters_by_section()
     for (path, parameter_spec) in PARAMETERS
         parts = split(path, ".")
         section = parts[1]
-        subsection = length(parts) > 1 ? parts[2] : ""
+        subsection = length(parts) > 2 ? parts[2] : ""  # Only use subsection if there are more than 2 parts
         
         if !haskey(sections, section)
             sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
@@ -581,6 +586,11 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
         println(io, "# Allowed values: $(join(parameter_spec.values, ", "))")
     end
     
+    # Print default value if it exists
+    if !isnothing(parameter_spec.default)
+        println(io, "# Default: $(parameter_spec.default)")
+    end
+    
     # Mark required fields
     if isnothing(parameter_spec.default)
         println(io, "# [REQUIRED]")
@@ -588,55 +598,25 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
 end
 
 """
-    _get_default_value(default_config::Dict, section::String, subsection::String, param_name::String, parameter_spec::ConfigParameter)
-
-Get a parameter's default value from the configuration or use a type-appropriate empty value.
-"""
-function _get_default_value(default_config::Dict, section::String, subsection::String, param_name::String, parameter_spec::ConfigParameter)
-    # Check if the value exists in the default config
-    if haskey(default_config, section)
-        if isempty(subsection)
-            # Direct section parameter
-            if haskey(default_config[section], param_name)
-                return default_config[section][param_name]
-            end
-        elseif haskey(default_config[section], subsection) && 
-               haskey(default_config[section][subsection], param_name)
-            # Nested subsection parameter
-            return default_config[section][subsection][param_name]
-        end
-    end
-    
-    # Value not found in default config, return a type-appropriate empty value
-    if parameter_spec.type <: String
-        return ""
-    elseif parameter_spec.type <: Vector
-        return []
-    elseif parameter_spec.type <: Number
-        return 0
-    elseif parameter_spec.type <: Bool
-        return false
-    else
-        return nothing
-    end
-end
-
-"""
-    _write_parameter_value(io::IO, param_name::String, value)
+    _write_parameter_value(io::IO, param_name::Union{String,SubString{String}}, value)
 
 Write a parameter value to the given IO stream in the appropriate TOML format.
 """
-function _write_parameter_value(io::IO, param_name::String, value)
+function _write_parameter_value(io::IO, param_name::Union{String,SubString{String}}, value)
     if isa(value, String)
-        println(io, "$param_name = \"$value\"")
+        # Double any backslashes in the string for TOML
+        escaped_value = replace(value, "\\" => "\\\\")
+        println(io, "$(String(param_name)) = \"$escaped_value\"")
     elseif isa(value, Vector)
         if isempty(value)
-            println(io, "$param_name = []")
+            println(io, "$(String(param_name)) = []")
         else
-            println(io, "$param_name = [")
+            println(io, "$(String(param_name)) = [")
             for item in value
                 if isa(item, String)
-                    println(io, "    \"$item\",")
+                    # Double any backslashes in the string for TOML
+                    escaped_item = replace(item, "\\" => "\\\\")
+                    println(io, "    \"$escaped_item\",")
                 else
                     println(io, "    $item,")
                 end
@@ -644,6 +624,6 @@ function _write_parameter_value(io::IO, param_name::String, value)
             println(io, "]")
         end
     else
-        println(io, "$param_name = $value")
+        println(io, "$(String(param_name)) = $value")
     end
 end

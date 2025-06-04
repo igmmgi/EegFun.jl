@@ -1,14 +1,141 @@
-# File paths and settings
-[files.input]
-raw_data_directory = "."
-raw_data_files = ""
-layout_file = ""
+# EEG Processing Configuration Template
+# Generated on 2025-06-04 15:03:15
 
+# This template shows all available configuration options.
+# Required fields are marked with [REQUIRED]
+# Default values are shown where available
+
+
+# files Settings
+[files]
+
+# input Settings
+[files.input]
+
+# Electrode layout file name ("*.csv")
+# Type: String
+# Default: biosemi72.csv
+layout_file = "biosemi72.csv"
+
+# Directory containing raw data files
+# Type: String
+# Default: .
+raw_data_directory = "."
+
+# Pattern for raw data files to process
+# Type: Union{String, Vector{String}}
+# Default: \.bdf
+raw_data_files = "\\.bdf"
+
+# output Settings
 [files.output]
-output_data_directory = "data/processed"
-save_continuous_data = true
-save_ica_data = true
-save_epoch_data = true
-save_erp_data = true
-exit_early = false
+
+# Whether to delete existing files in output directory
+# Type: Bool
+# Default: true
 delete_current_files = true
+
+# Whether to exit early from preprocessing pipeline (i.e., quick epoching only)
+# Type: Bool
+# Default: false
+exit_early = false
+
+# Directory for processed data output
+# Type: String
+# Default: ./preprocessed_files
+output_data_directory = "./preprocessed_files"
+
+# Whether to save continuous data
+# Type: Bool
+# Default: false
+save_continuous_data = false
+
+# Whether to save epoched data
+# Type: Bool
+# Default: true
+save_epoch_data = true
+
+# Whether to save ERP data
+# Type: Bool
+# Default: true
+save_erp_data = true
+
+# Whether to save ICA results
+# Type: Bool
+# Default: true
+save_ica_data = true
+
+# filtering Settings
+[filtering]
+
+# highpass Settings
+[filtering.highpass]
+
+# High-pass filter cutoff in Hz
+# Type: Float64
+# Range: 0.01 ≤ value ≤ 20.0
+# Default: 0.1
+cutoff = 0.1
+
+# Filter order
+# Type: Int64
+# Range: 1 ≤ value ≤ 8
+# Default: 1
+order = 1
+
+# Type of highpass filter
+# Type: String
+# Allowed values: fir, iir
+# Default: fir
+type = "fir"
+
+# lowpass Settings
+[filtering.lowpass]
+
+# High-pass filter cutoff in Hz
+# Type: Float64
+# Range: 5.0 ≤ value ≤ 200.0
+# Default: 40.0
+cutoff = 40.0
+
+# Filter order
+# Type: Int64
+# Range: 1 ≤ value ≤ 8
+# Default: 3
+order = 3
+
+# Type of lowpass filter
+# Type: String
+# Allowed values: fir, iir
+# Default: fir
+type = "fir"
+
+# ica Settings
+[ica]
+
+# Whether to run ICA
+# Type: Bool
+# Default: false
+ica_run = false
+
+# performance Settings
+[performance]
+
+# Number of threads to use for parallel processing (set to 0 to use all available threads)
+# Type: Int64
+# Range: 1 ≤ value
+# Default: 1
+thread_count = 1
+
+# Whether to use threading for parallel processing
+# Type: Bool
+# Default: false
+use_threading = false
+
+# preprocessing Settings
+[preprocessing]
+
+# Electrode(s) to use as reference
+# Type: String
+# Default: avg
+reference_electrode = "avg"

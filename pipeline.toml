@@ -6,20 +6,6 @@ raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf"]
 # raw_data_files = "Flank_C_[^3]\\.bdf$"
 # raw_data_files = "Flank_C_(?!7|14|28)([1-9]|[123][0-9])\\.bdf$"
 layout_file = "biosemi72.csv"
-
 [files.output]
 output_data_directory = "../output_data"
-delete_current_files = true
-save_continuous_data = true
-save_ica_data = true
-save_epoch_data = true
-save_erp_data = true
 
-[preprocessing]
-reference_electrode = "avg"
-
-[ica]
-ica_run = false
-
-[filtering]
-highpass.cutoff = 0.1

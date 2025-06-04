@@ -48,40 +48,6 @@ layout = read_layout("./data/layouts/biosemi72.csv")
 # Convert to 2D Cartesian coordinates
 polar_to_cartesian_xy!(layout)
 
-# Create a basic 2D layout plot
-fig = Figure()
-ax = Axis(fig[1, 1])
-plot_layout_2d!(fig, ax, layout)
-
-# Example 1: Simple ROI using LibGEOS (default)
-add_topo_rois!(ax, layout, 
-    [[:Fp1, :Fp2, :AF3]], # List of electrodes in the ROI
-    border_size = 10      # Size of border around points
-)
-
-# Example 2: Multiple ROIs with different colors using Graham's Scan
-add_topo_rois!(ax, layout,
-    [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], # Two ROIs
-    border_size = 10,
-    use_libgeos = false,  # Use Graham's Scan algorithm
-    roi_kwargs = Dict(
-        :color => [:red, :blue],        # Different colors for each ROI
-        :linewidth => [2, 2]
-    )
-)
-
-# Example 3: Filled ROIs
-add_topo_rois!(ax, layout,
-    [[:CPz, :C2, :FCz, :C1]], 
-    border_size = 5,
-    roi_kwargs = Dict(
-        :fill => [true],                # Make it filled
-        :fillcolor => [:blue],          # Fill color
-        :fillalpha => [0.2],            # Fill transparency
-        :color => [:black]              # Border color
-    )
-)
-
 
 # 3D layout
 # polar_to_cartesian_xyz!(layout)
