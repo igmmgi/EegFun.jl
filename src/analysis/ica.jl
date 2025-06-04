@@ -11,7 +11,7 @@ function run_ica(
     params::IcaPrms = IcaPrms(),
 )
     # Create a copy of the data to avoid modifying the original
-    dat_ica = deepcopy(dat)
+    dat_ica = copy(dat)
     
     # Apply filters if requested
     if hp_filter
@@ -295,7 +295,7 @@ function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remov
         throw(ArgumentError("Components must be between 1 and $n_components"))
     end
     
-    dat_out = deepcopy(dat)
+    dat_out = copy(dat)
     
     # Get data dimensions
     n_channels = length(ica.data_label)
@@ -333,7 +333,7 @@ function restore_original_data(dat::DataFrame, ica::InfoIca, components_removed:
         throw(ArgumentError("Components must be between 1 and $n_components"))
     end
     
-    dat_out = deepcopy(dat)
+    dat_out = copy(dat)
     
     # Get data and scale it
     data = permutedims(Matrix(dat_out[!, ica.data_label]))

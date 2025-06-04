@@ -187,7 +187,7 @@ function plot_interpolation_comparison(epochs::EpochData, bad_channels::Dict, ep
     
     # After interpolation
     ax3 = Axis(gl[4, 1], title="After Interpolation", limits=(nothing, limits))
-    epochs_copy = deepcopy(epochs)
+    epochs_copy = copy(epochs)
     neighbours = get_electrode_neighbours_xyz(epochs.layout, 40)
     
     for chan in epochs.layout.label

@@ -236,7 +236,7 @@ macro add_nonmutating(func)
         # method definition without docstring
         method_expr = quote
             function $non_mut_name($([:($p::$t) for (p,t) in zip(params, types)]...); kwargs...)
-                data_copy = deepcopy($(params[1]))
+                data_copy = copy($(params[1]))
                 $mut_name(data_copy, $(params[2:end]...); kwargs...)
                 return data_copy
             end
