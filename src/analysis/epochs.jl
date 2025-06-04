@@ -34,7 +34,7 @@ end
 
 function extract_epochs(dat::ContinuousData, condition, trigger_sequence, start_time, end_time; zero_position = 1)
 
-    df = deepcopy(dat.data)
+    df = copy(dat.data)
 
     # find t==0 positions
     zero_idx = search_sequence(df.triggers, trigger_sequence) .+ (zero_position - 1)
@@ -60,7 +60,7 @@ function extract_epochs(dat::ContinuousData, condition, trigger_sequence, start_
 end
 
 function remove_bad_epochs(dat::EpochData)
-    dat_out = deepcopy(dat)
+    dat_out = copy(dat)
     dat_out.data = filter(x -> !any(x[!, :is_extreme]), dat_out.data)
     @info "Epochs remaining: $(length(dat_out.data)) from $(length(dat.data)) epochs"
     return dat_out

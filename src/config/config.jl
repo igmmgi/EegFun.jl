@@ -207,7 +207,7 @@ Merge user config onto defaults, maintaining simple value structure.
 - `Dict`: The merged configuration
 """
 function _merge_configs(default_config::Dict, user_config::Dict)
-    result = deepcopy(default_config)
+    result = copy(default_config)
 
     function merge_nested!(target::Dict, source::Dict)
         for (key, value) in source
