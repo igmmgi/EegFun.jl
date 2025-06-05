@@ -1,1 +1,1 @@
-# EEGfun
+# eegfun
