@@ -4,13 +4,13 @@ using Documenter
 # push!(LOAD_PATH, "../src")
 
 makedocs(
-    sitename = "EEGfun.jl",
+    sitename = "eegfun",
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
-        canonical = "https://your-username.github.io/EEGfun.jl",
+        canonical = "https://igmmgi.github.io/eegfun",
         edit_link = "main"
     ),
-    # modules = [EEGfun],  # Comment out since we can't load the full package
+    # modules = [eegfun],  # Comment out since we can't load the full package
     pages = [
         "Home" => "index.md",
         "API Reference" => [
@@ -27,7 +27,10 @@ makedocs(
     # checkdocs = :exports  # Comment out since we're not checking exports
 )
 
-# deploydocs(
-#     repo = "github.com/your-username/EEGfun.jl.git",
-#     push_preview = true
-# ) 
+# Documenter can also automatically deploy documentation to gh-pages.
+# See "Hosting Documentation" and deploydocs() in the Documenter manual
+# for more information.
+#=deploydocs(
+    repo = "github.com/igmmgi/eegfun.git",
+    push_preview = true
+)=# 

@@ -108,7 +108,16 @@ function filter_data!(
     if filter_method == "iir"
         filter = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
     elseif filter_method == "fir"
+        # Calculate number of taps ensuring it's a power of 2 for optimal FFT performance
         n_taps = Int(ceil(3.3 * sample_rate / transition_band))
+        # Ensure odd number of taps for FIR filter
+        if n_taps % 2 == 0  
+            n_taps += 1     
+        end
+        # Ensure n_taps is not too small
+        n_taps = max(n_taps, 3)
+        # For FFTW 1.9.0 compatibility, ensure n_taps is a power of 2
+        n_taps = nextpow(2, n_taps)
         if n_taps % 2 == 0  
             n_taps += 1     
         end

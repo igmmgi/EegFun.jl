@@ -464,3 +464,107 @@ function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, neighbours::
     add_interactive_points!(fig, ax, layout, neighbours, positions)
     return fig, ax
 end
+
+
+"""
+
+
+    add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,Add commentMore actions
+
+
+                          neighbours::OrderedDict, positions::Observable, is_3d::Bool=false)
+
+
+
+
+
+Add interactive electrode points that highlight and show connections to neighboring electrodes on hover.
+
+
+
+
+
+# Arguments
+
+
+- `fig`: The figure to add interactivity to
+
+
+- `ax`: The axis to add interactivity to (can be 2D or 3D)
+
+
+- `layout`: DataFrame containing electrode information
+
+
+- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
+
+
+- `positions`: Observable containing point positions (Point2f or Point3f)
+
+
+- `is_3d`: Boolean indicating if the plot is 3D (default: false)
+
+
+
+
+
+# Returns
+
+
+- The figure and axis objects
+
+
+
+
+
+"""
+
+
+function add_interactive_points!(
+    fig::Figure,
+    ax::Union{Axis,Axis3},
+    layout::DataFrame,
+    neighbours::OrderedDict,
+    positions::Observable,
+    is_3d::Bool = false,
+)
+
+    base_size = 15
+    hover_size = 25
+    sizes = Observable(fill(base_size, length(layout.label)))
+
+    # Add interactive scatter points
+    p = scatter!(ax, positions; color = :black, markersize = sizes, inspectable = true, markerspace = :pixel)
+
+    # Initialize line segments
+    linesegments = Observable(is_3d ? Point3f[] : Point2f[])
+    lines!(ax, linesegments, color = :gray, linewidth = 3)
+
+    # Add hover interaction
+    on(events(fig).mouseposition) do mp
+
+        plt, i = pick(fig)
+        if plt == p
+
+            # Reset all sizes to base size
+            new_sizes = fill(base_size, length(layout.label))
+            new_sizes[i] = hover_size
+            sizes[] = new_sizes
+
+            # Create lines to neighboring electrodes
+            hovered_pos = positions[][i]
+            new_lines = is_3d ? Point3f[] : Point2f[]
+
+            for neighbor in neighbours[Symbol(layout.label[i])].electrodes
+                neighbor_idx = findfirst(==(neighbor), layout.label)
+                push!(new_lines, hovered_pos, positions[][neighbor_idx])
+            end
+
+            linesegments[] = new_lines
+
+
+        end
+
+
+    end
+end

@@ -1,11 +1,11 @@
 # Examples
 
-This section provides practical examples of using EEGfun.jl for common EEG analysis tasks.
+This section provides practical examples of using eegfun for common EEG analysis tasks.
 
 ## Loading and Basic Preprocessing
 
 ```julia
-using EEGfun
+using eegfun
 
 # Load EEG data
 data = load_eeg("subject01.bdf")
