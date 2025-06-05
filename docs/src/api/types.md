@@ -1,6 +1,6 @@
 # Data Types
 
-This section documents the main data structures used in EEGfun.jl.
+This section documents the main data structures used in eegfun.
 
 ## Core Data Types
 
