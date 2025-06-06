@@ -405,3 +405,61 @@ function Base.copy(info::AnalysisInfo)::AnalysisInfo
         info.lp_filter   
     )
 end
+
+"""
+    _format_neighbours_dict(io::IO, neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real)
+
+Helper function to format the neighbours dictionary output.
+"""
+function _format_neighbours_dict(io::IO, neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real)
+    for (electrode, neighbours) in neighbours_dict
+        println(io, "\nElectrode: $electrode")
+        println(io, "Number of neighbors: $(length(neighbours.electrodes))")
+        
+        if !isempty(neighbours.electrodes)
+            println(io, "\nNeighbors:")
+            for (i, (neighbor, distance, weight)) in enumerate(zip(neighbours.electrodes, neighbours.distances, neighbours.weights))
+                println(io, "  $i. $neighbor")
+                println(io, "     Distance: $(round(distance, digits=2))")
+                println(io, "     Weight: $(round(weight, digits=4))")
+            end
+        end
+        println(io, "\n" * "-"^50)
+    end
+    println(io, "\nAverage number of neighbours per electrode: $(round(nneighbours, digits=2))")
+end
+
+"""
+    print_neighbours_dict(neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real; filename::Union{String, Nothing}=nothing)
+
+Print or write the neighbors dictionary in a readable format, showing for each electrode:
+- Its neighbors
+- The distances to each neighbor
+- The weights used for interpolation
+- The average number of neighbors per electrode
+
+# Arguments
+- `neighbours_dict::OrderedDict{Symbol, Neighbours}`: Dictionary returned by get_electrode_neighbours_xy/xyz
+- `nneighbours::Real`: Average number of neighbors per electrode
+- `filename::Union{String, Nothing}=nothing`: If provided, writes to this file instead of stdout
+
+# Example
+    layout = read_layout("./layouts/biosemi64.csv")
+    neighbours, nneighbours = get_electrode_neighbours_xy(layout, 40)
+    
+    # Print to stdout
+    print_neighbours_dict(neighbours, nneighbours)
+    
+    # Write to file
+    print_neighbours_dict(neighbours, nneighbours, filename="neighbours.txt")
+"""
+function print_neighbours_dict(neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real; filename::Union{String, Nothing}=nothing)
+    if isnothing(filename)
+        _format_neighbours_dict(stdout, neighbours_dict, nneighbours)
+    else
+        open(filename, "w") do io
+            _format_neighbours_dict(io, neighbours_dict, nneighbours)
+        end
+    end
+end
+
