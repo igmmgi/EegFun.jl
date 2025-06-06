@@ -9,8 +9,8 @@
 # package
 include("src/eegfun.jl")
 
-config = load_config("src/config/default.toml");
-print_config(config)
+# config = load_config("src/config/default.toml");
+# print_config(config)
 
 config = load_config("pipeline.toml");
 print_config(config)
@@ -26,11 +26,12 @@ layout = read_layout("./data/layouts/biosemi72.csv");
 polar_to_cartesian_xy!(layout)
 fig, ax = plot_layout_2d(layout);
  
-neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80);
-
-
+neighbours, nneighbours = get_electrode_neighbours_xy(layout, 40);
+print_neighbours_dict(neighbours, nneighbours)
+print_neighbours_dict(neighbours, nneighbours, filename="electrode_neighbours.txt")
 plot_layout_2d(layout, neighbours)
 
+set_theme!(figure_padding=0)
 fig, ax = plot_layout_2d(layout)
 add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
 add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
@@ -39,6 +40,7 @@ add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size =
 add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
+save("topo_roi.pdf", fig)
 
 
 
