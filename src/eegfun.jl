@@ -12,6 +12,7 @@ using FFTW
 
 # Plotting and visualization
 using GLMakie
+using CairoMakie
 using ScatteredInterpolation
 
 # Utilities
@@ -24,6 +25,9 @@ using Random
 using Dates
 using TOML
 using PrettyTables
+
+# Julia
+using Base.Threads
 
 # eegfun.jl
 # Core types

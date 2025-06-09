@@ -1,0 +1,17 @@
+[epochs]
+
+[[epochs.conditions]]
+name = "condition_1"
+trigger_sequence = [1]
+
+[[epochs.conditions]]
+name = "condition_2"
+trigger_sequence = [4]
+
+[[epochs.conditions]]
+name = "condition_3" 
+trigger_sequence = [5]
+
+[[epochs.conditions]]
+name = "condition_4"
+trigger_sequence = [3] 

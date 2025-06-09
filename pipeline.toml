@@ -1,11 +1,12 @@
 [files.input]
-raw_data_directory = ".."
-# raw_data_files = ["Flank_C_3.bdf"]
-raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf"]
+directory = ".."
+raw_data_files = ["Flank_C_3.bdf"]
+# raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf"]
 # raw_data_files = "\\.bdf$"
 # raw_data_files = "Flank_C_[^3]\\.bdf$"
 # raw_data_files = "Flank_C_(?!7|14|28)([1-9]|[123][0-9])\\.bdf$"
 layout_file = "biosemi72.csv"
-[files.output]
-output_data_directory = "../output_data"
+epoch_condition_file = "epochs.toml"
 
+[files.output]
+directory = "../output_data"

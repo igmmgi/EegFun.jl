@@ -130,3 +130,19 @@ struct InfoIca
     data_label::Vector{Symbol}
 end
 
+"""
+    Neighbours
+
+Stores neighbor information for an electrode in layout-based operations.
+
+# Fields
+- `electrodes::Vector{Symbol}`: List of neighboring electrode labels
+- `distances::Vector{Float64}`: Distances to each neighbor
+- `weights::Vector{Float64}`: Interpolation weights for each neighbor
+"""
+struct Neighbours
+    electrodes::Vector{Symbol}
+    distances::Vector{Float64}
+    weights::Vector{Float64}
+end
+

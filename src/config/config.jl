@@ -5,127 +5,210 @@
 A struct to define configuration parameters with type and validation constraints.
 
 # Fields
-- `type::Type{T}`: The Julia type of the parameter
+- `description::String`: Human-readable description of the parameter
 - `min::Union{Nothing,T}`: Minimum value for numeric parameters (or nothing)
 - `max::Union{Nothing,T}`: Maximum value for numeric parameters (or nothing)
-- `description::String`: Human-readable description of the parameter
-- `values::Union{Nothing,Vector{T}}`: List of allowed values (or nothing if any value is allowed)
+- `allowed_values::Union{Nothing,Vector{T}}`: List of allowed values (or nothing if any value is allowed)
 - `default::Union{Nothing,T}`: Default value (or nothing if required)
 """
 struct ConfigParameter{T}
-    type::Type{T}
+    description::String
     min::Union{Nothing,T}
     max::Union{Nothing,T}
-    description::String
-    values::Union{Nothing,Vector{T}}
+    allowed_values::Union{Nothing,Vector{T}}
     default::Union{Nothing,T}
 end
+
+# Keyword constructor with defaults
+function ConfigParameter{T}(;
+    description::String,
+    default::Union{Nothing,T} = nothing,
+    min::Union{Nothing,T} = nothing,
+    max::Union{Nothing,T} = nothing,
+    allowed_values::Union{Nothing,Vector{T}} = nothing,
+) where {T}
+    ConfigParameter{T}(description, min, max, allowed_values, default)
+end
+
 
 # Store parameter definitions as a constant
 const PARAMETERS = Dict{String,ConfigParameter}(
 
     # File paths and settings
-    "files.input.raw_data_directory" =>
-        ConfigParameter{String}(String, nothing, nothing, "Directory containing raw data files", nothing, "."),
+    "files.input.directory" => ConfigParameter{String}(
+        description = "Directory containing raw data files.",
+        default = "."
+    ),
+    
     "files.input.raw_data_files" => ConfigParameter{Union{Vector{String},String}}(
-        Union{Vector{String},String},
-        nothing,
-        nothing,
-        "Pattern for raw data files to process",
-        nothing,
-        "\\.bdf",
+        description = "Pattern (regex or explicit list) for raw data files to process.",
+        default = "\\.bdf"
     ),
+    
     "files.input.layout_file" => ConfigParameter{String}(
-        String,
-        nothing,
-        nothing,
-        "Electrode layout file name (\"*.csv\")",
-        nothing,
-        "biosemi72.csv",
+        description = "Electrode layout file name (\"*.csv\")",
+        default = "biosemi72.csv"
     ),
-    "files.output.output_data_directory" => ConfigParameter{String}(
-        String,
-        nothing,
-        nothing,
-        "Directory for processed data output",
-        nothing,
-        "./preprocessed_files",
+   
+    "files.input.epoch_condition_file" => ConfigParameter{Union{Nothing,String}}(
+        description = "TOML file that defines the condition epochs.",
+        default = ""
     ),
-    "files.output.save_continuous_data" =>
-        ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to save continuous data", nothing, false),
-    "files.output.save_ica_data" =>
-        ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to save ICA results", nothing, true),
-    "files.output.save_epoch_data" =>
-        ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to save epoched data", nothing, true),
-    "files.output.save_erp_data" =>
-        ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to save ERP data", nothing, true),
-    "files.output.delete_current_files" => ConfigParameter{Bool}(
-        Bool,
-        nothing,
-        nothing,
-        "Whether to delete existing files in output directory",
-        nothing,
-        true,
+
+    "files.output.directory" => ConfigParameter{String}(
+        description = "Directory for processed output files",
+        default = "./preprocessed_files"
     ),
+
+    # What data should we save?
+    "files.output.save_continuous_data" => ConfigParameter{Bool}(
+        description = "Save continuous data?",
+        default = false
+    ),
+    
+    "files.output.save_ica_data" => ConfigParameter{Bool}(
+        description = "Save ICA results?",
+        default = true
+    ),
+    
+    "files.output.save_epoch_data" => ConfigParameter{Bool}(
+        description = "Save epoched data?",
+        default = true
+    ),
+    
+    "files.output.save_erp_data" => ConfigParameter{Bool}(
+        description = "Save ERP data",
+        default = true
+    ),
+    
     "files.output.exit_early" => ConfigParameter{Bool}(
-        Bool,
-        nothing,
-        nothing,
-        "Whether to exit early from preprocessing pipeline (i.e., quick epoching only)",
-        nothing,
-        false,
+        description = "Exit early from preprocessing pipeline (i.e., quick epoching only)",
+        default = false
     ),
 
     # Preprocessing settings
-    "preprocessing.reference_electrode" =>
-        ConfigParameter{String}(String, nothing, nothing, "Electrode(s) to use as reference", nothing, "avg"),
+    "preprocess.epoch_start" => ConfigParameter{Real}(
+        description = "Epoch start (seconds).",
+        default = -1,
+    ),
+    # Preprocessing settings
+    "preprocess.epoch_end" => ConfigParameter{Real}(
+        description = "Epoch end (seconds).",
+        default = 1,
+    ),
+
+    "preprocess.reference_channel" => ConfigParameter{String}(
+        description = "Channels(s) to use as reference",
+        default = "avg"
+    ),
+
+    "preprocess.layout.neighbour_criterion" => ConfigParameter{Real}(
+        description = "Distance criterion (in mm) for channel neighbour definition.",
+        default = 40,
+        min = 0
+    ),
+
+    "preprocess.eog.vEOG_criterion" => ConfigParameter{Real}(
+        description = "Distance criterion for vertical EOG channel definition.",
+        default = 50,
+        min = 0
+    ),
+
+    "preprocess.eog.hEOG_criterion" => ConfigParameter{Real}(
+        description = "Distance criterion for horizontal EOG channel definition.",
+        default = 30,
+        min = 0
+    ),
+
+    "preprocess.eog.extreme_value_criterion" => ConfigParameter{Real}(
+        description = "Value (mV) for defining data section as an extreme value.",
+        default = 100,
+    ),
+
 
     # Filtering settings
-    "filtering.highpass.type" => ConfigParameter{String}(
-        String,
-        nothing,
-        nothing,
-        "Type of highpass filter",
-        ["fir", "iir"],
-        "fir",
+    "filter.highpass.on" => ConfigParameter{Bool}(
+        description = "Apply highpass filter true/false",
+        default = true
     ),
-    "filtering.highpass.cutoff" =>
-        ConfigParameter{Float64}(Float64, 0.01, 20.0, "High-pass filter cutoff in Hz", nothing, 0.1),
-    "filtering.highpass.order" => ConfigParameter{Int}(Int, 1, 8, "Filter order", nothing, 1),
+    
+    "filter.highpass.type" => ConfigParameter{String}(
+        description = "Type of highpass filter",
+        default = "fir",
+        allowed_values = ["fir", "iir"]
+    ),
+    
+    "filter.highpass.cutoff" => ConfigParameter{Real}(
+        description = "High-pass filter cutoff frequency (Hz)",
+        default = 0.1,
+        min = 0.01,
+        max = 20.0
+    ),
+    
+    "filter.highpass.order" => ConfigParameter{Int}(
+        description = "Filter order",
+        default = 1,
+        min = 1,
+        max = 8
+    ),
 
-    # Filtering settings
-    "filtering.lowpass.type" => ConfigParameter{String}(
-        String,
-        nothing,
-        nothing,
-        "Type of lowpass filter",
-        ["fir", "iir"],
-        "fir",
+    # Lowpass filtering settings
+    "filter.lowpass.on" => ConfigParameter{Bool}(
+        description = "Apply lowpass filter true/false",
+        default = true
     ),
-    "filtering.lowpass.cutoff" =>
-        ConfigParameter{Float64}(Float64, 5, 200, "High-pass filter cutoff in Hz", nothing, 40),
-    "filtering.lowpass.order" => ConfigParameter{Int}(Int, 1, 8, "Filter order", nothing, 3),
+    
+    "filter.lowpass.type" => ConfigParameter{String}(
+        description = "Type of lowpass filter",
+        default = "fir",
+        allowed_values = ["fir", "iir"]
+    ),
+    
+    "filter.lowpass.cutoff" => ConfigParameter{Real}(
+        description = "Low-pass filter cutoff frequency (Hz)",
+        default = 40,
+        min = 5,
+        max = 200
+    ),
+    
+    "filter.lowpass.order" => ConfigParameter{Int}(
+        description = "Filter order",
+        default = 3,
+        min = 1,
+        max = 8
+    ),
 
     # ICA settings
-    "ica.ica_run" => ConfigParameter{Bool}(Bool, nothing, nothing, "Whether to run ICA", nothing, false),
+    "ica.run" => ConfigParameter{Bool}(
+        description = "Run Independent Component Analysis (ICA) true/false",
+        default = false
+    ),
 
-    # Performance settings
-    "performance.use_threading" => ConfigParameter{Bool}(
-        Bool,
-        nothing,
-        nothing,
-        "Whether to use threading for parallel processing",
-        nothing,
-        false,
+    "ica.filter.highpass.on" => ConfigParameter{Bool}(
+        description = "Apply highpass filter to ICA data true/false",
+        default = true
     ),
-    "performance.thread_count" => ConfigParameter{Int}(
-        Int,
-        1,
-        nothing,
-        "Number of threads to use for parallel processing (set to 0 to use all available threads)",
-        nothing,
-        1,
+    
+    "ica.filter.highpass.type" => ConfigParameter{String}(
+        description = "Type of highpass filter",
+        default = "fir",
+        allowed_values = ["fir", "iir"]
     ),
+    
+    "ica.filter.highpass.cutoff" => ConfigParameter{Real}(
+        description = "ICA high-pass filter cutoff frequency (Hz)",
+        default = 1,
+        min = 1,
+        max = 20.0
+    ),
+    
+    "ica.filter.highpass.order" => ConfigParameter{Int}(
+        description = "Filter order",
+        default = 1,
+        min = 1,
+        max = 8
+    )
+
 )
 
 # Used for some validation stuff
@@ -136,20 +219,13 @@ A struct to track validation results for configuration parameters.
 
 # Fields
 - `success::Bool`: Whether the validation was successful
-- `error::Union{Nothing,String}`: Error message if validation failed, nothing otherwise
-- `path::Union{Nothing,String}`: Path to the parameter that failed validation, nothing if validation succeeded
-
-# Constructors
-- `ValidationResult(success::Bool)`: Create a successful validation result
-- `ValidationResult(success::Bool, error::String, path::String)`: Create a validation result with error details
+- `error::Union{Nothing,String}`: Error message if validation failed, nothing otherwise (default: nothing)
+- `path::Union{Nothing,String}`: Path to the parameter that failed validation, nothing if validation succeeded (default: nothing)
 """
-struct ValidationResult
+@kwdef struct ValidationResult
     success::Bool
-    error::Union{Nothing,String}
-    path::Union{Nothing,String}
-    # Constructors
-    ValidationResult(success::Bool) = new(success, nothing, nothing)
-    ValidationResult(success::Bool, error::String, path::String) = new(success, error, path)
+    error::Union{Nothing,String} = nothing
+    path::Union{Nothing,String} = nothing
 end
 
 
@@ -180,7 +256,7 @@ function load_config(config_file::String)
     try
         user_config = TOML.parsefile(config_file)
     catch e
-        @minimal_error "Error parsing TOML file: $(e.msg)"
+        @minimal_error "Error parsing TOML file: $e"
     end
     
     # Merge and validate
@@ -300,19 +376,22 @@ Helper function to validate a single parameter value against its specification.
 - `ValidationResult`: Result of the validation
 """
 function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_name::String)
+    # Get the type from the type parameter
+    param_type = typeof(parameter_spec).parameters[1]
+    
     # For numeric types, allow conversion between numeric types
-    if parameter_spec.type <: Number
+    if param_type <: Number
         # Check if value is any numeric type
         isa(value, Number) ||
             return ValidationResult(false, "$parameter_name must be a number, got $(typeof(value))", parameter_name)
 
         # Convert to the target type
         try
-            value = convert(parameter_spec.type, value)
+            value = convert(param_type, value)
         catch
             return ValidationResult(
                 false,
-                "$parameter_name must be convertible to $(parameter_spec.type), got $(typeof(value))",
+                "$parameter_name must be convertible to $param_type, got $(typeof(value))",
                 parameter_name,
             )
         end
@@ -327,19 +406,19 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
             return ValidationResult(false, "$parameter_name ($value) must be <= $(parameter_spec.max)", parameter_name)
     else
         # For non-numeric types, require exact type match
-        isa(value, parameter_spec.type) || return ValidationResult(
+        isa(value, param_type) || return ValidationResult(
             false,
-            "$parameter_name must be of type $(parameter_spec.type), got $(typeof(value))",
+            "$parameter_name must be of type $param_type, got $(typeof(value))",
             parameter_name,
         )
     end
 
     # Check allowed values if they exist
-    if !isnothing(parameter_spec.values)
+    if !isnothing(parameter_spec.allowed_values)
         value_in_allowed = false
         
         # Convert value to string for comparison if needed
-        for allowed_value in parameter_spec.values
+        for allowed_value in parameter_spec.allowed_values
             if isequal(value, allowed_value)
                 value_in_allowed = true
                 break
@@ -348,7 +427,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
         
         value_in_allowed || return ValidationResult(
             false,
-            "$parameter_name ($value) must be one of: $(join(parameter_spec.values, ", "))",
+            "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed_values, ", "))",
             parameter_name,
         )
     end
@@ -437,7 +516,7 @@ function show_parameter_info(parameter_name::String = "")
         @info "Parameter: $parameter_name"
         @info "="^(length(parameter_name) + 11)
         @info "Description: $(parameter_spec.description)"
-        @info "Type: $(parameter_spec.type)"
+        @info "Type: $(typeof(parameter_spec).parameters[1])"
 
         if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
             range_str = "Range: "
@@ -451,8 +530,8 @@ function show_parameter_info(parameter_name::String = "")
             @info range_str
         end
 
-        if !isnothing(parameter_spec.values)
-            @info "Allowed values: $(join(parameter_spec.values, ", "))"
+        if !isnothing(parameter_spec.allowed_values)
+            @info "Allowed values: $(join(parameter_spec.allowed_values, ", "))"
         end
 
         if !isnothing(parameter_spec.default)
@@ -568,7 +647,7 @@ Write parameter documentation to the given IO stream.
 """
 function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
     println(io, "\n# $(parameter_spec.description)")
-    println(io, "# Type: $(parameter_spec.type)")
+    println(io, "# Type: $(typeof(parameter_spec).parameters[1])")
     
     if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
         range_str = "# Range: "
@@ -582,8 +661,8 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
         println(io, range_str)
     end
     
-    if !isnothing(parameter_spec.values)
-        println(io, "# Allowed values: $(join(parameter_spec.values, ", "))")
+    if !isnothing(parameter_spec.allowed_values)
+        println(io, "# Allowed values: $(join(parameter_spec.allowed_values, ", "))")
     end
     
     # Print default value if it exists
@@ -627,3 +706,4 @@ function _write_parameter_value(io::IO, param_name::Union{String,SubString{Strin
         println(io, "$(String(param_name)) = $value")
     end
 end
+
