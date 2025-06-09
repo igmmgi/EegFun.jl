@@ -14,6 +14,7 @@ include("src/eegfun.jl")
 
 config = load_config("pipeline.toml");
 print_config(config)
+print_config(config, "config_output.toml")
 
 
 preprocess_eeg_data("pipeline.toml")
@@ -26,9 +27,8 @@ layout = read_layout("./data/layouts/biosemi72.csv");
 polar_to_cartesian_xy!(layout)
 fig, ax = plot_layout_2d(layout);
  
-neighbours, nneighbours = get_electrode_neighbours_xy(layout, 40);
-print_neighbours_dict(neighbours, nneighbours)
-print_neighbours_dict(neighbours, nneighbours, filename="electrode_neighbours.txt")
+neighbours = get_electrode_neighbours_xy(layout, 40);
+print_neighbours_dict(neighbours, "electrode_neighbours.toml")
 plot_layout_2d(layout, neighbours)
 
 set_theme!(figure_padding=0)

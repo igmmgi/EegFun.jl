@@ -13,64 +13,84 @@ function print_vector(v::Vector; max_length::Int = 10, n_ends::Int = 5)
     print_vector_(collect(v), max_length = max_length, n_ends = n_ends)
 end
 
+"""
+    get_git_commit()
+
+Get the current git commit hash.
+
+# Returns
+- `String`: The full git commit hash, or "unknown" if not available
+"""
+function get_git_commit()
+    try
+        return readchomp(`git rev-parse HEAD`)
+    catch
+        return "unknown"
+    end
+end
 
 """
-    print_config(config, [io=stdout]; [indent=0])
-    print_config(config, filename::String; [indent=0])
+    get_eegfun_version()
 
-Print configuration in a readable format.
+Get the EEGfun version from Project.toml.
+
+# Returns
+- `String`: The version string from Project.toml, or "unknown" if not available
+"""
+function get_eegfun_version()
+    try
+        project_toml = TOML.parsefile("Project.toml")
+        return project_toml["version"]
+    catch
+        return "unknown"
+    end
+end
+
+"""
+    print_config(config, [io=stdout])
+    print_config(config, filename::String)
+
+Print configuration in TOML format.
 
 # Arguments
 - `config`: Configuration dictionary (typically loaded from TOML)
-- `io=stdout`: Optional IO object to print to (default: standard output)
-- `filename`: Optional filename to write output to
-- `indent=0`: Indentation level (used internally for recursive calls)
+- `io=stdout`: Optional IO object to print to (default: standard output)  
+- `filename`: Optional filename to write TOML output to
 
-# Example
+# Examples
 ```julia
-# Print to console
+# Print to console in TOML format
 print_config(config)
 
-# Print to file
-print_config(config, "config_dump.txt")
+# Write to TOML file
+print_config(config, "config_output.toml")
 ```
 """
-function print_config(config, io::IO=stdout; indent::Int=0)
-    # Sort just the keys, not the key-value pairs
-    for key in sort(collect(keys(config)))
-        value = config[key]
-        if value isa Dict
-            println(io, " "^indent, "$(key):")
-            print_config(value, io; indent=indent+2)
-        else
-            # Format based on value type
-            val_str = if value isa AbstractArray
-                "[" * join([format_value(v) for v in value], ", ") * "]"
-            else
-                format_value(value)
-            end
-            println(io, " "^indent, "$(key): $(val_str)")
+function print_config(config, io::IO=stdout)
+    # Use OrderedDict to ensure metadata appears first
+    config_with_meta = OrderedDict{String, Any}()
+    
+    # Always add fresh metadata first
+    config_with_meta["metadata"] = OrderedDict(
+        "generated_at" => string(now()),
+        "eegfun_version" => get_eegfun_version(),
+        "git_commit" => get_git_commit()
+    )
+    
+    # Copy config content, ensuring string keys and skipping any existing metadata
+    for (key, value) in config
+        if string(key) != "metadata"  # Skip any existing metadata
+            config_with_meta[string(key)] = value
         end
     end
-end
-
-"""
-    format_value(value)
-
-Format a value for display, adding quotes around strings.
-"""
-function format_value(value)
-    if value isa AbstractString
-        return "\"$(value)\""
-    else
-        return string(value)
-    end
+    
+    TOML.print(io, config_with_meta)
 end
 
 # Convenience method for printing to a file
-function print_config(config, filename::String; indent::Int=0)
+function print_config(config, filename::String)
     open(filename, "w") do file
-        print_config(config, file; indent=indent)
+        print_config(config, file)
     end
     println("Configuration written to: $filename")
 end

@@ -155,7 +155,7 @@ Identifies the neighbours of each electrode based on their Cartesian coordinates
 - `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours.
 
 # Returns
-- `OrderedDict{Symbol,Vector{Symbol}}`: A dictionary where each key is an electrode label, and the value is a list of labels of its neighbours.
+- `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
 
 # Throws
 - `ArgumentError`: If the layout DataFrame does not contain the required columns.
@@ -176,7 +176,6 @@ function get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real
     coords[:, 2] = layout.y2
 
     neighbour_dict = OrderedDict{Symbol,Neighbours}()
-    num_neighbours = Int[]
 
     for (idx1, label1) in enumerate(layout.label)
 
@@ -199,7 +198,6 @@ function get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real
 
         # Compute weights (inverse distance weighting)
         distances = neighbour_dict[Symbol(label1)].distances
-        push!(num_neighbours, length(distances))
         inv_distances = 1 ./ distances  # Inverse of distances
         total_inv_distance = sum(inv_distances)
         for idx in eachindex(neighbour_dict[Symbol(label1)].electrodes)
@@ -208,7 +206,7 @@ function get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real
 
     end
 
-    return neighbour_dict, mean(num_neighbours)
+    return neighbour_dict
 
 end
 
@@ -222,22 +220,11 @@ Identifies the neighbours of each electrode based on their Cartesian coordinates
 - `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours.
 
 # Returns
-- `OrderedDict{Symbol,Vector{Symbol}}`: A dictionary where each key is an electrode label, and the value is a list of labels of its neighbours.
+- `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
 
 # Throws
 - `ArgumentError`: If the layout DataFrame does not contain the required columns.
 """
-
-struct Neighbours
-    electrodes::Vector{Symbol}
-    distances::Vector{Float64}
-    weights::Vector{Float64}
-end
-
-
-
-
-
 function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Real)
 
     if !all([col in propertynames(layout) for col in [:x3, :y3, :z3, :label]])
@@ -255,7 +242,6 @@ function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Rea
     coords[:, 3] = layout.z3
 
     neighbour_dict = OrderedDict{Symbol, Neighbours}()
-    num_neighbours = Int[]
 
     for (idx1, label1) in enumerate(layout.label)
 
@@ -287,7 +273,6 @@ function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Rea
 
         # Compute weights (inverse distance weighting)
         distances = neighbour_dict[Symbol(label1)].distances
-        push!(num_neighbours, length(distances))
         inv_distances = 1 ./ distances  # Inverse of distances
         total_inv_distance = sum(inv_distances)
         for idx in eachindex(neighbour_dict[Symbol(label1)].electrodes)
@@ -296,6 +281,100 @@ function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Rea
 
     end
 
-    return neighbour_dict, mean(num_neighbours)
+    return neighbour_dict
 
 end
+
+
+"""
+    _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real)
+
+Helper function to format the neighbours dictionary as TOML structure.
+Preserves the order of electrodes from the original OrderedDict.
+"""
+function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real)
+    toml_dict = OrderedDict{String, Any}()
+    
+    # Add metadata first
+    toml_dict["metadata"] = OrderedDict(
+        "average_neighbours_per_electrode" => round(nneighbours, digits=2),
+        "total_electrodes" => length(neighbours_dict),
+        "generated_at" => string(now())
+    )
+    
+    # Add electrode data in original order
+    toml_dict["electrodes"] = OrderedDict{String, Any}()
+    
+    for (electrode, neighbours) in neighbours_dict
+        electrode_str = string(electrode)
+        toml_dict["electrodes"][electrode_str] = OrderedDict(
+            "neighbors" => [string(n) for n in neighbours.electrodes],
+            "distances" => [round(d, digits=4) for d in neighbours.distances],
+            "weights" => [round(w, digits=6) for w in neighbours.weights],
+            "neighbor_count" => length(neighbours.electrodes)
+        )
+    end
+    
+    return toml_dict
+end
+
+"""
+    print_neighbours_dict(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
+
+Write the neighbors dictionary to a TOML file in a structured format, showing for each electrode:
+- Its neighbors
+- The distances to each neighbor
+- The weights used for interpolation
+- The average number of neighbors per electrode
+
+The electrode order from the original OrderedDict is preserved.
+
+# Arguments
+- `neighbours_dict::OrderedDict{Symbol, Neighbours}`: Dictionary returned by get_electrode_neighbours_xy/xyz
+- `filename::String`: Path to the output TOML file
+
+# Example
+```julia
+layout = read_layout("./layouts/biosemi64.csv")
+neighbours = get_electrode_neighbours_xy(layout, 40)
+
+# Write to TOML file
+print_neighbours_dict(neighbours, "neighbours.toml")
+```
+"""
+function print_neighbours_dict(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
+    nneighbours = average_number_of_neighbours(neighbours_dict)
+    toml_data = _format_neighbours_toml(neighbours_dict, nneighbours)
+    open(filename, "w") do io
+        TOML.print(io, toml_data)
+    end
+end
+
+"""
+    average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
+
+Calculate the average number of neighbours per electrode from a neighbours dictionary.
+
+# Arguments
+- `neighbours_dict::OrderedDict{Symbol, Neighbours}`: Dictionary containing neighbour information for each electrode
+
+# Returns
+- `Float64`: The average number of neighbours per electrode
+
+# Example
+```julia
+layout = read_layout("./layouts/biosemi64.csv")
+neighbours, _ = get_electrode_neighbours_xy(layout, 40)
+avg_neighbours = average_neighbours_per_electrode(neighbours)
+```
+"""
+function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
+    if isempty(neighbours_dict)
+        return 0.0
+    end
+    
+    total_neighbours = sum(length(neighbours.electrodes) for neighbours in values(neighbours_dict))
+    return total_neighbours / length(neighbours_dict)
+end
+
+
