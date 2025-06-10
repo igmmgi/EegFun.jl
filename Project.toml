@@ -1,24 +1,46 @@
 name = "eegfun"
 uuid = "12345678-1234-1234-1234-123456789abc"
+authors = ["Ian <ian@example.com>"]
+description = "EEG data processing and analysis package for Julia"
 version = "0.1.0"
 
 [deps]
-BioSemiBDF = "a979c444-3566-4a01-8a07-2d47ad31ee4e"
+BioSemiBDF = "d1c37e40-cd17-11e8-241b-47481c954d91"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 LoggingExtras = "e6f89c97-d47a-5376-807f-9c37f3926c36"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ScatteredInterpolation = "3f865c0f-6dca-5f4d-999b-29fe1e7e3c92"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
+[compat]
+BioSemiBDF = "0.4"
+CSV = "0.10"
+CairoMakie = "0.13.10"
+DSP = "0.8"
+DataFrames = "1.7"
+FFTW = "1.8"
+GLMakie = "0.11.11"
+JLD2 = "0.5"
+Makie = "0.22"
+StatsBase = "0.34"
+julia = "1.11"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

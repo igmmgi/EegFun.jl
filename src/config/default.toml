@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-06-09 16:26:53
+# Generated on 2025-06-10 18:52:30
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -156,6 +156,16 @@ type = "fir"
 
 # preprocess Settings
 [preprocess]
+
+# Epoch end (seconds).
+# Type: Real
+# Default: 1
+epoch_end = 1
+
+# Epoch start (seconds).
+# Type: Real
+# Default: -1
+epoch_start = -1
 
 # Channels(s) to use as reference
 # Type: String

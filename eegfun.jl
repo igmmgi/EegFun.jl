@@ -7,16 +7,13 @@
 # global_logger(ConsoleLogger(stderr, Logging.Warn))
 
 # package
-include("src/eegfun.jl")
-
-# config = load_config("src/config/default.toml");
-# print_config(config)
+using eegfun
 
 config = load_config("pipeline.toml");
-print_config(config)
-print_config(config, "config_output.toml")
+# print_config(config)
+# print_config(config, "config_output.toml")
 
-
+# preprocess data
 preprocess_eeg_data("pipeline.toml")
 
 

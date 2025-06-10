@@ -218,22 +218,7 @@ function create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, b
     return stack
 end
 
-"""
-    orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
-
-Helper function to find orientation of triplet (p, q, r).
-Returns:
- 0 --> p, q and r are collinear
- 1 --> Clockwise
- 2 --> Counterclockwise
-"""
-function orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
-    val = (q[2] - p[2]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[2] - q[2])
-    if val ≈ 0
-        return 0
-    end
-    return val > 0 ? 1 : 2
-end
+# orientation function is imported from utils/misc.jl
 
 """
     add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbol}};
