@@ -359,7 +359,7 @@ function _validate_config(config::Dict, path = "")
         end
     end
 
-    return ValidationResult(true)
+    return ValidationResult(success=true)
 end
 
 """
@@ -432,7 +432,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
         )
     end
 
-    return ValidationResult(true)
+    return ValidationResult(success=true)
 end
 
 

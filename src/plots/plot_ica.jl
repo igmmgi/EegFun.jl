@@ -1930,15 +1930,15 @@ end
 
 
 """
-    plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int;
-                          exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                          line_freq::Real=50.0,
-                          freq_bandwidth::Real=1.0,
-                          window_size::Int=1024,
-                          overlap::Real=0.5,
-                          max_freq::Real=100.0)
+    plot_ica_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int;
+                              exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+                              line_freq::Real=50.0,
+                              freq_bandwidth::Real=1.0,
+                              window_size::Int=1024,
+                              overlap::Real=0.5,
+                              max_freq::Real=100.0)
 
-Plot the power spectrum of a specific ICA component.
+Plot the power spectrum of a specific ICA component with sample exclusion capabilities.
 
 # Arguments
 - `ica_result::InfoIca`: The ICA result object.
@@ -1956,7 +1956,7 @@ Plot the power spectrum of a specific ICA component.
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
 """
-function plot_component_spectrum(
+function plot_ica_component_spectrum(
     ica_result::InfoIca,
     dat::ContinuousData,
     comp_idx::Int;
@@ -2215,118 +2215,6 @@ end
 
 
 
-
-
-"""
-    plot_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
-                             exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                             line_freq::Real=50.0,
-                             freq_bandwidth::Real=1.0,
-                             z_threshold::Float64=3.0,
-                             min_harmonic_power::Real=0.5)
-
-Plot spectral metrics used for line noise component identification.
-
-# Arguments
-- `ica_result::InfoIca`: The ICA result object.
-- `dat::ContinuousData`: The continuous data.
-
-# Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
-- `line_freq::Real`: Line frequency in Hz (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
-- `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
-- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
-
-# Returns
-- `fig::Figure`: The Makie Figure containing the line noise metrics plots.
-"""
-function plot_line_noise_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    z_threshold::Float64=3.0,
-    min_harmonic_power::Real=0.5
-)
-    # Get line noise components and metrics
-    line_noise_comps, metrics_df = identify_line_noise_components(
-        ica_result, dat;
-        exclude_samples=exclude_samples,
-        line_freq=line_freq,
-        freq_bandwidth=freq_bandwidth,
-        z_threshold=z_threshold,
-        min_harmonic_power=min_harmonic_power
-    )
-
-    # Create figure with two subplots
-    fig = Figure(size=(1000, 400))
-    
-    # Plot 1: Power Ratio Z-Scores
-    ax1 = Axis(
-        fig[1, 1],
-        xlabel = "Component",
-        ylabel = "Power Ratio Z-Score",
-        title = "Line Frequency Power Ratio Z-Scores"
-    )
-    
-    # Plot all components with label
-    scatter!(ax1, metrics_df.Component, metrics_df.PowerRatioZScore, 
-             color=:gray, label="All Components")
-    
-    # Highlight identified components with label
-    if !isempty(line_noise_comps)
-        identified_metrics = metrics_df[in.(metrics_df.Component, Ref(line_noise_comps)), :]
-        scatter!(ax1, identified_metrics.Component, identified_metrics.PowerRatioZScore,
-                color=:red, markersize=8, label="Line Noise Components")
-        
-        # Add component numbers as labels
-        for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
-            text!(ax1, comp, row.PowerRatioZScore[1], text=string(comp),
-                  color=:red, align=(:center,:bottom), fontsize=10)
-        end
-    end
-    
-    # Add threshold line with label
-    hlines!(ax1, [z_threshold], color=:red, linestyle=:dash, label="Threshold")
-    
-    # Add legend
-    axislegend(ax1, position=(1.0, 1.0))
-    
-    # Plot 2: Harmonic Ratios
-    ax2 = Axis(
-        fig[1, 2],
-        xlabel = "Component",
-        ylabel = "Power Ratio",
-        title = "Harmonic Power Ratios"
-    )
-    
-    # Plot harmonic ratios with labels
-    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic2Ratio,
-             color=:blue, label="2nd Harmonic")
-    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic3Ratio,
-             color=:green, label="3rd Harmonic")
-    
-    # Add reference line for minimum harmonic power with label
-    hlines!(ax2, [min_harmonic_power], color=:gray, linestyle=:dash,
-            label="Min Harmonic Power")
-    
-    # Highlight identified components with label
-    if !isempty(line_noise_comps)
-        identified_metrics = metrics_df[in.(metrics_df.Component, Ref(line_noise_comps)), :]
-        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic2Ratio,
-                color=:red, markersize=8, label="Line Noise Components")
-        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic3Ratio,
-                color=:red, markersize=8)
-    end
-    
-    # Add legend
-    axislegend(ax2, position=(1.0, 1.0))
-    
-    return fig
-end
 
 
 

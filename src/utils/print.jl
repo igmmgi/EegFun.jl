@@ -92,6 +92,6 @@ function print_config(config, filename::String)
     open(filename, "w") do file
         print_config(config, file)
     end
-    println("Configuration written to: $filename")
+    @info "Configuration written to: $filename"
 end
 

@@ -18,7 +18,7 @@ mutable struct IcaState
 end
 
 mutable struct ExtraChannelVis
-    visualization::Union{Nothing,Makie.Lines,Makie.PolyElement,Makie.Plot}
+    visualization::Union{Nothing,Makie.Lines,Makie.PolyElement,Any}
     label::Union{Nothing,Makie.Text}
 end
 
@@ -60,13 +60,13 @@ mutable struct ChannelState
     labels::Vector{Symbol}
     visible::Vector{Bool}
     data_labels::Dict{Symbol,Makie.Text}
-    data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Makie.Plot}}
+    data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
             fill(true, length(channel_labels)),
             Dict{Symbol,Makie.Text}(),
-            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Makie.Plot}}(),
+            Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
         )
     end
 end
@@ -94,10 +94,10 @@ end
 mutable struct ExtraChannelInfo
     channel::Union{Nothing,Symbol}
     visible::Bool
-    data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Makie.Plot}}
+    data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     data_labels::Dict{Symbol,Makie.Text}
     ExtraChannelInfo() =
-        new(nothing, false, Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Makie.Plot}}(), Dict{Symbol,Makie.Text}())
+        new(nothing, false, Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(), Dict{Symbol,Makie.Text}())
 end
 
 # Single unified browser state with a type parameter
@@ -537,24 +537,6 @@ end
 # Get epoch menu based on state type
 get_epoch_menu(fig, ax, state::ContinuousDataBrowserState) = nothing
 get_epoch_menu(fig, ax, state::EpochedDataBrowserState) = create_epoch_menu(fig, ax, state)
-
-# Unified setup_ui method using multiple dispatch for the epoch menu
-function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing)
-    # Get common UI elements
-    toggles, labels_menu, reference_menu, ica_menu, extra_menu = setup_ui_base(fig, ax, state, dat, ica)
-
-    # Get type-specific epoch menu (or nothing)
-    epoch_menu = get_epoch_menu(fig, ax, state)
-
-    # Build the grid components
-    build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
-
-    # Apply theme
-    update_theme!(Theme(fontsize = 18))
-    hideydecorations!(ax, label = true)
-
-    return state
-end
 
 ############
 # Navigation
