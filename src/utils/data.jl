@@ -1,6 +1,13 @@
-
 function viewer(dat)
-    ENV["TERM_PROGRAM"] == "vscode" ? vscodedisplay(dat) : display(dat)
+    if ENV["TERM_PROGRAM"] == "vscode"
+        try
+            vscodedisplay(dat)
+        catch
+            display(dat)
+        end
+    else
+        display(dat)
+    end
 end
 
 function viewer(dat::EegData)
@@ -18,10 +25,13 @@ function tail(dat::EegData; n=nothing)
 end
 
 function to_data_frame(dat::EpochData)
+    isempty(dat.data) && return DataFrame()
     return vcat(dat.data...)
 end
 
 function to_data_frame(dat::Vector{EpochData})
+    isempty(dat) && return DataFrame()
+    isempty(dat[1].data) && return DataFrame()
     return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
 end
 
@@ -57,26 +67,34 @@ Calculate the mean of specified columns in a DataFrame.
 - `Vector{Float64}`: A vector containing the mean of each specified column.
 """
 colmeans(df::DataFrame, cols) = reduce(+, eachcol(df[!, cols])) ./ length(cols)
-colmeans(df::Matrix) = reduce(+, eachrow(df)) ./ size(df)[1]
-colmeans(df::Matrix, cols) = reduce(+, eachrow(df[:, cols])) ./ size(df)[1]
+colmeans(df::Matrix) = reduce(+, eachcol(df)) ./ size(df)[2]
+colmeans(df::Matrix, cols) = reduce(+, eachcol(df[:, cols])) ./ length(cols)
 
 
 """
-    data_limits_x(dat::DataFrame) -> Tuple{Float64,Float64}
+    data_limits_x(dat::DataFrame) -> Union{Tuple{Float64,Float64}, Nothing}
 
 Get the time range of the data.
 
 # Returns
 - `Tuple{Float64,Float64}`: Minimum and maximum time values
+- `Nothing`: If the DataFrame is empty
 """
-data_limits_x(dat::DataFrame; col = :time) = extrema(dat[!, col])
+function data_limits_x(dat::DataFrame; col = :time)
+    isempty(dat) && return nothing
+    return extrema(dat[!, col])
+end
 
 """
-    data_limits_y(dat::DataFrame, col) -> Vector{Float64}
+    data_limits_y(dat::DataFrame, col) -> Union{Vector{Float64}, Nothing}
 
 Get the value range for specified columns.
 
 # Returns
 - `Vector{Float64}`: [minimum, maximum] across specified columns
+- `Nothing`: If the DataFrame is empty
 """
-data_limits_y(dat::DataFrame, col) = [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
+function data_limits_y(dat::DataFrame, col)
+    isempty(dat) && return nothing
+    return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
+end

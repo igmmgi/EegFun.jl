@@ -9,7 +9,7 @@
 # package
 using eegfun
 
-config = load_config("pipeline.toml");
+config = eegfun.load_config("pipelin.toml");
 # print_config(config)
 # print_config(config, "config_output.toml")
 

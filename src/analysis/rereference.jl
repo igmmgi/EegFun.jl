@@ -59,7 +59,7 @@ function rereference!(
     channel_labels::Vector{Symbol}, 
     reference_channels::Vector{Symbol}
 )
-    @info "Rereferencing using channel(s): $(print_vector_(reference_channels))"
+    @info "Rereferencing using channel(s): $(_print_vector(reference_channels))"
     reference = calculate_reference(dat, reference_channels)
     _apply_rereference!(dat, channel_labels, reference)
 end

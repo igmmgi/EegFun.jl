@@ -54,7 +54,7 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dic
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
     !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
     if isnothing(kwargs[:title])
-        ax.title = "$(print_vector_(channels))"
+        ax.title = "$(_print_vector(channels))"
     else
         ax.title = kwargs[:title]
     end

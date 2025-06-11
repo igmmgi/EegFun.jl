@@ -8,8 +8,14 @@ Reads a layout file in CSV format and returns a DataFrame containing the layout 
 
 # Returns
 - `DataFrame`: A DataFrame containing the layout data, with columns for electrode labels, incidence angles, azimuth angles, and calculated Cartesian coordinates (if applicable).
+
+# Throws
+- `SystemError`: If the file does not exist or cannot be accessed.
 """
 function read_layout(file)
+    if !isfile(file)
+        throw(SystemError("Cannot open file: $file"))
+    end
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
     return df
@@ -31,9 +37,14 @@ Converts polar coordinates (incidence and azimuth angles) from a layout DataFram
 - Nothing. The function modifies the `layout` DataFrame directly.
 """
 function polar_to_cartesian_xy!(layout::DataFrame)
-
+    # Check for required columns
     if !all([col in propertynames(layout) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
+    end
+
+    # Validate data types
+    if !(eltype(layout.inc) <: Number && eltype(layout.azi) <: Number)
+        throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
     radius = 88 # mm
@@ -44,7 +55,6 @@ function polar_to_cartesian_xy!(layout::DataFrame)
     layout[!, :y2] = inc .* sin.(azi) .* radius
 
     return nothing
-
 end
 
 """
@@ -62,9 +72,14 @@ Converts polar coordinates (incidence and azimuth angles) from a layout DataFram
 - Nothing. The function modifies the `layout` DataFrame directly.
 """
 function polar_to_cartesian_xyz!(layout::DataFrame)
-
+    # Check for required columns
     if !all([col in propertynames(layout) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
+    end
+
+    # Validate data types
+    if !(eltype(layout.inc) <: Number && eltype(layout.azi) <: Number)
+        throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
     radius = 88.0  # mm
@@ -76,7 +91,6 @@ function polar_to_cartesian_xyz!(layout::DataFrame)
     layout[!, :z3] = radius .* cos.(inc)
 
     return nothing
-
 end
 
 """
