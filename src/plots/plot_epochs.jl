@@ -71,7 +71,7 @@ function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
         if length(channels) == 1
             _set_axis_properties!(ax, kwargs, "$(channels[1])")
         else
-            _set_axis_properties!(ax, kwargs, "Avg: $(print_vector_(channels, max_length = 8, n_ends = 3))")
+            _set_axis_properties!(ax, kwargs, "Avg: $(_print_vector(channels, max_length = 8, n_ends = 3))")
         end
 
     else

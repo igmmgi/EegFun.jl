@@ -1,4 +1,4 @@
-function print_vector_(v::Vector; max_length::Int = 10, n_ends::Int = 5)
+function _print_vector(v::Vector; max_length::Int = 10, n_ends::Int = 5)
     if length(v) > max_length
         v = vcat(first(v, n_ends), "...", last(v, n_ends))
     end
@@ -6,11 +6,11 @@ function print_vector_(v::Vector; max_length::Int = 10, n_ends::Int = 5)
 end
 
 function print_vector(v::UnitRange; max_length::Int = 10, n_ends::Int = 5)
-    print_vector_(collect(v), max_length = max_length, n_ends = n_ends)
+    _print_vector(collect(v), max_length = max_length, n_ends = n_ends)
 end
 
 function print_vector(v::Vector; max_length::Int = 10, n_ends::Int = 5)
-    print_vector_(collect(v), max_length = max_length, n_ends = n_ends)
+    _print_vector(collect(v), max_length = max_length, n_ends = n_ends)
 end
 
 """
@@ -23,7 +23,7 @@ Get the current git commit hash.
 """
 function get_git_commit()
     try
-        return readchomp(`git rev-parse HEAD`)
+        return String(readchomp(`git rev-parse HEAD`))
     catch
         return "unknown"
     end

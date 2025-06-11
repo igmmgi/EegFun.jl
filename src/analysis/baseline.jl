@@ -57,7 +57,7 @@ function baseline!(
 )
     baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
     channel_indices = get_channel_indices(dat, channel_labels)
-    @info "Applying baseline correction to channel(s) $(print_vector_(channel_labels)) over IntervalIdx: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
+    @info "Applying baseline correction to channel(s) $(_print_vector(channel_labels)) over IntervalIdx: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
     _apply_baseline!(dat.data, channel_indices, baseline_interval)
 end
 
@@ -101,7 +101,7 @@ function baseline!(
 )
     baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
     channel_indices = get_channel_indices(dat, channel_labels)
-    @info "Applying baseline correction to channel(s) $(print_vector_(channel_labels)) over over IntervalIdx: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
+    @info "Applying baseline correction to channel(s) $(_print_vector(channel_labels)) over over IntervalIdx: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
 
     for epoch in eachindex(dat.data)
         _apply_baseline!(dat.data[epoch], channel_labels, baseline_interval)
