@@ -23,29 +23,9 @@ ScatteredInterpolation = "3f865c0f-6dca-5f4d-999b-29fe1e7e3c92"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
-[compat]
-BioSemiBDF = "0.4.3"
-CSV = "0.10.15"
-DSP = "0.8.4"
-DataFrames = "1.7.0"
-Dates = "1.11.0"
-FFTW = "1.9.0"
-JLD2 = "0.5.13"
-LinearAlgebra = "1.11.0"
-Logging = "1.11.0"
-LoggingExtras = "1.1.0"
-Makie = "0.22.10"
-OrderedCollections = "1.8.1"
-PrettyTables = "2.4.0"
-Printf = "1.11.0"
-Random = "1.11.0"
-ScatteredInterpolation = "0.3.6"
-StatsBase = "0.34.5"
-TOML = "1.0.3"
-
 [extras]
 Coverage = "a2441757-f6aa-5fb2-8edb-039e3f45d037"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "Coverage"]
