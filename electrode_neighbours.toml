@@ -1,7 +1,7 @@
 [metadata]
 average_neighbours_per_electrode = 2.69
 total_electrodes = 72
-generated_at = "2025-06-11T19:43:26.072"
+generated_at = "2025-06-12T10:52:46.215"
 
 [electrodes.Fp1]
 neighbors = ["AF3"]

@@ -218,7 +218,6 @@ function create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, b
     return stack
 end
 
-# orientation function is imported from utils/misc.jl
 
 """
     add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbol}};
@@ -417,6 +416,39 @@ function plot_layout_3d(layout; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout; kwargs...)
+    display_plot = get(kwargs, :display_plot, true)
+    if display_plot
+        display(fig)
+    end
+    return fig, ax
+end
+
+"""
+    plot_layout_3d(layout, neighbours; kwargs...)
+
+Create a new figure and plot a 3D EEG electrode layout with interactive points showing electrode connections.
+
+# Arguments
+- `layout`: DataFrame containing electrode positions
+- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
+- `kwargs...`: Additional keyword arguments passed to the plot_layout_3d! function
+
+# Returns
+- The figure and axis objects
+
+# Example
+    layout = read_layout("./layouts/biosemi64.csv")
+    neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 80)
+    fig, ax = plot_layout_3d(layout, neighbours)
+"""
+function plot_layout_3d(layout, neighbours; kwargs...)
+    fig = Figure()
+    ax = Axis3(fig[1, 1])
+    plot_layout_3d!(fig, ax, layout, neighbours; kwargs...)
+    display_plot = get(kwargs, :display_plot, true)
+    if display_plot
+        display(fig)
+    end
     return fig, ax
 end
 
@@ -446,65 +478,28 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
 function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_3d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
     positions = Observable(Point3f.(layout.x3, layout.y3, layout.z3))
-    add_interactive_points!(fig, ax, layout, neighbours, positions)
+    add_interactive_points!(fig, ax, layout, neighbours, positions, true)
     return fig, ax
 end
 
 
 """
-
-
     add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,Add commentMore actions
-
-
                           neighbours::OrderedDict, positions::Observable, is_3d::Bool=false)
-
-
-
-
 
 Add interactive electrode points that highlight and show connections to neighboring electrodes on hover.
 
-
-
-
-
 # Arguments
-
-
 - `fig`: The figure to add interactivity to
-
-
 - `ax`: The axis to add interactivity to (can be 2D or 3D)
-
-
 - `layout`: DataFrame containing electrode information
-
-
 - `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
-
-
 - `positions`: Observable containing point positions (Point2f or Point3f)
-
-
 - `is_3d`: Boolean indicating if the plot is 3D (default: false)
 
-
-
-
-
 # Returns
-
-
 - The figure and axis objects
-
-
-
-
-
 """
-
-
 function add_interactive_points!(
     fig::Figure,
     ax::Union{Axis,Axis3},
@@ -513,8 +508,6 @@ function add_interactive_points!(
     positions::Observable,
     is_3d::Bool = false,
 )
-
-    println("hello")
 
     base_size = 15
     hover_size = 25
@@ -549,9 +542,7 @@ function add_interactive_points!(
 
             linesegments[] = new_lines
 
-
         end
-
 
     end
 end

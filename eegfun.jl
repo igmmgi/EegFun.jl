@@ -8,11 +8,12 @@
 
 # package
 using eegfun
+using GLMakie
 # using eegfun: load_config 
 
 config = eegfun.load_config("pipeline.toml");
-# eegfun.print_config(config)
-# eegfun.print_config(config, "config_output.toml")
+eegfun.print_config(config)
+eegfun.print_config(config, "config_output.toml")
 
 # preprocess data
 eegfun.preprocess_eeg_data("pipeline.toml")
@@ -27,7 +28,7 @@ fig, ax = eegfun.plot_layout_2d(layout);
  
 neighbours = eegfun.get_electrode_neighbours_xy(layout, 40);
 eegfun.print_neighbours_dict(neighbours, "electrode_neighbours.toml")
-fig, ax =eegfun.plot_layout_2d(layout, neighbours)
+eegfun.plot_layout_2d(layout, neighbours)
 
 set_theme!(figure_padding=0)
 fig, ax = eegfun.plot_layout_2d(layout)
@@ -38,27 +39,27 @@ eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border
 eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
-save("topo_roi.pdf", fig)
-
+save("topo_roi.png", fig)
 
 
 # First, read your layout file
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv")
 
 # Convert to 2D Cartesian coordinates
-polar_to_cartesian_xy!(layout)
+eegfun.polar_to_cartesian_xy!(layout)
 
 
 # 3D layout
-# polar_to_cartesian_xyz!(layout)
-# neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 40);
-# plot_layout_3d(layout)
-# plot_layout_3d(layout, neighbours)
+eegfun.polar_to_cartesian_xyz!(layout)
+# neighbours = eegfun.get_electrode_neighbours_xyz(layout, 40);
+# fig, ax = eegfun.plot_layout_3d(layout)
+# fig, ax = eegfun.plot_layout_3d(layout, neighbours)
 
 subject = 3
 dat = eegfun.read_bdf("../Flank_C_$(subject).bdf");
 
-fig, ax = eegfun.plot_events(dat)
+eegfun.plot_events(dat)
+eegfun.plot_events_timing(dat)
 
 
 dat = eegfun.create_eeg_dataframe(dat, layout);
