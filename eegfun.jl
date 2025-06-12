@@ -8,41 +8,42 @@
 
 # package
 using eegfun
+# using eegfun: load_config 
 
-config = eegfun.load_config("pipelin.toml");
-# print_config(config)
-# print_config(config, "config_output.toml")
+config = eegfun.load_config("pipeline.toml");
+# eegfun.print_config(config)
+# eegfun.print_config(config, "config_output.toml")
 
 # preprocess data
-preprocess_eeg_data("pipeline.toml")
+eegfun.preprocess_eeg_data("pipeline.toml")
 
 
 # load layout
-layout = read_layout("./data/layouts/biosemi72.csv");
+layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
 # 2D layout
-polar_to_cartesian_xy!(layout)
-fig, ax = plot_layout_2d(layout);
+eegfun.polar_to_cartesian_xy!(layout)
+fig, ax = eegfun.plot_layout_2d(layout);
  
-neighbours = get_electrode_neighbours_xy(layout, 40);
-print_neighbours_dict(neighbours, "electrode_neighbours.toml")
-plot_layout_2d(layout, neighbours)
+neighbours = eegfun.get_electrode_neighbours_xy(layout, 40);
+eegfun.print_neighbours_dict(neighbours, "electrode_neighbours.toml")
+fig, ax =eegfun.plot_layout_2d(layout, neighbours)
 
 set_theme!(figure_padding=0)
-fig, ax = plot_layout_2d(layout)
-add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
-add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
-add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
-add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
-add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
-add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
-add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
+fig, ax = eegfun.plot_layout_2d(layout)
+eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
+eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
+eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
+eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
+eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
+eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
+eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 save("topo_roi.pdf", fig)
 
 
 
 # First, read your layout file
-layout = read_layout("./data/layouts/biosemi72.csv")
+layout = eegfun.read_layout("./data/layouts/biosemi72.csv")
 
 # Convert to 2D Cartesian coordinates
 polar_to_cartesian_xy!(layout)
@@ -55,12 +56,12 @@ polar_to_cartesian_xy!(layout)
 # plot_layout_3d(layout, neighbours)
 
 subject = 3
-dat = read_bdf("../Flank_C_$(subject).bdf");
+dat = eegfun.read_bdf("../Flank_C_$(subject).bdf");
 
-fig, ax = plot_events(dat)
+fig, ax = eegfun.plot_events(dat)
 
 
-dat = create_eeg_dataframe(dat, layout);
+dat = eegfun.create_eeg_dataframe(dat, layout);
 
 fig, ax = plot_channel_spectrum(dat )
 fig, ax = plot_channel_spectrum(dat,:P2)
@@ -73,11 +74,11 @@ head(dat)
 tail(dat)
 
 # rereference
-rereference!(dat, :avg)
+eegfun.rereference!(dat, :avg)
 # rereference!(dat, :mastoid)
 
 # initial high-pass filter to remove slow drifts
-filter_data!(dat, "hp", "fir", 1, order=1)
+eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 
 
 # @btime dat1 = repair_bad_channels(dat, [:Fp1], neighbours)
@@ -88,15 +89,15 @@ filter_data!(dat, "hp", "fir", 1, order=1)
 # lines!(dat2.data[:, :Fp1], color = :green)
 
 # caculate EOG channels
-diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
-diff_channel!(dat, :F9, :F10, :hEOG);
+eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
+eegfun.diff_channel!(dat, :F9, :F10, :hEOG);
 
 # autodetect EOG signals
-detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # detect extreme values
-is_extreme_value!(dat, dat.layout.label, 100);
+eegfun.is_extreme_value!(dat, dat.layout.label, 100);
 # is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
 # is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
 
@@ -104,10 +105,10 @@ is_extreme_value!(dat, dat.layout.label, 100);
 # n_extreme_value(dat,  100)
 
 # mark trigger windows
-mark_epoch_windows!(dat, [1, 4, 5, 3], [-0.5, 1.0])
+eegfun.mark_epoch_windows!(dat, [1, 4, 5, 3], [-0.5, 1.0])
 
 # plot databrowser
-plot_databrowser(dat);
+eegfun.plot_databrowser(dat);
 plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 
 # summary = channel_summary(dat)

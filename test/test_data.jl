@@ -2,11 +2,14 @@ using Test
 using DataFrames
 using eegfun
 
+eegfun.head(eeg)
+
 @testset "Data Utilities" begin
 
     # Test head and tail
     @testset "head and tail" begin
-        df = DataFrame(a=1:10, b=11:20)
+
+        df = DataFrame(time = (0:9) ./ 1000, a=1:10, b=11:20)
         layout = DataFrame(label=[:a, :b])
         eeg = eegfun.ContinuousData(df, layout, 1000, eegfun.AnalysisInfo())
 

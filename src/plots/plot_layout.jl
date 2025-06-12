@@ -514,6 +514,8 @@ function add_interactive_points!(
     is_3d::Bool = false,
 )
 
+    println("hello")
+
     base_size = 15
     hover_size = 25
     sizes = Observable(fill(base_size, length(layout.label)))

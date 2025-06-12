@@ -1,7 +1,7 @@
 function viewer(dat)
     if ENV["TERM_PROGRAM"] == "vscode"
         try
-            vscodedisplay(dat)
+            Main.vscodedisplay(dat)
         catch
             display(dat)
         end
