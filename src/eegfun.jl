@@ -16,7 +16,6 @@ using FFTW
 # Plotting and visualization
 using Makie
 using GLMakie
-using CairoMakie
 using ScatteredInterpolation
 
 # Utilities
