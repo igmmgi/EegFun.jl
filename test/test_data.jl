@@ -2,8 +2,6 @@ using Test
 using DataFrames
 using eegfun
 
-eegfun.head(eeg)
-
 @testset "Data Utilities" begin
 
     # Test head and tail
