@@ -214,6 +214,9 @@ function repair_channels_spherical_spline!(
     return nothing
 end
 
+# Spherical spline interpolation based on Perrin et al. (1989)
+# Fast approximations derived from MNE-Python/EEGLAB implementations
+
 # Much faster g-function with pre-computed coefficients
 function fast_g_function(cos_angle::Float64, m::Int)
     if cos_angle ≈ 1.0
