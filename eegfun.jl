@@ -11,13 +11,25 @@ using eegfun
 using GLMakie
 # using eegfun: load_config 
 
+# Basic Tests
+# TODO: Implement proper tests
+layout = eegfun.read_layout("data/layouts/biosemi72.csv");
+subject = 3
+dat = eegfun.read_bdf("../Flank_C_$(subject).bdf");
+dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
+fig, ax = eegfun.plot_topoplot(dat; xlim = [8, 8.2])
+# eegfun.plot_databrowser(dat)
+fig, ax = eegfun.plot_topoplot(dat; method = :spherical_spline, xlim = [8, 8.2])
+
+
+
 config = eegfun.load_config("pipeline.toml");
-eegfun.print_config(config)
-eegfun.print_config(config, "config_output.toml")
+# eegfun.print_config(config)
+# eegfun.print_config(config, "config_output.toml")
 
 # preprocess data
 eegfun.preprocess_eeg_data("pipeline.toml")
-
 
 # load layout
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
@@ -52,7 +64,7 @@ eegfun.polar_to_cartesian_xy!(layout)
 # 3D layout
 eegfun.polar_to_cartesian_xyz!(layout)
 # neighbours = eegfun.get_electrode_neighbours_xyz(layout, 40);
-# fig, ax = eegfun.plot_layout_3d(layout)
+fig, ax = eegfun.plot_layout_3d(layout)
 # fig, ax = eegfun.plot_layout_3d(layout, neighbours)
 
 subject = 3
@@ -62,6 +74,7 @@ eegfun.plot_events(dat)
 eegfun.plot_events_timing(dat)
 
 
+dat = eegfun.create_eeg_dataframe(dat, layout);
 dat = eegfun.create_eeg_dataframe(dat, layout);
 
 # fig, ax = plot_channel_spectrum(dat )
@@ -108,14 +121,15 @@ eegfun.is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_
 # n_extreme_value(dat,  100)
 
 # mark trigger windows
-eegfun.mark_epoch_windows!(dat, [1], [-0.5, 1.0])
+eegfun.mark_epoch_windows!(dat, [1, 2, 3, 4, 1000], [-0.5, 1.0])
 
-epoch = eegfun.EpochCondition(name = "Condition", trigger_sequences = [[1, 2], [2, :any]])
-eegfun.mark_epoch_windows!(dat, [epoch], [-1, 1.0])
+epoch1 = eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1, 2], [2, :any]])
+epoch2 = eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[1, 2], [2, :any]])
+eegfun.mark_epoch_windows!(dat, [epoch1, epoch2], [-1, 1.0])
 
 # plot databrowser
 eegfun.plot_databrowser(dat);
-plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
+eegfun.plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 
 # summary = channel_summary(dat)
 # summary = channel_summary(dat, filter_samples = :epoch_window)
@@ -145,24 +159,24 @@ ica_result = run_ica(dat; exclude_samples = [:is_extreme_value])
 
 
 # plot ICA components
-plot_ica_topoplot(ica_result, dat.layout)
-plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
-plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
-plot_ica_topoplot(ica_result, dat.layout, comps = 1:15; use_global_scale = true)
-plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
-plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout)
+eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15; use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
+eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
 
-plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5];
+eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5];
                   use_global_scale = true,
                   colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
-plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5, 7, 9]; dims = (2, 3),
+eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5, 7, 9]; dims = (2, 3),
                   use_global_scale = true,
                   colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
 
 
-plot_ica_component_activation(dat, ica_result)
+eegfun.plot_ica_component_activation(dat, ica_result)
 
-plot_databrowser(dat, ica_result)
+eegfun.plot_databrowser(dat, ica_result)
 
 # dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)

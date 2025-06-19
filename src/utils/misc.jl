@@ -1,4 +1,54 @@
 """
+    make_output_filename(output_dir::String, input_file::String, suffix::String)
+
+Create an output filename from input file path with given suffix.
+
+# Arguments
+- `output_dir::String`: Output directory path
+- `input_file::String`: Input file path
+- `suffix::String`: Suffix to add (e.g., "_ica", "_continuous")
+
+# Returns
+- `String`: Full output filename path
+
+# Example
+```julia
+filename = make_output_filename("/output", "data/file.bdf", "_ica")
+# Returns: "/output/file_ica.jld2"
+```
+"""
+function make_output_filename(output_dir::String, input_file::String, suffix::String)
+    base_name = basename_without_ext(input_file)
+    return joinpath(output_dir, "$(base_name)$(suffix).jld2")
+end
+
+
+"""
+    basename_without_ext(path::String)
+
+Extract the base filename without extension from a file path.
+
+# Arguments
+- `path::String`: File path to process
+
+# Returns
+- `String`: Base filename without extension
+
+# Example
+```julia
+filename = basename_without_ext("data/file.bdf")
+# Returns: "file"
+```
+"""
+function basename_without_ext(path::String) 
+    return splitext(basename(path))[1]
+end
+
+
+
+
+
+"""
     channel_number_to_channel_label(channel_labels::Vector{Symbol}, channel_numbers::Union{Int,Vector{Int},UnitRange}) -> Vector{Symbol}
 
 Convert channel numbers to their corresponding labels.

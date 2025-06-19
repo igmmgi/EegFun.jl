@@ -86,8 +86,9 @@ function polar_to_cartesian_xyz!(layout::DataFrame)
     inc = layout[!, :inc] .* (pi / 180)  # Convert to radians
     azi = layout[!, :azi] .* (pi / 180)  # Convert to radians
 
-    layout[!, :x3] = radius .* sin.(inc) .* cos.(azi)
-    layout[!, :y3] = radius .* sin.(inc) .* sin.(azi)
+    # Swap x and y to match 2D orientation and eliminate 90-degree rotation
+    layout[!, :x3] = radius .* sin.(inc) .* sin.(azi)
+    layout[!, :y3] = radius .* sin.(inc) .* cos.(azi)
     layout[!, :z3] = radius .* cos.(inc)
 
     return nothing
@@ -322,10 +323,10 @@ function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol, Neighbours
     for (electrode, neighbours) in neighbours_dict
         electrode_str = string(electrode)
         toml_dict["electrodes"][electrode_str] = OrderedDict(
-            "neighbors" => [string(n) for n in neighbours.electrodes],
+            "neighbours" => [string(n) for n in neighbours.electrodes],
             "distances" => [round(d, digits=4) for d in neighbours.distances],
             "weights" => [round(w, digits=6) for w in neighbours.weights],
-            "neighbor_count" => length(neighbours.electrodes)
+            "neighbour_count" => length(neighbours.electrodes)
         )
     end
     

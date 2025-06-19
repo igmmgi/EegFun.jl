@@ -46,7 +46,7 @@ function mark_epoch_windows!(
     for trigger in triggers_of_interest
 
         if !(trigger in unique_triggers)
-            @warn "Trigger $trigger not found in data"
+            @minimal_warning "Trigger $trigger not found in data"
             continue
         end
 
@@ -122,7 +122,7 @@ function mark_epoch_windows!(
         sequence_indices = search_sequences(dat.data.triggers, condition.trigger_sequences)
         
         if isempty(sequence_indices)
-            @warn "No triggers found for condition '$(condition.name)'"
+            @minimal_warning "No triggers found for condition '$(condition.name)'"
             continue
         end
 
