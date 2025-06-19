@@ -18,9 +18,9 @@ subject = 3
 dat = eegfun.read_bdf("../Flank_C_$(subject).bdf");
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
-fig, ax = eegfun.plot_topoplot(dat; xlim = [8, 8.2])
+fig, ax = eegfun.plot_topoplot(dat; xlim = [18, 18.2])
 # eegfun.plot_databrowser(dat)
-fig, ax = eegfun.plot_topoplot(dat; method = :spherical_spline, xlim = [8, 8.2])
+fig, ax = eegfun.plot_topoplot(dat; method = :spherical_spline, xlim = [18, 18.2])
 
 
 
