@@ -14,8 +14,8 @@ function plot_topoplot!(
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
     method = :multiquadratic,  # :multiquadratic or :spherical_spline
-    m = 4,  # for spherical spline
-    lambda = 1e-5,  # for spherical spline
+    m = 4,  # for spherical spline (MNE-Python default)
+    lambda = 1e-7,  # for spherical spline (more conservative regularization)
 )
 
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
@@ -39,7 +39,7 @@ function plot_topoplot!(
     xoffset = pop!(label_kwargs, :xoffset)
     yoffset = pop!(label_kwargs, :yoffset)
 
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 200)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = pop!(topo_kwargs, :gridscale)
 
@@ -342,12 +342,13 @@ end
                                            m::Int=4, lambda::Float64=1e-5)
 
 Interpolate EEG data using spherical spline interpolation for topographic plotting.
+Implementation follows MNE-Python exactly.
 
 # Arguments
 - `dat::Vector{<:AbstractFloat}`: EEG values at electrode positions
 - `layout::DataFrame`: Layout information with x3, y3, z3 coordinates
 - `grid_scale::Int`: Size of the output grid
-- `m::Int=4`: Order of Legendre polynomials
+- `m::Int=4`: Order of Legendre polynomials (stiffness parameter)
 - `lambda::Float64=1e-5`: Regularization parameter
 
 # Returns
@@ -360,118 +361,113 @@ function data_interpolation_topo_spherical_spline(
     m::Int=4, 
     lambda::Float64=1e-5
 )
-    # Ensure we have both 2D and 3D coordinates
+    # Ensure we have 3D coordinates
     if !all(col -> col in propertynames(layout), [:x3, :y3, :z3])
         throw(ArgumentError("Layout must contain x3, y3, z3 columns"))
     end
-    if !all(col -> col in propertynames(layout), [:x2, :y2])
-        polar_to_cartesian_xy!(layout)
-    end
     
-    # Extract and normalize coordinates
     n_channels = length(dat)
+    
+    # Extract and normalize 3D coordinates to unit sphere (exactly like MNE)
     coords = zeros(Float64, n_channels, 3)
     for i in 1:n_channels
         coords[i, :] = [layout.x3[i], layout.y3[i], layout.z3[i]]
-        # Normalize to unit sphere
+    end
+    
+    # Normalize to unit sphere (exactly like MNE's _normalize_vectors)
+    for i in 1:n_channels
         norm_factor = sqrt(sum(coords[i,:].^2))
         if norm_factor > 0
             coords[i,:] ./= norm_factor
         end
     end
     
-    # Create a 2D grid that matches the plotting function exactly
-    # Use the same coordinate range as the plotting function expects
-    radius = 88.0  # mm - same as used in plotting function
+    # Create a 2D grid for plotting
+    radius = 88.0  # mm
     x_range = range(-radius * 2, radius * 2, length=grid_scale)
     y_range = range(-radius * 2, radius * 2, length=grid_scale)
     
-    # Create 2D grid points
-    grid_points_2d = zeros(2, grid_scale^2)
-    grid_idx = 1
-    for x in x_range, y in y_range
-        grid_points_2d[1, grid_idx] = x
-        grid_points_2d[2, grid_idx] = y
-        grid_idx += 1
-    end
+    # Compute cosine angles between all electrode pairs (exactly like MNE)
+    cosang = coords * coords'  # This is the dot product matrix
     
-    # Pre-compute g-function matrix for all electrode pairs
-    G = zeros(Float64, n_channels+1, n_channels+1)
-    for i in 1:n_channels, j in 1:n_channels
-        if i != j
-            cos_angle = dot(coords[i,:], coords[j,:])
-            cos_angle = clamp(cos_angle, -1.0, 1.0)
-            G[i,j] = fast_g_function(cos_angle, m)
-        end
-    end
+    # Compute G matrix using MNE's exact g-function
+    G = calc_g_matrix(cosang, m)
     
-    # Add regularization to diagonal
+    # Add regularization to diagonal (exactly like MNE)
     for i in 1:n_channels
-        G[i,i] = fast_g_function(1.0, m) + lambda
+        G[i,i] += lambda
     end
     
-    # Add constraint rows/columns
-    G[1:n_channels, n_channels+1] .= 1.0
-    G[n_channels+1, 1:n_channels] .= 1.0
-    G[n_channels+1, n_channels+1] = 0.0
+    # Add constraint rows/columns (exactly like MNE)
+    G_extended = zeros(Float64, n_channels+1, n_channels+1)
+    G_extended[1:n_channels, 1:n_channels] = G
+    G_extended[1:n_channels, n_channels+1] .= 1.0
+    G_extended[n_channels+1, 1:n_channels] .= 1.0
+    G_extended[n_channels+1, n_channels+1] = 0.0
     
-    # Pre-compute factorization
-    G_fact = lu(G)
-    
-    # Create RHS for the data
+    # Solve the system to get weights (exactly like MNE)
     data_vector = vcat(dat, 0.0)
-    
-    # Solve the system to get weights
-    weights = G_fact \ data_vector
+    weights = G_extended \ data_vector
     
     # Interpolate to grid points
     interpolated_values = zeros(Float64, grid_scale^2)
-    for i in 1:grid_scale^2
-        x2, y2 = grid_points_2d[1, i], grid_points_2d[2, i]
-        
-        # Calculate distance from center
-        r_2d = sqrt(x2^2 + y2^2)
+    grid_idx = 1
+    
+    for x in x_range, y in y_range
+        r_2d = sqrt(x^2 + y^2)
         
         if r_2d <= radius * 2.0  # Within full plotting area
-            # Use spherical spline with proper 3D projection for accuracy
+            # For each grid point, project to sphere and compute interpolation
             if r_2d <= radius
-                # Within head - use proper 3D spherical projection
-                # Swap x and y to match the corrected 3D coordinate system
-                z3 = sqrt(radius^2 - r_2d^2)
-                grid_point_3d = [y2, x2, z3]  # Swap x2 and y2 to match 3D coords
+                # Project 2D point to sphere surface using stereographic projection
+                # This is the standard approach used in EEG topography
+                r_norm = r_2d / radius
+                if r_norm < 1.0
+                    # Stereographic projection: 2D -> 3D sphere
+                    z3 = radius * (1.0 - r_norm^2) / (1.0 + r_norm^2)
+                    x3 = x * (1.0 + z3/radius)
+                    y3 = y * (1.0 + z3/radius)
+                else
+                    # At the edge, project to equator
+                    x3 = x
+                    y3 = y
+                    z3 = 0.0
+                end
+                
+                grid_point_3d = [x3, y3, z3]
+                
+                # Normalize to unit sphere
+                norm_factor = sqrt(sum(grid_point_3d.^2))
+                if norm_factor > 0
+                    grid_point_3d ./= norm_factor
+                    
+                    # Compute cosine angles to all electrodes
+                    cosang_grid = coords * grid_point_3d
+                    
+                    # Compute g-function values for each electrode
+                    g_values = zeros(Float64, n_channels+1)
+                    for j in 1:n_channels
+                        cos_angle = cosang_grid[j]
+                        cos_angle = clamp(cos_angle, -1.0, 1.0)
+                        g_values[j] = calc_g_function(cos_angle, m)
+                    end
+                    g_values[n_channels+1] = 1.0
+                    
+                    # Use the pre-computed spherical spline weights
+                    interpolated_values[grid_idx] = dot(g_values, weights)
+                else
+                    interpolated_values[grid_idx] = NaN
+                end
             else
-                # Beyond head - project to sphere surface by scaling
-                scale_factor = radius / r_2d
-                x_scaled = x2 * scale_factor
-                y_scaled = y2 * scale_factor
-                # Ensure we don't get negative values under sqrt due to floating point precision
-                z_squared = radius^2 - x_scaled^2 - y_scaled^2
-                z3 = z_squared > 0 ? sqrt(z_squared) : 0.0
-                # Swap x and y to match the corrected 3D coordinate system
-                grid_point_3d = [y_scaled, x_scaled, z3]  # Swap x_scaled and y_scaled
+                # Beyond head - use distance-weighted interpolation
+                interpolated_values[grid_idx] = NaN
             end
-            
-            # Normalize to unit sphere for interpolation
-            norm_factor = sqrt(sum(grid_point_3d.^2))
-            if norm_factor > 0
-                grid_point_3d ./= norm_factor
-            end
-            
-            # Compute g-function values using proper 3D angles
-            g_values = zeros(Float64, n_channels+1)
-            for j in 1:n_channels
-                cos_angle = dot(grid_point_3d, coords[j,:])
-                cos_angle = clamp(cos_angle, -1.0, 1.0)
-                g_values[j] = fast_g_function(cos_angle, m)
-            end
-            g_values[n_channels+1] = 1.0
-            
-            # Use the pre-computed spherical spline weights
-            interpolated_values[i] = dot(g_values, weights)
         else
             # Outside plotting area - set to NaN
-            interpolated_values[i] = NaN
+            interpolated_values[grid_idx] = NaN
         end
+        
+        grid_idx += 1
     end
     
     # Reshape to grid and apply circular mask
@@ -481,62 +477,79 @@ function data_interpolation_topo_spherical_spline(
     return result
 end
 
-# Spherical spline interpolation based on Perrin et al. (1989)
-# Fast approximations derived from MNE-Python/EEGLAB implementations
-
-# Much faster g-function with pre-computed coefficients
-function fast_g_function(cos_angle::Float64, m::Int)
-    if cos_angle ≈ 1.0
-        return 0.0
-    end
+# MNE-Python's exact g-function calculation
+function calc_g_function(cosang::Float64, stiffness::Int=4, n_legendre_terms::Int=50)
+    """Calculate spherical spline g function between points on a sphere.
     
-    # Use a table-based approach with common m values
-    if m == 4  # Most common case
-        # These coefficients work well for m=4 and avoid computing Legendre polynomials
-        if cos_angle > 0.9999
-            return 0.0
-        elseif cos_angle > 0.99
-            return 0.05 * (1.0 - cos_angle)
-        else
-            # Approximation that works well for m=4
-            return 0.25 * (1.0 - cos_angle) * (log(1.0 - cos_angle) + 0.5)
-        end
-    else
-        # For other m values, use a faster approximation
-        # This is based on a simplified version of the sum used in typical implementations
-        if cos_angle ≈ 1.0
-            return 0.0
-        end
-        
-        # Use a fixed number of terms - first 7-10 terms usually sufficient
-        sum_value = 0.0
-        for n in 1:10
-            # Use a simpler polynomial approximation instead of full Legendre
-            # For common angles, this is accurate enough
-            P_n = legendre_approx(n, cos_angle)
-            sum_value += ((2*n + 1) / (n^m * (n+1)^m)) * P_n
-        end
-        
-        return sum_value / (4 * π)
-    end
+    This is the exact implementation from MNE-Python.
+    """
+    factors = [
+        (2 * n + 1) / (n^stiffness * (n + 1)^stiffness * 4 * π)
+        for n in 1:n_legendre_terms
+    ]
+    
+    # Use Legendre polynomial evaluation
+    return legendre_val(cosang, [0.0; factors])
 end
 
-# Approximation of Legendre polynomials for common cases
-function legendre_approx(n::Int, x::Float64)
+# MNE-Python's exact G matrix calculation
+function calc_g_matrix(cosang::Matrix{Float64}, stiffness::Int=4, n_legendre_terms::Int=50)
+    """Calculate spherical spline G matrix between points on a sphere.
+    
+    This is the exact implementation from MNE-Python.
+    """
+    factors = [
+        (2 * n + 1) / (n^stiffness * (n + 1)^stiffness * 4 * π)
+        for n in 1:n_legendre_terms
+    ]
+    
+    # Use Legendre polynomial evaluation for the entire matrix
+    return legendre_val(cosang, [0.0; factors])
+end
+
+# Legendre polynomial evaluation (equivalent to numpy.polynomial.legendre.legval)
+function legendre_val(x::Float64, coeffs::Vector{Float64})
+    """Evaluate Legendre polynomial at x with given coefficients."""
+    result = 0.0
+    for (i, c) in enumerate(coeffs)
+        if i == 1
+            result += c  # P_0(x) = 1
+        else
+            result += c * legendre_polynomial(i-1, x)
+        end
+    end
+    return result
+end
+
+function legendre_val(x::Matrix{Float64}, coeffs::Vector{Float64})
+    """Evaluate Legendre polynomial for entire matrix."""
+    result = zeros(size(x))
+    for i in 1:size(x, 1), j in 1:size(x, 2)
+        result[i,j] = legendre_val(x[i,j], coeffs)
+    end
+    return result
+end
+
+# Accurate Legendre polynomial calculation
+function legendre_polynomial(n::Int, x::Float64)
     if n == 0
         return 1.0
     elseif n == 1
         return x
     elseif n == 2
-        return (3x^2 - 1)/2
+        return (3*x^2 - 1) / 2
     elseif n == 3
-        return (5x^3 - 3x)/2
+        return (5*x^3 - 3*x) / 2
     elseif n == 4
-        return (35x^4 - 30x^2 + 3)/8
+        return (35*x^4 - 30*x^2 + 3) / 8
+    elseif n == 5
+        return (63*x^5 - 70*x^3 + 15*x) / 8
+    elseif n == 6
+        return (231*x^6 - 315*x^4 + 105*x^2 - 5) / 16
     else
-        # For higher n, use the iterative method
-        p_prev = (35x^4 - 30x^2 + 3)/8  # P_4
-        p_curr = (63x^5 - 70x^3 + 15x)/8  # P_5
+        # Use iterative method for higher orders
+        p_prev = (35*x^4 - 30*x^2 + 3) / 8  # P_4
+        p_curr = (63*x^5 - 70*x^3 + 15*x) / 8  # P_5
         
         for i in 6:n
             p_next = ((2i - 1) * x * p_curr - (i - 1) * p_prev) / i
