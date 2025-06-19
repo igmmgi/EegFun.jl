@@ -134,16 +134,7 @@ function get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:Ab
 end
 
 
-"""
-    search_sequence(array::AbstractVector, sequence::Int) -> Vector{Int}
 
-Find starting indices of a sequence in an array.
-
-# Returns
-- `Vector{Int}`: Indices where sequence starts
-"""
-search_sequence(array::AbstractVector, sequence::Int) =
-    intersect(findall(array .== sequence), findall(diff(vcat(0, array)) .>= 1))
 
 
 """

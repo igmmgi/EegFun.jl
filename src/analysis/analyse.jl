@@ -70,6 +70,185 @@ function mark_epoch_windows!(
 
 end
 
+"""
+    mark_epoch_windows!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; 
+                         channel_out::Symbol = :epoch_window)
+
+Mark samples that are within a specified time window of trigger sequences defined by epoch conditions.
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+- `epoch_conditions`: Vector of EpochCondition objects defining trigger sequences and reference points
+- `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
+- `channel_out`: Symbol for the output column name (default: :epoch_window)
+
+# Returns
+- The modified ContinuousData object with a new column indicating samples within trigger sequence windows
+
+# Examples
+```julia
+# Define epoch conditions with wildcards and ranges
+condition1 = EpochCondition(name="condition_1", trigger_sequence=[1, :any, 3], reference_index=2)
+condition2 = EpochCondition(name="condition_2", trigger_ranges=[1:5, 10:15], reference_index=1)
+conditions = [condition1, condition2]
+
+# Mark windows around trigger sequences
+mark_epoch_windows!(dat, conditions, [-1.0, 2.0])
+
+# Custom column name
+mark_epoch_windows!(dat, conditions, [-0.5, 0.5], channel_out = :near_sequences)
+```
+"""
+function mark_epoch_windows!(
+    dat::ContinuousData,
+    epoch_conditions::Vector{EpochCondition},
+    time_window::Vector{<:Real};
+    channel_out::Symbol = :epoch_window,
+)
+
+    # Input validation
+    @assert length(time_window) == 2 "Time window must have exactly 2 elements"
+    @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
+    @assert !isempty(epoch_conditions) "Must specify at least one epoch condition"
+    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
+    @assert hasproperty(dat.data, :time) "Data must have a time column"
+
+    # Initialize result vector with false
+    dat.data[!, channel_out] .= false
+
+    # For each epoch condition
+    for condition in epoch_conditions
+        # Find all occurrences of the trigger sequences (unified approach)
+        sequence_indices = search_sequences(dat.data.triggers, condition.trigger_sequences)
+        
+        if isempty(sequence_indices)
+            @warn "No triggers found for condition '$(condition.name)'"
+            continue
+        end
+
+        # Apply after/before filtering if specified
+        if condition.after !== nothing || condition.before !== nothing
+            filtered_indices = Int[]
+            
+            for seq_start_idx in sequence_indices
+                # Check if this sequence meets the after/before constraints
+                valid_position = true
+                
+                if condition.after !== nothing
+                    # Check if there's a trigger with value 'after' before this sequence
+                    # Look backwards from sequence start to find the trigger
+                    found_after_trigger = false
+                    for i in (seq_start_idx-1):-1:1
+                        if dat.data.triggers[i] == condition.after
+                            found_after_trigger = true
+                            break
+                        end
+                    end
+                    if !found_after_trigger
+                        valid_position = false
+                    end
+                end
+                
+                if condition.before !== nothing
+                    # Check if there's a trigger with value 'before' after this sequence
+                    # Look forwards from sequence end to find the trigger
+                    sequence_end = seq_start_idx + length(condition.trigger_sequence) - 1
+                    found_before_trigger = false
+                    for i in (sequence_end+1):length(dat.data.triggers)
+                        if dat.data.triggers[i] == condition.before
+                            found_before_trigger = true
+                            break
+                        end
+                    end
+                    if !found_before_trigger
+                        valid_position = false
+                    end
+                end
+                
+                if valid_position
+                    push!(filtered_indices, seq_start_idx)
+                end
+            end
+            
+            sequence_indices = filtered_indices
+            if isempty(sequence_indices)
+                after_msg = condition.after !== nothing ? " after trigger $(condition.after)" : ""
+                before_msg = condition.before !== nothing ? " before trigger $(condition.before)" : ""
+                @warn "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
+                continue
+            end
+        end
+
+        # Apply timing constraints if specified
+        if condition.timing_pairs !== nothing && 
+           condition.min_interval !== nothing && 
+           condition.max_interval !== nothing
+            
+            valid_indices = Int[]
+            
+            for seq_start_idx in sequence_indices
+                # Check if this sequence meets all timing constraints
+                valid_sequence = true
+                
+                for (start_idx, end_idx) in condition.timing_pairs
+                    # Calculate actual indices in the trigger array
+                    actual_start_idx = seq_start_idx + (start_idx - 1)
+                    actual_end_idx = seq_start_idx + (end_idx - 1)
+                    
+                    # Check bounds
+                    if actual_start_idx < 1 || actual_end_idx > length(dat.data.triggers)
+                        valid_sequence = false
+                        break
+                    end
+                    
+                    # Calculate time interval between the two triggers
+                    start_time_val = dat.data.time[actual_start_idx]
+                    end_time_val = dat.data.time[actual_end_idx]
+                    interval = end_time_val - start_time_val
+                    
+                    # Check if interval meets constraints
+                    if interval < condition.min_interval || interval > condition.max_interval
+                        valid_sequence = false
+                        break
+                    end
+                end
+                
+                if valid_sequence
+                    push!(valid_indices, seq_start_idx)
+                end
+            end
+            
+            sequence_indices = valid_indices
+            if isempty(sequence_indices)
+                @warn "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
+                continue
+            end
+        end
+
+        # For each valid sequence occurrence, find the reference point (t=0 position)
+        for seq_start_idx in sequence_indices
+            # Calculate the reference index (t=0 position) within the sequence
+            reference_idx = seq_start_idx + (condition.reference_index - 1)
+            
+            # Check if reference index is within bounds
+            if reference_idx > length(dat.data.triggers)
+                @warn "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
+                continue
+            end
+            
+            reference_time = dat.data.time[reference_idx]
+
+            # Find all samples within the time window
+            window_start = reference_time + time_window[1]
+            window_end = reference_time + time_window[2]
+
+            # Mark samples within the window
+            in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
+            dat.data[in_window, channel_out] .= true
+        end
+    end
+end
+
 
 
 """

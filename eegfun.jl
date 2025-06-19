@@ -37,7 +37,7 @@ eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
 eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
-eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
+eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 save("topo_roi.png", fig)
 
@@ -64,15 +64,17 @@ eegfun.plot_events_timing(dat)
 
 dat = eegfun.create_eeg_dataframe(dat, layout);
 
-fig, ax = plot_channel_spectrum(dat )
-fig, ax = plot_channel_spectrum(dat,:P2)
-fig, ax = plot_channel_spectrum(dat,[:P2,:P1])
+# fig, ax = plot_channel_spectrum(dat )
+# fig, ax = plot_channel_spectrum(dat,:P2)
+# fig, ax = plot_channel_spectrum(dat,[:P2,:P1])
 
 
-fig, ax = plot_events(dat)
-viewer(dat)
-head(dat)
-tail(dat)
+fig, ax = eegfun.plot_events(dat)
+fig, ax = eegfun.plot_events_timing(dat)
+
+# eegfun.viewer(dat)
+# eegfun.head(dat)
+# eegfun.tail(dat)
 
 # rereference
 eegfun.rereference!(dat, :avg)
@@ -99,14 +101,17 @@ eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # detect extreme values
 eegfun.is_extreme_value!(dat, dat.layout.label, 100);
-# is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
-# is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
+eegfun.is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
+eegfun.is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
 
 # n_extreme_value(dat.data, [:Fp1], 100)
 # n_extreme_value(dat,  100)
 
 # mark trigger windows
-eegfun.mark_epoch_windows!(dat, [1, 4, 5, 3], [-0.5, 1.0])
+eegfun.mark_epoch_windows!(dat, [1], [-0.5, 1.0])
+
+epoch = eegfun.EpochCondition(name = "Condition", trigger_sequences = [[1, 2], [2, :any]])
+eegfun.mark_epoch_windows!(dat, [epoch], [-1, 1.0])
 
 # plot databrowser
 eegfun.plot_databrowser(dat);
