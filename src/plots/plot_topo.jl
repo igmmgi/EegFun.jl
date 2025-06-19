@@ -39,7 +39,7 @@ function plot_topoplot!(
     xoffset = pop!(label_kwargs, :xoffset)
     yoffset = pop!(label_kwargs, :yoffset)
 
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 200)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 400)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = pop!(topo_kwargs, :gridscale)
 
@@ -95,9 +95,12 @@ function plot_topoplot!(
     # Clear the axis to prevent double plotting
     empty!(ax)
     
+    # Use different ranges based on interpolation method
+    contour_range = method == :spherical_spline ? radius * 4 : radius * 2
+    
     co = contourf!(
-       range(-radius * 2, radius * 2, length = gridscale),
-       range(-radius * 2, radius * 2, length = gridscale),
+       range(-contour_range, contour_range, length = gridscale),
+       range(-contour_range, contour_range, length = gridscale),
        data,
        levels = range(ylim[1], ylim[2], div(gridscale, 2));
        topo_kwargs...,
@@ -367,28 +370,33 @@ function data_interpolation_topo_spherical_spline(
     end
     
     n_channels = length(dat)
+    radius = 88.0  # mm - same as used in plotting function
     
-    # Extract and normalize 3D coordinates to unit sphere (exactly like MNE)
+    # Extract 3D coordinates as they are (no normalization needed)
     coords = zeros(Float64, n_channels, 3)
     for i in 1:n_channels
         coords[i, :] = [layout.x3[i], layout.y3[i], layout.z3[i]]
     end
     
-    # Normalize to unit sphere (exactly like MNE's _normalize_vectors)
-    for i in 1:n_channels
-        norm_factor = sqrt(sum(coords[i,:].^2))
-        if norm_factor > 0
-            coords[i,:] ./= norm_factor
-        end
-    end
+    # Find the actual radius of the electrode positions
+    electrode_radius = mean([sqrt(sum(coords[i,:].^2)) for i in 1:n_channels])
     
     # Create a 2D grid for plotting
-    radius = 88.0  # mm
     x_range = range(-radius * 2, radius * 2, length=grid_scale)
     y_range = range(-radius * 2, radius * 2, length=grid_scale)
     
+    # For spherical spline calculation, we need unit sphere coordinates
+    # So we normalize for the G matrix calculation only
+    coords_unit = copy(coords)
+    for i in 1:n_channels
+        norm_factor = sqrt(sum(coords_unit[i,:].^2))
+        if norm_factor > 0
+            coords_unit[i,:] ./= norm_factor
+        end
+    end
+    
     # Compute cosine angles between all electrode pairs (exactly like MNE)
-    cosang = coords * coords'  # This is the dot product matrix
+    cosang = coords_unit * coords_unit'  # This is the dot product matrix
     
     # Compute G matrix using MNE's exact g-function
     G = calc_g_matrix(cosang, m)
@@ -420,29 +428,31 @@ function data_interpolation_topo_spherical_spline(
             # For each grid point, project to sphere and compute interpolation
             if r_2d <= radius
                 # Project 2D point to sphere surface using stereographic projection
-                # This is the standard approach used in EEG topography
-                r_norm = r_2d / radius
+                # Scale the projection to match the electrode radius
+                r_norm = r_2d / radius  # Normalize to plotting radius
                 if r_norm < 1.0
                     # Stereographic projection: 2D -> 3D sphere
-                    z3 = radius * (1.0 - r_norm^2) / (1.0 + r_norm^2)
-                    x3 = x * (1.0 + z3/radius)
-                    y3 = y * (1.0 + z3/radius)
+                    # Use electrode radius for the projection to match electrode positions
+                    z3 = electrode_radius * (1.0 - r_norm^2) / (1.0 + r_norm^2)
+                    x3 = x * (1.0 + z3/electrode_radius)
+                    y3 = y * (1.0 + z3/electrode_radius)
                 else
                     # At the edge, project to equator
-                    x3 = x
-                    y3 = y
+                    x3 = x * (electrode_radius / radius)
+                    y3 = y * (electrode_radius / radius)
                     z3 = 0.0
                 end
                 
                 grid_point_3d = [x3, y3, z3]
                 
-                # Normalize to unit sphere
-                norm_factor = sqrt(sum(grid_point_3d.^2))
+                # For interpolation, we need unit sphere coordinates
+                grid_point_unit = copy(grid_point_3d)
+                norm_factor = sqrt(sum(grid_point_unit.^2))
                 if norm_factor > 0
-                    grid_point_3d ./= norm_factor
+                    grid_point_unit ./= norm_factor
                     
-                    # Compute cosine angles to all electrodes
-                    cosang_grid = coords * grid_point_3d
+                    # Compute cosine angles to all electrodes (using unit sphere coordinates)
+                    cosang_grid = coords_unit * grid_point_unit
                     
                     # Compute g-function values for each electrode
                     g_values = zeros(Float64, n_channels+1)
