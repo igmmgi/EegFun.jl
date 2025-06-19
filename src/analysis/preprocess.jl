@@ -45,6 +45,7 @@ Preprocess EEG data according to the specified configuration file.
 """
 function preprocess_eeg_data(config::String)
     # Set up the global log
+
     global_log = setup_global_logging("preprocess_eeg_data.log")
     
     # Initialize variable for outer scope
@@ -209,16 +210,15 @@ function preprocess_eeg_data(config::String)
                 # epoch data
                 epochs = []
                 for (idx, epoch_condition) in enumerate(epoch_conditions)
-                    # TODO: Implement proper sequence matching
+                    # Use the new extract_epochs function that accepts EpochCondition objects
                     push!(
                         epochs,
                         extract_epochs(
                             dat,
                             idx,
-                            epoch_condition.trigger_sequence,
+                            epoch_condition,
                             config_data["preprocess"]["epoch_start"],
-                            config_data["preprocess"]["epoch_end"];
-                            zero_position = epoch_condition.reference_index,
+                            config_data["preprocess"]["epoch_end"],
                         ),
                     )
                 end
@@ -287,90 +287,3 @@ function preprocess_eeg_data(config::String)
     end
 end
 
-"""
-    EpochCondition
-
-Defines parameters for extracting epochs for a specific experimental condition.
-
-# Fields
-- `name::String`: Descriptive condition name
-- `trigger_sequence::Vector{Int}`: Trigger sequence to match (e.g., [1, 2, 3])
-- `reference_index::Int`: Which trigger position is t=0 (1-based, default: 1)
-- `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
-- `min_interval::Union{Nothing,Float64}`: Minimum time between specified trigger pairs (optional, default: nothing)
-- `max_interval::Union{Nothing,Float64}`: Maximum time between specified trigger pairs (optional, default: nothing)
-"""
-@kwdef struct EpochCondition
-    name::String
-    trigger_sequence::Vector{Int}
-    reference_index::Int = 1
-    timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
-    min_interval::Union{Nothing,Float64} = nothing
-    max_interval::Union{Nothing,Float64} = nothing
-end
-
-"""
-    parse_epoch_conditions(config::Dict) -> Vector{EpochCondition}
-
-Parse epoch conditions from configuration dictionary.
-"""
-function parse_epoch_conditions(config::Dict)
-    defaults = get(config, "epochs", Dict())
-    default_max_interval = get(defaults, "default_max_interval", 2.0)
-    default_min_interval = get(defaults, "default_min_interval", 0.0)
-    
-    conditions = EpochCondition[]
-    condition_configs = get(defaults, "conditions", [])
-    
-    for condition_config in condition_configs
-        name = condition_config["name"]
-        
-        # Parse trigger sequence (single sequence per condition)
-        trigger_sequence = Vector{Int}(condition_config["trigger_sequence"])
-        
-        # Parse reference index (single index) - default to 1
-        reference_index = get(condition_config, "reference_index", 1)
-        
-        # Parse timing pairs (optional - if not specified, no timing constraints)
-        timing_pairs_raw = get(condition_config, "timing_pairs", nothing)
-        if timing_pairs_raw === nothing
-            # No timing constraints
-            timing_pairs = nothing
-            min_interval = nothing
-            max_interval = nothing
-        else
-            # Parse timing constraints
-            timing_pairs = [(pair[1], pair[2]) for pair in timing_pairs_raw]
-            min_interval = get(condition_config, "min_interval", default_min_interval)
-            max_interval = get(condition_config, "max_interval", default_max_interval)
-        end
-        
-        # Validation
-        if reference_index < 1 || reference_index > length(trigger_sequence)
-            error("reference_index must be between 1 and $(length(trigger_sequence)) for condition '$name'")
-        end
-        
-        # Only validate timing constraints if they're specified
-        if timing_pairs !== nothing
-            if min_interval !== nothing && max_interval !== nothing && min_interval >= max_interval
-                error("min_interval must be < max_interval for condition '$name'")
-            end
-            
-            # Validate timing pairs
-            for (start_idx, end_idx) in timing_pairs
-                if start_idx < 1 || start_idx > length(trigger_sequence) || end_idx < 1 || end_idx > length(trigger_sequence)
-                    error("timing_pairs contains invalid indices for sequence of length $(length(trigger_sequence)) in condition '$name'")
-                end
-                if start_idx >= end_idx
-                    error("timing_pairs must have start_idx < end_idx for condition '$name'")
-                end
-            end
-        end
-        
-        push!(conditions, EpochCondition(
-            name, trigger_sequence, reference_index, timing_pairs, min_interval, max_interval
-        ))
-    end
-    
-    return conditions
-end
