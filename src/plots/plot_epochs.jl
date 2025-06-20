@@ -1,47 +1,57 @@
 """
-    plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs...)
+    plot_epochs(dat::EpochData, channel_predicate::Function = channels; kwargs=Dict())
 
-Plot epoched EEG data for specified channels. This function can either average across channels
-and plot a single trace or create separate subplots for each channel.
+Plot epoched EEG data for specified channels.
 
 # Arguments
 - `dat::EpochData`: The epoched EEG data to plot.
-- `channels::Vector{Symbol}`: List of channels to include in the plot.
-- `kwargs...`: Additional keyword arguments for customization.
-
-# Keyword Arguments
-- `average_channels::Bool=true`: If true, averages across channels for a single plot. If false, creates separate subplots for each channel.
-- `xlim::Union{Nothing, Tuple}`: X-axis limits (default: nothing).
-- `ylim::Union{Nothing, Tuple}`: Y-axis limits (default: nothing).
-- `title::Union{Nothing, String}`: Plot title (default: nothing).
-- `xlabel::String`: X-axis label (default: "Time (S)").
-- `ylabel::String`: Y-axis label (default: "mV").
-- `linewidth::Vector{Int}`: Line widths for individual trials and average (default: [1, 3]).
-- `color::Vector{Symbol}`: Colors for individual trials and average (default: [:grey, :black]).
-- `yreversed::Bool`: Whether to reverse the Y-axis (default: false).
-- `layout::Union{Nothing, Tuple{Int, Int}}`: Custom subplot layout (rows, cols) when `average_channels=false` (default: nothing).
+- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels)
+- `kwargs`: Additional keyword arguments for customization.
 
 # Returns
 - `fig::Figure`: The Figure object containing the plot.
-- `ax::Union{Axis, Vector{Axis}}`: The Axis object(s) containing the plot(s).
+- `ax::Axis`: The Axis object containing the plot.
 
-# Example
+# Examples
 ```julia
-# Plot a single channel
-plot_epochs(epoch, :Fp1)
+# Plot all channels
+plot_epochs(dat)
 
-# Plot multiple channels with averaging
-plot_epochs(epoch, [:Fp1, :Fp2])
+# Plot specific channels
+plot_epochs(dat, channels([:Fp1, :Fp2]))
+
+# Exclude reference channels
+plot_epochs(dat, channels_not([:M1, :M2]))
+
+# Plot frontal channels only
+plot_epochs(dat, channels(1:10))
+
+# Custom predicate
+plot_epochs(dat, x -> startswith.(string.(x), "F"))
 
 # Plot multiple channels separately
-plot_epochs(epoch, [:Fp1, :Fp2, :Fpz, :C1], average_channels=false)
+plot_epochs(dat, channels([:Fp1, :Fp2, :Fpz, :C1]), average_channels=false)
 ```
+
+# Keyword Arguments
+- `average_channels::Bool`: Whether to average across channels (default: true)
+- `xlim`: X-axis limits
+- `ylim`: Y-axis limits
+- `title`: Plot title
+- `xlabel`: X-axis label (default: "Time (S)")
+- `ylabel`: Y-axis label (default: "mV")
+- `linewidth`: Line width(s) (default: [1, 3])
+- `color`: Line color(s) (default: [:grey, :black])
+- `yreversed::Bool`: Whether to reverse Y-axis (default: false)
+- `layout`: Subplot layout for multiple channels (default: auto-calculated)
 """
-function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
+function plot_epochs(dat::EpochData, channel_predicate::Function = channels; kwargs=Dict())
+    # Get the channels using the predicate
+    selected_channels = channel_predicate(dat.layout.label)
 
     # Validate inputs
-    isempty(channels) && throw(ArgumentError("At least one channel must be specified"))
-    invalid_channels = setdiff(channels, dat.layout.label)
+    isempty(selected_channels) && throw(ArgumentError("At least one channel must be specified"))
+    invalid_channels = setdiff(selected_channels, dat.layout.label)
     !isempty(invalid_channels) && throw(ArgumentError("Invalid channels: $(join(invalid_channels, ", "))"))
 
     # Default keyword arguments
@@ -65,28 +75,28 @@ function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
 
         # Single plot averaging across channels
         ax = Axis(fig[1, 1])
-        _plot_epochs!(ax, dat, channels, kwargs)
+        _plot_epochs!(ax, dat, selected_channels, kwargs)
 
         # Set axis properties
-        if length(channels) == 1
-            _set_axis_properties!(ax, kwargs, "$(channels[1])")
+        if length(selected_channels) == 1
+            _set_axis_properties!(ax, kwargs, "$(selected_channels[1])")
         else
-            _set_axis_properties!(ax, kwargs, "Avg: $(_print_vector(channels, max_length = 8, n_ends = 3))")
+            _set_axis_properties!(ax, kwargs, "Avg: $(_print_vector(selected_channels, max_length = 8, n_ends = 3))")
         end
 
     else
 
         # Separate subplot for each channel
-        n_channels = length(channels)
+        n_channels = length(selected_channels)
         rows, cols = isnothing(kwargs[:layout]) ? best_rect(n_channels) : kwargs[:layout]
         
         # Calculate global y-range if ylim is not provided
         ylim = kwargs[:ylim]
         if isnothing(ylim)
-            ylim = _calculate_global_yrange(dat, channels)
+            ylim = _calculate_global_yrange(dat, selected_channels)
         end
         
-        for (idx, channel) in enumerate(channels)
+        for (idx, channel) in enumerate(selected_channels)
             row = fld(idx-1, cols) + 1
             col = mod(idx-1, cols) + 1
             ax = Axis(fig[row, col])
@@ -117,6 +127,12 @@ function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
     display(fig)
     return fig, ax
 
+end
+
+# Backward compatibility - keep the old method for existing code
+function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
+    channel_predicate = x -> x .∈ Ref(channels)
+    return plot_epochs(dat, channel_predicate; kwargs = kwargs)
 end
 
 """

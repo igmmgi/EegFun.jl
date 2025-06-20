@@ -1,6 +1,8 @@
 # #################################################################
 # plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
-function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dict())
+function plot_erp!(fig, ax, dat::ErpData, channel_predicate::Function = channels; kwargs = Dict())
+    # Get the channels using the predicate
+    selected_channels = channel_predicate(dat.layout.label)
 
     default_kwargs = Dict(
         :xlim => nothing,
@@ -30,15 +32,15 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dic
         lines!(
             ax,
             dat.data[!, :time],
-            colmeans(dat.data, channels),
+            colmeans(dat.data, selected_channels),
             color = kwargs[:color],
             linewidth = kwargs[:linewidth],
             linestyle = kwargs[:linestyle],
             label = kwargs[:legend_label],
         )
     else
-        colors = Makie.cgrad(kwargs[:colormap], length(channels), categorical = true)
-        for (idx, channel) in enumerate(channels)
+        colors = Makie.cgrad(kwargs[:colormap], length(selected_channels), categorical = true)
+        for (idx, channel) in enumerate(selected_channels)
             lines!(
                 ax,
                 dat.data[!, :time],
@@ -54,7 +56,7 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dic
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
     !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
     if isnothing(kwargs[:title])
-        ax.title = "$(_print_vector(channels))"
+        ax.title = "$(_print_vector(selected_channels))"
     else
         ax.title = kwargs[:title]
     end
@@ -76,7 +78,7 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dic
             halign = kwargs[:topoplot_position][1],
             valign = kwargs[:topoplot_position][2],
         )
-        layout = filter(row -> row.label in channels, dat.layout)
+        layout = filter(row -> row.label in selected_channels, dat.layout)
         if kwargs[:average_channels]
             plot_layout_2d!(
                 fig,
@@ -89,7 +91,7 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dic
                 fig,
                 topo_ax,
                 layout,
-                point_kwargs = Dict(:colormap => colors, :color => 1:length(channels), :markersize => 18),
+                point_kwargs = Dict(:colormap => colors, :color => 1:length(selected_channels), :markersize => 18),
             )
         end
     end
@@ -115,11 +117,44 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Vector{Symbol}; kwargs = Dic
 
 end
 
-function plot_erp(dat::ErpData, channels::Vector{Symbol}; kwargs = Dict())
+"""
+    plot_erp(dat::ErpData, channel_predicate::Function = channels; kwargs = Dict())
+
+Plot ERP data for specified channels.
+
+# Arguments
+- `dat::ErpData`: ERP data structure
+- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels)
+
+# Examples
+```julia
+# Plot all channels
+plot_erp(dat)
+
+# Plot specific channels
+plot_erp(dat, channels([:Fp1, :Fp2]))
+
+# Exclude reference channels
+plot_erp(dat, channels_not([:M1, :M2]))
+
+# Plot frontal channels only
+plot_erp(dat, channels(1:10))
+
+# Custom predicate
+plot_erp(dat, x -> startswith.(string.(x), "F"))
+```
+"""
+function plot_erp(dat::ErpData, channel_predicate::Function = channels; kwargs = Dict())
     fig = Figure()
     ax = Axis(fig[1, 1])
-    fig, ax = plot_erp!(fig, ax, dat, channels; kwargs = kwargs)
+    fig, ax = plot_erp!(fig, ax, dat, channel_predicate; kwargs = kwargs)
     return fig, ax
+end
+
+# Backward compatibility - keep the old method for existing code
+function plot_erp(dat::ErpData, channels::Vector{Symbol}; kwargs = Dict())
+    channel_predicate = x -> x .∈ Ref(channels)
+    return plot_erp(dat, channel_predicate; kwargs = kwargs)
 end
 
 function plot_erp(dat::ErpData, channels::Symbol; kwargs...)
@@ -127,7 +162,7 @@ function plot_erp(dat::ErpData, channels::Symbol; kwargs...)
 end
 
 function plot_erp(dat::ErpData; kwargs...)
-    plot_erp(dat, dat.layout.label; kwargs...)
+    plot_erp(dat, channels; kwargs...)
 end
 
 
