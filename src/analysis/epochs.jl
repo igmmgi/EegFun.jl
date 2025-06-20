@@ -448,7 +448,8 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         epoch_df = DataFrame(dat.data[pre:post, :])
         epoch_df.time = epoch_df.time .- dat.data.time[zero]
         insertcols!(epoch_df, 4, :condition => condition)
-        insertcols!(epoch_df, 5, :epoch => epoch)
+        insertcols!(epoch_df, 5, :condition_name => epoch_condition.name)
+        insertcols!(epoch_df, 6, :epoch => epoch)
         push!(epochs, epoch_df)
     end
 
@@ -474,15 +475,27 @@ Average epochs to create an ERP. This function:
 - `ErpData`: The averaged ERP data with epoch counts
 """
 function average_epochs(dat::EpochData)
-    # Get all EEG channels (excluding metadata columns)
-    eeg_channels = setdiff(propertynames(first(dat.data)), [:time, :triggers, :epoch, :sample])
+    # Get all EEG channels (excluding non-numeric columns)
+    all_columns = propertynames(first(dat.data))
+    numeric_columns = Symbol[]
+    
+    for col in all_columns
+        # Check if the column contains numeric data (excluding Bool)
+        col_type = eltype(first(dat.data)[!, col])
+        if col_type <: Number && col_type != Bool
+            push!(numeric_columns, col)
+        end
+    end
+    
+    # Remove time column from averaging (keep for grouping)
+    eeg_channels = setdiff(numeric_columns, [:time])
     
     # Concatenate all epochs
     all_epochs = reduce(vcat, dat.data)
     
     # Group by time and condition, then average EEG channels and count epochs
     erp = combine(
-        groupby(all_epochs, [:time, :condition]),
+        groupby(all_epochs, [:time, :condition, :condition_name]),
         :epoch => length => :n_epochs,      # Add epoch count
         eeg_channels .=> mean .=> eeg_channels  # Average EEG channels
     )
