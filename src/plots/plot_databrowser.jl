@@ -28,7 +28,10 @@ mutable struct SelectionState
     visible::Observable{Bool}
     rectangle::Makie.Poly
     function SelectionState(ax)
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly!(ax, Point2f[], color = (:blue, 0.3)))
+        # Initialize with a single point to avoid empty vector issues with CairoMakie
+        initial_points = [Point2f(0.0, 0.0)]
+        poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
     end
 end
 
@@ -393,8 +396,10 @@ function create_epoch_menu(fig, ax, state)
 end
 
 function show_additional_menu(state)
+
+    # Create the menu figure
     menu_fig = Figure()
-    plot_types = ["Topoplot", "Spectrum", "Plot3"]  # Added Spectrum option
+    plot_types = ["Topoplot", "Spectrum", "Plot3"]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
@@ -412,7 +417,8 @@ function show_additional_menu(state)
         end
     end
 
-    display(GLMakie.Screen(), menu_fig)
+    new_screen = getfield(Main, :GLMakie).Screen()
+    display(new_screen, menu_fig)
 end
 
 # Create common sliders for both continuous and epoched data
@@ -645,6 +651,8 @@ function finish_selection!(ax, state, mouse_x)
     state.selection.visible[] = true
     state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
     update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
+    # Make sure the polygon is visible when selection is visible
+    state.selection.rectangle.visible[] = true
 end
 
 function handle_mouse_events!(ax, state)
@@ -746,12 +754,17 @@ function update_x_region_selection!(ax, state, x1, x2)
         Point2f(Float64(x2), Float64(ylims[2])),
         Point2f(Float64(x1), Float64(ylims[2])),
     ]
+    # Ensure the polygon is visible when it has valid points
+    state.selection.rectangle.visible[] = true
 end
 
 function clear_x_region_selection!(state)
-    state.selection.rectangle[1] = Point2f[]
+    # Set to a single point instead of empty vector to avoid CairoMakie issues
+    state.selection.rectangle[1] = [Point2f(0.0, 0.0)]
     state.selection.bounds[] = (0.0, 0.0)
     state.selection.visible[] = false
+    # Make sure the polygon is hidden when selection is cleared
+    state.selection.rectangle.visible[] = false
 end
 
 function get_x_region_data(state::ContinuousDataBrowserState)
@@ -1168,6 +1181,12 @@ get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 
 function plot_databrowser(dat::Union{ContinuousData,EpochData}, channel_labels::Vector{Symbol}, ica = nothing)
+
+    # Check if CairoMakie is being used and warn about interactivity
+    if string(Makie.current_backend()) == "CairoMakie"
+        @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
+    end
+
     # Common setup
     fig = Figure(size = (1200, 800), fontsize = 18)
 
