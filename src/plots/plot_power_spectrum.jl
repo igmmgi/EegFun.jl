@@ -180,8 +180,7 @@ end
 
 
 """
-    plot_channel_spectrum(df::DataFrame, channel::Union{Symbol,Vector{Symbol}},
-                         fs::Real;
+    plot_channel_spectrum(df::DataFrame, channel_predicate::Function = channels, fs::Real;
                          line_freq::Real=50.0,
                          freq_bandwidth::Real=1.0,
                          window_size::Int=1024,
@@ -190,12 +189,30 @@ end
                          x_scale::Symbol=:linear,
                          y_scale::Symbol=:linear)
 
-Plot the power spectrum of one or more channels from a DataFrame.
+Plot the power spectrum of channels from a DataFrame.
 
 # Arguments
 - `df::DataFrame`: The data frame containing channel data.
-- `channel`: Channel(s) to plot (must be column names in the DataFrame).
+- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels)
 - `fs::Real`: Sampling frequency in Hz.
+
+# Examples
+```julia
+# Plot all channels
+plot_channel_spectrum(df, channels, 1000)
+
+# Plot specific channels
+plot_channel_spectrum(df, channels([:Fp1, :Fp2]), 1000)
+
+# Exclude reference channels
+plot_channel_spectrum(df, channels_not([:M1, :M2]), 1000)
+
+# Plot frontal channels only
+plot_channel_spectrum(df, channels(1:10), 1000)
+
+# Custom predicate
+plot_channel_spectrum(df, x -> startswith.(string.(x), "F"), 1000)
+```
 
 # Keyword Arguments
 - `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
@@ -206,9 +223,6 @@ Plot the power spectrum of one or more channels from a DataFrame.
 - `x_scale::Symbol`: Scale for x-axis, one of :linear, :log10, or :log (default: :linear).
 - `y_scale::Symbol`: Scale for y-axis, one of :linear, :log10, or :log (default: :linear).
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
-  Common options include DSP.hamming, DSP.blackman, DSP.bartlett, DSP.rect (rectangular window).
-- `include_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in the DataFrame marking samples to include.
-- `display_plot::Bool`: Whether to display the plot immediately (default: false).
 
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
@@ -216,10 +230,50 @@ Plot the power spectrum of one or more channels from a DataFrame.
 """
 function plot_channel_spectrum(
     df::DataFrame,
+    channel_predicate::Function,
+    fs::Real;
+    line_freq::Real = 50.0,
+    freq_bandwidth::Real = 1.0,
+    window_size::Int = 1024,
+    overlap::Real = 0.5,
+    max_freq::Real = 100.0,
+    x_scale::Symbol = :linear,
+    y_scale::Symbol = :linear,
+    window_function::Function = DSP.hanning,
+    show_legend::Bool = true,
+    display_plot::Bool = true,
+)
+    # Get all column names that are not time, sample, or triggers
+    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(df))
+    
+    # Filter channels
+    channel_mask = channel_predicate(all_columns)
+    selected_channels = all_columns[channel_mask]
+    
+    # Delegate to the implementation function
+    return _plot_power_spectrum_implementation(
+        df,
+        selected_channels,
+        fs;
+        line_freq = line_freq,
+        freq_bandwidth = freq_bandwidth,
+        window_size = window_size,
+        overlap = overlap,
+        max_freq = max_freq,
+        x_scale = x_scale,
+        y_scale = y_scale,
+        window_function = window_function,
+        show_legend = show_legend,
+        display_plot = display_plot,
+    )
+end
+
+# Backward compatibility - keep the old method for existing code
+function plot_channel_spectrum(
+    df::DataFrame,
     channel::Union{Symbol,Vector{Symbol}};
     kwargs...
 )
-
     # Process channel input to get vector of channels to plot
     channels_to_plot = channel isa Symbol ? [channel] : channel
     # Check if channels exist
@@ -239,43 +293,58 @@ function plot_channel_spectrum(
 end
 
 """
-    plot_channel_spectrum(dat::ContinuousData, channel::Union{Symbol,Vector{Symbol},Nothing}=nothing;
-                         line_freq::Real=50.0,
-                         freq_bandwidth::Real=1.0,
-                         window_size::Int=1024,
-                         overlap::Real=0.5,
-                         max_freq::Real=100.0,
-                         x_scale::Symbol=:linear,
-                         y_scale::Symbol=:linear)
+    plot_channel_spectrum(dat::ContinuousData; kwargs...)
 
-Plot the power spectrum of one or more EEG channels from ContinuousData.
+Plot the power spectrum of all channels from a ContinuousData object.
 
 # Arguments
-- `dat::ContinuousData`: The continuous data.
-- `channel`: The channel(s) to plot. Can be:
-  - `Symbol`: Single channel name
-  - `Vector{Symbol}`: Multiple channel names
-  - `nothing`: All channels in the layout (default)
+- `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `kwargs`: Additional keyword arguments passed to plot_channel_spectrum.
 
-# Keyword Arguments
-- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
-- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
-- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
-- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-- `x_scale::Symbol`: Scale for x-axis, one of :linear, :log10, or :log (default: :linear).
-- `y_scale::Symbol`: Scale for y-axis, one of :linear, :log10, or :log (default: :linear).
-- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
-  Common options include DSP.hamming, DSP.blackman, DSP.bartlett, DSP.rect (rectangular window).
+# Examples
+```julia
+# Plot all channels
+plot_channel_spectrum(dat)
 
-# Returns
-- `fig::Figure`: The Makie Figure containing the power spectrum plot.
+# Plot specific channels
+plot_channel_spectrum(dat, channels([:Fp1, :Fp2]))
+
+# Exclude reference channels
+plot_channel_spectrum(dat, channels_not([:M1, :M2]))
+```
 """
-function plot_channel_spectrum( dat::ContinuousData; kwargs...)
-    return plot_channel_spectrum(dat.data, dat.layout.label; kwargs...)
+function plot_channel_spectrum(dat::ContinuousData; kwargs...)
+    return plot_channel_spectrum(dat.data, channels, dat.sample_rate; kwargs...)
 end
 
-function plot_channel_spectrum( dat::ContinuousData, channel::Union{Symbol,Vector{Symbol}}; kwargs...)
+"""
+    plot_channel_spectrum(dat::ContinuousData, channel_predicate::Function; kwargs...)
+
+Plot the power spectrum of specified channels from a ContinuousData object.
+
+# Arguments
+- `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `channel_predicate::Function`: Function that returns boolean vector for channel filtering.
+- `kwargs`: Additional keyword arguments passed to plot_channel_spectrum.
+
+# Examples
+```julia
+# Plot specific channels
+plot_channel_spectrum(dat, channels([:Fp1, :Fp2]))
+
+# Exclude reference channels
+plot_channel_spectrum(dat, channels_not([:M1, :M2]))
+
+# Plot frontal channels only
+plot_channel_spectrum(dat, channels(1:10))
+```
+"""
+function plot_channel_spectrum(dat::ContinuousData, channel_predicate::Function; kwargs...)
+    return plot_channel_spectrum(dat.data, channel_predicate, dat.sample_rate; kwargs...)
+end
+
+# Backward compatibility - keep the old method for existing code
+function plot_channel_spectrum(dat::ContinuousData, channel::Union{Symbol,Vector{Symbol}}; kwargs...)
     return plot_channel_spectrum(dat.data, channel; kwargs...)
 end
 
@@ -283,7 +352,7 @@ end
 
 
 """
-    plot_selected_spectrum(selected_data::DataFrame, channel::Union{Symbol,Vector{Symbol}};
+    plot_selected_spectrum(selected_data::DataFrame, channel_predicate::Function = channels;
                           line_freq::Real=50.0,
                           freq_bandwidth::Real=1.0,
                           window_size::Int=1024,
@@ -296,7 +365,22 @@ Plot the power spectrum of a selected time region for specific channel(s).
 
 # Arguments
 - `selected_data::DataFrame`: The selected time region data.
-- `channel`: Channel(s) to plot (must be column names in selected_data).
+- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels).
+
+# Examples
+```julia
+# Plot all channels in selected region
+plot_selected_spectrum(selected_data, channels)
+
+# Plot specific channels
+plot_selected_spectrum(selected_data, channels([:Fp1, :Fp2]))
+
+# Exclude reference channels
+plot_selected_spectrum(selected_data, channels_not([:M1, :M2]))
+
+# Plot frontal channels only
+plot_selected_spectrum(selected_data, channels(1:10))
+```
 
 # Keyword Arguments
 - `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
@@ -315,7 +399,7 @@ Plot the power spectrum of a selected time region for specific channel(s).
 """
 function plot_selected_spectrum(
     selected_data::DataFrame,
-    channel::Union{Symbol,Vector{Symbol}};
+    channel_predicate::Function = channels;
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     window_size::Int = 1024,
@@ -325,12 +409,10 @@ function plot_selected_spectrum(
     y_scale::Symbol = :linear,
     window_function::Function = DSP.hanning,
 )
-   
-
     # Delegate to the main plotting function
     fig, ax = plot_channel_spectrum(
         selected_data,
-        channel;
+        channel_predicate;
         line_freq = line_freq,
         freq_bandwidth = freq_bandwidth,
         window_size = window_size,
@@ -342,6 +424,40 @@ function plot_selected_spectrum(
     )
 
     return fig, ax
+end
+
+# Backward compatibility - keep the old method for existing code
+function plot_selected_spectrum(
+    selected_data::DataFrame,
+    channel::Union{Symbol,Vector{Symbol}};
+    line_freq::Real = 50.0,
+    freq_bandwidth::Real = 1.0,
+    window_size::Int = 1024,
+    overlap::Real = 0.5,
+    max_freq::Real = 200.0,
+    x_scale::Symbol = :linear,
+    y_scale::Symbol = :linear,
+    window_function::Function = DSP.hanning,
+)
+    # Convert to predicate for backward compatibility
+    if channel isa Symbol
+        channel_predicate = x -> x .== channel
+    else
+        channel_predicate = x -> x .∈ Ref(channel)
+    end
+    
+    return plot_selected_spectrum(
+        selected_data,
+        channel_predicate;
+        line_freq = line_freq,
+        freq_bandwidth = freq_bandwidth,
+        window_size = window_size,
+        overlap = overlap,
+        max_freq = max_freq,
+        x_scale = x_scale,
+        y_scale = y_scale,
+        window_function = window_function,
+    )
 end
 
 
