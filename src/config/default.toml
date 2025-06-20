@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-06-10 18:52:30
+# Generated on 2025-06-20 11:41:44
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -123,13 +123,13 @@ type = "fir"
 # ica Settings
 [ica]
 
-# Run Independent Component Analysis (ICA) true/false
+# Run Independent Component Analysis (ICA) true/false.
 # Type: Bool
 # Default: false
 run = false
 
-# filter Settings
-[ica.filter]
+# ica_filter.highpass Settings
+[ica.ica_filter.highpass]
 
 # ICA high-pass filter cutoff frequency (Hz)
 # Type: Real
@@ -149,6 +149,31 @@ on = true
 order = 1
 
 # Type of highpass filter
+# Type: String
+# Allowed values: fir, iir
+# Default: fir
+type = "fir"
+
+# ica_filter.lowpass Settings
+[ica.ica_filter.lowpass]
+
+# ICA low-pass filter cutoff frequency (Hz)
+# Type: Real
+# Default: 30
+cutoff = 30
+
+# Apply lowpass filter to ICA data true/false
+# Type: Bool
+# Default: true
+on = true
+
+# Filter order
+# Type: Int64
+# Range: 1 ≤ value
+# Default: 2
+order = 2
+
+# Type of lowpass filter
 # Type: String
 # Allowed values: fir, iir
 # Default: fir
@@ -180,11 +205,29 @@ reference_channel = "avg"
 # Default: 100
 extreme_value_criterion = 100
 
+# Channels used in the calculation of horizontal eye movements (hEOG).
+# Type: Vector{Vector{String}}
+# Default: [["F9"], ["F10"], ["hEOG"]]
+hEOG_channels = [
+    ["F9"],
+    ["F10"],
+    ["hEOG"],
+]
+
 # Distance criterion for horizontal EOG channel definition.
 # Type: Real
 # Range: 0 ≤ value
 # Default: 30
 hEOG_criterion = 30
+
+# Channels used in the calculation of vertical eye movements (vEOG).
+# Type: Vector{Vector{String}}
+# Default: [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]
+vEOG_channels = [
+    ["Fp1", "IO1"],
+    ["Fp2", "IO2"],
+    ["vEOG"],
+]
 
 # Distance criterion for vertical EOG channel definition.
 # Type: Real

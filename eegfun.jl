@@ -12,6 +12,10 @@ using GLMakie
 # using CairoMakie
 # using eegfun: load_config 
 
+
+eegfun.preprocess_eeg_data("pipeline.toml")
+
+
 # Basic Tests
 # TODO: Implement proper tests
 layout = eegfun.read_layout("data/layouts/biosemi72.csv");
@@ -213,20 +217,21 @@ fig = plot_channel_spectrum(dat, [:P2, :P1])
 
 
 # EPOCHS
+epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = []
-for (idx, epoch) in enumerate([1, 4, 5, 3])
-     push!(epochs, extract_epochs(dat, idx, epoch, -2, 4))
+for (idx, epoch) in enumerate(epoch_cfg)
+     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
+
 plot_databrowser(epochs[1])
 plot_databrowser(epochs[2])
 plot_databrowser(epochs[2], ica_result)
-
 plot_epochs(epochs[1], :Cz)
 
 # average epochs
 erps = []
 for (idx, epoch) in enumerate(epochs)
-    push!(erps, average_epochs(epochs[idx]))
+    push!(erps, eegfun.average_epochs(epochs[idx]))
 end
 
 # ERP Plot

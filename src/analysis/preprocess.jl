@@ -133,35 +133,71 @@ function preprocess_eeg_data(config::String)
                     )
                 end
 
-                # TODO: do not hard code these channels!
-                # caculate EOG channels
-                diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG)
-                diff_channel!(dat, :F9, :F10, :hEOG)
+                # caculate vEOG and hEOG channels
+                diff_channel!(
+                    dat,
+                    Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][1]),
+                    Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][2]),
+                    Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][3][1]),
+                )
+                diff_channel!(
+                    dat,
+                    Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][1]),
+                    Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][2]),
+                    Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][3][1]),
+                )
 
                 # autodetect EOG signals
-                # TODO: do not hard code output channel names!
-                detect_eog_onsets!(dat, cfg["preprocess"]["eog"]["vEOG_criterion"], :vEOG, :is_vEOG)
-                detect_eog_onsets!(dat, cfg["preprocess"]["eog"]["hEOG_criterion"], :hEOG, :is_hEOG)
+                detect_eog_onsets!(
+                    dat,
+                    cfg["preprocess"]["eog"]["vEOG_criterion"],
+                    Symbol(cfg["preprocess"]["eog"]["vEOG_channels"][3][1]),
+                    Symbol("is_" * cfg["preprocess"]["eog"]["vEOG_channels"][3][1]),
+                )
+                detect_eog_onsets!(
+                    dat,
+                    cfg["preprocess"]["eog"]["hEOG_criterion"],
+                    Symbol(cfg["preprocess"]["eog"]["hEOG_channels"][3][1]),
+                    Symbol("is_" * cfg["preprocess"]["eog"]["hEOG_channels"][3][1]),
+                )
+
 
                 # detect extreme values
-                # TODO: output channel names should be configurable
-                is_extreme_value!(dat, dat.layout.label, cfg["preprocess"]["eog"]["extreme_value_criterion"])
+                is_extreme_value!(
+                    dat,
+                    dat.layout.label,
+                    cfg["preprocess"]["eog"]["extreme_value_criterion"],
+                    channel_out = Symbol(
+                        "is_extreme_value" * "_" * string(cfg["preprocess"]["eog"]["extreme_value_criterion"]),
+                    ),
+                )
 
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
                 # more extreme high-pass filter run ica on clean sections of "continuous" data
                 if cfg["ica"]["run"]
 
-                    if cfg["ica"]["filter"]["highpass"]["on"]
+                    dat_ica = copy(dat)
+
+                    if cfg["ica"]["ica_filter"]["highpass"]["on"]
                         # apply high-pass filter to data
-                        dat_ica = filter_data(
-                            dat,
+                        filter_data!(
+                            dat_ica,
                             "hp",
-                            cfg["ica"]["filter"]["highpass"]["type"],
-                            cfg["ica"]["filter"]["highpass"]["cutoff"],
-                            order = cfg["ica"]["filter"]["highpass"]["order"],
+                            cfg["ica"]["ica_filter"]["highpass"]["type"],
+                            cfg["ica"]["ica_filter"]["highpass"]["cutoff"],
+                            order = cfg["ica"]["ica_filter"]["highpass"]["order"],
                         )
-                    else
-                        dat_ica = copy(dat)
+                    end
+
+                    if cfg["ica"]["ica_filter"]["lowpass"]["on"]
+                        # apply high-pass filter to data
+                        filter_data!(
+                            dat_ica,
+                            "lp",
+                            cfg["ica"]["ica_filter"]["lowpass"]["type"],
+                            cfg["ica"]["ica_filter"]["lowpass"]["cutoff"],
+                            order = cfg["ica"]["ica_filter"]["lowpass"]["order"],
+                        )
                     end
 
                     ica_result = run_ica(dat_ica; exclude_samples = [:is_extreme_value])
@@ -177,7 +213,6 @@ function preprocess_eeg_data(config::String)
                 # epoch data
                 epochs = []
                 for (idx, epoch_cfg) in enumerate(epoch_cfgs)
-                    # Use the new extract_epochs function that accepts EpochCondition objects
                     push!(
                         epochs,
                         extract_epochs(

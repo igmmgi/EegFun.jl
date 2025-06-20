@@ -108,6 +108,16 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         min = 0
     ),
 
+    "preprocess.eog.vEOG_channels" => ConfigParameter{Vector{Vector{String}}}(
+        description = "Channels used in the calculation of vertical eye movements (vEOG).",
+        default = [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]],
+    ),
+
+    "preprocess.eog.hEOG_channels" => ConfigParameter{Vector{Vector{String}}}(
+        description = "Channels used in the calculation of horizontal eye movements (hEOG).",
+        default = [["F9"], ["F10"], ["hEOG"]],
+    ),
+
     "preprocess.eog.vEOG_criterion" => ConfigParameter{Real}(
         description = "Distance criterion for vertical EOG channel definition.",
         default = 50,
@@ -180,35 +190,58 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # ICA settings
     "ica.run" => ConfigParameter{Bool}(
-        description = "Run Independent Component Analysis (ICA) true/false",
+        description = "Run Independent Component Analysis (ICA) true/false.",
         default = false
     ),
 
-    "ica.filter.highpass.on" => ConfigParameter{Bool}(
+    "ica.ica_filter.highpass.on" => ConfigParameter{Bool}(
         description = "Apply highpass filter to ICA data true/false",
         default = true
     ),
     
-    "ica.filter.highpass.type" => ConfigParameter{String}(
+    "ica.ica_filter.highpass.type" => ConfigParameter{String}(
         description = "Type of highpass filter",
         default = "fir",
         allowed_values = ["fir", "iir"]
     ),
     
-    "ica.filter.highpass.cutoff" => ConfigParameter{Real}(
+    "ica.ica_filter.highpass.cutoff" => ConfigParameter{Real}(
         description = "ICA high-pass filter cutoff frequency (Hz)",
         default = 1,
         min = 1,
         max = 20.0
     ),
     
-    "ica.filter.highpass.order" => ConfigParameter{Int}(
+    "ica.ica_filter.highpass.order" => ConfigParameter{Int}(
         description = "Filter order",
         default = 1,
         min = 1,
         max = 8
+    ),
+
+    "ica.ica_filter.lowpass.on" => ConfigParameter{Bool}(
+        description = "Apply lowpass filter to ICA data true/false",
+        default = true
+    ),
+    
+    "ica.ica_filter.lowpass.type" => ConfigParameter{String}(
+        description = "Type of lowpass filter",
+        default = "fir",
+        allowed_values = ["fir", "iir"]
+    ),
+    
+    "ica.ica_filter.lowpass.cutoff" => ConfigParameter{Real}(
+        description = "ICA low-pass filter cutoff frequency (Hz)",
+        default = 30,
+    ),
+    
+    "ica.ica_filter.lowpass.order" => ConfigParameter{Int}(
+        description = "Filter order",
+        default = 2,
+        min = 1,
     )
 
+    
 )
 
 # Used for some validation stuff
@@ -626,7 +659,14 @@ function _group_parameters_by_section()
     for (path, parameter_spec) in PARAMETERS
         parts = split(path, ".")
         section = parts[1]
-        subsection = length(parts) > 2 ? parts[2] : ""  # Only use subsection if there are more than 2 parts
+        
+        # For nested paths like "ica.ica_filter.highpass.on", 
+        # we want subsection to be "ica_filter.highpass"
+        if length(parts) > 2
+            subsection = join(parts[2:end-1], ".")  # Join all parts except first and last
+        else
+            subsection = ""
+        end
         
         if !haskey(sections, section)
             sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
