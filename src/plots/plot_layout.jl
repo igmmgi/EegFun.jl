@@ -77,8 +77,8 @@ function plot_layout_2d!(
     hidedecorations!(ax)
     hidespines!(ax)
 
-    if display_plot
-        display(fig)
+    if display_plot # force a new figure window
+        display(getfield(Main, :GLMakie).Screen(), fig)
     end
 
     return fig, ax
@@ -416,9 +416,8 @@ function plot_layout_3d(layout; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout; kwargs...)
-    display_plot = get(kwargs, :display_plot, true)
-    if display_plot
-        display(fig)
+    if get(kwargs, :display_plot, true) # force a new figure window
+        display(getfield(Main, :GLMakie).Screen(), fig)
     end
     return fig, ax
 end
@@ -445,9 +444,8 @@ function plot_layout_3d(layout, neighbours; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout, neighbours; kwargs...)
-    display_plot = get(kwargs, :display_plot, true)
-    if display_plot
-        display(fig)
+    if get(kwargs, :display_plot, true) # force a new figure window
+        display(getfield(Main, :GLMakie).Screen(), fig)
     end
     return fig, ax
 end

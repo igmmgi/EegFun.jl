@@ -18,6 +18,7 @@ function plot_topoplot!(
     lambda = 1e-7,  # for spherical spline (more conservative regularization)
 )
 
+
     if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
         polar_to_cartesian_xy!(layout)
     end

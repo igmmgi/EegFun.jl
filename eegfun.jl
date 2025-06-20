@@ -9,6 +9,7 @@
 # package
 using eegfun
 using GLMakie
+# using CairoMakie
 # using eegfun: load_config 
 
 # Basic Tests
@@ -18,7 +19,7 @@ subject = 3
 dat = eegfun.read_bdf("../Flank_C_$(subject).bdf");
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
-fig, ax = eegfun.plot_topoplot(dat; xlim = [18, 18.2])
+fig, ax = eegfun.plot_topoplot(dat; xlim = [8, 8.2])
 # eegfun.plot_databrowser(dat)
 fig, ax = eegfun.plot_topoplot(dat; method = :spherical_spline, xlim = [8, 8.2])
 fig, ax = eegfun.plot_topoplot(dat; method = :spherical_spline, xlim = [18, 18.2])
@@ -44,6 +45,7 @@ eegfun.print_neighbours_dict(neighbours, "electrode_neighbours.toml")
 eegfun.plot_layout_2d(layout, neighbours)
 
 set_theme!(figure_padding=0)
+
 fig, ax = eegfun.plot_layout_2d(layout)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
@@ -52,6 +54,7 @@ eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border
 eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
+
 save("topo_roi.png", fig)
 
 
@@ -96,6 +99,7 @@ eegfun.rereference!(dat, :avg)
 
 # initial high-pass filter to remove slow drifts
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
+eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 
 
 # @btime dat1 = repair_bad_channels(dat, [:Fp1], neighbours)
