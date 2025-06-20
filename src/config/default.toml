@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-06-20 11:41:44
+# Generated on 2025-06-20 12:40:36
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -50,15 +50,25 @@ exit_early = false
 # Default: false
 save_continuous_data = false
 
+# Save epoched data after cleaning?
+# Type: Bool
+# Default: true
+save_epoch_data_cleaned = true
+
 # Save epoched data?
 # Type: Bool
 # Default: true
-save_epoch_data = true
+save_epoch_data_original = true
+
+# Save ERP data after cleaning?
+# Type: Bool
+# Default: true
+save_erp_data_cleaned = true
 
 # Save ERP data
 # Type: Bool
 # Default: true
-save_erp_data = true
+save_erp_data_original = true
 
 # Save ICA results?
 # Type: Bool

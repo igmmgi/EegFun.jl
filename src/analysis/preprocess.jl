@@ -228,19 +228,29 @@ function preprocess_eeg_data(config::String)
                 # Log epoch counts
                 df = DataFrame(file = basename(file), condition = 1:length(epochs), n_epochs_total = n_epochs.(epochs))
                 push!(all_epoch_counts, df)  # Store the DataFrame
-                @info "Epoch counts per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
+                @info "Epoch counts (original) per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
 
                 # save epochs
-                if cfg["files"]["output"]["save_epoch_data"]
-                    @info "Saving epoch data"
-                    jldsave(make_output_filename(output_directory, file, "_epochs"); epochs=epochs)
+                if cfg["files"]["output"]["save_epoch_data_original"]
+                    @info "Saving epoch data (original)"
+                    jldsave(make_output_filename(output_directory, file, "_epochs_original"); epochs=epochs)
+                end
+
+                # save original erp data
+                if cfg["files"]["output"]["save_erp_data_original"]
+                    erps_original = [average_epochs(epoch) for epoch in epochs]
+                    @info "Saving erp data (original)"
+                    jldsave(make_output_filename(output_directory, file, "_erps_original"); erps=erps_original)
+                end
+
+                # data cleaning/rejection
+                if cfg["files"]["output"]["save_epoch_data_cleaned"]
+                    @info "Saving epoch data (cleaned)"
+                    jldsave(make_output_filename(output_directory, file, "_epochs_cleaned"); epochs=epochs)
                 end
 
                 # average epochs
-                erps = []
-                for (idx, epoch) in enumerate(epochs)
-                    push!(erps, average_epochs(epochs[idx]))
-                end
+                erps = [average_epochs(epoch) for epoch in epochs]
 
                 df.n_epochs_erp = n_average.(erps)
                 # calculate the percentage of epochs that went into the ERP
@@ -248,9 +258,9 @@ function preprocess_eeg_data(config::String)
                 @info "Epoch counts per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
 
                 # save erps
-                if cfg["files"]["output"]["save_erp_data"]
-                    @info "Saving erp data"
-                    jldsave(make_output_filename(output_directory, file, "_erps"); erps=erps)
+                if cfg["files"]["output"]["save_erp_data_cleaned"]
+                    @info "Saving erp data (cleaned)"
+                    jldsave(make_output_filename(output_directory, file, "_erps_cleaned"); erps=erps)
                 end
 
                 @info "Successfully processed $file"

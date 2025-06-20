@@ -71,13 +71,23 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         default = true
     ),
     
-    "files.output.save_epoch_data" => ConfigParameter{Bool}(
+    "files.output.save_epoch_data_original" => ConfigParameter{Bool}(
         description = "Save epoched data?",
         default = true
     ),
+
+    "files.output.save_epoch_data_cleaned" => ConfigParameter{Bool}(
+        description = "Save epoched data after cleaning?",
+        default = true
+    ),
     
-    "files.output.save_erp_data" => ConfigParameter{Bool}(
+    "files.output.save_erp_data_original" => ConfigParameter{Bool}(
         description = "Save ERP data",
+        default = true
+    ),
+
+    "files.output.save_erp_data_cleaned" => ConfigParameter{Bool}(
+        description = "Save ERP data after cleaning?",
         default = true
     ),
     

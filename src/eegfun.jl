@@ -1,4 +1,4 @@
-__precompile__(true)  # Temporarily disable precompilation due to Julia environment issues
+__precompile__(true)  
 
 module eegfun
 
@@ -15,7 +15,6 @@ using FFTW
 
 # Plotting and visualization
 using Makie
-# using GLMakie
 using ScatteredInterpolation
 
 # Utilities
