@@ -12,44 +12,30 @@ using GLMakie
 # using CairoMakie
 # using eegfun: load_config 
 
-
+# while preprocessing routine
 eegfun.preprocess_eeg_data("pipeline.toml")
 
-
-# Basic Tests
-# TODO: Implement proper tests
-layout = eegfun.read_layout("data/layouts/biosemi72.csv");
-subject = 3
-dat = eegfun.read_bdf("../Flank_C_$(subject).bdf");
-dat = eegfun.create_eeg_dataframe(dat, layout);
-eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
-fig, ax = eegfun.plot_topoplot(dat; xlim = [8, 8.2])
-# eegfun.plot_databrowser(dat)
-fig, ax = eegfun.plot_topoplot(dat; method = :spherical_spline, xlim = [8, 8.2])
-fig, ax = eegfun.plot_topoplot(dat; method = :spherical_spline, xlim = [18, 18.2])
-
-
-
+# config test
 config = eegfun.load_config("pipeline.toml");
-# eegfun.print_config(config)
-# eegfun.print_config(config, "config_output.toml")
+eegfun.print_config(config)
+eegfun.print_config(config, "config_output.toml")
 
-# preprocess data
-eegfun.preprocess_eeg_data("pipeline.toml")
-
-# load layout
+# read/load layout
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
 # 2D layout
 eegfun.polar_to_cartesian_xy!(layout)
 fig, ax = eegfun.plot_layout_2d(layout);
- 
+
+# 2D layout with neighbours defined by distance
 neighbours = eegfun.get_electrode_neighbours_xy(layout, 40);
 eegfun.print_neighbours_dict(neighbours, "electrode_neighbours.toml")
 eegfun.plot_layout_2d(layout, neighbours)
 
-set_theme!(figure_padding=0)
+# Can set theme for plots
+# set_theme!(figure_padding=0)
 
+# Layout with Regions of Interest (ROIs) highlighted
 fig, ax = eegfun.plot_layout_2d(layout)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
@@ -59,43 +45,35 @@ eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 
+# save a basic figure
+# NB. for vector graphics, use CairoMakie
 save("topo_roi.png", fig)
-
-
-# First, read your layout file
-layout = eegfun.read_layout("./data/layouts/biosemi72.csv")
-
-# Convert to 2D Cartesian coordinates
-eegfun.polar_to_cartesian_xy!(layout)
-
 
 # 3D layout
 eegfun.polar_to_cartesian_xyz!(layout)
-# neighbours = eegfun.get_electrode_neighbours_xyz(layout, 40);
+neighbours = eegfun.get_electrode_neighbours_xyz(layout, 40);
 fig, ax = eegfun.plot_layout_3d(layout)
-# fig, ax = eegfun.plot_layout_3d(layout, neighbours)
+fig, ax = eegfun.plot_layout_3d(layout, neighbours)
 
-subject = 3
-dat = eegfun.read_bdf("../Flank_C_$(subject).bdf");
+# read data
+dat = eegfun.read_bdf("../Flank_C_3.bdf");
 
+# plot events
 eegfun.plot_events(dat)
 eegfun.plot_events_timing(dat)
 
-
+# create the ContinuousData eeg data type
 dat = eegfun.create_eeg_dataframe(dat, layout);
-dat = eegfun.create_eeg_dataframe(dat, layout);
-
-# fig, ax = plot_channel_spectrum(dat )
-# fig, ax = plot_channel_spectrum(dat,:P2)
-# fig, ax = plot_channel_spectrum(dat,[:P2,:P1])
-
+dat.data # DataFrame
 
 fig, ax = eegfun.plot_events(dat)
 fig, ax = eegfun.plot_events_timing(dat)
 
-# eegfun.viewer(dat)
-# eegfun.head(dat)
-# eegfun.tail(dat)
+# Uses vscode viewer if available
+# TODO: IDE/code editor agnostic viewer!
+eegfun.viewer(dat)
+eegfun.head(dat)
+eegfun.tail(dat)
 
 # rereference
 eegfun.rereference!(dat, :avg)
@@ -103,45 +81,54 @@ eegfun.rereference!(dat, :avg)
 
 # initial high-pass filter to remove slow drifts
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
-eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
+# eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 
+# caculate EOG diff channels channels
+eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
 
-# @btime dat1 = repair_bad_channels(dat, [:Fp1], neighbours)
-# polar_to_cartesian_xyz!(layout)
-# @btime dat2 = repair_channels_spherical_spline(dat, [:Fp1])
-# lines(dat.data[:, :Fp1])
-# lines!(dat1.data[:, :Fp1], color = :red)
-# lines!(dat2.data[:, :Fp1], color = :green)
-
-# caculate EOG channels
-eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG);
-eegfun.diff_channel!(dat, :F9, :F10, :hEOG);
-
-# autodetect EOG signals
+# autodetect vEOG/hEOG signals using simple step detection
+# a new Bool column is added to the data frame: :is_vEOG, :is_hEOG
+# TODO: add @info within function for logging
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # detect extreme values
+# a new Bool column is added to the data frame: :is_extreme_value, :is_extreme_value500, :is_extreme_value1000
+# TODO: add @info within function for logging
 eegfun.is_extreme_value!(dat, dat.layout.label, 100);
 eegfun.is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
 eegfun.is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
 
-# n_extreme_value(dat.data, [:Fp1], 100)
-# n_extreme_value(dat,  100)
+# count extreme values at specific electrodes at different thresholds
+eegfun.n_extreme_value(dat.data, [:Fp1], 100) # count extreme values at Fp1 at 100 uV threshold
+eegfun.n_extreme_value(dat,  1000) # count extreme values at all electrodes at 1000 uV threshold
 
 # mark trigger windows
-eegfun.mark_epoch_windows!(dat, [1, 2, 3, 4, 1000], [-0.5, 1.0])
+eegfun.mark_epoch_windows!(dat, [1, 3], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3
+eegfun.plot_databrowser(dat) # epoch window within extra_channel menu
 
-epoch1 = eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1, 2], [2, :any]])
-epoch2 = eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[1, 2], [2, :any]])
-eegfun.mark_epoch_windows!(dat, [epoch1, epoch2], [-1, 1.0])
+# or epoch marking using EpochCondition data type (allows potential for more complex epoch marking)
+epoch1 = eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1, 3], [3, :any]]) # 1 -> 3 or 3 -> any sequences
+eegfun.mark_epoch_windows!(dat, [epoch1], [-2.0, 2.0]) # epoch window within extra_channel menu
 
 # plot databrowser
 eegfun.plot_databrowser(dat);
 eegfun.plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 
-# summary = channel_summary(dat)
-# summary = channel_summary(dat, filter_samples = :epoch_window)
+# Channel Summary
+summary = eegfun.channel_summary(dat) # whole dataset
+
+
+   
+    
+
+
+
+
+# plot channel summary
+fig, ax = eegfun.plot_channel_summary(summary, :range)
+
 # viewer(summary)
 # fig, ax = plot_channel_summary(summary, :range)
 # # channel_summary(dat, channels(dat)[1:66])
@@ -470,4 +457,19 @@ function identify_ecg_components(
 
     return identified_ecg, metrics_df
 end
+
+
+
+# @btime dat1 = repair_bad_channels(dat, [:Fp1], neighbours)
+# polar_to_cartesian_xyz!(layout)
+# @btime dat2 = repair_channels_spherical_spline(dat, [:Fp1])
+# lines(dat.data[:, :Fp1])
+# lines!(dat1.data[:, :Fp1], color = :red)
+# lines!(dat2.data[:, :Fp1], color = :green)
+
+
+
+# fig, ax = plot_channel_spectrum(dat )
+# fig, ax = plot_channel_spectrum(dat,:P2)
+# fig, ax = plot_channel_spectrum(dat,[:P2,:P1])
 
