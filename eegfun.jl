@@ -119,6 +119,7 @@ eegfun.plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 # Channel Summary
 summary = eegfun.channel_summary(dat) # whole dataset
 summary = eegfun.channel_summary(dat, channels = eegfun.channels([:Fp1, :Fp2])) 
+summary = eegfun.channel_summary(dat, channels = eegfun.channels_not([:Fp1, :Fp2])) 
 summary = eegfun.channel_summary(dat, channels = eegfun.channels([:hEOG, :vEOG])) 
 
 

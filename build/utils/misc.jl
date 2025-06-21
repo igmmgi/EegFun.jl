@@ -293,6 +293,8 @@ macro add_nonmutating(func)
 
     Non-mutating version of `$mut_name`. Creates a copy of the input data
     and applies the operation to the copy.
+
+    See also: [`$func_name`](@ref)
     """
     
     push!(exprs.args, :(Base.@doc $doc $non_mut_name))

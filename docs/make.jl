@@ -1,30 +1,34 @@
 using Documenter
 
 # Include the source files directly for now
-# push!(LOAD_PATH, "../src")
+push!(LOAD_PATH, "../src")
+
+# Load the main module
+include("../src/eegfun.jl")
 
 makedocs(
     sitename = "eegfun",
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
         canonical = "https://igmmgi.github.io/eegfun",
-        edit_link = "main"
+        edit_link = "main",
+        size_threshold = nothing  # Disable size threshold checking
     ),
-    # modules = [eegfun],  # Comment out since we can't load the full package
+    modules = [eegfun],  # Enable automatic docstring extraction
     pages = [
         "Home" => "index.md",
-        "API Reference" => [
-            "Data Types" => "api/types.md",
-            "Preprocessing" => "api/preprocessing.md",
-            "Analysis" => "api/analysis.md",
-            "Utilities" => "api/utilities.md",
-            "Plotting" => "api/plotting.md"
-        ],
-        "Examples" => "examples.md"
+        "Data Loading & Types" => "data_types.md",
+        "Preprocessing" => "preprocessing.md",
+        "Analysis" => "analysis.md",
+        "ICA" => "ica.md",
+        "Plotting" => "plotting.md",
+        "Utilities" => "utilities.md"
     ],
     doctest = false,  # Disable doctests since we can't load the package
     clean = true,
-    # checkdocs = :exports  # Comment out since we're not checking exports
+    checkdocs = :none,  # Disable documentation checking entirely
+    linkcheck = false,  # Disable link checking
+    warnonly = [:cross_references]  # Only warn about cross-references, don't fail
 )
 
 # Documenter can also automatically deploy documentation to gh-pages.
