@@ -39,8 +39,9 @@ plot_grid_rect(dat, x -> startswith.(string.(x), "F"))
 - `yreversed`: Whether to reverse Y-axis (default: false)
 """
 function plot_grid_rect(dat::ErpData; channels::Function = channels(), kwargs = Dict())
-    # Get the channels using the predicate
-    selected_channels = channels(dat.layout.label)
+    # Get all available channels (layout + additional)
+    all_available_channels = _get_available_channels(dat)
+    selected_channels = channels(all_available_channels)
 
     default_kwargs = Dict{Symbol,Any}(
         :xlim => nothing,

@@ -1,8 +1,20 @@
 # #################################################################
 # plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
 function plot_erp!(fig, ax, dat::ErpData, channels::Function = channels(); kwargs = Dict())
-    # Get the channels using the predicate
-    selected_channels = channels(dat.layout.label)
+    # Get all available channels (layout + additional)
+    all_available_channels = _get_available_channels(dat)
+    selected_channels = channels(all_available_channels)
+
+    # For EEG channels, validate against layout
+    eeg_channels = intersect(selected_channels, dat.layout.label)
+    invalid_eeg_channels = setdiff(eeg_channels, dat.layout.label)
+    !isempty(invalid_eeg_channels) && throw(ArgumentError("Invalid EEG channels: $(join(invalid_eeg_channels, ", "))"))
+    
+    # Additional channels (not in layout) are allowed
+    additional_channels = setdiff(selected_channels, dat.layout.label)
+    if !isempty(additional_channels)
+        @info "plot_erp!: Including additional channels not in layout: $(_print_vector(additional_channels))"
+    end
 
     default_kwargs = Dict(
         :xlim => nothing,
