@@ -1,60 +1,39 @@
 # eegfun Documentation
 
-Welcome to eegfun, a Julia package for EEG/ERP analysis.
+Welcome to the eegfun documentation! This package provides comprehensive tools for EEG data analysis in Julia.
 
-## Overview
-
-eegfun provides a complete toolkit for analyzing electroencephalogram (EEG) data, including:
-
-- **Data Loading**: Support for various EEG file formats
-- **Preprocessing**: Filtering, referencing, artifact removal
-- **Analysis**: Time-frequency analysis, connectivity, statistics
-- **Visualization**: Interactive plots and topographic maps
-- **Event-Related Potentials**: ERP analysis and visualization
-
-## Getting Started
-
-### Installation
-
-```julia
-using Pkg
-Pkg.add("eegfun")
-```
-
-### Quick Start
+## Quick Start
 
 ```julia
 using eegfun
 
 # Load your EEG data
-data = load_eeg("your_file.bdf")
+dat = load_eeg_data("your_data.bdf", "biosemi64.csv")
 
-# Basic preprocessing
-data = filter_data(data, 0.1, 40.0)  # Bandpass filter
-data = reference_data(data, :average)  # Average reference
+# Basic analysis
+summary = channel_summary(dat)
+corr_matrix = correlation_matrix(dat)
 
-# Create epochs
-epochs = epoch_data(data, events, (-0.2, 0.8))
+# Quality control
+is_extreme_value!(dat, 100)
+detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
 
-# Compute ERPs
-erp = compute_erp(epochs)
-
-# Plot results
-plot_erp(erp, ["Fz", "Cz", "Pz"])
+# ICA
+ica_result = run_ica(dat, samples = samples_not(:is_extreme_value_100))
 ```
-![Plot Description](assets/images/simple_plot.png)
-## Main Data Types
 
-The package provides several core data types for different stages of EEG analysis:
+## Documentation Sections
 
-- **ContinuousData**: Raw continuous EEG data
-- **EpochData**: Segmented data around events  
-- **ErpData**: Event-related potential data
+- **[Data Loading & Types](@ref)** - How to load and work with EEG data
+- **[Preprocessing](@ref)** - Filtering, baseline correction, and artifact detection
+- **[Analysis](@ref)** - Channel summaries, correlation matrices, and statistical analysis
+- **[ICA](@ref)** - Independent Component Analysis
+- **[Plotting](@ref)** - Visualization tools for EEG data
+- **[Utilities](@ref)** - Helper functions and utilities
 
-## Package Structure
+## Key Features
 
-- **Data Types**: Core data structures for different analysis stages
-- **Preprocessing**: Functions for filtering, referencing, and cleaning data
-- **Analysis**: Statistical and spectral analysis functions
-- **Plotting**: Visualization functions for EEG data
-- **Utilities**: Helper functions and utilities 
+- **Flexible filtering**: Use predicate functions for channel and sample selection
+- **Quality control**: Built-in artifact detection and rejection
+- **Modern plotting**: Makie-based visualization
+- **Comprehensive analysis**: From basic summaries to advanced ICA 
