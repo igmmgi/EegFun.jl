@@ -1,16 +1,11 @@
 """
-    plot_epochs(dat::EpochData, channel_predicate::Function = channels; kwargs=Dict())
+    plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dict())
 
-Plot epoched EEG data for specified channels.
+Plot epoch data for specified channels.
 
 # Arguments
-- `dat::EpochData`: The epoched EEG data to plot.
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels)
-- `kwargs`: Additional keyword arguments for customization.
-
-# Returns
-- `fig::Figure`: The Figure object containing the plot.
-- `ax::Axis`: The Axis object containing the plot.
+- `dat::EpochData`: Epoch data structure
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
 
 # Examples
 ```julia
@@ -28,26 +23,23 @@ plot_epochs(dat, channels(1:10))
 
 # Custom predicate
 plot_epochs(dat, x -> startswith.(string.(x), "F"))
-
-# Plot multiple channels separately
-plot_epochs(dat, channels([:Fp1, :Fp2, :Fpz, :C1]), average_channels=false)
 ```
 
 # Keyword Arguments
-- `average_channels::Bool`: Whether to average across channels (default: true)
-- `xlim`: X-axis limits
-- `ylim`: Y-axis limits
-- `title`: Plot title
+- `xlim`: X-axis limits (default: auto-calculated)
+- `ylim`: Y-axis limits (default: auto-calculated)
 - `xlabel`: X-axis label (default: "Time (S)")
 - `ylabel`: Y-axis label (default: "mV")
-- `linewidth`: Line width(s) (default: [1, 3])
-- `color`: Line color(s) (default: [:grey, :black])
-- `yreversed::Bool`: Whether to reverse Y-axis (default: false)
-- `layout`: Subplot layout for multiple channels (default: auto-calculated)
+- `dims`: Grid dimensions [rows, cols] (default: auto-calculated)
+- `hidedecorations`: Whether to hide axis decorations (default: false)
+- `theme_fontsize`: Font size for theme (default: 24)
+- `yreversed`: Whether to reverse Y-axis (default: false)
+- `average_channels`: Whether to average channels (default: false)
+- `legend`: Whether to show legend (default: true)
+- `legend_label`: Label for legend (default: "")
 """
-function plot_epochs(dat::EpochData, channel_predicate::Function = channels; kwargs=Dict())
-    # Get the channels using the predicate
-    selected_channels = channel_predicate(dat.layout.label)
+function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dict())
+    selected_channels = channels(dat.layout.label)
 
     # Validate inputs
     isempty(selected_channels) && throw(ArgumentError("At least one channel must be specified"))
@@ -56,7 +48,7 @@ function plot_epochs(dat::EpochData, channel_predicate::Function = channels; kwa
 
     # Default keyword arguments
     default_kwargs = Dict(
-        :average_channels => true,
+        :average_channels => false,
         :xlim => nothing,
         :ylim => nothing,
         :title => nothing,
@@ -66,6 +58,11 @@ function plot_epochs(dat::EpochData, channel_predicate::Function = channels; kwa
         :color => [:grey, :black],
         :yreversed => false,
         :layout => nothing,
+        :legend => true,
+        :legend_label => "",
+        :dims => nothing,
+        :hidedecorations => false,
+        :theme_fontsize => 24,
     )
     kwargs = merge(default_kwargs, kwargs)
 
@@ -121,7 +118,7 @@ function plot_epochs(dat::EpochData, channel_predicate::Function = channels; kwa
     end
 
     # Theme adjustments
-    fontsize_theme = Theme(fontsize=24)
+    fontsize_theme = Theme(fontsize=kwargs[:theme_fontsize])
     update_theme!(fontsize_theme)
 
     display(fig)

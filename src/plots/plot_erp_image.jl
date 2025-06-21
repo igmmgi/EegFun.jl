@@ -1,17 +1,12 @@
 """
-    plot_erp_image(dat::EpochData, channel_predicate::Function = channels; 
-                   colorrange = nothing, erp_kwargs = Dict(), colorbar_kwargs = Dict(), 
-                   display_plot::Bool = true)
+    plot_erp_image(dat::EpochData, channels::Function = channels();
+                   kwargs = Dict())
 
-Plot ERP image showing trial-by-trial activity for specified channels.
+Plot ERP image for specified channels.
 
 # Arguments
-- `dat::EpochData`: EpochData structure containing epoched EEG data
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels)
-- `colorrange`: Color range for the heatmap (default: auto-calculated)
-- `erp_kwargs`: Keyword arguments for ERP plotting (default: Dict())
-- `colorbar_kwargs`: Keyword arguments for colorbar (default: Dict())
-- `display_plot::Bool`: Whether to display the plot (default: true)
+- `dat::EpochData`: Epoch data structure
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
 
 # Examples
 ```julia
@@ -31,42 +26,44 @@ plot_erp_image(dat, channels(1:10))
 plot_erp_image(dat, x -> startswith.(string.(x), "F"))
 ```
 
-# Returns
-- `fig::Figure`: The Figure object containing the plot
-- `ax::Axis`: The Axis object containing the plot
+# Keyword Arguments
+- `xlim`: X-axis limits (default: auto-calculated)
+- `ylim`: Y-axis limits (default: auto-calculated)
+- `xlabel`: X-axis label (default: "Time (S)")
+- `ylabel`: Y-axis label (default: "Epoch")
+- `dims`: Grid dimensions [rows, cols] (default: auto-calculated)
+- `hidedecorations`: Whether to hide axis decorations (default: false)
+- `theme_fontsize`: Font size for theme (default: 24)
+- `yreversed`: Whether to reverse Y-axis (default: false)
+- `colormap`: Colormap for the image (default: :RdBu)
+- `colorrange`: Color range for the image (default: auto-calculated)
 """
-function plot_erp_image(
-    dat::EpochData,
-    channel_predicate::Function = channels;
-    colorrange = nothing,
-    erp_kwargs = Dict(),
-    colorbar_kwargs = Dict(),
-    display_plot::Bool = true,
-)
-    # Get the channels using the predicate
-    selected_channels = channel_predicate(dat.layout.label)
+function plot_erp_image(dat::EpochData, 
+                       channels::Function = channels();
+                       kwargs = Dict())
+    selected_channels = channels(dat.layout.label)
 
     erp_default_kwargs = Dict(:plot_erp => true)
-    erp_kwargs = merge(erp_default_kwargs, erp_kwargs)
+    erp_kwargs = merge(erp_default_kwargs, kwargs)
     plot_erp = pop!(erp_kwargs, :plot_erp)
 
     colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
-    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    colorbar_kwargs = merge(colorbar_default_kwargs, kwargs)
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
 
     data = zeros(length(dat.data), nrow(dat.data[1]))
     for epoch in eachindex(dat.data)
         data[epoch, :] = colmeans(dat.data[epoch], selected_channels)
     end
-    if isnothing(colorrange)
-        colorrange = extrema(data)
+    if isnothing(kwargs[:colorrange])
+        kwargs[:colorrange] = extrema(data)
     end
     fig = Figure()
     ax = Axis(fig[1, 1])
-    hm = heatmap!(ax, dat.data[1].time, 1:length(dat.data), transpose(data), colorrange = colorrange)
+    hm = heatmap!(ax, dat.data[1].time, 1:length(dat.data), transpose(data), kwargs...)
     xlims!(ax, (-0.5, 2))
-    ax.xlabel = "Time (ms)"
-    ax.ylabel = "Epoch"
+    ax.xlabel = kwargs[:xlabel]
+    ax.ylabel = kwargs[:ylabel]
     if plot_colorbar
         Colorbar(fig[1, 2], hm; colorbar_kwargs...)
     end
@@ -77,12 +74,11 @@ function plot_erp_image(
         xlims!(ax, (-0.5, 2))
     end
 
-    if display_plot
+    if kwargs[:display_plot]
         display(fig)
     end
 
     return fig, ax
-
 end
 
 # Backward compatibility - keep the old method for existing code
@@ -103,7 +99,7 @@ function plot_erp_image(
 end
 
 function plot_erp_image(dat::EpochData, channel::Symbol; kwargs...)
-    plot_erp_image(dat, [channel]; kwargs...)
+    plot_erp_image(dat, x -> x .== channel; kwargs...)
 end
 
 

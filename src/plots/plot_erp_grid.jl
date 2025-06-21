@@ -1,13 +1,13 @@
 # #################################################################
 # plot_grid_rect: Plot ERP data in a grid layout
 """
-    plot_grid_rect(dat::ErpData; channel_predicate::Function = channels, kwargs = Dict())
+    plot_grid_rect(dat::ErpData; channels::Function = channels(), kwargs = Dict())
 
 Plot ERP data in a grid layout for specified channels.
 
 # Arguments
 - `dat::ErpData`: ERP data structure
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels)
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
 - `kwargs`: Additional keyword arguments for customization
 
 # Examples
@@ -38,9 +38,9 @@ plot_grid_rect(dat, x -> startswith.(string.(x), "F"))
 - `theme_fontsize`: Font size for theme (default: 24)
 - `yreversed`: Whether to reverse Y-axis (default: false)
 """
-function plot_grid_rect(dat::ErpData; channel_predicate::Function = channels, kwargs = Dict())
+function plot_grid_rect(dat::ErpData; channels::Function = channels(), kwargs = Dict())
     # Get the channels using the predicate
-    selected_channels = channel_predicate(dat.layout.label)
+    selected_channels = channels(dat.layout.label)
 
     default_kwargs = Dict{Symbol,Any}(
         :xlim => nothing,
@@ -99,15 +99,5 @@ function plot_grid_rect(dat::ErpData; channel_predicate::Function = channels, kw
     update_theme!(fontsize_theme)
     display(fig)
     return fig, ax
-end
-
-# Backward compatibility - keep the old method for existing code
-function plot_grid_rect(dat::ErpData; channels = nothing, kwargs = Dict())
-    if isnothing(channels)
-        return plot_grid_rect(dat, channel_predicate = channels; kwargs = kwargs)
-    else
-        channel_predicate = x -> x .∈ Ref(channels)
-        return plot_grid_rect(dat, channel_predicate = channel_predicate; kwargs = kwargs)
-    end
 end
 

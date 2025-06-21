@@ -165,7 +165,6 @@ function preprocess_eeg_data(config::String)
                 # detect extreme values
                 is_extreme_value!(
                     dat,
-                    dat.layout.label,
                     cfg["preprocess"]["eog"]["extreme_value_criterion"],
                     channel_out = Symbol(
                         "is_extreme_value" * "_" * string(cfg["preprocess"]["eog"]["extreme_value_criterion"]),

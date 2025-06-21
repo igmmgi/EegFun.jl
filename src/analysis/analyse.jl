@@ -345,16 +345,11 @@ function _channel_summary_impl(selected_data::DataFrame, channel_labels::Vector{
     return summary_df
 end
 
-# Core DataFrame methods
-function channel_summary(dat::DataFrame, channel_labels::Vector{Symbol})::DataFrame
-    selected_data = select(dat, channel_labels)
-    return _channel_summary_impl(selected_data, channel_labels)
-end
-
 # Helper functions for easier channel filtering
 channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
 channels(channel_name::Symbol) = x -> x .== channel_name
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i in 1:length(x)]
+channels() = x -> fill(true, length(x))
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i in 1:length(x)])
@@ -363,27 +358,28 @@ channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in chan
 samples(column::Symbol) = x -> x[!, column]
 samples(column::Symbol, value) = x -> x[!, column] .== value
 samples_not(column::Symbol) = x -> .!(x[!, column])
+samples() = x -> fill(true, nrow(x))
 
 # Main method with keyword arguments for predicates
 function channel_summary(dat::SingleDataFrameEeg; 
-                        sample_predicate::Function = x -> fill(true, nrow(x)),
-                        channel_predicate::Function = x -> fill(true, length(x)))::DataFrame
+                        samples::Function = samples(),
+                        channels::Function = channels)::DataFrame
     # Filter samples
-    sample_mask = sample_predicate(dat.data)
+    sample_mask = samples(dat.data)
     filtered_data = dat.data[sample_mask, :]
     
-    # Filter channels - channel_predicate should return boolean vector
-    channel_mask = channel_predicate(dat.layout.label)
+    # Filter channels - channels should return boolean vector
+    channel_mask = channels(dat.layout.label)
     selected_channels = dat.layout.label[channel_mask]
     
-    return channel_summary(filtered_data, selected_channels)
+    return _channel_summary_impl(filtered_data, selected_channels)
 end
 
 # For MultiDataFrameEeg
 function channel_summary(dat::MultiDataFrameEeg; 
-                        sample_predicate::Function = x -> fill(true, nrow(x)),
-                        channel_predicate::Function = x -> fill(true, length(x)))::Vector{DataFrame}
-    return [channel_summary(dat.data[trial]; sample_predicate = sample_predicate, channel_predicate = channel_predicate) for trial in eachindex(dat.data)]
+                        samples::Function = samples(),
+                        channels::Function = channels)::Vector{DataFrame}
+    return [channel_summary(dat.data[trial]; samples = samples, channels = channels) for trial in eachindex(dat.data)]
 end
 
 
@@ -393,17 +389,16 @@ end
 
 
 """
-    correlation_matrix(dat::DataFrame, channel_labels::Vector{Symbol}; 
-                      sample_predicate::Function = x -> fill(true, nrow(x)),
-                      channel_predicate::Function = x -> fill(true, length(x)))::DataFrame
+    correlation_matrix(dat::ContinuousData; 
+                      samples::Function = samples(),
+                      channels::Function = channels())::DataFrame
 
 Calculates the correlation matrix for the EEG data.
 
 # Arguments
-- `dat::DataFrame`: The DataFrame containing EEG data.
-- `channel_labels::Vector{Symbol}`: The channel labels to include in correlation analysis.
-- `sample_predicate::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `samples::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 
 # Returns
 A DataFrame containing the correlation matrix of the specified channels.
@@ -414,30 +409,40 @@ A DataFrame containing the correlation matrix of the specified channels.
 correlation_matrix(dat)
 
 # Filter samples where epoch_window is true
-correlation_matrix(dat, sample_predicate = samples(:epoch_window))
+correlation_matrix(dat, samples = samples(:epoch_window))
 
 # Filter to specific channels
-correlation_matrix(dat, channel_predicate = channels([:Fp1, :Fp2]))
+correlation_matrix(dat, channels = channels([:Fp1, :Fp2]))
 
 # Combine both filters
 correlation_matrix(dat, 
-    sample_predicate = samples(:epoch_window),
-    channel_predicate = channels_not([:M1, :M2])
+    samples = samples(:epoch_window),
+    channels = channels_not([:M1, :M2])
 )
 ```
 """
-function correlation_matrix(dat::DataFrame, channel_labels::Vector{Symbol}; 
-                          sample_predicate::Function = x -> fill(true, nrow(x)),
-                          channel_predicate::Function = x -> fill(true, length(x)))::DataFrame
-    # Filter channels
-    channel_mask = channel_predicate(channel_labels)
-    selected_channels = channel_labels[channel_mask]
+function correlation_matrix(dat::ContinuousData; 
+                          samples::Function = samples(),
+                          channels::Function = channels())::DataFrame
+    # Use layout.label as source of truth for EEG channels
+    eeg_channels = dat.layout.label
+    channel_mask = channels(eeg_channels)
+    selected_channels = eeg_channels[channel_mask]
     
+    return _correlation_matrix(dat.data, selected_channels; samples = samples)
+end
+
+# Internal function for plain DataFrames with explicit channel specification
+function _correlation_matrix(
+    dat::DataFrame,
+    selected_channels::Vector{Symbol};
+    samples::Function = samples(),
+)::DataFrame
     # Select the specified channels
     data = select(dat, selected_channels)
     
     # Filter samples
-    sample_mask = sample_predicate(dat)
+    sample_mask = samples(dat)
     data = data[sample_mask, :]
     
     # Compute correlation matrix
@@ -445,46 +450,6 @@ function correlation_matrix(dat::DataFrame, channel_labels::Vector{Symbol};
     insertcols!(df, 1, :row => selected_channels)
     return df
 end
-
-"""
-    correlation_matrix(dat::ContinuousData; 
-                      sample_predicate::Function = x -> fill(true, nrow(x)),
-                      channel_predicate::Function = x -> fill(true, length(x)))::DataFrame
-
-Calculates the correlation matrix for the EEG data.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `sample_predicate::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-
-# Returns
-A DataFrame containing the correlation matrix of the specified channels.
-
-# Examples
-```julia
-# Basic correlation matrix
-correlation_matrix(dat)
-
-# Filter samples where epoch_window is true
-correlation_matrix(dat, sample_predicate = samples(:epoch_window))
-
-# Filter to specific channels
-correlation_matrix(dat, channel_predicate = channels([:Fp1, :Fp2]))
-
-# Combine both filters
-correlation_matrix(dat, 
-    sample_predicate = samples(:epoch_window),
-    channel_predicate = channels_not([:M1, :M2])
-)
-```
-"""
-function correlation_matrix(dat::ContinuousData; 
-                          sample_predicate::Function = x -> fill(true, nrow(x)),
-                          channel_predicate::Function = x -> fill(true, length(x)))::DataFrame
-    return correlation_matrix(dat.data, dat.layout.label; sample_predicate = sample_predicate, channel_predicate = channel_predicate)
-end
-
 
 """
     detect_eog_onsets!(dat::ContinuousData, criterion::Float64, channel_in::Symbol, channel_out::Symbol)
@@ -512,34 +477,26 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     return nothing
 end
 
-"""
-    is_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Real)::Vector{Bool}
+# Internal function for plain DataFrames with explicit channel specification
+function _is_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol})::Vector{Bool}
+    return any(x -> abs.(x) >= criterion, Matrix(select(dat, selected_channels)), dims = 2)[:]
+end
 
-Checks if any values in the specified columns exceed a given criterion.
-
-# Arguments
-- `dat::DataFrame`: The DataFrame containing the data to check.
-- `columns::Vector{Symbol}`: The columns to check for extreme values.
-- `criterion::Float64`: The threshold for determining extreme values.
-
-# Returns
-A Boolean vector indicating whether any extreme values were found for each row.
-
-"""
-function is_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Vector{Bool}
-    return any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
+# Internal function for plain DataFrames with explicit channel specification
+function _is_extreme_value!(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}; channel_out::Symbol = :is_extreme_value)
+    dat[!, channel_out] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, selected_channels)), dims = 2)[:]
 end
 
 """
-    is_extreme_value(dat::DataFrame, criterion::Number; 
-                     channel_predicate::Function = x -> fill(true, length(x)))::Vector{Bool}
+    is_extreme_value(dat::ContinuousData, criterion::Number; 
+                     channels::Function = channels())::Vector{Bool}
 
 Checks if any values in the specified channels exceed a given criterion.
 
 # Arguments
-- `dat::DataFrame`: The DataFrame containing the data to check.
+- `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Number`: The threshold for determining extreme values.
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 
 # Returns
 A Boolean vector indicating whether any extreme values were found for each row.
@@ -550,86 +507,25 @@ A Boolean vector indicating whether any extreme values were found for each row.
 is_extreme_value(dat, 100)
 
 # Check only specific channels
-is_extreme_value(dat, 100, channel_predicate = channels([:Fp1, :Fp2]))
+is_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
 
 # Exclude reference channels
-is_extreme_value(dat, 100, channel_predicate = channels_not([:M1, :M2]))
+is_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function is_extreme_value(dat::DataFrame, criterion::Number; 
-                         channel_predicate::Function = x -> fill(true, length(x)))::Vector{Bool}
-    # Get all column names that are not time, sample, or triggers
-    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(dat))
+function is_extreme_value(dat::ContinuousData, criterion::Number; 
+                         channels::Function = channels())::Vector{Bool}
+    # Use layout.label as source of truth for EEG channels
+    eeg_channels = dat.layout.label
+    channel_mask = channels(eeg_channels)
+    selected_channels = eeg_channels[channel_mask]
     
-    # Filter channels
-    channel_mask = channel_predicate(all_columns)
-    selected_columns = all_columns[channel_mask]
-    
-    return is_extreme_value(dat, selected_columns, criterion)
-end
-
-function is_extreme_value!(
-    dat::DataFrame,
-    columns::Vector{Symbol},
-    criterion::Number;
-    channel_out::Symbol = :is_extreme_value,
-)
-    dat[!, channel_out] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, columns)), dims = 2)[:]
-end
-
-"""
-    is_extreme_value!(dat::DataFrame, criterion::Number; 
-                      channel_predicate::Function = x -> fill(true, length(x)),
-                      channel_out::Symbol = :is_extreme_value)
-
-Checks if any values in the specified channels exceed a given criterion and adds the result as a new column.
-
-# Arguments
-- `dat::DataFrame`: The DataFrame containing the data to check.
-- `criterion::Number`: The threshold for determining extreme values.
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `channel_out::Symbol`: Name of the output column (default: :is_extreme_value).
-
-# Examples
-```julia
-# Check all channels
-is_extreme_value!(dat, 100)
-
-# Check only specific channels
-is_extreme_value!(dat, 100, channel_predicate = channels([:Fp1, :Fp2]))
-
-# Exclude reference channels
-is_extreme_value!(dat, 100, channel_predicate = channels_not([:M1, :M2]))
-```
-"""
-function is_extreme_value!(
-    dat::DataFrame,
-    criterion::Number;
-    channel_predicate::Function = x -> fill(true, length(x)),
-    channel_out::Symbol = :is_extreme_value,
-)
-    # Get all column names that are not time, sample, or triggers
-    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(dat))
-    
-    # Filter channels
-    channel_mask = channel_predicate(all_columns)
-    selected_columns = all_columns[channel_mask]
-    
-    is_extreme_value!(dat, selected_columns, criterion, channel_out = channel_out)
-end
-
-function is_extreme_value!(
-    dat::ContinuousData,
-    columns::Vector{Symbol},
-    criterion::Number;
-    channel_out::Symbol = :is_extreme_value,
-)
-    is_extreme_value!(dat.data, columns, criterion, channel_out = channel_out)
+    return _is_extreme_value(dat.data, criterion, selected_channels)
 end
 
 """
     is_extreme_value!(dat::ContinuousData, criterion::Number; 
-                      channel_predicate::Function = x -> fill(true, length(x)),
+                      channels::Function = channels(),
                       channel_out::Symbol = :is_extreme_value)
 
 Checks if any values in the specified channels exceed a given criterion and adds the result as a new column.
@@ -637,7 +533,7 @@ Checks if any values in the specified channels exceed a given criterion and adds
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Number`: The threshold for determining extreme values.
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 - `channel_out::Symbol`: Name of the output column (default: :is_extreme_value).
 
 # Examples
@@ -646,93 +542,35 @@ Checks if any values in the specified channels exceed a given criterion and adds
 is_extreme_value!(dat, 100)
 
 # Check only specific channels
-is_extreme_value!(dat, 100, channel_predicate = channels([:Fp1, :Fp2]))
+is_extreme_value!(dat, 100, channels = channels([:Fp1, :Fp2]))
 
 # Exclude reference channels
-is_extreme_value!(dat, 100, channel_predicate = channels_not([:M1, :M2]))
+is_extreme_value!(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function is_extreme_value!(
-    dat::ContinuousData,
-    criterion::Number;
-    channel_predicate::Function = x -> fill(true, length(x)),
-    channel_out::Symbol = :is_extreme_value,
-)
-    is_extreme_value!(dat.data, criterion, channel_predicate = channel_predicate, channel_out = channel_out)
-end
-
-
-
-"""
-    n_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Int
-
-Counts the number of extreme values in the specified columns.
-
-# Arguments
-- `dat::DataFrame`: The DataFrame containing the data to check.
-- `columns::Vector{Symbol}`: The columns to check for extreme values.
-- `criterion::Float64`: The threshold for determining extreme values.
-
-# Returns
-An integer count of the number of extreme values found.
-
-"""
-function n_extreme_value(dat::DataFrame, columns::Vector{Symbol}, criterion::Number)::Int
-    return sum(sum.(eachcol(abs.(select(dat, columns)) .>= criterion)))
-end
-
-"""
-    n_extreme_value(dat::DataFrame, criterion::Number; 
-                    channel_predicate::Function = x -> fill(true, length(x)))::Int
-
-Counts the number of extreme values in the specified channels.
-
-# Arguments
-- `dat::DataFrame`: The DataFrame containing the data to check.
-- `criterion::Number`: The threshold for determining extreme values.
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-
-# Returns
-An integer count of the number of extreme values found.
-
-# Examples
-```julia
-# Count extreme values in all channels
-n_extreme_value(dat, 100)
-
-# Count extreme values in specific channels
-n_extreme_value(dat, 100, channel_predicate = channels([:Fp1, :Fp2]))
-
-# Count extreme values excluding reference channels
-n_extreme_value(dat, 100, channel_predicate = channels_not([:M1, :M2]))
-```
-"""
-function n_extreme_value(dat::DataFrame, criterion::Number; 
-                        channel_predicate::Function = x -> fill(true, length(x)))::Int
-    # Get all column names that are not time, sample, or triggers
-    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(dat))
+function is_extreme_value!(dat::ContinuousData, criterion::Number; 
+                          channels::Function = channels(),
+                          channel_out::Symbol = :is_extreme_value)
+    # Use layout.label as source of truth for EEG channels
+    eeg_channels = dat.layout.label
+    channel_mask = channels(eeg_channels)  # This returns a boolean vector
+    selected_channels = eeg_channels[channel_mask]
     
-    # Filter channels
-    channel_mask = channel_predicate(all_columns)
-    selected_columns = all_columns[channel_mask]
-    
-    return n_extreme_value(dat, selected_columns, criterion)
+    _is_extreme_value!(dat.data, criterion, selected_channels, channel_out = channel_out)
 end
 
-function n_extreme_value(dat::DataFrame, columns::Symbol, criterion::Number)::Int
-    return n_extreme_value(dat, [columns], criterion)
-end
+
 
 """
     n_extreme_value(dat::ContinuousData, criterion::Number; 
-                    channel_predicate::Function = x -> fill(true, length(x)))::Int
+                    channels::Function = channels())::Int
 
 Counts the number of extreme values in the specified channels.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Number`: The threshold for determining extreme values.
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 
 # Returns
 An integer count of the number of extreme values found.
@@ -743,52 +581,41 @@ An integer count of the number of extreme values found.
 n_extreme_value(dat, 100)
 
 # Count extreme values in specific channels
-n_extreme_value(dat, 100, channel_predicate = channels([:Fp1, :Fp2]))
+n_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
 
 # Count extreme values excluding reference channels
-n_extreme_value(dat, 100, channel_predicate = channels_not([:M1, :M2]))
+n_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function n_extreme_value(dat::ContinuousData, criterion::Number; 
-                        channel_predicate::Function = x -> fill(true, length(x)))::Int
-    return n_extreme_value(dat.data, criterion, channel_predicate = channel_predicate)
+function n_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels())::Int
+    # Use layout.label as source of truth for EEG channels
+    eeg_channels = dat.layout.label
+    channel_mask = channels(eeg_channels)
+    selected_channels = eeg_channels[channel_mask]
+    
+    return _n_extreme_value(dat.data, criterion, selected_channels)
 end
 
-function n_extreme_value(dat::ContinuousData, columns::Vector{Symbol}, criterion::Number)::Int 
-    return n_extreme_value(dat.data, columns, criterion)
+# Internal function for plain DataFrames with explicit channel specification
+function _n_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol})::Int
+    return sum(sum.(eachcol(abs.(select(dat, selected_channels)) .>= criterion)))
 end
 
-function n_extreme_value(dat::ContinuousData, columns::Symbol, criterion::Number)::Int 
-    return n_extreme_value(dat, [columns], criterion)
-end
-
-function n_extreme_value(dat::ContinuousData, criterion::Number)::Int
-    return n_extreme_value(dat.data, dat.layout.label, criterion)
-end
-
-
-
-
-
-function channel_joint_probability(
+# Internal function for plain DataFrames with explicit channel specification
+function _channel_joint_probability(
     dat::DataFrame,
-    channels::Vector{Symbol};
+    selected_channels::Vector{Symbol};
     threshold::Float64 = 5.0,
     normval::Int = 2,
-    sample_predicate::Function = x -> fill(true, nrow(x)),
-    channel_predicate::Function = x -> fill(true, length(x)),
+    samples::Function = samples(),
 )::DataFrame
-    @info "channel_joint_probability: Computing probability for channels $(_print_vector(channels))"
-    
-    # Filter channels
-    channel_mask = channel_predicate(channels)
-    selected_channels = channels[channel_mask]
+    @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
     
     # Select the specified channels
     data = select(dat, selected_channels)
     
     # Filter samples
-    sample_mask = sample_predicate(dat)
+    sample_mask = samples(dat)
     data = data[sample_mask, :]
     
     # Convert to matrix and compute joint probability
@@ -800,8 +627,8 @@ end
     channel_joint_probability(dat::ContinuousData; 
                              threshold::Float64 = 5.0, 
                              normval::Int = 2,
-                             sample_predicate::Function = x -> fill(true, nrow(x)),
-                             channel_predicate::Function = x -> fill(true, length(x)))::DataFrame
+                             samples::Function = samples(),
+                             channels::Function = channels())::DataFrame
 
 Computes joint probability for EEG channels.
 
@@ -809,8 +636,8 @@ Computes joint probability for EEG channels.
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `threshold::Float64`: Threshold for joint probability (default: 5.0).
 - `normval::Int`: Normalization value (default: 2).
-- `sample_predicate::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `samples::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 
 # Returns
 A DataFrame containing joint probability values for each channel.
@@ -821,28 +648,32 @@ A DataFrame containing joint probability values for each channel.
 channel_joint_probability(dat)
 
 # Filter samples where epoch_window is true
-channel_joint_probability(dat, sample_predicate = samples(:epoch_window))
+channel_joint_probability(dat, samples = samples(:epoch_window))
 
 # Filter to specific channels
-channel_joint_probability(dat, channel_predicate = channels([:Fp1, :Fp2]))
+channel_joint_probability(dat, channels = channels([:Fp1, :Fp2]))
 
 # Combine both filters
 channel_joint_probability(dat, 
-    sample_predicate = samples(:epoch_window),
-    channel_predicate = channels_not([:M1, :M2])
+    samples = samples(:epoch_window),
+    channels = channels_not([:M1, :M2])
 )
 ```
 """
 function channel_joint_probability(dat::ContinuousData; 
                                  threshold::Float64 = 5.0, 
                                  normval::Int = 2,
-                                 sample_predicate::Function = x -> fill(true, nrow(x)),
-                                 channel_predicate::Function = x -> fill(true, length(x)))::DataFrame
-    return channel_joint_probability(dat.data, dat.layout.label; 
-                                   threshold = threshold, 
-                                   normval = normval, 
-                                   sample_predicate = sample_predicate, 
-                                   channel_predicate = channel_predicate)
+                                 samples::Function = samples(),
+                                 channels::Function = channels())::DataFrame
+    # Use layout.label as source of truth for EEG channels
+    eeg_channels = dat.layout.label
+    channel_mask = channels(eeg_channels)
+    selected_channels = eeg_channels[channel_mask]
+    
+    return _channel_joint_probability(dat.data, selected_channels; 
+                                    threshold = threshold, 
+                                    normval = normval, 
+                                    samples = samples)
 end
 
 
