@@ -91,16 +91,14 @@ eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG =
 
 # autodetect vEOG/hEOG signals using simple step detection
 # a new Bool column is added to the data frame: :is_vEOG, :is_hEOG
-# TODO: add @info within function for logging
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # detect extreme values
 # a new Bool column is added to the data frame: :is_extreme_value, :is_extreme_value500, :is_extreme_value1000
-# TODO: add @info within function for logging
 eegfun.is_extreme_value!(dat, 100);
 eegfun.is_extreme_value!(dat, 500, channels = eegfun.channels([:Fp1]), channel_out = :is_extreme_value500);
-eegfun.is_extreme_value!(dat, 1000, channels = eegfun.channels_not([:Fp1]), channel_out = :is_extreme_value1000);
+eegfun.is_extreme_value!(dat, 1000, channels = eegfun.channels_not([:Fp1, :AF3]), channel_out = :is_extreme_value1000);
 
 # count extreme values at specific electrodes at different thresholds
 eegfun.n_extreme_value(dat, 100) # count extreme values across all electrodes

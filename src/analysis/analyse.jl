@@ -363,7 +363,7 @@ samples() = x -> fill(true, nrow(x))
 # Main method with keyword arguments for predicates
 function channel_summary(dat::SingleDataFrameEeg; 
                         samples::Function = samples(),
-                        channels::Function = channels)::DataFrame
+                        channels::Function = channels())::DataFrame
     # Filter samples
     sample_mask = samples(dat.data)
     filtered_data = dat.data[sample_mask, :]
@@ -378,7 +378,7 @@ end
 # For MultiDataFrameEeg
 function channel_summary(dat::MultiDataFrameEeg; 
                         samples::Function = samples(),
-                        channels::Function = channels)::Vector{DataFrame}
+                        channels::Function = channels())::Vector{DataFrame}
     return [channel_summary(dat.data[trial]; samples = samples, channels = channels) for trial in eachindex(dat.data)]
 end
 
@@ -467,6 +467,7 @@ Nothing. The function modifies the input data in place.
 
 """
 function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
+    @info "detect_eog_onsets!: Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion)"
     step_size = div(dat.sample_rate, 20)
     eog_signal = dat.data[1:step_size:end, channel_in]
     eog_diff = diff(eog_signal)
@@ -513,13 +514,12 @@ is_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
 is_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function is_extreme_value(dat::ContinuousData, criterion::Number; 
-                         channels::Function = channels())::Vector{Bool}
+function is_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels())::Vector{Bool}
     # Use layout.label as source of truth for EEG channels
     eeg_channels = dat.layout.label
     channel_mask = channels(eeg_channels)
     selected_channels = eeg_channels[channel_mask]
-    
+    @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
     return _is_extreme_value(dat.data, criterion, selected_channels)
 end
 
@@ -548,14 +548,11 @@ is_extreme_value!(dat, 100, channels = channels([:Fp1, :Fp2]))
 is_extreme_value!(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function is_extreme_value!(dat::ContinuousData, criterion::Number; 
-                          channels::Function = channels(),
-                          channel_out::Symbol = :is_extreme_value)
-    # Use layout.label as source of truth for EEG channels
+function is_extreme_value!(dat::ContinuousData, criterion::Number; channels::Function = channels(), channel_out::Symbol = :is_extreme_value)
     eeg_channels = dat.layout.label
-    channel_mask = channels(eeg_channels)  # This returns a boolean vector
+    channel_mask = channels(eeg_channels)
     selected_channels = eeg_channels[channel_mask]
-    
+    @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
     _is_extreme_value!(dat.data, criterion, selected_channels, channel_out = channel_out)
 end
 
