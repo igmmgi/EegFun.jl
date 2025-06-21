@@ -1,8 +1,8 @@
 # #################################################################
 # plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
-function plot_erp!(fig, ax, dat::ErpData, channel_predicate::Function = channels; kwargs = Dict())
+function plot_erp!(fig, ax, dat::ErpData, channels::Function = channels(); kwargs = Dict())
     # Get the channels using the predicate
-    selected_channels = channel_predicate(dat.layout.label)
+    selected_channels = channels(dat.layout.label)
 
     default_kwargs = Dict(
         :xlim => nothing,
@@ -118,13 +118,13 @@ function plot_erp!(fig, ax, dat::ErpData, channel_predicate::Function = channels
 end
 
 """
-    plot_erp(dat::ErpData, channel_predicate::Function = channels; kwargs = Dict())
+    plot_erp(dat::ErpData, channels::Function = channels(); kwargs = Dict())
 
 Plot ERP data for specified channels.
 
 # Arguments
 - `dat::ErpData`: ERP data structure
-- `channel_predicate::Function`: Function that returns boolean vector for channel filtering (default: channels - all channels)
+- `channels::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
 
 # Examples
 ```julia
@@ -144,10 +144,10 @@ plot_erp(dat, channels(1:10))
 plot_erp(dat, x -> startswith.(string.(x), "F"))
 ```
 """
-function plot_erp(dat::ErpData, channel_predicate::Function = channels; kwargs = Dict())
+function plot_erp(dat::ErpData, channels::Function = channels(); kwargs = Dict())
     fig = Figure()
     ax = Axis(fig[1, 1])
-    fig, ax = plot_erp!(fig, ax, dat, channel_predicate; kwargs = kwargs)
+    fig, ax = plot_erp!(fig, ax, dat, channels; kwargs = kwargs)
     return fig, ax
 end
 
@@ -160,12 +160,6 @@ end
 function plot_erp(dat::ErpData, channels::Symbol; kwargs...)
     plot_erp(dat, [channels]; kwargs...)
 end
-
-function plot_erp(dat::ErpData; kwargs...)
-    plot_erp(dat, channels; kwargs...)
-end
-
-
 
 function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData, channels; kwargs = Dict())
     kwargs = merge(kwargs, kwargs)

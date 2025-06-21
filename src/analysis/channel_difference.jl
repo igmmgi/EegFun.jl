@@ -81,7 +81,7 @@ function diff_channel!(dat::DataFrame, channels1::Vector{Symbol}, channels2::Vec
 
     # Check if difference channel already exists
     if difference_label ∈ propertynames(dat)
-        @warn "Overwriting existing channel '$(difference_label)'"
+        @minimal_warning "Overwriting existing channel '$(difference_label)'"
     end
 
     dat[!, difference_label] = calculate_channel_difference(dat, channels1, channels2)

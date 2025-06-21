@@ -55,7 +55,7 @@ neighbours = eegfun.get_electrode_neighbours_xyz(layout, 40);
 fig, ax = eegfun.plot_layout_3d(layout)
 fig, ax = eegfun.plot_layout_3d(layout, neighbours)
 
-# read data
+# read data giving BioSemiBDF type
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 
 # plot events
@@ -66,6 +66,7 @@ eegfun.plot_events_timing(dat)
 dat = eegfun.create_eeg_dataframe(dat, layout);
 dat.data # DataFrame
 
+# above plot_events_* also works for ContinuousData type
 fig, ax = eegfun.plot_events(dat)
 fig, ax = eegfun.plot_events_timing(dat)
 
@@ -80,6 +81,7 @@ eegfun.rereference!(dat, :avg)
 # rereference!(dat, :mastoid)
 
 # initial high-pass filter to remove slow drifts
+# TODO: add @info within function for logging
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 # eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 
@@ -96,13 +98,13 @@ eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 # detect extreme values
 # a new Bool column is added to the data frame: :is_extreme_value, :is_extreme_value500, :is_extreme_value1000
 # TODO: add @info within function for logging
-eegfun.is_extreme_value!(dat, dat.layout.label, 100);
-eegfun.is_extreme_value!(dat, dat.layout.label, 500,  channel_out = :is_extreme_value500);
-eegfun.is_extreme_value!(dat, dat.layout.label, 1000, channel_out = :is_extreme_value1000);
+eegfun.is_extreme_value!(dat, 100);
+eegfun.is_extreme_value!(dat, 500, channels = eegfun.channels([:Fp1]), channel_out = :is_extreme_value500);
+eegfun.is_extreme_value!(dat, 1000, channels = eegfun.channels_not([:Fp1]), channel_out = :is_extreme_value1000);
 
 # count extreme values at specific electrodes at different thresholds
-eegfun.n_extreme_value(dat.data, [:Fp1], 100) # count extreme values at Fp1 at 100 uV threshold
-eegfun.n_extreme_value(dat,  1000) # count extreme values at all electrodes at 1000 uV threshold
+eegfun.n_extreme_value(dat, 100) # count extreme values across all electrodes
+eegfun.n_extreme_value(dat, 100, channels = eegfun.channels([:Fp1])) # count extreme values at Fp1 at 100 uV threshold
 
 # mark trigger windows
 eegfun.mark_epoch_windows!(dat, [1, 3], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3
