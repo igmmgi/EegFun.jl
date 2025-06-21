@@ -286,7 +286,13 @@ plot_channel_spectrum(dat, channels(1:10))
 ```
 """
 function plot_channel_spectrum(dat::ContinuousData, channels::Function; kwargs...)
-    return plot_channel_spectrum(dat.data, dat.sample_rate, channels; kwargs...)
+    # Get all available channels (layout + additional)
+    all_available_channels = _get_available_channels(dat)
+    channel_mask = channels(all_available_channels)
+    selected_channels = all_available_channels[channel_mask]
+    
+    # Delegate to the DataFrame version with selected channels
+    return plot_channel_spectrum(dat.data, dat.sample_rate, selected_channels; kwargs...)
 end
 
 """

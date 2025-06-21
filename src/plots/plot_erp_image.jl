@@ -41,7 +41,9 @@ plot_erp_image(dat, x -> startswith.(string.(x), "F"))
 function plot_erp_image(dat::EpochData, 
                        channels::Function = channels();
                        kwargs = Dict())
-    selected_channels = channels(dat.layout.label)
+    # Get all available channels (layout + additional)
+    all_available_channels = _get_available_channels(dat)
+    selected_channels = channels(all_available_channels)
 
     erp_default_kwargs = Dict(:plot_erp => true)
     erp_kwargs = merge(erp_default_kwargs, kwargs)

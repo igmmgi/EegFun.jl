@@ -39,12 +39,23 @@ plot_epochs(dat, x -> startswith.(string.(x), "F"))
 - `legend_label`: Label for legend (default: "")
 """
 function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dict())
-    selected_channels = channels(dat.layout.label)
+    # Get all available channels (layout + additional)
+    all_available_channels = _get_available_channels(dat)
+    selected_channels = channels(all_available_channels)
 
     # Validate inputs
     isempty(selected_channels) && throw(ArgumentError("At least one channel must be specified"))
-    invalid_channels = setdiff(selected_channels, dat.layout.label)
-    !isempty(invalid_channels) && throw(ArgumentError("Invalid channels: $(join(invalid_channels, ", "))"))
+    
+    # For EEG channels, validate against layout
+    eeg_channels = intersect(selected_channels, dat.layout.label)
+    invalid_eeg_channels = setdiff(eeg_channels, dat.layout.label)
+    !isempty(invalid_eeg_channels) && throw(ArgumentError("Invalid EEG channels: $(join(invalid_eeg_channels, ", "))"))
+    
+    # Additional channels (not in layout) are allowed
+    additional_channels = setdiff(selected_channels, dat.layout.label)
+    if !isempty(additional_channels)
+        @info "plot_epochs: Including additional channels not in layout: $(_print_vector(additional_channels))"
+    end
 
     # Default keyword arguments
     default_kwargs = Dict(
