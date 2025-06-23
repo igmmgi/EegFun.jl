@@ -149,7 +149,7 @@ function run_ica(
         dat_ica = filter_data(dat_ica, "lp", "iir", lp_freq, order = 3)
     end
 
-    # Get channels to use using predicate
+    # Always use all available channels, let channels() function handle filtering
     all_available_channels = _get_available_channels(dat_ica)
     channel_mask = channels(all_available_channels)
     selected_channels = all_available_channels[channel_mask]
