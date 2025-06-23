@@ -86,9 +86,9 @@ function polar_to_cartesian_xyz!(layout::DataFrame)
     inc = layout[!, :inc] .* (pi / 180)  # Convert to radians
     azi = layout[!, :azi] .* (pi / 180)  # Convert to radians
 
-    # Swap x and y to match 2D orientation and eliminate 90-degree rotation
-    layout[!, :x3] = radius .* sin.(inc) .* sin.(azi)
-    layout[!, :y3] = radius .* sin.(inc) .* cos.(azi)
+    # Standard spherical to Cartesian conversion
+    layout[!, :x3] = radius .* sin.(inc) .* cos.(azi)
+    layout[!, :y3] = radius .* sin.(inc) .* sin.(azi)
     layout[!, :z3] = radius .* cos.(inc)
 
     return nothing

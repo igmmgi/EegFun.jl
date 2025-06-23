@@ -1,7 +1,7 @@
 """
     run_ica(dat::ContinuousData;
             n_components::Union{Nothing,Int} = nothing,
-            channels::Function = channels(),
+            channels::Function = channels(dat),
             samples::Function = samples(),
             hp_filter::Bool = true,
             lp_filter::Bool = false,
@@ -25,11 +25,15 @@ Runs Independent Component Analysis (ICA) on EEG data.
 # Returns
 An ICA result object containing unmixing matrix, mixing matrix, and component information.
 
+# Important Note on Channel Selection
+By default, `channels()` uses only the layout channels (from `dat.layout.label`), which is appropriate for ICA.
+To include additional channels (like EOG, reference, etc.), explicitly specify them in the channels parameter.
+
 # Examples
 
 ## Basic Usage
 ```julia
-# ICA on all channels and all samples
+# ICA on layout channels only (default behavior)
 ica_result = run_ica(dat)
 
 # ICA excluding extreme values
@@ -38,17 +42,20 @@ ica_result = run_ica(dat, samples = samples_not(:is_extreme_value_100))
 
 ## Channel Filtering
 ```julia
-# ICA on specific channels only
+# ICA on specific layout channels only
 ica_result = run_ica(dat, channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]))
 
-# ICA excluding reference channels
+# ICA excluding reference channels from layout
 ica_result = run_ica(dat, channels = channels_not([:M1, :M2]))
 
-# ICA on frontal channels only
+# ICA on frontal channels only (first 10 channels)
 ica_result = run_ica(dat, channels = channels(1:10))
 
 # ICA on channels starting with "F" (frontal)
 ica_result = run_ica(dat, channels = x -> startswith.(string.(x), "F"))
+
+# ICA on layout channels only, excluding specific ones
+ica_result = run_ica(dat, channels = x -> x .∈ Ref(dat.layout.label) .&& .!(x .∈ Ref([:M1, :M2])))
 ```
 
 ## Sample Filtering
@@ -111,7 +118,10 @@ ica_result = run_ica(dat, n_components = 10)
 
 ## Additional Channels (not in layout)
 ```julia
-# ICA including derived channels like EOG
+# ICA including derived channels like EOG (use with caution)
+ica_result = run_ica(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+
+# Mix layout channels and additional channels
 ica_result = run_ica(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 """
@@ -164,7 +174,7 @@ function run_ica(
         n_components = length(selected_channels) - 1
     end
 
-    @info "\nRunning ICA with $(length(selected_channels)) channels and $(length(sample_indices)) samples, $(n_components) components"
+    @info "Running ICA: $(length(selected_channels)) channels x $(length(sample_indices)) samples -> $(n_components) components"
 
     # Create data matrix and run ICA
     dat_for_ica = create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
