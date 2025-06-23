@@ -1,7 +1,7 @@
 [metadata]
-generated_at = "2025-06-21T19:46:33.939"
+generated_at = "2025-06-23T14:34:06.640"
 eegfun_version = "0.1.0"
-git_commit = "a92c1ccca7d31001e7f91d5258b81e6f2222efba"
+git_commit = "a23ebaab4217e69f8b0445c1d9454a528f232dd4"
 
 [preprocess]
 epoch_start = -1

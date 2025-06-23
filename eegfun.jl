@@ -38,12 +38,9 @@ eegfun.plot_layout_2d(layout, neighbours)
 # Layout with Regions of Interest (ROIs) highlighted
 fig, ax = eegfun.plot_layout_2d(layout)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
-eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
-eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
-eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 5, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
+eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
 eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
-eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:blue], :fillalpha => [0.2]))
 
 # save a basic figure
 # NB. for vector graphics, use CairoMakie
