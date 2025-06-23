@@ -77,6 +77,8 @@ data(dat::SingleDataFrameEeg) = dat.data # single data frame
 data(dat::MultiDataFrameEeg) = to_data_frame(dat) # single data frame with all epochs
 
 # Timepoints, channel, epoch, and duration 
+samples(dat::SingleDataFrameEeg) = dat.data.sample
+samples(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch].sample
 n_samples(dat::SingleDataFrameEeg) = nrow(dat.data)
 n_samples(dat::MultiDataFrameEeg) = nrow(first(dat.data))
 n_channels(dat::EegData) = length(channels(dat))

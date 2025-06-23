@@ -99,7 +99,7 @@ eegfun.is_extreme_value!(dat, 1000, channels = eegfun.channels_not([:Fp1, :AF3])
 
 # count extreme values at specific electrodes at different thresholds
 eegfun.n_extreme_value(dat, 100) # count extreme values across all electrodes
-eegfun.n_extreme_value(dat, 100, channels = eegfun.channels([:Fp1])) # count extreme values at Fp1 at 100 uV threshold
+eegfun.n_extreme_value(dat, 100, channels = eegfun.channels([:Fp1, :vEOG, :is_extreme_value500])) # count extreme values at Fp1 at 100 uV threshold
 
 # mark trigger windows
 eegfun.mark_epoch_windows!(dat, [1, 3], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3
