@@ -40,7 +40,7 @@ plot_grid_rect(dat, x -> startswith.(string.(x), "F"))
 """
 function plot_grid_rect(dat::ErpData; channels::Function = channels(), kwargs = Dict())
     # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
+    all_available_channels = _get_available_channels(dat, true)
     selected_channels = channels(all_available_channels)
 
     default_kwargs = Dict{Symbol,Any}(
