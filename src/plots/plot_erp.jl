@@ -1,9 +1,11 @@
 # #################################################################
 # plot_erp: ERP Data (Single Condition; Single Channel or Average of multiple channels)
 function plot_erp!(fig, ax, dat::ErpData, channels::Function = channels(); kwargs = Dict())
-    # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
-    selected_channels = channels(all_available_channels)
+    # Get layout channels by default
+    layout_channels = channels(dat)
+    
+    # Apply the channel predicate to layout channels
+    selected_channels = channels(layout_channels)
 
     # For EEG channels, validate against layout
     eeg_channels = intersect(selected_channels, dat.layout.label)

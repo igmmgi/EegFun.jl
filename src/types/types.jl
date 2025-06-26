@@ -64,6 +64,7 @@ end
 
 # Basic information functions right with the types
 channels(dat::EegData) = dat.layout.label
+all_channels(dat::EegData) = propertynames(dat.data)
 extra_channels(dat::EegData) = setdiff(propertynames(data(dat)), [channels(dat); :time; :sample; :triggers])
 times(dat::SingleDataFrameEeg) = dat.data.time
 times(dat::MultiDataFrameEeg) = first(dat.data).time  # assume all epochs are the same

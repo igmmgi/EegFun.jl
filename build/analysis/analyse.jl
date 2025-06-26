@@ -449,17 +449,7 @@ samples_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns)
 samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))  # NOT OR = AND NOT
 samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))  # NOT AND = OR NOT
 
-# Helper function to get available channels (layout + additional data channels)
-function _get_available_channels(dat::SingleDataFrameEeg)
-    # Start with layout channels
-    available_channels = dat.layout.label
-    
-    # Add any additional channels in data that aren't in layout
-    data_channels = propertynames(dat.data)
-    additional_channels = setdiff(data_channels, [:time, :sample, :triggers, available_channels...])
-    
-    return [available_channels; additional_channels]
-end
+
 
 """
     channel_summary(dat::SingleDataFrameEeg; 
@@ -559,10 +549,12 @@ function channel_summary(dat::SingleDataFrameEeg;
     sample_mask = samples(dat.data)
     filtered_data = dat.data[sample_mask, :]
     
-    # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
+    # Get layout channels by default
+    layout_channels = channels(dat)
+    
+    # Apply the channel predicate to layout channels
+    channel_mask = channels(layout_channels)
+    selected_channels = layout_channels[channel_mask]
     
     @info "channel_summary: Selected channels: $(_print_vector(selected_channels))"
     
@@ -737,7 +729,7 @@ function correlation_matrix(dat::ContinuousData;
                           samples::Function = samples(),
                           channels::Function = channels())::DataFrame
     # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
+    all_available_channels = channels(dat)
     channel_mask = channels(all_available_channels)
     selected_channels = all_available_channels[channel_mask]
     
@@ -921,7 +913,7 @@ is_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
 """
 function is_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels())::Vector{Bool}
     # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
+    all_available_channels = channels(dat)
     channel_mask = channels(all_available_channels)
     selected_channels = all_available_channels[channel_mask]
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
@@ -953,13 +945,20 @@ is_extreme_value!(dat, 100, channels = channels([:Fp1, :Fp2]))
 is_extreme_value!(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function is_extreme_value!(dat::ContinuousData, criterion::Number; channels::Function = channels(), channel_out::Symbol = :is_extreme_value)
-    # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
+function is_extreme_value!(dat::ContinuousData, criterion::Number; channels::Function = channels(), include_additional_channels::Bool = false, channel_out::Symbol = :is_extreme_value)
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+    layout_channels = channels(dat)
+    end
+    
+    # Apply the channel predicate to layout channels
+    channel_mask = channels(layout_channels)
+    selected_channels = layout_channels[channel_mask]
+    
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
-    _is_extreme_value!(dat.data, criterion, selected_channels, channel_out = channel_out)
+    _is_extreme_value!(dat.data, criterion, selected_channels; channel_out = channel_out)
 end
 
 
@@ -990,11 +989,17 @@ n_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
 n_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function n_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels())::Int
-    # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
+function n_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels(), include_additional_channels::Bool = false)::Int
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+        layout_channels = channels(dat)
+    end
+    
+    # Apply the channel predicate to layout channels
+    channel_mask = channels(layout_channels)
+    selected_channels = layout_channels[channel_mask]
     
     return _n_extreme_value(dat.data, criterion, selected_channels)
 end
@@ -1068,10 +1073,12 @@ function channel_joint_probability(dat::ContinuousData;
                                  normval::Int = 2,
                                  samples::Function = samples(),
                                  channels::Function = channels())::DataFrame
-    # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
+    # Get layout channels by default
+    layout_channels = channels(dat)
+    
+    # Apply the channel predicate to layout channels
+    channel_mask = channels(layout_channels)
+    selected_channels = layout_channels[channel_mask]
     
     return _channel_joint_probability(dat.data, selected_channels; 
                                     threshold = threshold, 

@@ -204,7 +204,7 @@ function mark_epoch_windows!(
     for condition in epoch_conditions
         # Find all occurrences of the trigger sequences (unified approach)
         sequence_indices = search_sequences(dat.data.triggers, condition.trigger_sequences)
-        
+
         if isempty(sequence_indices)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
             continue
@@ -213,16 +213,16 @@ function mark_epoch_windows!(
         # Apply after/before filtering if specified
         if condition.after !== nothing || condition.before !== nothing
             filtered_indices = Int[]
-            
+
             for seq_start_idx in sequence_indices
                 # Check if this sequence meets the after/before constraints
                 valid_position = true
-                
+
                 if condition.after !== nothing
                     # Check if there's a trigger with value 'after' before this sequence
                     # Look backwards from sequence start to find the trigger
                     found_after_trigger = false
-                    for i in (seq_start_idx-1):-1:1
+                    for i = (seq_start_idx-1):-1:1
                         if dat.data.triggers[i] == condition.after
                             found_after_trigger = true
                             break
@@ -232,13 +232,13 @@ function mark_epoch_windows!(
                         valid_position = false
                     end
                 end
-                
+
                 if condition.before !== nothing
                     # Check if there's a trigger with value 'before' after this sequence
                     # Look forwards from sequence end to find the trigger
                     sequence_end = seq_start_idx + length(condition.trigger_sequence) - 1
                     found_before_trigger = false
-                    for i in (sequence_end+1):length(dat.data.triggers)
+                    for i = (sequence_end+1):length(dat.data.triggers)
                         if dat.data.triggers[i] == condition.before
                             found_before_trigger = true
                             break
@@ -248,12 +248,12 @@ function mark_epoch_windows!(
                         valid_position = false
                     end
                 end
-                
+
                 if valid_position
                     push!(filtered_indices, seq_start_idx)
                 end
             end
-            
+
             sequence_indices = filtered_indices
             if isempty(sequence_indices)
                 after_msg = condition.after !== nothing ? " after trigger $(condition.after)" : ""
@@ -264,44 +264,44 @@ function mark_epoch_windows!(
         end
 
         # Apply timing constraints if specified
-        if condition.timing_pairs !== nothing && 
-           condition.min_interval !== nothing && 
+        if condition.timing_pairs !== nothing &&
+           condition.min_interval !== nothing &&
            condition.max_interval !== nothing
-            
+
             valid_indices = Int[]
-            
+
             for seq_start_idx in sequence_indices
                 # Check if this sequence meets all timing constraints
                 valid_sequence = true
-                
+
                 for (start_idx, end_idx) in condition.timing_pairs
                     # Calculate actual indices in the trigger array
                     actual_start_idx = seq_start_idx + (start_idx - 1)
                     actual_end_idx = seq_start_idx + (end_idx - 1)
-                    
+
                     # Check bounds
                     if actual_start_idx < 1 || actual_end_idx > length(dat.data.triggers)
                         valid_sequence = false
                         break
                     end
-                    
+
                     # Calculate time interval between the two triggers
                     start_time_val = dat.data.time[actual_start_idx]
                     end_time_val = dat.data.time[actual_end_idx]
                     interval = end_time_val - start_time_val
-                    
+
                     # Check if interval meets constraints
                     if interval < condition.min_interval || interval > condition.max_interval
                         valid_sequence = false
                         break
                     end
                 end
-                
+
                 if valid_sequence
                     push!(valid_indices, seq_start_idx)
                 end
             end
-            
+
             sequence_indices = valid_indices
             if isempty(sequence_indices)
                 @warn "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
@@ -313,13 +313,13 @@ function mark_epoch_windows!(
         for seq_start_idx in sequence_indices
             # Calculate the reference index (t=0 position) within the sequence
             reference_idx = seq_start_idx + (condition.reference_index - 1)
-            
+
             # Check if reference index is within bounds
             if reference_idx > length(dat.data.triggers)
                 @warn "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
                 continue
             end
-            
+
             reference_time = dat.data.time[reference_idx]
 
             # Find all samples within the time window
@@ -429,55 +429,34 @@ function _channel_summary_impl(selected_data::DataFrame, channel_labels::Vector{
     return summary_df
 end
 
-# Helper functions for easier channel filtering
+# Helper function predicates for easier channel filtering
+channels() = x -> fill(true, length(x))  # Default: select all channels given
 channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
 channels(channel_name::Symbol) = x -> x .== channel_name
-channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i in 1:length(x)]
-channels() = x -> fill(true, length(x))
+channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
-channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i in 1:length(x)])
+channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
 
-# Helper functions for easier sample filtering
+# Helper function predicates for easier sample filtering
 samples() = x -> fill(true, nrow(x))
 samples(column::Symbol) = x -> x[!, column]
-samples(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)  # OR logic (backward compatibility)
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
 samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])
-samples_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))  # NOT OR = AND NOT
-samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))  # NOT OR = AND NOT
-samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))  # NOT AND = OR NOT
-
-# Helper function to get available channels (layout channels only by default)
-function _get_available_channels(dat::EegData)
-    return dat.layout.label
-end
-
-# Helper function to get all available channels (layout + additional)
-function _get_all_available_channels(dat::EegData)
-    available_channels = dat.layout.label
-    data_channels = propertynames(data(dat))
-    additional_channels = setdiff(data_channels, [:time, :sample, :triggers, available_channels...])
-    return [available_channels; additional_channels]
-end
-
-# Helper function for users to get all available channels
-all_channels(dat::EegData) = _get_all_available_channels(dat)
+samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns)) 
+samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))  
 
 
 
 """
-    channel_summary(dat::SingleDataFrameEeg; 
-                   samples::Function = samples(),
-                   channels::Function = channels())::DataFrame
+    channel_summary(dat::ContinuousData; channel_selection::Function = channels())::DataFrame
 
 Computes summary statistics for EEG channels.
 
 # Arguments
-- `dat::SingleDataFrameEeg`: The EEG data object.
-- `samples::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 
 # Returns
 A DataFrame containing summary statistics for each channel.
@@ -498,11 +477,8 @@ summary = channel_summary(dat, channels = channels_not([:M1, :M2]))
 
 ## Including Additional Channels
 ```julia
-# To include additional channels (EOG, reference, etc.), explicitly specify them
-all_channels = _get_all_available_channels(dat)
-summary = channel_summary(dat, channels = channels(all_channels))
-
-# Or include specific additional channels
+# Channel summary for additional channels (EOG, extreme value flags, etc.)
+# The function automatically detects when you specify additional channels
 summary = channel_summary(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
@@ -565,34 +541,38 @@ summary = channel_summary(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ## Additional Channels (not in layout)
 ```julia
 # Include derived channels like EOG
+# The function automatically switches to all available channels when needed
 # summary = channel_summary(dat, channels = channels([:vEOG, :hEOG]))
 
 # Mix layout channels and additional channels
 # summary = channel_summary(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 """
-function channel_summary(dat::SingleDataFrameEeg; 
-                        samples::Function = samples(),
-                        channels::Function = channels())::DataFrame
-    # Filter samples
-    sample_mask = samples(dat.data)
-    filtered_data = dat.data[sample_mask, :]
-    
-    # Always use all available channels as base, let channels() function handle filtering
-    all_available_channels = _get_all_available_channels(dat)
-    
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
-    
-    @info "channel_summary: Selected channels: $(_print_vector(selected_channels))"
-    
-    return _channel_summary_impl(filtered_data, selected_channels)
+function channel_summary(
+    dat::ContinuousData;
+    channel_selection::Function = channels(),
+    include_additional_channels::Bool = false,
+)::DataFrame
+
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+        layout_channels = channels(dat)
+    end
+    # Apply the channel selection predicate to layout channels
+    channel_mask = channel_selection(layout_channels)
+    selected_channels = layout_channels[channel_mask]
+
+    return _channel_summary(dat.data, selected_channels)
 end
 
 # For MultiDataFrameEeg
-function channel_summary(dat::MultiDataFrameEeg; 
-                        samples::Function = samples(),
-                        channels::Function = channels())::Vector{DataFrame}
+function channel_summary(
+    dat::MultiDataFrameEeg;
+    samples::Function = samples(),
+    channels::Function = channels(),
+)::Vector{DataFrame}
     return [channel_summary(dat.data[trial]; samples = samples, channels = channels) for trial in eachindex(dat.data)]
 end
 
@@ -603,19 +583,17 @@ end
 
 
 """
-    correlation_matrix(dat::ContinuousData; 
-                      samples::Function = samples(),
-                      channels::Function = channels(dat))::DataFrame
+    correlation_matrix(dat::ContinuousData; channel_selection::Function = channels(), include_additional_channels::Bool = false)::Matrix{Float64}
 
 Calculates the correlation matrix for the EEG data.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `samples::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
-A DataFrame containing the correlation matrix of the specified channels.
+A matrix containing the correlation values between the specified channels.
 
 # Examples
 
@@ -633,11 +611,7 @@ corr_matrix = correlation_matrix(dat, channels = channels_not([:M1, :M2]))
 
 ## Including Additional Channels
 ```julia
-# To include additional channels (EOG, reference, etc.), explicitly specify them
-all_channels = _get_all_available_channels(dat)
-corr_matrix = correlation_matrix(dat, channels = channels(all_channels))
-
-# Or include specific additional channels
+# Correlation matrix for additional channels (EOG, extreme value flags, etc.)
 corr_matrix = correlation_matrix(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
@@ -763,17 +737,24 @@ is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
 # heatmap(corr_values, xticks=channel_names, yticks=channel_names)
 ```
 """
-function correlation_matrix(dat::ContinuousData; 
-                          samples::Function = samples(),
-                          channels::Function = channels(dat))::DataFrame
-    # Always use all available channels, let channels() function handle filtering
-    all_available_channels = propertynames(dat.data)
-    all_available_channels = setdiff(all_available_channels, [:time, :sample, :triggers])
-    
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
-    
-    return _correlation_matrix(dat.data, selected_channels; samples = samples)
+function correlation_matrix(
+    dat::ContinuousData;
+    channel_selection::Function = channels(),
+    include_additional_channels::Bool = false,
+)::Matrix{Float64}
+
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+        layout_channels = channels(dat)
+    end
+
+    # Apply the channel predicate to layout channels
+    channel_mask = channel_selection(layout_channels)
+    selected_channels = layout_channels[channel_mask]
+
+    return _correlation_matrix(dat.data, selected_channels)
 end
 
 # Internal function for plain DataFrames with explicit channel specification
@@ -784,11 +765,11 @@ function _correlation_matrix(
 )::DataFrame
     # Select the specified channels
     data = select(dat, selected_channels)
-    
+
     # Filter samples
     sample_mask = samples(dat)
     data = data[sample_mask, :]
-    
+
     # Compute correlation matrix
     df = DataFrame(cor(Matrix(data)), selected_channels)
     insertcols!(df, 1, :row => selected_channels)
@@ -921,7 +902,12 @@ function _is_extreme_value(dat::DataFrame, criterion::Number, selected_channels:
 end
 
 # Internal function for plain DataFrames with explicit channel specification
-function _is_extreme_value!(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}; channel_out::Symbol = :is_extreme_value)
+function _is_extreme_value!(
+    dat::DataFrame,
+    criterion::Number,
+    selected_channels::Vector{Symbol};
+    channel_out::Symbol = :is_extreme_value,
+)
     dat[!, channel_out] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, selected_channels)), dims = 2)[:]
 end
 
@@ -941,40 +927,48 @@ A Boolean vector indicating whether any extreme values were found for each row.
 # Examples
 ```julia
 # Check extreme values in layout channels only (default)
-is_extreme_value!(dat, 100)
+is_extreme_value(dat, 100)
 
 # Check extreme values in specific layout channels
-is_extreme_value!(dat, 100, channels = channels([:Fp1, :Fp2]))
+is_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
+
+# Check extreme values in additional channels (automatically detected)
+is_extreme_value(dat, 100, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
 
 # Exclude reference channels from layout
-is_extreme_value!(dat, 100, channels = channels_not([:M1, :M2]))
-
-# To include additional channels (EOG, reference, etc.), explicitly specify them
-all_channels = _get_all_available_channels(dat)
-is_extreme_value!(dat, 100, channels = channels(all_channels))
+is_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
 ```
 """
-function is_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels())::Vector{Bool}
-    # Always use all available channels as base, let channels() function handle filtering
-    all_available_channels = _get_all_available_channels(dat)
-    
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
+function is_extreme_value(
+    dat::ContinuousData,
+    criterion::Number;
+    channel_selection::Function = channels(),
+    include_additional_channels::Bool = false,
+)::Vector{Bool}
+
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+        layout_channels = channels(dat)
+    end
+    # Apply the channel predicate to layout channels
+    channel_mask = channel_selection(layout_channels)
+    selected_channels = layout_channels[channel_mask]
+
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
     return _is_extreme_value(dat.data, criterion, selected_channels)
 end
 
 """
-    is_extreme_value!(dat::ContinuousData, criterion::Number; 
-                      channels::Function = channels(),
-                      channel_out::Symbol = :is_extreme_value)
+    is_extreme_value!(dat::ContinuousData, criterion::Number; channel_selection::Function = channels(), channel_out::Symbol = :is_extreme_value)
 
 Checks if any values in the specified channels exceed a given criterion and adds the result as a new column.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Number`: The threshold for determining extreme values.
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 - `channel_out::Symbol`: Name of the output column (default: :is_extreme_value).
 
 # Examples
@@ -985,29 +979,40 @@ is_extreme_value!(dat, 100)
 # Check extreme values in specific layout channels
 is_extreme_value!(dat, 100, channels = channels([:Fp1, :Fp2]))
 
+# Check extreme values in additional channels (automatically detected)
+is_extreme_value!(dat, 100, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
+
 # Exclude reference channels from layout
 is_extreme_value!(dat, 100, channels = channels_not([:M1, :M2]))
-
-# To include additional channels (EOG, reference, etc.), explicitly specify them
-all_channels = _get_all_available_channels(dat)
-is_extreme_value!(dat, 100, channels = channels(all_channels))
 ```
 """
-function is_extreme_value!(dat::ContinuousData, criterion::Number; channels::Function = channels(), channel_out::Symbol = :is_extreme_value)
-    # Always use all available channels as base, let channels() function handle filtering
-    all_available_channels = _get_all_available_channels(dat)
-    
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
+function is_extreme_value!(
+    dat::ContinuousData,
+    criterion::Number;
+    channel_selection::Function = channels(),
+    include_additional_channels::Bool = false,
+    channel_out::Symbol = :is_extreme_value,
+)
+
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+        layout_channels = channels(dat)
+    end
+    # Apply the channel predicate to layout channels
+    channel_mask = channel_selection(layout_channels)
+    selected_channels = layout_channels[channel_mask]
+
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
-    _is_extreme_value!(dat.data, criterion, selected_channels, channel_out = channel_out)
+    _is_extreme_value!(dat.data, criterion, selected_channels; channel_out = channel_out)
+
 end
 
 
 
 """
-    n_extreme_value(dat::ContinuousData, criterion::Number; 
-                    channels::Function = channels())::Int
+    n_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels(), include_additional_channels::Bool = false)::Int
 
 Counts the number of extreme values in the specified channels.
 
@@ -1021,33 +1026,36 @@ An integer count of the number of extreme values found.
 
 # Examples
 ```julia
-# Count extreme values in all channels
+# Count extreme values in layout channels only (default)
 n_extreme_value(dat, 100)
 
-# Count extreme values in specific channels
+# Count extreme values in specific layout channels
 n_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
 
-# Count extreme values excluding reference channels
+# Count extreme values excluding reference channels from layout
 n_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
+
+# Count extreme values in additional channels (EOG, extreme value flags, etc.)
+n_extreme_value(dat, 100, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
 ```
 """
-function n_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels())::Int
-    # Start with layout channels only
-    layout_channels = dat.layout.label  # Get layout channels directly
-    
-    # Apply channel filtering to get selected channels
-    channel_mask = channels(layout_channels)
-    selected_channels = layout_channels[channel_mask]
-    
-    # Check if user is trying to access channels that aren't in the layout
-    # If so, switch to using all available channels
-    if !isempty(selected_channels) && !all(ch -> ch in layout_channels, selected_channels)
-        # User specified channels not in layout, use all available channels as base
-        all_available_channels = _get_all_available_channels(dat)
-        channel_mask = channels(all_available_channels)
-        selected_channels = all_available_channels[channel_mask]
+function n_extreme_value(
+    dat::ContinuousData,
+    criterion::Number;
+    channel_selection::Function = channels(),
+    include_additional_channels::Bool = false,
+)::Int
+
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+        layout_channels = channels(dat)
     end
-    
+    # Apply the channel predicate to layout channels
+    channel_mask = channel_selection(layout_channels)
+    selected_channels = layout_channels[channel_mask]
+
     return _n_extreme_value(dat.data, criterion, selected_channels)
 end
 
@@ -1066,48 +1074,46 @@ function _channel_joint_probability(
     samples::Function = samples(),
 )::DataFrame
     @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
-    
+
     # Select the specified channels
     data = select(dat, selected_channels)
-    
+
     # Filter samples
     sample_mask = samples(dat)
     data = data[sample_mask, :]
-    
+
     # Convert to matrix and compute joint probability
     jp, indelec = joint_probability(Matrix(data)', threshold, normval)
     return DataFrame(channel = selected_channels, jp = jp, rejection = indelec)
 end
 
 """
-    channel_joint_probability(dat::ContinuousData; 
-                             threshold::Float64 = 5.0, 
-                             normval::Int = 2,
-                             samples::Function = samples(),
-                             channels::Function = channels())::DataFrame
+    channel_joint_probability(dat::ContinuousData; channels::Function = channels(), threshold::Real = 3.0, normval::Real = 2)::DataFrame
 
 Computes joint probability for EEG channels.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `threshold::Float64`: Threshold for joint probability (default: 5.0).
-- `normval::Int`: Normalization value (default: 2).
-- `samples::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `threshold::Real`: Threshold for joint probability (default: 3.0).
+- `normval::Real`: Normalization value (default: 2).
 
 # Returns
 A DataFrame containing joint probability values for each channel.
 
 # Examples
 ```julia
-# Basic joint probability
+# Basic joint probability for layout channels only (default)
 channel_joint_probability(dat)
 
 # Filter samples where epoch_window is true
 channel_joint_probability(dat, samples = samples(:epoch_window))
 
-# Filter to specific channels
+# Filter to specific layout channels
 channel_joint_probability(dat, channels = channels([:Fp1, :Fp2]))
+
+# Filter to additional channels (EOG, extreme value flags, etc.)
+channel_joint_probability(dat, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
 
 # Combine both filters
 channel_joint_probability(dat, 
@@ -1116,21 +1122,26 @@ channel_joint_probability(dat,
 )
 ```
 """
-function channel_joint_probability(dat::ContinuousData; 
-                                 threshold::Float64 = 5.0, 
-                                 normval::Int = 2,
-                                 samples::Function = samples(),
-                                 channels::Function = channels())::DataFrame
-    # Always use all available channels as base, let channels() function handle filtering
-    all_available_channels = _get_all_available_channels(dat)
-    
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
-    
-    return _channel_joint_probability(dat.data, selected_channels; 
-                                    threshold = threshold, 
-                                    normval = normval, 
-                                    samples = samples)
+function channel_joint_probability(
+    dat::ContinuousData;
+    channel_selection::Function = channels(),
+    include_additional_channels,
+    threshold::Real = 3.0,
+    normval::Real = 2,
+)::DataFrame
+
+    # Get layout channels by default
+    if include_additional_channels
+        layout_channels = all_channels(dat)
+    else
+        layout_channels = channels(dat)
+    end
+    # Apply the channel predicate to layout channels
+    channel_mask = channel_selection(layout_channels)
+    selected_channels = layout_channels[channel_mask]
+
+    return _channel_joint_probability(dat.data, selected_channels, threshold, normval)
+
 end
 
 
@@ -1225,22 +1236,22 @@ Calculates the mean amplitude for each electrode within a specified time window.
 # Returns
 - `DataFrame`: A DataFrame with electrode labels as column names and corresponding mean amplitudes
 """
-function get_mean_amplitude(erp_data::ErpData, time_window::Tuple{<:Real, <:Real})
+function get_mean_amplitude(erp_data::ErpData, time_window::Tuple{<:Real,<:Real})
     # Find time indices within the window
     time_indices = findall(x -> x >= time_window[1] && x <= time_window[2], erp_data.time)
-    
+
     if isempty(time_indices)
         error("No data points found within the specified time window")
     end
-    
+
     # Calculate mean amplitude for each electrode
-    mean_amplitudes = Dict{Symbol, Float64}()
+    mean_amplitudes = Dict{Symbol,Float64}()
     for electrode in erp_data.layout.label
         if haskey(erp_data.data, electrode)
             mean_amplitudes[electrode] = mean(erp_data.data[time_indices, electrode])
         end
     end
-    
+
     return DataFrame(mean_amplitudes)
 end
 

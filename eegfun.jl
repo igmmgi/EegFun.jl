@@ -12,6 +12,44 @@ using GLMakie
 # using CairoMakie
 # using eegfun: load_config 
 
+# load data
+dat = eegfun.read_bdf("../Flank_C_3.bdf");
+layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.rereference!(dat, :avg)
+eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
+eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
+eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+
+eegfun.channels(dat)
+eegfun.all_channels(dat)
+
+# this is what I want to test
+eegfun.is_extreme_value!(dat, 100);
+eegfun.is_extreme_value!(dat, 100; include_additional_channels = true);
+eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1, :Fp2]));
+eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
+eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
+
+
+
+# count extreme values at specific electrodes at different thresholds
+eegfun.n_extreme_value(dat, 100)
+eegfun.n_extreme_value(dat, 100, include_additional_channels = true)
+eegfun.n_extreme_value(dat, 100, channel_predicate = eegfun.channels([:Fp1, :Fp2])) # count extreme values at Fp1 at 100 uV threshold
+eegfun.n_extreme_value(dat, 100, channel_predicate = x -> endswith.(string.(x), "z"));
+eegfun.n_extreme_value(dat, 100, channel_predicate = x -> .!(endswith.(string.(x), "z")));
+
+
+
+# plot events
+eegfun.plot_events(dat)
+eegfun.plot_events_timing(dat)
+
+
+
 # while preprocessing routine
 eegfun.preprocess_eeg_data("pipeline.toml")
 

@@ -106,7 +106,7 @@ fig, ax = plot_epochs(dat, channels([1, 5, 10, 15, 20]))
 """
 function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dict())
     # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat)
+    all_available_channels = _get_available_channels(dat, true)
     selected_channels = channels(all_available_channels)
 
     # Validate inputs

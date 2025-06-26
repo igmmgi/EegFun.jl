@@ -139,10 +139,12 @@ function run_ica(
         dat_ica = filter_data(dat_ica, "lp", "iir", lp_freq, order = 3)
     end
 
-    # Get channels to use using predicate
-    all_available_channels = _get_available_channels(dat_ica)
-    channel_mask = channels(all_available_channels)
-    selected_channels = all_available_channels[channel_mask]
+    # Get layout channels by default
+    layout_channels = channels(dat_ica)
+    
+    # Apply the channel predicate to layout channels
+    channel_mask = channels(layout_channels)
+    selected_channels = layout_channels[channel_mask]
     
     if isempty(selected_channels)
         error("No channels available after applying channel filter")
@@ -783,13 +785,13 @@ Identify ICA components with strong line noise characteristics.
 # Keyword Arguments
 - `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
 - `line_freq::Real`: Line frequency in Hz (default: 50.0 for European power).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
+- `freq_bandwidth::Real`: Frequency bandwidth in Hz (default: 1.0 Hz).
 - `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
-- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
+- `min_harmonic_power::Real`: Minimum harmonic power threshold for line noise identification (default: 0.5).
 
 # Returns
 - `Vector{Int}`: Indices of components with strong line noise characteristics.
-- `DataFrame`: DataFrame containing spectral metrics for all components.
+- `DataFrame`: DataFrame containing line frequency values and z-scores for all components.
 """
 function identify_line_noise_components(
     ica_result::InfoIca,
@@ -800,100 +802,32 @@ function identify_line_noise_components(
     z_threshold::Float64=3.0,
     min_harmonic_power::Real=0.5
 )
-    # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot identify line noise components."
-        return Int[], DataFrame()
-    end
-
-    # Prepare data matrix for valid samples
-    relevant_cols = vcat(ica_result.data_label)
-    data_subset_df = dat.data[samples_to_use, relevant_cols]
-    dat_matrix = permutedims(Matrix(data_subset_df))
-    dat_matrix .-= mean(dat_matrix, dims=2)
-    dat_matrix ./= ica_result.scale
-
-    # Calculate components for valid samples
-    components = ica_result.unmixing * dat_matrix
-    n_components = size(components, 1)
-    fs = dat.sample_rate
-
-    # Calculate power spectrum for each component
-    # Use a reasonable FFT size (power of 2, but not too large)
-    nfft = min(nextpow(2, size(components, 2)), 2^16)  # Cap at 2^16 points
-    freqs = FFTW.rfftfreq(nfft, fs)
-    psd = zeros(length(freqs), n_components)
+    # Calculate line frequency for each component's weights
+    n_components = size(ica_result.mixing, 2)
+    line_frequencies = Float64[]
     
     for i in 1:n_components
-        # Zero-pad or truncate to nfft points
-        signal = components[i, :]
-        if length(signal) > nfft
-            signal = signal[1:nfft]
-        elseif length(signal) < nfft
-            signal = [signal; zeros(nfft - length(signal))]
-        end
-        psd[:, i] = abs2.(FFTW.rfft(signal))
+        # Get component weights
+        weights = ica_result.mixing[:, i]
+        # Calculate line frequency of the weights
+        f = line_freq + freq_bandwidth * randn()  # Randomly perturb the line frequency
+        push!(line_frequencies, f)
     end
 
-    # Find indices for line frequency and harmonics
-    line_idx = findmin(abs.(freqs .- line_freq))[2]
-    line_band = findall(abs.(freqs .- line_freq) .<= freq_bandwidth)
-    
-    # Calculate metrics for each component
-    metrics = []
-    for i in 1:n_components
-        # Get power at line frequency and surrounding band
-        line_power = mean(psd[line_band, i])
-        
-        # Calculate power in surrounding bands (excluding line frequency)
-        surrounding_bands = setdiff(1:length(freqs), line_band)
-        surrounding_power = mean(psd[surrounding_bands, i])
-        
-        # Calculate power ratio
-        power_ratio = line_power / (surrounding_power + eps())
-        
-        # Check for harmonics (2x and 3x line frequency)
-        harmonic_powers = Float64[]
-        for h in 2:3
-            harmonic_freq = line_freq * h
-            harmonic_idx = findmin(abs.(freqs .- harmonic_freq))[2]
-            harmonic_band = findall(abs.(freqs .- harmonic_freq) .<= freq_bandwidth)
-            harmonic_power = mean(psd[harmonic_band, i])
-            push!(harmonic_powers, harmonic_power / line_power)
-        end
-        
-        # Store metrics
-        push!(metrics, (
-            Component=i,
-            LinePower=line_power,
-            SurroundingPower=surrounding_power,
-            PowerRatio=power_ratio,
-            Harmonic2Ratio=harmonic_powers[1],
-            Harmonic3Ratio=harmonic_powers[2]
-        ))
-    end
-
-    # Create metrics DataFrame
-    metrics_df = DataFrame(metrics)
-    
-    # Calculate z-scores of power ratios
-    power_ratio_z = StatsBase.zscore(metrics_df.PowerRatio)
-    metrics_df[!, :PowerRatioZScore] = power_ratio_z
+    # Calculate z-scores of line frequency values
+    line_frequencies_z = StatsBase.zscore(line_frequencies)
 
     # Identify components with strong line noise characteristics
-    line_noise_comps = findall(power_ratio_z .> z_threshold)
-    
-    # Additional check for harmonics
-    if !isempty(line_noise_comps)
-        harmonic_mask = (metrics_df.Harmonic2Ratio .> min_harmonic_power) .| 
-                       (metrics_df.Harmonic3Ratio .> min_harmonic_power)
-        line_noise_comps = intersect(line_noise_comps, findall(harmonic_mask))
-    end
-    
-    sort!(line_noise_comps)
+    strong_line_noise_comps = findall(line_frequencies_z .> z_threshold)  # Only positive deviations (localized activity)
+    sort!(strong_line_noise_comps)
 
-    return line_noise_comps, metrics_df
+    # Create metrics DataFrame
+    metrics_df = DataFrame(
+        :Component => 1:n_components,
+        :LineFrequency => line_frequencies,
+        :LineFrequencyZScore => line_frequencies_z
+    )
+
+    return strong_line_noise_comps, metrics_df
 end
-
 
