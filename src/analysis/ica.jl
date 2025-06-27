@@ -77,20 +77,20 @@ ica_result = run_ica(dat, samples = samples_and([:epoch_window, samples_not(:is_
 ```julia
 # Exclude reference channels and extreme values
 ica_result = run_ica(dat, 
-    channels = channels_not([:M1, :M2]),
-    samples = samples_not(:is_extreme_value_100)
+    channel_selection = channels_not([:M1, :M2]),
+    sample_selection = samples_not(:is_extreme_value_100)
 )
 
 # Only frontal channels, exclude bad samples
 ica_result = run_ica(dat, 
-    channels = channels(1:10),
-    samples = samples_or_not([:is_extreme_value_100, :is_vEOG])
+    channel_selection = channels(1:10),
+    sample_selection = samples_or_not([:is_extreme_value_100, :is_vEOG])
 )
 
 # Complex filtering: frontal channels, good samples, within epochs
 ica_result = run_ica(dat, 
-    channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
-    samples = samples_and([
+    channel_selection = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
+    sample_selection = samples_and([
         :epoch_window, 
         samples_not(:is_extreme_value_100),
         samples_not(:is_vEOG),
@@ -119,18 +119,18 @@ ica_result = run_ica(dat, n_components = 10)
 ## Additional Channels (not in layout)
 ```julia
 # ICA including derived channels like EOG (use with caution)
-ica_result = run_ica(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+ica_result = run_ica(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 
 # Mix layout channels and additional channels
-ica_result = run_ica(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+ica_result = run_ica(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 """
 function run_ica(
     dat::ContinuousData;
     n_components::Union{Nothing,Int} = nothing,
+    sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
-    samples::Function = samples(),
     hp_filter::Bool = true,
     lp_filter::Bool = false,
     hp_freq::Float64 = 1.0,
@@ -156,8 +156,7 @@ function run_ica(
     end
 
     # Get samples to use using predicate
-    sample_mask = samples(dat_ica.data)
-    sample_indices = findall(sample_mask)
+    sample_indices = get_selected_samples(dat_ica, sample_selection)
 
     if isempty(sample_indices)
         error("No samples available after applying sample filter")
