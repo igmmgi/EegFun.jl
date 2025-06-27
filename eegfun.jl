@@ -33,6 +33,8 @@ eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
 
+eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+
 
 
 # count extreme values at specific electrodes at different thresholds

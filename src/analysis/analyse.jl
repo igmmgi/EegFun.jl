@@ -400,14 +400,17 @@ end
 
 
 # Helper function with common logic
-function _channel_summary_impl(selected_data::DataFrame, channel_labels::Vector{Symbol})::DataFrame
+function _channel_summary_impl(data::DataFrame, selected_samples::Vector{Int}, channel_labels::Vector{Symbol})::DataFrame
+    # Filter data by selected samples
+    filtered_data = data[selected_samples, :]
+    
     # Initialize a matrix to store summary statistics
     # 6 statistics: min, max, range, std, mad, var
     summary_stats = Matrix{Float64}(undef, length(channel_labels), 6)
 
     # Compute summary statistics for each column
     for (i, col) in enumerate(channel_labels)
-        col_data = @view selected_data[!, col]
+        col_data = @view filtered_data[!, col]
         summary_stats[i, :] =
             [minimum(col_data), maximum(col_data), datarange(col_data), std(col_data), mad(col_data), var(col_data)]
     end
@@ -456,14 +459,23 @@ function get_selected_channels(dat, channel_selection::Function; include_additio
     return layout_channels[channel_mask]
 end
 
+# Helper to select samples based on a predicate
+function get_selected_samples(dat, sample_selection::Function)
+    # Apply the sample predicate
+    sample_mask = sample_selection(dat.data)
+    return findall(sample_mask)
+end
+
 """
-    channel_summary(dat::ContinuousData; channel_selection::Function = channels())::DataFrame
+    channel_summary(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::DataFrame
 
 Computes summary statistics for EEG channels.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
 A DataFrame containing summary statistics for each channel.
@@ -476,101 +488,104 @@ A DataFrame containing summary statistics for each channel.
 summary = channel_summary(dat)
 
 # Channel summary for specific layout channels
-summary = channel_summary(dat, channels = channels([:Fp1, :Fp2, :F3, :F4]))
+summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
 
 # Channel summary excluding reference channels from layout
-summary = channel_summary(dat, channels = channels_not([:M1, :M2]))
+summary = channel_summary(dat, channel_selection = channels_not([:M1, :M2]))
 ```
 
 ## Including Additional Channels
 ```julia
 # Channel summary for additional channels (EOG, extreme value flags, etc.)
 # The function automatically detects when you specify additional channels
-summary = channel_summary(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
 ## Channel Filtering
 ```julia
 # Summary for specific channels
-# summary = channel_summary(dat, channels = channels([:Fp1, :Fp2, :F3, :F4]))
+summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
 
 # Summary excluding reference channels
-# summary = channel_summary(dat, channels = channels_not([:M1, :M2]))
+summary = channel_summary(dat, channel_selection = channels_not([:M1, :M2]))
 
 # Summary for frontal channels only (channels 1-10)
-# summary = channel_summary(dat, channels = channels(1:10))
+summary = channel_summary(dat, channel_selection = channels(1:10))
 
 # Summary for channels starting with "F" (frontal)
-# summary = channel_summary(dat, channels = x -> startswith.(string.(x), "F"))
+summary = channel_summary(dat, channel_selection = x -> startswith.(string.(x), "F"))
 ```
 
 ## Sample Filtering
 ```julia
 # Exclude extreme values
-# summary = channel_summary(dat, samples = samples_not(:is_extreme_value_100))
+summary = channel_summary(dat, sample_selection = samples_not(:is_extreme_value_100))
 
 # Exclude multiple types of bad samples
-# summary = channel_summary(dat, samples = samples_or_not([:is_extreme_value_100, :is_vEOG, :is_hEOG]))
+summary = channel_summary(dat, sample_selection = samples_or_not([:is_extreme_value_100, :is_vEOG, :is_hEOG]))
 
 # Only include samples within epoch windows
-# summary = channel_summary(dat, samples = samples(:epoch_window))
+summary = channel_summary(dat, sample_selection = samples(:epoch_window))
 
 # Include samples that are both in epoch window AND not extreme
-# summary = channel_summary(dat, samples = samples_and([:epoch_window, samples_not(:is_extreme_value_100)]))
+summary = channel_summary(dat, sample_selection = samples_and([:epoch_window, samples_not(:is_extreme_value_100)]))
 ```
 
 ## Combined Filtering
 ```julia
 # Exclude reference channels and extreme values
-# summary = channel_summary(dat, 
-#     channels = channels_not([:M1, :M2]),
-#     samples = samples_not(:is_extreme_value_100)
-# )
+summary = channel_summary(dat, 
+    channel_selection = channels_not([:M1, :M2]),
+    sample_selection = samples_not(:is_extreme_value_100)
+)
 
 # Only frontal channels, exclude bad samples
-# summary = channel_summary(dat, 
-#     channels = channels(1:10),
-#     samples = samples_or_not([:is_extreme_value_100, :is_vEOG])
-# )
+summary = channel_summary(dat, 
+    channel_selection = channels(1:10),
+    sample_selection = samples_or_not([:is_extreme_value_100, :is_vEOG])
+)
 
 # Complex filtering: frontal channels, good samples, within epochs
-# summary = channel_summary(dat, 
-#     channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
-#     samples = samples_and([
-#         :epoch_window, 
-#         samples_not(:is_extreme_value_100),
-#         samples_not(:is_vEOG),
-#         samples_not(:is_hEOG)
-#     ])
-# )
+summary = channel_summary(dat, 
+    channel_selection = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
+    sample_selection = samples_and([
+        :epoch_window, 
+        samples_not(:is_extreme_value_100),
+        samples_not(:is_vEOG),
+        samples_not(:is_hEOG)
+    ])
+)
 ```
 
 ## Additional Channels (not in layout)
 ```julia
 # Include derived channels like EOG
 # The function automatically switches to all available channels when needed
-# summary = channel_summary(dat, channels = channels([:vEOG, :hEOG]))
+summary = channel_summary(dat, channel_selection = channels([:vEOG, :hEOG]))
 
 # Mix layout channels and additional channels
-# summary = channel_summary(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 """
 function channel_summary(
     dat::ContinuousData;
+    sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
 )::DataFrame
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
-    return _channel_summary(dat.data, selected_channels)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    return _channel_summary_impl(dat.data, selected_samples, selected_channels)
 end
 
 # For MultiDataFrameEeg
 function channel_summary(
     dat::MultiDataFrameEeg;
-    samples::Function = samples(),
-    channels::Function = channels(),
+    sample_selection::Function = samples(),
+    channel_selection::Function = channels(),
 )::Vector{DataFrame}
-    return [channel_summary(dat.data[trial]; samples = samples, channels = channels) for trial in eachindex(dat.data)]
+    return [channel_summary(dat.data[trial]; sample_selection = sample_selection, channel_selection = channel_selection) for trial in eachindex(dat.data)]
 end
 
 
@@ -580,12 +595,13 @@ end
 
 
 """
-    correlation_matrix(dat::ContinuousData; channel_selection::Function = channels(), include_additional_channels::Bool = false)::Matrix{Float64}
+    correlation_matrix(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::Matrix{Float64}
 
 Calculates the correlation matrix for the EEG data.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
 - `include_additional_channels::Bool`: Whether to include additional channels (default: false).
 
@@ -600,77 +616,77 @@ A matrix containing the correlation values between the specified channels.
 corr_matrix = correlation_matrix(dat)
 
 # Correlation matrix for specific layout channels
-corr_matrix = correlation_matrix(dat, channels = channels([:Fp1, :Fp2, :F3, :F4]))
+corr_matrix = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
 
 # Correlation matrix excluding reference channels from layout
-corr_matrix = correlation_matrix(dat, channels = channels_not([:M1, :M2]))
+corr_matrix = correlation_matrix(dat, channel_selection = channels_not([:M1, :M2]))
 ```
 
 ## Including Additional Channels
 ```julia
 # Correlation matrix for additional channels (EOG, extreme value flags, etc.)
-corr_matrix = correlation_matrix(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+corr_matrix = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
 ## Sample Filtering
 ```julia
 # Correlation matrix only for good samples
-# corr_matrix = correlation_matrix(dat, samples = samples_not(:is_extreme_value_100))
+corr_matrix = correlation_matrix(dat, sample_selection = samples_not(:is_extreme_value_100))
 
 # Correlation matrix only within epoch windows
-# corr_matrix = correlation_matrix(dat, samples = samples(:epoch_window))
+corr_matrix = correlation_matrix(dat, sample_selection = samples(:epoch_window))
 
 # Correlation matrix for good samples within epochs
-# corr_matrix = correlation_matrix(dat, 
-#     samples = samples_and([
-#         :epoch_window,
-#         samples_not(:is_extreme_value_100)
-#     ])
-# )
+corr_matrix = correlation_matrix(dat, 
+    sample_selection = samples_and([
+        :epoch_window,
+        samples_not(:is_extreme_value_100)
+    ])
+)
 ```
 
 ## Channel Filtering
 ```julia
 # Frontal channels only
-# corr_matrix = correlation_matrix(dat, channels = channels(1:10))
+corr_matrix = correlation_matrix(dat, channel_selection = channels(1:10))
 
 # Channels starting with "F" (frontal)
-# corr_matrix = correlation_matrix(dat, channels = x -> startswith.(string.(x), "F"))
+corr_matrix = correlation_matrix(dat, channel_selection = x -> startswith.(string.(x), "F"))
 
 # Parietal channels only
-# corr_matrix = correlation_matrix(dat, channels = x -> startswith.(string.(x), "P"))
+corr_matrix = correlation_matrix(dat, channel_selection = x -> startswith.(string.(x), "P"))
 
 # Mix of layout and additional channels
-# corr_matrix = correlation_matrix(dat, channels = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+corr_matrix = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
 ## Combined Filtering
 ```julia
 # Exclude reference channels and bad samples
-# corr_matrix = correlation_matrix(dat, 
-#     channels = channels_not([:M1, :M2]),
-#     samples = samples_not(:is_extreme_value_100)
-# )
+corr_matrix = correlation_matrix(dat, 
+    channel_selection = channels_not([:M1, :M2]),
+    sample_selection = samples_not(:is_extreme_value_100)
+)
 
 # Only frontal channels, good samples
-# corr_matrix = correlation_matrix(dat, 
-#     channels = channels(1:10),
-#     samples = samples_and([
-#         :epoch_window, 
-#         samples_not(:is_extreme_value_100)
-#     ])
-# )
+corr_matrix = correlation_matrix(dat, 
+    channel_selection = channels(1:10),
+    sample_selection = samples_and([
+        :epoch_window, 
+        samples_not(:is_extreme_value_100)
+    ])
+)
 
 # Complex filtering: frontal channels, good samples, within epochs
-# corr_matrix = correlation_matrix(dat, 
-#     channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
-#     samples = samples_and([
-#         :epoch_window, 
-#         samples_not(:is_extreme_value_100),
-#         samples_not(:is_vEOG),
-#         samples_not(:is_hEOG)
-#     ])
-# )
+corr_matrix = correlation_matrix(dat, 
+    channel_selection = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
+    sample_selection = samples_and([
+        :epoch_window, 
+        samples_not(:is_extreme_value_100),
+        samples_not(:is_vEOG),
+        samples_not(:is_hEOG)
+    ])
+)
 ```
 
 ## Quality Control Applications
@@ -679,7 +695,7 @@ corr_matrix = correlation_matrix(dat, channels = channels([:Fp1, :Fp2, :vEOG, :h
 is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
 
 # 2. Get correlation matrix for good data
-# good_corr = correlation_matrix(dat, samples = samples_not(:is_extreme_100))
+good_corr = correlation_matrix(dat, sample_selection = samples_not(:is_extreme_100))
 
 # 3. Check for highly correlated channels (potential duplicates)
 # Look for correlation values above 0.95
@@ -689,16 +705,16 @@ is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
 ## Regional Analysis
 ```julia
 # Frontal correlation matrix
-# frontal_corr = correlation_matrix(dat, 
-#     channels = channels(x -> startswith.(string.(x), "F")),
-#     samples = samples(:epoch_window)
-# )
+frontal_corr = correlation_matrix(dat, 
+    channel_selection = channels(x -> startswith.(string.(x), "F")),
+    sample_selection = samples(:epoch_window)
+)
 
 # Parietal correlation matrix
-# parietal_corr = correlation_matrix(dat, 
-#     channels = channels(x -> startswith.(string.(x), "P")),
-#     samples = samples(:epoch_window)
-# )
+parietal_corr = correlation_matrix(dat, 
+    channel_selection = channels(x -> startswith.(string.(x), "P")),
+    sample_selection = samples(:epoch_window)
+)
 
 # Compare frontal vs parietal connectivity
 # println("Frontal average correlation: ...")
@@ -708,13 +724,13 @@ is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
 ## Time-Based Analysis
 ```julia
 # Correlation matrix for different time periods
-# early_corr = correlation_matrix(dat, 
-#     samples = samples_and([:epoch_window, x -> x.time .< 0.2])  # First 200ms
-# )
+early_corr = correlation_matrix(dat, 
+    sample_selection = samples_and([:epoch_window, x -> x.time .< 0.2])  # First 200ms
+)
 
-# late_corr = correlation_matrix(dat, 
-#     samples = samples_and([:epoch_window, x -> x.time .> 0.3])  # After 300ms
-# )
+late_corr = correlation_matrix(dat, 
+    sample_selection = samples_and([:epoch_window, x -> x.time .> 0.3])  # After 300ms
+)
 
 # Compare early vs late connectivity
 # println("Early connectivity: ...")
@@ -724,11 +740,11 @@ is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
 ## Visualization
 ```julia
 # Get correlation matrix
-# corr_matrix = correlation_matrix(dat, channels = channels_not([:M1, :M2]))
+corr_matrix = correlation_matrix(dat, channel_selection = channels_not([:M1, :M2]))
 
 # Convert to matrix for plotting
-# corr_values = Matrix(corr_matrix[:, 2:end])
-# channel_names = corr_matrix.row
+corr_values = Matrix(corr_matrix[:, 2:end])
+channel_names = corr_matrix.row
 
 # Plot as heatmap (using your preferred plotting package)
 # heatmap(corr_values, xticks=channel_names, yticks=channel_names)
@@ -736,28 +752,27 @@ is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
 """
 function correlation_matrix(
     dat::ContinuousData;
+    sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
 )::Matrix{Float64}
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
-    return _correlation_matrix(dat.data, selected_channels)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
 
 # Internal function for plain DataFrames with explicit channel specification
 function _correlation_matrix(
     dat::DataFrame,
-    selected_channels::Vector{Symbol};
-    samples::Function = samples(),
+    selected_samples::Vector{Int},
+    selected_channels::Vector{Symbol},
 )::DataFrame
     # Select the specified channels
     data = select(dat, selected_channels)
 
-    # Filter samples
-    sample_mask = samples(dat)
-    data = data[sample_mask, :]
-
     # Compute correlation matrix
-    df = DataFrame(cor(Matrix(data)), selected_channels)
+    df = DataFrame(cor(Matrix(data[selected_samples, :])), selected_channels)
     insertcols!(df, 1, :row => selected_channels)
     return df
 end
@@ -883,8 +898,18 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
 end
 
 # Internal function for plain DataFrames with explicit channel specification
-function _is_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol})::Vector{Bool}
-    return any(x -> abs.(x) >= criterion, Matrix(select(dat, selected_channels)), dims = 2)[:]
+function _is_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Vector{Bool}
+    # Initialize result vector with false for all samples
+    result = fill(false, nrow(dat))
+    
+    # Check for extreme values only in selected samples
+    if !isempty(selected_samples)
+        data_subset = select(dat[selected_samples, :], selected_channels)
+        extreme_mask = any(x -> abs.(x) >= criterion, Matrix(data_subset), dims = 2)[:]
+        result[selected_samples] = extreme_mask
+    end
+    
+    return result
 end
 
 # Internal function for plain DataFrames with explicit channel specification
@@ -898,17 +923,19 @@ function _is_extreme_value!(
 end
 
 """
-    is_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels())::Vector{Bool}
+    is_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::Vector{Bool}
 
 Checks if any values in the specified channels exceed a given criterion.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Number`: The threshold for determining extreme values.
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
-A Boolean vector indicating whether any extreme values were found for each row.
+A Boolean vector indicating whether any extreme values were found for each row. Only samples selected by sample_selection are checked for extreme values.
 
 # Examples
 ```julia
@@ -916,37 +943,57 @@ A Boolean vector indicating whether any extreme values were found for each row.
 is_extreme_value(dat, 100)
 
 # Check extreme values in specific layout channels
-is_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
+is_extreme_value(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
+
+# Check extreme values only in good samples (exclude already detected extreme values)
+is_extreme_value(dat, 100, sample_selection = samples_not(:is_extreme_value_100))
+
+# Check extreme values only within epoch windows
+is_extreme_value(dat, 100, sample_selection = samples(:epoch_window))
 
 # Check extreme values in additional channels (automatically detected)
-is_extreme_value(dat, 100, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
+is_extreme_value(dat, 100, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
 
 # Exclude reference channels from layout
-is_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
+is_extreme_value(dat, 100, channel_selection = channels_not([:M1, :M2]))
+
+# Combined filtering: check specific channels only in good samples
+is_extreme_value(dat, 100, 
+    sample_selection = samples_and([:epoch_window, samples_not(:is_vEOG)]),
+    channel_selection = channels([:Fp1, :Fp2, :F3, :F4])
+)
 ```
 """
 function is_extreme_value(
     dat::ContinuousData,
     criterion::Number;
+    sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
 )::Vector{Bool}
 
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
-    @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
-    return _is_extreme_value(dat.data, criterion, selected_channels)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    @info "is_extreme_value: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
+    return _is_extreme_value(dat.data, criterion, selected_channels, selected_samples)
 end
 
 """
-    is_extreme_value!(dat::ContinuousData, criterion::Number; channels::Function = channels(), channel_out::Symbol = :is_extreme_value)
+    is_extreme_value!(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false, channel_out::Symbol = :is_extreme_value)
 
 Checks if any values in the specified channels exceed a given criterion and adds the result as a new column.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Number`: The threshold for determining extreme values.
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
 - `channel_out::Symbol`: Name of the output column (default: :is_extreme_value).
+
+# Returns
+Nothing. The function modifies the input data in place.
 
 # Examples
 ```julia
@@ -954,41 +1001,58 @@ Checks if any values in the specified channels exceed a given criterion and adds
 is_extreme_value!(dat, 100)
 
 # Check extreme values in specific layout channels
-is_extreme_value!(dat, 100, channels = channels([:Fp1, :Fp2]))
+is_extreme_value!(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
+
+# Check extreme values only in good samples (exclude already detected extreme values)
+is_extreme_value!(dat, 100, sample_selection = samples_not(:is_extreme_value_100))
+
+# Check extreme values only within epoch windows
+is_extreme_value!(dat, 100, sample_selection = samples(:epoch_window))
 
 # Check extreme values in additional channels (automatically detected)
-is_extreme_value!(dat, 100, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
+is_extreme_value!(dat, 100, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
 
 # Exclude reference channels from layout
-is_extreme_value!(dat, 100, channels = channels_not([:M1, :M2]))
+is_extreme_value!(dat, 100, channel_selection = channels_not([:M1, :M2]))
+
+# Combined filtering: check specific channels only in good samples
+is_extreme_value!(dat, 100, 
+    sample_selection = samples_and([:epoch_window, samples_not(:is_vEOG)]),
+    channel_selection = channels([:Fp1, :Fp2, :F3, :F4])
+)
 ```
 """
 function is_extreme_value!(
     dat::ContinuousData,
     criterion::Number;
+    sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
     channel_out::Symbol = :is_extreme_value,
 )
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
-    _is_extreme_value!(dat.data, criterion, selected_channels; channel_out = channel_out)
+    dat.data[!, channel_out] = _is_extreme_value(dat.data, criterion, selected_channels, selected_samples)
 end
 
 
 
 """
-    n_extreme_value(dat::ContinuousData, criterion::Number; channels::Function = channels(), include_additional_channels::Bool = false)::Int
+    n_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::Int
 
 Counts the number of extreme values in the specified channels.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `criterion::Number`: The threshold for determining extreme values.
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
-An integer count of the number of extreme values found.
+An integer count of the number of extreme values found in the selected samples and channels.
 
 # Examples
 ```julia
@@ -996,47 +1060,65 @@ An integer count of the number of extreme values found.
 n_extreme_value(dat, 100)
 
 # Count extreme values in specific layout channels
-n_extreme_value(dat, 100, channels = channels([:Fp1, :Fp2]))
+n_extreme_value(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
+
+# Count extreme values only in good samples (exclude already detected extreme values)
+n_extreme_value(dat, 100, sample_selection = samples_not(:is_extreme_value_100))
+
+# Count extreme values only within epoch windows
+n_extreme_value(dat, 100, sample_selection = samples(:epoch_window))
 
 # Count extreme values excluding reference channels from layout
-n_extreme_value(dat, 100, channels = channels_not([:M1, :M2]))
+n_extreme_value(dat, 100, channel_selection = channels_not([:M1, :M2]))
 
 # Count extreme values in additional channels (EOG, extreme value flags, etc.)
-n_extreme_value(dat, 100, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
+n_extreme_value(dat, 100, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
+
+# Combined filtering: count extreme values in specific channels only in good samples
+n_extreme_value(dat, 100, 
+    sample_selection = samples_and([:epoch_window, samples_not(:is_vEOG)]),
+    channel_selection = channels([:Fp1, :Fp2, :F3, :F4])
+)
 ```
 """
 function n_extreme_value(
     dat::ContinuousData,
     criterion::Number;
+    sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
 )::Int
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
-    return _n_extreme_value(dat.data, criterion, selected_channels)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    return _n_extreme_value(dat.data, criterion, selected_channels, selected_samples)
 end
 
 # Internal function for plain DataFrames with explicit channel specification
-function _n_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol})::Int
+function _n_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Int
     @info "n_extreme_value: Counting extreme values in channel $(_print_vector(selected_channels)) with criterion $(criterion)"
-    return sum(sum.(eachcol(abs.(select(dat, selected_channels)) .>= criterion)))
+    
+    # Only count extreme values in selected samples
+    if isempty(selected_samples)
+        return 0
+    end
+    
+    data_subset = select(dat[selected_samples, :], selected_channels)
+    return sum(sum.(eachcol(abs.(data_subset) .>= criterion)))
 end
 
 # Internal function for plain DataFrames with explicit channel specification
 function _channel_joint_probability(
     dat::DataFrame,
+    selected_samples::Vector{Int},
     selected_channels::Vector{Symbol};
     threshold::Float64 = 5.0,
     normval::Int = 2,
-    samples::Function = samples(),
 )::DataFrame
     @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
 
-    # Select the specified channels
-    data = select(dat, selected_channels)
-
-    # Filter samples
-    sample_mask = samples(dat)
-    data = data[sample_mask, :]
+    # Select the specified channels and filter by samples
+    data = select(dat[selected_samples, :], selected_channels)
 
     # Convert to matrix and compute joint probability
     jp, indelec = joint_probability(Matrix(data)', threshold, normval)
@@ -1044,13 +1126,15 @@ function _channel_joint_probability(
 end
 
 """
-    channel_joint_probability(dat::ContinuousData; channels::Function = channels(), threshold::Real = 3.0, normval::Real = 2)::DataFrame
+    channel_joint_probability(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false, threshold::Real = 3.0, normval::Real = 2)::DataFrame
 
 Computes joint probability for EEG channels.
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
+- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
 - `threshold::Real`: Threshold for joint probability (default: 3.0).
 - `normval::Real`: Normalization value (default: 2).
 
@@ -1063,30 +1147,33 @@ A DataFrame containing joint probability values for each channel.
 channel_joint_probability(dat)
 
 # Filter samples where epoch_window is true
-channel_joint_probability(dat, samples = samples(:epoch_window))
+channel_joint_probability(dat, sample_selection = samples(:epoch_window))
 
 # Filter to specific layout channels
-channel_joint_probability(dat, channels = channels([:Fp1, :Fp2]))
+channel_joint_probability(dat, channel_selection = channels([:Fp1, :Fp2]))
 
 # Filter to additional channels (EOG, extreme value flags, etc.)
-channel_joint_probability(dat, channels = channels([:Fp1, :vEOG, :is_extreme_value500]))
+channel_joint_probability(dat, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
 
 # Combine both filters
 channel_joint_probability(dat, 
-    samples = samples(:epoch_window),
-    channels = channels_not([:M1, :M2])
+    sample_selection = samples(:epoch_window),
+    channel_selection = channels_not([:M1, :M2])
 )
 ```
 """
 function channel_joint_probability(
     dat::ContinuousData;
+    sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
     threshold::Real = 3.0,
     normval::Real = 2,
 )::DataFrame
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
-    return _channel_joint_probability(dat.data, selected_channels, threshold, normval)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    return _channel_joint_probability(dat.data, selected_samples, selected_channels, threshold, normval)
 end
 
 
