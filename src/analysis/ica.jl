@@ -150,7 +150,7 @@ function run_ica(
         dat_ica = filter_data(dat_ica, "lp", "iir", lp_freq, order = 3)
     end
 
-    selected_channels = _get_filtered_channels(dat_ica, channel_selection; include_additional_channels = include_additional_channels)
+    selected_channels = get_selected_channels(dat_ica, channel_selection; include_additional_channels=include_additional_channels)
     if isempty(selected_channels)
         error("No channels available after applying channel filter")
     end
