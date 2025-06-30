@@ -1028,19 +1028,29 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
     for (idx, visible) in enumerate(state.channels.visible)
         if visible
             col = state.channels.labels[idx]
+            
+            # Create computed Observables once for better performance
+            time_obs = @lift($(data.current).time)
+            data_obs = @lift($(data.current)[!, $col] .+ state.view.offset[idx])
+            color_obs = @lift(abs.($(data.current)[!, $col]) .>= $(state.view.crit_val))
+            
             state.channels.data_lines[col] = lines!(
                 ax,
-                @lift($(data.current).time),
-                @lift($(data.current)[!, $col] .+ state.view.offset[idx]),
-                color = @lift(abs.($(data.current)[!, $col]) .>= $(state.view.crit_val)),
+                time_obs,
+                data_obs,
+                color = color_obs,
                 colormap = [:darkgrey, :darkgrey, :red],
                 linewidth = 2,
             )
+            
             if !state.view.butterfly[]
+                # Create label position Observable once
+                label_pos_obs = @lift(($(data.current).time[$(state.view.xrange)[1]], 
+                                     $(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]))
+                
                 state.channels.data_labels[col] = text!(
                     ax,
-                    @lift($(data.current).time[$(state.view.xrange)[1]]),
-                    @lift($(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]),
+                    label_pos_obs,
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
@@ -1062,19 +1072,28 @@ function _draw_implementation(ax, state, data::EpochedDataState)
         if visible  # Only plot if channel is visible
             col = state.channels.labels[idx]
 
+            # Create computed Observables once for better performance
+            time_obs = @lift($(current_data).time)
+            data_obs = @lift($(current_data)[!, $col] .+ state.view.offset[idx])
+            color_obs = @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val))
+
             state.channels.data_lines[col] = lines!(
                 ax,
-                @lift($(current_data).time),
-                @lift($(current_data)[!, $col] .+ state.view.offset[idx]),
-                color = @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val)),
+                time_obs,
+                data_obs,
+                color = color_obs,
                 colormap = [:darkgrey, :darkgrey, :red],
                 linewidth = 2,
             )
+            
             if !state.view.butterfly[]
+                # Create label position Observable once
+                label_pos_obs = @lift(($(current_data).time[1], 
+                                     $(current_data)[!, $col][1] .+ state.view.offset[idx]))
+                
                 state.channels.data_labels[col] = text!(
                     ax,
-                    @lift($(current_data).time[1]),
-                    @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]),
+                    label_pos_obs,
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
@@ -1107,23 +1126,25 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
                 visible = true,
             )
         else
+            # Create computed Observables once for better performance
+            time_obs = @lift($(data.current).time)
+            channel_data_obs = @lift($(data.current)[!, $channel] .+ current_offset)
+            
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
-                @lift($(data.current).time),
-                @lift(begin
-                    df = $(data.current)
-                    df[!, $channel] .+ current_offset
-                end),
+                time_obs,
+                channel_data_obs,
                 color = :black,
                 linewidth = 2,
             )
+            
+            # Create label position Observable once
+            label_pos_obs = @lift(($(data.current).time[$(state.view.xrange)[1]], 
+                                 $(data.current)[!, $channel][$(state.view.xrange)[1]] .+ current_offset))
+            
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                @lift($(data.current).time[$(state.view.xrange)[1]]),
-                @lift(begin
-                    df = $(data.current)
-                    df[!, $channel][$(state.view.xrange)[1]] .+ current_offset
-                end),
+                label_pos_obs,
                 text = String(channel),
                 align = (:left, :center),
                 fontsize = 18,
@@ -1151,23 +1172,25 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
                 visible = true,
             )
         else
+            # Create computed Observables once for better performance
+            time_obs = @lift($(current_data).time)
+            channel_data_obs = @lift($(current_data)[!, $channel] .+ current_offset)
+            
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
-                @lift($(current_data).time),
-                @lift(begin
-                    df = $(current_data)
-                    df[!, $channel] .+ current_offset
-                end),
+                time_obs,
+                channel_data_obs,
                 color = :black,
                 linewidth = 2,
             )
+            
+            # Create label position Observable once
+            label_pos_obs = @lift(($(current_data).time[1], 
+                                 $(current_data)[!, $channel][1] .+ current_offset))
+            
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                @lift($(current_data).time[1]),
-                @lift(begin
-                    df = $(current_data)
-                    df[!, $channel][1] .+ current_offset
-                end),
+                label_pos_obs,
                 text = String(channel),
                 align = (:left, :center),
                 fontsize = 18,

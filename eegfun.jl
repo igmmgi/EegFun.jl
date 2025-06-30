@@ -24,6 +24,9 @@ eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG =
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
+eegfun.plot_databrowser(dat)
+
+
 eegfun.channels(dat)
 eegfun.all_channels(dat)
 
