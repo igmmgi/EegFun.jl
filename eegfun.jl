@@ -12,6 +12,7 @@ using GLMakie
 # using CairoMakie
 # using eegfun: load_config 
 
+
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
@@ -32,8 +33,9 @@ eegfun.is_extreme_value!(dat, 100; include_additional_channels = true);
 eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1, :Fp2]));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
+eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")), sample_selection = x -> x .> 1000);
 
-eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> x.sample .< 2000)
 
 
 

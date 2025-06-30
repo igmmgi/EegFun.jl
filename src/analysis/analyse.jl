@@ -336,6 +336,43 @@ end
 
 
 """
+    _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
+
+Cleans trigger data by detecting only the onset (first occurrence) of each trigger value.
+Converts sustained trigger signals into single onset events.
+
+# Arguments
+- `trigger_data::Vector{<:Integer}`: Raw trigger data vector
+
+# Returns
+- `Vector{<:Integer}`: Cleaned trigger data with only onset events
+
+# Examples
+```julia
+# Input:  [0, 1, 1, 0, 0, 2, 2, 2, 0, 0]
+# Output: [0, 1, 0, 0, 0, 2, 0, 0, 0, 0]
+```
+"""
+function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
+    if isempty(trigger_data)
+        return trigger_data
+    end
+    
+    # Create result vector
+    cleaned = zeros(Int, length(trigger_data))
+    
+    # Find where triggers change (onset detection)
+    # diff will be non-zero when trigger value changes
+    trigger_changes = diff(vcat(0, trigger_data))
+    
+    # Use vectorized operations to set onset values
+    onset_indices = trigger_changes .> 0
+    cleaned[onset_indices] = trigger_data[onset_indices]
+    
+    return cleaned
+end
+
+"""
     create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
 
 Creates a DataFrame containing EEG data from a BioSemiBDF object.
@@ -344,12 +381,18 @@ Creates a DataFrame containing EEG data from a BioSemiBDF object.
 - `data::BioSemiBDF.BioSemiData`: The BioSemi data structure containing time, triggers, and channel data.
 
 # Returns
-A DataFrame with two columns: `time` and `triggers`, combined with channel data from the BioSemiBDF.
+A DataFrame with columns: `time`, `sample`, `triggers` (cleaned), and channel data from the BioSemiBDF.
 
+# Note
+The trigger data is automatically cleaned to detect only onset events, converting sustained trigger 
+signals into single onset events. For example: [0, 1, 1, 0, 0, 2, 2, 2, 0, 0] becomes [0, 1, 0, 0, 0, 2, 0, 0, 0, 0].
 """
 function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
+    # Clean the trigger data to detect only onsets
+    cleaned_triggers = _clean_triggers(data.triggers.raw)
+    
     return hcat(
-        DataFrame(time = data.time, sample = 1:length(data.time), triggers = data.triggers.raw),
+        DataFrame(time = data.time, sample = 1:length(data.time), triggers = cleaned_triggers),
         DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:end-1])),  # assumes last channel is trigger
     )
 end
@@ -1285,6 +1328,67 @@ function get_mean_amplitude(erp_data::ErpData, time_window::Tuple{<:Real,<:Real}
     end
 
     return DataFrame(mean_amplitudes)
+end
+
+
+
+
+
+
+
+"""
+    trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
+
+Counts the number of occurrences of each trigger value in the data and optionally prints a formatted table.
+
+# Arguments
+- `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `print_table::Bool`: Whether to print the trigger count table (default: true).
+
+# Returns
+A DataFrame with columns `trigger` and `count` showing trigger values and their counts, excluding zero values.
+
+# Examples
+```julia
+# Get trigger counts and print table
+trigger_counts = trigger_count(dat)
+
+# Get trigger counts without printing
+trigger_counts = trigger_count(dat, print_table = false)
+```
+"""
+function trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
+    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
+    
+    # Get unique non-zero trigger values
+    unique_triggers = unique(dat.data.triggers)
+    non_zero_triggers = filter(x -> x != 0, unique_triggers)
+    
+    # Count occurrences of each trigger value
+    trigger_values = Int[]
+    trigger_counts = Int[]
+    
+    for trigger in sort(non_zero_triggers)
+        push!(trigger_values, trigger)
+        push!(trigger_counts, count(x -> x == trigger, dat.data.triggers))
+    end
+    
+    # Create DataFrame
+    result_df = DataFrame(trigger = trigger_values, count = trigger_counts)
+    
+    # Print table if requested
+    if print_table && !isempty(result_df)
+        println("Trigger Count Summary:")
+        pretty_table(result_df, 
+                    header = ["Trigger", "Count"],
+                    alignment = [:r, :r],
+                    crop = :none)
+        println()
+    elseif print_table && isempty(result_df)
+        println("No non-zero triggers found in the data.")
+    end
+    
+    return result_df
 end
 
 
