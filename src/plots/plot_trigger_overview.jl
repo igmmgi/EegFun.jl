@@ -1,3 +1,12 @@
+########################################################
+# Module constants
+########################################################
+
+# Plotting constants
+const DEFAULT_MARKER_SIZE = 15
+const DEFAULT_LINE_WIDTH = 1
+const DEFAULT_LINE_OFFSET = 0.1
+
 """
     _trigger_time_count(time, triggers)
 
@@ -14,14 +23,15 @@ Internal function to process trigger data and count occurrences.
 """
 function _trigger_time_count(time, triggers)
 
-    trigger_indices = findall(diff(triggers) .>= 1)
+    # Since triggers are already cleaned (only onset values), just find non-zero values
+    trigger_indices = findall(triggers .!= 0)
 
     if isempty(trigger_indices)
         return Float64[], Int[], OrderedDict{Int,Int}()
     end
 
-    trigger_values = triggers[trigger_indices.+1]
-    trigger_times = time[trigger_indices.+1]
+    trigger_values = triggers[trigger_indices]
+    trigger_times = time[trigger_indices]
     trigger_count = OrderedDict(i => 0 for i in sort!(collect(Set(trigger_values))))
     for val in trigger_values
         trigger_count[val] += 1
@@ -32,7 +42,7 @@ function _trigger_time_count(time, triggers)
 end
 
 """
-    plot_events(trigger_times, trigger_values, trigger_count)
+    plot_trigger_overview(trigger_times, trigger_values, trigger_count)
 
 Plot trigger events as a scatter plot with vertical lines.
 
@@ -45,7 +55,7 @@ Plot trigger events as a scatter plot with vertical lines.
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
 """
-function plot_events(trigger_times, trigger_values, trigger_count; display_plot = true)
+function plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = true)
 
     if isempty(trigger_count)
         @warn "No triggers found in the data"
@@ -56,13 +66,20 @@ function plot_events(trigger_times, trigger_values, trigger_count; display_plot 
 
     fig = Figure()
     ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
+    
+    # Pre-compute trigger data for each type to avoid repeated filtering
+    trigger_data = Dict{Int, Vector{Float64}}()
+    for (key, _) in trigger_count
+        trigger_data[key] = trigger_times[trigger_values .== key]
+    end
+    
     for (unique, (key, value)) in enumerate(trigger_count)
-        times = trigger_times[trigger_values.==key]
-        y_pos = repeat([unique], length(trigger_values[trigger_values.==key]))
-        scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = 15)
+        times = trigger_data[key]
+        y_pos = fill(unique, length(times))
+        scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = DEFAULT_MARKER_SIZE)
         # Add vertical lines
         for (t, y) in zip(times, y_pos)
-            lines!(ax, [t, t], [y - 0.1, y + 0.1], color = :black, linewidth = 1)
+            lines!(ax, [t, t], [y - DEFAULT_LINE_OFFSET, y + DEFAULT_LINE_OFFSET], color = :black, linewidth = DEFAULT_LINE_WIDTH)
         end
     end
     fig[1, 2] = Legend(fig, ax)
@@ -78,7 +95,7 @@ function plot_events(trigger_times, trigger_values, trigger_count; display_plot 
 end
 
 """
-    plot_events(dat::BioSemiBDF.BioSemiData)
+    plot_trigger_overview(dat::BioSemiBDF.BioSemiData)
 
 Plot trigger events from BioSemi BDF data.
 
@@ -89,13 +106,13 @@ Plot trigger events from BioSemi BDF data.
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
 """
-function plot_events(dat::BioSemiBDF.BioSemiData; display_plot = true)
+function plot_trigger_overview(dat::BioSemiBDF.BioSemiData; display_plot = true)
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
-    return plot_events(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
+    return plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
 end
 
 """
-    plot_events(dat::ContinuousData)
+    plot_trigger_overview(dat::ContinuousData)
 
 Plot trigger events from ContinuousData object.
 
@@ -106,13 +123,7 @@ Plot trigger events from ContinuousData object.
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
 """
-function plot_events(dat::ContinuousData; display_plot = true)
+function plot_trigger_overview(dat::ContinuousData; display_plot = true)
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
-    return plot_events(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
+    return plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
 end
-
-# layout = read_layout("./layouts/biosemi72.csv");
-# dat = read_bdf("../Flank_C_3.bdf");
-# plot_events(dat)
-# dat = create_eeg_dataframe(dat, layout);
-# plot_events(dat)
