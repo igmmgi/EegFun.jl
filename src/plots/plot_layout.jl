@@ -1,6 +1,103 @@
 ########################################################
+# Module constants
+########################################################
+
+# Head shape constants
+const DEFAULT_HEAD_RADIUS = 88.0  # mm - standard head size for EEG layouts
+const HEAD_EAR_RATIO = 1/7        # Ratio of ear size to head radius
+const HEAD_NOSE_SCALE = 4.0       # Scale factor for nose size
+
+# Interactive point constants
+const DEFAULT_BASE_SIZE = 15      # pixels - default electrode point size
+const DEFAULT_HOVER_SIZE = 25     # pixels - electrode size on hover
+const DEFAULT_LINE_WIDTH = 3      # pixels - width of connection lines
+
+# Default styling constants
+const DEFAULT_HEAD_COLOR = :black
+const DEFAULT_HEAD_LINEWIDTH = 2
+const DEFAULT_POINT_COLOR = :black
+const DEFAULT_POINT_MARKER = :circle
+const DEFAULT_POINT_SIZE = 12
+const DEFAULT_LABEL_COLOR = :black
+const DEFAULT_LABEL_FONTSIZE = 20
+
+# Coordinate validation constants
+const MAX_REASONABLE_COORDINATE = 1000.0  # mm - maximum reasonable coordinate value
+
+########################################################
+# Helper functions for kwargs handling
+########################################################
+
+"""
+    _merge_kwargs(defaults::Dict, user_kwargs::Dict)
+
+Helper function to merge default keyword arguments with user-provided arguments.
+
+# Arguments
+- `defaults::Dict`: Dictionary of default keyword arguments
+- `user_kwargs::Dict`: Dictionary of user-provided keyword arguments
+
+# Returns
+- `Dict`: Merged dictionary with user kwargs taking precedence
+"""
+function _merge_kwargs(defaults::Dict, user_kwargs::Dict)
+    return merge(defaults, user_kwargs)
+end
+
+"""
+    _extract_plot_kwargs(merged_kwargs::Dict, exclude_keys::Vector{Symbol})
+
+Helper function to extract plotting keyword arguments by excluding specific keys.
+
+# Arguments
+- `merged_kwargs::Dict`: Dictionary of merged keyword arguments
+- `exclude_keys::Vector{Symbol}`: Keys to exclude from the result
+
+# Returns
+- `Dict`: Filtered dictionary without the excluded keys
+"""
+function _extract_plot_kwargs(merged_kwargs::Dict, exclude_keys::Vector{Symbol})
+    return filter(p -> p.first ∉ exclude_keys, merged_kwargs)
+end
+
+"""
+    _validate_layout_columns(layout::DataFrame, required_cols::Vector{Symbol})
+
+Helper function to validate that a layout DataFrame contains required columns.
+
+# Arguments
+- `layout::DataFrame`: The layout DataFrame to validate
+- `required_cols::Vector{Symbol}`: Vector of required column names
+
+# Throws
+- `ArgumentError`: If any required columns are missing
+"""
+function _validate_layout_columns(layout::DataFrame, required_cols::Vector{Symbol})
+    missing_cols = setdiff(required_cols, propertynames(layout))
+    if !isempty(missing_cols)
+        throw(ArgumentError("Missing required columns: $missing_cols"))
+    end
+end
+
+########################################################
 # 2D layout
 ########################################################
+"""
+    _ensure_coordinates_2d!(layout::DataFrame)
+
+Helper function to ensure 2D coordinates exist in the layout DataFrame.
+Converts polar coordinates to Cartesian if needed.
+
+# Arguments
+- `layout::DataFrame`: The layout DataFrame to check and potentially convert
+"""
+function _ensure_coordinates_2d!(layout::DataFrame)
+    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
+        @info "Converting polar coordinates to 2D Cartesian coordinates"
+        polar_to_cartesian_xy!(layout)
+    end
+end
+
 """
     plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame;
                   head_kwargs::Dict=Dict(), point_kwargs::Dict=Dict(),
@@ -36,32 +133,31 @@ function plot_layout_2d!(
     display_plot = true,
 )
 
-    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
-        polar_to_cartesian_xy!(layout)
-    end
+    _validate_layout_columns(layout, [:label])
+    _ensure_coordinates_2d!(layout)
 
-    # Default kwargs
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
+    # Use helper functions for kwargs handling
+    head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
+    merged_head_kwargs = _merge_kwargs(head_default_kwargs, head_kwargs)
 
-    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
-    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
+    point_default_kwargs = Dict(:plot_points => true, :marker => DEFAULT_POINT_MARKER, :markersize => DEFAULT_POINT_SIZE, :color => DEFAULT_POINT_COLOR)
+    merged_point_kwargs = _merge_kwargs(point_default_kwargs, point_kwargs)
     plot_points = merged_point_kwargs[:plot_points]
-    point_plot_kwargs = filter(p -> p.first != :plot_points, merged_point_kwargs)
+    point_plot_kwargs = _extract_plot_kwargs(merged_point_kwargs, [:plot_points])
 
-    label_default_kwargs = Dict(:plot_labels => true, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
-    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
+    label_default_kwargs = Dict(:plot_labels => true, :fontsize => DEFAULT_LABEL_FONTSIZE, :color => DEFAULT_LABEL_COLOR, :xoffset => 0, :yoffset => 0)
+    merged_label_kwargs = _merge_kwargs(label_default_kwargs, label_kwargs)
     plot_labels = merged_label_kwargs[:plot_labels]
     xoffset = merged_label_kwargs[:xoffset]
     yoffset = merged_label_kwargs[:yoffset]
-    merged_label_kwargs = filter(p -> p.first ∉ (:plot_labels, :xoffset, :yoffset), merged_label_kwargs)
+    label_plot_kwargs = _extract_plot_kwargs(merged_label_kwargs, [:plot_labels, :xoffset, :yoffset])
 
-    # Head shape - Use hardcoded radius
-    radius = 88 # mm
+    # Head shape - Use constants
+    radius = DEFAULT_HEAD_RADIUS
     arc!(ax, Point2f(0), radius * 2, -π, π; merged_head_kwargs...) # head
-    arc!(ax, Point2f(radius * 2, 0), radius * 2 / 7, -π / 2, π / 2; merged_head_kwargs...) # ear right
-    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 / 7, π / 2, -π / 2; merged_head_kwargs...) # ear left
-    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * 4; merged_head_kwargs...) # nose
+    arc!(ax, Point2f(radius * 2, 0), radius * 2 * HEAD_EAR_RATIO, -π / 2, π / 2; merged_head_kwargs...) # ear right
+    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 * HEAD_EAR_RATIO, π / 2, -π / 2; merged_head_kwargs...) # ear left
+    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * HEAD_NOSE_SCALE; merged_head_kwargs...) # nose
 
     # Regular points
     if plot_points
@@ -69,8 +165,13 @@ function plot_layout_2d!(
     end
 
     if plot_labels
-        for label in eachrow(layout)
-            text!(ax, position = (label.x2 + xoffset, label.y2 + yoffset), String(label.label); merged_label_kwargs...)
+        # More efficient: access columns directly instead of iterating rows
+        x_coords = layout[!, :x2] .+ xoffset
+        y_coords = layout[!, :y2] .+ yoffset
+        labels = String.(layout[!, :label])
+        
+        for i in eachindex(labels)
+            text!(ax, position = (x_coords[i], y_coords[i]), labels[i]; label_plot_kwargs...)
         end
     end
 
@@ -159,7 +260,7 @@ Create a 2D EEG electrode layout with interactive points showing electrode conne
 """
 function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_2d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
-    positions = Observable(Point2f.(layout.x2, layout.y2))
+    positions = Point2f.(layout.x2, layout.y2)
     add_interactive_points!(fig, ax, layout, neighbours, positions)
     return fig, ax
 end
@@ -325,17 +426,39 @@ end
 # 3D layout
 ########################################################
 """
-    plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame;
-                  point_kwargs::Dict=Dict(), label_kwargs::Dict=Dict())
+    _ensure_coordinates_3d!(layout::DataFrame)
 
-Plot a 3D EEG electrode layout with customizable electrode points and labels.
+Helper function to ensure 3D coordinates exist in the layout DataFrame.
+Converts polar coordinates to Cartesian if needed.
+
+# Arguments
+- `layout::DataFrame`: The layout DataFrame to check and potentially convert
+"""
+function _ensure_coordinates_3d!(layout::DataFrame)
+    if (:x3 ∉ propertynames(layout) || :y3 ∉ propertynames(layout) || :z3 ∉ propertynames(layout))
+        @info "Converting polar coordinates to 3D Cartesian coordinates"
+        polar_to_cartesian_xyz!(layout)
+    end
+end
+
+"""
+    plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame;
+                  head_kwargs::Dict = Dict(),
+                  point_kwargs::Dict = Dict(),
+                  label_kwargs::Dict = Dict(),
+                  display_plot = true,
+)
+
+Plot a 3D EEG electrode layout with customizable head shape, electrode points, and labels.
 
 # Arguments
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
 - `layout`: DataFrame containing electrode positions with columns x3, y3, z3, and label
+- `head_kwargs`: Keyword arguments for head shape rendering (color, linewidth, etc.)
 - `point_kwargs`: Keyword arguments for electrode points (plot_points, marker, size, color etc.)
 - `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, zoffset etc.)
+- `display_plot`: Boolean indicating whether to display the plot (default: true)
 
 # Returns
 - The figure and axis objects
@@ -351,46 +474,63 @@ function plot_layout_3d!(
     fig::Figure,
     ax::Axis3,
     layout::DataFrame;
+    head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
+    display_plot = true,
 )
+    # Validate required columns
+    _validate_layout_columns(layout, [:label])
 
-    if (:x3 ∉ propertynames(layout) || :y3 ∉ propertynames(layout) || :z3 ∉ propertynames(layout))
-        polar_to_cartesian_xyz!(layout)
-    end
+    _ensure_coordinates_3d!(layout)
 
-    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
-    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
+    # Use helper functions for kwargs handling
+    head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
+    merged_head_kwargs = _merge_kwargs(head_default_kwargs, head_kwargs)
+
+    point_default_kwargs = Dict(:plot_points => true, :marker => DEFAULT_POINT_MARKER, :markersize => DEFAULT_POINT_SIZE, :color => DEFAULT_POINT_COLOR)
+    merged_point_kwargs = _merge_kwargs(point_default_kwargs, point_kwargs)
     plot_points = merged_point_kwargs[:plot_points]
-    point_plot_kwargs = filter(p -> p.first != :plot_points, merged_point_kwargs)
+    point_plot_kwargs = _extract_plot_kwargs(merged_point_kwargs, [:plot_points])
 
-    label_default_kwargs =
-        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0, :zoffset => 0)
-    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
+    label_default_kwargs = Dict(:plot_labels => true, :fontsize => DEFAULT_LABEL_FONTSIZE, :color => DEFAULT_LABEL_COLOR, :xoffset => 0, :yoffset => 0, :zoffset => 0)
+    merged_label_kwargs = _merge_kwargs(label_default_kwargs, label_kwargs)
     plot_labels = merged_label_kwargs[:plot_labels]
-
     xoffset = merged_label_kwargs[:xoffset]
     yoffset = merged_label_kwargs[:yoffset]
     zoffset = merged_label_kwargs[:zoffset]
-    label_plot_kwargs = filter(p -> p.first ∉ (:plot_labels, :xoffset, :yoffset, :zoffset), merged_label_kwargs)
+    label_plot_kwargs = _extract_plot_kwargs(merged_label_kwargs, [:plot_labels, :xoffset, :yoffset, :zoffset])
 
+    # Head shape - Use constants
+    radius = DEFAULT_HEAD_RADIUS
+    arc!(ax, Point3f(0, 0, 0), radius * 2, -π, π; merged_head_kwargs...) # head
+    arc!(ax, Point3f(radius * 2, 0, 0), radius * 2 * HEAD_EAR_RATIO, -π / 2, π / 2; merged_head_kwargs...) # ear right
+    arc!(ax, Point3f(-radius * 2, 0, 0), -radius * 2 * HEAD_EAR_RATIO, π / 2, -π / 2; merged_head_kwargs...) # ear left
+    lines!(ax, Point3f[(-0.05, 0.5, 0), (0.0, 0.6, 0), (0.05, 0.5, 0)] .* radius * HEAD_NOSE_SCALE; merged_head_kwargs...) # nose
+
+    # Regular points
     if plot_points
         scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3]; point_plot_kwargs...)
     end
 
     if plot_labels
-        for label in eachrow(layout)
-            text!(
-                ax,
-                position = (label.x3 + xoffset, label.y3 + yoffset, label.z3 + zoffset),
-                String(label.label);
-                label_plot_kwargs...,
-            )
+        # More efficient: access columns directly instead of iterating rows
+        x_coords = layout[!, :x3] .+ xoffset
+        y_coords = layout[!, :y3] .+ yoffset
+        z_coords = layout[!, :z3] .+ zoffset
+        labels = String.(layout[!, :label])
+        
+        for i in eachindex(labels)
+            text!(ax, position = (x_coords[i], y_coords[i], z_coords[i]), labels[i]; label_plot_kwargs...)
         end
     end
 
     hidedecorations!(ax)
     hidespines!(ax)
+
+    if display_plot # force a new figure window
+        display(getfield(Main, :GLMakie).Screen(), fig)
+    end
 
     return fig, ax
 end
@@ -475,15 +615,15 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
 """
 function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_3d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
-    positions = Observable(Point3f.(layout.x3, layout.y3, layout.z3))
+    positions = Point3f.(layout.x3, layout.y3, layout.z3)
     add_interactive_points!(fig, ax, layout, neighbours, positions, true)
     return fig, ax
 end
 
 
 """
-    add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,Add commentMore actions
-                          neighbours::OrderedDict, positions::Observable, is_3d::Bool=false)
+    add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,
+                          neighbours::OrderedDict, positions::Union{Vector{Point2f}, Vector{Point3f}}, is_3d::Bool=false)
 
 Add interactive electrode points that highlight and show connections to neighboring electrodes on hover.
 
@@ -492,7 +632,7 @@ Add interactive electrode points that highlight and show connections to neighbor
 - `ax`: The axis to add interactivity to (can be 2D or 3D)
 - `layout`: DataFrame containing electrode information
 - `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
-- `positions`: Observable containing point positions (Point2f or Point3f)
+- `positions`: Vector containing point positions (Point2f or Point3f) - no longer Observable
 - `is_3d`: Boolean indicating if the plot is 3D (default: false)
 
 # Returns
@@ -503,44 +643,61 @@ function add_interactive_points!(
     ax::Union{Axis,Axis3},
     layout::DataFrame,
     neighbours::OrderedDict,
-    positions::Observable,
+    positions::Union{Vector{Point2f}, Vector{Point3f}},  # Keep as regular vector
     is_3d::Bool = false,
 )
-
     base_size = 15
     hover_size = 25
-    sizes = Observable(fill(base_size, length(layout.label)))
+    sizes = Observable(fill(base_size, length(layout.label)))  # Observable for reactivity
+
+    # Pre-compute neighbor indices for better performance
+    neighbor_indices = Vector{Vector{Int}}(undef, length(layout.label))
+    for (i, label) in enumerate(layout.label)
+        neighbor_indices[i] = Int[]
+        if haskey(neighbours, Symbol(label))
+            for neighbor in neighbours[Symbol(label)].electrodes
+                neighbor_idx = findfirst(==(neighbor), layout.label)
+                if neighbor_idx !== nothing
+                    push!(neighbor_indices[i], neighbor_idx)
+                end
+            end
+        end
+    end
+
+    # Pre-allocate vectors for better performance
+    new_sizes = fill(base_size, length(layout.label))
+    max_neighbors = maximum(length.(neighbor_indices), init=0)
+    new_lines = is_3d ? Vector{Point3f}(undef, max_neighbors * 2) : Vector{Point2f}(undef, max_neighbors * 2)
 
     # Add interactive scatter points
     p = scatter!(ax, positions; color = :black, markersize = sizes, inspectable = true, markerspace = :pixel)
 
     # Initialize line segments
-    linesegments = Observable(is_3d ? Point3f[] : Point2f[])
+    linesegments = Observable(is_3d ? Point3f[] : Point2f[])  # Observable for reactivity
     lines!(ax, linesegments, color = :gray, linewidth = 3)
 
     # Add hover interaction
     on(events(fig).mouseposition) do mp
-
         plt, i = pick(fig)
         if plt == p
-
-            # Reset all sizes to base size
-            new_sizes = fill(base_size, length(layout.label))
+            # Reset all sizes to base size and set hover size
+            fill!(new_sizes, base_size)
             new_sizes[i] = hover_size
             sizes[] = new_sizes
 
             # Create lines to neighboring electrodes
-            hovered_pos = positions[][i]
-            new_lines = is_3d ? Point3f[] : Point2f[]
-
-            for neighbor in neighbours[Symbol(layout.label[i])].electrodes
-                neighbor_idx = findfirst(==(neighbor), layout.label)
-                push!(new_lines, hovered_pos, positions[][neighbor_idx])
+            hovered_pos = positions[i]
+            line_count = 0
+            
+            # Use pre-computed neighbor indices
+            for neighbor_idx in neighbor_indices[i]
+                new_lines[line_count + 1] = hovered_pos
+                new_lines[line_count + 2] = positions[neighbor_idx]
+                line_count += 2
             end
 
-            linesegments[] = new_lines
-
+            # Only update with the actual lines we created
+            linesegments[] = new_lines[1:line_count]
         end
-
     end
 end
