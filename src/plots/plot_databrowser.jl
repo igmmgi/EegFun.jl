@@ -666,13 +666,33 @@ end
 function yless!(ax, state)
     # Zoom out by increasing display scale
     current_scale = state.view.display_scale[]
-    state.view.display_scale[] = current_scale * 1.2
+    new_scale = current_scale * 1.2
+    state.view.display_scale[] = new_scale
+    
+    # Update title to show current scale
+    update_scale_indicator!(ax, new_scale)
 end
 
 function ymore!(ax, state)
     # Zoom in by decreasing display scale
     current_scale = state.view.display_scale[]
-    state.view.display_scale[] = current_scale * 0.8
+    new_scale = current_scale * 0.8
+    state.view.display_scale[] = new_scale
+    
+    # Update title to show current scale
+    update_scale_indicator!(ax, new_scale)
+end
+
+function update_scale_indicator!(ax, scale)
+    """Update the plot title to show the current display scale"""
+    base_title = ax.title[]
+    # Remove any existing scale indicator
+    if occursin(" (", base_title)
+        base_title = split(base_title, " (")[1]
+    end
+    # Add new scale indicator
+    scale_text = scale ≈ 1.0 ? "" : " (×$(round(scale, digits=2)))"
+    ax.title = base_title * scale_text
 end
 
 function is_mouse_in_axis(ax, pos)
@@ -1320,11 +1340,10 @@ function zoom_out!(state::DataBrowserState)
     end
 end
 
-# Optimized data Observable creation with minimal reactive overhead
+# Simple data Observable creation
 function create_optimized_data_observable(data_obs::Observable, channel::Symbol, offset::Float64, display_scale_obs::Observable)
     """
-    Create a highly optimized data Observable that minimizes reactive overhead.
-    Uses the simplest possible approach for maximum performance.
+    Create a simple data Observable that scales data by display scale.
     """
     return @lift($(data_obs) .* $(display_scale_obs) .+ offset)
 end
