@@ -24,18 +24,23 @@ eegfun.plot_trigger_timing(dat)
 
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+
+# we can get cleaner trigger info
 eegfun.trigger_count(dat);
 eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
 
-
-
+# preprocessing steps
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+
+eegfun.plot_databrowser(dat)
+eegfun.plot_databrowser(dat, [:vEOG, :hEOG])
+
 
 eegfun.plot_databrowser(dat)
 
