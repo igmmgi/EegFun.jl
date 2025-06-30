@@ -17,9 +17,17 @@ using GLMakie
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
+# we can get raw trigger info
+eegfun.trigger_count(dat);
 eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
+
+# create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.trigger_count(dat);
+eegfun.plot_trigger_overview(dat)
+eegfun.plot_trigger_timing(dat)
+
 
 
 eegfun.rereference!(dat, :avg)

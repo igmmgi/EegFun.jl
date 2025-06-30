@@ -107,6 +107,7 @@ Plot trigger events from BioSemi BDF data.
 - `ax`: The Axis object containing the plot
 """
 function plot_trigger_overview(dat::BioSemiBDF.BioSemiData; display_plot = true)
+    @info "Plotting trigger (raw) overview for BioSemi data"
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
     return plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
 end
@@ -124,6 +125,7 @@ Plot trigger events from ContinuousData object.
 - `ax`: The Axis object containing the plot
 """
 function plot_trigger_overview(dat::ContinuousData; display_plot = true)
+    @info "Plotting trigger (cleaned) overview for ContinuousData"
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
     return plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
 end
