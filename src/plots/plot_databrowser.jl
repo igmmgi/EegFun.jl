@@ -64,12 +64,15 @@ mutable struct ChannelState
     visible::Vector{Bool}
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
+    # Cache for computed Observables to avoid recreation
+    cached_observables::Dict{Symbol,Any}
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
             fill(true, length(channel_labels)),
             Dict{Symbol,Makie.Text}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
+            Dict{Symbol,Any}(),  # Cache for computed Observables
         )
     end
 end
@@ -159,6 +162,42 @@ function create_browser_state(dat::EpochData, channel_labels, ax, ica)
         selection = SelectionState(ax),
         ica_state = !isnothing(ica) ? IcaState() : nothing,
     )
+end
+
+# Helper functions for Observable caching
+function get_or_create_cached_observable!(channel_state::ChannelState, key::Symbol, create_func::Function)
+    """
+    Get an Observable from cache or create it if it doesn't exist.
+    
+    # Arguments
+    - `channel_state::ChannelState`: The channel state containing the cache
+    - `key::Symbol`: The cache key for this Observable
+    - `create_func::Function`: Function to create the Observable if not cached
+    
+    # Returns
+    - The cached or newly created Observable
+    """
+    if haskey(channel_state.cached_observables, key)
+        return channel_state.cached_observables[key]
+    else
+        obs = create_func()
+        channel_state.cached_observables[key] = obs
+        return obs
+    end
+end
+
+function clear_observable_cache!(channel_state::ChannelState)
+    """
+    Clear the Observable cache when data changes significantly.
+    """
+    empty!(channel_state.cached_observables)
+end
+
+function clear_observable_cache!(state::DataBrowserState)
+    """
+    Clear the Observable cache for the entire browser state.
+    """
+    clear_observable_cache!(state.channels)
 end
 
 # Helper functions for common data access/resetting/updating
@@ -306,6 +345,8 @@ function create_labels_menu(fig, ax, state)
         end
 
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        # Clear cache when changing channel visibility
+        clear_observable_cache!(state.channels)
         update_channel_offsets!(state)
         draw(ax, state)
 
@@ -337,6 +378,8 @@ function create_ica_menu(fig, ax, state, ica)
 
     on(menu[1].selection) do s
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        # Clear cache when applying ICA changes
+        clear_observable_cache!(state.channels)
         component_to_remove_int = extract_int(String(s))
         state.ica_state.components_to_remove = isnothing(component_to_remove_int) ? nothing : [component_to_remove_int]
 
@@ -385,6 +428,8 @@ function create_epoch_menu(fig, ax, state)
 
     on(menu[1].selection) do s
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        # Clear cache when changing epochs
+        clear_observable_cache!(state.channels)
         state.data.current_epoch[] = s
         ax.title = "Epoch $(s)/$(n_epochs(state.data.original))"
         update_markers!(ax, state)
@@ -963,8 +1008,12 @@ end
 
 # Generic set_axes! function that handles both types
 function set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
-    # Set y limits for both types
-    @lift ylims!(ax, $(state.view.yrange)[1], $(state.view.yrange)[end])
+    # Create computed Observables for limits to reduce nesting
+    y_min_obs = @lift($(state.view.yrange)[1])
+    y_max_obs = @lift($(state.view.yrange)[end])
+    
+    # Set y limits using computed Observables
+    @lift ylims!(ax, $(y_min_obs), $(y_max_obs))
     
     # Use type-specific method for setting x limits
     set_x_limits!(ax, state, state.data)
@@ -972,16 +1021,20 @@ end
 
 # Type-specific x limit setting for continuous data
 function set_x_limits!(ax, state, data::ContinuousDataState)
-    @lift xlims!(
-        ax,
-        $(data.current).time[$(state.view.xrange)[1]],
-        $(data.current).time[$(state.view.xrange)[end]],
-    )
+    # Create computed Observables for x limits to reduce nesting
+    x_start_obs = @lift($(data.current).time[$(state.view.xrange)[1]])
+    x_end_obs = @lift($(data.current).time[$(state.view.xrange)[end]])
+    
+    @lift xlims!(ax, $(x_start_obs), $(x_end_obs))
 end
 
 # Type-specific x limit setting for epoched data
 function set_x_limits!(ax, state, data::EpochedDataState)
-    @lift xlims!(ax, $(data.current[1]).time[1], $(data.current[1]).time[end])
+    # Create computed Observable for x limits
+    x_start_obs = @lift($(data.current[1]).time[1])
+    x_end_obs = @lift($(data.current[1]).time[end])
+    
+    @lift xlims!(ax, $(x_start_obs), $(x_end_obs))
 end
 
 # Common marker initialization
@@ -1015,6 +1068,8 @@ end
 function butterfly_plot!(ax, state)
     state.view.butterfly[] = !state.view.butterfly[]
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    # Clear the Observable cache when switching modes to ensure fresh Observables
+    clear_observable_cache!(state.channels)
     update_channel_offsets!(state)
     draw(ax, state)
 end
@@ -1029,10 +1084,18 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
         if visible
             col = state.channels.labels[idx]
             
-            # Create computed Observables once for better performance
-            time_obs = @lift($(data.current).time)
-            data_obs = @lift($(data.current)[!, $col] .+ state.view.offset[idx])
-            color_obs = @lift(abs.($(data.current)[!, $col]) .>= $(state.view.crit_val))
+            # Use cached Observables or create them if they don't exist
+            time_obs = get_or_create_cached_observable!(state.channels, :time, () -> @lift($(data.current).time))
+            
+            # Create base data Observable without offset
+            base_data_obs = get_or_create_cached_observable!(state.channels, Symbol("base_data_$(col)"), 
+                () -> @lift($(data.current)[!, $col]))
+            
+            # Create optimized data Observable with offset
+            data_obs = create_data_observable(base_data_obs, col, state.view.offset[idx])
+            
+            # Create optimized color Observable
+            color_obs = create_color_observable(base_data_obs, state.view.crit_val, col)
             
             state.channels.data_lines[col] = lines!(
                 ax,
@@ -1044,13 +1107,16 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
             )
             
             if !state.view.butterfly[]
-                # Create label position Observable once
-                label_pos_obs = @lift(($(data.current).time[$(state.view.xrange)[1]], 
-                                     $(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]))
+                # Create separate Observables for label position to reduce nesting
+                label_x_obs = get_or_create_cached_observable!(state.channels, Symbol("label_x_$(col)"), 
+                    () -> @lift($(data.current).time[$(state.view.xrange)[1]]))
+                label_y_obs = get_or_create_cached_observable!(state.channels, Symbol("label_y_$(col)"), 
+                    () -> @lift($(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]))
                 
                 state.channels.data_labels[col] = text!(
                     ax,
-                    label_pos_obs,
+                    label_x_obs,
+                    label_y_obs,
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
@@ -1064,18 +1130,27 @@ function _draw_implementation(ax, state, data::EpochedDataState)
     current_epoch = data.current_epoch[]  # Get current epoch value
     current_data = data.current[current_epoch]  # Get current DataFrame Observable
 
-    # Ensure view range is within data bounds
-    n_samples = @lift(nrow($(current_data)))
-    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples[])
+    # Pre-compute nrow outside Observable for better performance
+    n_samples = nrow(current_data[])
+    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
 
     for (idx, visible) in enumerate(state.channels.visible)
         if visible  # Only plot if channel is visible
             col = state.channels.labels[idx]
 
-            # Create computed Observables once for better performance
-            time_obs = @lift($(current_data).time)
-            data_obs = @lift($(current_data)[!, $col] .+ state.view.offset[idx])
-            color_obs = @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val))
+            # Use cached Observables or create them if they don't exist
+            time_obs = get_or_create_cached_observable!(state.channels, Symbol("time_epoch_$(current_epoch)"), 
+                () -> @lift($(current_data).time))
+            
+            # Create base data Observable without offset
+            base_data_obs = get_or_create_cached_observable!(state.channels, Symbol("base_data_$(col)_epoch_$(current_epoch)"), 
+                () -> @lift($(current_data)[!, $col]))
+            
+            # Create optimized data Observable with offset
+            data_obs = create_data_observable(base_data_obs, col, state.view.offset[idx])
+            
+            # Create optimized color Observable
+            color_obs = create_color_observable(base_data_obs, state.view.crit_val, col)
 
             state.channels.data_lines[col] = lines!(
                 ax,
@@ -1087,13 +1162,16 @@ function _draw_implementation(ax, state, data::EpochedDataState)
             )
             
             if !state.view.butterfly[]
-                # Create label position Observable once
-                label_pos_obs = @lift(($(current_data).time[1], 
-                                     $(current_data)[!, $col][1] .+ state.view.offset[idx]))
+                # Create separate Observables for label position to reduce nesting
+                label_x_obs = get_or_create_cached_observable!(state.channels, Symbol("label_x_$(col)_epoch_$(current_epoch)"), 
+                    () -> @lift($(current_data).time[1]))
+                label_y_obs = get_or_create_cached_observable!(state.channels, Symbol("label_y_$(col)_epoch_$(current_epoch)"), 
+                    () -> @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]))
                 
                 state.channels.data_labels[col] = text!(
                     ax,
-                    label_pos_obs,
+                    label_x_obs,
+                    label_y_obs,
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
@@ -1139,12 +1217,13 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
             )
             
             # Create label position Observable once
-            label_pos_obs = @lift(($(data.current).time[$(state.view.xrange)[1]], 
-                                 $(data.current)[!, $channel][$(state.view.xrange)[1]] .+ current_offset))
+            label_x_obs = @lift($(data.current).time[$(state.view.xrange)[1]])
+            label_y_obs = @lift($(data.current)[!, $channel][$(state.view.xrange)[1]] .+ current_offset)
             
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                label_pos_obs,
+                label_x_obs,
+                label_y_obs,
                 text = String(channel),
                 align = (:left, :center),
                 fontsize = 18,
@@ -1185,18 +1264,50 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
             )
             
             # Create label position Observable once
-            label_pos_obs = @lift(($(current_data).time[1], 
-                                 $(current_data)[!, $channel][1] .+ current_offset))
+            label_x_obs = @lift($(current_data).time[1])
+            label_y_obs = @lift($(current_data)[!, $channel][1] .+ current_offset)
             
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                label_pos_obs,
+                label_x_obs,
+                label_y_obs,
                 text = String(channel),
                 align = (:left, :center),
                 fontsize = 18,
             )
         end
     end
+end
+
+# Helper function to create optimized data Observables with cached offsets
+function create_data_observable(data_obs::Observable, channel::Symbol, offset::Float64)
+    """
+    Create an optimized data Observable that pre-computes the offset addition.
+    This reduces the computational overhead in the reactive system.
+    """
+    return @lift($(data_obs) .+ offset)
+end
+
+# Helper function to create optimized color Observables
+function create_color_observable(data_obs::Observable, crit_val_obs::Observable, channel::Symbol)
+    """
+    Create an optimized color Observable that pre-computes the threshold comparison.
+    This reduces the computational overhead in the reactive system.
+    """
+    return @lift(begin
+        data = $(data_obs)
+        threshold = $(crit_val_obs)
+        abs.(data) .>= threshold
+    end)
+end
+
+# Helper function to clear cache when epoch changes
+function clear_cache_on_epoch_change!(state::DataBrowserState{EpochedDataState})
+    """
+    Clear the Observable cache when the epoch changes for epoched data.
+    This ensures fresh Observables are created for the new epoch.
+    """
+    clear_observable_cache!(state.channels)
 end
 
 # Helper functions for getting type-specific information
