@@ -388,11 +388,8 @@ The trigger data is automatically cleaned to detect only onset events, convertin
 signals into single onset events. For example: [0, 1, 1, 0, 0, 2, 2, 2, 0, 0] becomes [0, 1, 0, 0, 0, 2, 0, 0, 0, 0].
 """
 function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
-    # Clean the trigger data to detect only onsets
-    cleaned_triggers = _clean_triggers(data.triggers.raw)
-    
     return hcat(
-        DataFrame(time = data.time, sample = 1:length(data.time), triggers = cleaned_triggers),
+        DataFrame(time = data.time, sample = 1:length(data.time), triggers = _clean_triggers(data.triggers.raw)),
         DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:end-1])),  # assumes last channel is trigger
     )
 end
