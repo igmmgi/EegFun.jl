@@ -53,9 +53,10 @@ mutable struct ViewState
     offset::Vector{Float64}
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
+    display_scale::Observable{Float64}  # New display scale factor
     function ViewState(n_channels::Int)
         offset = n_channels > 1 ? LinRange(1500 * 0.9, -1500 * 0.9, n_channels + 2)[2:end-1] : zeros(n_channels)
-        new(Observable(1:5000), Observable(-1500:1500), offset, Observable(0.0), Observable(false))
+        new(Observable(1:5000), Observable(-1500:1500), offset, Observable(0.0), Observable(false), Observable(1.0))
     end
 end
 
@@ -663,14 +664,15 @@ function step_epoch_forward(ax, state::EpochedDataBrowserState)
 end
 
 function yless!(ax, state)
-    (state.view.yrange.val[1] + 100 >= 0 || state.view.yrange.val[end] - 100 <= 0) && return
-    state.view.yrange[] = state.view.yrange.val[1]+100:state.view.yrange.val[end]-100
-    ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
+    # Zoom out by increasing display scale
+    current_scale = state.view.display_scale[]
+    state.view.display_scale[] = current_scale * 1.2
 end
 
 function ymore!(ax, state)
-    state.view.yrange[] = state.view.yrange.val[1]-100:state.view.yrange.val[end]+100
-    ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
+    # Zoom in by decreasing display scale
+    current_scale = state.view.display_scale[]
+    state.view.display_scale[] = current_scale * 0.8
 end
 
 function is_mouse_in_axis(ax, pos)
@@ -1092,10 +1094,10 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
                 () -> @lift($(data.current)[!, $col]))
             
             # Create optimized data Observable with offset
-            data_obs = create_data_observable(base_data_obs, col, state.view.offset[idx])
+            data_obs = create_optimized_data_observable(base_data_obs, col, state.view.offset[idx], state.view.display_scale)
             
             # Create optimized color Observable
-            color_obs = create_color_observable(base_data_obs, state.view.crit_val, col)
+            color_obs = create_optimized_color_observable(base_data_obs, state.view.crit_val)
             
             state.channels.data_lines[col] = lines!(
                 ax,
@@ -1147,10 +1149,10 @@ function _draw_implementation(ax, state, data::EpochedDataState)
                 () -> @lift($(current_data)[!, $col]))
             
             # Create optimized data Observable with offset
-            data_obs = create_data_observable(base_data_obs, col, state.view.offset[idx])
+            data_obs = create_optimized_data_observable(base_data_obs, col, state.view.offset[idx], state.view.display_scale)
             
             # Create optimized color Observable
-            color_obs = create_color_observable(base_data_obs, state.view.crit_val, col)
+            color_obs = create_optimized_color_observable(base_data_obs, state.view.crit_val)
 
             state.channels.data_lines[col] = lines!(
                 ax,
@@ -1204,9 +1206,14 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
                 visible = true,
             )
         else
-            # Create computed Observables once for better performance
+            # Use optimized Observable creation
             time_obs = @lift($(data.current).time)
-            channel_data_obs = @lift($(data.current)[!, $channel] .+ current_offset)
+            channel_data_obs = create_optimized_data_observable(
+                @lift($(data.current)[!, $channel]), 
+                channel, 
+                current_offset, 
+                state.view.display_scale
+            )
             
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
@@ -1216,9 +1223,14 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
                 linewidth = 2,
             )
             
-            # Create label position Observable once
+            # Simplified label position Observable
             label_x_obs = @lift($(data.current).time[$(state.view.xrange)[1]])
-            label_y_obs = @lift($(data.current)[!, $channel][$(state.view.xrange)[1]] .+ current_offset)
+            label_y_obs = create_optimized_data_observable(
+                @lift($(data.current)[!, $channel][$(state.view.xrange)[1]]), 
+                channel, 
+                current_offset, 
+                state.view.display_scale
+            )
             
             state.extra_channel.data_labels[channel] = text!(
                 ax,
@@ -1251,9 +1263,14 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
                 visible = true,
             )
         else
-            # Create computed Observables once for better performance
+            # Use optimized Observable creation
             time_obs = @lift($(current_data).time)
-            channel_data_obs = @lift($(current_data)[!, $channel] .+ current_offset)
+            channel_data_obs = create_optimized_data_observable(
+                @lift($(current_data)[!, $channel]), 
+                channel, 
+                current_offset, 
+                state.view.display_scale
+            )
             
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
@@ -1263,9 +1280,14 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
                 linewidth = 2,
             )
             
-            # Create label position Observable once
+            # Simplified label position Observable
             label_x_obs = @lift($(current_data).time[1])
-            label_y_obs = @lift($(current_data)[!, $channel][1] .+ current_offset)
+            label_y_obs = create_optimized_data_observable(
+                @lift($(current_data)[!, $channel][1]), 
+                channel, 
+                current_offset, 
+                state.view.display_scale
+            )
             
             state.extra_channel.data_labels[channel] = text!(
                 ax,
@@ -1279,20 +1301,38 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
     end
 end
 
-# Helper function to create optimized data Observables with cached offsets
-function create_data_observable(data_obs::Observable, channel::Symbol, offset::Float64)
-    """
-    Create an optimized data Observable that pre-computes the offset addition.
-    This reduces the computational overhead in the reactive system.
-    """
-    return @lift($(data_obs) .+ offset)
+# Optimized zoom functions with minimal reactive overhead
+function zoom_in!(state::DataBrowserState)
+    """Zoom in by increasing display scale with minimal reactive overhead"""
+    current_scale = state.view.display_scale[]
+    new_scale = min(current_scale * 1.5, 10.0)  # Cap at 10x
+    if new_scale != current_scale
+        state.view.display_scale[] = new_scale
+    end
 end
 
-# Helper function to create optimized color Observables
-function create_color_observable(data_obs::Observable, crit_val_obs::Observable, channel::Symbol)
+function zoom_out!(state::DataBrowserState)
+    """Zoom out by decreasing display scale with minimal reactive overhead"""
+    current_scale = state.view.display_scale[]
+    new_scale = max(current_scale / 1.5, 0.1)  # Floor at 0.1x
+    if new_scale != current_scale
+        state.view.display_scale[] = new_scale
+    end
+end
+
+# Optimized data Observable creation with minimal reactive overhead
+function create_optimized_data_observable(data_obs::Observable, channel::Symbol, offset::Float64, display_scale_obs::Observable)
     """
-    Create an optimized color Observable that pre-computes the threshold comparison.
-    This reduces the computational overhead in the reactive system.
+    Create a highly optimized data Observable that minimizes reactive overhead.
+    Uses the simplest possible approach for maximum performance.
+    """
+    return @lift($(data_obs) .* $(display_scale_obs) .+ offset)
+end
+
+# Optimized color Observable creation
+function create_optimized_color_observable(data_obs::Observable, crit_val_obs::Observable)
+    """
+    Create an optimized color Observable with minimal reactive overhead.
     """
     return @lift(begin
         data = $(data_obs)
