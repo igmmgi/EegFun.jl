@@ -27,11 +27,19 @@ mutable struct SelectionState
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
     rectangle::Makie.Poly
+    # Add drag detection state
+    drag_start_pos::Union{Nothing,Tuple{Float64,Float64}}
+    drag_start_time::Union{Nothing,Float64}
+    is_dragging::Bool
+    drag_threshold::Float64  # Minimum distance to consider it a drag
+    click_timeout::Float64   # Maximum time for a click (seconds)
+    
     function SelectionState(ax)
         # Initialize with a single point to avoid empty vector issues with CairoMakie
         initial_points = [Point2f(0.0, 0.0)]
         poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, 
+            nothing, nothing, false, 3.0, 0.15)  # 3 pixel threshold, 150ms timeout
     end
 end
 
@@ -67,6 +75,8 @@ mutable struct ChannelState
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     # Cache for computed Observables to avoid recreation
     cached_observables::Dict{Symbol,Any}
+    # Track highlighted channels
+    highlighted::Observable{Symbol}
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
@@ -74,6 +84,7 @@ mutable struct ChannelState
             Dict{Symbol,Makie.Text}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
             Dict{Symbol,Any}(),  # Cache for computed Observables
+            Observable{Symbol}(:none),  # Track highlighted channel
         )
     end
 end
@@ -234,7 +245,7 @@ function setup_ui_base(fig, ax, state, dat, ica = nothing)
     set_axes!(ax, state)
 
     # Mouse and keyboard events
-    handle_mouse_events!(ax, state)
+    handle_mouse_events!(fig, ax, state)
     handle_keyboard_events!(fig, ax, state)
 
     # Create toggles
@@ -626,22 +637,24 @@ function _handle_right_navigation(ax, state, data::EpochedDataState)
 end
 
 function xback!(ax, state::ContinuousDataBrowserState)
-    state.view.xrange.val[1] - 200 < 1 && return
-    state.view.xrange[] = state.view.xrange.val .- 200
+    current_range = state.view.xrange[]
+    current_range[1] - 200 < 1 && return
+    state.view.xrange[] = current_range .- 200
     xlims!(
         ax,
-        state.data.current[].time[state.view.xrange.val[1]],
-        state.data.current[].time[state.view.xrange.val[end]],
+        state.data.current[].time[state.view.xrange[][1]],
+        state.data.current[].time[state.view.xrange[][end]],
     )
 end
 
 function xforward!(ax, state::ContinuousDataBrowserState)
-    state.view.xrange.val[1] + 200 > nrow(state.data.current[]) && return
-    state.view.xrange[] = state.view.xrange.val .+ 200
+    current_range = state.view.xrange[]
+    current_range[1] + 200 > nrow(state.data.current[]) && return
+    state.view.xrange[] = current_range .+ 200
     xlims!(
         ax,
-        state.data.current[].time[state.view.xrange.val[1]],
-        state.data.current[].time[state.view.xrange.val[end]],
+        state.data.current[].time[state.view.xrange[][1]],
+        state.data.current[].time[state.view.xrange[][end]],
     )
 end
 
@@ -702,7 +715,8 @@ function finish_selection!(ax, state, mouse_x)
     state.selection.rectangle.visible[] = true
 end
 
-function handle_mouse_events!(ax, state)
+function handle_mouse_events!(fig, ax, state)
+    # Handle regular mouse events (selection, navigation)
     on(events(ax).mousebutton) do event
         pos = events(ax).mouseposition[]
         if !is_mouse_in_axis(ax, pos)
@@ -718,24 +732,88 @@ function handle_mouse_events!(ax, state)
         end
     end
 
+    # Handle line clicks for highlighting (immediate response on press)
+    on(events(fig).mousebutton) do event
+        if event.button == Mouse.left && event.action == Mouse.press
+            # Try to handle line click immediately
+            handle_line_click!(fig, ax, state, event)
+        end
+    end
+
     # Update selection rectangle while dragging
     on(events(ax).mouseposition) do _
         if state.selection.active[]
             world_pos = mouseposition(ax)[1]
             update_x_region_selection!(ax, state, state.selection.bounds[][1], world_pos)
+            
+            # Check if we've started dragging
+            if state.selection.drag_start_pos !== nothing && !state.selection.is_dragging
+                current_pos = (world_pos, mouseposition(ax)[2])
+                distance = sqrt((current_pos[1] - state.selection.drag_start_pos[1])^2 + 
+                              (current_pos[2] - state.selection.drag_start_pos[2])^2)
+                
+                if distance > state.selection.drag_threshold
+                    state.selection.is_dragging = true
+                end
+            end
+        end
+    end
+end
+
+# Add line highlighting functionality
+function handle_line_click!(fig, ax, state, event)
+    plt = pick(fig)
+    if plt !== nothing && plt[1] isa Lines
+        # Check if the clicked line corresponds to a channel
+        for (channel, line) in state.channels.data_lines
+            if plt[1] == line
+                # Toggle highlighting: if already highlighted, clear it; otherwise highlight
+                if state.channels.highlighted[] == channel
+                    state.channels.highlighted[] = :none
+                else
+                    state.channels.highlighted[] = channel
+                end
+                # No need to redraw - the Observables will update automatically
+                break
+            end
         end
     end
 end
 
 function handle_left_click!(ax, state, event, mouse_x)
     if event.action == Mouse.press
-        if state.selection.visible[] && is_within_selection(state, mouse_x)
-            clear_x_region_selection!(state)
-        else
-            start_selection!(ax, state, mouse_x)
+        # Check if we clicked on a line first
+        plt = pick(ax.scene)
+        clicked_on_line = false
+        if plt !== nothing && plt[1] isa Lines
+            for (channel, line) in state.channels.data_lines
+                if plt[1] == line
+                    clicked_on_line = true
+                    break
+                end
+            end
+        end
+        
+        # Only start selection if we didn't click on a line
+        if !clicked_on_line
+            # Record start position and time for drag detection
+            state.selection.drag_start_pos = (mouse_x, mouseposition(ax)[2])
+            state.selection.drag_start_time = time()
+            state.selection.is_dragging = false
+            
+            if state.selection.visible[] && is_within_selection(state, mouse_x)
+                clear_x_region_selection!(state)
+            else
+                start_selection!(ax, state, mouse_x)
+            end
         end
     elseif event.action == Mouse.release && state.selection.active[]
         finish_selection!(ax, state, mouse_x)
+        
+        # Reset drag detection state
+        state.selection.drag_start_pos = nothing
+        state.selection.drag_start_time = nothing
+        state.selection.is_dragging = false
     end
 end
 
@@ -1099,13 +1177,19 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
             # Create optimized color Observable
             color_obs = create_optimized_color_observable(base_data_obs, state.view.crit_val)
             
+            # Create reactive line style based on highlighting
+            linewidth_obs = @lift($(state.channels.highlighted) == $col ? 4 : 2)
+            alpha_obs = @lift($(state.channels.highlighted) == $col ? 1.0 : 0.7)
+            
             state.channels.data_lines[col] = lines!(
                 ax,
                 time_obs,
                 data_obs,
                 color = color_obs,
                 colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
+                linewidth = linewidth_obs,
+                alpha = alpha_obs,
+                inspectable = true,  # Make lines clickable
             )
             
             if !state.view.butterfly[]
@@ -1115,13 +1199,18 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
                 label_y_obs = get_or_create_cached_observable!(state.channels, Symbol("label_y_$(col)"), 
                     () -> @lift($(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]))
                 
+                # Create reactive label style based on highlighting
+                label_fontsize_obs = @lift($(state.channels.highlighted) == $col ? 22 : 18)
+                label_color_obs = @lift($(state.channels.highlighted) == $col ? :red : :black)
+                
                 state.channels.data_labels[col] = text!(
                     ax,
                     label_x_obs,
                     label_y_obs,
                     text = String(col),
                     align = (:left, :center),
-                    fontsize = 18,
+                    fontsize = label_fontsize_obs,
+                    color = label_color_obs,
                 )
             end
         end
@@ -1154,13 +1243,20 @@ function _draw_implementation(ax, state, data::EpochedDataState)
             # Create optimized color Observable
             color_obs = create_optimized_color_observable(base_data_obs, state.view.crit_val)
 
+            # Determine line style based on highlighting
+            is_highlighted = state.channels.highlighted[] == col
+            linewidth = is_highlighted ? 4 : 2
+            alpha = is_highlighted ? 1.0 : 0.7
+
             state.channels.data_lines[col] = lines!(
                 ax,
                 time_obs,
                 data_obs,
                 color = color_obs,
                 colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
+                linewidth = linewidth,
+                alpha = alpha,
+                inspectable = true,  # Make lines clickable
             )
             
             if !state.view.butterfly[]
@@ -1170,13 +1266,18 @@ function _draw_implementation(ax, state, data::EpochedDataState)
                 label_y_obs = get_or_create_cached_observable!(state.channels, Symbol("label_y_$(col)_epoch_$(current_epoch)"), 
                     () -> @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]))
                 
+                # Create reactive label style based on highlighting
+                label_fontsize_obs = @lift($(state.channels.highlighted) == $col ? 22 : 18)
+                label_color_obs = @lift($(state.channels.highlighted) == $col ? :red : :black)
+                
                 state.channels.data_labels[col] = text!(
                     ax,
                     label_x_obs,
                     label_y_obs,
                     text = String(col),
                     align = (:left, :center),
-                    fontsize = 18,
+                    fontsize = label_fontsize_obs,
+                    color = label_color_obs,
                 )
             end
         end
