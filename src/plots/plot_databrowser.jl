@@ -708,11 +708,18 @@ end
 
 function finish_selection!(ax, state, mouse_x)
     state.selection.active[] = false
-    state.selection.visible[] = true
-    state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
-    update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
-    # Make sure the polygon is visible when selection is visible
-    state.selection.rectangle.visible[] = true
+    
+    # Only make selection visible if it's actually a meaningful selection (not just a click)
+    if abs(mouse_x - state.selection.bounds[][1]) > 0.01  # Small threshold to detect actual drag
+        state.selection.visible[] = true
+        state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
+        update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
+        # Make sure the polygon is visible when selection is visible
+        state.selection.rectangle.visible[] = true
+    else
+        # Just a click - clear the selection to ensure arrow keys work
+        clear_x_region_selection!(state)
+    end
 end
 
 function handle_mouse_events!(fig, ax, state)
@@ -777,6 +784,9 @@ function handle_line_click!(fig, ax, state, event)
                 break
             end
         end
+    else
+        # Clicked on empty space - clear highlighting to ensure arrow keys work
+        state.channels.highlighted[] = :none
     end
 end
 
@@ -1165,11 +1175,11 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
             col = state.channels.labels[idx]
             
             # Use cached Observables or create them if they don't exist
-            time_obs = get_or_create_cached_observable!(state.channels, :time, () -> @lift($(data.current).time))
+            time_obs = get_or_create_cached_observable!(state.channels, :time, () -> @lift(@views $(data.current).time))
             
-            # Create base data Observable without offset
+            # Create base data Observable without offset - use @views to avoid copying
             base_data_obs = get_or_create_cached_observable!(state.channels, Symbol("base_data_$(col)"), 
-                () -> @lift($(data.current)[!, $col]))
+                () -> @lift(@views $(data.current)[!, $col]))
             
             # Create optimized data Observable with offset
             data_obs = create_optimized_data_observable(base_data_obs, col, state.view.offset[idx], state.view.display_scale)
@@ -1426,7 +1436,11 @@ function create_optimized_data_observable(data_obs::Observable, channel::Symbol,
     """
     Create a simple data Observable that scales data by display scale.
     """
-    return @lift($(data_obs) .* $(display_scale_obs) .+ offset)
+    return @lift begin
+        data = $(data_obs)
+        scale = $(display_scale_obs)
+        data .* scale .+ offset
+    end
 end
 
 # Optimized color Observable creation
@@ -1434,11 +1448,11 @@ function create_optimized_color_observable(data_obs::Observable, crit_val_obs::O
     """
     Create an optimized color Observable with minimal reactive overhead.
     """
-    return @lift(begin
+    return @lift begin
         data = $(data_obs)
         threshold = $(crit_val_obs)
         abs.(data) .>= threshold
-    end)
+    end
 end
 
 # Helper function to clear cache when epoch changes
