@@ -1099,8 +1099,9 @@ end
 # Generic set_axes! function that handles both types
 function set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
     # Create computed Observables for limits to reduce nesting
-    y_min_obs = @lift($(state.view.yrange)[1])
-    y_max_obs = @lift($(state.view.yrange)[end])
+    y_range = state.view.yrange
+    y_min_obs = @lift($(y_range)[1])
+    y_max_obs = @lift($(y_range)[end])
     
     # Set y limits using computed Observables
     @lift ylims!(ax, $(y_min_obs), $(y_max_obs))
@@ -1112,8 +1113,9 @@ end
 # Type-specific x limit setting for continuous data
 function set_x_limits!(ax, state, data::ContinuousDataState)
     # Create computed Observables for x limits to reduce nesting
-    x_start_obs = @lift($(data.current).time[$(state.view.xrange)[1]])
-    x_end_obs = @lift($(data.current).time[$(state.view.xrange)[end]])
+    time_data = @lift($(data.current).time)
+    x_start_obs = @lift($(time_data)[$(state.view.xrange)[1]])
+    x_end_obs = @lift($(time_data)[$(state.view.xrange)[end]])
     
     @lift xlims!(ax, $(x_start_obs), $(x_end_obs))
 end
@@ -1175,6 +1177,7 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
             col = state.channels.labels[idx]
             
             # Use cached Observables or create them if they don't exist
+            current_data = data.current
             time_obs = get_or_create_cached_observable!(state.channels, :time, () -> @lift(@views $(data.current).time))
             
             # Create base data Observable without offset - use @views to avoid copying
@@ -1206,8 +1209,11 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
                 # Create separate Observables for label position to reduce nesting
                 label_x_obs = get_or_create_cached_observable!(state.channels, Symbol("label_x_$(col)"), 
                     () -> @lift($(data.current).time[$(state.view.xrange)[1]]))
-                label_y_obs = get_or_create_cached_observable!(state.channels, Symbol("label_y_$(col)"), 
-                    () -> @lift($(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]))
+                
+                # Create intermediate Observable for the data point
+                data_point = get_or_create_cached_observable!(state.channels, Symbol("data_point_$(col)"), 
+                    () -> @lift($(data.current)[$(state.view.xrange)[1], $col]))
+                label_y_obs = @lift($(data_point) .+ state.view.offset[idx])
                 
                 # Create reactive label style based on highlighting
                 label_fontsize_obs = @lift($(state.channels.highlighted) == $col ? 22 : 18)
@@ -1273,8 +1279,11 @@ function _draw_implementation(ax, state, data::EpochedDataState)
                 # Create separate Observables for label position to reduce nesting
                 label_x_obs = get_or_create_cached_observable!(state.channels, Symbol("label_x_$(col)_epoch_$(current_epoch)"), 
                     () -> @lift($(current_data).time[1]))
-                label_y_obs = get_or_create_cached_observable!(state.channels, Symbol("label_y_$(col)_epoch_$(current_epoch)"), 
-                    () -> @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]))
+                
+                # Create intermediate Observable for the data point
+                data_point = get_or_create_cached_observable!(state.channels, Symbol("data_point_$(col)_epoch_$(current_epoch)"), 
+                    () -> @lift($(current_data)[!, $col][1]))
+                label_y_obs = @lift($(data_point) .+ state.view.offset[idx])
                 
                 # Create reactive label style based on highlighting
                 label_fontsize_obs = @lift($(state.channels.highlighted) == $col ? 22 : 18)
@@ -1318,6 +1327,7 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
             )
         else
             # Use optimized Observable creation
+            current_data = data.current
             time_obs = @lift($(data.current).time)
             channel_data_obs = create_optimized_data_observable(
                 @lift($(data.current)[!, $channel]), 
@@ -1336,8 +1346,11 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
             
             # Simplified label position Observable
             label_x_obs = @lift($(data.current).time[$(state.view.xrange)[1]])
+            
+            # Create intermediate Observable for the channel data point
+            channel_data_point = @lift($(data.current)[!, $channel][$(state.view.xrange)[1]])
             label_y_obs = create_optimized_data_observable(
-                @lift($(data.current)[!, $channel][$(state.view.xrange)[1]]), 
+                channel_data_point, 
                 channel, 
                 current_offset, 
                 state.view.display_scale
@@ -1393,8 +1406,11 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
             
             # Simplified label position Observable
             label_x_obs = @lift($(current_data).time[1])
+            
+            # Create intermediate Observable for the channel data point
+            channel_data_point = @lift($(current_data)[!, $channel][1])
             label_y_obs = create_optimized_data_observable(
-                @lift($(current_data)[!, $channel][1]), 
+                channel_data_point, 
                 channel, 
                 current_offset, 
                 state.view.display_scale
@@ -1436,11 +1452,9 @@ function create_optimized_data_observable(data_obs::Observable, channel::Symbol,
     """
     Create a simple data Observable that scales data by display scale.
     """
-    return @lift begin
-        data = $(data_obs)
-        scale = $(display_scale_obs)
-        data .* scale .+ offset
-    end
+    # Create intermediate Observables to reduce nesting
+    scaled_data = @lift($(data_obs) .* $(display_scale_obs))
+    return @lift($(scaled_data) .+ offset)
 end
 
 # Optimized color Observable creation
@@ -1448,11 +1462,9 @@ function create_optimized_color_observable(data_obs::Observable, crit_val_obs::O
     """
     Create an optimized color Observable with minimal reactive overhead.
     """
-    return @lift begin
-        data = $(data_obs)
-        threshold = $(crit_val_obs)
-        abs.(data) .>= threshold
-    end
+    # Create intermediate Observable for absolute values
+    abs_data = @lift(abs.($(data_obs)))
+    return @lift($(abs_data) .>= $(crit_val_obs))
 end
 
 # Helper function to clear cache when epoch changes
