@@ -1,7 +1,5 @@
-function _plot_power_spectrum_implementation(
-    df::DataFrame,
-    channels_to_plot::Vector{Symbol},
-    fs::Real;
+function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real;
+    display_plot::Bool=true,
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     window_size::Int = 1024,
@@ -11,26 +9,25 @@ function _plot_power_spectrum_implementation(
     y_scale::Symbol = :linear,
     window_function::Function = DSP.hanning,
     show_legend::Bool = true,
-    display_plot::Bool = true,
 )
     # Check if we have enough data and adjust window size if needed
     if size(df, 1) < window_size
-        @warn "Selected region is too short for the specified window size. Adjusting window size..."
+        @minimal_warning "Selected region is too short for the specified window size. Adjusting window size..."
         window_size = 2^floor(Int, log2(size(df, 1) / 2))
         if window_size < 32
-            @warn "Selected region is too short for meaningful spectral analysis. Minimum window size of 32 samples required."
-            return Figure(), Axis()
+            @minimal_warning "Selected region is too short for meaningful spectral analysis. Minimum window size of 32 samples required."
+            return
         end
     end
 
     # Validate scale parameters
     valid_scales = [:linear, :log10]
     if !(x_scale in valid_scales)
-        @warn "Invalid x_scale '$x_scale'. Using :linear instead."
+        @minimal_warning "Invalid x_scale '$x_scale'. Using :linear instead."
         x_scale = :linear
     end
     if !(y_scale in valid_scales)
-        @warn "Invalid y_scale '$y_scale'. Using :linear instead."
+        @minimal_warning "Invalid y_scale '$y_scale'. Using :linear instead."
         y_scale = :linear
     end
 
@@ -50,80 +47,26 @@ function _plot_power_spectrum_implementation(
         spectra[ch] = (DSP.freq(pgram), DSP.power(pgram))
     end
 
-    # Create figure with a layout for plot and controls
-    fig = Figure()
+    # Set axis labels and title
+    ax.xlabel = "Frequency (Hz)"
+    ax.ylabel = "Power Spectral Density (μV²/Hz)"
+    ax.title = "Channel Power Spectrum"
     
-    # Create main grid layout with plot area and control area
-    gl = fig[1, 1] = GridLayout()
-    
-    # Create a toggle grid for the controls
-    control_grid = fig[2, 1] = GridLayout()
-    
-    # Initialize with the specified scales
-    is_xlog10 = x_scale == :log10
-    is_ylog10 = y_scale == :log10
-    
-    # Create axis with default linear scales first
-    ax = Axis(gl[1, 1]; 
-        xlabel = "Frequency (Hz)",
-        ylabel = "Power Spectral Density (μV²/Hz)",
-        title = "Channel Power Spectrum"
-    )
-    
-    # Apply initial scale settings and limits separately, in the correct order
-    if is_xlog10
+    # Apply scale settings
+    if x_scale == :log10
         xlims!(ax, (0.1, max_freq))
         ax.xscale = log10
     else
         xlims!(ax, (0, max_freq))
     end
     
-    # Add the same initialization for y-scale
     # Calculate max y-value for limits
     max_power = maximum([maximum(psd) for (_, psd) in values(spectra)])
-    if is_ylog10
+    if y_scale == :log10
         ylims!(ax, (1e-10, max_power))
         ax.yscale = log10
     else
         ylims!(ax, (0, max_power))
-    end
-
-    # Add scale menus for each axis
-    Label(control_grid[1, 1], "X-axis scale:")
-    x_scale_options = ["linear", "log10"]
-    x_scale_menu = Menu(control_grid[1, 2], 
-                        options = x_scale_options,
-                        default = x_scale == :log10 ? "log10" : "linear")
-    
-    Label(control_grid[2, 1], "Y-axis scale:")
-    y_scale_options = ["linear", "log10"]
-    y_scale_menu = Menu(control_grid[2, 2], 
-                        options = y_scale_options,
-                        default = y_scale == :log10 ? "log10" : "linear")
-    
-    # Connect menu selection to axis scales
-    on(x_scale_menu.selection) do selection
-        if selection == "linear"
-            # Apply linear scale
-            ax.xscale = identity
-            xlims!(ax, (0, max_freq))
-        else # "log10"
-            # Apply log10 scale
-            xlims!(ax, (0.1, max_freq))
-            ax.xscale = log10
-        end
-    end
-    
-    on(y_scale_menu.selection) do selection
-        if selection == "linear"
-            # Apply linear scale
-            ax.yscale = identity
-            ylims!(ax, (0, max_power))
-        else # "log10"
-            # Apply log10 scale
-            ylims!(ax, (1e-10, max_power))
-            ax.yscale = log10
-        end
     end
 
     # Plot spectra for all channels
@@ -170,250 +113,121 @@ function _plot_power_spectrum_implementation(
         axislegend(ax, position = (1.0, 1.0), nbanks = ncols)
     end
 
-    if display_plot
-        display(fig)
+    if display_plot # force a new figure window
+        display(getfield(Main, :GLMakie).Screen(), fig)
     end
 
-    return fig, ax
 end
 
 
 
 """
-    plot_channel_spectrum(df::DataFrame, fs::Real, channels::Function = channels();
-                          kwargs = Dict())
+    plot_channel_spectrum(data; kwargs...)
+    plot_channel_spectrum(data, fs; kwargs...)
 
-Plot power spectrum for specified channels.
+Plot power spectrum for specified channels from EEG data.
 
 # Arguments
-- `df::DataFrame`: DataFrame containing EEG data
-- `fs::Real`: Sampling frequency in Hz
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
-- `kwargs`: Additional keyword arguments for customization
-
-# Examples
-```julia
-# Plot all channels
-plot_channel_spectrum(df, 1000)
-
-# Plot specific channels
-plot_channel_spectrum(df, 1000, channels([:Fp1, :Fp2]))
-
-# Exclude reference channels
-plot_channel_spectrum(df, 1000, channels_not([:M1, :M2]))
-
-# Plot frontal channels only
-plot_channel_spectrum(df, 1000, channels(1:10))
-
-# Custom predicate
-plot_channel_spectrum(df, 1000, x -> startswith.(string.(x), "F"))
-```
+- `data`: DataFrame or ContinuousData object containing EEG data
+- `fs`: Sampling frequency in Hz (optional, extracted from data if not provided)
 
 # Keyword Arguments
-- `xlim`: X-axis limits (default: auto-calculated)
-- `ylim`: Y-axis limits (default: auto-calculated)
-- `xlabel`: X-axis label (default: "Frequency (Hz)")
-- `ylabel`: Y-axis label (default: "Power")
-- `dims`: Grid dimensions [rows, cols] (default: auto-calculated)
-- `hidedecorations`: Whether to hide axis decorations (default: false)
-- `theme_fontsize`: Font size for theme (default: 24)
-- `yreversed`: Whether to reverse Y-axis (default: false)
-- `colormap`: Colormap for the plot (default: :jet)
-- `colorrange`: Color range for the plot (default: auto-calculated)
-"""
-function plot_channel_spectrum(df::DataFrame, fs::Real, channels::Function = channels();
-                              kwargs = Dict())
-    # Get all column names that are not time, sample, or triggers
-    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(df))
-    
-    # Filter channels
-    channel_mask = channels(all_columns)
-    selected_channels = all_columns[channel_mask]
-    
-    # Delegate to the implementation function
-    return _plot_power_spectrum_implementation(
-        df,
-        selected_channels,
-        fs;
-        kwargs...
-    )
-end
-
-# Backward compatibility - keep the old method for existing code
-function plot_channel_spectrum(
-    df::DataFrame,
-    channel::Union{Symbol,Vector{Symbol}};
-    kwargs...
-)
-    # Process channel input to get vector of channels to plot
-    channels_to_plot = channel isa Symbol ? [channel] : channel
-    # Check if channels exist
-    for ch in channels_to_plot
-        if !(ch in propertynames(df))
-            error("Channel $ch not found in data")
-        end
-    end
-
-    # Use the implementation function with filtered data
-    return _plot_power_spectrum_implementation(
-        df,
-        channels_to_plot,
-        sample_rate(df);
-        kwargs...
-    )
-end
-
-"""
-    plot_channel_spectrum(dat::ContinuousData, channels::Function; kwargs...)
-
-Plot the power spectrum of specified channels from a ContinuousData object.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `channels::Function`: Function that returns boolean vector for channel filtering.
-- `kwargs`: Additional keyword arguments passed to plot_channel_spectrum.
-
-# Examples
-```julia
-# Plot specific channels
-plot_channel_spectrum(dat, channels([:Fp1, :Fp2]))
-
-# Exclude reference channels
-plot_channel_spectrum(dat, channels_not([:M1, :M2]))
-
-# Plot frontal channels only
-plot_channel_spectrum(dat, channels(1:10))
-```
-"""
-function plot_channel_spectrum(dat::ContinuousData, channels::Function; kwargs...)
-    # Get all available channels (layout + additional)
-    all_available_channels = _get_available_channels(dat, true)
-    selected_channels = channels(all_available_channels)
-    
-    # Delegate to the DataFrame version with selected channels
-    return plot_channel_spectrum(dat.data, dat.sample_rate, selected_channels; kwargs...)
-end
-
-"""
-    plot_selected_spectrum(selected_data::DataFrame, channels::Function = channels();
-                          line_freq::Real=50.0,
-                          freq_bandwidth::Real=1.0,
-                          window_size::Int=1024,
-                          overlap::Real=0.5,
-                          max_freq::Real=100.0,
-                          x_scale::Symbol=:linear,
-                          y_scale::Symbol=:linear)
-
-Plot the power spectrum of a selected time region for specific channel(s).
-
-# Arguments
-- `selected_data::DataFrame`: The selected time region data.
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels).
-
-# Examples
-```julia
-# Plot all channels in selected region
-plot_selected_spectrum(selected_data, channels)
-
-# Plot specific channels
-plot_selected_spectrum(selected_data, channels([:Fp1, :Fp2]))
-
-# Exclude reference channels
-plot_selected_spectrum(selected_data, channels_not([:M1, :M2]))
-
-# Plot frontal channels only
-plot_selected_spectrum(selected_data, channels(1:10))
-```
-
-# Keyword Arguments
-- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
-- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
-- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
-- `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-- `x_scale::Symbol`: Scale for x-axis, one of :linear, :log10, or :log (default: :linear).
-- `y_scale::Symbol`: Scale for y-axis, one of :linear, :log10, or :log (default: :linear).
-- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
-  Common options include DSP.hamming, DSP.blackman, DSP.bartlett, DSP.rect (rectangular window).
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
+- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0)
+- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz)
+- `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024)
+- `overlap::Real`: Overlap between windows for Welch's method (default: 0.5)
+- `max_freq::Real`: Maximum frequency to display in Hz (default: 200.0)
+- `x_scale::Symbol`: Scale for x-axis, one of :linear or :log10 (default: :linear)
+- `y_scale::Symbol`: Scale for y-axis, one of :linear or :log10 (default: :linear)
+- `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning)
+- `show_legend::Bool`: Whether to show the legend (default: true)
 
 # Returns
-- `fig::Figure`: The Makie Figure containing the power spectrum plot.
-- `ax::Axis`: The axis containing the plot.
-"""
-function plot_selected_spectrum(
-    selected_data::DataFrame,
-    channels::Function = channels();
-    line_freq::Real = 50.0,
-    freq_bandwidth::Real = 1.0,
-    window_size::Int = 1024,
-    overlap::Real = 0.5,
-    max_freq::Real = 200.0,
-    x_scale::Symbol = :linear,
-    y_scale::Symbol = :linear,
-    window_function::Function = DSP.hanning,
-)
-    # Get sample rate from the data (assuming it's available)
-    fs = sample_rate(selected_data)
-    
-    # Delegate to the main plotting function
-    fig, ax = plot_channel_spectrum(
-        selected_data,
-        fs,
-        channels;
-        line_freq = line_freq,
-        freq_bandwidth = freq_bandwidth,
-        window_size = window_size,
-        overlap = overlap,
-        max_freq = max_freq,
-        x_scale = x_scale,
-        y_scale = y_scale,
-        window_function = window_function,
-    )
+- `fig::Figure`: The Makie Figure containing the power spectrum plot
+- `ax::Axis`: The axis containing the plot
 
+# Examples
+```julia
+# DataFrame with auto-extracted sample rate
+plot_channel_spectrum(selected_data, channel_selection = channels([:Fp1]))
+plot_channel_spectrum(selected_data, channel_selection = channels([:Fp1, :Fp2]))
+
+# DataFrame with explicit sample rate
+plot_channel_spectrum(df, 1000, channel_selection = channels([:Fp1]))
+plot_channel_spectrum(df, 1000, channel_selection = channels([:Fp1, :Fp2]))
+
+# ContinuousData (auto-extracts sample rate)
+plot_channel_spectrum(dat, channel_selection = channels([:Fp1]))
+plot_channel_spectrum(dat, channel_selection = channels_not([:M1, :M2]))
+
+# Function-based channel selection
+plot_channel_spectrum(dat, channel_selection = channels(x -> startswith.(string.(x), "F")))
+plot_channel_spectrum(dat, channel_selection = channels(1:10))
+
+# Sample and channel filtering
+plot_channel_spectrum(dat, 
+                     sample_selection = samples_not(:is_extreme_value_100),
+                     channel_selection = channels_not([:M1, :M2]))
+
+# Custom parameters
+plot_channel_spectrum(dat, channel_selection = channels([:Fp1, :Fp2]), 
+                     line_freq=60.0, max_freq=100.0, x_scale=:log10)
+```
+"""
+function plot_channel_spectrum(data::DataFrame; 
+                              sample_selection::Function = samples(),
+                              channel_selection::Function = channels(),
+                              kwargs...)
+    fs = sample_rate(data)
+    return plot_channel_spectrum(data, fs; 
+                                sample_selection = sample_selection,
+                                channel_selection = channel_selection,
+                                kwargs...)
+end
+
+function plot_channel_spectrum(data::DataFrame, fs::Real; 
+                              sample_selection::Function = samples(),
+                              channel_selection::Function = channels(),
+                              kwargs...)
+    # Get selected channels using the helper function
+    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(data))
+    channel_mask = channel_selection(all_columns)
+    selected_channels = all_columns[channel_mask]
+    
+    # Apply sample selection
+    selected_samples = get_selected_samples(data, sample_selection)
+    data_subset = data[selected_samples, :]
+    
+    # Create figure and axis exactly like plot_topoplot
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    _plot_power_spectrum!(fig, ax, data_subset, selected_channels, fs; kwargs...)
     return fig, ax
 end
 
-# Backward compatibility - keep the old method for existing code
-function plot_selected_spectrum(
-    selected_data::DataFrame,
-    channel::Union{Symbol,Vector{Symbol}};
-    line_freq::Real = 50.0,
-    freq_bandwidth::Real = 1.0,
-    window_size::Int = 1024,
-    overlap::Real = 0.5,
-    max_freq::Real = 200.0,
-    x_scale::Symbol = :linear,
-    y_scale::Symbol = :linear,
-    window_function::Function = DSP.hanning,
-)
-    # Convert to predicate for backward compatibility
-    if channel isa Symbol
-        channel_predicate = x -> x .== channel
-    else
-        channel_predicate = x -> x .∈ Ref(channel)
-    end
+function plot_channel_spectrum(dat::ContinuousData; 
+                              sample_selection::Function = samples(),
+                              channel_selection::Function = channels(),
+                              kwargs...)
+    # Get selected channels using the helper function
+    selected_channels = get_selected_channels(dat, channel_selection)
     
-    return plot_selected_spectrum(
-        selected_data,
-        channel_predicate;
-        line_freq = line_freq,
-        freq_bandwidth = freq_bandwidth,
-        window_size = window_size,
-        overlap = overlap,
-        max_freq = max_freq,
-        x_scale = x_scale,
-        y_scale = y_scale,
-        window_function = window_function,
-    )
+    # Apply sample selection
+    selected_samples = get_selected_samples(dat, sample_selection)
+    data_subset = dat.data[selected_samples, :]
+    
+    # Create figure and axis exactly like plot_topoplot
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    _plot_power_spectrum!(fig, ax, data_subset, selected_channels, dat.sample_rate; kwargs...)
+    return fig, ax
 end
-
-
-
-
-
 
 """
     plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int;
+                         sample_selection::Function = samples(),
                          line_freq::Real=50.0,
                          freq_bandwidth::Real=1.0,
                          window_size::Int=1024,
@@ -431,6 +245,7 @@ Plot the power spectrum of a specific ICA component.
 - `comp_idx::Int`: Index of the component to plot.
 
 # Keyword Arguments
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
 - `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
 - `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
@@ -443,11 +258,24 @@ Plot the power spectrum of a specific ICA component.
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
 - `ax::Axis`: The axis containing the plot.
+
+# Examples
+```julia
+# Plot component with all samples
+plot_component_spectrum(ica_result, dat, 1)
+
+# Plot component excluding bad samples
+plot_component_spectrum(ica_result, dat, 1, sample_selection = samples_not(:is_extreme_value_100))
+
+# Plot component only within epoch windows
+plot_component_spectrum(ica_result, dat, 1, sample_selection = samples(:epoch_window))
+```
 """
 function plot_component_spectrum(
     ica_result::InfoIca,
     dat::ContinuousData,
     comp_idx::Int;
+    sample_selection::Function = samples(),
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     window_size::Int = 1024,
@@ -457,46 +285,49 @@ function plot_component_spectrum(
     y_scale::Symbol = :linear,
     window_function::Function = DSP.hanning,
 )
-    # Prepare data matrix for valid samples
+    # Apply sample selection
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    # Prepare data matrix for selected samples only
     relevant_cols = vcat(ica_result.data_label)
-    dat_matrix = permutedims(Matrix(dat.data[:, relevant_cols]))
+    dat_matrix = permutedims(Matrix(dat.data[selected_samples, relevant_cols]))
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica_result.scale
 
-    # Calculate component activation
+    # Calculate component activation for selected samples
     components = ica_result.unmixing * dat_matrix
     fs = dat.sample_rate
 
     # Get the component time series and create a temporary DataFrame
     signal = components[comp_idx, :]
     component_name = Symbol("Component_$(comp_idx)")
-    time_values = dat.data.time
-    component_df = DataFrame(component_name => signal, :time => dat.data.time)
+    time_values = dat.data.time[selected_samples]
+    component_df = DataFrame(component_name => signal, :time => time_values)
 
     # Custom title for the component
     variance_pct = ica_result.variance[comp_idx] * 100
     title_text = @sprintf("Power Spectrum of Component %d (%.1f%% variance)", comp_idx, variance_pct)
     
-    # Call the implementation function with the component data
-    fig, ax = _plot_power_spectrum_implementation(
-        component_df,
-        [component_name],
-        fs,
-        line_freq,
-        freq_bandwidth,
-        window_size,
-        overlap,
-        max_freq,
-        x_scale,
-        y_scale,
-        window_function,
-    )
+    # Create figure and axis exactly like plot_topoplot
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    _plot_power_spectrum!(fig, ax, component_df, [component_name], fs;
+                         line_freq = line_freq,
+                         freq_bandwidth = freq_bandwidth,
+                         window_size = window_size,
+                         overlap = overlap,
+                         max_freq = max_freq,
+                         x_scale = x_scale,
+                         y_scale = y_scale,
+                         window_function = window_function)
     
     # Update the plot title with component-specific information
     ax.title = title_text
 
     return fig, ax
 end
+
+
 
 """
     plot_components_spectra(ica_result::InfoIca, dat::ContinuousData, comp_indices::Vector{Int}=Int[];
@@ -517,6 +348,7 @@ Plot power spectra of multiple ICA components on the same axis.
 - `comp_indices::Vector{Int}`: Vector of component indices to plot. If empty, plots all components.
 
 # Keyword Arguments
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
 - `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
 - `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
@@ -529,11 +361,26 @@ Plot power spectra of multiple ICA components on the same axis.
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
 - `ax::Axis`: The axis containing the plot.
+
+# Examples
+```julia
+# Plot all components with all samples
+plot_components_spectra(ica_result, dat)
+
+# Plot specific components excluding bad samples
+plot_components_spectra(ica_result, dat, [1, 3, 5], 
+                       sample_selection = samples_not(:is_extreme_value_100))
+
+# Plot components only within epoch windows
+plot_components_spectra(ica_result, dat, 1:10, 
+                       sample_selection = samples(:epoch_window))
+```
 """
 function plot_components_spectra(
     ica_result::InfoIca,
     dat::ContinuousData,
     comp_indices::Vector{Int}=Int[];
+    sample_selection::Function = samples(),
     line_freq::Real=50.0,
     freq_bandwidth::Real=1.0,
     window_size::Int=1024,
@@ -548,18 +395,21 @@ function plot_components_spectra(
         comp_indices = 1:size(ica_result.unmixing, 1)
     end
     
-    # Prepare data matrix
+    # Apply sample selection
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    # Prepare data matrix for selected samples only
     relevant_cols = vcat(ica_result.data_label)
-    dat_matrix = permutedims(Matrix(dat.data[:, relevant_cols]))
+    dat_matrix = permutedims(Matrix(dat.data[selected_samples, relevant_cols]))
     dat_matrix .-= mean(dat_matrix, dims=2)
     dat_matrix ./= ica_result.scale
 
-    # Calculate component activations
+    # Calculate component activations for selected samples
     components = ica_result.unmixing * dat_matrix
     fs = dat.sample_rate
     
     # Create a DataFrame to store all component signals
-    component_df = DataFrame(:time => dat.data.time)
+    component_df = DataFrame(:time => dat.data.time[selected_samples])
     
     # Add each component to the DataFrame with appropriate names
     for comp_idx in comp_indices
@@ -570,20 +420,18 @@ function plot_components_spectra(
     # Create list of component symbols to plot
     components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in comp_indices]
     
-    # Use the implementation function to create the plot
-    fig, ax = _plot_power_spectrum_implementation(
-        component_df,
-        components_to_plot,
-        fs,
-        line_freq,
-        freq_bandwidth,
-        window_size,
-        overlap,
-        max_freq,
-        x_scale,
-        y_scale,
-        window_function
-    )
+    # Create figure and axis exactly like plot_topoplot
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    _plot_power_spectrum!(fig, ax, component_df, components_to_plot, fs;
+                         line_freq = line_freq,
+                         freq_bandwidth = freq_bandwidth,
+                         window_size = window_size,
+                         overlap = overlap,
+                         max_freq = max_freq,
+                         x_scale = x_scale,
+                         y_scale = y_scale,
+                         window_function = window_function)
     
     # Add component variance percentage to the legend
     component_labels = []
@@ -607,7 +455,7 @@ function plot_components_spectra(
     
     # Set a more descriptive title
     ax.title = "ICA Component Power Spectra"
-    
+
     return fig, ax
 end
 

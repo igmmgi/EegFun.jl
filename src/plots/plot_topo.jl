@@ -13,20 +13,15 @@ function plot_topoplot!(
     label_kwargs = Dict(),
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
+    display_plot = true,
     method = :multiquadratic,  # :multiquadratic or :spherical_spline
-    m = 4,  # for spherical spline (MNE-Python default)
-    lambda = 1e-7,  # for spherical spline (more conservative regularization)
+    m = 4,  # for spherical spline 
+    lambda = 1e-7,  # for spherical spline 
 )
 
-
-    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
-        polar_to_cartesian_xy!(layout)
-    end
-    
-    # Ensure we have 3D coordinates for spherical spline
-    if method == :spherical_spline && (:x3 ∉ propertynames(layout) || :y3 ∉ propertynames(layout) || :z3 ∉ propertynames(layout))
-        polar_to_cartesian_xyz!(layout)
-    end
+    # Ensure we have both 2D and 3D coordinates
+    _ensure_coordinates_2d!(layout)
+    _ensure_coordinates_3d!(layout)
 
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
@@ -58,27 +53,14 @@ function plot_topoplot!(
 
     # interpolate data using chosen method
     if method == :spherical_spline
-        # Ensure we have both 2D and 3D coordinates
-        if !all(col -> col in propertynames(layout), [:x3, :y3, :z3])
-            throw(ArgumentError("Layout must contain x3, y3, z3 columns"))
-        end
-        if !all(col -> col in propertynames(layout), [:x2, :y2])
-            polar_to_cartesian_xy!(layout)
-        end
-        
-        data = data_interpolation_topo_spherical_spline(
+        data = _data_interpolation_topo_spherical_spline(
             mean.(eachcol(dat[xlim_idx, layout.label])),
             layout,
             gridscale,
             lambda=lambda
         )
     else  # default to multiquadratic
-        # Ensure we have 2D coordinates
-        if !all(col -> col in propertynames(layout), [:x2, :y2])
-            polar_to_cartesian_xy!(layout)
-        end
-        
-        data = data_interpolation_topo(
+        data = _data_interpolation_topo(
             mean.(eachcol(dat[xlim_idx, layout.label])),
             permutedims(Matrix(layout[!, [:x2, :y2]])),
             gridscale,
@@ -88,14 +70,12 @@ function plot_topoplot!(
     if isnothing(ylim)
         ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
     end
-
-    radius = 88 # mm
     
     # Clear the axis to prevent double plotting
     empty!(ax)
     
     # Use different ranges based on interpolation method
-    contour_range = method == :spherical_spline ? radius * 4 : radius * 2
+    contour_range = method == :spherical_spline ? DEFAULT_HEAD_RADIUS * 4 : DEFAULT_HEAD_RADIUS * 2
     
     co = contourf!(
        range(-contour_range, contour_range, length = gridscale),
@@ -110,7 +90,7 @@ function plot_topoplot!(
     end
 
     # head shape
-    plot_layout_2d!(fig, ax, layout, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
+    plot_layout_2d!(fig, ax, layout, display_plot = display_plot, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
 
     return fig, ax
 
@@ -285,7 +265,7 @@ end
 
 
 """
-    circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
+    _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
 
 Apply a circular mask to a topographic data matrix, setting values outside
 the circle to NaN.
@@ -298,7 +278,7 @@ the circle to NaN.
 - `ArgumentError`: If grid_scale is not positive
 - `DimensionMismatch`: If matrix is not square
 """
-function circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
+function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
     if grid_scale <= 0
         throw(ArgumentError("grid_scale must be positive"))
     end
@@ -322,7 +302,7 @@ end
 
 
 """
-    data_interpolation_topo(dat::Vector{Float64}, points::Matrix{Float64}, grid_scale::Int)
+    _data_interpolation_topo(dat::Vector{Float64}, points::Matrix{Float64}, grid_scale::Int)
 
 Interpolate EEG data using scattered interpolation 
 
@@ -331,7 +311,7 @@ Interpolate EEG data using scattered interpolation
 - `points::Matrix{<:AbstractFloat}`: 2×N matrix of electrode coordinates
 - `grid_scale::Int`: Size of the output grid
 """
-function data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<:AbstractFloat}, grid_scale::Int)
+function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<:AbstractFloat}, grid_scale::Int)
     # Check input data
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
@@ -341,9 +321,8 @@ function data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<:
     end
 
     # Create grid using the same coordinate range as the plotting function
-    radius = 88.0  # mm - same as used in plotting function
-    x_range = range(-radius * 2, radius * 2, length = grid_scale)
-    y_range = range(-radius * 2, radius * 2, length = grid_scale)
+    x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
+    y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
 
     # Create regular grid
     grid_points = zeros(2, grid_scale^2)
@@ -356,7 +335,7 @@ function data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<:
     try
         itp = ScatteredInterpolation.interpolate(Multiquadratic(), points, dat)
         result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
-        circle_mask!(result, grid_scale)
+        _circle_mask!(result, grid_scale)
         return result
     catch e
         throw(ErrorException("Interpolation failed: $(e)"))
@@ -367,7 +346,7 @@ end
 
 
 """
-    data_interpolation_topo_spherical_spline(dat::Vector{Float64}, layout::DataFrame, grid_scale::Int; 
+    _data_interpolation_topo_spherical_spline(dat::Vector{Float64}, layout::DataFrame, grid_scale::Int; 
                                            m::Int=4, lambda::Float64=1e-5)
 
 Interpolate EEG data using spherical spline interpolation for topographic plotting.
@@ -383,19 +362,16 @@ Implementation follows MNE-Python exactly.
 # Returns
 - `Matrix{Float64}`: Interpolated data on a regular grid
 """
-function data_interpolation_topo_spherical_spline(
+function _data_interpolation_topo_spherical_spline(
     dat::Vector{<:AbstractFloat}, 
     layout::DataFrame, 
     grid_scale::Int;
     lambda::Float64=1e-5
 )
-    # Ensure we have 3D coordinates
-    if !all(col -> col in propertynames(layout), [:x3, :y3, :z3])
-        throw(ArgumentError("Layout must contain x3, y3, z3 columns"))
-    end
+    # Ensure we have both 2D and 3D coordinates
+    _ensure_coordinates_3d!(layout)
     
     n_channels = length(dat)
-    radius = 88.0  # mm - same as used in plotting function
     
     # Extract 3D coordinates as they are (no normalization needed)
     coords = zeros(Float64, n_channels, 3)
@@ -407,8 +383,8 @@ function data_interpolation_topo_spherical_spline(
     electrode_radius = mean([sqrt(sum(coords[i,:].^2)) for i in 1:n_channels])
     
     # Create a 2D grid for plotting
-    x_range = range(-radius * 2, radius * 2, length=grid_scale)
-    y_range = range(-radius * 2, radius * 2, length=grid_scale)
+    x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length=grid_scale)
+    y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length=grid_scale)
     
     # For spherical spline calculation, we need unit sphere coordinates
     # So we normalize for the G matrix calculation only
@@ -424,7 +400,7 @@ function data_interpolation_topo_spherical_spline(
     cosang = coords_unit * coords_unit'  # This is the dot product matrix
     
     # Compute G matrix using MNE's exact g-function
-    G = calc_g_matrix(cosang)
+    G = _calc_g_matrix(cosang)
     
     # Add regularization to diagonal (exactly like MNE)
     for i in 1:n_channels
@@ -454,7 +430,7 @@ function data_interpolation_topo_spherical_spline(
     interpolated_values = fill(NaN, length(grid_x))
     
     # Find valid grid points (within head and plotting area)
-    valid_mask = (r_2d .<= radius) .& (r_2d .<= radius * 2.0)
+    valid_mask = (r_2d .<= DEFAULT_HEAD_RADIUS) .& (r_2d .<= DEFAULT_HEAD_RADIUS * 2.0)
     valid_indices = findall(valid_mask)
     
     if !isempty(valid_indices)
@@ -464,7 +440,7 @@ function data_interpolation_topo_spherical_spline(
         valid_r = r_2d[valid_indices]
         
         # Pre-compute stereographic projection for all valid points at once
-        r_norm = valid_r ./ radius
+        r_norm = valid_r ./ DEFAULT_HEAD_RADIUS
         
         # Vectorized stereographic projection
         # Fix coordinate conversion to prevent 90-degree offset
@@ -487,7 +463,7 @@ function data_interpolation_topo_spherical_spline(
         cosang_grid = clamp.(cosang_grid, -1.0, 1.0)
         
         # Compute g-function values for all grid points and electrodes at once
-        g_values = calc_g_function.(cosang_grid)
+        g_values = _calc_g_function.(cosang_grid)
         
         # Add the constant term (1.0) for each grid point
         g_values_extended = hcat(g_values, ones(size(g_values, 1)))
@@ -501,13 +477,13 @@ function data_interpolation_topo_spherical_spline(
     
     # Reshape to grid and apply circular mask
     result = reshape(interpolated_values, grid_scale, grid_scale)
-    circle_mask!(result, grid_scale)
+    _circle_mask!(result, grid_scale)
     
     return result
 end
 
 # Legendre polynomial calculation using iterative method
-function legendre_polynomial(n::Int, x::Float64)
+function _legendre_polynomial(n::Int, x::Float64)
     n == 0 && return 1.0
     n == 1 && return x
 
@@ -525,7 +501,7 @@ function legendre_polynomial(n::Int, x::Float64)
 end
 
 # Legendre polynomial evaluation for scalar input
-function legendre_val(x::Float64, factors::Vector{Float64})
+function _legendre_val(x::Float64, factors::Vector{Float64})
     """Evaluate Legendre polynomial series for scalar input."""
     result = 0.0
     for (i, factor) in enumerate(factors)
@@ -533,13 +509,13 @@ function legendre_val(x::Float64, factors::Vector{Float64})
             continue
         end
         n = i - 1  # Legendre polynomial order
-        result += factor * legendre_polynomial(n, x)
+        result += factor * _legendre_polynomial(n, x)
     end
     return result
 end
 
 # MNE-Python's exact g-function calculation for EEG topography (m=4)
-function calc_g_function(cosang::Float64, n_legendre_terms::Int=15)
+function _calc_g_function(cosang::Float64, n_legendre_terms::Int=15)
     """Calculate spherical spline g function between points on a sphere.
     
     This is the exact implementation from MNE-Python, optimized for EEG topography (m=4).
@@ -553,11 +529,11 @@ function calc_g_function(cosang::Float64, n_legendre_terms::Int=15)
     ]
     
     # Use Legendre polynomial evaluation
-    return legendre_val(cosang, [0.0; factors])
+    return _legendre_val(cosang, [0.0; factors])
 end
 
 # MNE-Python's exact G matrix calculation for EEG topography (m=4)
-function calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int=15)
+function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int=15)
     """Calculate spherical spline G matrix between points on a sphere.
     
     This is the exact implementation from MNE-Python, optimized for EEG topography (m=4).
@@ -568,5 +544,5 @@ function calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int=15)
     ]
     
     # Use Legendre polynomial evaluation for the entire matrix
-    return legendre_val.(cosang, Ref([0.0; factors]))
+    return _legendre_val.(cosang, Ref([0.0; factors]))
 end

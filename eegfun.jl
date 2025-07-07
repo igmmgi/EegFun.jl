@@ -8,7 +8,6 @@
 
 # package
 using eegfun
-
 using GLMakie
 # using CairoMakie
 # using eegfun: load_config 

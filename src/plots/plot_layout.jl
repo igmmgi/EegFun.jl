@@ -92,7 +92,7 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 - `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, etc.)
 
 # Returns
-- The figure and axis objects
+- `nothing` (modifies the provided figure and axis in-place)
 
 # Example
     layout = read_layout("./layouts/biosemi64.csv")
@@ -160,7 +160,7 @@ function plot_layout_2d!(
         display(getfield(Main, :GLMakie).Screen(), fig)
     end
 
-    return fig, ax
+    return nothing
 end
 
 
@@ -227,7 +227,7 @@ Create a 2D EEG electrode layout with interactive points showing electrode conne
 - `kwargs...`: Additional keyword arguments passed to the base plot_layout_2d function
 
 # Returns
-- The figure and axis objects
+- `nothing` (modifies the provided figure and axis in-place)
 
 # Example
     layout = read_layout("./layouts/biosemi64.csv")
@@ -239,12 +239,12 @@ Create a 2D EEG electrode layout with interactive points showing electrode conne
 function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_2d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
     positions = Point2f.(layout.x2, layout.y2)
-    add_interactive_points!(fig, ax, layout, neighbours, positions)
-    return fig, ax
+    _add_interactive_points!(fig, ax, layout, neighbours, positions)
+    return nothing
 end
 
 """
-    create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
+    _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
 
 Create a convex hull around a set of 2D points with a specified border size using Graham's Scan algorithm.
 
@@ -256,7 +256,7 @@ Create a convex hull around a set of 2D points with a specified border size usin
 # Returns
 - A Vector of 2D points forming the convex hull
 """
-function create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
+function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
     circle_points = 0:2π/361:2π
     xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
@@ -370,7 +370,7 @@ function add_topo_rois!(
         end
         
         # Create convex hull
-        hull_points = create_convex_hull_graham(
+        hull_points = _create_convex_hull_graham(
             layout.x2[roi_idx],
             layout.y2[roi_idx],
             border_size
@@ -594,13 +594,13 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
 function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, neighbours::OrderedDict; kwargs...)
     plot_layout_3d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
     positions = Point3f.(layout.x3, layout.y3, layout.z3)
-    add_interactive_points!(fig, ax, layout, neighbours, positions, true)
+    _add_interactive_points!(fig, ax, layout, neighbours, positions, true)
     return fig, ax
 end
 
 
 """
-    add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,
+    _add_interactive_points!(fig::Figure, ax::Union{Axis, Axis3}, layout::DataFrame,
                           neighbours::OrderedDict, positions::Union{Vector{Point2f}, Vector{Point3f}}, is_3d::Bool=false)
 
 Add interactive electrode points that highlight and show connections to neighboring electrodes on hover.
@@ -616,7 +616,7 @@ Add interactive electrode points that highlight and show connections to neighbor
 # Returns
 - The figure and axis objects
 """
-function add_interactive_points!(
+function _add_interactive_points!(
     fig::Figure,
     ax::Union{Axis,Axis3},
     layout::DataFrame,
