@@ -749,7 +749,15 @@ detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
 
 # Detect horizontal EOG onsets
 detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
-```
+
+# Combine for any EOG artifact
+combine_boolean_columns!(dat, [:is_vEOG, :is_hEOG], :or, output_column = :is_any_EOG)
+
+# Create quality flags
+combine_boolean_columns!(dat, [:is_extreme_value, :is_any_EOG], :nor, output_column = :is_good_data)
+
+# Complex quality control (good samples = not extreme AND not any EOG)
+combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :nor, output_column = :is_clean_data)
 
 ## Multiple EOG Channels
 ```julia
@@ -1304,6 +1312,88 @@ function trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::D
     # Get cleaned trigger data (onset detection only)
     cleaned_triggers = _clean_triggers(dat.triggers.raw)
     return _trigger_count_biosemi_impl(dat.triggers.raw, cleaned_triggers, print_table = print_table)
+end
+
+
+
+
+
+
+
+"""
+    combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
+
+Combines multiple boolean columns using a specified logical operation and stores the result in a new column.
+
+# Arguments
+- `dat::ContinuousData`: The ContinuousData object containing the boolean columns
+- `columns::Vector{Symbol}`: Vector of column names to combine
+- `operation::Symbol`: Logical operation to apply (:and, :or, :xor, :nand, :nor, :xnor)
+- `output_column::Symbol`: Name of the output column (default: :combined_flags)
+
+# Returns
+Nothing. The function modifies the input data in place.
+
+# Examples
+```julia
+# Combine EOG artifacts (any EOG = vertical OR horizontal)
+combine_boolean_columns!(dat, [:is_vEOG, :is_hEOG], :or, output_column = :is_any_EOG)
+
+# Combine extreme values (all extreme = extreme_100 AND extreme_500)
+combine_boolean_columns!(dat, [:is_extreme_value_100, :is_extreme_value_500], :and, output_column = :is_all_extreme)
+
+# Combine quality flags (good data = NOT extreme AND NOT EOG)
+combine_boolean_columns!(dat, [:is_extreme_value, :is_any_EOG], :nor, output_column = :is_good_data)
+
+# Complex combination (good samples = NOT extreme AND (NOT vEOG OR NOT hEOG))
+combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :and, output_column = :temp1)
+combine_boolean_columns!(dat, [:is_vEOG, :is_hEOG], :nor, output_column = :temp2)
+combine_boolean_columns!(dat, [:temp1, :temp2], :and, output_column = :is_good_sample)
+```
+
+# Available Operations
+- `:and` - All columns must be true (logical AND)
+- `:or` - At least one column must be true (logical OR)
+- `:xor` - Exactly one column must be true (logical XOR)
+- `:nand` - Not all columns are true (logical NAND)
+- `:nor` - No columns are true (logical NOR)
+- `:xnor` - All columns have the same value (logical XNOR)
+"""
+function combine_boolean_columns!(
+    dat::ContinuousData, 
+    columns::Vector{Symbol}, 
+    operation::Symbol; 
+    output_column::Symbol = :combined_flags
+)
+    # Input validation
+    @assert !isempty(columns) "Must specify at least one column to combine"
+    @assert all(col -> hasproperty(dat.data, col), columns) "All specified columns must exist in the data"
+    @assert operation in [:and, :or, :xor, :nand, :nor, :xnor] "Invalid operation. Must be one of: :and, :or, :xor, :nand, :nor, :xnor"
+    
+    # Get the boolean columns
+    bool_columns = [dat.data[!, col] for col in columns]
+    
+    # Apply the logical operation
+    result = if operation == :and
+        all.(zip(bool_columns...))
+    elseif operation == :or
+        any.(zip(bool_columns...))
+    elseif operation == :xor
+        # XOR: exactly one column is true
+        sum.(zip(bool_columns...)) .== 1
+    elseif operation == :nand
+        .!(all.(zip(bool_columns...)))
+    elseif operation == :nor
+        .!(any.(zip(bool_columns...)))
+    elseif operation == :xnor
+        # XNOR: all columns have the same value (all true or all false)
+        all.(zip(bool_columns...)) .| .!(any.(zip(bool_columns...)))
+    end
+    
+    # Store the result
+    dat.data[!, output_column] = result
+    
+    @info "combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
 end
 
 
