@@ -704,7 +704,7 @@ function correlation_matrix(
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
-)::Matrix{Float64}
+)::DataFrame
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
@@ -1057,7 +1057,7 @@ function channel_joint_probability(
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     
-    return _channel_joint_probability(dat.data, selected_samples, selected_channels, threshold, normval)
+    return _channel_joint_probability(dat.data, selected_samples, selected_channels; threshold=threshold, normval=normval)
 end
 
 

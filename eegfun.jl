@@ -24,6 +24,30 @@ eegfun.plot_trigger_timing(dat)
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 
+
+
+# bad channels
+jp = eegfun.channel_joint_probability(dat)
+jp = eegfun.channel_joint_probability(dat, channel_selection = eegfun.channels([:Fp1, :AF7, :AF8, :Fp2]))
+jp = eegfun.channel_joint_probability(dat, sample_selection = x -> x.sample .< 10000)
+
+
+# jp = channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
+fig, ax = eegfun.plot_joint_probability(jp)
+
+cm = eegfun.correlation_matrix(dat)
+
+
+fig, ax = eegfun.plot_correlation_heatmap(cm)
+
+cm = eegfun.correlation_matrix(dat, sample_selection = eegfun.samples(:epoch_window))
+fig, ax = eegfun.plot_correlation_heatmap(cm)
+
+
+
+
+
+
 # we can get cleaner trigger info
 eegfun.trigger_count(dat);
 eegfun.plot_trigger_overview(dat)
