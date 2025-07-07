@@ -20,7 +20,7 @@ Mark samples that are within a specified time window of triggers of interest.
 # Mark windows around trigger 1 (1 second before to 2 seconds after)
 mark_epoch_windows!(dat, [1], [-1.0, 2.0])
 
-# Mark windows around multiple triggers
+# Mark windows around multiple (1, 3, and 5) triggers
 mark_epoch_windows!(dat, [1, 3, 5], [-1.0, 2.0])
 
 # Custom column name
@@ -48,11 +48,6 @@ mark_epoch_windows!(dat, [1], [-0.05, 0.3], channel_out = :fast_response)
 mark_epoch_windows!(dat, [1], [-0.2, 0.8], channel_out = :condition_1)
 mark_epoch_windows!(dat, [2], [-0.2, 1.0], channel_out = :condition_2)
 mark_epoch_windows!(dat, [3], [-0.2, 1.2], channel_out = :condition_3)
-
-# Combine conditions
-# dat.data[!, :any_condition] = dat.data[!, :condition_1] .| 
-#                              dat.data[!, :condition_2] .| 
-#                              dat.data[!, :condition_3]
 ```
 
 ## Using with Sample Filtering
@@ -62,48 +57,6 @@ mark_epoch_windows!(dat, [1, 3], [-1.0, 2.0])
 
 # Use in analysis (only samples within epochs)
 # summary = channel_summary(dat, samples = samples(:epoch_window))
-
-# Use in ICA (only good samples within epochs)
-# ica_result = run_ica(dat, 
-#     samples = samples_and([
-#         :epoch_window,
-#         samples_not(:is_extreme_value_100)
-#     ])
-# )
-```
-
-## Quality Control Workflow
-```julia
-# 1. Mark epoch windows
-mark_epoch_windows!(dat, [1, 3, 5], [-1.0, 2.0])
-
-# 2. Detect artifacts
-is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
-
-# 3. Get good samples within epochs
-# good_epoch_samples = samples_and([
-#     :epoch_window,
-#     samples_not(:is_extreme_100),
-#     samples_not(:is_vEOG)
-# ])
-
-# 4. Analyze good data
-# summary = channel_summary(dat, samples = good_epoch_samples)
-```
-
-## Complex Trigger Sequences
-```julia
-# Define epoch conditions with wildcards and ranges
-# condition1 = EpochCondition(name="condition_1", trigger_sequence=[1, :any, 3], reference_index=2)
-# condition2 = EpochCondition(name="condition_2", trigger_ranges=[1:5, 10:15], reference_index=1)
-# conditions = [condition1, condition2]
-
-# Mark windows around trigger sequences
-# mark_epoch_windows!(dat, conditions, [-1.0, 2.0])
-
-# Custom column name
-# mark_epoch_windows!(dat, conditions, [-0.5, 0.5], channel_out = :near_sequences)
 ```
 """
 function mark_epoch_windows!(
@@ -114,11 +67,8 @@ function mark_epoch_windows!(
 )
 
     # Input validation
-    @assert length(time_window) == 2 "Time window must have exactly 2 elements"
-    @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
+    _validate_epoch_window_params(dat, time_window)
     @assert !isempty(triggers_of_interest) "Must specify at least one trigger of interest"
-    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
-    @assert hasproperty(dat.data, :time) "Data must have a time column"
 
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
@@ -191,11 +141,8 @@ function mark_epoch_windows!(
 )
 
     # Input validation
-    @assert length(time_window) == 2 "Time window must have exactly 2 elements"
-    @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
+    _validate_epoch_window_params(dat, time_window)
     @assert !isempty(epoch_conditions) "Must specify at least one epoch condition"
-    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
-    @assert hasproperty(dat.data, :time) "Data must have a time column"
 
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
@@ -258,7 +205,7 @@ function mark_epoch_windows!(
             if isempty(sequence_indices)
                 after_msg = condition.after !== nothing ? " after trigger $(condition.after)" : ""
                 before_msg = condition.before !== nothing ? " before trigger $(condition.before)" : ""
-                @warn "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
+                @minimal_warning "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
                 continue
             end
         end
@@ -304,7 +251,7 @@ function mark_epoch_windows!(
 
             sequence_indices = valid_indices
             if isempty(sequence_indices)
-                @warn "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
+                @minimal_warning "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
                 continue
             end
         end
@@ -316,7 +263,7 @@ function mark_epoch_windows!(
 
             # Check if reference index is within bounds
             if reference_idx > length(dat.data.triggers)
-                @warn "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
+                @minimal_warning "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
                 continue
             end
 
@@ -354,23 +301,25 @@ Converts sustained trigger signals into single onset events.
 ```
 """
 function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
+
+    # we need some triggers!
     if isempty(trigger_data)
         return trigger_data
     end
     
-    # Create result vector
+    # initalize
     cleaned = zeros(Int, length(trigger_data))
     
-    # Find where triggers change (onset detection)
-    # diff will be non-zero when trigger value changes
+    # find where triggers change (onset detection)
     trigger_changes = diff(vcat(0, trigger_data))
     
-    # Use vectorized operations to set onset values
+    # insert onsets
     onset_indices = trigger_changes .> 0
     cleaned[onset_indices] = trigger_data[onset_indices]
     
     return cleaned
 end
+
 
 """
     create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
@@ -439,25 +388,26 @@ end
 
 
 
-# Helper function with common logic
-function _channel_summary_impl(data::DataFrame, selected_samples::Vector{Int}, channel_labels::Vector{Symbol})::DataFrame
+# channel_summary
+function _channel_summary_impl(data::DataFrame, sample_selection::Vector{Int}, channel_selection::Vector{Symbol})::DataFrame
+
     # Filter data by selected samples
-    filtered_data = data[selected_samples, :]
+    selected_data = data[sample_selection, :]
     
     # Initialize a matrix to store summary statistics
     # 6 statistics: min, max, range, std, mad, var
-    summary_stats = Matrix{Float64}(undef, length(channel_labels), 6)
+    summary_stats = Matrix{Float64}(undef, length(channel_selection), 6)
 
     # Compute summary statistics for each column
-    for (i, col) in enumerate(channel_labels)
-        col_data = @view filtered_data[!, col]
+    for (i, col) in enumerate(channel_selection)
+        col_data = @view selected_data[!, col]
         summary_stats[i, :] =
             [minimum(col_data), maximum(col_data), datarange(col_data), std(col_data), mad(col_data), var(col_data)]
     end
 
     # Create a new DataFrame directly from the matrix and channel labels
     summary_df = DataFrame(
-        channel = channel_labels,
+        channel = channel_selection,
         min = summary_stats[:, 1],
         max = summary_stats[:, 2],
         range = summary_stats[:, 3],
@@ -470,6 +420,7 @@ function _channel_summary_impl(data::DataFrame, selected_samples::Vector{Int}, c
     summary_df[!, :zvar] .= (summary_df[!, :var] .- mean(summary_df[!, :var])) ./ std(summary_df[!, :var])
 
     return summary_df
+
 end
 
 # Helper function predicates for easier channel filtering
@@ -492,34 +443,34 @@ samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in colu
 
 # Helper to select channels based on include_additional_channels and a predicate
 function get_selected_channels(dat, channel_selection::Function; include_additional_channels::Bool = false)
-    # Get layout or all channels
+    # Get layout or all channels and return selected channel predicate
     layout_channels = include_additional_channels ? all_channels(dat) : channels(dat)
-    # Apply the channel predicate
-    channel_mask = channel_selection(layout_channels)
-    return layout_channels[channel_mask]
+    return layout_channels[channel_selection(layout_channels)]
 end
 
 # Helper to select channels from a DataFrame
 function get_selected_channels(dat::DataFrame, channel_selection::Function; include_additional_channels::Bool = false)
-    # Get all columns except metadata columns
+    # Get all columns except metadata columns and return selected channel predicate
     all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(dat))
-    # Apply the channel predicate
-    channel_mask = channel_selection(all_columns)
-    return all_columns[channel_mask]
+    return all_columns[channel_selection(all_columns)]
 end
 
 # Helper to select samples based on a predicate
 function get_selected_samples(dat, sample_selection::Function)
-    # Apply the sample predicate
-    sample_mask = sample_selection(dat.data)
-    return findall(sample_mask)
+    return findall(sample_selection(dat.data))
 end
 
 # Helper to select samples from a DataFrame
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
-    # Apply the sample predicate directly to the DataFrame
-    sample_mask = sample_selection(dat)
-    return findall(sample_mask)
+    return findall(sample_selection(dat))
+end
+
+# Helper function to validate epoch window parameters
+function _validate_epoch_window_params(dat::ContinuousData, time_window::Vector{<:Real})
+    @assert length(time_window) == 2 "Time window must have exactly 2 elements"
+    @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
+    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
+    @assert hasproperty(dat.data, :time) "Data must have a time column"
 end
 
 """
@@ -557,7 +508,7 @@ summary = channel_summary(dat, channel_selection = channels_not([:M1, :M2]))
 summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
-## Channel Filtering
+## Channel Selection
 ```julia
 # Summary for specific channels
 summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
@@ -572,7 +523,7 @@ summary = channel_summary(dat, channel_selection = channels(1:10))
 summary = channel_summary(dat, channel_selection = x -> startswith.(string.(x), "F"))
 ```
 
-## Sample Filtering
+## Sample Selection
 ```julia
 # Exclude extreme values
 summary = channel_summary(dat, sample_selection = samples_not(:is_extreme_value_100))
@@ -587,7 +538,7 @@ summary = channel_summary(dat, sample_selection = samples(:epoch_window))
 summary = channel_summary(dat, sample_selection = samples_and([:epoch_window, samples_not(:is_extreme_value_100)]))
 ```
 
-## Combined Filtering
+## Combined Selection
 ```julia
 # Exclude reference channels and extreme values
 summary = channel_summary(dat, 
@@ -631,11 +582,9 @@ function channel_summary(
 )::DataFrame
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
 end
 
-# For MultiDataFrameEeg
 function channel_summary(
     dat::MultiDataFrameEeg;
     sample_selection::Function = samples(),
@@ -643,10 +592,6 @@ function channel_summary(
 )::Vector{DataFrame}
     return [channel_summary(dat.data[trial]; sample_selection = sample_selection, channel_selection = channel_selection) for trial in eachindex(dat.data)]
 end
-
-
-
-
 
 
 
@@ -684,7 +629,7 @@ corr_matrix = correlation_matrix(dat, channel_selection = channels_not([:M1, :M2
 corr_matrix = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
-## Sample Filtering
+## Sample Selection
 ```julia
 # Correlation matrix only for good samples
 corr_matrix = correlation_matrix(dat, sample_selection = samples_not(:is_extreme_value_100))
@@ -701,7 +646,7 @@ corr_matrix = correlation_matrix(dat,
 )
 ```
 
-## Channel Filtering
+## Channel Selection
 ```julia
 # Frontal channels only
 corr_matrix = correlation_matrix(dat, channel_selection = channels(1:10))
@@ -716,7 +661,7 @@ corr_matrix = correlation_matrix(dat, channel_selection = x -> startswith.(strin
 corr_matrix = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 
-## Combined Filtering
+## Combined Selection
 ```julia
 # Exclude reference channels and bad samples
 corr_matrix = correlation_matrix(dat, 
@@ -752,58 +697,6 @@ is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
 
 # 2. Get correlation matrix for good data
 good_corr = correlation_matrix(dat, sample_selection = samples_not(:is_extreme_100))
-
-# 3. Check for highly correlated channels (potential duplicates)
-# Look for correlation values above 0.95
-# Highly correlated channels may indicate duplicates or artifacts
-```
-
-## Regional Analysis
-```julia
-# Frontal correlation matrix
-frontal_corr = correlation_matrix(dat, 
-    channel_selection = channels(x -> startswith.(string.(x), "F")),
-    sample_selection = samples(:epoch_window)
-)
-
-# Parietal correlation matrix
-parietal_corr = correlation_matrix(dat, 
-    channel_selection = channels(x -> startswith.(string.(x), "P")),
-    sample_selection = samples(:epoch_window)
-)
-
-# Compare frontal vs parietal connectivity
-# println("Frontal average correlation: ...")
-# println("Parietal average correlation: ...")
-```
-
-## Time-Based Analysis
-```julia
-# Correlation matrix for different time periods
-early_corr = correlation_matrix(dat, 
-    sample_selection = samples_and([:epoch_window, x -> x.time .< 0.2])  # First 200ms
-)
-
-late_corr = correlation_matrix(dat, 
-    sample_selection = samples_and([:epoch_window, x -> x.time .> 0.3])  # After 300ms
-)
-
-# Compare early vs late connectivity
-# println("Early connectivity: ...")
-# println("Late connectivity: ...")
-```
-
-## Visualization
-```julia
-# Get correlation matrix
-corr_matrix = correlation_matrix(dat, channel_selection = channels_not([:M1, :M2]))
-
-# Convert to matrix for plotting
-corr_values = Matrix(corr_matrix[:, 2:end])
-channel_names = corr_matrix.row
-
-# Plot as heatmap (using your preferred plotting package)
-# heatmap(corr_values, xticks=channel_names, yticks=channel_names)
 ```
 """
 function correlation_matrix(
@@ -814,7 +707,6 @@ function correlation_matrix(
 )::Matrix{Float64}
     selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
 
@@ -824,14 +716,15 @@ function _correlation_matrix(
     selected_samples::Vector{Int},
     selected_channels::Vector{Symbol},
 )::DataFrame
-    # Select the specified channels
-    data = select(dat, selected_channels)
-
+    # Select the specified channels and samples
+    selected_data = select(dat, selected_channels)[selected_samples, :]
     # Compute correlation matrix
-    df = DataFrame(cor(Matrix(data[selected_samples, :])), selected_channels)
+    df = DataFrame(cor(Matrix(selected_data)), selected_channels)
     insertcols!(df, 1, :row => selected_channels)
     return df
 end
+
+
 
 """
     detect_eog_onsets!(dat::ContinuousData, criterion::Float64, channel_in::Symbol, channel_out::Symbol)
@@ -858,18 +751,6 @@ detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
 detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
 ```
 
-## Different Thresholds
-```julia
-# Conservative threshold (fewer detections)
-detect_eog_onsets!(dat, 100.0, :vEOG, :is_vEOG_conservative)
-
-# Liberal threshold (more detections)
-detect_eog_onsets!(dat, 20.0, :vEOG, :is_vEOG_liberal)
-
-# Standard threshold
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG_standard)
-```
-
 ## Multiple EOG Channels
 ```julia
 # Detect both vertical and horizontal EOG
@@ -878,67 +759,6 @@ detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
 
 # Combine for any EOG artifact
 # dat.data[!, :is_any_EOG] = dat.data[!, :is_vEOG] .| dat.data[!, :is_hEOG]
-```
-
-## Using with Sample Filtering
-```julia
-# Detect EOG artifacts
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
-detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
-
-# Use in analysis (exclude EOG artifacts)
-# summary = channel_summary(dat, 
-#     samples = samples_and([
-#         samples_not(:is_vEOG),
-#         samples_not(:is_hEOG)
-#     ])
-# )
-
-# Use in ICA (exclude EOG artifacts)
-# ica_result = run_ica(dat, 
-#     samples = samples_and([
-#         :epoch_window,
-#         samples_not(:is_vEOG),
-#         samples_not(:is_hEOG)
-#     ])
-# )
-```
-
-## Quality Control Workflow
-```julia
-# 1. Detect extreme values
-is_extreme_value!(dat, 100, channel_out = :is_extreme_100)
-
-# 2. Detect EOG artifacts
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
-detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
-
-# 3. Get summary of good data
-# good_samples = samples_and([
-#     samples_not(:is_extreme_100),
-#     samples_not(:is_vEOG),
-#     samples_not(:is_hEOG)
-# ])
-
-# summary = channel_summary(dat, samples = good_samples)
-```
-
-## Threshold Selection Tips
-```julia
-# Start with moderate threshold
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG_test)
-
-# Check how many samples were detected
-# println("Detected ... EOG samples out of ... total samples")
-
-# Adjust threshold based on results
-# if n_detected < 100
-#     # Too few detections, lower threshold
-#     detect_eog_onsets!(dat, 30.0, :vEOG, :is_vEOG)
-# elseif n_detected > 1000
-#     # Too many detections, raise threshold
-#     detect_eog_onsets!(dat, 80.0, :vEOG, :is_vEOG)
-# end
 ```
 """
 function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
@@ -1177,7 +997,7 @@ function _channel_joint_probability(
     data = select(dat[selected_samples, :], selected_channels)
 
     # Convert to matrix and compute joint probability
-    jp, indelec = joint_probability(Matrix(data)', threshold, normval)
+    jp, indelec = _joint_probability(Matrix(data)', threshold, normval)
     return DataFrame(channel = selected_channels, jp = jp, rejection = indelec)
 end
 
@@ -1233,7 +1053,7 @@ function channel_joint_probability(
 end
 
 
-function joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
+function _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
     nbchan = size(signal, 1)
     jp = zeros(nbchan)
     dataProba = Vector{Float64}(undef, size(signal, 2)) # Pre-allocate
@@ -1245,7 +1065,7 @@ function joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, 
 
     # Normalize the joint probability
     if normalize != 0
-        tmpjp = normalize == 2 ? trim_extremes(jp) : jp
+        tmpjp = normalize == 2 ? _trim_extremes(jp) : jp
         jp .= (jp .- mean(tmpjp)) ./ std(tmpjp)
     end
 
@@ -1303,7 +1123,7 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
 end
 
 
-function trim_extremes(x::Vector{Float64})
+function _trim_extremes(x::Vector{Float64})
     n = length(x)
     trim = round(Int, n * 0.1)
     sorted = sort(x)
@@ -1402,8 +1222,8 @@ function _trigger_count_impl(trigger_data::Vector{<:Integer}; print_table::Bool 
     
     # Print table if requested
     if print_table
-        println(title)
         pretty_table(result_df, 
+                    title = title,
                     header = ["Trigger", "Count"],
                     alignment = [:r, :r],
                     crop = :none)
@@ -1421,7 +1241,7 @@ function _trigger_count_biosemi_impl(raw_triggers::Vector{<:Integer}, cleaned_tr
     
     if isempty(non_zero_triggers)
         if print_table
-            println("No non-zero triggers found in the data.")
+            @minimal_warning "No non-zero triggers found in the data."
         end
         return DataFrame()
     end
@@ -1446,8 +1266,8 @@ function _trigger_count_biosemi_impl(raw_triggers::Vector{<:Integer}, cleaned_tr
     
     # Print table if requested
     if print_table
-        println("Trigger Count Summary (Raw vs Cleaned):")
         pretty_table(result_df, 
+                    title = "Trigger Count Summary (Raw vs Cleaned)",
                     header = ["Trigger", "Raw Count", "Cleaned Count"],
                     alignment = [:r, :r, :r],
                     crop = :none)
@@ -1457,6 +1277,7 @@ function _trigger_count_biosemi_impl(raw_triggers::Vector{<:Integer}, cleaned_tr
     
     return result_df
 end
+
 
 """
     trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
@@ -1480,13 +1301,9 @@ trigger_counts = trigger_count(dat, print_table = false)
 ```
 """
 function trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
-    # Get raw trigger data
-    raw_triggers = dat.triggers.raw
-    
     # Get cleaned trigger data (onset detection only)
-    cleaned_triggers = _clean_triggers(raw_triggers)
-    
-    return _trigger_count_biosemi_impl(raw_triggers, cleaned_triggers, print_table = print_table)
+    cleaned_triggers = _clean_triggers(dat.triggers.raw)
+    return _trigger_count_biosemi_impl(dat.triggers.raw, cleaned_triggers, print_table = print_table)
 end
 
 
