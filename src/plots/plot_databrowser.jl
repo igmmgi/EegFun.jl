@@ -467,7 +467,7 @@ function show_additional_menu(state)
                 plot_topoplot(selected_data, state.data.original.layout)
             elseif btn.label[] == "Spectrum"
                 selected_channel = state.channels.labels[state.channels.visible]
-                plot_selected_spectrum(selected_data, selected_channel)
+                plot_channel_spectrum(selected_data, channel_selection = channels(selected_channel))
             elseif btn.label[] == "Plot3"
                 println("Plot3: TODO")
             end

@@ -499,10 +499,26 @@ function get_selected_channels(dat, channel_selection::Function; include_additio
     return layout_channels[channel_mask]
 end
 
+# Helper to select channels from a DataFrame
+function get_selected_channels(dat::DataFrame, channel_selection::Function; include_additional_channels::Bool = false)
+    # Get all columns except metadata columns
+    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(dat))
+    # Apply the channel predicate
+    channel_mask = channel_selection(all_columns)
+    return all_columns[channel_mask]
+end
+
 # Helper to select samples based on a predicate
 function get_selected_samples(dat, sample_selection::Function)
     # Apply the sample predicate
     sample_mask = sample_selection(dat.data)
+    return findall(sample_mask)
+end
+
+# Helper to select samples from a DataFrame
+function get_selected_samples(dat::DataFrame, sample_selection::Function)
+    # Apply the sample predicate directly to the DataFrame
+    sample_mask = sample_selection(dat)
     return findall(sample_mask)
 end
 
