@@ -1,22 +1,6 @@
 ########################################################
-# Module constants
+# Trigger timing plotting functions
 ########################################################
-
-# Plotting constants
-const DEFAULT_TIMELINE_WIDTH = 2
-const DEFAULT_EVENT_LINE_WIDTH = 1
-const DEFAULT_FONT_SIZE = 24
-const EVENT_LINE_HEIGHT = 0.05
-const TIME_LABEL_OFFSET = -0.001
-const Y_MIN_LIMIT = -0.1
-const Y_MAX_LIMIT = 0.15
-
-# Slider constants
-const DEFAULT_WINDOW_SIZE = 10.0  # seconds
-const MIN_WINDOW_SIZE = 1.0       # seconds
-const MAX_WINDOW_SIZE = 60.0      # seconds
-const WINDOW_SIZE_STEP = 1.0      # seconds
-const POSITION_STEP = 0.5         # seconds
 
 # Pre-allocated vectors for performance
 const VERTICAL_LINE_X = Ref([0.0, 0.0])

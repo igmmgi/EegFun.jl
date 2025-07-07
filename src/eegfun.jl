@@ -61,6 +61,7 @@ include("analysis/baseline.jl")
 include("analysis/preprocess.jl")
 
 # Plotting functions
+include("plots/constants.jl")
 include("plots/plot_ica.jl")
 include("plots/plot_layout.jl")
 include("plots/plot_misc.jl")

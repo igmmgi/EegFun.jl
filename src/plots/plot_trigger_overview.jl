@@ -1,11 +1,6 @@
 ########################################################
-# Module constants
+# Trigger overview plotting functions
 ########################################################
-
-# Plotting constants
-const DEFAULT_MARKER_SIZE = 15
-const DEFAULT_LINE_WIDTH = 1
-const DEFAULT_LINE_OFFSET = 0.1
 
 """
     _trigger_time_count(time, triggers)
@@ -79,7 +74,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; dis
         scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = DEFAULT_MARKER_SIZE)
         # Add vertical lines
         for (t, y) in zip(times, y_pos)
-            lines!(ax, [t, t], [y - DEFAULT_LINE_OFFSET, y + DEFAULT_LINE_OFFSET], color = :black, linewidth = DEFAULT_LINE_WIDTH)
+            lines!(ax, [t, t], [y - DEFAULT_LINE_OFFSET, y + DEFAULT_LINE_OFFSET], color = :black, linewidth = DEFAULT_LINE_WIDTH_TRIGGER)
         end
     end
     fig[1, 2] = Legend(fig, ax)
