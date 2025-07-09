@@ -156,10 +156,6 @@ function plot_layout_2d!(
     hidedecorations!(ax)
     hidespines!(ax)
 
-    if display_plot
-        display_figure(fig)
-    end
-
     return nothing
 end
 

@@ -9,7 +9,7 @@
 # package
 using eegfun
 # using GLMakie
-using CairoMakie
+# using CairoMakie
 # using eegfun: load_config 
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
@@ -17,59 +17,15 @@ layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
 # 2D layout
 eegfun.polar_to_cartesian_xy!(layout)
-
 eegfun.plot_layout_2d(layout);
-
-fig, ax = eegfun.plot_layout_2d(layout);
-
-
-
-
-
-dat = eegfun.create_eeg_dataframe(dat, layout);
-cm = eegfun.correlation_matrix(dat)
-# cm = eegfun.correlation_matrix(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
-# cm = eegfun.correlation_matrix(dat, sample_selection = x -> x.sample .< 1000)
-
-fig, ax = eegfun.plot_correlation_heatmap(cm)
-
-cm = correlation_matrix(dat, filter_samples = :epoch_window)
-fig, ax = plot_correlation_heatmap(cm)
-
-
 
 # we can get raw trigger info
 eegfun.trigger_count(dat);
-
 eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
 
 # create our eeg ContinuousData type
-
 dat = eegfun.create_eeg_dataframe(dat, layout);
-
-
-# bad channels
-jp = eegfun.channel_joint_probability(dat)
-jp = eegfun.channel_joint_probability(dat, channel_selection = eegfun.channels([:Fp1, :AF7, :AF8, :Fp2]))
-jp = eegfun.channel_joint_probability(dat, sample_selection = x -> x.sample .< 10000)
-
-
-# jp = channel_joint_probability(dat, threshold=5.0, normval=2, filter_samples = :epoch_window)
-fig, ax = eegfun.plot_joint_probability(jp)
-
-cm = eegfun.correlation_matrix(dat)
-
-
-fig, ax = eegfun.plot_correlation_heatmap(cm)
-
-cm = eegfun.correlation_matrix(dat, sample_selection = eegfun.samples(:epoch_window))
-fig, ax = eegfun.plot_correlation_heatmap(cm)
-
-
-
-
-
 
 # we can get cleaner trigger info
 eegfun.trigger_count(dat);
@@ -216,13 +172,6 @@ eegfun.mark_epoch_windows!(dat, [epoch1], [-2.0, 2.0]) # epoch window within ext
 eegfun.plot_databrowser(dat);
 eegfun.plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 
-# Channel Summary
-summary = eegfun.channel_summary(dat) # whole dataset
-summary = eegfun.channel_summary(dat, channels = eegfun.channels([:Fp1, :Fp2])) 
-summary = eegfun.channel_summary(dat, channels = eegfun.channels_not([:Fp1, :Fp2])) 
-summary = eegfun.channel_summary(dat, channels = eegfun.channels([:hEOG, :vEOG])) 
-
-
    
     
 
@@ -254,7 +203,7 @@ fig, ax = eegfun.plot_channel_summary(summary, :range)
 
 # ICA "continuous" data
 # ica_result = run_ica(dat; exclude_samples = [:is_extreme_value], include_samples = [:epoch_window])
-ica_result = run_ica(dat; exclude_samples = [:is_extreme_value])
+ica_result = eegfun.run_ica(dat; exclude_samples = [:is_extreme_value])
 
 
 # plot ICA components
@@ -277,27 +226,7 @@ eegfun.plot_ica_component_activation(dat, ica_result)
 
 eegfun.plot_databrowser(dat, ica_result)
 
-# dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
-# dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
-eye_components, metrics_df = identify_eye_components(ica_result, dat; exclude_samples = [:is_extreme_value])
-
-fig = plot_eye_component_features(eye_components, metrics_df)
-
-ecg_components, metrics_df = identify_ecg_components(ica_result, dat; exclude_samples = [:is_extreme_value])
-fig = plot_ecg_component_features_(ecg_components, metrics_df)
-
-high_kurtosis_comps, metrics_df = identify_spatial_kurtosis_components(ica_result, dat; exclude_samples = [:is_extreme_value])
-fig = plot_spatial_kurtosis_components(ica_result, dat)
-
-line_noise_comps, metrics_df = identify_line_noise_components(ica_result, dat)
-fig = plot_line_noise_components(ica_result, dat)
-fig = plot_component_spectrum(ica_result, dat, 1)
-fig = plot_component_spectrum(ica_result, dat, 1:10) 
-
-fig = plot_channel_spectrum(dat, :P2)
-fig = plot_channel_spectrum(dat)
-fig = plot_channel_spectrum(dat, [:P2, :P1])
 
 
 
@@ -454,112 +383,6 @@ plot_erp([erps[1], erps[2],erps[3]], [:PO7, :PO8], kwargs = Dict(:average_channe
 # debug_analysis_info(dat)
 
 
-function identify_ecg_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    min_bpm::Real=40,
-    max_bpm::Real=120,
-    min_peaks::Int=8,
-    max_ibi_std_s::Real=0.15,
-    include_samples::Union{Nothing,Vector{Symbol}} = nothing,
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value]
-)
-    # --- Data Preparation ---
-    # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, include_samples, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying include/exclude criteria. Cannot identify ECG components."
-        # Return empty results
-        return Int[], DataFrame(Component=Int[], num_peaks=Int[], num_valid_ibis=Int[], mean_ibi_s=Float64[], std_ibi_s=Float64[], is_ekg_artifact=Bool[])
-    end
-
-    # Extract relevant data *only for these samples*
-    relevant_cols = vcat(ica_result.data_label)
-    data_subset_df = dat.data[samples_to_use, relevant_cols]
-
-    # Prepare matrix for unmixing (on the subset)
-    dat_matrix_subset = permutedims(Matrix(data_subset_df)) 
-    dat_matrix_subset .-= mean(dat_matrix_subset, dims=2)
-    dat_matrix_subset ./= ica_result.scale
-
-    # Calculate components activations *only for these samples*
-    components_subset = ica_result.unmixing * dat_matrix_subset 
-    
-    # Get the number of components
-    n_components = size(ica_result.unmixing, 1)  # Changed variable name
-    fs = dat.sample_rate 
-
-    # Convert BPM to plausible IBI range in seconds
-    min_ibi_s = 60.0 / max_bpm
-    max_ibi_s = 60.0 / min_bpm
-
-    # Store results
-    metrics = []
-    identified_ecg = Int[]
-
-    # Loop through components, analyzing the activations *from the subset*
-    for comp_idx in 1:n_components  # Using n_components instead of n_components_total
-        ts = components_subset[comp_idx, :] # Time series from *filtered* samples
-
-        # Find prominent peaks using the cardiac-specific detector
-        r_peaks = detect_cardiac_peaks_in_ica(ts, fs; min_bpm=min_bpm, max_bpm=max_bpm)
-        
-        num_peaks = length(r_peaks)
-        mean_ibi = NaN
-        std_ibi = NaN
-        num_valid_ibis = 0
-        is_ecg = false
-
-        if num_peaks >= 2
-            # Calculate Inter-Beat Intervals (IBIs) in seconds
-            ibis_s = diff(r_peaks) ./ fs
-
-            # Filter IBIs based on plausible heart rate range
-            valid_ibi_mask = (ibis_s .>= min_ibi_s) .& (ibis_s .<= max_ibi_s)
-            valid_ibis = ibis_s[valid_ibi_mask]
-            num_valid_ibis = length(valid_ibis)
-
-            if num_valid_ibis > 1 
-                mean_ibi = mean(valid_ibis)
-                std_ibi = std(valid_ibis)
-
-                # Check criteria
-                if num_valid_ibis >= (min_peaks - 1) && 
-                   std_ibi <= max_ibi_std_s
-                    is_ecg = true
-                    push!(identified_ecg, comp_idx)
-                end
-            elseif num_valid_ibis == 1 
-                 mean_ibi = valid_ibis[1]
-                 std_ibi = 0.0 
-                 if num_valid_ibis >= (min_peaks - 1) && std_ibi <= max_ibi_std_s
-                     is_ecg = true
-                     push!(identified_ecg, comp_idx)
-                 end
-            end
-        end
-
-        # Store metrics for this component
-        push!(metrics, (
-            Component=comp_idx,
-            num_peaks=num_peaks,
-            num_valid_ibis=num_valid_ibis,
-            mean_ibi_s=mean_ibi,
-            std_ibi_s=std_ibi,
-            is_ecg_artifact=is_ecg
-        ))
-    end
-
-    # --- Construct Results ---
-    metrics_df = DataFrame(metrics)
-    # Ensure Component column matches 1:n_components if metrics is empty
-    if isempty(metrics)
-         metrics_df = DataFrame(Component=1:n_components, num_peaks=0, num_valid_ibis=0, mean_ibi_s=NaN, std_ibi_s=NaN, is_ecg_artifact=false)
-    end
-    sort!(identified_ecg)
-
-    return identified_ecg, metrics_df
-end
 
 
 
@@ -576,3 +399,63 @@ end
 # fig, ax = plot_channel_spectrum(dat,:P2)
 # fig, ax = plot_channel_spectrum(dat,[:P2,:P1])
 
+using eegfun
+using GLMakie
+dat = eegfun.read_bdf("../Flank_C_3.bdf");
+layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+dat = eegfun.create_eeg_dataframe(dat, layout);
+# preprocessing steps
+eegfun.rereference!(dat, :avg)
+eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
+eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
+eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+eegfun.is_extreme_value!(dat, 100);
+# mark trigger windows
+eegfun.mark_epoch_windows!(dat, [1, 3, 4, 5], [-1, 2.0]) # simple epoch marking with trigger 1 and 3
+# eegfun.plot_databrowser(dat) # epoch window within extra_channel menu
+# ICA "continuous" data
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples(:epoch_window))
+
+
+
+# plot ICA components
+eegfun.plot_ica_topoplot(ica_result, dat.layout)
+# eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15; use_global_scale = true)
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5]; use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5, 7, 9]; dims = (2, 3), use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
+
+eegfun.plot_ica_component_activation(dat, ica_result)
+# eegfun.plot_databrowser(dat, ica_result)
+
+# dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
+# dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
+
+eye_components, metrics_df = eegfun.identify_eye_components(ica_result, dat)
+ecg_components, metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+
+fig, ax = eegfun.plot_eye_component_features(eye_components, metrics_df)
+fig, ax = eegfun.plot_ecg_component_features_(ecg_components, metrics_df)
+
+high_kurtosis_comps, metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
+fig, ax = eegfun.plot_spatial_kurtosis_components(high_kurtosis_comps, metrics_df)
+
+
+
+
+line_noise_comps, metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
+
+
+
+fig = plot_line_noise_components(ica_result, dat)
+fig = plot_component_spectrum(ica_result, dat, 1)
+fig = plot_component_spectrum(ica_result, dat, 1:10) 
+
+fig = plot_channel_spectrum(dat, :P2)
+fig = plot_channel_spectrum(dat)
+fig = plot_channel_spectrum(dat, [:P2, :P1])

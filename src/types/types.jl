@@ -62,6 +62,35 @@ mutable struct Coord
     coord::Array{CoordXY}
 end
 
+"""
+    EpochCondition
+
+Defines parameters for extracting epochs for a specific experimental condition.
+
+# Fields
+- `name::String`: Descriptive condition name
+- `trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}`: Trigger sequences to match (e.g., [[1, 2, 3]], [[1, :any, 3]], [[1:5], [10:15]])
+- `reference_index::Int`: Which trigger position is t=0 (1-based, default: 1)
+- `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
+- `min_interval::Union{Nothing,Float64}`: Minimum time between specified trigger pairs (optional, default: nothing)
+- `max_interval::Union{Nothing,Float64}`: Maximum time between specified trigger pairs (optional, default: nothing)
+- `after::Union{Nothing,Int}`: Only search for sequences after this trigger value (optional, default: nothing)
+- `before::Union{Nothing,Int}`: Only search for sequences before this trigger value (optional, default: nothing)
+"""
+@kwdef struct EpochCondition
+    name::String
+    trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}
+    reference_index::Int = 1
+    timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
+    min_interval::Union{Nothing,Float64} = nothing
+    max_interval::Union{Nothing,Float64} = nothing
+    after::Union{Nothing,Int} = nothing
+    before::Union{Nothing,Int} = nothing
+end
+
+
+
+
 # Basic information functions right with the types
 channels(dat::EegData) = dat.layout.label
 all_channels(dat::EegData) = propertynames(dat.data)
@@ -131,6 +160,40 @@ struct InfoIca
     mean::Vector{Float64}
     ica_label::Vector{Symbol}
     data_label::Vector{Symbol}
+end
+
+# Custom display method for InfoIca
+function Base.show(io::IO, ica::InfoIca)
+    n_components = length(ica.ica_label)
+    n_channels = length(ica.data_label)
+    
+    println(io, "InfoIca Result")
+    println(io, "├─ Components: $n_components")
+    println(io, "├─ Channels: $n_channels")
+    println(io, "├─ Scale: $(round(ica.scale, digits=3))")
+    println(io, "├─ Top 5 variance explained:")
+    
+    # Show top 5 components with their variance
+    for i in 1:min(5, n_components)
+        var_pct = round(ica.variance[i] * 100, digits=2)
+        println(io, "│  $(ica.ica_label[i]): $(var_pct)%")
+    end
+    
+    if n_components > 5
+        println(io, "│  ... and $(n_components - 5) more components")
+    end
+    
+    println(io, "├─ Matrix sizes:")
+    println(io, "│  ├─ Unmixing: $(size(ica.unmixing))")
+    println(io, "│  ├─ Mixing: $(size(ica.mixing))")
+    println(io, "│  └─ Sphere: $(size(ica.sphere))")
+    
+    println(io, "└─ Channel labels: $(join(ica.data_label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")")
+end
+
+# Compact display for arrays
+function Base.show(io::IO, ::MIME"text/plain", ica::InfoIca)
+    show(io, ica)
 end
 
 """
