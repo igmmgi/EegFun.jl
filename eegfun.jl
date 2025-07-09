@@ -8,12 +8,35 @@
 
 # package
 using eegfun
-using GLMakie
-# using CairoMakie
+# using GLMakie
+using CairoMakie
 # using eegfun: load_config 
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+
+# 2D layout
+eegfun.polar_to_cartesian_xy!(layout)
+
+eegfun.plot_layout_2d(layout);
+
+fig, ax = eegfun.plot_layout_2d(layout);
+
+
+
+
+
+dat = eegfun.create_eeg_dataframe(dat, layout);
+cm = eegfun.correlation_matrix(dat)
+# cm = eegfun.correlation_matrix(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+# cm = eegfun.correlation_matrix(dat, sample_selection = x -> x.sample .< 1000)
+
+fig, ax = eegfun.plot_correlation_heatmap(cm)
+
+cm = correlation_matrix(dat, filter_samples = :epoch_window)
+fig, ax = plot_correlation_heatmap(cm)
+
+
 
 # we can get raw trigger info
 eegfun.trigger_count(dat);
@@ -22,8 +45,8 @@ eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
 
 # create our eeg ContinuousData type
-dat = eegfun.create_eeg_dataframe(dat, layout);
 
+dat = eegfun.create_eeg_dataframe(dat, layout);
 
 
 # bad channels
