@@ -449,13 +449,15 @@ fig, ax = eegfun.plot_spatial_kurtosis_components(high_kurtosis_comps, metrics_d
 
 
 line_noise_comps, metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
+fig = eegfun.plot_line_noise_components(line_noise_comps, metrics_df)
+
+
+eegfun.plot_ica_component_spectrum(ica_result, dat, 1)
+eegfun.plot_ica_component_spectrum(ica_result, dat, [1, 3, 5])
+eegfun.plot_ica_component_spectrum(ica_result, dat, Int[])
+eegfun.plot_ica_component_spectrum(ica_result, dat, 1:10)
 
 
 
-fig = plot_line_noise_components(ica_result, dat)
-fig = plot_component_spectrum(ica_result, dat, 1)
-fig = plot_component_spectrum(ica_result, dat, 1:10) 
+fig, ax = eegfun.plot_channel_spectrum(dat)
 
-fig = plot_channel_spectrum(dat, :P2)
-fig = plot_channel_spectrum(dat)
-fig = plot_channel_spectrum(dat, [:P2, :P1])
