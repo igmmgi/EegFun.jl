@@ -157,7 +157,6 @@ function run_ica(
 
     # Get samples to use using predicate
     sample_indices = get_selected_samples(dat_ica, sample_selection)
-
     if isempty(sample_indices)
         error("No samples available after applying sample filter")
     end
@@ -502,32 +501,32 @@ function identify_eye_components(
     dat::ContinuousData;
     vEOG_channel::Symbol = :vEOG,
     hEOG_channel::Symbol = :hEOG,
+    sample_selection::Function = samples(),
     z_threshold::Float64 = 3.0,
-    exclude_samples::Union{Nothing,Vector{Symbol}} = nothing,
 )
 
     # Check basic inputs
     if !(vEOG_channel in propertynames(dat.data))
-        error("Vertical EOG channel $vEOG_channel not found in data")
+        @minimal_error "Vertical EOG channel $vEOG_channel not found in data"
     end
     if !(hEOG_channel in propertynames(dat.data))
-        error("Horizontal EOG channel $hEOG_channel not found in data")
+        @minimal_error "Horizontal EOG channel $hEOG_channel not found in data"
     end
 
     # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot identify eye components."
+    selected_samples = get_selected_samples(dat, sample_selection)
+    if isempty(selected_samples)
+        @minimal_warning "No samples remaining after applying exclude criteria. Cannot identify eye components."
         return Dict(:vEOG => Int[], :hEOG => Int[]), DataFrame()
     end
 
     # Get EOG signals for valid samples only
-    vEOG = dat.data[samples_to_use, vEOG_channel]
-    hEOG = dat.data[samples_to_use, hEOG_channel]
+    vEOG = dat.data[selected_samples, vEOG_channel]
+    hEOG = dat.data[selected_samples, hEOG_channel]
 
     # Prepare data matrix for valid samples
     relevant_cols = vcat(ica_result.data_label)
-    data_subset_df = dat.data[samples_to_use, relevant_cols]
+    data_subset_df = dat.data[selected_samples, relevant_cols]
     dat_matrix = permutedims(Matrix(data_subset_df))
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica_result.scale
@@ -580,7 +579,7 @@ end
 
 
 """
-    identify_ekg_components(ica_result::InfoIca, dat::ContinuousData;
+    identify_ecg_components(ica_result::InfoIca, dat::ContinuousData;
                               min_bpm::Real=40, max_bpm::Real=120,
                               min_prominence_std::Real=2.5,
                               min_peaks::Int=10,
@@ -618,34 +617,25 @@ function identify_ecg_components(
     ica_result::InfoIca,
     dat::ContinuousData;
     min_bpm::Real = 40,
-    max_bpm::Real = 120,
-    min_prominence_std::Real = 3,
+    max_bpm::Real = 130,
+    min_prominence_std::Real = 5,
     min_peaks::Int = 10,
     max_ibi_std_s::Real = 0.2,
     min_peak_ratio::Real = 0.7,
-    include_samples::Union{Nothing,Vector{Symbol}} = nothing,
-    exclude_samples::Union{Nothing,Vector{Symbol}} = nothing,
+    sample_selection::Function = samples(),
+    plot_component_index::Int = 0,
 )
 
     # Data Preparation 
-    samples_to_use = _get_samples_to_use(dat, include_samples, exclude_samples)
-    if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria."
-        return Int[],
-        DataFrame(
-            Component = Int[],
-            num_peaks = Int[],
-            num_valid_ibis = Int[],
-            mean_ibi_s = Float64[],
-            std_ibi_s = Float64[],
-            peak_ratio = Float64[],
-            is_ecg_artifact = Bool[],
-        )
+    selected_samples = get_selected_samples(dat, sample_selection)
+    if isempty(selected_samples)
+        @minimal_warning "No samples remaining after applying exclude criteria."
+        return Int[], DataFrame()
     end
 
     # Process data
     relevant_cols = ica_result.data_label
-    data_subset_df = dat.data[samples_to_use, relevant_cols]
+    data_subset_df = dat.data[selected_samples, relevant_cols]
     dat_matrix_subset = permutedims(Matrix(data_subset_df))
     dat_matrix_subset .-= mean(dat_matrix_subset, dims = 2)
     dat_matrix_subset ./= ica_result.scale
@@ -665,9 +655,15 @@ function identify_ecg_components(
     for comp_idx = 1:n_components
         ts = components_subset[comp_idx, :]
 
-        # Find prominent peaks - apply stricter criteria
-        # 1. Use a higher threshold
-        peak_indices = _findpeaks((ts .* -1); min_prominence_std = min_prominence_std)
+        # Find prominent peaks 
+        peak_indices = _find_peaks(ts; min_prominence_std = min_prominence_std)
+
+        # for debugging
+        if comp_idx == plot_component_index
+            fig, ax = lines(ts, color = :black)
+            scatter!(ax, peak_indices, ts[peak_indices], color = :red)
+            display(fig)
+        end
 
         num_peaks = length(peak_indices)
         mean_ibi = NaN
@@ -703,6 +699,9 @@ function identify_ecg_components(
             end
         end
 
+        # Calculate heart rate if we have valid IBI
+        heart_rate_bpm = isnan(mean_ibi) || mean_ibi <= 0 ? NaN : 60.0 / mean_ibi
+        
         # Store metrics 
         push!(
             metrics,
@@ -713,6 +712,7 @@ function identify_ecg_components(
                 mean_ibi_s = mean_ibi,
                 std_ibi_s = std_ibi,
                 peak_ratio = peak_ratio,
+                heart_rate_bpm = heart_rate_bpm,
                 is_ecg_artifact = is_ecg,
             ),
         )
@@ -722,18 +722,20 @@ function identify_ecg_components(
     metrics_df = DataFrame(metrics)
     if isempty(metrics)
         metrics_df = DataFrame(
-            Component = 1:n_components,
-            num_peaks = 0,
-            num_valid_ibis = 0,
-            mean_ibi_s = NaN,
-            std_ibi_s = NaN,
-            peak_ratio = 0.0,
-            is_ecg_artifact = false,
+            :Component => 1:n_components,
+            :num_peaks => 0,
+            :num_valid_ibis => 0,
+            :mean_ibi_s => NaN,
+            :std_ibi_s => NaN,
+            :peak_ratio => 0.0,
+            :heart_rate_bpm => NaN,
+            :is_ecg_artifact => false,
         )
     end
     sort!(identified_ecg)
 
     return identified_ecg, metrics_df
+
 end
 
 """
@@ -758,7 +760,6 @@ Identify ICA components with high spatial kurtosis (localized, spot-like activit
 function identify_spatial_kurtosis_components(
     ica_result::InfoIca,
     dat::ContinuousData;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
     z_threshold::Float64 = 3.0,
 )
     # Calculate spatial kurtosis for each component's weights
@@ -819,16 +820,17 @@ Identify ICA components with strong line noise characteristics.
 function identify_line_noise_components(
     ica_result::InfoIca,
     dat::ContinuousData;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+    sample_selection::Function = samples(),
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     z_threshold::Float64 = 3.0,
     min_harmonic_power::Real = 0.5,
 )
+
     # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
+    samples_to_use = get_selected_samples(dat, sample_selection)
     if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot identify line noise components."
+        @minimal_warning "No samples remaining after applying exclude criteria. Cannot identify line noise components."
         return Int[], DataFrame()
     end
 
@@ -922,6 +924,7 @@ function identify_line_noise_components(
     sort!(line_noise_comps)
 
     return line_noise_comps, metrics_df
+
 end
 
 

@@ -13,15 +13,13 @@ function plot_topoplot!(
     label_kwargs = Dict(),
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
-    display_plot = true,
     method = :multiquadratic,  # :multiquadratic or :spherical_spline
     m = 4,  # for spherical spline 
     lambda = 1e-7,  # for spherical spline 
 )
 
-    # Ensure we have both 2D and 3D coordinates
+    # Ensure we have 2D coordinates
     _ensure_coordinates_2d!(layout)
-    _ensure_coordinates_3d!(layout)
 
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
@@ -90,7 +88,7 @@ function plot_topoplot!(
     end
 
     # head shape
-    plot_layout_2d!(fig, ax, layout, display_plot = display_plot, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
+    plot_layout_2d!(fig, ax, layout, head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
 
     return fig, ax
 
@@ -99,11 +97,15 @@ end
 function plot_topoplot(
     dat,
     layout;
+    display_plot = true,
     kwargs...
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_topoplot!(fig, ax, dat, layout; kwargs...)
+    if display_plot
+        display_figure(fig)
+    end
     return fig, ax
 end
 

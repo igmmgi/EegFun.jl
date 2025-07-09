@@ -66,7 +66,7 @@ function plot_ica_topoplot_single(
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :] # Corrected bracket
 
     # Create the topo data
-    data = data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+    data = _data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
 
     # Calculate levels for the plot
     # Use get on merged_topo_kwargs to check if user provided levels
@@ -200,8 +200,7 @@ function plot_ica_topoplot(
     all_data = []
     for i in eachindex(comps)
         # Use gridscale accessed earlier
-        data =
-            data_interpolation_topo(ica.mixing[:, comps[i]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+        data = _data_interpolation_topo(ica.mixing[:, comps[i]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
         push!(all_data, data)
     end
 
@@ -350,7 +349,7 @@ function plot_ica_topoplot(
     tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
 
     # Create the topo data
-    data = data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+    data = _data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
 
     # Create the plot directly on the existing axis using filtered kwargs
     co = contourf!(
@@ -798,9 +797,10 @@ function plot_topoplot_in_viewer!(
 
     # Extract layout data
     tmp_layout = layout[(in.(layout.label, Ref(ica_result.data_label))), :] # Use 'in.'
+    _ensure_coordinates_2d!(tmp_layout)
 
     # Create the topo data
-    data = data_interpolation_topo(
+    data = _data_interpolation_topo(
         ica_result.mixing[:, comp_idx],
         permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
         gridscale,
@@ -1487,7 +1487,7 @@ Uses the results from `identify_eye_components`.
 # Returns
 - `fig::Figure`: The Makie Figure containing the z-score plots.
 """
-function plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
+function plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0, display_plot::Bool=true)
 
     # Extract data from inputs
     vEOG_corr_z = metrics_df.vEOG_zscore
@@ -1549,52 +1549,25 @@ function plot_eye_component_features(identified_comps::Dict, metrics_df::DataFra
         end
     end
 
-    return fig
+    if display_plot
+        display_figure(fig)
+    end
+
+    return fig, (ax_v, ax_h)
 
 end
 
 # --- EKG Artifact Identification ---
 
-function _get_samples_to_use(dat::ContinuousData, include_list, exclude_list)
-    n_samples = size(dat.data, 1)
-    keep = trues(n_samples) # Start with all true
-
-    # Apply exclusions
-    if !isnothing(exclude_list)
-        for col in exclude_list
-            if col in propertynames(dat.data) && eltype(dat.data[!, col]) == Bool
-                keep .&= .!dat.data[!, col] # Set to false where exclude is true
-            else
-                @warn "Exclude column '$col' not found or not Bool type."
-            end
-        end
-    end
-
-    # Apply inclusions (if specified, overrides excludes implicitly)
-    if !isnothing(include_list)
-        include_mask = falses(n_samples)
-        for col in include_list
-             if col in propertynames(dat.data) && eltype(dat.data[!, col]) == Bool
-                include_mask .|= dat.data[!, col] # Set to true where include is true
-            else
-                @warn "Include column '$col' not found or not Bool type."
-            end
-        end
-        keep .&= include_mask # Keep only where include is true (within remaining)
-    end
-
-    return findall(keep)
-end
-
 
 """
-    _findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
+    _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0)
 
-Basic peak finder. Finds indices where data point is greater than its
-immediate neighbors and exceeds mean + min_prominence_std * std(data).
-Returns indices of peaks.
+Enhanced peak finder. Finds indices where data point is greater than its
+immediate neighbors (positive peaks) OR less than its immediate neighbors (negative peaks)
+and exceeds the threshold. Returns indices of peaks.
 """
-function _findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
+function _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0)
     if length(data) < 3
         return Int[]
     end
@@ -1602,10 +1575,15 @@ function _findpeaks(data::AbstractVector; min_prominence_std::Real=2.0)
     mean_val = mean(data)
     std_val = std(data)
     # Handle zero std deviation case
-    threshold = (std_val ≈ 0) ? mean_val : mean_val + min_prominence_std * std_val
+    threshold_pos = (std_val ≈ 0) ? mean_val : mean_val + min_prominence_std * std_val
+    threshold_neg = (std_val ≈ 0) ? mean_val : mean_val - min_prominence_std * std_val
 
     for i in 2:(length(data)-1)
-        if data[i] > data[i-1] && data[i] > data[i+1] && data[i] > threshold
+        # Positive peaks (greater than neighbors and above threshold)
+        if data[i] > data[i-1] && data[i] > data[i+1] && data[i] > threshold_pos
+            push!(peaks, i)
+        # Negative peaks (less than neighbors and below threshold)
+        elseif data[i] < data[i-1] && data[i] < data[i+1] && data[i] < threshold_neg
             push!(peaks, i)
         end
     end
@@ -1634,20 +1612,14 @@ Plot spatial kurtosis z-scores for all ICA components and highlight those exceed
 - `fig::Figure`: The Makie Figure containing the spatial kurtosis plot.
 """
 function plot_spatial_kurtosis_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-    z_threshold::Float64 = 3.0
+    kurtosis_comps::Vector{Int},
+    metrics_df::DataFrame,
+    z_threshold::Float64 = 3.0,
+    display_plot::Bool = true,
 )
-    # Get spatial kurtosis values
-    high_kurtosis_comps, metrics_df = identify_spatial_kurtosis_components(
-        ica_result, dat;
-        exclude_samples = exclude_samples,
-        z_threshold = z_threshold
-    )
 
     # Create figure
-    fig = Figure(size=(800, 400))
+    fig = Figure()
     
     # Plot spatial kurtosis z-scores
     ax = Axis(
@@ -1661,28 +1633,28 @@ function plot_spatial_kurtosis_components(
     scatter!(ax, metrics_df.Component, metrics_df.SpatialKurtosisZScore, color=:gray)
     
     # Highlight high kurtosis components
-    if !isempty(high_kurtosis_comps)
-        high_kurtosis_values = metrics_df[in.(metrics_df.Component, Ref(high_kurtosis_comps)), :SpatialKurtosisZScore]
-        scatter!(ax, high_kurtosis_comps, high_kurtosis_values, color=:red, markersize=8)
+    if !isempty(kurtosis_comps)
+        kurtosis_values = metrics_df[in.(metrics_df.Component, Ref(kurtosis_comps)), :SpatialKurtosisZScore]
+        scatter!(ax, kurtosis_comps, kurtosis_values, color=:red, markersize=8)
         
         # Add labels for high kurtosis components
-        for (i, comp) in enumerate(high_kurtosis_comps)
-            text!(ax, comp, high_kurtosis_values[i], text=string(comp), 
+        for (i, comp) in enumerate(kurtosis_comps)
+            text!(ax, comp, kurtosis_values[i], text=string(comp), 
                   color=:red, align=(:center,:bottom), fontsize=10)
         end
     end
     
-    # Add threshold line
+    # Add reference lines
     hlines!(ax, [z_threshold], color=:red, linestyle=:dash)
-    
-    # Add reference line for mean
-    hlines!(ax, [0.0], color=:gray, linestyle=:dot, label="Mean")
-    
-    # Add legend with correct position specification
-    axislegend(ax, position=(1.0, 1.0))
-    
-    return fig
+    hlines!(ax, [0.0], color=:gray, linestyle=:dot)
+   
+    if display_plot
+        display_figure(fig)
+    end
+
+    return fig, ax
 end
+
 
 """
     plot_ecg_component_features(identified_comps::Vector{Int}, metrics_df::DataFrame;
@@ -1706,6 +1678,7 @@ function plot_ecg_component_features_(
     max_bpm::Real=120,
     max_ibi_std_s::Real=0.2,         
     min_peak_ratio::Real=0.7,         
+    display_plot::Bool=true,
 )
     # Create figure with two panels
     fig = Figure()
@@ -1806,7 +1779,12 @@ function plot_ecg_component_features_(
     hlines!(ax1, [min_peak_ratio], color = (:black, 0.5), linestyle = :dash)
     hlines!(ax2, [max_ibi_std_s], color = (:black, 0.5), linestyle = :dash)
     
-    return fig
+    if display_plot
+        display_figure(fig)
+    end
+
+    return fig, (ax1, ax2)
+
 end
 
 
@@ -1968,7 +1946,7 @@ function plot_ica_component_spectrum(
     max_freq::Real=100.0
 )
     # Get samples to use
-    samples_to_use = _get_samples_to_use(dat, nothing, exclude_samples)
+    samples_to_use = get_selected_samples(dat, samples_not(exclude_samples))
     if isempty(samples_to_use)
         @warn "No samples remaining after applying exclude criteria. Cannot plot component spectrum."
         return Figure()
