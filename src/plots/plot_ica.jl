@@ -1557,20 +1557,24 @@ function plot_eye_component_features(identified_comps::Dict, metrics_df::DataFra
 
 end
 
-# --- EKG Artifact Identification ---
-
-
+# ECG Component Identification 
 """
-    _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0)
+    _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0, window_size::Int=1)
 
 Enhanced peak finder. Finds indices where data point is greater than its
-immediate neighbors (positive peaks) OR less than its immediate neighbors (negative peaks)
+neighbors within a window (positive peaks) OR less than its neighbors within a window (negative peaks)
 and exceeds the threshold. Returns indices of peaks.
+
+# Arguments
+- `data::AbstractVector`: Input data vector
+- `min_prominence_std::Real`: Minimum prominence threshold in standard deviations (default: 2.0)
+- `window_size::Int`: Number of samples to look on each side for comparison (default: 1)
 """
-function _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0)
-    if length(data) < 3
+function _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0, window_size::Int=1)
+    if length(data) < 2 * window_size + 1
         return Int[]
     end
+    
     peaks = Int[]
     mean_val = mean(data)
     std_val = std(data)
@@ -1578,12 +1582,16 @@ function _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0)
     threshold_pos = (std_val ≈ 0) ? mean_val : mean_val + min_prominence_std * std_val
     threshold_neg = (std_val ≈ 0) ? mean_val : mean_val - min_prominence_std * std_val
 
-    for i in 2:(length(data)-1)
-        # Positive peaks (greater than neighbors and above threshold)
-        if data[i] > data[i-1] && data[i] > data[i+1] && data[i] > threshold_pos
+    for i in (window_size + 1):(length(data) - window_size)
+        # Get the window around the current point
+        left_window = data[(i - window_size):(i - 1)]
+        right_window = data[(i + 1):(i + window_size)]
+        
+        # Positive peaks (greater than all neighbors in window and above threshold)
+        if all(data[i] .> left_window) && all(data[i] .> right_window) && data[i] > threshold_pos
             push!(peaks, i)
-        # Negative peaks (less than neighbors and below threshold)
-        elseif data[i] < data[i-1] && data[i] < data[i+1] && data[i] < threshold_neg
+        # Negative peaks (less than all neighbors in window and below threshold)
+        elseif all(data[i] .< left_window) && all(data[i] .< right_window) && data[i] < threshold_neg
             push!(peaks, i)
         end
     end
