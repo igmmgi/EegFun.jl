@@ -472,11 +472,11 @@ function ica(dat::ContinuousData; kwargs...)
 end
 
 """
-    identify_eye_components(ica_result::InfoIca, dat::ContinuousData;
+    identify_eog_components(ica_result::InfoIca, dat::ContinuousData;
                           vEOG_channel::Symbol=:vEOG,
                           hEOG_channel::Symbol=:hEOG,
                           z_threshold::Float64=3.0,
-                          exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value])
+                          sample_selection::Function = samples())
 
 Identify ICA components potentially related to eye movements based on z-scored correlation.
 
@@ -488,7 +488,7 @@ Identify ICA components potentially related to eye movements based on z-scored c
 - `vEOG_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG).
 - `hEOG_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG).
 - `z_threshold::Float64`: Absolute Z-score threshold for identification (default: 3.0).
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
+- `sample_selection::Function`: Function to select samples from `dat.data`. Defaults to `samples()`.
 
 # Returns
 - `Dict{Symbol, Vector{Int}}`: Dictionary containing:
@@ -496,7 +496,7 @@ Identify ICA components potentially related to eye movements based on z-scored c
   - `:hEOG`: Vector of indices identified for horizontal eye movements.
 - `DataFrame`: DataFrame containing detailed correlation metrics per component.
 """
-function identify_eye_components(
+function identify_eog_components(
     ica_result::InfoIca,
     dat::ContinuousData;
     vEOG_channel::Symbol = :vEOG,
@@ -584,8 +584,8 @@ end
                               min_prominence_std::Real=2.5,
                               min_peaks::Int=10,
                               max_ibi_std_s::Real=0.05,
-                              include_samples::Union{Nothing,Vector{Symbol}} = nothing,
-                              exclude_samples::Union{Nothing,Vector{Symbol}} = nothing
+                              sample_selection::Function = samples(),
+                              plot_component_index::Int = 0
 
 Identify ICA components potentially related to EKG artifacts based on peak detection
 and interval regularity, using only samples consistent with ICA calculation.
@@ -925,6 +925,260 @@ function identify_line_noise_components(
 
     return line_noise_comps, metrics_df
 
+end
+
+"""
+    ArtifactComponents
+
+A structure to hold all identified artifact components from ICA analysis.
+
+# Fields
+- `eog::Dict{Symbol, Vector{Int}}`: Dictionary with :vEOG and :hEOG keys containing identified eye movement components
+- `ecg::Vector{Int}`: Vector of identified ECG/heartbeat components  
+- `line_noise::Vector{Int}`: Vector of identified line noise components
+- `channel_noise::Vector{Int}`: Vector of identified high spatial kurtosis (channel noise) components
+"""
+struct ArtifactComponents
+    eog::Dict{Symbol, Vector{Int}}
+    ecg::Vector{Int}
+    line_noise::Vector{Int}
+    channel_noise::Vector{Int}
+end
+
+"""
+    combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+
+Combine all identified artifact components into a single ArtifactComponents structure.
+
+# Arguments
+- `eog_comps::Dict{Symbol, Vector{Int}}`: EOG components dictionary
+- `ecg_comps::Vector{Int}`: ECG components vector
+- `line_noise_comps::Vector{Int}`: Line noise components vector
+- `channel_noise_comps::Vector{Int}`: Channel noise components vector
+
+# Returns
+- `ArtifactComponents`: Combined structure containing all artifact components
+"""
+function combine_artifact_components(
+    eog_comps::Dict{Symbol, Vector{Int}},
+    ecg_comps::Vector{Int},
+    line_noise_comps::Vector{Int},
+    channel_noise_comps::Vector{Int}
+)
+    return ArtifactComponents(
+        eog_comps,
+        ecg_comps,
+        line_noise_comps,
+        channel_noise_comps
+    )
+end
+
+"""
+    get_all_artifact_components(ica_result::InfoIca, dat::ContinuousData; kwargs...)
+
+Convenience function to identify all artifact components and return them in a combined structure.
+
+# Arguments
+- `ica_result::InfoIca`: The ICA result object
+- `dat::ContinuousData`: The continuous data
+
+# Keyword Arguments
+- All keyword arguments are passed through to the individual identification functions
+- See individual function documentation for available options
+
+# Returns
+- `ArtifactComponents`: Combined structure containing all artifact components and metrics
+"""
+function get_all_artifact_components(ica_result::InfoIca, dat::ContinuousData; kwargs...)
+    # Extract relevant kwargs for each function
+    eog_kwargs = Dict{Symbol, Any}()
+    ecg_kwargs = Dict{Symbol, Any}()
+    line_noise_kwargs = Dict{Symbol, Any}()
+    channel_noise_kwargs = Dict{Symbol, Any}()
+    
+    # Map kwargs to appropriate functions
+    for (key, value) in kwargs
+        if key in [:vEOG_channel, :hEOG_channel, :z_threshold]
+            eog_kwargs[key] = value
+        elseif key in [:min_bpm, :max_bpm, :min_prominence_std, :min_peaks, :max_ibi_std_s, :min_peak_ratio, :sample_selection]
+            ecg_kwargs[key] = value
+        elseif key in [:line_freq, :freq_bandwidth, :min_harmonic_power]
+            line_noise_kwargs[key] = value
+        elseif key in [:z_threshold]
+            channel_noise_kwargs[key] = value
+        end
+    end
+    
+    # Call identification functions
+    eog_comps, _ = identify_eog_components(ica_result, dat; eog_kwargs...)
+    ecg_comps, _ = identify_ecg_components(ica_result, dat; ecg_kwargs...)
+    line_noise_comps, _ = identify_line_noise_components(ica_result, dat; line_noise_kwargs...)
+    channel_noise_comps, _ = identify_spatial_kurtosis_components(ica_result, dat; channel_noise_kwargs...)
+    
+    return combine_artifact_components(
+        eog_comps,
+        ecg_comps,
+        line_noise_comps,
+        channel_noise_comps
+    )
+end
+
+"""
+    get_all_components(artifacts::ArtifactComponents)
+
+Get all unique artifact component indices as a single vector.
+
+# Arguments
+- `artifacts::ArtifactComponents`: The artifact components structure
+
+# Returns
+- `Vector{Int}`: Sorted vector of all unique artifact component indices
+"""
+function get_all_components(artifacts::ArtifactComponents)
+    all_comps = Set{Int}()
+    
+    # Add EOG components
+    for (_, comps) in artifacts.eog
+        union!(all_comps, comps)
+    end
+    
+    # Add other components
+    union!(all_comps, artifacts.ecg)
+    union!(all_comps, artifacts.line_noise)
+    union!(all_comps, artifacts.channel_noise)
+    
+    return sort(collect(all_comps))
+end
+
+"""
+    get_component_type(artifacts::ArtifactComponents, comp_idx::Int)
+
+Get the type(s) of artifact for a specific component index.
+
+# Arguments
+- `artifacts::ArtifactComponents`: The artifact components structure
+- `comp_idx::Int`: Component index to check
+
+# Returns
+- `Vector{Symbol}`: Vector of artifact types for this component
+"""
+function get_component_type(artifacts::ArtifactComponents, comp_idx::Int)
+    types = Symbol[]
+    
+    # Check EOG types
+    for (eog_type, comps) in artifacts.eog
+        if comp_idx in comps
+            push!(types, eog_type)
+        end
+    end
+    
+    # Check other types
+    if comp_idx in artifacts.ecg
+        push!(types, :ECG)
+    end
+    if comp_idx in artifacts.line_noise
+        push!(types, :LineNoise)
+    end
+    if comp_idx in artifacts.channel_noise
+        push!(types, :ChannelNoise)
+    end
+    
+    return types
+end
+
+"""
+    Base.show(io::IO, artifacts::ArtifactComponents)
+
+Custom printing for ArtifactComponents structure.
+"""
+function Base.show(io::IO, artifacts::ArtifactComponents)
+    println(io, "ArtifactComponents Summary:")
+    println(io, "==========================")
+    
+    # EOG components
+    total_eog = length(artifacts.eog[:vEOG]) + length(artifacts.eog[:hEOG])
+    println(io, "EOG Components: $total_eog total")
+    if !isempty(artifacts.eog[:vEOG])
+        println(io, "  Vertical EOG: $(artifacts.eog[:vEOG])")
+    end
+    if !isempty(artifacts.eog[:hEOG])
+        println(io, "  Horizontal EOG: $(artifacts.eog[:hEOG])")
+    end
+    
+    # ECG components
+    println(io, "ECG Components: $(length(artifacts.ecg))")
+    if !isempty(artifacts.ecg)
+        println(io, "  ECG: $(artifacts.ecg)")
+    end
+    
+    # Line noise components
+    println(io, "Line Noise Components: $(length(artifacts.line_noise))")
+    if !isempty(artifacts.line_noise)
+        println(io, "  Line Noise: $(artifacts.line_noise)")
+    end
+    
+    # Channel noise components
+    println(io, "Channel Noise Components: $(length(artifacts.channel_noise))")
+    if !isempty(artifacts.channel_noise)
+        println(io, "  Channel Noise: $(artifacts.channel_noise)")
+    end
+    
+    # Summary
+    all_comps = get_all_components(artifacts)
+    println(io, "Total Unique Artifact Components: $(length(all_comps))")
+    if !isempty(all_comps)
+        println(io, "All Components: $(all_comps)")
+    end
+end
+
+"""
+    print_detailed_artifacts(artifacts::ArtifactComponents)
+
+Print detailed information about all artifact components.
+"""
+function print_detailed_artifacts(artifacts::ArtifactComponents)
+    println("Detailed Artifact Components Analysis")
+    println("====================================")
+    
+    # EOG details
+    println("\nEOG Components:")
+    println("---------------")
+    if !isempty(artifacts.eog[:vEOG])
+        println("Vertical EOG Components: $(artifacts.eog[:vEOG])")
+    end
+    if !isempty(artifacts.eog[:hEOG])
+        println("Horizontal EOG Components: $(artifacts.eog[:hEOG])")
+    end
+    
+    # ECG details
+    println("\nECG Components:")
+    println("---------------")
+    if !isempty(artifacts.ecg)
+        println("ECG Components: $(artifacts.ecg)")
+    end
+    
+    # Line noise details
+    println("\nLine Noise Components:")
+    println("---------------------")
+    if !isempty(artifacts.line_noise)
+        println("Line Noise Components: $(artifacts.line_noise)")
+    end
+    
+    # Channel noise details
+    println("\nChannel Noise Components:")
+    println("------------------------")
+    if !isempty(artifacts.channel_noise)
+        println("Channel Noise Components: $(artifacts.channel_noise)")
+    end
+    
+    # Summary
+    all_comps = get_all_components(artifacts)
+    println("\nSummary:")
+    println("--------")
+    println("Total Unique Artifact Components: $(length(all_comps))")
+    if !isempty(all_comps)
+        println("All Components: $(all_comps)")
+    end
 end
 
 
