@@ -1825,24 +1825,15 @@ Plot spectral metrics used for line noise component identification.
 - `fig::Figure`: The Makie Figure containing the line noise metrics plots.
 """
 function plot_line_noise_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+    line_noise_comps::Vector{Int},
+    metrics_df::DataFrame,
     line_freq::Real=50.0,
     freq_bandwidth::Real=1.0,
     z_threshold::Float64=3.0,
-    min_harmonic_power::Real=0.5
+    min_harmonic_power::Real=0.5,
+    display_plot::Bool=true,
 )
-    # Get line noise components and metrics
-    line_noise_comps, metrics_df = identify_line_noise_components(
-        ica_result, dat;
-        exclude_samples=exclude_samples,
-        line_freq=line_freq,
-        freq_bandwidth=freq_bandwidth,
-        z_threshold=z_threshold,
-        min_harmonic_power=min_harmonic_power
-    )
-
+    
     # Create figure with two subplots
     fig = Figure(size=(1000, 400))
     
@@ -1907,8 +1898,12 @@ function plot_line_noise_components(
     
     # Add legend
     axislegend(ax2, position=(1.0, 1.0))
+
+    if display_plot
+        display_figure(fig)
+    end
     
-    return fig
+    return fig, (ax1, ax2)
 end
 
 
@@ -1946,17 +1941,18 @@ function plot_ica_component_spectrum(
     ica_result::InfoIca,
     dat::ContinuousData,
     comp_idx::Int;
-    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
+    sample_selection::Function = samples(),
     line_freq::Real=50.0,
     freq_bandwidth::Real=1.0,
     window_size::Int=1024,
     overlap::Real=0.5,
-    max_freq::Real=100.0
+    max_freq::Real=100.0,
+    display_plot::Bool=true
 )
     # Get samples to use
-    samples_to_use = get_selected_samples(dat, samples_not(exclude_samples))
+    samples_to_use = get_selected_samples(dat, sample_selection)
     if isempty(samples_to_use)
-        @warn "No samples remaining after applying exclude criteria. Cannot plot component spectrum."
+        @minimal_warning "No samples remaining after applying exclude criteria. Cannot plot component spectrum."
         return Figure()
     end
 
@@ -2022,8 +2018,12 @@ function plot_ica_component_spectrum(
     
     # Add legend
     axislegend(ax, position=(1.0, 1.0))
+
+    if display_plot
+        display_figure(fig)
+    end
     
-    return fig
+    return fig, ax
 end
 
 
