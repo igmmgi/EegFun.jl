@@ -436,28 +436,58 @@ eegfun.plot_ica_component_activation(dat, ica_result)
 # dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
-eye_components, metrics_df = eegfun.identify_eye_components(ica_result, dat)
-ecg_components, metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+eog_comps, eog_comps_metrics_df = eegfun.identify_eog_components(ica_result, dat)
+ecg_comps, ecg_comps_metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
+channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
 
 fig, ax = eegfun.plot_eye_component_features(eye_components, metrics_df)
 fig, ax = eegfun.plot_ecg_component_features_(ecg_components, metrics_df)
-
-high_kurtosis_comps, metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
+fig, ax = eegfun.plot_line_noise_components(line_noise_comps, metrics_df)
 fig, ax = eegfun.plot_spatial_kurtosis_components(high_kurtosis_comps, metrics_df)
 
 
-
-
-line_noise_comps, metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
-fig = eegfun.plot_line_noise_components(line_noise_comps, metrics_df)
-
-
 eegfun.plot_ica_component_spectrum(ica_result, dat, 1)
+
 eegfun.plot_ica_component_spectrum(ica_result, dat, [1, 3, 5])
+
 eegfun.plot_ica_component_spectrum(ica_result, dat, Int[])
 eegfun.plot_ica_component_spectrum(ica_result, dat, 1:10)
 
 
 
 fig, ax = eegfun.plot_channel_spectrum(dat)
+
+# Example of using the new ArtifactComponents structure
+println("\n=== Example: Using ArtifactComponents Structure ===")
+
+# Method 1: Combine existing results
+artifacts = eegfun.combine_artifact_components(
+    eog_comps,
+    ecg_comps,
+    line_noise_comps,
+    channel_noise_comps
+)
+
+# Print summary
+println(artifacts)
+
+# Print detailed information
+eegfun.print_detailed_artifacts(artifacts)
+
+# Get all unique components
+all_comps = eegfun.get_all_components(artifacts)
+println("\nAll unique artifact components: $all_comps")
+
+# Check what type a specific component is
+for comp in all_comps
+    types = eegfun.get_component_type(artifacts, comp)
+    println("Component $comp is classified as: $types")
+end
+
+# Method 2: Use convenience function to get all artifacts at once
+println("\n=== Using convenience function ===")
+all_artifacts = eegfun.get_all_artifact_components(ica_result, dat, 
+    sample_selection = eegfun.samples_not(:is_extreme_value))
+println(all_artifacts)
 
