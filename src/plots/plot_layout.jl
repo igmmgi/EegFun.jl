@@ -108,7 +108,7 @@ function plot_layout_2d!(
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
-    display_plot = true,
+    display_plot::Bool = true,
 )
 
     _validate_layout_columns(layout, [:label])
@@ -156,8 +156,8 @@ function plot_layout_2d!(
     hidedecorations!(ax)
     hidespines!(ax)
 
-    if display_plot # force a new figure window
-        display(getfield(Main, :GLMakie).Screen(), fig)
+    if display_plot
+        display_figure(fig)
     end
 
     return nothing
@@ -455,7 +455,7 @@ function plot_layout_3d!(
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
-    display_plot = true,
+    display_plot::Bool = true,
 )
     # Validate required columns
     _validate_layout_columns(layout, [:label])
@@ -506,8 +506,8 @@ function plot_layout_3d!(
     hidedecorations!(ax)
     hidespines!(ax)
 
-    if display_plot # force a new figure window
-        display(getfield(Main, :GLMakie).Screen(), fig)
+    if display_plot
+        display_figure(fig)
     end
 
     return fig, ax
@@ -535,7 +535,7 @@ function plot_layout_3d(layout; kwargs...)
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout; kwargs...)
     if get(kwargs, :display_plot, true) # force a new figure window
-        display(getfield(Main, :GLMakie).Screen(), fig)
+        display_figure(fig)
     end
     return fig, ax
 end
@@ -562,8 +562,8 @@ function plot_layout_3d(layout, neighbours; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout, neighbours; kwargs...)
-    if get(kwargs, :display_plot, true) # force a new figure window
-        display(getfield(Main, :GLMakie).Screen(), fig)
+    if get(kwargs, :display_plot, true)
+        display_figure(fig)
     end
     return fig, ax
 end
