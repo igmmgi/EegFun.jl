@@ -139,7 +139,7 @@ using eegfun
         mixing = rand(3, 3)
         sphere = rand(3, 3)
         variance = rand(3)
-        info = eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, zeros(3), [:ic1, :ic2, :ic3], [:ch1, :ch2, :ch3])
+        info = eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, zeros(3), [:ic1, :ic2, :ic3], [:ch1, :ch2, :ch3], Dict{Int, Matrix{Float64}}())
         @test size(info.unmixing) == (3, 3)
         @test size(info.mixing) == (3, 3)
         @test length(info.ica_label) == 3
