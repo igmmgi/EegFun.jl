@@ -388,7 +388,7 @@ function infomax_ica(
         original_mean,
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
         data_labels,
-        Dict{Int, Matrix{Float64}}(),
+        OrderedDict{Int, Matrix{Float64}}(),
     )
 
 end
@@ -400,15 +400,15 @@ Remove ICA components from data in-place and store the removed activations in th
 
 # Arguments
 - `dat::DataFrame`: DataFrame containing the data to clean
-- `ica::InfoIca`: ICA result object
+- `ica::InfoIca`: ICA result object (will be mutated to store removed activations)
 - `components_to_remove::Vector{Int}`: Vector of component indices to remove
 
 # Returns
-- `nothing` (removed activations are stored in `ica.removed_activations`)
+- `DataFrame`: The mutated data (same as input dat)
 
 # Example
 ```julia
-remove_ica_components!(dat.data, ica_result, [1, 3, 5])
+dat_cleaned = remove_ica_components!(dat.data, ica_result, [1, 3, 5])
 # Removed activations are now stored in ica_result.removed_activations
 ```
 """
@@ -447,13 +447,13 @@ function remove_ica_components!(dat::DataFrame, ica::InfoIca, components_to_remo
     # Update DataFrame in-place
     dat[!, ica.data_label] .= permutedims(cleaned_data)
 
-    return nothing
+    return dat
 end
 
 """
     remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
 
-Remove ICA components from data and return cleaned data.
+Remove ICA components from data and return cleaned data and updated ICA result.
 
 # Arguments
 - `dat::DataFrame`: DataFrame containing the data to clean
@@ -461,23 +461,24 @@ Remove ICA components from data and return cleaned data.
 - `components_to_remove::Vector{Int}`: Vector of component indices to remove
 
 # Returns
-- `DataFrame`: Copy of input data with components removed
+- `Tuple{DataFrame, InfoIca}`: Copy of input data with components removed, and copy of ICA result with stored activations
 
 # Example
 ```julia
-cleaned_data = remove_ica_components(dat.data, ica_result, [1, 3, 5])
+cleaned_data, ica_updated = remove_ica_components(dat.data, ica_result, [1, 3, 5])
 ```
 """
 function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
     dat_out = copy(dat)
-    remove_ica_components!(dat_out, ica, components_to_remove)
-    return dat_out
+    ica_out = copy(ica)  # Use our custom copy method
+    remove_ica_components!(dat_out, ica_out, components_to_remove)
+    return dat_out, ica_out
 end
 
 """
     remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
 
-Remove ICA components from ContinuousData and return cleaned data.
+Remove ICA components from ContinuousData and return cleaned data and updated ICA result.
 
 # Arguments
 - `dat::ContinuousData`: ContinuousData object containing the data to clean
@@ -485,39 +486,42 @@ Remove ICA components from ContinuousData and return cleaned data.
 - `components_to_remove::Vector{Int}`: Vector of component indices to remove
 
 # Returns
-- `ContinuousData`: Copy of input data with components removed
+- `Tuple{ContinuousData, InfoIca}`: Copy of input data with components removed, and copy of ICA result with stored activations
 
 # Example
 ```julia
-cleaned_dat = remove_ica_components(dat, ica_result, [1, 3, 5])
+cleaned_dat, ica_updated = remove_ica_components(dat, ica_result, [1, 3, 5])
 ```
 """
 function remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
     dat_out = copy(dat)
-    remove_ica_components!(dat_out.data, ica, components_to_remove)
-    return dat_out
+    ica_out = copy(ica)  # Use our custom copy method
+    remove_ica_components!(dat_out.data, ica_out, components_to_remove)
+    return dat_out, ica_out
 end
 
 """
     remove_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
 
-Remove ICA components from ContinuousData in-place.
+Remove ICA components from ContinuousData in-place and store the removed activations in the ICA result.
 
 # Arguments
 - `dat::ContinuousData`: ContinuousData object to clean in-place
-- `ica::InfoIca`: ICA result object
+- `ica::InfoIca`: ICA result object (will be mutated to store removed activations)
 - `components_to_remove::Vector{Int}`: Vector of component indices to remove
 
 # Returns
-- `nothing` (removed activations are stored in `ica.removed_activations`)
+- `ContinuousData`: The mutated data (same as input dat)
 
 # Example
 ```julia
-remove_ica_components!(dat, ica_result, [1, 3, 5])
+dat_cleaned = remove_ica_components!(dat, ica_result, [1, 3, 5])
+# Removed activations are now stored in ica_result.removed_activations
 ```
 """
 function remove_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
-    return remove_ica_components!(dat.data, ica, components_to_remove)
+    remove_ica_components!(dat.data, ica, components_to_remove)
+    return dat
 end
 
 
@@ -528,7 +532,7 @@ end
 
 
 """
-    restore_original_data!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+    restore_ica_components!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
 
 Restore ICA components to data in-place using stored activations.
 
@@ -542,10 +546,10 @@ Restore ICA components to data in-place using stored activations.
 
 # Example
 ```julia
-restore_original_data!(dat.data, ica_result, [1, 3, 5])
+restore_ica_components!(dat.data, ica_result, [1, 3, 5])
 ```
 """
-function restore_original_data!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+function restore_ica_components!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_restore .<= n_components)
         throw(ArgumentError("Components must be between 1 and $n_components"))
@@ -583,7 +587,7 @@ function restore_original_data!(dat::DataFrame, ica::InfoIca, components_to_rest
 end
 
 """
-    restore_original_data(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+    restore_ica_components(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
 
 Restore ICA components to data and return restored data.
 
@@ -597,17 +601,17 @@ Restore ICA components to data and return restored data.
 
 # Example
 ```julia
-restored_data = restore_original_data(dat.data, ica_result, [1, 3, 5])
+restored_data = restore_ica_components(dat.data, ica_result, [1, 3, 5])
 ```
 """
-function restore_original_data(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+function restore_ica_components(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
     dat_out = copy(dat)
-    restore_original_data!(dat_out, ica, components_to_restore)
+    restore_ica_components!(dat_out, ica, components_to_restore)
     return dat_out
 end
 
 """
-    restore_original_data(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+    restore_ica_components(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
 
 Restore ICA components to ContinuousData and return restored data.
 
@@ -621,17 +625,17 @@ Restore ICA components to ContinuousData and return restored data.
 
 # Example
 ```julia
-restored_dat = restore_original_data(dat, ica_result, [1, 3, 5])
+restored_dat = restore_ica_components(dat, ica_result, [1, 3, 5])
 ```
 """
-function restore_original_data(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+function restore_ica_components(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
     dat_out = copy(dat)
-    restore_original_data!(dat_out.data, ica, components_to_restore)
+    restore_ica_components!(dat_out.data, ica, components_to_restore)
     return dat_out
 end
 
 """
-    restore_original_data!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+    restore_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
 
 Restore ICA components to ContinuousData in-place.
 
@@ -645,11 +649,11 @@ Restore ICA components to ContinuousData in-place.
 
 # Example
 ```julia
-restore_original_data!(dat, ica_result, [1, 3, 5])
+restore_ica_components!(dat, ica_result, [1, 3, 5])
 ```
 """
-function restore_original_data!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
-    return restore_original_data!(dat.data, ica, components_to_restore)
+function restore_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+    return restore_ica_components!(dat.data, ica, components_to_restore)
 end
 
 

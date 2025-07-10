@@ -1029,20 +1029,20 @@ end
 # Apply ICA component restoration based on state type
 function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
     if isnothing(removed_activations)
-         @warn "Cannot restore ICA components: No previous activations stored."
+         @minimal_warning "Cannot restore ICA components: No previous activations stored."
          return
     end
-    df_new = restore_original_data(state.current[], ica, components_removed, removed_activations)
+    df_new = restore_ica_components(state.current[], ica, components_removed)
     state.current[] = df_new # Update observable
 end
 
 function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
     if isnothing(removed_activations)
-         @warn "Cannot restore ICA components: No previous activations stored."
+         @minimal_warning "Cannot restore ICA components: No previous activations stored."
          return
     end
     for df_obs in state.current
-        df_new = restore_original_data(df_obs[], ica, components_removed, removed_activations)
+        df_new = restore_ica_components(df_obs[], ica, components_removed)
         df_obs[] = df_new # Update observable
     end
 end
