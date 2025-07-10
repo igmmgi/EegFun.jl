@@ -388,29 +388,51 @@ function infomax_ica(
         original_mean,
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
         data_labels,
+        Dict{Int, Matrix{Float64}}(),
     )
 
 end
 
-function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
+"""
+    remove_ica_components!(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
 
+Remove ICA components from data in-place and store the removed activations in the ICA result.
+
+# Arguments
+- `dat::DataFrame`: DataFrame containing the data to clean
+- `ica::InfoIca`: ICA result object
+- `components_to_remove::Vector{Int}`: Vector of component indices to remove
+
+# Returns
+- `nothing` (removed activations are stored in `ica.removed_activations`)
+
+# Example
+```julia
+remove_ica_components!(dat.data, ica_result, [1, 3, 5])
+# Removed activations are now stored in ica_result.removed_activations
+```
+"""
+function remove_ica_components!(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_remove .<= n_components)
         throw(ArgumentError("Components must be between 1 and $n_components"))
     end
 
-    dat_out = copy(dat)
-
     # Get data dimensions
     n_channels = length(ica.data_label)
 
     # Get data and scale it
-    data = permutedims(Matrix(dat_out[!, ica.data_label]))
+    data = permutedims(Matrix(dat[!, ica.data_label]))
     data .-= ica.mean
     data ./= ica.scale
 
-    # Get removed activations before transformation
-    removed_activations = view(ica.unmixing, components_to_remove, :) * data
+    # Get removed activations before transformation and store individually
+    all_removed_activations = view(ica.unmixing, components_to_remove, :) * data
+    
+    # Store each component's activations separately
+    for (i, comp_idx) in enumerate(components_to_remove)
+        ica.removed_activations[comp_idx] = all_removed_activations[i:i, :]
+    end
 
     # Pre-compute the transformation matrix
     tra =
@@ -422,50 +444,217 @@ function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remov
     cleaned_data .*= ica.scale
     cleaned_data .+= ica.mean
 
-    # Create output DataFrame and assign result
-    dat_out[!, ica.data_label] .= permutedims(cleaned_data)
+    # Update DataFrame in-place
+    dat[!, ica.data_label] .= permutedims(cleaned_data)
 
-    return dat_out, removed_activations
-
+    return nothing
 end
 
-function restore_original_data(
-    dat::DataFrame,
-    ica::InfoIca,
-    components_removed::Vector{Int},
-    removed_activations::Matrix{Float64},
-)
+"""
+    remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
+
+Remove ICA components from data and return cleaned data.
+
+# Arguments
+- `dat::DataFrame`: DataFrame containing the data to clean
+- `ica::InfoIca`: ICA result object
+- `components_to_remove::Vector{Int}`: Vector of component indices to remove
+
+# Returns
+- `DataFrame`: Copy of input data with components removed
+
+# Example
+```julia
+cleaned_data = remove_ica_components(dat.data, ica_result, [1, 3, 5])
+```
+"""
+function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
+    dat_out = copy(dat)
+    remove_ica_components!(dat_out, ica, components_to_remove)
+    return dat_out
+end
+
+"""
+    remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
+
+Remove ICA components from ContinuousData and return cleaned data.
+
+# Arguments
+- `dat::ContinuousData`: ContinuousData object containing the data to clean
+- `ica::InfoIca`: ICA result object
+- `components_to_remove::Vector{Int}`: Vector of component indices to remove
+
+# Returns
+- `ContinuousData`: Copy of input data with components removed
+
+# Example
+```julia
+cleaned_dat = remove_ica_components(dat, ica_result, [1, 3, 5])
+```
+"""
+function remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
+    dat_out = copy(dat)
+    remove_ica_components!(dat_out.data, ica, components_to_remove)
+    return dat_out
+end
+
+"""
+    remove_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
+
+Remove ICA components from ContinuousData in-place.
+
+# Arguments
+- `dat::ContinuousData`: ContinuousData object to clean in-place
+- `ica::InfoIca`: ICA result object
+- `components_to_remove::Vector{Int}`: Vector of component indices to remove
+
+# Returns
+- `nothing` (removed activations are stored in `ica.removed_activations`)
+
+# Example
+```julia
+remove_ica_components!(dat, ica_result, [1, 3, 5])
+```
+"""
+function remove_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
+    return remove_ica_components!(dat.data, ica, components_to_remove)
+end
 
 
+
+
+
+
+
+
+"""
+    restore_original_data!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+
+Restore ICA components to data in-place using stored activations.
+
+# Arguments
+- `dat::DataFrame`: DataFrame containing the data to restore
+- `ica::InfoIca`: ICA result object with stored activations
+- `components_to_restore::Vector{Int}`: Vector of component indices to restore
+
+# Returns
+- `nothing` (data is modified in-place)
+
+# Example
+```julia
+restore_original_data!(dat.data, ica_result, [1, 3, 5])
+```
+"""
+function restore_original_data!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
     n_components = size(ica.unmixing, 1)
-    if !all(1 .<= components_removed .<= n_components)
+    if !all(1 .<= components_to_restore .<= n_components)
         throw(ArgumentError("Components must be between 1 and $n_components"))
     end
 
-    dat_out = copy(dat)
+    # Check that all components to restore have stored activations
+    for comp in components_to_restore
+        if !haskey(ica.removed_activations, comp)
+            throw(ArgumentError("Component $comp has no stored activations to restore"))
+        end
+    end
 
     # Get data and scale it
-    data = permutedims(Matrix(dat_out[!, ica.data_label]))
+    data = permutedims(Matrix(dat[!, ica.data_label]))
     data .-= ica.mean
     data ./= ica.scale
 
     # Get current activations
     activations = ica.unmixing * data
 
-    # Restore removed components
-    activations[components_removed, :] .= removed_activations
+    # Restore each component's stored activations
+    for comp in components_to_restore
+        activations[comp, :] .= vec(ica.removed_activations[comp])
+    end
 
     # Back to channel space and restore scaling
     restored_data = ica.mixing * activations
     restored_data .*= ica.scale
     restored_data .+= ica.mean
 
-    # Create output and assign result
-    dat_out[!, ica.data_label] .= permutedims(restored_data)
+    # Update DataFrame in-place
+    dat[!, ica.data_label] .= permutedims(restored_data)
 
-    return dat_out
-
+    return nothing
 end
+
+"""
+    restore_original_data(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+
+Restore ICA components to data and return restored data.
+
+# Arguments
+- `dat::DataFrame`: DataFrame containing the data to restore
+- `ica::InfoIca`: ICA result object with stored activations
+- `components_to_restore::Vector{Int}`: Vector of component indices to restore
+
+# Returns
+- `DataFrame`: Copy of input data with components restored
+
+# Example
+```julia
+restored_data = restore_original_data(dat.data, ica_result, [1, 3, 5])
+```
+"""
+function restore_original_data(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+    dat_out = copy(dat)
+    restore_original_data!(dat_out, ica, components_to_restore)
+    return dat_out
+end
+
+"""
+    restore_original_data(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+
+Restore ICA components to ContinuousData and return restored data.
+
+# Arguments
+- `dat::ContinuousData`: ContinuousData object containing the data to restore
+- `ica::InfoIca`: ICA result object with stored activations
+- `components_to_restore::Vector{Int}`: Vector of component indices to restore
+
+# Returns
+- `ContinuousData`: Copy of input data with components restored
+
+# Example
+```julia
+restored_dat = restore_original_data(dat, ica_result, [1, 3, 5])
+```
+"""
+function restore_original_data(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+    dat_out = copy(dat)
+    restore_original_data!(dat_out.data, ica, components_to_restore)
+    return dat_out
+end
+
+"""
+    restore_original_data!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+
+Restore ICA components to ContinuousData in-place.
+
+# Arguments
+- `dat::ContinuousData`: ContinuousData object to restore in-place
+- `ica::InfoIca`: ICA result object with stored activations
+- `components_to_restore::Vector{Int}`: Vector of component indices to restore
+
+# Returns
+- `nothing` (data is modified in-place)
+
+# Example
+```julia
+restore_original_data!(dat, ica_result, [1, 3, 5])
+```
+"""
+function restore_original_data!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+    return restore_original_data!(dat.data, ica, components_to_restore)
+end
+
+
+
+
 
 function ica(dat::ContinuousData; kwargs...)
     run_ica(dat; kwargs...)
@@ -973,55 +1162,6 @@ function combine_artifact_components(
     )
 end
 
-"""
-    get_all_artifact_components(ica_result::InfoIca, dat::ContinuousData; kwargs...)
-
-Convenience function to identify all artifact components and return them in a combined structure.
-
-# Arguments
-- `ica_result::InfoIca`: The ICA result object
-- `dat::ContinuousData`: The continuous data
-
-# Keyword Arguments
-- All keyword arguments are passed through to the individual identification functions
-- See individual function documentation for available options
-
-# Returns
-- `ArtifactComponents`: Combined structure containing all artifact components and metrics
-"""
-function get_all_artifact_components(ica_result::InfoIca, dat::ContinuousData; kwargs...)
-    # Extract relevant kwargs for each function
-    eog_kwargs = Dict{Symbol, Any}()
-    ecg_kwargs = Dict{Symbol, Any}()
-    line_noise_kwargs = Dict{Symbol, Any}()
-    channel_noise_kwargs = Dict{Symbol, Any}()
-    
-    # Map kwargs to appropriate functions
-    for (key, value) in kwargs
-        if key in [:vEOG_channel, :hEOG_channel, :z_threshold]
-            eog_kwargs[key] = value
-        elseif key in [:min_bpm, :max_bpm, :min_prominence_std, :min_peaks, :max_ibi_std_s, :min_peak_ratio, :sample_selection]
-            ecg_kwargs[key] = value
-        elseif key in [:line_freq, :freq_bandwidth, :min_harmonic_power]
-            line_noise_kwargs[key] = value
-        elseif key in [:z_threshold]
-            channel_noise_kwargs[key] = value
-        end
-    end
-    
-    # Call identification functions
-    eog_comps, _ = identify_eog_components(ica_result, dat; eog_kwargs...)
-    ecg_comps, _ = identify_ecg_components(ica_result, dat; ecg_kwargs...)
-    line_noise_comps, _ = identify_line_noise_components(ica_result, dat; line_noise_kwargs...)
-    channel_noise_comps, _ = identify_spatial_kurtosis_components(ica_result, dat; channel_noise_kwargs...)
-    
-    return combine_artifact_components(
-        eog_comps,
-        ecg_comps,
-        line_noise_comps,
-        channel_noise_comps
-    )
-end
 
 """
     get_all_components(artifacts::ArtifactComponents)
@@ -1034,7 +1174,7 @@ Get all unique artifact component indices as a single vector.
 # Returns
 - `Vector{Int}`: Sorted vector of all unique artifact component indices
 """
-function get_all_components(artifacts::ArtifactComponents)
+function get_all_ica_components(artifacts::ArtifactComponents)
     all_comps = Set{Int}()
     
     # Add EOG components
@@ -1050,41 +1190,7 @@ function get_all_components(artifacts::ArtifactComponents)
     return sort(collect(all_comps))
 end
 
-"""
-    get_component_type(artifacts::ArtifactComponents, comp_idx::Int)
 
-Get the type(s) of artifact for a specific component index.
-
-# Arguments
-- `artifacts::ArtifactComponents`: The artifact components structure
-- `comp_idx::Int`: Component index to check
-
-# Returns
-- `Vector{Symbol}`: Vector of artifact types for this component
-"""
-function get_component_type(artifacts::ArtifactComponents, comp_idx::Int)
-    types = Symbol[]
-    
-    # Check EOG types
-    for (eog_type, comps) in artifacts.eog
-        if comp_idx in comps
-            push!(types, eog_type)
-        end
-    end
-    
-    # Check other types
-    if comp_idx in artifacts.ecg
-        push!(types, :ECG)
-    end
-    if comp_idx in artifacts.line_noise
-        push!(types, :LineNoise)
-    end
-    if comp_idx in artifacts.channel_noise
-        push!(types, :ChannelNoise)
-    end
-    
-    return types
-end
 
 """
     Base.show(io::IO, artifacts::ArtifactComponents)
@@ -1092,93 +1198,15 @@ end
 Custom printing for ArtifactComponents structure.
 """
 function Base.show(io::IO, artifacts::ArtifactComponents)
-    println(io, "ArtifactComponents Summary:")
-    println(io, "==========================")
-    
-    # EOG components
-    total_eog = length(artifacts.eog[:vEOG]) + length(artifacts.eog[:hEOG])
-    println(io, "EOG Components: $total_eog total")
-    if !isempty(artifacts.eog[:vEOG])
-        println(io, "  Vertical EOG: $(artifacts.eog[:vEOG])")
-    end
-    if !isempty(artifacts.eog[:hEOG])
-        println(io, "  Horizontal EOG: $(artifacts.eog[:hEOG])")
-    end
-    
-    # ECG components
-    println(io, "ECG Components: $(length(artifacts.ecg))")
-    if !isempty(artifacts.ecg)
-        println(io, "  ECG: $(artifacts.ecg)")
-    end
-    
-    # Line noise components
-    println(io, "Line Noise Components: $(length(artifacts.line_noise))")
-    if !isempty(artifacts.line_noise)
-        println(io, "  Line Noise: $(artifacts.line_noise)")
-    end
-    
-    # Channel noise components
-    println(io, "Channel Noise Components: $(length(artifacts.channel_noise))")
-    if !isempty(artifacts.channel_noise)
-        println(io, "  Channel Noise: $(artifacts.channel_noise)")
-    end
-    
-    # Summary
-    all_comps = get_all_components(artifacts)
-    println(io, "Total Unique Artifact Components: $(length(all_comps))")
-    if !isempty(all_comps)
-        println(io, "All Components: $(all_comps)")
-    end
-end
-
-"""
-    print_detailed_artifacts(artifacts::ArtifactComponents)
-
-Print detailed information about all artifact components.
-"""
-function print_detailed_artifacts(artifacts::ArtifactComponents)
-    println("Detailed Artifact Components Analysis")
-    println("====================================")
-    
-    # EOG details
-    println("\nEOG Components:")
-    println("---------------")
-    if !isempty(artifacts.eog[:vEOG])
-        println("Vertical EOG Components: $(artifacts.eog[:vEOG])")
-    end
-    if !isempty(artifacts.eog[:hEOG])
-        println("Horizontal EOG Components: $(artifacts.eog[:hEOG])")
-    end
-    
-    # ECG details
-    println("\nECG Components:")
-    println("---------------")
-    if !isempty(artifacts.ecg)
-        println("ECG Components: $(artifacts.ecg)")
-    end
-    
-    # Line noise details
-    println("\nLine Noise Components:")
-    println("---------------------")
-    if !isempty(artifacts.line_noise)
-        println("Line Noise Components: $(artifacts.line_noise)")
-    end
-    
-    # Channel noise details
-    println("\nChannel Noise Components:")
-    println("------------------------")
-    if !isempty(artifacts.channel_noise)
-        println("Channel Noise Components: $(artifacts.channel_noise)")
-    end
-    
-    # Summary
-    all_comps = get_all_components(artifacts)
-    println("\nSummary:")
-    println("--------")
-    println("Total Unique Artifact Components: $(length(all_comps))")
-    if !isempty(all_comps)
-        println("All Components: $(all_comps)")
-    end
+    # Get all components for and print short summary
+    all_comps = get_all_ica_components(artifacts)
+    println(io, "ICA Artifact Components")
+    println(io, "vEOG: $(artifacts.eog[:vEOG])")
+    println(io, "hEOG: $(artifacts.eog[:hEOG])")
+    println(io, "ECG: $(artifacts.ecg)")
+    println(io, "Line Noise: $(artifacts.line_noise)")
+    println(io, "Channel Noise: $(artifacts.channel_noise)")
+    println(io, "All: $all_comps")
 end
 
 

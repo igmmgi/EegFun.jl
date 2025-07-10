@@ -441,6 +441,30 @@ ecg_comps, ecg_comps_metrics_df = eegfun.identify_ecg_components(ica_result, dat
 line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
 channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
 
+
+# Method 1: Combine existing results
+artifacts = eegfun.combine_artifact_components(
+    eog_comps,
+    ecg_comps,
+    line_noise_comps,
+    channel_noise_comps
+)
+
+all_comps = eegfun.get_all_ica_components(artifacts)
+dat_ica_removed = eegfun.remove_ica_components(dat, ica_result, all_comps)
+
+dat_ica_removed.data
+dat_ica_reconstructed = eegfun.restore_original_data(dat_ica_removed, ica_result, all_comps)
+
+dat.data ≈ dat_ica_reconstructed.data
+
+dat_ica_reconstructed_1 = eegfun.restore_original_data(dat_ica_removed, ica_result, [1])
+dat_ica_reconstructed_2 = eegfun.restore_original_data(dat_ica_reconstructed_1, ica_result, [4])
+dat_ica_reconstructed_3 = eegfun.restore_original_data(dat_ica_reconstructed_2, ica_result, [7])
+dat_ica_reconstructed_4 = eegfun.restore_original_data(dat_ica_reconstructed_3, ica_result, [39])
+
+
+
 fig, ax = eegfun.plot_eye_component_features(eye_components, metrics_df)
 fig, ax = eegfun.plot_ecg_component_features_(ecg_components, metrics_df)
 fig, ax = eegfun.plot_line_noise_components(line_noise_comps, metrics_df)
@@ -458,16 +482,7 @@ eegfun.plot_ica_component_spectrum(ica_result, dat, 1:10)
 
 fig, ax = eegfun.plot_channel_spectrum(dat)
 
-# Example of using the new ArtifactComponents structure
-println("\n=== Example: Using ArtifactComponents Structure ===")
 
-# Method 1: Combine existing results
-artifacts = eegfun.combine_artifact_components(
-    eog_comps,
-    ecg_comps,
-    line_noise_comps,
-    channel_noise_comps
-)
 
 # Print summary
 println(artifacts)
@@ -479,11 +494,7 @@ eegfun.print_detailed_artifacts(artifacts)
 all_comps = eegfun.get_all_components(artifacts)
 println("\nAll unique artifact components: $all_comps")
 
-# Check what type a specific component is
-for comp in all_comps
-    types = eegfun.get_component_type(artifacts, comp)
-    println("Component $comp is classified as: $types")
-end
+
 
 # Method 2: Use convenience function to get all artifacts at once
 println("\n=== Using convenience function ===")

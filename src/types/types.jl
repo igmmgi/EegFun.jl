@@ -160,6 +160,7 @@ struct InfoIca
     mean::Vector{Float64}
     ica_label::Vector{Symbol}
     data_label::Vector{Symbol}
+    removed_activations::Dict{Int, Matrix{Float64}}
 end
 
 # Custom display method for InfoIca
