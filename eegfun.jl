@@ -451,17 +451,17 @@ artifacts = eegfun.combine_artifact_components(
 )
 
 all_comps = eegfun.get_all_ica_components(artifacts)
-dat_ica_removed = eegfun.remove_ica_components(dat, ica_result, all_comps)
+dat_ica_removed, ica_result_updated = eegfun.remove_ica_components(dat, ica_result, all_comps)
 
 dat_ica_removed.data
-dat_ica_reconstructed = eegfun.restore_original_data(dat_ica_removed, ica_result, all_comps)
+dat_ica_reconstructed = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, all_comps)
 
 dat.data ≈ dat_ica_reconstructed.data
 
-dat_ica_reconstructed_1 = eegfun.restore_original_data(dat_ica_removed, ica_result, [1])
-dat_ica_reconstructed_2 = eegfun.restore_original_data(dat_ica_reconstructed_1, ica_result, [4])
-dat_ica_reconstructed_3 = eegfun.restore_original_data(dat_ica_reconstructed_2, ica_result, [7])
-dat_ica_reconstructed_4 = eegfun.restore_original_data(dat_ica_reconstructed_3, ica_result, [39])
+dat_ica_reconstructed_1 = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, [1])
+dat_ica_reconstructed_2 = eegfun.restore_ica_components(dat_ica_reconstructed_1, ica_result_updated, [4])
+dat_ica_reconstructed_3 = eegfun.restore_ica_components(dat_ica_reconstructed_2, ica_result_updated, [7])
+dat_ica_reconstructed_4 = eegfun.restore_ica_components(dat_ica_reconstructed_3, ica_result_updated, [39])
 
 
 

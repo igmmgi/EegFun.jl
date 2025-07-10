@@ -160,7 +160,7 @@ struct InfoIca
     mean::Vector{Float64}
     ica_label::Vector{Symbol}
     data_label::Vector{Symbol}
-    removed_activations::Dict{Int, Matrix{Float64}}
+    removed_activations::OrderedDict{Int, Matrix{Float64}}
 end
 
 # Custom display method for InfoIca
@@ -195,6 +195,21 @@ end
 # Compact display for arrays
 function Base.show(io::IO, ::MIME"text/plain", ica::InfoIca)
     show(io, ica)
+end
+
+# Custom copy method for InfoIca
+function Base.copy(ica::InfoIca)::InfoIca
+    return InfoIca(
+        copy(ica.unmixing),
+        copy(ica.mixing),
+        copy(ica.sphere),
+        copy(ica.variance),
+        ica.scale,
+        copy(ica.mean),
+        copy(ica.ica_label),
+        copy(ica.data_label),
+        copy(ica.removed_activations)
+    )
 end
 
 """
