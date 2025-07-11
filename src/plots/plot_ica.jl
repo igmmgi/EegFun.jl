@@ -125,7 +125,7 @@ Plot multiple ICA component topographies in a grid layout within a new Figure.
 - `layout::DataFrame`: DataFrame containing channel layout information (needs `x`, `y` or `x2`, `y2`).
 
 # Keyword Arguments
-- `comps=nothing`: Vector of component indices to plot. If `nothing`, plots all components.
+- `component_selection::Function`: Function that returns boolean vector for component filtering (default: all components).
 - `dims=nothing`: Tuple specifying grid dimensions (rows, cols). If `nothing`, calculates best square-ish grid.
 - `head_kwargs::Dict`: Controls the head outline for all plots.
 - `point_kwargs::Dict`: Controls channel markers for all plots.
@@ -136,11 +136,44 @@ Plot multiple ICA component topographies in a grid layout within a new Figure.
 
 # Returns
 - `fig::Figure`: The generated Makie Figure containing the grid of topoplots.
+
+# Examples
+
+## Basic Usage
+```julia
+# Plot all components (default)
+fig = plot_ica_topoplot(ica_result, layout)
+
+# Plot specific components
+fig = plot_ica_topoplot(ica_result, layout, component_selection = components([1, 3, 5]))
+
+# Plot components 1-10
+fig = plot_ica_topoplot(ica_result, layout, component_selection = components(1:10))
+
+# Plot all components except 1 and 2
+fig = plot_ica_topoplot(ica_result, layout, component_selection = components_not([1, 2]))
+
+# Plot only component 1
+fig = plot_ica_topoplot(ica_result, layout, component_selection = components(1))
+```
+
+## Advanced Selection
+```julia
+# Plot components with custom selection function
+fig = plot_ica_topoplot(ica_result, layout, 
+    component_selection = x -> x .<= 10  # Only first 10 components
+)
+
+# Plot even-numbered components
+fig = plot_ica_topoplot(ica_result, layout, 
+    component_selection = x -> iseven.(x)
+)
+```
 """
 function plot_ica_topoplot(
     ica,
     layout;
-    comps = nothing,
+    component_selection::Function = components(),
     dims = nothing,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
@@ -178,9 +211,9 @@ function plot_ica_topoplot(
         polar_to_cartesian_xy!(layout)
     end
 
-    if isnothing(comps)
-        comps = 1:size(ica.mixing)[2]
-    end
+    # Get selected components using the component_selection function
+    all_components = 1:size(ica.mixing, 2)
+    comps = all_components[component_selection(all_components)]
 
     # Create figure with reduced margins
     fig = Figure(

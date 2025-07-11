@@ -209,15 +209,15 @@ ica_result = eegfun.run_ica(dat; exclude_samples = [:is_extreme_value])
 # plot ICA components
 eegfun.plot_ica_topoplot(ica_result, dat.layout)
 eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
-eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
-eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15; use_global_scale = true)
-eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
-eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15))
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15); use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]))
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]);  use_global_scale = true)
 
-eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5];
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5]);
                   use_global_scale = true,
                   colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
-eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5, 7, 9]; dims = (2, 3),
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3),
                   use_global_scale = true,
                   colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
 
@@ -423,13 +423,15 @@ fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels_
 
 # plot ICA components
 eegfun.plot_ica_topoplot(ica_result, dat.layout)
+
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:10))
 # eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
-# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15)
-# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = 1:15; use_global_scale = true)
-# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3])
-# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1,3];  use_global_scale = true)
-# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5]; use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
-# eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5, 7, 9]; dims = (2, 3), use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15))
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15); use_global_scale = true)
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]))
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]);  use_global_scale = true)
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5]); use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
+# eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3), use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
 
 eegfun.plot_ica_component_activation(dat, ica_result)
 
