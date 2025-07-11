@@ -431,7 +431,8 @@ eegfun.plot_ica_topoplot(ica_result, dat.layout)
 # eegfun.plot_ica_topoplot(ica_result, dat.layout, comps = [1, 3, 5, 7, 9]; dims = (2, 3), use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
 
 eegfun.plot_ica_component_activation(dat, ica_result)
-# eegfun.plot_databrowser(dat, ica_result)
+
+eegfun.plot_databrowser(dat, ica_result)
 
 # dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)

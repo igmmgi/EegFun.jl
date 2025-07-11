@@ -14,7 +14,8 @@ mutable struct IcaState
     removed_activations::Union{Nothing,Any}
     components_to_remove::Union{Nothing,Vector{Int}}
     components_removed::Union{Nothing,Vector{Int}}
-    IcaState() = new(nothing, nothing, nothing)
+    current_ica::Union{Nothing,InfoIca}
+    IcaState() = new(nothing, nothing, nothing, nothing)
 end
 
 mutable struct ExtraChannelVis
@@ -385,7 +386,12 @@ end
 # Update create_ica_menu to use the new struct
 function create_ica_menu(fig, ax, state, ica)
 
-    options = vcat(["None"], ica.ica_label)
+    # Initialize current_ica if not set
+    if isnothing(state.ica_state.current_ica)
+        state.ica_state.current_ica = ica
+    end
+
+    options = vcat(["None"], state.ica_state.current_ica.ica_label)
     menu = create_menu(fig, options, "None", "ICA Components")
 
     on(menu[1].selection) do s
@@ -400,26 +406,26 @@ function create_ica_menu(fig, ax, state, ica)
             if !isnothing(state.ica_state.components_removed)
                  apply_ica_restore!(
                     state.data, 
-                    ica, 
-                    state.ica_state.components_removed, 
-                    state.ica_state.removed_activations
+                    state.ica_state.current_ica, 
+                    state.ica_state.components_removed
                  )
             end
-            # Apply removal using the helper function
-            state.ica_state.removed_activations = apply_ica_removal!(
+            # Apply removal using the helper function and update the ICA object
+            ica_updated = apply_ica_removal!(
                 state.data, 
-                ica, 
+                state.ica_state.current_ica, 
                 state.ica_state.components_to_remove
             )
+            # Replace the ICA object with the updated one
+            state.ica_state.current_ica = ica_updated
             state.ica_state.components_removed = state.ica_state.components_to_remove
         else # Selected "None"
              # Restore previous state if components were removed
              if !isnothing(state.ica_state.components_removed)
                  apply_ica_restore!(
                     state.data, 
-                    ica, 
-                    state.ica_state.components_removed, 
-                    state.ica_state.removed_activations
+                    state.ica_state.current_ica, 
+                    state.ica_state.components_removed
                  )
                  # Reset ICA state tracking
                  state.ica_state.removed_activations = nothing 
@@ -1009,41 +1015,63 @@ end
 
 # Apply ICA component removal based on state type
 function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    df_new, activations = remove_ica_components(state.current[], ica, components_to_remove)
+    df_new, ica_updated = remove_ica_components(state.current[], ica, components_to_remove)
     state.current[] = df_new # Update observable
-    return activations
+    return ica_updated
 end
 
 function apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    first_epoch_activations = nothing
+    first_epoch_ica_updated = nothing
     for (i, df_obs) in enumerate(state.current)
-        df_new, activations = remove_ica_components(df_obs[], ica, components_to_remove)
+        df_new, ica_updated = remove_ica_components(df_obs[], ica, components_to_remove)
         df_obs[] = df_new # Update observable
         if i == 1
-            first_epoch_activations = activations
+            first_epoch_ica_updated = ica_updated
         end
     end
-    return first_epoch_activations
+    return first_epoch_ica_updated
 end
 
 # Apply ICA component restoration based on state type
-function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
-    if isnothing(removed_activations)
-         @minimal_warning "Cannot restore ICA components: No previous activations stored."
-         return
+function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components_removed::Vector{Int})
+    # Filter components that actually have stored activations
+    available_components = Int[]
+    for comp in components_removed
+        if haskey(ica.removed_activations, comp)
+            push!(available_components, comp)
+        else
+            @minimal_warning "Component $comp has no stored activations and will be skipped."
+        end
     end
-    df_new, ica_updated = restore_ica_components(state.current[], ica, components_removed)
+    
+    if isempty(available_components)
+        @minimal_warning "No components available for restoration."
+        return
+    end
+    
+    df_new, ica_updated = restore_ica_components(state.current[], ica, available_components)
     state.current[] = df_new # Update observable
     # Note: ica_updated is not used here since we're working with a copy
 end
 
-function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
-    if isnothing(removed_activations)
-         @minimal_warning "Cannot restore ICA components: No previous activations stored."
-         return
+function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int})
+    # Filter components that actually have stored activations
+    available_components = Int[]
+    for comp in components_removed
+        if haskey(ica.removed_activations, comp)
+            push!(available_components, comp)
+        else
+            @minimal_warning "Component $comp has no stored activations and will be skipped."
+        end
     end
+    
+    if isempty(available_components)
+        @minimal_warning "No components available for restoration."
+        return
+    end
+    
     for df_obs in state.current
-        df_new, ica_updated = restore_ica_components(df_obs[], ica, components_removed)
+        df_new, ica_updated = restore_ica_components(df_obs[], ica, available_components)
         df_obs[] = df_new # Update observable
         # Note: ica_updated is not used here since we're working with a copy
     end
