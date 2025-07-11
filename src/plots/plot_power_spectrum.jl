@@ -203,18 +203,14 @@ end
 
 
 """
-    plot_ica_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int; kwargs...)
-    plot_ica_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_indices::Vector{Int}; kwargs...)
-    plot_ica_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_indices::AbstractRange{Int}; kwargs...)
+    plot_ica_component_spectrum(ica_result::InfoIca, dat::ContinuousData; component_selection::Function = components(), kwargs...)
 
-Plot power spectrum of ICA component(s).
+Plot power spectrum of ICA component(s) using a component selection predicate.
 
 # Arguments
 - `ica_result::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data.
-- `comp_idx::Int`: Single component index to plot.
-- `comp_indices::Vector{Int}`: Vector of component indices to plot.
-- `comp_indices::AbstractRange{Int}`: Range of component indices to plot.
+- `component_selection::Function`: Function that returns boolean vector for component filtering (default: all components).
 
 # Keyword Arguments
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
@@ -233,77 +229,29 @@ Plot power spectrum of ICA component(s).
 
 # Examples
 ```julia
-# Plot single component
-plot_ica_component_spectrum(ica_result, dat, 1)
-plot_ica_component_spectrum(ica_result, dat, 1, sample_selection = samples_not(:is_extreme_value_100))
+# Plot all components (default)
+plot_ica_component_spectrum(ica_result, dat)
 
-# Plot multiple components
-plot_ica_component_spectrum(ica_result, dat, [1, 3, 5])
-plot_ica_component_spectrum(ica_result, dat, 1:10, sample_selection = samples(:epoch_window))
+# Plot specific components
+plot_ica_component_spectrum(ica_result, dat, component_selection = components([1, 3, 5]))
 
-# Plot all components
-plot_ica_component_spectrum(ica_result, dat, Int[])
+# Plot components 1-10
+plot_ica_component_spectrum(ica_result, dat, component_selection = components(1:10))
+
+# Plot all components except 1 and 2
+plot_ica_component_spectrum(ica_result, dat, component_selection = components_not([1, 2]))
+
+# Plot component 1 only
+plot_ica_component_spectrum(ica_result, dat, component_selection = components(1))
+
+# With sample selection
+plot_ica_component_spectrum(ica_result, dat, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
 ```
 """
 function plot_ica_component_spectrum(
     ica_result::InfoIca,
-    dat::ContinuousData,
-    comp_idx::Int;
-    sample_selection::Function = samples(),
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    window_size::Int=1024,
-    overlap::Real=0.5,
-    max_freq::Real=100.0,
-    x_scale::Symbol=:linear,
-    y_scale::Symbol=:linear,
-    window_function::Function=DSP.hanning
-)
-    return plot_ica_component_spectrum(ica_result, dat, [comp_idx];
-                                     sample_selection=sample_selection,
-                                     line_freq=line_freq,
-                                     freq_bandwidth=freq_bandwidth,
-                                     window_size=window_size,
-                                     overlap=overlap,
-                                     max_freq=max_freq,
-                                     x_scale=x_scale,
-                                     y_scale=y_scale,
-                                     window_function=window_function)
-end
-
-function plot_ica_component_spectrum(
-    ica_result::InfoIca,
-    dat::ContinuousData,
-    comp_indices::AbstractRange{Int};
-    sample_selection::Function = samples(),
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    window_size::Int=1024,
-    overlap::Real=0.5,
-    max_freq::Real=100.0,
-    x_scale::Symbol=:linear,
-    y_scale::Symbol=:linear,
-    window_function::Function=DSP.hanning
-)
-    return plot_ica_component_spectrum(ica_result, dat, collect(comp_indices);
-                                     sample_selection=sample_selection,
-                                     line_freq=line_freq,
-                                     freq_bandwidth=freq_bandwidth,
-                                     window_size=window_size,
-                                     overlap=overlap,
-                                     max_freq=max_freq,
-                                     x_scale=x_scale,
-                                     y_scale=y_scale,
-                                     window_function=window_function)
-end
-
-
-
-
-function plot_ica_component_spectrum(
-    ica_result::InfoIca,
-    dat::ContinuousData,
-    comp_indices::Vector{Int};
+    dat::ContinuousData;
+    component_selection::Function = components(),
     sample_selection::Function = samples(),
     line_freq::Real=50.0,
     freq_bandwidth::Real=1.0,
@@ -315,11 +263,13 @@ function plot_ica_component_spectrum(
     window_function::Function=DSP.hanning,
     display_plot::Bool=true
 )
-    # If empty vector, use all components
-    if isempty(comp_indices)
-        comp_indices = 1:size(ica_result.unmixing, 1)
-    end
+    # Get selected components using the predicate
+    selected_components = get_selected_components(ica_result, component_selection)
     
+    # If empty vector, use all components
+    if isempty(selected_components)
+        selected_components = 1:size(ica_result.unmixing, 1)
+    end
     # Apply sample selection
     selected_samples = get_selected_samples(dat, sample_selection)
     
@@ -337,13 +287,13 @@ function plot_ica_component_spectrum(
     component_df = DataFrame(:time => dat.data.time[selected_samples])
     
     # Add each component to the DataFrame with consistent naming
-    for comp_idx in comp_indices
+    for comp_idx in selected_components
         component_name = Symbol("IC_$(comp_idx)")
         component_df[!, component_name] = components[comp_idx, :]
     end
     
     # Create list of component symbols to plot
-    components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in comp_indices]
+    components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in selected_components]
     
     # Create figure and axis
     fig = Figure()
@@ -362,16 +312,16 @@ function plot_ica_component_spectrum(
         
         # Add component variance percentages to the legend
         component_labels = []
-        for comp_idx in comp_indices
+        for comp_idx in selected_components
             variance_pct = ica_result.variance[comp_idx] * 100
             push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
         end
         
         # Create a new legend with the custom labels
-        legend_entries = [LineElement(color=ax.scene.plots[i].color) for i in 1:length(comp_indices)]
+        legend_entries = [LineElement(color=ax.scene.plots[i].color) for i in 1:length(selected_components)]
         
         # Calculate number of columns based on number of components
-        ncols = length(comp_indices) > 10 ? ceil(Int, length(comp_indices) / 10) : 1
+        ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
         
         # Place legend - use multi-column for many components
         Legend(fig[1, 2], legend_entries, component_labels, "Components", nbanks=ncols)

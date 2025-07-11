@@ -467,36 +467,19 @@ dat_ica_reconstructed_4, ica_result_restored_4 = eegfun.restore_ica_components(d
 
 
 
-fig, ax = eegfun.plot_eye_component_features(eog_comps, eog_comps_metrics_df)
+fig, ax = eegfun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
+
 fig, ax = eegfun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
 fig, ax = eegfun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
 fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
 
 
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, 1)
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, [1, 3, 5])
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, Int[])
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, 1:10)
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components(1))
+
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components([1, 3, 5]))
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components(1:10))
 
 
 
 fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
-
-
-
-# Print summary
-println(artifacts)
-
-
-# Get all unique components
-all_comps = eegfun.get_all_components(artifacts)
-println("\nAll unique artifact components: $all_comps")
-
-
-
-# Method 2: Use convenience function to get all artifacts at once
-println("\n=== Using convenience function ===")
-all_artifacts = eegfun.get_all_artifact_components(ica_result, dat, 
-    sample_selection = eegfun.samples_not(:is_extreme_value))
-println(all_artifacts)
 
