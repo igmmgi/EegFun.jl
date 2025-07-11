@@ -432,6 +432,13 @@ channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
 
+# Helper function predicates for easier component filtering
+components() = x -> fill(true, length(x))  # Default: select all components given
+components(component_numbers::Union{Vector{Int},UnitRange}) = x -> [i in component_numbers for i = 1:length(x)]
+components(component_number::Int) = x -> x .== component_number
+components_not(component_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in component_numbers for i = 1:length(x)])
+components_not(component_number::Int) = x -> .!(x .== component_number)
+
 # Helper function predicates for easier sample filtering
 samples() = x -> fill(true, nrow(x))
 samples(column::Symbol) = x -> x[!, column]
@@ -453,6 +460,13 @@ function get_selected_channels(dat::DataFrame, channel_selection::Function; incl
     # Get all columns except metadata columns and return selected channel predicate
     all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(dat))
     return all_columns[channel_selection(all_columns)]
+end
+
+# Helper to select components based on a predicate
+function get_selected_components(ica_result::InfoIca, component_selection::Function)
+    # Get all component indices (1 to n_components)
+    all_components = 1:length(ica_result.ica_label)
+    return all_components[component_selection(all_components)]
 end
 
 # Helper to select samples based on a predicate

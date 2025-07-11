@@ -412,7 +412,8 @@ dat_cleaned = remove_ica_components!(dat.data, ica_result, [1, 3, 5])
 # Removed activations are now stored in ica_result.removed_activations
 ```
 """
-function remove_ica_components!(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
+function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+    components_to_remove = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_remove .<= n_components)
         throw(ArgumentError("Components must be between 1 and $n_components"))
@@ -468,10 +469,10 @@ Remove ICA components from data and return cleaned data and updated ICA result.
 cleaned_data, ica_updated = remove_ica_components(dat.data, ica_result, [1, 3, 5])
 ```
 """
-function remove_ica_components(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})
+function remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    remove_ica_components!(dat_out, ica_out, components_to_remove)
+    remove_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
@@ -493,10 +494,10 @@ Remove ICA components from ContinuousData and return cleaned data and updated IC
 cleaned_dat, ica_updated = remove_ica_components(dat, ica_result, [1, 3, 5])
 ```
 """
-function remove_ica_components(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
+function remove_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    remove_ica_components!(dat_out.data, ica_out, components_to_remove)
+    remove_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
@@ -519,16 +520,10 @@ dat_cleaned = remove_ica_components!(dat, ica_result, [1, 3, 5])
 # Removed activations are now stored in ica_result.removed_activations
 ```
 """
-function remove_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_remove::Vector{Int})
-    remove_ica_components!(dat.data, ica, components_to_remove)
+function remove_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    remove_ica_components!(dat.data, ica, component_selection = component_selection)
     return dat
 end
-
-
-
-
-
-
 
 
 """
@@ -549,7 +544,8 @@ Restore ICA components to data in-place using stored activations and update ICA 
 restore_ica_components!(dat.data, ica_result, [1, 3, 5])
 ```
 """
-function restore_ica_components!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
+    components_to_restore = get_selected_components(ica, component_selection)
     n_components = size(ica.unmixing, 1)
     if !all(1 .<= components_to_restore .<= n_components)
         throw(ArgumentError("Components must be between 1 and $n_components"))
@@ -609,10 +605,10 @@ Restore ICA components to data and return restored data and updated ICA result.
 restored_data, ica_updated = restore_ica_components(dat.data, ica_result, [1, 3, 5])
 ```
 """
-function restore_ica_components(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
+function restore_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    restore_ica_components!(dat_out, ica_out, components_to_restore)
+    restore_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
@@ -634,10 +630,10 @@ Restore ICA components to ContinuousData and return restored data and updated IC
 restored_dat, ica_updated = restore_ica_components(dat, ica_result, [1, 3, 5])
 ```
 """
-function restore_ica_components(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
+function restore_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
     ica_out = copy(ica)  # Use our custom copy method
-    restore_ica_components!(dat_out.data, ica_out, components_to_restore)
+    restore_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
 
@@ -659,11 +655,9 @@ Restore ICA components to ContinuousData in-place and update ICA result.
 restore_ica_components!(dat, ica_result, [1, 3, 5])
 ```
 """
-function restore_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
-    return restore_ica_components!(dat.data, ica, components_to_restore)
+function restore_ica_components!(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
+    return restore_ica_components!(dat.data, ica, component_selection = component_selection)
 end
-
-
 
 
 
