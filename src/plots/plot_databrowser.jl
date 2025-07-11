@@ -1032,8 +1032,9 @@ function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components
          @minimal_warning "Cannot restore ICA components: No previous activations stored."
          return
     end
-    df_new = restore_ica_components(state.current[], ica, components_removed)
+    df_new, ica_updated = restore_ica_components(state.current[], ica, components_removed)
     state.current[] = df_new # Update observable
+    # Note: ica_updated is not used here since we're working with a copy
 end
 
 function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
@@ -1042,8 +1043,9 @@ function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_re
          return
     end
     for df_obs in state.current
-        df_new = restore_ica_components(df_obs[], ica, components_removed)
+        df_new, ica_updated = restore_ica_components(df_obs[], ica, components_removed)
         df_obs[] = df_new # Update observable
+        # Note: ica_updated is not used here since we're working with a copy
     end
 end
 
