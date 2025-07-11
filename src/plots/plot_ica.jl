@@ -1069,9 +1069,9 @@ function parse_component_input(text::String, total_components::Int)
         # Split by comma
         parts = strip.(split(text, ','))
         for part in parts
-            if occursin('-', part)
-                # Handle ranges like "1-5"
-                range_parts = strip.(split(part, '-'))
+            if occursin(':', part)
+                # Handle ranges like "1:5"
+                range_parts = strip.(split(part, ':'))
                 if length(range_parts) == 2
                     start_num = parse(Int, range_parts[1])
                     end_num = parse(Int, range_parts[2])
@@ -1088,7 +1088,7 @@ function parse_component_input(text::String, total_components::Int)
             end
         end
     catch e
-        # Silently handle parsing errors
+        @minimal_warning e
     end
 
     # Remove duplicates and sort
@@ -1383,7 +1383,7 @@ function update_components!(state)
 
             if comp_idx <= state.total_components
                 tmp_layout = state.dat.layout[(in.(state.dat.layout.label, Ref(state.ica_result.data_label))), :]
-                data = data_interpolation_topo(
+                data = _data_interpolation_topo(
                     state.ica_result.mixing[:, comp_idx],
                     permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
                     gridscale, # Use state value
