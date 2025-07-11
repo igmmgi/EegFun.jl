@@ -1015,8 +1015,16 @@ end
 
 # Apply ICA component removal based on state type
 function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    df_new, ica_updated = remove_ica_components(state.current[], ica, components_to_remove)
-    state.current[] = df_new # Update observable
+    # Reconstruct ContinuousData object from state
+    dat_continuous = eegfun.ContinuousData(
+        state.current[],
+        state.original.layout,
+        state.original.sample_rate,
+        state.original.analysis_info
+    )
+    
+    dat_new, ica_updated = remove_ica_components(dat_continuous, ica, component_selection = eegfun.components(components_to_remove))
+    state.current[] = dat_new.data # Update observable with just the DataFrame
     return ica_updated
 end
 
@@ -1049,8 +1057,16 @@ function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components
         return
     end
     
-    df_new, ica_updated = restore_ica_components(state.current[], ica, available_components)
-    state.current[] = df_new # Update observable
+    # Reconstruct ContinuousData object from state
+    dat_continuous = eegfun.ContinuousData(
+        state.current[],
+        state.original.layout,
+        state.original.sample_rate,
+        state.original.analysis_info
+    )
+    
+    dat_new, ica_updated = restore_ica_components(dat_continuous, ica, component_selection = eegfun.components(available_components))
+    state.current[] = dat_new.data # Update observable with just the DataFrame
     # Note: ica_updated is not used here since we're working with a copy
 end
 
