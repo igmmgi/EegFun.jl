@@ -453,30 +453,27 @@ artifacts = eegfun.combine_artifact_components(
 all_comps = eegfun.get_all_ica_components(artifacts)
 dat_ica_removed, ica_result_updated = eegfun.remove_ica_components(dat, ica_result, all_comps)
 
-dat_ica_removed.data
-dat_ica_reconstructed = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, all_comps)
+dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, all_comps)
 
 dat.data ≈ dat_ica_reconstructed.data
 
-dat_ica_reconstructed_1 = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, [1])
-dat_ica_reconstructed_2 = eegfun.restore_ica_components(dat_ica_reconstructed_1, ica_result_updated, [4])
-dat_ica_reconstructed_3 = eegfun.restore_ica_components(dat_ica_reconstructed_2, ica_result_updated, [7])
-dat_ica_reconstructed_4 = eegfun.restore_ica_components(dat_ica_reconstructed_3, ica_result_updated, [39])
+dat_ica_reconstructed_1, ica_result_restored_1 = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, [1])
+dat_ica_reconstructed_2, ica_result_restored_2 = eegfun.restore_ica_components(dat_ica_reconstructed_1, ica_result_restored_1, [4])
+dat_ica_reconstructed_3, ica_result_restored_3 = eegfun.restore_ica_components(dat_ica_reconstructed_2, ica_result_restored_2, [7])
+dat_ica_reconstructed_4, ica_result_restored_4 = eegfun.restore_ica_components(dat_ica_reconstructed_3, ica_result_restored_3, [39])
 
 
 
-fig, ax = eegfun.plot_eye_component_features(eye_components, metrics_df)
-fig, ax = eegfun.plot_ecg_component_features_(ecg_components, metrics_df)
-fig, ax = eegfun.plot_line_noise_components(line_noise_comps, metrics_df)
-fig, ax = eegfun.plot_spatial_kurtosis_components(high_kurtosis_comps, metrics_df)
+fig, ax = eegfun.plot_eye_component_features(eog_comps, eog_comps_metrics_df)
+fig, ax = eegfun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
+fig, ax = eegfun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
+fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
 
 
-eegfun.plot_ica_component_spectrum(ica_result, dat, 1)
-
-eegfun.plot_ica_component_spectrum(ica_result, dat, [1, 3, 5])
-
-eegfun.plot_ica_component_spectrum(ica_result, dat, Int[])
-eegfun.plot_ica_component_spectrum(ica_result, dat, 1:10)
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, 1)
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, [1, 3, 5])
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, Int[])
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, 1:10)
 
 
 
@@ -487,8 +484,6 @@ fig, ax = eegfun.plot_channel_spectrum(dat)
 # Print summary
 println(artifacts)
 
-# Print detailed information
-eegfun.print_detailed_artifacts(artifacts)
 
 # Get all unique components
 all_comps = eegfun.get_all_components(artifacts)

@@ -534,15 +534,15 @@ end
 """
     restore_ica_components!(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
 
-Restore ICA components to data in-place using stored activations.
+Restore ICA components to data in-place using stored activations and update ICA result.
 
 # Arguments
 - `dat::DataFrame`: DataFrame containing the data to restore
-- `ica::InfoIca`: ICA result object with stored activations
+- `ica::InfoIca`: ICA result object with stored activations (will be updated)
 - `components_to_restore::Vector{Int}`: Vector of component indices to restore
 
 # Returns
-- `nothing` (data is modified in-place)
+- `nothing` (data and ICA result are modified in-place)
 
 # Example
 ```julia
@@ -583,13 +583,18 @@ function restore_ica_components!(dat::DataFrame, ica::InfoIca, components_to_res
     # Update DataFrame in-place
     dat[!, ica.data_label] .= permutedims(restored_data)
 
+    # Remove restored components from the removed_activations dictionary
+    for comp in components_to_restore
+        delete!(ica.removed_activations, comp)
+    end
+
     return nothing
 end
 
 """
     restore_ica_components(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
 
-Restore ICA components to data and return restored data.
+Restore ICA components to data and return restored data and updated ICA result.
 
 # Arguments
 - `dat::DataFrame`: DataFrame containing the data to restore
@@ -597,23 +602,24 @@ Restore ICA components to data and return restored data.
 - `components_to_restore::Vector{Int}`: Vector of component indices to restore
 
 # Returns
-- `DataFrame`: Copy of input data with components restored
+- `Tuple{DataFrame, InfoIca}`: Copy of input data with components restored, and copy of ICA result with updated removed_activations
 
 # Example
 ```julia
-restored_data = restore_ica_components(dat.data, ica_result, [1, 3, 5])
+restored_data, ica_updated = restore_ica_components(dat.data, ica_result, [1, 3, 5])
 ```
 """
 function restore_ica_components(dat::DataFrame, ica::InfoIca, components_to_restore::Vector{Int})
     dat_out = copy(dat)
-    restore_ica_components!(dat_out, ica, components_to_restore)
-    return dat_out
+    ica_out = copy(ica)  # Use our custom copy method
+    restore_ica_components!(dat_out, ica_out, components_to_restore)
+    return dat_out, ica_out
 end
 
 """
     restore_ica_components(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
 
-Restore ICA components to ContinuousData and return restored data.
+Restore ICA components to ContinuousData and return restored data and updated ICA result.
 
 # Arguments
 - `dat::ContinuousData`: ContinuousData object containing the data to restore
@@ -621,31 +627,32 @@ Restore ICA components to ContinuousData and return restored data.
 - `components_to_restore::Vector{Int}`: Vector of component indices to restore
 
 # Returns
-- `ContinuousData`: Copy of input data with components restored
+- `Tuple{ContinuousData, InfoIca}`: Copy of input data with components restored, and copy of ICA result with updated removed_activations
 
 # Example
 ```julia
-restored_dat = restore_ica_components(dat, ica_result, [1, 3, 5])
+restored_dat, ica_updated = restore_ica_components(dat, ica_result, [1, 3, 5])
 ```
 """
 function restore_ica_components(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
     dat_out = copy(dat)
-    restore_ica_components!(dat_out.data, ica, components_to_restore)
-    return dat_out
+    ica_out = copy(ica)  # Use our custom copy method
+    restore_ica_components!(dat_out.data, ica_out, components_to_restore)
+    return dat_out, ica_out
 end
 
 """
     restore_ica_components!(dat::ContinuousData, ica::InfoIca, components_to_restore::Vector{Int})
 
-Restore ICA components to ContinuousData in-place.
+Restore ICA components to ContinuousData in-place and update ICA result.
 
 # Arguments
 - `dat::ContinuousData`: ContinuousData object to restore in-place
-- `ica::InfoIca`: ICA result object with stored activations
+- `ica::InfoIca`: ICA result object with stored activations (will be updated)
 - `components_to_restore::Vector{Int}`: Vector of component indices to restore
 
 # Returns
-- `nothing` (data is modified in-place)
+- `nothing` (data and ICA result are modified in-place)
 
 # Example
 ```julia

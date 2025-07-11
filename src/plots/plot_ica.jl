@@ -1471,7 +1471,7 @@ end
 
 
 """
-    plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
+    plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0)
 
 Plot z-scores of EOG correlations from the metrics DataFrame and highlight identified components.
 
@@ -1487,7 +1487,7 @@ Uses the results from `identify_eye_components`.
 # Returns
 - `fig::Figure`: The Makie Figure containing the z-score plots.
 """
-function plot_eye_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0, display_plot::Bool=true)
+function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0, display_plot::Bool=true)
 
     # Extract data from inputs
     vEOG_corr_z = metrics_df.vEOG_zscore
