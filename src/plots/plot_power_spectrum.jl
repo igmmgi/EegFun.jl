@@ -164,35 +164,21 @@ plot_channel_spectrum(dat, channel_selection = channels([:Fp1, :Fp2]),
                      line_freq=60.0, max_freq=100.0, x_scale=:log10)
 ```
 """
-function plot_channel_spectrum(data::DataFrame; 
-                              sample_selection::Function = samples(),
-                              channel_selection::Function = channels(),
-                              kwargs...)
-    fs = sample_rate(data)
-    return plot_channel_spectrum(data, fs; 
-                                sample_selection = sample_selection,
-                                channel_selection = channel_selection,
-                                kwargs...)
-end
-
-function plot_channel_spectrum(data::DataFrame, fs::Real; 
+function plot_channel_spectrum(dat::DataFrame; 
                               sample_selection::Function = samples(),
                               channel_selection::Function = channels(),
                               display_plot::Bool=true,
                               kwargs...)
-    # Get selected channels using the helper function
-    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(data))
-    channel_mask = channel_selection(all_columns)
-    selected_channels = all_columns[channel_mask]
-    
-    # Apply sample selection
-    selected_samples = get_selected_samples(data, sample_selection)
-    data_subset = data[selected_samples, :]
+
+    # Get selected channels/samples and subsequent data subset
+    selected_channels = get_selected_channels(dat, channel_selection)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    data_subset = dat[selected_samples, :]
     
     # Create figure and axis exactly like plot_topoplot
     fig = Figure()
     ax = Axis(fig[1, 1])
-    _plot_power_spectrum!(fig, ax, data_subset, selected_channels, fs; kwargs...)
+    _plot_power_spectrum!(fig, ax, data_subset, selected_channels, sample_rate(dat); kwargs...)
     if display_plot
         display_figure(fig)
     end
@@ -204,22 +190,17 @@ function plot_channel_spectrum(dat::ContinuousData;
                               channel_selection::Function = channels(),
                               display_plot::Bool=true,
                               kwargs...)
-    # Get selected channels using the helper function
-    selected_channels = get_selected_channels(dat, channel_selection)
-    
-    # Apply sample selection
-    selected_samples = get_selected_samples(dat, sample_selection)
-    data_subset = dat.data[selected_samples, :]
-    
-    # Create figure and axis exactly like plot_topoplot
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    _plot_power_spectrum!(fig, ax, data_subset, selected_channels, dat.sample_rate; kwargs...)
-    if display_plot
-        display_figure(fig)
-    end
-    return fig, ax
+    return plot_channel_spectrum(
+        dat.data, 
+        sample_selection = sample_selection, 
+        channel_selection = channel_selection, 
+        display_plot = display_plot, 
+        kwargs...
+    )
 end
+
+
+
 
 """
     plot_ica_component_spectrum(ica_result::InfoIca, dat::ContinuousData, comp_idx::Int; kwargs...)
@@ -315,6 +296,9 @@ function plot_ica_component_spectrum(
                                      y_scale=y_scale,
                                      window_function=window_function)
 end
+
+
+
 
 function plot_ica_component_spectrum(
     ica_result::InfoIca,

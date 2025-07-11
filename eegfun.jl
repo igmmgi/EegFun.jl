@@ -418,6 +418,7 @@ eegfun.mark_epoch_windows!(dat, [1, 3, 4, 5], [-1, 2.0]) # simple epoch marking 
 # ICA "continuous" data
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples(:epoch_window))
 
+fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
 
 
 # plot ICA components
@@ -452,9 +453,10 @@ artifacts = eegfun.combine_artifact_components(
 )
 
 all_comps = eegfun.get_all_ica_components(artifacts)
-dat_ica_removed, ica_result_updated = eegfun.remove_ica_components(dat, ica_result, all_comps)
 
-dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, all_comps)
+dat_ica_removed, ica_result_updated = eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components(all_comps))
+
+dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, component_selection = eegfun.components(all_comps))
 
 dat.data ≈ dat_ica_reconstructed.data
 
@@ -478,7 +480,7 @@ fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, 1:10)
 
 
 
-fig, ax = eegfun.plot_channel_spectrum(dat)
+fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 
 
 
