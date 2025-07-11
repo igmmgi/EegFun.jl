@@ -178,6 +178,7 @@ end
 function plot_channel_spectrum(data::DataFrame, fs::Real; 
                               sample_selection::Function = samples(),
                               channel_selection::Function = channels(),
+                              display_plot::Bool=true,
                               kwargs...)
     # Get selected channels using the helper function
     all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(data))
@@ -192,6 +193,9 @@ function plot_channel_spectrum(data::DataFrame, fs::Real;
     fig = Figure()
     ax = Axis(fig[1, 1])
     _plot_power_spectrum!(fig, ax, data_subset, selected_channels, fs; kwargs...)
+    if display_plot
+        display_figure(fig)
+    end
     return fig, ax
 end
 
