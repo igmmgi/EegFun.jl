@@ -449,3 +449,71 @@ function average_epochs(dat::EpochData)
     
     return ErpData(erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
 end
+
+"""
+    remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
+
+Remove epochs that contain any true values in the specified boolean columns.
+
+# Arguments
+- `dat::EpochData`: The epoched data to filter
+- `bad_columns::Vector{Symbol}`: Vector of column names to check for true values
+
+# Returns
+- `EpochData`: A new EpochData object with bad epochs removed
+
+"""
+function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
+    # Validate that all bad_columns exist in the data
+    for col in bad_columns
+        if !hasproperty(first(dat.data), col)
+            error("Column '$col' not found in epoch data")
+        end
+    end
+    
+    # Filter epochs: keep only epochs where ALL bad columns are false for ALL samples
+    good_epochs = DataFrame[]
+    
+    for epoch_df in dat.data
+        # Check if any sample in this epoch has any true value in any bad column
+        has_bad_samples = false
+        
+        for col in bad_columns
+            if any(epoch_df[!, col])
+                has_bad_samples = true
+                break
+            end
+        end
+        
+        # If no bad samples found, keep this epoch
+        if !has_bad_samples
+            push!(good_epochs, epoch_df)
+        end
+    end
+    
+    # Return new EpochData with only good epochs
+    return EpochData(good_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+end
+
+"""
+    remove_bad_epochs(dat::EpochData, bad_column::Symbol)
+
+Remove epochs that contain any true values in the specified boolean column.
+
+# Arguments
+- `dat::EpochData`: The epoched data to filter
+- `bad_column::Symbol`: Column name to check for true values
+
+# Returns
+- `EpochData`: A new EpochData object with bad epochs removed
+
+# Examples
+```julia
+# Remove epochs with extreme values
+cleaned_epochs = remove_bad_epochs(epochs, :is_extreme_value_100)
+
+# Remove epochs with EOG artifacts
+cleaned_epochs = remove_bad_epochs(epochs, :is_vEOG)
+```
+"""
+remove_bad_epochs(dat::EpochData, bad_column::Symbol) = remove_bad_epochs(dat, [bad_column])

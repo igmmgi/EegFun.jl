@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-06-20 12:40:36
+# Generated on 2025-07-16 11:34:48
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -207,13 +207,21 @@ epoch_start = -1
 # Default: avg
 reference_channel = "avg"
 
-# eog Settings
-[preprocess.eog]
+# eeg Settings
+[preprocess.eeg]
+
+# Value (mV) for defining data section as an artifact value.
+# Type: Real
+# Default: 100
+artifact_value_criterion = 100
 
 # Value (mV) for defining data section as an extreme value.
 # Type: Real
-# Default: 100
-extreme_value_criterion = 100
+# Default: 500
+extreme_value_criterion = 500
+
+# eog Settings
+[preprocess.eog]
 
 # Channels used in the calculation of horizontal eye movements (hEOG).
 # Type: Vector{Vector{String}}

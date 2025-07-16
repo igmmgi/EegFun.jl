@@ -8,12 +8,18 @@
 
 # package
 using eegfun
+using GLMakie
+eegfun.preprocess_eeg_data("pipeline.toml")
+
+
+
 # using GLMakie
 # using CairoMakie
 # using eegfun: load_config 
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+
 
 # 2D layout
 eegfun.polar_to_cartesian_xy!(layout)
@@ -416,9 +422,12 @@ eegfun.is_extreme_value!(dat, 100);
 eegfun.mark_epoch_windows!(dat, [1, 3, 4, 5], [-1, 2.0]) # simple epoch marking with trigger 1 and 3
 # eegfun.plot_databrowser(dat) # epoch window within extra_channel menu
 # ICA "continuous" data
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples(:epoch_window))
+# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples(:epoch_window))
+# eegfun.plot_databrowser(dat)
 
-fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
+
+# TODO: legend
+fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 
 
 # plot ICA components
@@ -433,7 +442,8 @@ eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.co
 # eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5]); use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
 # eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3), use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
 
-eegfun.plot_ica_component_activation(dat, ica_result)
+fig, ax = eegfun.plot_ica_component_activation(dat, ica_result)
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components(1))
 
 eegfun.plot_databrowser(dat, ica_result)
 
@@ -457,31 +467,12 @@ artifacts = eegfun.combine_artifact_components(
 all_comps = eegfun.get_all_ica_components(artifacts)
 
 dat_ica_removed, ica_result_updated = eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components(all_comps))
-
 dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, component_selection = eegfun.components(all_comps))
-
 dat.data ≈ dat_ica_reconstructed.data
-
-dat_ica_reconstructed_1, ica_result_restored_1 = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, [1])
-dat_ica_reconstructed_2, ica_result_restored_2 = eegfun.restore_ica_components(dat_ica_reconstructed_1, ica_result_restored_1, [4])
-dat_ica_reconstructed_3, ica_result_restored_3 = eegfun.restore_ica_components(dat_ica_reconstructed_2, ica_result_restored_2, [7])
-dat_ica_reconstructed_4, ica_result_restored_4 = eegfun.restore_ica_components(dat_ica_reconstructed_3, ica_result_restored_3, [39])
-
 
 
 fig, ax = eegfun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
-
 fig, ax = eegfun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
 fig, ax = eegfun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
 fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
-
-
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components(1))
-
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components([1, 3, 5]))
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components(1:10))
-
-
-
-fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 

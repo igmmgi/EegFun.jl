@@ -8,6 +8,9 @@ raw_data_files = ["Flank_C_3.bdf"]
 layout_file = "biosemi72.csv"
 epoch_condition_file = "epochs.toml"
 
+[preprocess.eeg]
+artifact_value_criterion = 100
+
 [ica]
 run = true
 

@@ -140,11 +140,15 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         min = 0
     ),
 
-    "preprocess.eog.extreme_value_criterion" => ConfigParameter{Real}(
+    "preprocess.eeg.extreme_value_criterion" => ConfigParameter{Real}(
         description = "Value (mV) for defining data section as an extreme value.",
-        default = 100,
+        default = 500,
     ),
 
+    "preprocess.eeg.artifact_value_criterion" => ConfigParameter{Real}(
+        description = "Value (mV) for defining data section as an artifact value.",
+        default = 100,
+    ),
 
     # Filtering settings
     "filter.highpass.on" => ConfigParameter{Bool}(
