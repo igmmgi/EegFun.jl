@@ -1,3 +1,4 @@
+
 # Base type for data states
 abstract type AbstractDataState end
 
@@ -14,8 +15,7 @@ mutable struct IcaState
     removed_activations::Union{Nothing,Any}
     components_to_remove::Union{Nothing,Vector{Int}}
     components_removed::Union{Nothing,Vector{Int}}
-    current_ica::Union{Nothing,InfoIca}
-    IcaState() = new(nothing, nothing, nothing, nothing)
+    IcaState() = new(nothing, nothing, nothing)
 end
 
 mutable struct ExtraChannelVis
@@ -28,19 +28,11 @@ mutable struct SelectionState
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
     rectangle::Makie.Poly
-    # Add drag detection state
-    drag_start_pos::Union{Nothing,Tuple{Float64,Float64}}
-    drag_start_time::Union{Nothing,Float64}
-    is_dragging::Bool
-    drag_threshold::Float64  # Minimum distance to consider it a drag
-    click_timeout::Float64   # Maximum time for a click (seconds)
-    
     function SelectionState(ax)
         # Initialize with a single point to avoid empty vector issues with CairoMakie
         initial_points = [Point2f(0.0, 0.0)]
         poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, 
-            nothing, nothing, false, 3.0, 0.15)  # 3 pixel threshold, 150ms timeout
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
     end
 end
 
@@ -62,10 +54,9 @@ mutable struct ViewState
     offset::Vector{Float64}
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
-    display_scale::Observable{Float64}  # New display scale factor
     function ViewState(n_channels::Int)
         offset = n_channels > 1 ? LinRange(1500 * 0.9, -1500 * 0.9, n_channels + 2)[2:end-1] : zeros(n_channels)
-        new(Observable(1:5000), Observable(-1500:1500), offset, Observable(0.0), Observable(false), Observable(1.0))
+        new(Observable(1:5000), Observable(-1500:1500), offset, Observable(0.0), Observable(false))
     end
 end
 
@@ -74,18 +65,12 @@ mutable struct ChannelState
     visible::Vector{Bool}
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
-    # Cache for computed Observables to avoid recreation
-    cached_observables::Dict{Symbol,Any}
-    # Track highlighted channels
-    highlighted::Observable{Symbol}
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
             fill(true, length(channel_labels)),
             Dict{Symbol,Makie.Text}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
-            Dict{Symbol,Any}(),  # Cache for computed Observables
-            Observable{Symbol}(:none),  # Track highlighted channel
         )
     end
 end
@@ -119,7 +104,7 @@ mutable struct ExtraChannelInfo
         new(nothing, false, Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(), Dict{Symbol,Makie.Text}())
 end
 
-# Single unified browser state with a type parameter
+
 mutable struct DataBrowserState{T<:AbstractDataState}
     view::ViewState
     channels::ChannelState
@@ -130,7 +115,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
 
-    # Unified constructor
+    # Constructor
     function DataBrowserState{T}(;
         view::ViewState,
         channels::ChannelState,
@@ -177,42 +162,6 @@ function create_browser_state(dat::EpochData, channel_labels, ax, ica)
     )
 end
 
-# Helper functions for Observable caching
-function get_or_create_cached_observable!(channel_state::ChannelState, key::Symbol, create_func::Function)
-    """
-    Get an Observable from cache or create it if it doesn't exist.
-    
-    # Arguments
-    - `channel_state::ChannelState`: The channel state containing the cache
-    - `key::Symbol`: The cache key for this Observable
-    - `create_func::Function`: Function to create the Observable if not cached
-    
-    # Returns
-    - The cached or newly created Observable
-    """
-    if haskey(channel_state.cached_observables, key)
-        return channel_state.cached_observables[key]
-    else
-        obs = create_func()
-        channel_state.cached_observables[key] = obs
-        return obs
-    end
-end
-
-function clear_observable_cache!(channel_state::ChannelState)
-    """
-    Clear the Observable cache when data changes significantly.
-    """
-    empty!(channel_state.cached_observables)
-end
-
-function clear_observable_cache!(state::DataBrowserState)
-    """
-    Clear the Observable cache for the entire browser state.
-    """
-    clear_observable_cache!(state.channels)
-end
-
 # Helper functions for common data access/resetting/updating
 get_current_data(state::ContinuousDataState) = state.current[]
 get_current_data(state::EpochedDataState) = state.current[state.current_epoch[]][]
@@ -246,7 +195,7 @@ function setup_ui_base(fig, ax, state, dat, ica = nothing)
     set_axes!(ax, state)
 
     # Mouse and keyboard events
-    handle_mouse_events!(fig, ax, state)
+    handle_mouse_events!(ax, state)
     handle_keyboard_events!(fig, ax, state)
 
     # Create toggles
@@ -358,8 +307,6 @@ function create_labels_menu(fig, ax, state)
         end
 
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        # Clear cache when changing channel visibility
-        clear_observable_cache!(state.channels)
         update_channel_offsets!(state)
         draw(ax, state)
 
@@ -386,18 +333,11 @@ end
 # Update create_ica_menu to use the new struct
 function create_ica_menu(fig, ax, state, ica)
 
-    # Initialize current_ica if not set
-    if isnothing(state.ica_state.current_ica)
-        state.ica_state.current_ica = ica
-    end
-
-    options = vcat(["None"], state.ica_state.current_ica.ica_label)
+    options = vcat(["None"], ica.ica_label)
     menu = create_menu(fig, options, "None", "ICA Components")
 
     on(menu[1].selection) do s
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        # Clear cache when applying ICA changes
-        clear_observable_cache!(state.channels)
         component_to_remove_int = extract_int(String(s))
         state.ica_state.components_to_remove = isnothing(component_to_remove_int) ? nothing : [component_to_remove_int]
 
@@ -406,26 +346,26 @@ function create_ica_menu(fig, ax, state, ica)
             if !isnothing(state.ica_state.components_removed)
                  apply_ica_restore!(
                     state.data, 
-                    state.ica_state.current_ica, 
-                    state.ica_state.components_removed
+                    ica, 
+                    state.ica_state.components_removed, 
+                    state.ica_state.removed_activations
                  )
             end
-            # Apply removal using the helper function and update the ICA object
-            ica_updated = apply_ica_removal!(
+            # Apply removal using the helper function
+            state.ica_state.removed_activations = apply_ica_removal!(
                 state.data, 
-                state.ica_state.current_ica, 
+                ica, 
                 state.ica_state.components_to_remove
             )
-            # Replace the ICA object with the updated one
-            state.ica_state.current_ica = ica_updated
             state.ica_state.components_removed = state.ica_state.components_to_remove
         else # Selected "None"
              # Restore previous state if components were removed
              if !isnothing(state.ica_state.components_removed)
                  apply_ica_restore!(
                     state.data, 
-                    state.ica_state.current_ica, 
-                    state.ica_state.components_removed
+                    ica, 
+                    state.ica_state.components_removed, 
+                    state.ica_state.removed_activations
                  )
                  # Reset ICA state tracking
                  state.ica_state.removed_activations = nothing 
@@ -446,8 +386,6 @@ function create_epoch_menu(fig, ax, state)
 
     on(menu[1].selection) do s
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        # Clear cache when changing epochs
-        clear_observable_cache!(state.channels)
         state.data.current_epoch[] = s
         ax.title = "Epoch $(s)/$(n_epochs(state.data.original))"
         update_markers!(ax, state)
@@ -473,7 +411,7 @@ function show_additional_menu(state)
                 plot_topoplot(selected_data, state.data.original.layout)
             elseif btn.label[] == "Spectrum"
                 selected_channel = state.channels.labels[state.channels.visible]
-                plot_channel_spectrum(selected_data, channel_selection = channels(selected_channel))
+                plot_selected_spectrum(selected_data, selected_channel)
             elseif btn.label[] == "Plot3"
                 println("Plot3: TODO")
             end
@@ -643,24 +581,22 @@ function _handle_right_navigation(ax, state, data::EpochedDataState)
 end
 
 function xback!(ax, state::ContinuousDataBrowserState)
-    current_range = state.view.xrange[]
-    current_range[1] - 200 < 1 && return
-    state.view.xrange[] = current_range .- 200
+    state.view.xrange.val[1] - 200 < 1 && return
+    state.view.xrange[] = state.view.xrange.val .- 200
     xlims!(
         ax,
-        state.data.current[].time[state.view.xrange[][1]],
-        state.data.current[].time[state.view.xrange[][end]],
+        state.data.current[].time[state.view.xrange.val[1]],
+        state.data.current[].time[state.view.xrange.val[end]],
     )
 end
 
 function xforward!(ax, state::ContinuousDataBrowserState)
-    current_range = state.view.xrange[]
-    current_range[1] + 200 > nrow(state.data.current[]) && return
-    state.view.xrange[] = current_range .+ 200
+    state.view.xrange.val[1] + 200 > nrow(state.data.current[]) && return
+    state.view.xrange[] = state.view.xrange.val .+ 200
     xlims!(
         ax,
-        state.data.current[].time[state.view.xrange[][1]],
-        state.data.current[].time[state.view.xrange[][end]],
+        state.data.current[].time[state.view.xrange.val[1]],
+        state.data.current[].time[state.view.xrange.val[end]],
     )
 end
 
@@ -683,15 +619,14 @@ function step_epoch_forward(ax, state::EpochedDataBrowserState)
 end
 
 function yless!(ax, state)
-    # Zoom out by increasing display scale
-    current_scale = state.view.display_scale[]
-    state.view.display_scale[] = current_scale * 1.2
+    (state.view.yrange.val[1] + 100 >= 0 || state.view.yrange.val[end] - 100 <= 0) && return
+    state.view.yrange[] = state.view.yrange.val[1]+100:state.view.yrange.val[end]-100
+    ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
 end
 
 function ymore!(ax, state)
-    # Zoom in by decreasing display scale
-    current_scale = state.view.display_scale[]
-    state.view.display_scale[] = current_scale * 0.8
+    state.view.yrange[] = state.view.yrange.val[1]-100:state.view.yrange.val[end]+100
+    ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
 end
 
 function is_mouse_in_axis(ax, pos)
@@ -714,22 +649,14 @@ end
 
 function finish_selection!(ax, state, mouse_x)
     state.selection.active[] = false
-    
-    # Only make selection visible if it's actually a meaningful selection (not just a click)
-    if abs(mouse_x - state.selection.bounds[][1]) > 0.01  # Small threshold to detect actual drag
-        state.selection.visible[] = true
-        state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
-        update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
-        # Make sure the polygon is visible when selection is visible
-        state.selection.rectangle.visible[] = true
-    else
-        # Just a click - clear the selection to ensure arrow keys work
-        clear_x_region_selection!(state)
-    end
+    state.selection.visible[] = true
+    state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
+    update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
+    # Make sure the polygon is visible when selection is visible
+    state.selection.rectangle.visible[] = true
 end
 
-function handle_mouse_events!(fig, ax, state)
-    # Handle regular mouse events (selection, navigation)
+function handle_mouse_events!(ax, state)
     on(events(ax).mousebutton) do event
         pos = events(ax).mouseposition[]
         if !is_mouse_in_axis(ax, pos)
@@ -745,91 +672,24 @@ function handle_mouse_events!(fig, ax, state)
         end
     end
 
-    # Handle line clicks for highlighting (immediate response on press)
-    on(events(fig).mousebutton) do event
-        if event.button == Mouse.left && event.action == Mouse.press
-            # Try to handle line click immediately
-            handle_line_click!(fig, ax, state, event)
-        end
-    end
-
     # Update selection rectangle while dragging
     on(events(ax).mouseposition) do _
         if state.selection.active[]
             world_pos = mouseposition(ax)[1]
             update_x_region_selection!(ax, state, state.selection.bounds[][1], world_pos)
-            
-            # Check if we've started dragging
-            if state.selection.drag_start_pos !== nothing && !state.selection.is_dragging
-                current_pos = (world_pos, mouseposition(ax)[2])
-                distance = sqrt((current_pos[1] - state.selection.drag_start_pos[1])^2 + 
-                              (current_pos[2] - state.selection.drag_start_pos[2])^2)
-                
-                if distance > state.selection.drag_threshold
-                    state.selection.is_dragging = true
-                end
-            end
         end
-    end
-end
-
-# Add line highlighting functionality
-function handle_line_click!(fig, ax, state, event)
-    plt = pick(fig)
-    if plt !== nothing && plt[1] isa Lines
-        # Check if the clicked line corresponds to a channel
-        for (channel, line) in state.channels.data_lines
-            if plt[1] == line
-                # Toggle highlighting: if already highlighted, clear it; otherwise highlight
-                if state.channels.highlighted[] == channel
-                    state.channels.highlighted[] = :none
-                else
-                    state.channels.highlighted[] = channel
-                end
-                # No need to redraw - the Observables will update automatically
-                break
-            end
-        end
-    else
-        # Clicked on empty space - clear highlighting to ensure arrow keys work
-        state.channels.highlighted[] = :none
     end
 end
 
 function handle_left_click!(ax, state, event, mouse_x)
     if event.action == Mouse.press
-        # Check if we clicked on a line first
-        plt = pick(ax.scene)
-        clicked_on_line = false
-        if plt !== nothing && plt[1] isa Lines
-            for (channel, line) in state.channels.data_lines
-                if plt[1] == line
-                    clicked_on_line = true
-                    break
-                end
-            end
-        end
-        
-        # Only start selection if we didn't click on a line
-        if !clicked_on_line
-            # Record start position and time for drag detection
-            state.selection.drag_start_pos = (mouse_x, mouseposition(ax)[2])
-            state.selection.drag_start_time = time()
-            state.selection.is_dragging = false
-            
-            if state.selection.visible[] && is_within_selection(state, mouse_x)
-                clear_x_region_selection!(state)
-            else
-                start_selection!(ax, state, mouse_x)
-            end
+        if state.selection.visible[] && is_within_selection(state, mouse_x)
+            clear_x_region_selection!(state)
+        else
+            start_selection!(ax, state, mouse_x)
         end
     elseif event.action == Mouse.release && state.selection.active[]
         finish_selection!(ax, state, mouse_x)
-        
-        # Reset drag detection state
-        state.selection.drag_start_pos = nothing
-        state.selection.drag_start_time = nothing
-        state.selection.is_dragging = false
     end
 end
 
@@ -1015,81 +875,41 @@ end
 
 # Apply ICA component removal based on state type
 function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    # Reconstruct ContinuousData object from state
-    dat_continuous = eegfun.ContinuousData(
-        state.current[],
-        state.original.layout,
-        state.original.sample_rate,
-        state.original.analysis_info
-    )
-    
-    dat_new, ica_updated = remove_ica_components(dat_continuous, ica, component_selection = eegfun.components(components_to_remove))
-    state.current[] = dat_new.data # Update observable with just the DataFrame
-    return ica_updated
+    df_new, activations = remove_ica_components(state.current[], ica, components_to_remove)
+    state.current[] = df_new # Update observable
+    return activations
 end
 
 function apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    first_epoch_ica_updated = nothing
+    first_epoch_activations = nothing
     for (i, df_obs) in enumerate(state.current)
-        df_new, ica_updated = remove_ica_components(df_obs[], ica, components_to_remove)
+        df_new, activations = remove_ica_components(df_obs[], ica, components_to_remove)
         df_obs[] = df_new # Update observable
         if i == 1
-            first_epoch_ica_updated = ica_updated
+            first_epoch_activations = activations
         end
     end
-    return first_epoch_ica_updated
+    return first_epoch_activations
 end
 
 # Apply ICA component restoration based on state type
-function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components_removed::Vector{Int})
-    # Filter components that actually have stored activations
-    available_components = Int[]
-    for comp in components_removed
-        if haskey(ica.removed_activations, comp)
-            push!(available_components, comp)
-        else
-            @minimal_warning "Component $comp has no stored activations and will be skipped."
-        end
+function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
+    if isnothing(removed_activations)
+         @warn "Cannot restore ICA components: No previous activations stored."
+         return
     end
-    
-    if isempty(available_components)
-        @minimal_warning "No components available for restoration."
-        return
-    end
-    
-    # Reconstruct ContinuousData object from state
-    dat_continuous = eegfun.ContinuousData(
-        state.current[],
-        state.original.layout,
-        state.original.sample_rate,
-        state.original.analysis_info
-    )
-    
-    dat_new, ica_updated = restore_ica_components(dat_continuous, ica, component_selection = eegfun.components(available_components))
-    state.current[] = dat_new.data # Update observable with just the DataFrame
-    # Note: ica_updated is not used here since we're working with a copy
+    df_new = restore_original_data(state.current[], ica, components_removed, removed_activations)
+    state.current[] = df_new # Update observable
 end
 
-function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int})
-    # Filter components that actually have stored activations
-    available_components = Int[]
-    for comp in components_removed
-        if haskey(ica.removed_activations, comp)
-            push!(available_components, comp)
-        else
-            @minimal_warning "Component $comp has no stored activations and will be skipped."
-        end
+function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
+    if isnothing(removed_activations)
+         @warn "Cannot restore ICA components: No previous activations stored."
+         return
     end
-    
-    if isempty(available_components)
-        @minimal_warning "No components available for restoration."
-        return
-    end
-    
     for df_obs in state.current
-        df_new, ica_updated = restore_ica_components(df_obs[], ica, available_components)
+        df_new = restore_original_data(df_obs[], ica, components_removed, removed_activations)
         df_obs[] = df_new # Update observable
-        # Note: ica_updated is not used here since we're working with a copy
     end
 end
 
@@ -1144,13 +964,8 @@ end
 
 # Generic set_axes! function that handles both types
 function set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
-    # Create computed Observables for limits to reduce nesting
-    y_range = state.view.yrange
-    y_min_obs = @lift($(y_range)[1])
-    y_max_obs = @lift($(y_range)[end])
-    
-    # Set y limits using computed Observables
-    @lift ylims!(ax, $(y_min_obs), $(y_max_obs))
+    # Set y limits for both types
+    @lift ylims!(ax, $(state.view.yrange)[1], $(state.view.yrange)[end])
     
     # Use type-specific method for setting x limits
     set_x_limits!(ax, state, state.data)
@@ -1158,21 +973,16 @@ end
 
 # Type-specific x limit setting for continuous data
 function set_x_limits!(ax, state, data::ContinuousDataState)
-    # Create computed Observables for x limits to reduce nesting
-    time_data = @lift($(data.current).time)
-    x_start_obs = @lift($(time_data)[$(state.view.xrange)[1]])
-    x_end_obs = @lift($(time_data)[$(state.view.xrange)[end]])
-    
-    @lift xlims!(ax, $(x_start_obs), $(x_end_obs))
+    @lift xlims!(
+        ax,
+        $(data.current).time[$(state.view.xrange)[1]],
+        $(data.current).time[$(state.view.xrange)[end]],
+    )
 end
 
 # Type-specific x limit setting for epoched data
 function set_x_limits!(ax, state, data::EpochedDataState)
-    # Create computed Observable for x limits
-    x_start_obs = @lift($(data.current[1]).time[1])
-    x_end_obs = @lift($(data.current[1]).time[end])
-    
-    @lift xlims!(ax, $(x_start_obs), $(x_end_obs))
+    @lift xlims!(ax, $(data.current[1]).time[1], $(data.current[1]).time[end])
 end
 
 # Common marker initialization
@@ -1206,8 +1016,6 @@ end
 function butterfly_plot!(ax, state)
     state.view.butterfly[] = !state.view.butterfly[]
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-    # Clear the Observable cache when switching modes to ensure fresh Observables
-    clear_observable_cache!(state.channels)
     update_channel_offsets!(state)
     draw(ax, state)
 end
@@ -1221,58 +1029,22 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
     for (idx, visible) in enumerate(state.channels.visible)
         if visible
             col = state.channels.labels[idx]
-            
-            # Use cached Observables or create them if they don't exist
-            current_data = data.current
-            time_obs = get_or_create_cached_observable!(state.channels, :time, () -> @lift(@views $(data.current).time))
-            
-            # Create base data Observable without offset - use @views to avoid copying
-            base_data_obs = get_or_create_cached_observable!(state.channels, Symbol("base_data_$(col)"), 
-                () -> @lift(@views $(data.current)[!, $col]))
-            
-            # Create optimized data Observable with offset
-            data_obs = create_optimized_data_observable(base_data_obs, col, state.view.offset[idx], state.view.display_scale)
-            
-            # Create optimized color Observable
-            color_obs = create_optimized_color_observable(base_data_obs, state.view.crit_val)
-            
-            # Create reactive line style based on highlighting
-            linewidth_obs = @lift($(state.channels.highlighted) == $col ? 4 : 2)
-            alpha_obs = @lift($(state.channels.highlighted) == $col ? 1.0 : 0.7)
-            
             state.channels.data_lines[col] = lines!(
                 ax,
-                time_obs,
-                data_obs,
-                color = color_obs,
+                @lift($(data.current).time),
+                @lift($(data.current)[!, $col] .+ state.view.offset[idx]),
+                color = @lift(abs.($(data.current)[!, $col]) .>= $(state.view.crit_val)),
                 colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = linewidth_obs,
-                alpha = alpha_obs,
-                inspectable = true,  # Make lines clickable
+                linewidth = 2,
             )
-            
             if !state.view.butterfly[]
-                # Create separate Observables for label position to reduce nesting
-                label_x_obs = get_or_create_cached_observable!(state.channels, Symbol("label_x_$(col)"), 
-                    () -> @lift($(data.current).time[$(state.view.xrange)[1]]))
-                
-                # Create intermediate Observable for the data point
-                data_point = get_or_create_cached_observable!(state.channels, Symbol("data_point_$(col)"), 
-                    () -> @lift($(data.current)[$(state.view.xrange)[1], $col]))
-                label_y_obs = @lift($(data_point) .+ state.view.offset[idx])
-                
-                # Create reactive label style based on highlighting
-                label_fontsize_obs = @lift($(state.channels.highlighted) == $col ? 22 : 18)
-                label_color_obs = @lift($(state.channels.highlighted) == $col ? :red : :black)
-                
                 state.channels.data_labels[col] = text!(
                     ax,
-                    label_x_obs,
-                    label_y_obs,
+                    @lift($(data.current).time[$(state.view.xrange)[1]]),
+                    @lift($(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]),
                     text = String(col),
                     align = (:left, :center),
-                    fontsize = label_fontsize_obs,
-                    color = label_color_obs,
+                    fontsize = 18,
                 )
             end
         end
@@ -1283,66 +1055,30 @@ function _draw_implementation(ax, state, data::EpochedDataState)
     current_epoch = data.current_epoch[]  # Get current epoch value
     current_data = data.current[current_epoch]  # Get current DataFrame Observable
 
-    # Pre-compute nrow outside Observable for better performance
-    n_samples = nrow(current_data[])
-    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
+    # Ensure view range is within data bounds
+    n_samples = @lift(nrow($(current_data)))
+    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples[])
 
     for (idx, visible) in enumerate(state.channels.visible)
         if visible  # Only plot if channel is visible
             col = state.channels.labels[idx]
 
-            # Use cached Observables or create them if they don't exist
-            time_obs = get_or_create_cached_observable!(state.channels, Symbol("time_epoch_$(current_epoch)"), 
-                () -> @lift($(current_data).time))
-            
-            # Create base data Observable without offset
-            base_data_obs = get_or_create_cached_observable!(state.channels, Symbol("base_data_$(col)_epoch_$(current_epoch)"), 
-                () -> @lift($(current_data)[!, $col]))
-            
-            # Create optimized data Observable with offset
-            data_obs = create_optimized_data_observable(base_data_obs, col, state.view.offset[idx], state.view.display_scale)
-            
-            # Create optimized color Observable
-            color_obs = create_optimized_color_observable(base_data_obs, state.view.crit_val)
-
-            # Determine line style based on highlighting
-            is_highlighted = state.channels.highlighted[] == col
-            linewidth = is_highlighted ? 4 : 2
-            alpha = is_highlighted ? 1.0 : 0.7
-
             state.channels.data_lines[col] = lines!(
                 ax,
-                time_obs,
-                data_obs,
-                color = color_obs,
+                @lift($(current_data).time),
+                @lift($(current_data)[!, $col] .+ state.view.offset[idx]),
+                color = @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val)),
                 colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = linewidth,
-                alpha = alpha,
-                inspectable = true,  # Make lines clickable
+                linewidth = 2,
             )
-            
             if !state.view.butterfly[]
-                # Create separate Observables for label position to reduce nesting
-                label_x_obs = get_or_create_cached_observable!(state.channels, Symbol("label_x_$(col)_epoch_$(current_epoch)"), 
-                    () -> @lift($(current_data).time[1]))
-                
-                # Create intermediate Observable for the data point
-                data_point = get_or_create_cached_observable!(state.channels, Symbol("data_point_$(col)_epoch_$(current_epoch)"), 
-                    () -> @lift($(current_data)[!, $col][1]))
-                label_y_obs = @lift($(data_point) .+ state.view.offset[idx])
-                
-                # Create reactive label style based on highlighting
-                label_fontsize_obs = @lift($(state.channels.highlighted) == $col ? 22 : 18)
-                label_color_obs = @lift($(state.channels.highlighted) == $col ? :red : :black)
-                
                 state.channels.data_labels[col] = text!(
                     ax,
-                    label_x_obs,
-                    label_y_obs,
+                    @lift($(current_data).time[1]),
+                    @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]),
                     text = String(col),
                     align = (:left, :center),
-                    fontsize = label_fontsize_obs,
-                    color = label_color_obs,
+                    fontsize = 18,
                 )
             end
         end
@@ -1372,40 +1108,23 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
                 visible = true,
             )
         else
-            # Use optimized Observable creation
-            current_data = data.current
-            time_obs = @lift($(data.current).time)
-            channel_data_obs = create_optimized_data_observable(
-                @lift($(data.current)[!, $channel]), 
-                channel, 
-                current_offset, 
-                state.view.display_scale
-            )
-            
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
-                time_obs,
-                channel_data_obs,
+                @lift($(data.current).time),
+                @lift(begin
+                    df = $(data.current)
+                    df[!, $channel] .+ current_offset
+                end),
                 color = :black,
                 linewidth = 2,
             )
-            
-            # Simplified label position Observable
-            label_x_obs = @lift($(data.current).time[$(state.view.xrange)[1]])
-            
-            # Create intermediate Observable for the channel data point
-            channel_data_point = @lift($(data.current)[!, $channel][$(state.view.xrange)[1]])
-            label_y_obs = create_optimized_data_observable(
-                channel_data_point, 
-                channel, 
-                current_offset, 
-                state.view.display_scale
-            )
-            
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                label_x_obs,
-                label_y_obs,
+                @lift($(data.current).time[$(state.view.xrange)[1]]),
+                @lift(begin
+                    df = $(data.current)
+                    df[!, $channel][$(state.view.xrange)[1]] .+ current_offset
+                end),
                 text = String(channel),
                 align = (:left, :center),
                 fontsize = 18,
@@ -1433,93 +1152,29 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
                 visible = true,
             )
         else
-            # Use optimized Observable creation
-            time_obs = @lift($(current_data).time)
-            channel_data_obs = create_optimized_data_observable(
-                @lift($(current_data)[!, $channel]), 
-                channel, 
-                current_offset, 
-                state.view.display_scale
-            )
-            
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
-                time_obs,
-                channel_data_obs,
+                @lift($(current_data).time),
+                @lift(begin
+                    df = $(current_data)
+                    df[!, $channel] .+ current_offset
+                end),
                 color = :black,
                 linewidth = 2,
             )
-            
-            # Simplified label position Observable
-            label_x_obs = @lift($(current_data).time[1])
-            
-            # Create intermediate Observable for the channel data point
-            channel_data_point = @lift($(current_data)[!, $channel][1])
-            label_y_obs = create_optimized_data_observable(
-                channel_data_point, 
-                channel, 
-                current_offset, 
-                state.view.display_scale
-            )
-            
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                label_x_obs,
-                label_y_obs,
+                @lift($(current_data).time[1]),
+                @lift(begin
+                    df = $(current_data)
+                    df[!, $channel][1] .+ current_offset
+                end),
                 text = String(channel),
                 align = (:left, :center),
                 fontsize = 18,
             )
         end
     end
-end
-
-# Optimized zoom functions with minimal reactive overhead
-function zoom_in!(state::DataBrowserState)
-    """Zoom in by increasing display scale with minimal reactive overhead"""
-    current_scale = state.view.display_scale[]
-    new_scale = min(current_scale * 1.5, 10.0)  # Cap at 10x
-    if new_scale != current_scale
-        state.view.display_scale[] = new_scale
-    end
-end
-
-function zoom_out!(state::DataBrowserState)
-    """Zoom out by decreasing display scale with minimal reactive overhead"""
-    current_scale = state.view.display_scale[]
-    new_scale = max(current_scale / 1.5, 0.1)  # Floor at 0.1x
-    if new_scale != current_scale
-        state.view.display_scale[] = new_scale
-    end
-end
-
-# Simple data Observable creation
-function create_optimized_data_observable(data_obs::Observable, channel::Symbol, offset::Float64, display_scale_obs::Observable)
-    """
-    Create a simple data Observable that scales data by display scale.
-    """
-    # Create intermediate Observables to reduce nesting
-    scaled_data = @lift($(data_obs) .* $(display_scale_obs))
-    return @lift($(scaled_data) .+ offset)
-end
-
-# Optimized color Observable creation
-function create_optimized_color_observable(data_obs::Observable, crit_val_obs::Observable)
-    """
-    Create an optimized color Observable with minimal reactive overhead.
-    """
-    # Create intermediate Observable for absolute values
-    abs_data = @lift(abs.($(data_obs)))
-    return @lift($(abs_data) .>= $(crit_val_obs))
-end
-
-# Helper function to clear cache when epoch changes
-function clear_cache_on_epoch_change!(state::DataBrowserState{EpochedDataState})
-    """
-    Clear the Observable cache when the epoch changes for epoched data.
-    This ensures fresh Observables are created for the new epoch.
-    """
-    clear_observable_cache!(state.channels)
 end
 
 # Helper functions for getting type-specific information

@@ -15,7 +15,7 @@ function check_files_exist(conditions::Union{Vector{Int},Int}, filetype::String)
     for condition in conditions
         fname = "$(condition)_$(filetype).jld2"
         if !isfile(fname)
-            @warn "File not found: $(fname)" _module=nothing _file=nothing _line=nothing
+            @minimal_warning "File not found: $(fname)" 
             all_files_exist = false
         end
     end
@@ -26,7 +26,7 @@ function check_files_exist(files::Vector{String})
     all_files_exist = true
     for fname in files
         if !isfile(fname)
-            @warn "File not found: $(fname)" _module=nothing _file=nothing _line=nothing
+            @minimal_warning "File not found: $(fname)" 
             all_files_exist = false
         end
     end
@@ -64,7 +64,7 @@ function check_files_exist(subjects::Union{Vector{Int},Int}, conditions::Union{V
         for condition in conditions
             fname = "$(subject)_$(condition)_$(filetype).jld2"
             if !isfile(fname)
-                @warn "File not found: $(fname)" _module=nothing _file=nothing _line=nothing
+                @minimal_warning "File not found: $(fname)" 
                 all_files_exist = false
             end
         end
