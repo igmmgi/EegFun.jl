@@ -209,9 +209,21 @@ function preprocess_eeg_data(config::String)
 
 
                     # automatically identify components that are likely to be artifacts
-                    eog_comps, eog_comps_metrics_df = identify_eog_components(ica_result, dat)
-                    ecg_comps, ecg_comps_metrics_df = identify_ecg_components(ica_result, dat)
-                    line_noise_comps, line_noise_comps_metrics_df = identify_line_noise_components(ica_result, dat)
+                    eog_comps, eog_comps_metrics_df = identify_eog_components(ica_result, dat, sample_selection = samples_not(
+                        Symbol(
+                            "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                        ),
+                    ))
+                    ecg_comps, ecg_comps_metrics_df = identify_ecg_components(ica_result, dat, sample_selection = samples_not(
+                        Symbol(
+                            "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                        ),
+                    ))
+                    line_noise_comps, line_noise_comps_metrics_df = identify_line_noise_components(ica_result, dat, sample_selection = samples_not(
+                        Symbol(
+                            "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                        ),
+                    ))
                     channel_noise_comps, channel_noise_comps_metrics_df = identify_spatial_kurtosis_components(ica_result, dat)
 
                     # Combine above component artifact results into a single structure
