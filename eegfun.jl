@@ -9,7 +9,8 @@
 # package
 using eegfun
 using GLMakie
-eegfun.preprocess_eeg_data("pipeline.toml")
+
+# eegfun.preprocess_eeg_data("pipeline.toml")
 
 
 
@@ -47,6 +48,7 @@ eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 eegfun.plot_databrowser(dat)
+
 eegfun.plot_databrowser(dat, [:vEOG, :hEOG])
 
 eegfun.channels(dat)     # original channels in the layout

@@ -323,8 +323,8 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<
     end
 
     # Create grid using the same coordinate range as the plotting function
-    x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
-    y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
+    x_range = collect(range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale))
+    y_range = collect(range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale))
 
     # Create regular grid
     grid_points = zeros(2, grid_scale^2)
@@ -346,10 +346,8 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<
 end
 
 
-
 """
-    _data_interpolation_topo_spherical_spline(dat::Vector{Float64}, layout::DataFrame, grid_scale::Int; 
-                                           m::Int=4, lambda::Float64=1e-5)
+    _data_interpolation_topo_spherical_spline(dat::Vector{Float64}, layout::DataFrame, grid_scale::Int; m::Int=4, lambda::Float64=1e-5)
 
 Interpolate EEG data using spherical spline interpolation for topographic plotting.
 Implementation follows MNE-Python exactly.
@@ -447,8 +445,9 @@ function _data_interpolation_topo_spherical_spline(
         # Vectorized stereographic projection
         # Fix coordinate conversion to prevent 90-degree offset
         z3 = electrode_radius .* (1.0 .- r_norm.^2) ./ (1.0 .+ r_norm.^2)
-        x3 = valid_x .* (1.0 .+ z3./electrode_radius)
-        y3 = valid_y .* (1.0 .+ z3./electrode_radius)
+        # Swap x and y to fix the 90-degree rotation
+        x3 = valid_y .* (1.0 .+ z3./electrode_radius)
+        y3 = valid_x .* (1.0 .+ z3./electrode_radius)
         
         # Stack into 3D coordinates - ensure proper coordinate order
         grid_points_3d = hcat(x3, y3, z3)
