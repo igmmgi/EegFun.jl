@@ -9,14 +9,10 @@
 # package
 using eegfun
 using GLMakie
+# using CairoMakie
 
 # eegfun.preprocess_eeg_data("pipeline.toml")
 
-
-
-# using GLMakie
-# using CairoMakie
-# using eegfun: load_config 
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
@@ -42,8 +38,11 @@ eegfun.plot_trigger_timing(dat)
 # preprocessing steps
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
-eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
+
+eegfun.channel_difference!(dat)
+eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:Fp1, :Fp2]), channels_in2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:F9]), channels_in2 = eegfun.channels([:F10]), channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 

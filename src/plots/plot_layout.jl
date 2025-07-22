@@ -108,7 +108,6 @@ function plot_layout_2d!(
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
-    display_plot::Bool = true,
 )
 
     _validate_layout_columns(layout, [:label])
@@ -177,10 +176,16 @@ Create a new figure and plot a 2D EEG electrode layout.
     polar_to_cartesian_xy!(layout)
     plot_layout_2d(layout)
 """
-function plot_layout_2d(layout::DataFrame; kwargs...)
+function plot_layout_2d(layout::DataFrame; 
+    display_plot::Bool = true,
+    kwargs...
+)
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout; kwargs...)
+    if display_plot
+        display_figure(fig)
+    end
     return fig, ax
 end
 
