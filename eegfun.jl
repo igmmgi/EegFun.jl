@@ -35,7 +35,8 @@ eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:Fp1, :Fp2]), ch
 eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:F9]), channels_in2 = eegfun.channels([:F10]), channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-eegfun.plot_databrowser(dat)
+
+eegfun.plot_databrowser(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]), sample_selection = x -> x.sample .> 20000)
 
 eegfun.plot_databrowser(dat, [:vEOG, :hEOG])
 
