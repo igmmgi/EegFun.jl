@@ -63,12 +63,14 @@ end
 mutable struct ChannelState
     labels::Vector{Symbol}
     visible::Vector{Bool}
+    selected::Vector{Bool}
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     function ChannelState(channel_labels::Vector{Symbol})
         new(
             channel_labels,
             fill(true, length(channel_labels)),
+            fill(false, length(channel_labels)),
             Dict{Symbol,Makie.Text}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
         )
@@ -658,6 +660,16 @@ function finish_selection!(ax, state, mouse_x)
 end
 
 function handle_mouse_events!(ax, state)
+    # Track if Shift is currently pressed
+    shift_pressed = Ref(false)
+    
+    # Listen for keyboard events to track Shift state
+    on(events(ax).keyboardbutton) do key_event
+        if key_event.key == Keyboard.left_shift
+            shift_pressed[] = key_event.action == Keyboard.press
+        end
+    end
+    
     on(events(ax).mousebutton) do event
         pos = events(ax).mouseposition[]
         if !is_mouse_in_axis(ax, pos)
@@ -667,7 +679,28 @@ function handle_mouse_events!(ax, state)
         mouse_x = mouseposition(ax)[1]
 
         if event.button == Mouse.left
-            handle_left_click!(ax, state, event, mouse_x)
+            if event.action == Mouse.press
+                if shift_pressed[]
+                    # Shift+Left press: Start time selection
+                    handle_left_click!(ax, state, event, mouse_x)
+                else
+                    # Left press without Shift: Check for channel selection on release
+                    # (We'll handle this in the release event)
+                end
+            elseif event.action == Mouse.release
+                if !shift_pressed[]
+                    # Left release without Shift: Check for channel selection
+                    mouse_y = mouseposition(ax)[2]
+                    clicked_channel = find_closest_channel(ax, state, mouse_x, mouse_y)
+                    if !isnothing(clicked_channel)
+                        toggle_channel_visibility!(ax, state, clicked_channel)
+                        return
+                    end
+                else
+                    # Shift+Left release: Finish time selection
+                    handle_left_click!(ax, state, event, mouse_x)
+                end
+            end
         elseif event.button == Mouse.right && event.action == Mouse.press
             handle_right_click!(ax, state, mouse_x)
         end
@@ -698,6 +731,50 @@ function handle_right_click!(ax, state, mouse_x)
     if state.selection.visible[] && is_within_selection(state, mouse_x)
         show_additional_menu(state)
     end
+end
+
+
+
+# Helper function to find the closest channel to a click
+function find_closest_channel(ax, state, mouse_x, mouse_y)
+    current_data = get_current_data(state.data)
+    
+    min_distance = Inf
+    closest_channel = nothing
+    
+    for (idx, visible) in enumerate(state.channels.visible)
+        if visible
+            col = state.channels.labels[idx]
+            
+            # Find the data point closest to the clicked x position
+            time_data = current_data.time
+            x_idx = argmin(abs.(time_data .- mouse_x))
+            
+            # Calculate the y position of this channel at the clicked x position
+            channel_y = current_data[x_idx, col] + state.view.offset[idx]
+            
+            # Calculate distance to the clicked point
+            distance = abs(mouse_y - channel_y)
+            
+            # If this is the closest channel so far and within reasonable distance
+            if distance < min_distance && distance < 50  # 50 pixel tolerance
+                min_distance = distance
+                closest_channel = idx
+            end
+        end
+    end
+    
+    return closest_channel
+end
+
+# Helper function to toggle channel selection
+function toggle_channel_visibility!(ax, state, channel_idx)
+    # Toggle the selection of the clicked channel
+    state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
+    
+    # Clear and redraw the plot
+    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    draw(ax, state)
 end
 
 function handle_keyboard_events!(fig, ax, state)
@@ -768,6 +845,8 @@ function clear_x_region_selection!(state)
     # Make sure the polygon is hidden when selection is cleared
     state.selection.rectangle.visible[] = false
 end
+
+
 
 function get_x_region_data(state::ContinuousDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
@@ -1030,13 +1109,20 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
     for (idx, visible) in enumerate(state.channels.visible)
         if visible
             col = state.channels.labels[idx]
+            is_selected = state.channels.selected[idx]
+            
+            # Set line properties based on selection
+            line_color = is_selected ? :black : @lift(abs.($(data.current)[!, $col]) .>= $(state.view.crit_val))
+            line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
+            line_width = is_selected ? 4 : 2
+            
             state.channels.data_lines[col] = lines!(
                 ax,
                 @lift($(data.current).time),
                 @lift($(data.current)[!, $col] .+ state.view.offset[idx]),
-                color = @lift(abs.($(data.current)[!, $col]) .>= $(state.view.crit_val)),
-                colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
+                color = line_color,
+                colormap = line_colormap,
+                linewidth = line_width,
             )
             if !state.view.butterfly[]
                 state.channels.data_labels[col] = text!(
@@ -1046,6 +1132,7 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
+                    color = is_selected ? :red : :black,
                 )
             end
         end
@@ -1063,14 +1150,20 @@ function _draw_implementation(ax, state, data::EpochedDataState)
     for (idx, visible) in enumerate(state.channels.visible)
         if visible  # Only plot if channel is visible
             col = state.channels.labels[idx]
+            is_selected = state.channels.selected[idx]
+            
+            # Set line properties based on selection
+            line_color = is_selected ? :black : @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val))
+            line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
+            line_width = is_selected ? 4 : 2
 
             state.channels.data_lines[col] = lines!(
                 ax,
                 @lift($(current_data).time),
                 @lift($(current_data)[!, $col] .+ state.view.offset[idx]),
-                color = @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val)),
-                colormap = [:darkgrey, :darkgrey, :red],
-                linewidth = 2,
+                color = line_color,
+                colormap = line_colormap,
+                linewidth = line_width,
             )
             if !state.view.butterfly[]
                 state.channels.data_labels[col] = text!(
@@ -1080,6 +1173,7 @@ function _draw_implementation(ax, state, data::EpochedDataState)
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
+                    color = is_selected ? :red : :black,
                 )
             end
         end
