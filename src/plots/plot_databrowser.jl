@@ -1318,3 +1318,65 @@ plot_databrowser(dat::Union{ContinuousData,EpochData}, ica::InfoIca) = plot_data
 plot_databrowser(dat::Union{ContinuousData,EpochData}, channel_label::Symbol) = plot_databrowser(dat, [channel_label])
 plot_databrowser(dat::Union{ContinuousData,EpochData}, channel_label::Symbol, ica::InfoIca) =
     plot_databrowser(dat, [channel_label], ica)
+
+# New method with predicates
+function plot_databrowser(dat::Union{ContinuousData,EpochData}; 
+                         channel_selection::Function = channels(), 
+                         sample_selection::Function = samples())
+    
+    # Apply channel selection to get filtered channel labels
+    selected_channels = get_selected_channels(dat, channel_selection)
+    filtered_channel_labels = intersect(dat.layout.label, selected_channels)
+    
+    # Apply sample selection to filter data
+    if sample_selection != samples()  # Only filter if a non-default sample selection is provided
+        if dat isa ContinuousData
+            # For continuous data, filter the DataFrame
+            sample_mask = get_selected_samples(dat.data, sample_selection)
+            filtered_dat = ContinuousData(dat.data[sample_mask, :], dat.layout, dat.sample_rate, dat.analysis_info)
+        else  # EpochData
+            # For epoch data, filter each epoch DataFrame
+            filtered_epochs = []
+            for epoch_df in dat.data
+                sample_mask = get_selected_samples(epoch_df, sample_selection)
+                push!(filtered_epochs, epoch_df[sample_mask, :])
+            end
+            filtered_dat = EpochData(filtered_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+        end
+        dat = filtered_dat
+    end
+    
+    # Call the existing method with filtered data and channels
+    return plot_databrowser(dat, filtered_channel_labels)
+end
+
+# Method with predicates and ICA
+function plot_databrowser(dat::Union{ContinuousData,EpochData}, ica::InfoIca; 
+                         channel_selection::Function = channels(), 
+                         sample_selection::Function = samples())
+    
+    # Apply channel selection to get filtered channel labels
+    selected_channels = get_selected_channels(dat, channel_selection)
+    filtered_channel_labels = intersect(dat.layout.label, selected_channels)
+    
+    # Apply sample selection to filter data
+    if sample_selection != samples()  # Only filter if a non-default sample selection is provided
+        if dat isa ContinuousData
+            # For continuous data, filter the DataFrame
+            sample_mask = get_selected_samples(dat.data, sample_selection)
+            filtered_dat = ContinuousData(dat.data[sample_mask, :], dat.layout, dat.sample_rate, dat.analysis_info)
+        else  # EpochData
+            # For epoch data, filter each epoch DataFrame
+            filtered_epochs = []
+            for epoch_df in dat.data
+                sample_mask = get_selected_samples(epoch_df, sample_selection)
+                push!(filtered_epochs, epoch_df[sample_mask, :])
+            end
+            filtered_dat = EpochData(filtered_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+        end
+        dat = filtered_dat
+    end
+    
+    # Call the existing method with filtered data and channels
+    return plot_databrowser(dat, filtered_channel_labels, ica)
+end
