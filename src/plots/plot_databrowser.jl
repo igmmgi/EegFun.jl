@@ -660,13 +660,16 @@ function finish_selection!(ax, state, mouse_x)
 end
 
 function handle_mouse_events!(ax, state)
-    # Track if Shift is currently pressed
+    # Track if Shift and Ctrl are currently pressed
     shift_pressed = Ref(false)
+    ctrl_pressed = Ref(false)
     
-    # Listen for keyboard events to track Shift state
+    # Listen for keyboard events to track Shift and Ctrl state
     on(events(ax).keyboardbutton) do key_event
         if key_event.key == Keyboard.left_shift
             shift_pressed[] = key_event.action == Keyboard.press
+        elseif key_event.key == Keyboard.left_control
+            ctrl_pressed[] = key_event.action == Keyboard.press
         end
     end
     
@@ -688,15 +691,15 @@ function handle_mouse_events!(ax, state)
                     # (We'll handle this in the release event)
                 end
             elseif event.action == Mouse.release
-                if !shift_pressed[]
-                    # Left release without Shift: Check for channel selection
+                if ctrl_pressed[]
+                    # Ctrl+Left release: Check for channel selection
                     mouse_y = mouseposition(ax)[2]
                     clicked_channel = find_closest_channel(ax, state, mouse_x, mouse_y)
                     if !isnothing(clicked_channel)
                         toggle_channel_visibility!(ax, state, clicked_channel)
                         return
                     end
-                else
+                elseif shift_pressed[]
                     # Shift+Left release: Finish time selection
                     handle_left_click!(ax, state, event, mouse_x)
                 end
