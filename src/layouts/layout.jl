@@ -1,3 +1,20 @@
+# Layout type is defined in types.jl
+
+# Validation function (separate from constructor)
+function validate_layout(layout::Layout)
+    required_cols = [:label, :inc, :azi]
+    missing_cols = setdiff(required_cols, propertynames(layout.data))
+    if !isempty(missing_cols)
+        throw(ArgumentError("Layout missing required columns: $missing_cols"))
+    end
+    return layout
+end
+
+# Accessor methods
+get_labels(layout::Layout) = layout.data.label
+has_2d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x2, :y2])
+has_3d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x3, :y3, :z3])
+
 """
     read_layout(layout_file_name::String)
 
@@ -18,78 +35,92 @@ function read_layout(file)
     end
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
-    return df
+    return Layout(df, nothing, nothing)
 end
 
 
 """
-    polar_to_cartesian_xy!(layout::DataFrame)
+    polar_to_cartesian_xy!(layout::Layout)
 
-Converts polar coordinates (incidence and azimuth angles) from a layout DataFrame into Cartesian coordinates (x, y).
+Converts polar coordinates (incidence and azimuth angles) from a layout into Cartesian coordinates (x, y).
 
 # Arguments
-- `layout::DataFrame`: A DataFrame containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
+- `layout::Layout`: A Layout containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
 
 # Modifies
-- The input `layout` DataFrame is modified in place to include new columns `x2` and `y2`, which represent the Cartesian coordinates calculated from the polar coordinates.
+- The input `layout` is modified in place to include new columns `x2` and `y2`, which represent the Cartesian coordinates calculated from the polar coordinates.
+- Clears any existing neighbour information since coordinates have changed.
 
 # Returns
-- Nothing. The function modifies the `layout` DataFrame directly.
+- Nothing. The function modifies the `layout` directly.
 """
-function polar_to_cartesian_xy!(layout::DataFrame)
+function polar_to_cartesian_xy!(layout::Layout)
+    # Get the DataFrame from Layout
+    df = layout.data
+    
     # Check for required columns
-    if !all([col in propertynames(layout) for col in [:inc, :azi]])
+    if !all([col in propertynames(df) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
 
     # Validate data types
-    if !(eltype(layout.inc) <: Number && eltype(layout.azi) <: Number)
+    if !(eltype(df.inc) <: Number && eltype(df.azi) <: Number)
         throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
     radius = 88 # mm
-    inc = layout[!, :inc] .* (pi / 180)
-    azi = layout[!, :azi] .* (pi / 180)
+    inc = df[!, :inc] .* (pi / 180)
+    azi = df[!, :azi] .* (pi / 180)
 
-    layout[!, :x2] = inc .* cos.(azi) .* radius
-    layout[!, :y2] = inc .* sin.(azi) .* radius
+    df[!, :x2] = inc .* cos.(azi) .* radius
+    df[!, :y2] = inc .* sin.(azi) .* radius
+
+    # Clear neighbours since coordinates have changed
+    clear_neighbours!(layout)
 
     return nothing
 end
 
 """
-    polar_to_cartesian_xyz!(layout::DataFrame)
+    polar_to_cartesian_xyz!(layout::Layout)
 
-Converts polar coordinates (incidence and azimuth angles) from a layout DataFrame into Cartesian coordinates (x, y, z).
+Converts polar coordinates (incidence and azimuth angles) from a layout into Cartesian coordinates (x, y, z).
 
 # Arguments
-- `layout::DataFrame`: A DataFrame containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
+- `layout::Layout`: A Layout containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
 
 # Modifies
-- The input `layout` DataFrame is modified in place to include new columns `x3`, `y3`, and `z3`, which represent the Cartesian coordinates calculated from the polar coordinates.
+- The input `layout` is modified in place to include new columns `x3`, `y3`, and `z3`, which represent the Cartesian coordinates calculated from the polar coordinates.
+- Clears any existing neighbour information since coordinates have changed.
 
 # Returns
-- Nothing. The function modifies the `layout` DataFrame directly.
+- Nothing. The function modifies the `layout` directly.
 """
-function polar_to_cartesian_xyz!(layout::DataFrame)
+function polar_to_cartesian_xyz!(layout::Layout)
+    # Get the DataFrame from Layout
+    df = layout.data
+    
     # Check for required columns
-    if !all([col in propertynames(layout) for col in [:inc, :azi]])
+    if !all([col in propertynames(df) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
 
     # Validate data types
-    if !(eltype(layout.inc) <: Number && eltype(layout.azi) <: Number)
+    if !(eltype(df.inc) <: Number && eltype(df.azi) <: Number)
         throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
     radius = 88.0  # mm
-    inc = layout[!, :inc] .* (pi / 180)  # Convert to radians
-    azi = layout[!, :azi] .* (pi / 180)  # Convert to radians
+    inc = df[!, :inc] .* (pi / 180)  # Convert to radians
+    azi = df[!, :azi] .* (pi / 180)  # Convert to radians
 
     # Standard spherical to Cartesian conversion
-    layout[!, :x3] = radius .* sin.(inc) .* cos.(azi)
-    layout[!, :y3] = radius .* sin.(inc) .* sin.(azi)
-    layout[!, :z3] = radius .* cos.(inc)
+    df[!, :x3] = radius .* sin.(inc) .* cos.(azi)
+    df[!, :y3] = radius .* sin.(inc) .* sin.(azi)
+    df[!, :z3] = radius .* cos.(inc)
+
+    # Clear neighbours since coordinates have changed
+    clear_neighbours!(layout)
 
     return nothing
 end
@@ -161,42 +192,40 @@ end
 
 
 """
-    get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real)
+    get_electrode_neighbours_xy(layout::Layout, distance_criterion::Real)
 
 Identifies the neighbours of each electrode based on their Cartesian coordinates.
 
 # Arguments
-- `layout::DataFrame`: A DataFrame containing the layout information with columns for electrode labels, Cartesian coordinates (`x2`, `y2`).
+- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, Cartesian coordinates (`x2`, `y2`).
 - `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours.
 
 # Returns
 - `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
 
 # Throws
-- `ArgumentError`: If the layout DataFrame does not contain the required columns.
+- `ArgumentError`: If the layout does not contain the required columns.
 """
-function get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real)
+function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
-    if !all([col in propertynames(layout) for col in [:x2, :y2, :label]])
-        throw(ArgumentError("Layout must contain x2, y2, and :label columns"))
-    end
+    _ensure_coordinates_2d!(layout)
 
     if distance_criterion <= 0
         throw(ArgumentError("Distance criterion must be positive"))
     end
 
     # Precompute coordinates
-    coords = Matrix{Float64}(undef, size(layout, 1), 2)
-    coords[:, 1] = layout.x2
-    coords[:, 2] = layout.y2
+    coords = Matrix{Float64}(undef, size(layout.data, 1), 2)
+    coords[:, 1] = layout.data.x2
+    coords[:, 2] = layout.data.y2
 
     neighbour_dict = OrderedDict{Symbol,Neighbours}()
 
-    for (idx1, label1) in enumerate(layout.label)
+    for (idx1, label1) in enumerate(layout.data.label)
 
         neighbour_dict[Symbol(label1)] = Neighbours([], [], [])
 
-        for (idx2, label2) in enumerate(layout.label)
+        for (idx2, label2) in enumerate(layout.data.label)
             if idx1 == idx2
                 continue
             end
@@ -221,48 +250,49 @@ function get_electrode_neighbours_xy(layout::DataFrame, distance_criterion::Real
 
     end
 
-    return neighbour_dict
+    layout.neighbours = neighbour_dict
+    layout.criterion = distance_criterion
+
+    return nothing
 
 end
 
 """
-    get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Real)
+    get_electrode_neighbours_xyz(layout::Layout, distance_criterion::Real)
 
 Identifies the neighbours of each electrode based on their Cartesian coordinates.
 
 # Arguments
-- `layout::DataFrame`: A DataFrame containing the layout information with columns for electrode labels, Cartesian coordinates (`x3`, `y3`, `z3`).
+- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, Cartesian coordinates (`x3`, `y3`, `z3`).
 - `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours.
 
 # Returns
 - `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
 
 # Throws
-- `ArgumentError`: If the layout DataFrame does not contain the required columns.
+- `ArgumentError`: If the layout does not contain the required columns.
 """
-function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Real)
+function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
-    if !all([col in propertynames(layout) for col in [:x3, :y3, :z3, :label]])
-        throw(ArgumentError("Layout must contain :x3, :y3, :z3, and :label columns"))
-    end
+    _ensure_coordinates_3d!(layout)
 
     if distance_criterion <= 0
         throw(ArgumentError("Distance criterion must be positive"))
     end
 
     # Precompute coordinates
-    coords = Matrix{Float64}(undef, size(layout, 1), 3)
-    coords[:, 1] = layout.x3
-    coords[:, 2] = layout.y3
-    coords[:, 3] = layout.z3
+    coords = Matrix{Float64}(undef, size(layout.data, 1), 3)
+    coords[:, 1] = layout.data.x3
+    coords[:, 2] = layout.data.y3
+    coords[:, 3] = layout.data.z3
 
     neighbour_dict = OrderedDict{Symbol, Neighbours}()
 
-    for (idx1, label1) in enumerate(layout.label)
+    for (idx1, label1) in enumerate(layout.data.label)
 
         neighbour_dict[Symbol(label1)] = Neighbours([], [], [])
 
-        for (idx2, label2) in enumerate(layout.label)
+        for (idx2, label2) in enumerate(layout.data.label)
 
             if idx1 == idx2
                 continue
@@ -296,7 +326,10 @@ function get_electrode_neighbours_xyz(layout::DataFrame, distance_criterion::Rea
 
     end
 
-    return neighbour_dict
+    layout.neighbours = neighbour_dict
+    layout.criterion = distance_criterion
+
+    return nothing
 
 end
 
@@ -391,5 +424,3 @@ function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neigh
     total_neighbours = sum(length(neighbours.electrodes) for neighbours in values(neighbours_dict))
     return total_neighbours / length(neighbours_dict)
 end
-
-

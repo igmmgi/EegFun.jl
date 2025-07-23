@@ -50,8 +50,8 @@ Helper function to validate that a layout DataFrame contains required columns.
 # Throws
 - `ArgumentError`: If any required columns are missing
 """
-function _validate_layout_columns(layout::DataFrame, required_cols::Vector{Symbol})
-    missing_cols = setdiff(required_cols, propertynames(layout))
+function _validate_layout_columns(layout::Layout, required_cols::Vector{Symbol})
+    missing_cols = setdiff(required_cols, propertynames(layout.data))
     if !isempty(missing_cols)
         throw(ArgumentError("Missing required columns: $missing_cols"))
     end
@@ -61,7 +61,7 @@ end
 # 2D layout
 ########################################################
 """
-    _ensure_coordinates_2d!(layout::DataFrame)
+    _ensure_coordinates_2d!(layout::Layout)
 
 Helper function to ensure 2D coordinates exist in the layout DataFrame.
 Converts polar coordinates to Cartesian if needed.
@@ -69,15 +69,15 @@ Converts polar coordinates to Cartesian if needed.
 # Arguments
 - `layout::DataFrame`: The layout DataFrame to check and potentially convert
 """
-function _ensure_coordinates_2d!(layout::DataFrame)
-    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
+function _ensure_coordinates_2d!(layout::Layout)
+    if !has_2d_coords(layout)
         @info "Converting polar coordinates to 2D Cartesian coordinates"
         polar_to_cartesian_xy!(layout)
     end
 end
 
 """
-    plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame;
+    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout;
                   head_kwargs::Dict=Dict(), point_kwargs::Dict=Dict(),
                   label_kwargs::Dict=Dict())
 
@@ -86,7 +86,7 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 # Arguments
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
-- `layout`: DataFrame containing electrode positions with columns x2, y2, and label
+- `layout`: Layout containing electrode positions with columns x2, y2, and label
 - `head_kwargs`: Keyword arguments for head shape rendering (color, linewidth, etc.)
 - `point_kwargs`: Keyword arguments for electrode points (plot_points, marker, size, color etc.)
 - `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, etc.)
@@ -95,7 +95,7 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 - `nothing` (modifies the provided figure and axis in-place)
 
 # Example
-    layout = read_layout("./layouts/biosemi64.csv")
+    layout = Layout("biosemi64.csv")
     polar_to_cartesian_xy!(layout)
     fig = Figure()
     ax = Axis(fig[1, 1])
@@ -104,7 +104,7 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 function plot_layout_2d!(
     fig::Figure,
     ax::Axis,
-    layout::DataFrame;
+    layout::Layout;
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
@@ -112,6 +112,9 @@ function plot_layout_2d!(
 
     _validate_layout_columns(layout, [:label])
     _ensure_coordinates_2d!(layout)
+
+    # Get the DataFrame from Layout
+    df = layout.data
 
     # Use helper functions for kwargs handling
     head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
@@ -138,14 +141,14 @@ function plot_layout_2d!(
 
     # Regular points
     if plot_points
-        scatter!(ax, layout[!, :x2], layout[!, :y2]; point_plot_kwargs...)
+        scatter!(ax, df[!, :x2], df[!, :y2]; point_plot_kwargs...)
     end
 
     if plot_labels
         # More efficient: access columns directly instead of iterating rows
-        x_coords = layout[!, :x2] .+ xoffset
-        y_coords = layout[!, :y2] .+ yoffset
-        labels = String.(layout[!, :label])
+        x_coords = df[!, :x2] .+ xoffset
+        y_coords = df[!, :y2] .+ yoffset
+        labels = String.(df[!, :label])
         
         for i in eachindex(labels)
             text!(ax, position = (x_coords[i], y_coords[i]), labels[i]; label_plot_kwargs...)
@@ -405,7 +408,7 @@ end
 # 3D layout
 ########################################################
 """
-    _ensure_coordinates_3d!(layout::DataFrame)
+    _ensure_coordinates_3d!(layout::Layout)
 
 Helper function to ensure 3D coordinates exist in the layout DataFrame.
 Converts polar coordinates to Cartesian if needed.
@@ -413,15 +416,15 @@ Converts polar coordinates to Cartesian if needed.
 # Arguments
 - `layout::DataFrame`: The layout DataFrame to check and potentially convert
 """
-function _ensure_coordinates_3d!(layout::DataFrame)
-    if (:x3 ∉ propertynames(layout) || :y3 ∉ propertynames(layout) || :z3 ∉ propertynames(layout))
+function _ensure_coordinates_3d!(layout::Layout)
+    if !has_3d_coords(layout)
         @info "Converting polar coordinates to 3D Cartesian coordinates"
         polar_to_cartesian_xyz!(layout)
     end
 end
 
 """
-    plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame;
+    plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout;
                   head_kwargs::Dict = Dict(),
                   point_kwargs::Dict = Dict(),
                   label_kwargs::Dict = Dict(),
@@ -433,7 +436,7 @@ Plot a 3D EEG electrode layout with customizable head shape, electrode points, a
 # Arguments
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
-- `layout`: DataFrame containing electrode positions with columns x3, y3, z3, and label
+- `layout`: Layout containing electrode positions with columns x3, y3, z3, and label
 - `head_kwargs`: Keyword arguments for head shape rendering (color, linewidth, etc.)
 - `point_kwargs`: Keyword arguments for electrode points (plot_points, marker, size, color etc.)
 - `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, zoffset etc.)
@@ -443,7 +446,7 @@ Plot a 3D EEG electrode layout with customizable head shape, electrode points, a
 - The figure and axis objects
 
 # Example
-    layout = read_layout("./layouts/biosemi64.csv")
+    layout = Layout("biosemi64.csv")
     polar_to_cartesian_xyz!(layout)
     fig = Figure()
     ax = Axis3(fig[1, 1])
@@ -452,7 +455,7 @@ Plot a 3D EEG electrode layout with customizable head shape, electrode points, a
 function plot_layout_3d!(
     fig::Figure,
     ax::Axis3,
-    layout::DataFrame;
+    layout::Layout;
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
@@ -462,6 +465,9 @@ function plot_layout_3d!(
     _validate_layout_columns(layout, [:label])
 
     _ensure_coordinates_3d!(layout)
+
+    # Get the DataFrame from Layout
+    df = layout.data
 
     # Use helper functions for kwargs handling
     head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
@@ -489,15 +495,15 @@ function plot_layout_3d!(
 
     # Regular points
     if plot_points
-        scatter!(ax, layout[!, :x3], layout[!, :y3], layout[!, :z3]; point_plot_kwargs...)
+        scatter!(ax, df[!, :x3], df[!, :y3], df[!, :z3]; point_plot_kwargs...)
     end
 
     if plot_labels
         # More efficient: access columns directly instead of iterating rows
-        x_coords = layout[!, :x3] .+ xoffset
-        y_coords = layout[!, :y3] .+ yoffset
-        z_coords = layout[!, :z3] .+ zoffset
-        labels = String.(layout[!, :label])
+        x_coords = df[!, :x3] .+ xoffset
+        y_coords = df[!, :y3] .+ yoffset
+        z_coords = df[!, :z3] .+ zoffset
+        labels = String.(df[!, :label])
         
         for i in eachindex(labels)
             text!(ax, position = (x_coords[i], y_coords[i], z_coords[i]), labels[i]; label_plot_kwargs...)

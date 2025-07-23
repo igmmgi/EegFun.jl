@@ -12,8 +12,24 @@ using GLMakie
 # using CairoMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
 # load data
+
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+
+# 2D layout with neighbours defined by distance
+eegfun.get_layout_neighbours_xy!(layout, 40);
+
+eegfun.get_layout_neighbours_xyz!(layout, 40);
+
+# neighbours = eegfun.neighbours(layout);
+
+eegfun.print_neighbours_dict(layout.neighbours, "electrode_neighbours.toml")
+eegfun.plot_layout_2d(layout, layout.neighbours)
+
+
+
+
+
 # 2D layout
 eegfun.polar_to_cartesian_xy!(layout)
 # eegfun.plot_layout_2d(layout);
@@ -88,6 +104,7 @@ fig, ax = eegfun.plot_layout_2d(layout);
 
 # 2D layout with neighbours defined by distance
 neighbours = eegfun.get_electrode_neighbours_xy(layout, 40);
+
 eegfun.print_neighbours_dict(neighbours, "electrode_neighbours.toml")
 eegfun.plot_layout_2d(layout, neighbours)
 
