@@ -42,8 +42,138 @@ mutable struct EpochData <: MultiDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
+mutable struct CoordXY
+    x::Any
+    y::Any
+end
+
+mutable struct Coord
+    coord::Array{CoordXY}
+end
+
+"""
+    Neighbours
+
+Stores neighbor information for an electrode in layout-based operations.
+
+# Fields
+- `electrodes::Vector{Symbol}`: List of neighboring electrode labels
+- `distances::Vector{Float64}`: Distances to each neighbor
+- `weights::Vector{Float64}`: Interpolation weights for each neighbor
+"""
+struct Neighbours
+    electrodes::Vector{Symbol}
+    distances::Vector{Float64}
+    weights::Vector{Float64}
+end
+
 mutable struct Layout
     data::DataFrame
+    neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}
+    criterion::Union{Nothing, Float64}
+end
+
+# Helper methods for neighbour management
+has_neighbours(layout::Layout) = !isnothing(layout.neighbours)
+criterion(layout::Layout) = layout.criterion
+
+# Helper function for average neighbours calculation
+function _average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
+    if isempty(neighbours_dict)
+        return 0.0
+    end
+    
+    total_neighbours = sum(length(neighbours.electrodes) for neighbours in values(neighbours_dict))
+    return total_neighbours / length(neighbours_dict)
+end
+
+# Get neighbours with automatic computation if needed (mutating)
+function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
+    if !has_neighbours(layout) || layout.criterion != distance_criterion
+        layout.neighbours = get_electrode_neighbours_xy(layout, distance_criterion)
+        layout.criterion = distance_criterion
+    end
+    return nothing
+end
+
+function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
+    if !has_neighbours(layout) || layout.criterion != distance_criterion
+        layout.neighbours = get_electrode_neighbours_xyz(layout, distance_criterion)
+        layout.criterion = distance_criterion
+    end
+    return nothing
+end
+
+# Getter functions that return the neighbours
+neighbours(layout::Layout) = layout.neighbours
+
+# Clear neighbours (useful when layout data changes)
+function clear_neighbours!(layout::Layout)
+    layout.neighbours = nothing
+    layout.criterion = nothing
+end
+
+# Display method for Layout
+function Base.show(io::IO, layout::Layout)
+    # Show metadata first
+    n_electrodes = size(layout.data, 1)
+    has_2d = has_2d_coords(layout)
+    has_3d = has_3d_coords(layout)
+    has_neigh = has_neighbours(layout)
+    
+    println(io, "Layout ($n_electrodes electrodes)")
+    println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")")
+    if has_neigh
+        avg_neighbours = _average_number_of_neighbours(layout.neighbours)
+        println(io, "Criterion: $(layout.criterion), Avg neighbours: $(round(avg_neighbours, digits=1))")
+    end
+    println(io)
+    
+    # Format the data for display
+    display_data = copy(layout.data)
+    
+    # Format numeric columns to 2 decimal places
+    for col in names(display_data)
+        if eltype(display_data[!, col]) <: Number
+            display_data[!, col] = [round(val, digits=2) for val in display_data[!, col]]
+        end
+    end
+    
+    # Create a combined view with first and last rows
+    if n_electrodes <= 10
+        # Show all rows if 10 or fewer
+        PrettyTables.pretty_table(io, display_data, 
+            header=names(display_data),
+            alignment=:r,  # Right align all columns
+            crop=:none
+        )
+    else
+        # Show first 5 and last 5 rows with ellipsis
+        first_rows = display_data[1:5, :]
+        last_rows = display_data[end-4:end, :]
+        
+        # Create ellipsis row
+        ellipsis_row = DataFrame()
+        for col in names(display_data)
+            ellipsis_row[!, col] = ["..."]
+        end
+        
+        # Combine the data
+        combined_data = vcat(first_rows, ellipsis_row, last_rows)
+        
+        PrettyTables.pretty_table(io, combined_data, 
+            header=names(display_data),
+            alignment=:r,  # Right align all columns
+            crop=:none
+        )
+        
+        println(io, "\n[showing first 5 and last 5 of $n_electrodes electrodes]")
+    end
+end
+
+# Compact display for arrays
+function Base.show(io::IO, ::MIME"text/plain", layout::Layout)
+    show(io, layout)
 end
 
 struct IntervalIdx
@@ -54,15 +184,6 @@ end
 struct IntervalTime
     interval_start::Float64
     interval_end::Float64
-end
-
-mutable struct CoordXY
-    x::Any
-    y::Any
-end
-
-mutable struct Coord
-    coord::Array{CoordXY}
 end
 
 """
@@ -213,21 +334,5 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.data_label),
         copy(ica.removed_activations)
     )
-end
-
-"""
-    Neighbours
-
-Stores neighbor information for an electrode in layout-based operations.
-
-# Fields
-- `electrodes::Vector{Symbol}`: List of neighboring electrode labels
-- `distances::Vector{Float64}`: Distances to each neighbor
-- `weights::Vector{Float64}`: Interpolation weights for each neighbor
-"""
-struct Neighbours
-    electrodes::Vector{Symbol}
-    distances::Vector{Float64}
-    weights::Vector{Float64}
 end
 
