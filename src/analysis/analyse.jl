@@ -448,6 +448,13 @@ samples_not(column::Symbol) = x -> .!(x[!, column])
 samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns)) 
 samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))  
 
+# Helper function predicates for easier epoch filtering
+epochs() = x -> fill(true, length(x))  # Default: select all epochs given
+epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i in x]
+epochs(epoch_number::Int) = x -> x .== epoch_number
+epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
+epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
+
 # Helper to select channels based on include_additional_channels and a predicate
 function get_selected_channels(dat, channel_selection::Function; include_additional_channels::Bool = false)
     # Get layout or all channels and return selected channel predicate
