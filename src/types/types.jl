@@ -42,6 +42,9 @@ mutable struct EpochData <: MultiDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
+mutable struct Layout
+    data::DataFrame
+end
 
 struct IntervalIdx
     interval_start::Int

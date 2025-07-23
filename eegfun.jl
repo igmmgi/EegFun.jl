@@ -23,19 +23,10 @@ eegfun.polar_to_cartesian_xy!(layout)
 # eegfun.plot_trigger_timing(dat)
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
-
-# Subset by channels only
-filtered_dat = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
-
-# Subset by samples only  
-filtered_dat = eegfun.subset(dat, sample_selection = x -> x.sample .<= 10000)
-
-# Subset by both predicates
-filtered_dat = eegfun.subset(dat, 
-    channel_selection = eegfun.channels([:Fp1, :Fp2]), 
-    sample_selection = x -> x.sample .< 1000)
-
-
+# Subset channels/samples 
+# dat_subset = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+# dat_subset = eegfun.subset(dat, sample_selection = x -> x.sample .<= 10_000) # first 10000 samples
+# dat_subset = eegfun.subset(dat, sample_selection = x -> x.time .<= 10) # first 10 seconds
 # we can get cleaner trigger info
 # eegfun.trigger_count(dat);
 # eegfun.plot_trigger_overview(dat)
@@ -49,9 +40,8 @@ eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:F9]), channels_
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
-eegfun.plot_databrowser(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]), sample_selection = x -> x.sample .> 20000)
-
-eegfun.plot_databrowser(dat, [:vEOG, :hEOG])
+# eegfun.plot_databrowser(dat)
+# eegfun.plot_databrowser(dat, channel_selection = eegfun.channels_not([:Cz]), sample_selection = x -> x.time .< 20)
 
 eegfun.channels(dat)     # original channels in the layout
 eegfun.all_channels(dat) # all channels in the data
