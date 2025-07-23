@@ -4,6 +4,7 @@ authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>"]
 version = "0.1.0"
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 BioSemiBDF = "d1c37e40-cd17-11e8-241b-47481c954d91"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
@@ -26,6 +27,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
+BenchmarkTools = "1.6.0"
 CairoMakie = "0.15.2"
 GLMakie = "0.13.2"
 

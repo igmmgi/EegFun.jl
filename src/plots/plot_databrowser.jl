@@ -1279,7 +1279,7 @@ end
 get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 
-function plot_databrowser(dat::Union{ContinuousData,EpochData}, channel_labels::Vector{Symbol}, ica = nothing)
+function plot_databrowser(dat::Union{ContinuousData,EpochData}, ica = nothing)
 
     # Check if CairoMakie is being used and warn about interactivity
     if string(Makie.current_backend()) == "CairoMakie"
@@ -1293,7 +1293,7 @@ function plot_databrowser(dat::Union{ContinuousData,EpochData}, channel_labels::
     ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (μV)", title = get_title(dat))
 
     # Create appropriate state based on data type
-    state = create_browser_state(dat, channel_labels, ax, ica)
+    state = create_browser_state(dat, dat.layout.label, ax, ica)
 
     # Common UI setup
     setup_ui(fig, ax, state, dat, ica)
@@ -1312,9 +1312,74 @@ function plot_vertical_lines!(ax, marker, active)
     marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
 end
 
-# Convenience methods
-plot_databrowser(dat::Union{ContinuousData,EpochData}) = plot_databrowser(dat, dat.layout.label)
-plot_databrowser(dat::Union{ContinuousData,EpochData}, ica::InfoIca) = plot_databrowser(dat, dat.layout.label, ica)
-plot_databrowser(dat::Union{ContinuousData,EpochData}, channel_label::Symbol) = plot_databrowser(dat, [channel_label])
-plot_databrowser(dat::Union{ContinuousData,EpochData}, channel_label::Symbol, ica::InfoIca) =
-    plot_databrowser(dat, [channel_label], ica)
+
+
+# Subset-based plot_databrowser methods
+"""
+    plot_databrowser(dat::Union{ContinuousData,EpochData}; 
+                    channel_selection::Function = channels(), 
+                    sample_selection::Function = samples(),
+                    epoch_selection::Function = epochs(),
+                    ica = nothing)
+
+Plot a subset of EEG data using the databrowser interface.
+
+# Arguments
+- `dat`: EEG data object (ContinuousData or EpochData)
+- `channel_selection`: Function that returns channel labels to include (default: all channels)
+- `sample_selection`: Function that returns sample mask to include (default: all samples)
+- `epoch_selection`: Function that returns epoch mask to include (default: all epochs, only for EpochData)
+- `ica`: Optional ICA result object for component visualization
+
+# Returns
+- Figure and Axis objects for the databrowser plot
+
+# Examples
+```julia
+# Plot subset by channels only
+plot_databrowser(dat, channel_selection = channels([:Fp1, :Fp2]))
+
+# Plot subset by samples only
+plot_databrowser(dat, sample_selection = x -> x.sample .< 1000)
+
+# Plot subset by epochs only (EpochData only)
+plot_databrowser(dat, epoch_selection = epochs(1:10))
+
+# Plot subset with all filters
+plot_databrowser(dat, 
+    channel_selection = channels([:Fp1, :Fp2]), 
+    sample_selection = x -> x.sample .< 1000,
+    epoch_selection = epochs([1, 3, 5]))
+
+# Plot subset with ICA
+plot_databrowser(dat, 
+    channel_selection = channels([:Fp1, :Fp2]), 
+    ica = ica_result)
+```
+"""
+function plot_databrowser(dat::ContinuousData; 
+                         channel_selection::Function = channels(), 
+                         sample_selection::Function = samples(),
+                         ica = nothing)
+    
+    # Create subset of data
+    filtered_dat = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
+    
+    # Plot the filtered data
+    return plot_databrowser(filtered_dat, ica)
+end
+
+function plot_databrowser(dat::EpochData; 
+                         channel_selection::Function = channels(), 
+                         sample_selection::Function = samples(),
+                         epoch_selection::Function = epochs(),
+                         ica = nothing)
+    
+    # Create subset of data
+    filtered_dat = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, epoch_selection = epoch_selection)
+    
+    # Plot the filtered data
+    return plot_databrowser(filtered_dat, ica)
+end
+
+
