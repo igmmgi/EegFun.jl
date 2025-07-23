@@ -98,3 +98,51 @@ function data_limits_y(dat::DataFrame, col)
     isempty(dat) && return nothing
     return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
 end
+
+"""
+    subset(dat::ContinuousData; 
+           channel_selection::Function = channels(), 
+           sample_selection::Function = samples())
+
+Create a subset of ContinuousData by applying channel and sample predicates.
+
+# Arguments
+- `dat`: ContinuousData object to subset
+- `channel_selection`: Function that returns channel labels to include (default: all channels)
+- `sample_selection`: Function that returns sample mask to include (default: all samples)
+
+# Returns
+- New ContinuousData object with filtered channels and samples
+
+# Examples
+```julia
+# Subset by channels only
+filtered_dat = subset(dat, channel_selection = channels([:Fp1, :Fp2]))
+
+# Subset by samples only
+filtered_dat = subset(dat, sample_selection = x -> x.sample .< 1000)
+
+# Subset by both
+filtered_dat = subset(dat, 
+    channel_selection = channels([:Fp1, :Fp2]), 
+    sample_selection = x -> x.sample .< 1000)
+```
+"""
+function subset(dat::ContinuousData; 
+               channel_selection::Function = channels(), 
+               sample_selection::Function = samples())
+    
+    # Get selected channels and samples directly
+    selected_channels = get_selected_channels(dat, channel_selection)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    # Filter data by samples and channels
+    dat_subset = dat.data[selected_samples, :]
+    dat_subset = select(dat_subset, vcat([:time, :sample, :triggers], selected_channels))
+    
+    # Filter layout to match selected channels
+    layout_subset = filter(:label => in(selected_channels), dat.layout)
+    
+    # Create new ContinuousData object
+    return ContinuousData(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
+end

@@ -23,6 +23,19 @@ eegfun.polar_to_cartesian_xy!(layout)
 # eegfun.plot_trigger_timing(dat)
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+
+# Subset by channels only
+filtered_dat = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+
+# Subset by samples only  
+filtered_dat = eegfun.subset(dat, sample_selection = x -> x.sample .<= 10000)
+
+# Subset by both predicates
+filtered_dat = eegfun.subset(dat, 
+    channel_selection = eegfun.channels([:Fp1, :Fp2]), 
+    sample_selection = x -> x.sample .< 1000)
+
+
 # we can get cleaner trigger info
 # eegfun.trigger_count(dat);
 # eegfun.plot_trigger_overview(dat)
