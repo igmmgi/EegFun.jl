@@ -15,15 +15,16 @@ using GLMakie
 
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
-
 # 2D layout with neighbours defined by distance
 eegfun.get_layout_neighbours_xy!(layout, 40);
-
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 
 # neighbours = eegfun.neighbours(layout);
 
-eegfun.print_neighbours_dict(layout.neighbours, "electrode_neighbours.toml")
+eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
+eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
+
+eegfun.plot_layout_2d(layout)
 eegfun.plot_layout_2d(layout, layout.neighbours)
 
 

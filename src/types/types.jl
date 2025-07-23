@@ -131,11 +131,12 @@ function Base.show(io::IO, layout::Layout)
     
     # Format the data for display
     display_data = copy(layout.data)
-    
-    # Format numeric columns to 2 decimal places
+
+    # Format numeric columns with different precision based on column type
     for col in names(display_data)
         if eltype(display_data[!, col]) <: Number
-            display_data[!, col] = [round(val, digits=2) for val in display_data[!, col]]
+            # Coordinate columns - always show exactly 2 decimal places
+            display_data[!, col] = [@sprintf("%.2f", val) for val in display_data[!, col]]
         end
     end
     
@@ -174,6 +175,60 @@ end
 # Compact display for arrays
 function Base.show(io::IO, ::MIME"text/plain", layout::Layout)
     show(io, layout)
+end
+
+# Custom show method for neighbours OrderedDict
+function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol, Neighbours})
+    # Use the text/plain MIME type to ensure our custom method is used
+    show(io, MIME"text/plain"(), neighbours_dict)
+end
+
+# Helper function to format a single electrode entry
+function _format_electrode(io, electrode, neighbours)
+    n_neighbours = length(neighbours.electrodes)
+    avg_distance = round(mean(neighbours.distances), digits=1)
+    
+    println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance)mm)")
+    if n_neighbours > 0
+        neighbour_details = []
+        for j in 1:n_neighbours
+            neighbour = string(neighbours.electrodes[j])
+            distance = round(neighbours.distances[j], digits=1)
+            weight = round(neighbours.weights[j], digits=3)
+            push!(neighbour_details, "$(neighbour) ($(distance),$(weight))")
+        end
+        neighbour_list = join(neighbour_details, ", ")
+        println(io, "    Neighbours: $neighbour_list")
+    end
+    println(io)
+end
+
+function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symbol, Neighbours})
+    n_electrodes = length(neighbours_dict)
+    avg_neighbours = average_number_of_neighbours(neighbours_dict)
+    
+    println(io, "Neighbours Dictionary ($n_electrodes electrodes): Average neighbours per electrode: $(round(avg_neighbours, digits=1))")
+    println(io)
+    
+    # Show entries based on size
+    if n_electrodes <= 6 
+        # Show all entries
+        for (electrode, neighbours) in neighbours_dict
+            _format_electrode(io, electrode, neighbours)
+        end
+    else
+        entries = collect(neighbours_dict)
+        # First/last 3 entries
+        for i in 1:3
+            _format_electrode(io, entries[i][1], entries[i][2])
+        end
+        println(io, "⋮")
+        for i in (n_electrodes-2):n_electrodes
+            _format_electrode(io, entries[i][1], entries[i][2])
+        end
+        
+        println(io, "[showing first 3 and last 3 of $n_electrodes electrodes]")
+    end
 end
 
 struct IntervalIdx
@@ -335,4 +390,3 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.removed_activations)
     )
 end
-
