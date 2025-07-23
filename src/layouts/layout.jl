@@ -390,13 +390,19 @@ neighbours = get_electrode_neighbours_xy(layout, 40)
 print_neighbours_dict(neighbours, "neighbours.toml")
 ```
 """
-function print_neighbours_dict(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
+function print_layout_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
     nneighbours = average_number_of_neighbours(neighbours_dict)
     toml_data = _format_neighbours_toml(neighbours_dict, nneighbours)
     open(filename, "w") do io
         TOML.print(io, toml_data)
     end
 end
+
+function print_layout_neighbours(layout::Layout, filename::String)
+    print_layout_neighbours(layout.neighbours, filename)
+end
+
+
 
 """
     average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})

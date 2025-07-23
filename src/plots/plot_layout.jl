@@ -179,7 +179,7 @@ Create a new figure and plot a 2D EEG electrode layout.
     polar_to_cartesian_xy!(layout)
     plot_layout_2d(layout)
 """
-function plot_layout_2d(layout::DataFrame; 
+function plot_layout_2d(layout::Layout; 
     display_plot::Bool = true,
     kwargs...
 )
@@ -246,6 +246,9 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, neighbours::O
     _add_interactive_points!(fig, ax, layout, neighbours, positions)
     return nothing
 end
+
+
+
 
 """
     _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
