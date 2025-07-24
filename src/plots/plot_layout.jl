@@ -163,13 +163,14 @@ end
 
 
 """
-    plot_layout_2d(layout::DataFrame; kwargs...)
+    plot_layout_2d(layout::Layout; kwargs...)
 
 Create a new figure and plot a 2D EEG electrode layout.
 
 # Arguments
-- `layout`: DataFrame containing electrode positions
-- `kwargs...`: Keyword arguments passed to the base plot_layout_2d function
+- `layout`: Layout containing electrode positions
+- `interactive`: Boolean to show interactive neighbour connections (default: false)
+- `kwargs...`: Additional keyword arguments passed to plot_layout_2d!
 
 # Returns
 - The figure and axis objects
@@ -178,14 +179,28 @@ Create a new figure and plot a 2D EEG electrode layout.
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xy!(layout)
     plot_layout_2d(layout)
+    # With interactive neighbours
+    plot_layout_2d(layout, interactive=true)
 """
 function plot_layout_2d(layout::Layout; 
+    interactive::Bool = false,
     display_plot::Bool = true,
     kwargs...
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_layout_2d!(fig, ax, layout; kwargs...)
+    
+    if interactive
+        if isnothing(layout.neighbours)
+            @warn "Layout has no neighbours data. Set interactive=false or calculate neighbours first."
+            plot_layout_2d!(fig, ax, layout; kwargs...)
+        else
+            plot_layout_2d!(fig, ax, layout, layout.neighbours; kwargs...)
+        end
+    else
+        plot_layout_2d!(fig, ax, layout; kwargs...)
+    end
+    
     if display_plot
         display_figure(fig)
     end
@@ -198,7 +213,7 @@ end
 Create a new figure and plot a 2D EEG electrode layout with interactive points showing electrode connections.
 
 # Arguments
-- `layout`: DataFrame containing electrode positions
+- `layout`: Layout containing electrode positions
 - `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
 - `kwargs...`: Additional keyword arguments passed to the plot_layout_2d! function
 
@@ -210,7 +225,7 @@ Create a new figure and plot a 2D EEG electrode layout with interactive points s
     neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80)
     fig, ax = plot_layout_2d(layout, neighbours)
 """
-function plot_layout_2d(layout, neighbours; kwargs...)
+function plot_layout_2d(layout::Layout, neighbours::OrderedDict; kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout, neighbours; kwargs...)
@@ -218,7 +233,7 @@ function plot_layout_2d(layout, neighbours; kwargs...)
 end
 
 """
-    plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, 
+    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout, 
                    neighbours::OrderedDict; kwargs...)
 
 Create a 2D EEG electrode layout with interactive points showing electrode connections.
@@ -226,7 +241,7 @@ Create a 2D EEG electrode layout with interactive points showing electrode conne
 # Arguments
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
-- `layout`: DataFrame containing electrode positions
+- `layout`: Layout containing electrode positions
 - `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
 - `kwargs...`: Additional keyword arguments passed to the base plot_layout_2d function
 
@@ -240,10 +255,10 @@ Create a 2D EEG electrode layout with interactive points showing electrode conne
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout, neighbours)
 """
-function plot_layout_2d!(fig::Figure, ax::Axis, layout::DataFrame, neighbours::OrderedDict; kwargs...)
+function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout, neighbours::OrderedDict; kwargs...)
     plot_layout_2d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
-    positions = Point2f.(layout.x2, layout.y2)
-    _add_interactive_points!(fig, ax, layout, neighbours, positions)
+    positions = Point2f.(layout.data.x2, layout.data.y2)
+    _add_interactive_points!(fig, ax, layout.data, neighbours, positions)
     return nothing
 end
 
@@ -489,12 +504,7 @@ function plot_layout_3d!(
     zoffset = merged_label_kwargs[:zoffset]
     label_plot_kwargs = _extract_plot_kwargs(merged_label_kwargs, [:plot_labels, :xoffset, :yoffset, :zoffset])
 
-    # Head shape - Use constants
-    radius = DEFAULT_HEAD_RADIUS
-    arc!(ax, Point3f(0, 0, 0), radius * 2, -π, π; merged_head_kwargs...) # head
-    arc!(ax, Point3f(radius * 2, 0, 0), radius * 2 * HEAD_EAR_RATIO, -π / 2, π / 2; merged_head_kwargs...) # ear right
-    arc!(ax, Point3f(-radius * 2, 0, 0), -radius * 2 * HEAD_EAR_RATIO, π / 2, -π / 2; merged_head_kwargs...) # ear left
-    lines!(ax, Point3f[(-0.05, 0.5, 0), (0.0, 0.6, 0), (0.05, 0.5, 0)] .* radius * HEAD_NOSE_SCALE; merged_head_kwargs...) # nose
+    # No head shape for 3D plots (as per original design)
 
     # Regular points
     if plot_points
@@ -516,21 +526,18 @@ function plot_layout_3d!(
     hidedecorations!(ax)
     hidespines!(ax)
 
-    if display_plot
-        display_figure(fig)
-    end
-
     return fig, ax
 end
 
 """
-    plot_layout_3d(layout; kwargs...)
+    plot_layout_3d(layout::Layout; kwargs...)
 
 Create a new figure and plot a 3D EEG electrode layout.
 
 # Arguments
-- `layout`: DataFrame containing electrode positions
-- `kwargs...`: Additional keyword arguments passed to the plot_layout_3d function
+- `layout`: Layout containing electrode positions
+- `interactive`: Boolean to show interactive neighbour connections (default: false)
+- `kwargs...`: Additional keyword arguments passed to plot_layout_3d!
 
 # Returns
 - The figure and axis objects
@@ -539,11 +546,28 @@ Create a new figure and plot a 3D EEG electrode layout.
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xyz!(layout)
     fig, ax = plot_layout_3d(layout)
+    # With interactive neighbours
+    plot_layout_3d(layout, interactive=true)
 """
-function plot_layout_3d(layout; kwargs...)
+function plot_layout_3d(layout::Layout; 
+    interactive::Bool = false,
+    display_plot::Bool = true,
+    kwargs...
+)
     fig = Figure()
     ax = Axis3(fig[1, 1])
-    plot_layout_3d!(fig, ax, layout; kwargs...)
+    
+    if interactive
+        if isnothing(layout.neighbours)
+            @warn "Layout has no neighbours data. Set interactive=false or calculate neighbours first."
+            plot_layout_3d!(fig, ax, layout; kwargs...)
+        else
+            plot_layout_3d!(fig, ax, layout, layout.neighbours; kwargs...)
+        end
+    else
+        plot_layout_3d!(fig, ax, layout; kwargs...)
+    end
+    
     if get(kwargs, :display_plot, true) # force a new figure window
         display_figure(fig)
     end
@@ -556,7 +580,7 @@ end
 Create a new figure and plot a 3D EEG electrode layout with interactive points showing electrode connections.
 
 # Arguments
-- `layout`: DataFrame containing electrode positions
+- `layout`: Layout containing electrode positions
 - `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
 - `kwargs...`: Additional keyword arguments passed to the plot_layout_3d! function
 
@@ -568,7 +592,7 @@ Create a new figure and plot a 3D EEG electrode layout with interactive points s
     neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 80)
     fig, ax = plot_layout_3d(layout, neighbours)
 """
-function plot_layout_3d(layout, neighbours; kwargs...)
+function plot_layout_3d(layout::Layout, neighbours::OrderedDict; kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout, neighbours; kwargs...)
@@ -579,7 +603,7 @@ function plot_layout_3d(layout, neighbours; kwargs...)
 end
 
 """
-    plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, 
+    plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout, 
                    neighbours::OrderedDict; kwargs...)
 
 Create a 3D EEG electrode layout with interactive points showing electrode connections.
@@ -587,7 +611,7 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
 # Arguments
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
-- `layout`: DataFrame containing electrode positions
+- `layout`: Layout containing electrode positions
 - `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
 - `kwargs...`: Additional keyword arguments passed to the base plot_layout_3d function
 
@@ -601,10 +625,10 @@ Create a 3D EEG electrode layout with interactive points showing electrode conne
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout, neighbours)
 """
-function plot_layout_3d!(fig::Figure, ax::Axis3, layout::DataFrame, neighbours::OrderedDict; kwargs...)
+function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout, neighbours::OrderedDict; kwargs...)
     plot_layout_3d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
-    positions = Point3f.(layout.x3, layout.y3, layout.z3)
-    _add_interactive_points!(fig, ax, layout, neighbours, positions, true)
+    positions = Point3f.(layout.data.x3, layout.data.y3, layout.data.z3)
+    _add_interactive_points!(fig, ax, layout.data, neighbours, positions, true)
     return fig, ax
 end
 

@@ -24,8 +24,10 @@ eegfun.get_layout_neighbours_xyz!(layout, 40);
 eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
 eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
 
-eegfun.plot_layout_2d(layout)
-eegfun.plot_layout_2d(layout, layout.neighbours)
+eegfun.plot_layout_2d(layout, interactive = true)
+
+eegfun.plot_layout_3d(layout, interactive = true)
+
 
 
 
