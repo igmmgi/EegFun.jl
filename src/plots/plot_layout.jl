@@ -1,65 +1,23 @@
 ########################################################
 # Layout plotting functions
 ########################################################
-
-########################################################
-# Helper functions for kwargs handling
-########################################################
-
 """
-    _merge_kwargs(defaults::Dict, user_kwargs::Dict)
+    extract_kwargs(kwargs::Dict, keys_to_extract::Vector{Symbol})
 
-Helper function to merge default keyword arguments with user-provided arguments.
+Helper function to extract keyword arguments by removing control keys.
 
 # Arguments
-- `defaults::Dict`: Dictionary of default keyword arguments
-- `user_kwargs::Dict`: Dictionary of user-provided keyword arguments
+- `kwargs::Dict`: Dictionary of keyword arguments
+- `keys_to_extract::Vector{Symbol}`: Keys to extract from dict
 
 # Returns
-- `Dict`: Merged dictionary with user kwargs taking precedence
+- `Dict`: Dictionary without the specified keys (only plotting parameters)
 """
-function _merge_kwargs(defaults::Dict, user_kwargs::Dict)
-    return merge(defaults, user_kwargs)
+function extract_kwargs(kwargs::Dict, keys_to_extract::Vector{Symbol})
+    return filter(p -> p.first ∉ keys_to_extract, kwargs)
 end
 
-"""
-    _extract_plot_kwargs(merged_kwargs::Dict, exclude_keys::Vector{Symbol})
 
-Helper function to extract plotting keyword arguments by excluding specific keys.
-
-# Arguments
-- `merged_kwargs::Dict`: Dictionary of merged keyword arguments
-- `exclude_keys::Vector{Symbol}`: Keys to exclude from the result
-
-# Returns
-- `Dict`: Filtered dictionary without the excluded keys
-"""
-function _extract_plot_kwargs(merged_kwargs::Dict, exclude_keys::Vector{Symbol})
-    return filter(p -> p.first ∉ exclude_keys, merged_kwargs)
-end
-
-"""
-    _validate_layout_columns(layout::DataFrame, required_cols::Vector{Symbol})
-
-Helper function to validate that a layout DataFrame contains required columns.
-
-# Arguments
-- `layout::DataFrame`: The layout DataFrame to validate
-- `required_cols::Vector{Symbol}`: Vector of required column names
-
-# Throws
-- `ArgumentError`: If any required columns are missing
-"""
-function _validate_layout_columns(layout::Layout, required_cols::Vector{Symbol})
-    missing_cols = setdiff(required_cols, propertynames(layout.data))
-    if !isempty(missing_cols)
-        throw(ArgumentError("Missing required columns: $missing_cols"))
-    end
-end
-
-########################################################
-# 2D layout
-########################################################
 """
     _ensure_coordinates_2d!(layout::Layout)
 
@@ -67,7 +25,7 @@ Helper function to ensure 2D coordinates exist in the layout DataFrame.
 Converts polar coordinates to Cartesian if needed.
 
 # Arguments
-- `layout::DataFrame`: The layout DataFrame to check and potentially convert
+- `layout::Layout`: The layout to check and potentially convert
 """
 function _ensure_coordinates_2d!(layout::Layout)
     if !has_2d_coords(layout)
@@ -77,9 +35,25 @@ function _ensure_coordinates_2d!(layout::Layout)
 end
 
 """
+    _ensure_coordinates_3d!(layout::Layout)
+
+Helper function to ensure 3D coordinates exist in the layout DataFrame.
+Converts polar coordinates to Cartesian if needed.
+
+# Arguments
+- `layout::Layout`: The layout to check and potentially convert
+"""
+function _ensure_coordinates_3d!(layout::Layout)
+    if !has_3d_coords(layout)
+        @info "Converting polar coordinates to 3D Cartesian coordinates"
+        polar_to_cartesian_xyz!(layout)
+    end
+end
+
+"""
     plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout;
-                  head_kwargs::Dict=Dict(), point_kwargs::Dict=Dict(),
-                  label_kwargs::Dict=Dict())
+                  neighbours::Bool=false, head_kwargs::Dict=Dict(), 
+                  point_kwargs::Dict=Dict(), label_kwargs::Dict=Dict())
 
 Plot a 2D EEG electrode layout with customizable head shape, electrode points, and labels.
 
@@ -87,6 +61,7 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
 - `layout`: Layout containing electrode positions with columns x2, y2, and label
+- `neighbours`: Boolean to show interactive neighbour connections (default: false)
 - `head_kwargs`: Keyword arguments for head shape rendering (color, linewidth, etc.)
 - `point_kwargs`: Keyword arguments for electrode points (plot_points, marker, size, color etc.)
 - `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, etc.)
@@ -105,32 +80,30 @@ function plot_layout_2d!(
     fig::Figure,
     ax::Axis,
     layout::Layout;
+    neighbours::Bool = false,
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
 )
 
-    _validate_layout_columns(layout, [:label])
     _ensure_coordinates_2d!(layout)
 
-    # Get the DataFrame from Layout
-    df = layout.data
-
-    # Use helper functions for kwargs handling
+    # kwargs handling
     head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
-    merged_head_kwargs = _merge_kwargs(head_default_kwargs, head_kwargs)
+    merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
 
     point_default_kwargs = Dict(:plot_points => true, :marker => DEFAULT_POINT_MARKER, :markersize => DEFAULT_POINT_SIZE, :color => DEFAULT_POINT_COLOR)
-    merged_point_kwargs = _merge_kwargs(point_default_kwargs, point_kwargs)
+    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = merged_point_kwargs[:plot_points]
-    point_plot_kwargs = _extract_plot_kwargs(merged_point_kwargs, [:plot_points])
+    point_plot_kwargs = extract_kwargs(merged_point_kwargs, [:plot_points])
+    println(point_plot_kwargs)
 
     label_default_kwargs = Dict(:plot_labels => true, :fontsize => DEFAULT_LABEL_FONTSIZE, :color => DEFAULT_LABEL_COLOR, :xoffset => 0, :yoffset => 0)
-    merged_label_kwargs = _merge_kwargs(label_default_kwargs, label_kwargs)
+    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
     plot_labels = merged_label_kwargs[:plot_labels]
     xoffset = merged_label_kwargs[:xoffset]
     yoffset = merged_label_kwargs[:yoffset]
-    label_plot_kwargs = _extract_plot_kwargs(merged_label_kwargs, [:plot_labels, :xoffset, :yoffset])
+    label_plot_kwargs = extract_kwargs(merged_label_kwargs, [:plot_labels, :xoffset, :yoffset])
 
     # Head shape - Use constants
     radius = DEFAULT_HEAD_RADIUS
@@ -141,17 +114,24 @@ function plot_layout_2d!(
 
     # Regular points
     if plot_points
-        scatter!(ax, df[!, :x2], df[!, :y2]; point_plot_kwargs...)
+        scatter!(ax, layout.data[!, :x2], layout.data[!, :y2]; point_plot_kwargs...)
     end
 
     if plot_labels
-        # More efficient: access columns directly instead of iterating rows
-        x_coords = df[!, :x2] .+ xoffset
-        y_coords = df[!, :y2] .+ yoffset
-        labels = String.(df[!, :label])
-        
+        x_coords = layout.data[!, :x2] .+ xoffset
+        y_coords = layout.data[!, :y2] .+ yoffset
+        labels = String.(layout.data[!, :label])
         for i in eachindex(labels)
             text!(ax, position = (x_coords[i], y_coords[i]), labels[i]; label_plot_kwargs...)
+        end
+    end
+    
+    if neighbours
+        if isnothing(layout.neighbours)
+            @minimal_warning "Layout has no neighbours data. Set neighbours=false or calculate neighbours first."
+        else
+            positions = Point2f.(layout.data.x2, layout.data.y2)
+            _add_interactive_points!(fig, ax, layout.data, layout.neighbours, positions)
         end
     end
 
@@ -169,7 +149,8 @@ Create a new figure and plot a 2D EEG electrode layout.
 
 # Arguments
 - `layout`: Layout containing electrode positions
-- `interactive`: Boolean to show interactive neighbour connections (default: false)
+- `neighbours`: Boolean to show interactive neighbour connections (default: false)
+- `display_plot`: Boolean to display the plot (default: true)
 - `kwargs...`: Additional keyword arguments passed to plot_layout_2d!
 
 # Returns
@@ -179,89 +160,24 @@ Create a new figure and plot a 2D EEG electrode layout.
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xy!(layout)
     plot_layout_2d(layout)
-    # With interactive neighbours
-    plot_layout_2d(layout, interactive=true)
+    # With neighbour interactivity
+    plot_layout_2d(layout, neighbours=true)
 """
 function plot_layout_2d(layout::Layout; 
-    interactive::Bool = false,
+    neighbours::Bool = false,
     display_plot::Bool = true,
     kwargs...
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
     
-    if interactive
-        if isnothing(layout.neighbours)
-            @warn "Layout has no neighbours data. Set interactive=false or calculate neighbours first."
-            plot_layout_2d!(fig, ax, layout; kwargs...)
-        else
-            plot_layout_2d!(fig, ax, layout, layout.neighbours; kwargs...)
-        end
-    else
-        plot_layout_2d!(fig, ax, layout; kwargs...)
-    end
-    
+    plot_layout_2d!(fig, ax, layout; neighbours=neighbours, kwargs...)
+        
     if display_plot
         display_figure(fig)
     end
     return fig, ax
 end
-
-"""
-    plot_layout_2d(layout, neighbours; kwargs...)
-
-Create a new figure and plot a 2D EEG electrode layout with interactive points showing electrode connections.
-
-# Arguments
-- `layout`: Layout containing electrode positions
-- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
-- `kwargs...`: Additional keyword arguments passed to the plot_layout_2d! function
-
-# Returns
-- The figure and axis objects
-
-# Example
-    layout = read_layout("./layouts/biosemi64.csv")
-    neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80)
-    fig, ax = plot_layout_2d(layout, neighbours)
-"""
-function plot_layout_2d(layout::Layout, neighbours::OrderedDict; kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_layout_2d!(fig, ax, layout, neighbours; kwargs...)
-    return fig, ax
-end
-
-"""
-    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout, 
-                   neighbours::OrderedDict; kwargs...)
-
-Create a 2D EEG electrode layout with interactive points showing electrode connections.
-
-# Arguments
-- `fig`: The figure to plot on
-- `ax`: The axis to plot on
-- `layout`: Layout containing electrode positions
-- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
-- `kwargs...`: Additional keyword arguments passed to the base plot_layout_2d function
-
-# Returns
-- `nothing` (modifies the provided figure and axis in-place)
-
-# Example
-    layout = read_layout("./layouts/biosemi64.csv")
-    neighbours, nneighbours = get_electrode_neighbours_xy(layout, 80)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_layout_2d!(fig, ax, layout, neighbours)
-"""
-function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout, neighbours::OrderedDict; kwargs...)
-    plot_layout_2d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
-    positions = Point2f.(layout.data.x2, layout.data.y2)
-    _add_interactive_points!(fig, ax, layout.data, neighbours, positions)
-    return nothing
-end
-
 
 
 
@@ -387,7 +303,7 @@ function add_topo_rois!(
         # Get coordinates for ROI electrodes
         roi_idx = findall(in(roi), layout.label)
         if isempty(roi_idx)
-            @warn "No electrodes found for ROI $i"
+            @minimal_warning "No electrodes found for ROI $i"
             continue
         end
         
@@ -422,32 +338,12 @@ function add_topo_rois!(
     end
 end
 
-########################################################
-# 3D layout
-########################################################
-"""
-    _ensure_coordinates_3d!(layout::Layout)
 
-Helper function to ensure 3D coordinates exist in the layout DataFrame.
-Converts polar coordinates to Cartesian if needed.
-
-# Arguments
-- `layout::DataFrame`: The layout DataFrame to check and potentially convert
-"""
-function _ensure_coordinates_3d!(layout::Layout)
-    if !has_3d_coords(layout)
-        @info "Converting polar coordinates to 3D Cartesian coordinates"
-        polar_to_cartesian_xyz!(layout)
-    end
-end
 
 """
     plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout;
-                  head_kwargs::Dict = Dict(),
-                  point_kwargs::Dict = Dict(),
-                  label_kwargs::Dict = Dict(),
-                  display_plot = true,
-)
+                  neighbours::Bool=false, head_kwargs::Dict = Dict(),
+                  point_kwargs::Dict = Dict(), label_kwargs::Dict = Dict())
 
 Plot a 3D EEG electrode layout with customizable head shape, electrode points, and labels.
 
@@ -455,13 +351,13 @@ Plot a 3D EEG electrode layout with customizable head shape, electrode points, a
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
 - `layout`: Layout containing electrode positions with columns x3, y3, z3, and label
+- `neighbours`: Boolean to show interactive neighbour connections (default: false)
 - `head_kwargs`: Keyword arguments for head shape rendering (color, linewidth, etc.)
 - `point_kwargs`: Keyword arguments for electrode points (plot_points, marker, size, color etc.)
 - `label_kwargs`: Keyword arguments for electrode labels (plot_labels, fontsize, color, xoffset, yoffset, zoffset etc.)
-- `display_plot`: Boolean indicating whether to display the plot (default: true)
 
 # Returns
-- The figure and axis objects
+- `nothing` (modifies the provided figure and axis in-place)
 
 # Example
     layout = Layout("biosemi64.csv")
@@ -474,52 +370,53 @@ function plot_layout_3d!(
     fig::Figure,
     ax::Axis3,
     layout::Layout;
+    neighbours::Bool = false,
     head_kwargs::Dict = Dict(),
     point_kwargs::Dict = Dict(),
     label_kwargs::Dict = Dict(),
     display_plot::Bool = true,
 )
-    # Validate required columns
-    _validate_layout_columns(layout, [:label])
 
     _ensure_coordinates_3d!(layout)
 
-    # Get the DataFrame from Layout
-    df = layout.data
-
-    # Use helper functions for kwargs handling
+    # kwargs handling
     head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
-    merged_head_kwargs = _merge_kwargs(head_default_kwargs, head_kwargs)
+    merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
 
     point_default_kwargs = Dict(:plot_points => true, :marker => DEFAULT_POINT_MARKER, :markersize => DEFAULT_POINT_SIZE, :color => DEFAULT_POINT_COLOR)
-    merged_point_kwargs = _merge_kwargs(point_default_kwargs, point_kwargs)
+    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = merged_point_kwargs[:plot_points]
-    point_plot_kwargs = _extract_plot_kwargs(merged_point_kwargs, [:plot_points])
+    point_plot_kwargs = extract_kwargs(merged_point_kwargs, [:plot_points])
 
     label_default_kwargs = Dict(:plot_labels => true, :fontsize => DEFAULT_LABEL_FONTSIZE, :color => DEFAULT_LABEL_COLOR, :xoffset => 0, :yoffset => 0, :zoffset => 0)
-    merged_label_kwargs = _merge_kwargs(label_default_kwargs, label_kwargs)
+    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
     plot_labels = merged_label_kwargs[:plot_labels]
     xoffset = merged_label_kwargs[:xoffset]
     yoffset = merged_label_kwargs[:yoffset]
     zoffset = merged_label_kwargs[:zoffset]
-    label_plot_kwargs = _extract_plot_kwargs(merged_label_kwargs, [:plot_labels, :xoffset, :yoffset, :zoffset])
-
-    # No head shape for 3D plots (as per original design)
+    label_plot_kwargs = extract_kwargs(merged_label_kwargs, [:plot_labels, :xoffset, :yoffset, :zoffset])
 
     # Regular points
     if plot_points
-        scatter!(ax, df[!, :x3], df[!, :y3], df[!, :z3]; point_plot_kwargs...)
+        scatter!(ax, layout.data[!, :x3], layout.data[!, :y3], layout.data[!, :z3]; point_plot_kwargs...)
     end
 
     if plot_labels
-        # More efficient: access columns directly instead of iterating rows
-        x_coords = df[!, :x3] .+ xoffset
-        y_coords = df[!, :y3] .+ yoffset
-        z_coords = df[!, :z3] .+ zoffset
-        labels = String.(df[!, :label])
-        
+        x_coords = layout.data[!, :x3] .+ xoffset
+        y_coords = layout.data[!, :y3] .+ yoffset
+        z_coords = layout.data[!, :z3] .+ zoffset
+        labels = String.(layout.data[!, :label])
         for i in eachindex(labels)
             text!(ax, position = (x_coords[i], y_coords[i], z_coords[i]), labels[i]; label_plot_kwargs...)
+        end
+    end
+
+    if neighbours
+        if isnothing(layout.neighbours)
+            @minimal_warning "Layout has no neighbours data. Set neighbours=false or calculate neighbours first."
+        else
+            positions = Point3f.(layout.data.x3, layout.data.y3, layout.data.z3)
+            _add_interactive_points!(fig, ax, layout.data, layout.neighbours, positions, true)
         end
     end
 
@@ -529,6 +426,7 @@ function plot_layout_3d!(
     return fig, ax
 end
 
+
 """
     plot_layout_3d(layout::Layout; kwargs...)
 
@@ -536,7 +434,8 @@ Create a new figure and plot a 3D EEG electrode layout.
 
 # Arguments
 - `layout`: Layout containing electrode positions
-- `interactive`: Boolean to show interactive neighbour connections (default: false)
+- `neighbours`: Boolean to show interactive neighbour connections (default: false)
+- `display_plot`: Boolean to display the plot (default: true)
 - `kwargs...`: Additional keyword arguments passed to plot_layout_3d!
 
 # Returns
@@ -545,92 +444,31 @@ Create a new figure and plot a 3D EEG electrode layout.
 # Example
     layout = read_layout("./layouts/biosemi64.csv")
     polar_to_cartesian_xyz!(layout)
-    fig, ax = plot_layout_3d(layout)
-    # With interactive neighbours
-    plot_layout_3d(layout, interactive=true)
+    plot_layout_3d(layout)
+    # With neighbour interactivity
+    plot_layout_3d(layout, neighbours=true)
 """
 function plot_layout_3d(layout::Layout; 
-    interactive::Bool = false,
+    neighbours::Bool = false,
     display_plot::Bool = true,
     kwargs...
 )
     fig = Figure()
     ax = Axis3(fig[1, 1])
     
-    if interactive
-        if isnothing(layout.neighbours)
-            @warn "Layout has no neighbours data. Set interactive=false or calculate neighbours first."
-            plot_layout_3d!(fig, ax, layout; kwargs...)
-        else
-            plot_layout_3d!(fig, ax, layout, layout.neighbours; kwargs...)
-        end
-    else
-        plot_layout_3d!(fig, ax, layout; kwargs...)
-    end
+    plot_layout_3d!(fig, ax, layout; neighbours=neighbours, kwargs...)
     
-    if get(kwargs, :display_plot, true) # force a new figure window
+    if display_plot
         display_figure(fig)
     end
+
     return fig, ax
+
 end
 
-"""
-    plot_layout_3d(layout, neighbours; kwargs...)
 
-Create a new figure and plot a 3D EEG electrode layout with interactive points showing electrode connections.
 
-# Arguments
-- `layout`: Layout containing electrode positions
-- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
-- `kwargs...`: Additional keyword arguments passed to the plot_layout_3d! function
 
-# Returns
-- The figure and axis objects
-
-# Example
-    layout = read_layout("./layouts/biosemi64.csv")
-    neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 80)
-    fig, ax = plot_layout_3d(layout, neighbours)
-"""
-function plot_layout_3d(layout::Layout, neighbours::OrderedDict; kwargs...)
-    fig = Figure()
-    ax = Axis3(fig[1, 1])
-    plot_layout_3d!(fig, ax, layout, neighbours; kwargs...)
-    if get(kwargs, :display_plot, true)
-        display_figure(fig)
-    end
-    return fig, ax
-end
-
-"""
-    plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout, 
-                   neighbours::OrderedDict; kwargs...)
-
-Create a 3D EEG electrode layout with interactive points showing electrode connections.
-
-# Arguments
-- `fig`: The figure to plot on
-- `ax`: The axis to plot on
-- `layout`: Layout containing electrode positions
-- `neighbours`: OrderedDict mapping electrode symbols to their neighboring electrodes
-- `kwargs...`: Additional keyword arguments passed to the base plot_layout_3d function
-
-# Returns
-- The figure and axis objects
-
-# Example
-    layout = read_layout("./layouts/biosemi64.csv")
-    neighbours, nneighbours = get_electrode_neighbours_xyz(layout, 80)
-    fig = Figure()
-    ax = Axis3(fig[1, 1])
-    plot_layout_3d!(fig, ax, layout, neighbours)
-"""
-function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout, neighbours::OrderedDict; kwargs...)
-    plot_layout_3d!(fig, ax, layout; point_kwargs = Dict(:plot_points => false), kwargs...)
-    positions = Point3f.(layout.data.x3, layout.data.y3, layout.data.z3)
-    _add_interactive_points!(fig, ax, layout.data, neighbours, positions, true)
-    return fig, ax
-end
 
 
 """
