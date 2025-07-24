@@ -337,36 +337,12 @@ The trigger data is automatically cleaned to detect only onset events, convertin
 signals into single onset events. For example: [0, 1, 1, 0, 0, 2, 2, 2, 0, 0] becomes [0, 1, 0, 0, 0, 2, 0, 0, 0, 0].
 """
 function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
+    @info "create_eeg_dataframe: Creating EEG DataFrame"
     return hcat(
         DataFrame(time = data.time, sample = 1:length(data.time), triggers = _clean_triggers(data.triggers.raw)),
         DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:end-1])),  # assumes last channel is trigger
     )
 end
-
-
-
-# """
-#     create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
-# 
-# Creates a ContinuousData object from a BioSemiBDF data structure and a layout file.
-# 
-# # Arguments
-# - `dat::BioSemiBDF.BioSemiData`: The BioSemi data structure containing EEG data.
-# - `layout_file_name::String`: The filename of the layout CSV file.
-# 
-# # Returns
-# A ContinuousData object containing the EEG data and layout information.
-# 
-# # """
-# function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
-#     return ContinuousData(
-#         create_eeg_dataframe(dat),
-#         Layout(CSV.File(layout_file_name)),
-#         dat.header.sample_rate[1],
-#         AnalysisInfo(),
-#     )
-# end
-
 
 
 """
@@ -1406,9 +1382,4 @@ function combine_boolean_columns!(
     
     @info "combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
 end
-
-
-
-
-
 
