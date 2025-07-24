@@ -1,7 +1,3 @@
-using Logging  # Add at top of file
-
-###############################################################
-# Filter functions 
 """
     _apply_filtfilt!(dat::DataFrame, columns, filter)
 
@@ -75,18 +71,21 @@ function filter_data!(
     plot_filter::Bool = false,
 )
 
-    valid_types = ("hp", "lp")
-    valid_methods = ("iir", "fir")
     
+    valid_types = ("hp", "lp")
     if !(filter_type in valid_types)
         throw(ArgumentError("filter_type '$filter_type' must be one of: $valid_types"))
     end
+    
+    valid_methods = ("iir", "fir")
     if !(filter_method in valid_methods)
         throw(ArgumentError("filter_method '$filter_method' must be one of: $valid_methods"))
     end
+
     if order <= 0
         throw(ArgumentError("filter order must be positive: $order"))
     end
+
     if sample_rate <= 0
         throw(ArgumentError("sample_rate must be positive: $sample_rate"))
     end
@@ -127,6 +126,7 @@ function filter_data!(
     if print_filter
         print_filter_characteristics(filter, sample_rate, filter_freq, transition_band)
     end
+
     if plot_filter
         plot_filter_response(filter, sample_rate, filter_freq, transition_band)
     end
@@ -137,6 +137,7 @@ function filter_data!(
     else
         _apply_filt!(dat, columns, filter)
     end
+
 end
 
 
@@ -527,6 +528,8 @@ function plot_filter_response(
     
     return fig, ax
 end
+
+
 
 
 # # Test print_filter_characteristics and plot_filter_response

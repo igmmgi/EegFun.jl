@@ -19,37 +19,6 @@ Basic information about data preprocessing.
     lp_filter::Float64 = 0.0
 end
 
-# Concrete types with basic fields
-mutable struct ContinuousData <: SingleDataFrameEeg
-    data::DataFrame
-    layout::DataFrame
-    sample_rate::Int64
-    analysis_info::AnalysisInfo
-end
- 
-mutable struct ErpData <: SingleDataFrameEeg
-    data::DataFrame
-    layout::DataFrame
-    sample_rate::Int64
-    analysis_info::AnalysisInfo
-    n_epochs::Int64
-end
- 
-mutable struct EpochData <: MultiDataFrameEeg
-    data::Vector{DataFrame}
-    layout::DataFrame
-    sample_rate::Int64
-    analysis_info::AnalysisInfo
-end
-
-mutable struct CoordXY
-    x::Any
-    y::Any
-end
-
-mutable struct Coord
-    coord::Array{CoordXY}
-end
 
 """
     Neighbours
@@ -72,6 +41,40 @@ mutable struct Layout
     neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}
     criterion::Union{Nothing, Float64}
 end
+
+
+# Concrete types with basic fields
+mutable struct ContinuousData <: SingleDataFrameEeg
+    data::DataFrame
+    layout::Layout
+    sample_rate::Int64
+    analysis_info::AnalysisInfo
+end
+ 
+mutable struct ErpData <: SingleDataFrameEeg
+    data::DataFrame
+    layout::Layout
+    sample_rate::Int64
+    analysis_info::AnalysisInfo
+    n_epochs::Int64
+end
+ 
+mutable struct EpochData <: MultiDataFrameEeg
+    data::Vector{DataFrame}
+    layout::Layout
+    sample_rate::Int64
+    analysis_info::AnalysisInfo
+end
+
+mutable struct CoordXY
+    x::Any
+    y::Any
+end
+
+mutable struct Coord
+    coord::Array{CoordXY}
+end
+
 
 # Helper methods for neighbour management
 has_neighbours(layout::Layout) = !isnothing(layout.neighbours)
@@ -271,7 +274,7 @@ end
 
 
 # Basic information functions right with the types
-channels(dat::EegData) = dat.layout.label
+channels(dat::EegData) = dat.layout.data.label
 all_channels(dat::EegData) = propertynames(dat.data)
 extra_channels(dat::EegData) = setdiff(propertynames(data(dat)), [channels(dat); :time; :sample; :triggers])
 times(dat::SingleDataFrameEeg) = dat.data.time

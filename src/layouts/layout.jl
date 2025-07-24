@@ -430,3 +430,63 @@ function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neigh
     total_neighbours = sum(length(neighbours.electrodes) for neighbours in values(neighbours_dict))
     return total_neighbours / length(neighbours_dict)
 end
+
+# Helper to select channels from a Layout
+function get_selected_channels(layout::Layout, channel_selection::Function)
+    # Get all channel labels from the layout
+    all_channels = layout.data.label
+    
+    # Apply the channel selection predicate to get boolean mask and return selected channels
+    return all_channels[channel_selection(all_channels)]
+end
+
+"""
+    subset_layout!(layout::Layout; channel_selection = channels())
+
+Subset a Layout object to include only channels that match the channel selection predicate.
+Modifies the layout in place.
+
+# Arguments
+- `layout::Layout`: The layout to subset
+- `channel_selection::Function`: Channel selection predicate function (default: all channels)
+
+# Returns
+- `nothing` (modifies the layout in place)
+"""
+function subset_layout!(layout::Layout; channel_selection = channels())
+    
+    selected_channels = get_selected_channels(layout, channel_selection)
+    println(selected_channels)
+    
+    # Filter the layout data to keep only selected channels
+    layout.data = filter(:label => in(selected_channels), layout.data)
+    
+    # Clear any cached neighbour information since channels have changed
+    if has_neighbours(layout)
+        clear_neighbours!(layout)
+    end
+    
+    @info "subset_layout!: Subset layout from $(length(layout.data.label)) to $(length(selected_channels)) channels"
+end
+
+"""
+    subset_layout(layout::Layout; channel_selection = channels())
+
+Create a subset copy of a Layout object using channel selection predicates.
+
+# Arguments
+- `layout::Layout`: The layout to subset
+- `channel_selection::Function`: Channel selection predicate function (default: all channels)
+
+# Returns
+- `Layout`: A new subset layout object
+"""
+function subset_layout(layout::Layout; channel_selection = channels())
+    # Create a copy of the layout
+    subset_layout = Layout(copy(layout.data), layout.neighbours, layout.criterion)
+    
+    # Apply the subsetting
+    subset_layout!(subset_layout, channel_selection = channel_selection)
+    
+    return subset_layout
+end
