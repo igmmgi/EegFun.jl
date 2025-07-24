@@ -19,14 +19,12 @@ layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 eegfun.get_layout_neighbours_xy!(layout, 40);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 
-# neighbours = eegfun.neighbours(layout);
-
 eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
 eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
 
-eegfun.plot_layout_2d(layout, interactive = true)
+eegfun.plot_layout_2d(layout, neighbours = true)
 
-eegfun.plot_layout_3d(layout, interactive = true)
+eegfun.plot_layout_3d(layout, neighbours= true)
 
 
 
