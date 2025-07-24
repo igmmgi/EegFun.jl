@@ -193,7 +193,7 @@ end
 
 
 """
-    get_electrode_neighbours_xy(layout::Layout, distance_criterion::Real)
+    get_electrode_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
 Identifies the neighbours of each electrode based on their Cartesian coordinates.
 
@@ -209,12 +209,12 @@ Identifies the neighbours of each electrode based on their Cartesian coordinates
 """
 function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
+    if distance_criterion <= 0
+        @minimal_error "Distance criterion must be positive"
+    end
     _ensure_coordinates_2d!(layout)
 
-    if distance_criterion <= 0
-        throw(ArgumentError("Distance criterion must be positive"))
-    end
-
+    @info "Calculating neighbours with distance criterion $distance_criterion"
     # Precompute coordinates
     coords = Matrix{Float64}(undef, size(layout.data, 1), 2)
     coords[:, 1] = layout.data.x2
@@ -259,7 +259,7 @@ function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
 end
 
 """
-    get_electrode_neighbours_xyz(layout::Layout, distance_criterion::Real)
+    get_electrode_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
 Identifies the neighbours of each electrode based on their Cartesian coordinates.
 
@@ -275,12 +275,12 @@ Identifies the neighbours of each electrode based on their Cartesian coordinates
 """
 function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
+    if distance_criterion <= 0
+        @minimal_error "Distance criterion must be positive"
+    end
     _ensure_coordinates_3d!(layout)
 
-    if distance_criterion <= 0
-        throw(ArgumentError("Distance criterion must be positive"))
-    end
-
+    @info "Calculating neighbours with distance criterion $distance_criterion"
     # Precompute coordinates
     coords = Matrix{Float64}(undef, size(layout.data, 1), 3)
     coords[:, 1] = layout.data.x3
