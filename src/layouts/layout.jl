@@ -33,6 +33,7 @@ function read_layout(file)
     if !isfile(file)
         @minimal_error "Cannot open file: $file"
     end
+    @info "Reading layout from $file"
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
     return Layout(df, nothing, nothing)

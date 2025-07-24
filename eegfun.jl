@@ -14,7 +14,6 @@ using GLMakie
 
 
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
-
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
 
