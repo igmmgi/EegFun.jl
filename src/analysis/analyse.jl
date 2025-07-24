@@ -345,27 +345,27 @@ end
 
 
 
-"""
-    create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
-
-Creates a ContinuousData object from a BioSemiBDF data structure and a layout file.
-
-# Arguments
-- `dat::BioSemiBDF.BioSemiData`: The BioSemi data structure containing EEG data.
-- `layout_file_name::String`: The filename of the layout CSV file.
-
-# Returns
-A ContinuousData object containing the EEG data and layout information.
-
-"""
-function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
-    return ContinuousData(
-        create_eeg_dataframe(dat),
-        DataFrame(CSV.File(layout_file_name)),
-        dat.header.sample_rate[1],
-        AnalysisInfo(),
-    )
-end
+# """
+#     create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
+# 
+# Creates a ContinuousData object from a BioSemiBDF data structure and a layout file.
+# 
+# # Arguments
+# - `dat::BioSemiBDF.BioSemiData`: The BioSemi data structure containing EEG data.
+# - `layout_file_name::String`: The filename of the layout CSV file.
+# 
+# # Returns
+# A ContinuousData object containing the EEG data and layout information.
+# 
+# # """
+# function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout_file_name::String)::ContinuousData
+#     return ContinuousData(
+#         create_eeg_dataframe(dat),
+#         Layout(CSV.File(layout_file_name)),
+#         dat.header.sample_rate[1],
+#         AnalysisInfo(),
+#     )
+# end
 
 
 
@@ -382,7 +382,7 @@ Creates a ContinuousData object from a BioSemiBDF data structure and a layout Da
 A ContinuousData object containing the EEG data and layout information.
 
 """
-function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)::ContinuousData
+function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::Layout)::ContinuousData
     return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 
