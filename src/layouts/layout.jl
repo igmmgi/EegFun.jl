@@ -214,7 +214,7 @@ function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
     end
     _ensure_coordinates_2d!(layout)
 
-    @info "Calculating neighbours with distance criterion $distance_criterion"
+    @info "Calculating neighbours with distance criterion $distance_criterion mm"
     # Precompute coordinates
     coords = Matrix{Float64}(undef, size(layout.data, 1), 2)
     coords[:, 1] = layout.data.x2
@@ -280,7 +280,7 @@ function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
     end
     _ensure_coordinates_3d!(layout)
 
-    @info "Calculating neighbours with distance criterion $distance_criterion"
+    @info "Calculating neighbours with distance criterion $distance_criterion mm"
     # Precompute coordinates
     coords = Matrix{Float64}(undef, size(layout.data, 1), 3)
     coords[:, 1] = layout.data.x3
@@ -400,6 +400,9 @@ function print_layout_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours
 end
 
 function print_layout_neighbours(layout::Layout, filename::String)
+    if isnothing(layout.neighbours)
+        @minimal_error "No neighbours to print"
+    end
     print_layout_neighbours(layout.neighbours, filename)
 end
 
@@ -481,7 +484,7 @@ Create a subset copy of a Layout object using channel selection predicates.
 """
 function subset_layout(layout::Layout; channel_selection = channels())
     # Create a copy of the layout and apply subsetting
-    subset_layout = Layout(copy(layout.data))
+    subset_layout = Layout(copy(layout.data), nothing, nothing)
     subset_layout!(subset_layout, channel_selection = channel_selection)
     return subset_layout
 end

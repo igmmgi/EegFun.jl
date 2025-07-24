@@ -12,13 +12,13 @@ using GLMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
 # load data
 
-
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
 eegfun.plot_layout_2d(layout)
 
 # 2D layout with neighbours defined by distance
+
 eegfun.get_layout_neighbours_xy!(layout, 40);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 
@@ -28,20 +28,13 @@ subset_layout = eegfun.subset_layout(layout, channel_selection = x -> .!endswith
 eegfun.plot_layout_2d(subset_layout)
 
 
-
-
 eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
+
 eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
 eegfun.plot_layout_2d(layout, neighbours = true)
 eegfun.plot_layout_3d(layout, neighbours= true)
 
-
 dat = eegfun.create_eeg_dataframe(dat, layout);
-
-
-
-dat1 = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
-
 
 
 eegfun.filter_data!(dat, "hp", "firhaha", 1, order=1)

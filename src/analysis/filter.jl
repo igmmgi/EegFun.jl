@@ -71,32 +71,31 @@ function filter_data!(
     plot_filter::Bool = false,
 )
 
-    
+    # some basic input checks
     valid_types = ("hp", "lp")
     if !(filter_type in valid_types)
-        throw(ArgumentError("filter_type '$filter_type' must be one of: $valid_types"))
+        @minimal_error "filter_type '$filter_type' must be one of: $valid_types"
     end
     
     valid_methods = ("iir", "fir")
     if !(filter_method in valid_methods)
-        throw(ArgumentError("filter_method '$filter_method' must be one of: $valid_methods"))
+        @minimal_error "filter_method '$filter_method' must be one of: $valid_methods"
     end
 
     if order <= 0
-        throw(ArgumentError("filter order must be positive: $order"))
+        @minimal_error "filter order must be positive: $order"
     end
 
     if sample_rate <= 0
-        throw(ArgumentError("sample_rate must be positive: $sample_rate"))
+        @minimal_error "sample_rate must be positive: $sample_rate"
     end
 
     if !(filter_freq > 0 && filter_freq < sample_rate / 2)
-        throw(ArgumentError("filter_freq must be between 0 and Nyquist frequency ($(sample_rate/2) Hz): $filter_freq"))
+        @minimal_error "filter_freq must be between 0 and Nyquist frequency ($(sample_rate/2) Hz): $filter_freq"
     end
 
-    transition_band = transition_width * filter_freq
-
     # Create filter prototype based on type
+    transition_band = transition_width * filter_freq
     if filter_type == "hp"
         filter_prototype = Highpass(filter_freq - (transition_band/2))  # Subtract for highpass
     elseif filter_type == "lp"
@@ -123,6 +122,7 @@ function filter_data!(
         filter = digitalfilter(filter_prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
     end
 
+    @info "filter_data! filter_type: $filter_type, filter_freq: $filter_freq"
     if print_filter
         print_filter_characteristics(filter, sample_rate, filter_freq, transition_band)
     end
@@ -176,7 +176,7 @@ function filter_data!(
     _update_filter_info!(dat, filter_type, filter_freq)
     filter_data!(
         dat.data,
-        dat.layout.label,
+        dat.layout.data.label,
         filter_type,
         filter_method,
         filter_freq,
@@ -210,7 +210,7 @@ function filter_data!(
     for epoch in eachindex(dat.data)
         filter_data!(
             dat.data[epoch],
-            dat.layout.label,
+            dat.layout.data.label,
             filter_type,
             filter_method,
             filter_freq,
