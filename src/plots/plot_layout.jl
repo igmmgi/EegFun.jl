@@ -96,7 +96,6 @@ function plot_layout_2d!(
     merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = merged_point_kwargs[:plot_points]
     point_plot_kwargs = extract_kwargs(merged_point_kwargs, [:plot_points])
-    println(point_plot_kwargs)
 
     label_default_kwargs = Dict(:plot_labels => true, :fontsize => DEFAULT_LABEL_FONTSIZE, :color => DEFAULT_LABEL_COLOR, :xoffset => 0, :yoffset => 0)
     merged_label_kwargs = merge(label_default_kwargs, label_kwargs)

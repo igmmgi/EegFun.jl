@@ -143,11 +143,9 @@ function subset(dat::SingleDataFrameEeg;
     selected_channels = get_selected_channels(dat, channel_selection)
     selected_samples = get_selected_samples(dat, sample_selection)
     
-    # Filter data by samples and channels
+    # Filter data by samples and channels and match layout
     dat_subset = _subset_dataframe(dat.data, selected_channels, selected_samples)
-    
-    # Filter layout to match selected channels
-    layout_subset = filter(:label => in(selected_channels), dat.layout.data)
+    layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
     
     # Create new SingleDataFrameEeg object
     return typeof(dat)(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
@@ -198,11 +196,9 @@ function subset(dat::EpochData;
     selected_samples = get_selected_samples(dat, sample_selection)
     selected_epochs = findall(epoch_selection(1:length(dat.data)))
     
-    # Filter epochs first, then apply channel/sample filtering
+    # Filter epochs first, then apply channel/sample filtering and match layout
     epochs_subset = _subset_dataframe.(dat.data[selected_epochs], Ref(selected_channels), Ref(selected_samples))
-    
-    # Filter layout to match selected channels
-    layout_subset = filter(:label => in(selected_channels), dat.layout.data)
+    layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
     
     # Create new EpochData object
     return EpochData(epochs_subset, layout_subset, dat.sample_rate, dat.analysis_info)
