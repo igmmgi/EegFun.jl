@@ -18,12 +18,10 @@ layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # how to plot layout
 eegfun.plot_layout_2d(layout)
 
-# how to plot layout with neighbours
-eegfun.plot_layout_2d(layout, neighbours = true)
-eegfun.plot_layout_3d(layout, neighbours= true)
-
 # define neighbours 2D/3D defined by distance (mm)
+eegfun.polar_to_cartesian_xy!(layout);
 eegfun.get_layout_neighbours_xy!(layout, 40);
+eegfun.polar_to_cartesian_xyz!(layout);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 
 # how to plot layout with neighbours
@@ -38,21 +36,21 @@ eegfun.plot_layout_2d(subset_layout);
 eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
 eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
 
+# we can get raw trigger info 
+eegfun.trigger_count(dat);
 
+eegfun.plot_trigger_overview(dat)
+eegfun.plot_trigger_timing(dat)
+
+
+
+# create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 
+# how to filter data
+eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 
-eegfun.filter_data!(dat, "hp", "firhaha", 1, order=1)
 
-
-
-# 2D layout
-eegfun.polar_to_cartesian_xy!(layout)
-# eegfun.plot_layout_2d(layout);
-# we can get raw trigger info
-# eegfun.trigger_count(dat);
-# eegfun.plot_trigger_overview(dat)
-# eegfun.plot_trigger_timing(dat)
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 # Subset channels/samples 
