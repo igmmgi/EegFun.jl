@@ -431,19 +431,29 @@ epochs(epoch_number::Int) = x -> x .== epoch_number
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
-# Helper to select channels based on include_additional_channels and a predicate
-function get_selected_channels(dat, channel_selection::Function; include_additional_channels::Bool = false)
-    # Get layout or all channels and return selected channel predicate
-    layout_channels = include_additional_channels ? all_channels(dat) : channels(dat)
-    return layout_channels[channel_selection(layout_channels)]
+# Helper to select channels based on include_extra_channels and a predicate
+function get_selected_channels(dat, channel_selection::Function; include_extra_channels::Bool = true, keep_metadata_columns::Bool = true)
+    # Always include metadata columns
+    if keep_metadata_columns
+        metadata_cols = metadata_columns(dat)
+    else
+        metadata_cols = Symbol[]
+    end
+    
+    # Get available non-metadata columns for selection
+    if include_extra_channels
+        selectable_cols = vcat(channels(dat), extra_channels(dat))
+    else
+        selectable_cols = channels(dat)
+    end
+    
+    # Apply channel selection to non-metadata columns
+    selected_cols = selectable_cols[channel_selection(selectable_cols)]
+    
+    # Return metadata + selected channels
+    return vcat(metadata_cols, selected_cols)
 end
 
-# Helper to select channels from a DataFrame
-function get_selected_channels(dat::DataFrame, channel_selection::Function; include_additional_channels::Bool = false)
-    # Get all columns except metadata columns and return selected channel predicate
-    all_columns = filter(col -> !(col in [:time, :sample, :triggers]), propertynames(dat))
-    return all_columns[channel_selection(all_columns)]
-end
 
 # Helper to select components based on a predicate
 function get_selected_components(ica_result::InfoIca, component_selection::Function)
@@ -471,7 +481,37 @@ function _validate_epoch_window_params(dat::ContinuousData, time_window::Vector{
 end
 
 """
-    channel_summary(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::DataFrame
+    get_selected_epochs(dat::EpochData, epoch_selection::Function) -> Vector{Int}
+
+Get the indices of epochs that match the epoch selection predicate.
+
+# Arguments
+- `dat::EpochData`: The EpochData object containing the epochs
+- `epoch_selection::Function`: Function that returns boolean vector for epoch filtering
+
+# Returns
+- `Vector{Int}`: Indices of selected epochs
+
+# Examples
+```julia
+# Get all epochs
+selected = get_selected_epochs(dat, epochs())
+
+# Get specific epochs
+selected = get_selected_epochs(dat, epochs(1:10))
+
+# Get epochs matching a condition
+selected = get_selected_epochs(dat, epochs([1, 3, 5]))
+```
+"""
+function get_selected_epochs(dat::EpochData, epoch_selection::Function)
+    return findall(epoch_selection(1:length(dat.data)))
+end
+
+
+
+"""
+    channel_summary(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::DataFrame
 
 Computes summary statistics for EEG channels.
 
@@ -479,7 +519,7 @@ Computes summary statistics for EEG channels.
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
 A DataFrame containing summary statistics for each channel.
@@ -575,9 +615,9 @@ function channel_summary(
     dat::ContinuousData;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra_channels::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
 end
@@ -593,7 +633,7 @@ end
 
 
 """
-    correlation_matrix(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::Matrix{Float64}
+    correlation_matrix(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::Matrix{Float64}
 
 Calculates the correlation matrix for the EEG data.
 
@@ -601,7 +641,7 @@ Calculates the correlation matrix for the EEG data.
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
 A matrix containing the correlation values between the specified channels.
@@ -700,9 +740,9 @@ function correlation_matrix(
     dat::ContinuousData;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra_channels::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
@@ -804,7 +844,7 @@ function _is_extreme_value!(
 end
 
 """
-    is_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::Vector{Bool}
+    is_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::Vector{Bool}
 
 Checks if any values in the specified channels exceed a given criterion.
 
@@ -813,7 +853,7 @@ Checks if any values in the specified channels exceed a given criterion.
 - `criterion::Number`: The threshold for determining extreme values.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
 A Boolean vector indicating whether any extreme values were found for each row. Only samples selected by sample_selection are checked for extreme values.
@@ -850,10 +890,10 @@ function is_extreme_value(
     criterion::Number;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra_channels::Bool = false,
 )::Vector{Bool}
 
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     
     @info "is_extreme_value: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
@@ -861,7 +901,7 @@ function is_extreme_value(
 end
 
 """
-    is_extreme_value!(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false, channel_out::Symbol = :is_extreme_value)
+    is_extreme_value!(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false, channel_out::Symbol = :is_extreme_value)
 
 Checks if any values in the specified channels exceed a given criterion and adds the result as a new column.
 
@@ -870,7 +910,7 @@ Checks if any values in the specified channels exceed a given criterion and adds
 - `criterion::Number`: The threshold for determining extreme values.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
 - `channel_out::Symbol`: Name of the output column (default: :is_extreme_value).
 
 # Returns
@@ -908,10 +948,10 @@ function is_extreme_value!(
     criterion::Number;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra_channels::Bool = false,
     channel_out::Symbol = :is_extreme_value,
 )
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
@@ -921,7 +961,7 @@ end
 
 
 """
-    n_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false)::Int
+    n_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::Int
 
 Counts the number of extreme values in the specified channels.
 
@@ -930,7 +970,7 @@ Counts the number of extreme values in the specified channels.
 - `criterion::Number`: The threshold for determining extreme values.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
 
 # Returns
 An integer count of the number of extreme values found in the selected samples and channels.
@@ -967,9 +1007,9 @@ function n_extreme_value(
     criterion::Number;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra_channels::Bool = false,
 )::Int
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     
     return _n_extreme_value(dat.data, criterion, selected_channels, selected_samples)
@@ -1007,7 +1047,7 @@ function _channel_joint_probability(
 end
 
 """
-    channel_joint_probability(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false, threshold::Real = 3.0, normval::Real = 2)::DataFrame
+    channel_joint_probability(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false, threshold::Real = 3.0, normval::Real = 2)::DataFrame
 
 Computes joint probability for EEG channels.
 
@@ -1015,7 +1055,7 @@ Computes joint probability for EEG channels.
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
 - `threshold::Real`: Threshold for joint probability (default: 3.0).
 - `normval::Real`: Normalization value (default: 2).
 
@@ -1047,11 +1087,11 @@ function channel_joint_probability(
     dat::ContinuousData;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra_channels::Bool = false,
     threshold::Real = 3.0,
     normval::Real = 2,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     
     return _channel_joint_probability(dat.data, selected_samples, selected_channels; threshold=threshold, normval=normval)

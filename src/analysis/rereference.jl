@@ -171,18 +171,6 @@ rereference!(dat_epochs, :avg)
 """
 
 # helper function to handle special reference cases such as :avg and :mastoid
-function resolve_reference(dat, reference_channel::Symbol)
-    if reference_channel == :avg # all channels
-        reference_channel = channels(dat) 
-    elseif reference_channel == :mastoid
-        reference_channel = [:M1, :M2]
-    else
-        reference_channel = [reference_channel]
-    end
-    return reference_channel
-end
-
-# helper function to handle special reference cases such as :avg and :mastoid
 function resolve_reference(dat, reference_channel::Vector{Symbol})
     if reference_channel[1] == :avg # all channels
         reference_channel = channels(dat) 
@@ -192,6 +180,13 @@ function resolve_reference(dat, reference_channel::Vector{Symbol})
     dat.analysis_info.reference = reference_channel
     return reference_channel
 end
+
+function resolve_reference(dat::EegData, reference_channel::Symbol)
+    return resolve_reference(dat, [reference_channel])
+end
+
+
+
 
 # Base methods for all references
 function rereference!(

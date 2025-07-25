@@ -416,7 +416,7 @@ function show_additional_menu(state)
                 plot_selected_spectrum(selected_data, selected_channel)
             elseif btn.label[] == "Plot3"
                 plot_topography(selected_data, state.data.original.layout, method=:spherical_spline)
-                println("Plot3: TODO")
+                @info "Plot3: TODO"
             end
         end
     end
@@ -855,7 +855,7 @@ function get_x_region_data(state::ContinuousDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
     time_mask = (x_min .<= state.data.current[].time .<= x_max)
     selected_data = state.data.current[][time_mask, :]
-    println("Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))")
+    @info "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))"
     return selected_data
 end
 
@@ -865,7 +865,7 @@ function get_x_region_data(state::EpochedDataBrowserState)
     current_data = state.data.current[current_epoch][]
     time_mask = (x_min .<= current_data.time .<= x_max)
     selected_data = current_data[time_mask, :]
-    println("Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))")
+    @info "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))"
     return selected_data
 end
 
@@ -1280,6 +1280,8 @@ get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 
 function plot_databrowser(dat::Union{ContinuousData,EpochData}, ica = nothing)
+
+    @info "plot_databrowser: ..."
 
     # Check if CairoMakie is being used and warn about interactivity
     if string(Makie.current_backend()) == "CairoMakie"
