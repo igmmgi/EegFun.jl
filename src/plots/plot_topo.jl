@@ -1,11 +1,11 @@
 ##########################################
 # 2D topographic plot
 ##########################################
-function plot_topoplot!(
-    fig, 
-    ax,
-    dat,
-    layout;
+function plot_topography!(
+    fig::Figure, 
+    ax::Axis,
+    dat::DataFrame,
+    layout::Layout;
     xlim = nothing,
     ylim = nothing,
     head_kwargs = Dict(),
@@ -52,15 +52,15 @@ function plot_topoplot!(
     # interpolate data using chosen method
     if method == :spherical_spline
         data = _data_interpolation_topo_spherical_spline(
-            mean.(eachcol(dat[xlim_idx, layout.label])),
+            mean.(eachcol(dat[xlim_idx, layout.data.label])),
             layout,
             gridscale,
             lambda=lambda
         )
     else  # default to multiquadratic
         data = _data_interpolation_topo(
-            mean.(eachcol(dat[xlim_idx, layout.label])),
-            permutedims(Matrix(layout[!, [:x2, :y2]])),
+            mean.(eachcol(dat[xlim_idx, layout.data.label])),
+            permutedims(Matrix(layout.data[!, [:x2, :y2]])),
             gridscale,
         )
     end
@@ -94,15 +94,15 @@ function plot_topoplot!(
 
 end
 
-function plot_topoplot(
-    dat,
-    layout;
+function plot_topography(
+    dat::DataFrame,
+    layout::Layout;
     display_plot = true,
     kwargs...
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topoplot!(fig, ax, dat, layout; kwargs...)
+    plot_topography!(fig, ax, dat, layout; kwargs...)
     if display_plot
         display_figure(fig)
     end
@@ -110,13 +110,13 @@ function plot_topoplot(
 end
 
 """
-    plot_topoplot(dat::ContinuousData; kwargs...)
+    plot_topography(dat::ContinuousData; kwargs...)
 
 Create a topographic plot from continuous EEG data.
 
 # Arguments
 - `dat`: ContinuousData object
-- `kwargs...`: Additional keyword arguments passed to plot_topoplot!
+- `kwargs...`: Additional keyword arguments passed to plot_topography!
 
 # Returns
 - Figure and Axis objects
@@ -126,64 +126,67 @@ Create a topographic plot from continuous EEG data.
 ## Basic Usage
 ```julia
 # Plot all channels
-fig, ax = plot_topoplot(dat)
+fig, ax = plot_topography(dat)
 
 # Plot specific time point
-fig, ax = plot_topoplot(dat, time_point = 1.5)  # 1.5 seconds
+fig, ax = plot_topography(dat, time_point = 1.5)  # 1.5 seconds
 
 # Plot specific sample
-fig, ax = plot_topoplot(dat, sample = 1500)  # Sample 1500
+fig, ax = plot_topography(dat, sample = 1500)  # Sample 1500
 ```
 
 ## Channel Filtering
 ```julia
 # Exclude reference channels
-fig, ax = plot_topoplot(dat, channels = channels_not([:M1, :M2]))
+fig, ax = plot_topography(dat, channels = channels_not([:M1, :M2]))
 
 # Only frontal channels
-fig, ax = plot_topoplot(dat, channels = channels(x -> startswith.(string.(x), "F")))
+fig, ax = plot_topography(dat, channels = channels(x -> startswith.(string.(x), "F")))
 
 # Specific channels
-fig, ax = plot_topoplot(dat, channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]))
+fig, ax = plot_topography(dat, channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]))
 ```
 
 ## Customization
 ```julia
 # Custom color scheme
-fig, ax = plot_topoplot(dat, colormap = :RdBu_r)
+fig, ax = plot_topography(dat, colormap = :RdBu_r)
 
 # Custom limits
-fig, ax = plot_topoplot(dat, clim = (-10, 10))
+fig, ax = plot_topography(dat, clim = (-10, 10))
 
 # Custom title
-fig, ax = plot_topoplot(dat, title = "Alpha Power (8-12 Hz)")
+fig, ax = plot_topography(dat, title = "Alpha Power (8-12 Hz)")
 
 # Without head outline
-fig, ax = plot_topoplot(dat, show_head = false)
+fig, ax = plot_topography(dat, show_head = false)
 
 # Custom electrode size
-fig, ax = plot_topoplot(dat, electrode_size = 8)
+fig, ax = plot_topography(dat, electrode_size = 8)
 ```
 
 ## Time-Series Analysis
 ```julia
 # Plot at specific ERP time points
-fig, ax = plot_topoplot(dat, time_point = 0.1)   # 100ms post-stimulus
-fig, ax = plot_topoplot(dat, time_point = 0.3)   # 300ms post-stimulus
+fig, ax = plot_topography(dat, time_point = 0.1)   # 100ms post-stimulus
+fig, ax = plot_topography(dat, time_point = 0.3)   # 300ms post-stimulus
 
 # Plot mean over time window
-fig, ax = plot_topoplot(dat, time_window = (0.1, 0.3))  # 100-300ms
+fig, ax = plot_topography(dat, time_window = (0.1, 0.3))  # 100-300ms
 ```
 """
-function plot_topoplot(dat::ContinuousData; kwargs...)
+function plot_topography(dat::ContinuousData; display_plot = true, kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topoplot!(fig, ax, dat.data, dat.layout; kwargs...)
+    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
+    if display_plot
+        display_figure(fig)
+    end
     return fig, ax
 end
 
 """
-    plot_topoplot!(fig, ax, dat::ContinuousData; kwargs...)
+    plot_topography!(fig, ax, dat::ContinuousData; kwargs...)
 
 Add a topographic plot to existing figure/axis from continuous EEG data.
 
@@ -193,31 +196,37 @@ Add a topographic plot to existing figure/axis from continuous EEG data.
 - `dat`: ContinuousData object
 - `kwargs...`: Additional keyword arguments
 """
-function plot_topoplot!(fig, ax, dat::ContinuousData; kwargs...)
-    plot_topoplot!(fig, ax, dat.data, dat.layout; kwargs...)
+function plot_topography!(fig, ax, dat::ContinuousData; kwargs...)
+    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
 end
 
+
+
+
+
+
+
 """
-    plot_topoplot(dat::EpochData, epoch::Int; kwargs...)
+    plot_topography(dat::EpochData, epoch::Int; kwargs...)
 
 Create a topographic plot from epoched EEG data.
 
 # Arguments
 - `dat`: EpochData object
-- `kwargs...`: Additional keyword arguments passed to plot_topoplot!
+- `kwargs...`: Additional keyword arguments passed to plot_topography!
 
 # Returns
 - Figure and Axis objects
 """
-function plot_topoplot(dat::EpochData, epoch::Int; kwargs...)
+function plot_topography(dat::EpochData, epoch::Int; kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topoplot!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
+    plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
     return fig, ax
 end
 
 """
-    plot_topoplot!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
+    plot_topography!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
 
 Add a topographic plot to existing figure/axis from epoched EEG data.
 
@@ -227,31 +236,31 @@ Add a topographic plot to existing figure/axis from epoched EEG data.
 - `dat`: EpochData object
 - `kwargs...`: Additional keyword arguments
 """
-function plot_topoplot!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
-    plot_topoplot!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
+function plot_topography!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
+    plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
 end
 
 """
-    plot_topoplot(dat::ErpData; kwargs...)
+    plot_topography(dat::ErpData; kwargs...)
 
 Create a topographic plot from ERP data.
 
 # Arguments
 - `dat`: ErpData object
-- `kwargs...`: Additional keyword arguments passed to plot_topoplot!
+- `kwargs...`: Additional keyword arguments passed to plot_topography!
 
 # Returns
 - Figure and Axis objects
 """
-function plot_topoplot(dat::ErpData; kwargs...)
+function plot_topography(dat::ErpData; kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topoplot!(fig, ax, dat.data, dat.layout; kwargs...)
+    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
     return fig, ax
 end
 
 """
-    plot_topoplot!(fig, ax, dat::ErpData; kwargs...)
+    plot_topography!(fig, ax, dat::ErpData; kwargs...)
 
 Add a topographic plot to existing figure/axis from ERP data.
 
@@ -261,8 +270,8 @@ Add a topographic plot to existing figure/axis from ERP data.
 - `dat`: ErpData object
 - `kwargs...`: Additional keyword arguments
 """
-function plot_topoplot!(fig, ax, dat::ErpData; kwargs...)
-    plot_topoplot!(fig, ax, dat.data, dat.layout; kwargs...)
+function plot_topography!(fig, ax, dat::ErpData; kwargs...)
+    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
 end
 
 

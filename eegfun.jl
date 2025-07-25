@@ -38,21 +38,28 @@ eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
 
 # we can get raw trigger info 
 eegfun.trigger_count(dat);
-
 eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
 
-
-
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+
+# we can get raw trigger info 
+eegfun.trigger_count(dat);
+eegfun.plot_trigger_overview(dat)
+eegfun.plot_trigger_timing(dat)
 
 # how to filter data
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 
+# how to rereference data
+eegfun.rereference!(dat, :avg)
 
-# create our eeg ContinuousData type
-dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.plot_databrowser(dat)
+
+eegfun.plot_topoplot(dat)
+
+
 # Subset channels/samples 
 # dat_subset = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 # dat_subset = eegfun.subset(dat, sample_selection = x -> x.sample .<= 10_000) # first 10000 samples
@@ -63,7 +70,6 @@ dat = eegfun.create_eeg_dataframe(dat, layout);
 # eegfun.plot_trigger_timing(dat)
 # preprocessing steps
 eegfun.rereference!(dat, :avg)
-eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 # eegfun.channel_difference!(dat)
 eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:Fp1, :Fp2]), channels_in2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:F9]), channels_in2 = eegfun.channels([:F10]), channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)

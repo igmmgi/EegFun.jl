@@ -410,12 +410,12 @@ function show_additional_menu(state)
         on(btn.clicks) do n
             selected_data = get_x_region_data(state)
             if btn.label[] == "Topoplot"
-                plot_topoplot(selected_data, state.data.original.layout, method=:multiquadratic)
+                plot_topography(selected_data, state.data.original.layout, method=:multiquadratic)
             elseif btn.label[] == "Spectrum"
                 selected_channel = state.channels.labels[state.channels.visible]
                 plot_selected_spectrum(selected_data, selected_channel)
             elseif btn.label[] == "Plot3"
-                plot_topoplot(selected_data, state.data.original.layout, method=:spherical_spline)
+                plot_topography(selected_data, state.data.original.layout, method=:spherical_spline)
                 println("Plot3: TODO")
             end
         end
@@ -1293,7 +1293,7 @@ function plot_databrowser(dat::Union{ContinuousData,EpochData}, ica = nothing)
     ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (μV)", title = get_title(dat))
 
     # Create appropriate state based on data type
-    state = create_browser_state(dat, dat.layout.label, ax, ica)
+    state = create_browser_state(dat, dat.layout.data.label, ax, ica)
 
     # Common UI setup
     setup_ui(fig, ax, state, dat, ica)
