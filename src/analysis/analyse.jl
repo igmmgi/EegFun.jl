@@ -1196,93 +1196,12 @@ trigger_counts = trigger_count(dat, print_table = false)
 ```
 """
 function trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
-    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
-    return _trigger_count_impl(dat.data.triggers, print_table = print_table)
+    @info "trigger_count: Counting triggers in ContinuousData"
+    return _count_triggers([dat.data.triggers], print_table = print_table, 
+                          title = "Trigger Count Summary",
+                          headers = ["Trigger", "Count"], 
+                          is_biosemi = false)
 end
-
-# Helper function for trigger counting logic
-function _trigger_count_impl(trigger_data::Vector{<:Integer}; print_table::Bool = true, title::String = "Trigger Count Summary")
-    # Get unique non-zero trigger values
-    unique_triggers = unique(trigger_data)
-    non_zero_triggers = filter(x -> x != 0, unique_triggers)
-    
-    if isempty(non_zero_triggers)
-        if print_table
-            println("No non-zero triggers found in the data.")
-        end
-        return DataFrame()
-    end
-    
-    # Count occurrences of each trigger value
-    trigger_values = Int[]
-    trigger_counts = Int[]
-    
-    for trigger in sort(non_zero_triggers)
-        push!(trigger_values, trigger)
-        push!(trigger_counts, count(x -> x == trigger, trigger_data))
-    end
-    
-    # Create DataFrame
-    result_df = DataFrame(trigger = trigger_values, count = trigger_counts)
-    
-    # Print table if requested
-    if print_table
-        pretty_table(result_df, 
-                    title = title,
-                    header = ["Trigger", "Count"],
-                    alignment = [:r, :r],
-                    crop = :none)
-        println()
-    end
-    
-    return result_df
-end
-
-# Helper function for BioSemi data with both raw and cleaned counts
-function _trigger_count_biosemi_impl(raw_triggers::Vector{<:Integer}, cleaned_triggers::Vector{<:Integer}; print_table::Bool = true)
-    # Get unique non-zero trigger values from both raw and cleaned data
-    unique_triggers = unique(vcat(raw_triggers, cleaned_triggers))
-    non_zero_triggers = filter(x -> x != 0, unique_triggers)
-    
-    if isempty(non_zero_triggers)
-        if print_table
-            @minimal_warning "No non-zero triggers found in the data."
-        end
-        return DataFrame()
-    end
-    
-    # Count occurrences of each trigger value in both raw and cleaned data
-    trigger_values = Int[]
-    raw_counts = Int[]
-    cleaned_counts = Int[]
-    
-    for trigger in sort(non_zero_triggers)
-        push!(trigger_values, trigger)
-        push!(raw_counts, count(x -> x == trigger, raw_triggers))
-        push!(cleaned_counts, count(x -> x == trigger, cleaned_triggers))
-    end
-    
-    # Create DataFrame
-    result_df = DataFrame(
-        trigger = trigger_values, 
-        raw_count = raw_counts, 
-        cleaned_count = cleaned_counts
-    )
-    
-    # Print table if requested
-    if print_table
-        pretty_table(result_df, 
-                    title = "Trigger Count Summary (Raw vs Cleaned)",
-                    header = ["Trigger", "Raw Count", "Cleaned Count"],
-                    alignment = [:r, :r, :r],
-                    crop = :none)
-        println()
-        println("Note: Cleaned counts show only trigger onset events (sustained signals converted to single onsets)")
-    end
-    
-    return result_df
-end
-
 
 """
     trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
@@ -1306,10 +1225,73 @@ trigger_counts = trigger_count(dat, print_table = false)
 ```
 """
 function trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
-    # Get cleaned trigger data (onset detection only)
-    cleaned_triggers = _clean_triggers(dat.triggers.raw)
-    return _trigger_count_biosemi_impl(dat.triggers.raw, cleaned_triggers, print_table = print_table)
+    @info "trigger_count: Counting triggers in BioSemiData"
+    cleaned_triggers = _clean_triggers(dat.triggers.raw) # cleaned triggers
+    return _count_triggers([dat.triggers.raw, cleaned_triggers], print_table = print_table,
+                          title = "Trigger Count Summary (Raw vs Cleaned)",
+                          headers = ["Trigger", "Raw Count", "Cleaned Count"],
+                          is_biosemi = true)
 end
+
+# Core function that handles both single and multiple trigger datasets
+function _count_triggers(trigger_datasets::Vector{<:Vector{<:Integer}}; 
+                        print_table::Bool = true, 
+                        title::String = "Trigger Count Summary",
+                        headers::Vector{String} = ["Trigger", "Count"],
+                        is_biosemi::Bool = false)
+    
+    # Get unique non-zero trigger values from all datasets
+    all_triggers = vcat(trigger_datasets...)
+    unique_triggers = unique(all_triggers)
+    non_zero_triggers = filter(x -> x != 0, unique_triggers)
+    
+    if isempty(non_zero_triggers)
+        @minimal_warning "No non-zero triggers found in the data."
+        return DataFrame()
+    end
+    
+    # Count occurrences of each trigger value in each dataset
+    trigger_values = Int[]
+    counts_matrix = Vector{Int}[]
+    
+    for trigger in sort(non_zero_triggers)
+        push!(trigger_values, trigger)
+        trigger_counts = Int[]
+        for dataset in trigger_datasets
+            push!(trigger_counts, count(x -> x == trigger, dataset))
+        end
+        push!(counts_matrix, trigger_counts)
+    end
+    
+    # Create DataFrame
+    if length(trigger_datasets) == 1
+        result_df = DataFrame(trigger = trigger_values, count = [counts[1] for counts in counts_matrix])
+    else
+        # For BioSemi with raw and cleaned counts
+        result_df = DataFrame(
+            trigger = trigger_values, 
+            raw_count = [counts[1] for counts in counts_matrix],
+            cleaned_count = [counts[2] for counts in counts_matrix]
+        )
+    end
+    
+    # Print table if requested
+    if print_table
+        println()
+        pretty_table(result_df, 
+                    title = title,
+                    header = headers,
+                    alignment = fill(:r, length(headers)),
+                    crop = :none)
+        println()
+        if is_biosemi
+            println("Note: Cleaned counts show only trigger onset events (sustained signals converted to single onsets)")
+        end
+    end
+    
+    return result_df
+end
+
 
 
 
