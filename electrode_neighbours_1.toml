@@ -1,0 +1,436 @@
+[metadata]
+average_neighbours_per_electrode = 3.92
+total_electrodes = 72
+generated_at = "2025-07-25T09:26:35.544"
+
+[electrodes.Fp1]
+neighbours = ["AF7", "AF3", "Fpz"]
+distances = [30.5435, 28.5422, 27.5157]
+weights = [0.31445, 0.336498, 0.349052]
+neighbour_count = 3
+
+[electrodes.AF7]
+neighbours = ["Fp1", "AF3", "F5", "F7"]
+distances = [30.5435, 35.5672, 30.8455, 24.4795]
+weights = [0.2441, 0.209622, 0.24171, 0.304567]
+neighbour_count = 4
+
+[electrodes.AF3]
+neighbours = ["Fp1", "AF7", "F1", "F3", "F5", "AFz"]
+distances = [28.5422, 35.5672, 36.6162, 30.9763, 38.1808, 34.1153]
+weights = [0.196557, 0.157734, 0.153215, 0.181111, 0.146936, 0.164447]
+neighbour_count = 6
+
+[electrodes.F1]
+neighbours = ["AF3", "F3", "FC1", "Fz"]
+distances = [36.6162, 26.1584, 35.466, 25.6746]
+weights = [0.20583, 0.288118, 0.212505, 0.293547]
+neighbour_count = 4
+
+[electrodes.F3]
+neighbours = ["AF3", "F1", "F5", "FC3"]
+distances = [30.9763, 26.1584, 26.9179, 32.4362]
+weights = [0.233104, 0.276036, 0.268249, 0.222612]
+neighbour_count = 4
+
+[electrodes.F5]
+neighbours = ["AF7", "AF3", "F3", "F7", "FC5"]
+distances = [30.8455, 38.1808, 26.9179, 27.0859, 29.8461]
+weights = [0.195081, 0.157602, 0.223546, 0.222159, 0.201613]
+neighbour_count = 5
+
+[electrodes.F7]
+neighbours = ["AF7", "F5", "FT7", "FC5", "F9"]
+distances = [24.4795, 27.0859, 27.5157, 39.0819, 35.1192]
+weights = [0.242905, 0.219531, 0.216102, 0.152147, 0.169315]
+neighbour_count = 5
+
+[electrodes.FT7]
+neighbours = ["F7", "FC5", "T7"]
+distances = [27.5157, 32.3846, 27.5157]
+weights = [0.35092, 0.29816, 0.35092]
+neighbour_count = 3
+
+[electrodes.FC5]
+neighbours = ["F5", "F7", "FT7", "FC3", "C5"]
+distances = [29.8461, 39.0819, 32.3846, 33.3515, 30.2901]
+weights = [0.219033, 0.167271, 0.201863, 0.196011, 0.215822]
+neighbour_count = 5
+
+[electrodes.FC3]
+neighbours = ["F3", "FC5", "FC1", "C3"]
+distances = [32.4362, 33.3515, 32.1366, 32.1982]
+weights = [0.250672, 0.243793, 0.25301, 0.252525]
+neighbour_count = 4
+
+[electrodes.FC1]
+neighbours = ["F1", "FC3", "C1", "FCz"]
+distances = [35.466, 32.1366, 33.6148, 33.6148]
+weights = [0.237318, 0.261906, 0.250388, 0.250388]
+neighbour_count = 4
+
+[electrodes.C1]
+neighbours = ["FC1", "C3", "CP1", "Cz"]
+distances = [33.6148, 35.0888, 33.6148, 35.0888]
+weights = [0.255363, 0.244637, 0.255363, 0.244637]
+neighbour_count = 4
+
+[electrodes.C3]
+neighbours = ["FC3", "C1", "C5", "CP3"]
+distances = [32.1982, 35.0888, 35.0888, 32.1982]
+weights = [0.26074, 0.23926, 0.23926, 0.26074]
+neighbour_count = 4
+
+[electrodes.C5]
+neighbours = ["FC5", "C3", "T7", "CP5"]
+distances = [30.2901, 35.0888, 35.0888, 30.2901]
+weights = [0.268349, 0.231651, 0.231651, 0.268349]
+neighbour_count = 4
+
+[electrodes.T7]
+neighbours = ["FT7", "C5", "TP7"]
+distances = [27.5157, 35.0888, 27.5157]
+weights = [0.359173, 0.281654, 0.359173]
+neighbour_count = 3
+
+[electrodes.TP7]
+neighbours = ["T7", "CP5", "P7"]
+distances = [27.5157, 32.3846, 27.5157]
+weights = [0.35092, 0.29816, 0.35092]
+neighbour_count = 3
+
+[electrodes.CP5]
+neighbours = ["C5", "TP7", "CP3", "P5", "P7"]
+distances = [30.2901, 32.3846, 33.3515, 29.8461, 39.0819]
+weights = [0.215822, 0.201863, 0.196011, 0.219033, 0.167271]
+neighbour_count = 5
+
+[electrodes.CP3]
+neighbours = ["C3", "CP5", "CP1", "P3"]
+distances = [32.1982, 33.3515, 32.1366, 32.4362]
+weights = [0.252525, 0.243793, 0.25301, 0.250672]
+neighbour_count = 4
+
+[electrodes.CP1]
+neighbours = ["C1", "CP3", "P1", "CPz"]
+distances = [33.6148, 32.1366, 35.466, 33.6148]
+weights = [0.250388, 0.261906, 0.237318, 0.250388]
+neighbour_count = 4
+
+[electrodes.P1]
+neighbours = ["CP1", "P3", "PO3", "Pz"]
+distances = [35.466, 26.1584, 36.6162, 25.6746]
+weights = [0.212505, 0.288118, 0.20583, 0.293547]
+neighbour_count = 4
+
+[electrodes.P3]
+neighbours = ["CP3", "P1", "P5", "PO3"]
+distances = [32.4362, 26.1584, 26.9179, 30.9763]
+weights = [0.222612, 0.276036, 0.268249, 0.233104]
+neighbour_count = 4
+
+[electrodes.P5]
+neighbours = ["CP5", "P3", "P7", "PO7", "PO3"]
+distances = [29.8461, 26.9179, 27.0859, 32.5569, 38.1808]
+weights = [0.203702, 0.225862, 0.22446, 0.186741, 0.159235]
+neighbour_count = 5
+
+[electrodes.P7]
+neighbours = ["TP7", "CP5", "P5", "P9", "PO7"]
+distances = [27.5157, 39.0819, 27.0859, 38.5871, 27.5157]
+weights = [0.225581, 0.158821, 0.22916, 0.160857, 0.225581]
+neighbour_count = 5
+
+[electrodes.P9]
+neighbours = ["P7", "PO7", "PO9", "M1"]
+distances = [38.5871, 36.5484, 29.0684, 30.7264]
+weights = [0.215561, 0.227585, 0.286148, 0.270707]
+neighbour_count = 4
+
+[electrodes.PO7]
+neighbours = ["P5", "P7", "P9", "PO3", "O1"]
+distances = [32.5569, 27.5157, 36.5484, 33.7548, 27.5157]
+weights = [0.191508, 0.226594, 0.170593, 0.184712, 0.226594]
+neighbour_count = 5
+
+[electrodes.PO3]
+neighbours = ["P1", "P3", "P5", "PO7", "O1", "POz"]
+distances = [36.6162, 30.9763, 38.1808, 33.7548, 28.5422, 34.1153]
+weights = [0.151928, 0.17959, 0.145702, 0.164807, 0.194906, 0.163066]
+neighbour_count = 6
+
+[electrodes.O1]
+neighbours = ["PO7", "PO3", "Oz", "PO9"]
+distances = [27.5157, 28.5422, 27.5157, 35.5724]
+weights = [0.267555, 0.257933, 0.267555, 0.206957]
+neighbour_count = 4
+
+[electrodes.Iz]
+neighbours = ["Oz", "PO9", "PO10"]
+distances = [35.0888, 30.436, 30.436]
+weights = [0.302504, 0.348748, 0.348748]
+neighbour_count = 3
+
+[electrodes.Oz]
+neighbours = ["O1", "Iz", "POz", "O2"]
+distances = [27.5157, 35.0888, 35.0888, 27.5157]
+weights = [0.280242, 0.219758, 0.219758, 0.280242]
+neighbour_count = 4
+
+[electrodes.POz]
+neighbours = ["PO3", "Oz", "Pz", "PO4"]
+distances = [34.1153, 35.0888, 35.0888, 34.1153]
+weights = [0.253517, 0.246483, 0.246483, 0.253517]
+neighbour_count = 4
+
+[electrodes.Pz]
+neighbours = ["P1", "POz", "CPz", "P2"]
+distances = [25.6746, 35.0888, 35.0888, 25.6746]
+weights = [0.288733, 0.211267, 0.211267, 0.288733]
+neighbour_count = 4
+
+[electrodes.CPz]
+neighbours = ["CP1", "Pz", "Cz", "CP2"]
+distances = [33.6148, 35.0888, 35.0888, 33.6148]
+weights = [0.255363, 0.244637, 0.244637, 0.255363]
+neighbour_count = 4
+
+[electrodes.Fpz]
+neighbours = ["Fp1", "Fp2", "AFz"]
+distances = [27.5157, 27.5157, 35.0888]
+weights = [0.359173, 0.359173, 0.281654]
+neighbour_count = 3
+
+[electrodes.Fp2]
+neighbours = ["Fpz", "AF8", "AF4"]
+distances = [27.5157, 30.5435, 28.5422]
+weights = [0.349052, 0.31445, 0.336498]
+neighbour_count = 3
+
+[electrodes.AF8]
+neighbours = ["Fp2", "AF4", "F6", "F8"]
+distances = [30.5435, 35.5672, 30.8455, 24.4795]
+weights = [0.2441, 0.209622, 0.24171, 0.304567]
+neighbour_count = 4
+
+[electrodes.AF4]
+neighbours = ["Fp2", "AF8", "AFz", "F2", "F4", "F6"]
+distances = [28.5422, 35.5672, 34.1153, 36.6162, 30.9763, 38.1808]
+weights = [0.196557, 0.157734, 0.164447, 0.153215, 0.181111, 0.146936]
+neighbour_count = 6
+
+[electrodes.AFz]
+neighbours = ["AF3", "Fpz", "AF4", "Fz"]
+distances = [34.1153, 35.0888, 34.1153, 35.0888]
+weights = [0.253517, 0.246483, 0.253517, 0.246483]
+neighbour_count = 4
+
+[electrodes.Fz]
+neighbours = ["F1", "AFz", "F2", "FCz"]
+distances = [25.6746, 35.0888, 25.6746, 35.0888]
+weights = [0.288733, 0.211267, 0.288733, 0.211267]
+neighbour_count = 4
+
+[electrodes.F2]
+neighbours = ["AF4", "Fz", "F4", "FC2"]
+distances = [36.6162, 25.6746, 26.1584, 35.466]
+weights = [0.20583, 0.293547, 0.288118, 0.212505]
+neighbour_count = 4
+
+[electrodes.F4]
+neighbours = ["AF4", "F2", "F6", "FC4"]
+distances = [30.9763, 26.1584, 26.9179, 32.4362]
+weights = [0.233104, 0.276036, 0.268249, 0.222612]
+neighbour_count = 4
+
+[electrodes.F6]
+neighbours = ["AF8", "AF4", "F4", "F8", "FC6"]
+distances = [30.8455, 38.1808, 26.9179, 27.0859, 29.8461]
+weights = [0.195081, 0.157602, 0.223546, 0.222159, 0.201613]
+neighbour_count = 5
+
+[electrodes.F8]
+neighbours = ["AF8", "F6", "FT8", "FC6", "F10"]
+distances = [24.4795, 27.0859, 27.5157, 39.0819, 35.1192]
+weights = [0.242905, 0.219531, 0.216102, 0.152147, 0.169315]
+neighbour_count = 5
+
+[electrodes.FT8]
+neighbours = ["F8", "FC6", "T8"]
+distances = [27.5157, 32.3846, 27.5157]
+weights = [0.35092, 0.29816, 0.35092]
+neighbour_count = 3
+
+[electrodes.FC6]
+neighbours = ["F6", "F8", "FT8", "FC4", "C6"]
+distances = [29.8461, 39.0819, 32.3846, 33.3515, 30.2901]
+weights = [0.219033, 0.167271, 0.201863, 0.196011, 0.215822]
+neighbour_count = 5
+
+[electrodes.FC4]
+neighbours = ["F4", "FC6", "FC2", "C4"]
+distances = [32.4362, 33.3515, 32.1366, 32.1982]
+weights = [0.250672, 0.243793, 0.25301, 0.252525]
+neighbour_count = 4
+
+[electrodes.FC2]
+neighbours = ["F2", "FC4", "FCz", "C2"]
+distances = [35.466, 32.1366, 33.6148, 33.6148]
+weights = [0.237318, 0.261906, 0.250388, 0.250388]
+neighbour_count = 4
+
+[electrodes.FCz]
+neighbours = ["FC1", "Fz", "FC2", "Cz"]
+distances = [33.6148, 35.0888, 33.6148, 35.0888]
+weights = [0.255363, 0.244637, 0.255363, 0.244637]
+neighbour_count = 4
+
+[electrodes.Cz]
+neighbours = ["C1", "CPz", "FCz", "C2"]
+distances = [35.0888, 35.0888, 35.0888, 35.0888]
+weights = [0.25, 0.25, 0.25, 0.25]
+neighbour_count = 4
+
+[electrodes.C2]
+neighbours = ["FC2", "Cz", "C4", "CP2"]
+distances = [33.6148, 35.0888, 35.0888, 33.6148]
+weights = [0.255363, 0.244637, 0.244637, 0.255363]
+neighbour_count = 4
+
+[electrodes.C4]
+neighbours = ["FC4", "C2", "C6", "CP4"]
+distances = [32.1982, 35.0888, 35.0888, 32.1982]
+weights = [0.26074, 0.23926, 0.23926, 0.26074]
+neighbour_count = 4
+
+[electrodes.C6]
+neighbours = ["FC6", "C4", "T8", "CP6"]
+distances = [30.2901, 35.0888, 35.0888, 30.2901]
+weights = [0.268349, 0.231651, 0.231651, 0.268349]
+neighbour_count = 4
+
+[electrodes.T8]
+neighbours = ["FT8", "C6", "TP8"]
+distances = [27.5157, 35.0888, 27.5157]
+weights = [0.359173, 0.281654, 0.359173]
+neighbour_count = 3
+
+[electrodes.TP8]
+neighbours = ["T8", "CP6", "P8"]
+distances = [27.5157, 32.3846, 27.5157]
+weights = [0.35092, 0.29816, 0.35092]
+neighbour_count = 3
+
+[electrodes.CP6]
+neighbours = ["C6", "TP8", "CP4", "P6", "P8"]
+distances = [30.2901, 32.3846, 33.3515, 29.8461, 39.0819]
+weights = [0.215822, 0.201863, 0.196011, 0.219033, 0.167271]
+neighbour_count = 5
+
+[electrodes.CP4]
+neighbours = ["C4", "CP6", "CP2", "P4"]
+distances = [32.1982, 33.3515, 32.1366, 32.4362]
+weights = [0.252525, 0.243793, 0.25301, 0.250672]
+neighbour_count = 4
+
+[electrodes.CP2]
+neighbours = ["CPz", "C2", "CP4", "P2"]
+distances = [33.6148, 33.6148, 32.1366, 35.466]
+weights = [0.250388, 0.250388, 0.261906, 0.237318]
+neighbour_count = 4
+
+[electrodes.P2]
+neighbours = ["Pz", "CP2", "P4", "PO4"]
+distances = [25.6746, 35.466, 26.1584, 36.6162]
+weights = [0.293547, 0.212505, 0.288118, 0.20583]
+neighbour_count = 4
+
+[electrodes.P4]
+neighbours = ["CP4", "P2", "P6", "PO4"]
+distances = [32.4362, 26.1584, 26.9179, 30.9763]
+weights = [0.222612, 0.276036, 0.268249, 0.233104]
+neighbour_count = 4
+
+[electrodes.P6]
+neighbours = ["CP6", "P4", "P8", "PO8", "PO4"]
+distances = [29.8461, 26.9179, 27.0859, 32.5569, 38.1808]
+weights = [0.203702, 0.225862, 0.22446, 0.186741, 0.159235]
+neighbour_count = 5
+
+[electrodes.P8]
+neighbours = ["TP8", "CP6", "P6", "P10", "PO8"]
+distances = [27.5157, 39.0819, 27.0859, 38.5871, 27.5157]
+weights = [0.225581, 0.158821, 0.22916, 0.160857, 0.225581]
+neighbour_count = 5
+
+[electrodes.P10]
+neighbours = ["P8", "PO8", "PO10", "M2"]
+distances = [38.5871, 36.5484, 29.0684, 30.7264]
+weights = [0.215561, 0.227585, 0.286148, 0.270707]
+neighbour_count = 4
+
+[electrodes.PO8]
+neighbours = ["P6", "P8", "P10", "PO4", "O2"]
+distances = [32.5569, 27.5157, 36.5484, 33.7548, 27.5157]
+weights = [0.191508, 0.226594, 0.170593, 0.184712, 0.226594]
+neighbour_count = 5
+
+[electrodes.PO4]
+neighbours = ["POz", "P2", "P4", "P6", "PO8", "O2"]
+distances = [34.1153, 36.6162, 30.9763, 38.1808, 33.7548, 28.5422]
+weights = [0.163066, 0.151928, 0.17959, 0.145702, 0.164807, 0.194906]
+neighbour_count = 6
+
+[electrodes.O2]
+neighbours = ["Oz", "PO8", "PO4", "PO10"]
+distances = [27.5157, 27.5157, 28.5422, 35.5724]
+weights = [0.267555, 0.267555, 0.257933, 0.206957]
+neighbour_count = 4
+
+[electrodes.PO9]
+neighbours = ["P9", "O1", "Iz"]
+distances = [29.0684, 35.5724, 30.436]
+weights = [0.36072, 0.294767, 0.344512]
+neighbour_count = 3
+
+[electrodes.PO10]
+neighbours = ["Iz", "P10", "O2"]
+distances = [30.436, 29.0684, 35.5724]
+weights = [0.344512, 0.36072, 0.294767]
+neighbour_count = 3
+
+[electrodes.F9]
+neighbours = ["F7", "IO1"]
+distances = [35.1192, 39.7644]
+weights = [0.531016, 0.468984]
+neighbour_count = 2
+
+[electrodes.F10]
+neighbours = ["F8", "IO2"]
+distances = [35.1192, 39.7644]
+weights = [0.531016, 0.468984]
+neighbour_count = 2
+
+[electrodes.IO1]
+neighbours = ["F9"]
+distances = [39.7644]
+weights = [1.0]
+neighbour_count = 1
+
+[electrodes.IO2]
+neighbours = ["F10"]
+distances = [39.7644]
+weights = [1.0]
+neighbour_count = 1
+
+[electrodes.M1]
+neighbours = ["P9"]
+distances = [30.7264]
+weights = [1.0]
+neighbour_count = 1
+
+[electrodes.M2]
+neighbours = ["P10"]
+distances = [30.7264]
+weights = [1.0]
+neighbour_count = 1
