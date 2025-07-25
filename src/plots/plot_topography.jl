@@ -109,99 +109,6 @@ function plot_topography(
     return fig, ax
 end
 
-"""
-    plot_topography(dat::ContinuousData; kwargs...)
-
-Create a topographic plot from continuous EEG data.
-
-# Arguments
-- `dat`: ContinuousData object
-- `kwargs...`: Additional keyword arguments passed to plot_topography!
-
-# Returns
-- Figure and Axis objects
-
-# Examples
-
-## Basic Usage
-```julia
-# Plot all channels
-fig, ax = plot_topography(dat)
-
-# Plot specific time point
-fig, ax = plot_topography(dat, time_point = 1.5)  # 1.5 seconds
-
-# Plot specific sample
-fig, ax = plot_topography(dat, sample = 1500)  # Sample 1500
-```
-
-## Channel Filtering
-```julia
-# Exclude reference channels
-fig, ax = plot_topography(dat, channels = channels_not([:M1, :M2]))
-
-# Only frontal channels
-fig, ax = plot_topography(dat, channels = channels(x -> startswith.(string.(x), "F")))
-
-# Specific channels
-fig, ax = plot_topography(dat, channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]))
-```
-
-## Customization
-```julia
-# Custom color scheme
-fig, ax = plot_topography(dat, colormap = :RdBu_r)
-
-# Custom limits
-fig, ax = plot_topography(dat, clim = (-10, 10))
-
-# Custom title
-fig, ax = plot_topography(dat, title = "Alpha Power (8-12 Hz)")
-
-# Without head outline
-fig, ax = plot_topography(dat, show_head = false)
-
-# Custom electrode size
-fig, ax = plot_topography(dat, electrode_size = 8)
-```
-
-## Time-Series Analysis
-```julia
-# Plot at specific ERP time points
-fig, ax = plot_topography(dat, time_point = 0.1)   # 100ms post-stimulus
-fig, ax = plot_topography(dat, time_point = 0.3)   # 300ms post-stimulus
-
-# Plot mean over time window
-fig, ax = plot_topography(dat, time_window = (0.1, 0.3))  # 100-300ms
-```
-"""
-function plot_topography(dat::ContinuousData; display_plot = true, kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
-    if display_plot
-        display_figure(fig)
-    end
-    return fig, ax
-end
-
-"""
-    plot_topography!(fig, ax, dat::ContinuousData; kwargs...)
-
-Add a topographic plot to existing figure/axis from continuous EEG data.
-
-# Arguments
-- `fig`: Figure object
-- `ax`: Axis object
-- `dat`: ContinuousData object
-- `kwargs...`: Additional keyword arguments
-"""
-function plot_topography!(fig, ax, dat::ContinuousData; kwargs...)
-    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
-end
-
-
-
 
 
 
@@ -240,37 +147,29 @@ function plot_topography!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
     plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
 end
 
-"""
-    plot_topography(dat::ErpData; kwargs...)
 
-Create a topographic plot from ERP data.
-
-# Arguments
-- `dat`: ErpData object
-- `kwargs...`: Additional keyword arguments passed to plot_topography!
-
-# Returns
-- Figure and Axis objects
-"""
-function plot_topography(dat::ErpData; kwargs...)
+function plot_topography(dat::SingleDataFrameEeg; display_plot = true, kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
+    if display_plot
+        display_figure(fig)
+    end
     return fig, ax
 end
 
 """
-    plot_topography!(fig, ax, dat::ErpData; kwargs...)
+    plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
 
-Add a topographic plot to existing figure/axis from ERP data.
+Add a topographic plot to existing figure/axis from single DataFrame EEG data.
 
 # Arguments
 - `fig`: Figure object
 - `ax`: Axis object
-- `dat`: ErpData object
+- `dat`: SingleDataFrameEeg object (ContinuousData or ErpData)
 - `kwargs...`: Additional keyword arguments
 """
-function plot_topography!(fig, ax, dat::ErpData; kwargs...)
+function plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
     plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
 end
 

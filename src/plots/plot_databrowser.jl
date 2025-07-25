@@ -1357,28 +1357,23 @@ plot_databrowser(dat,
     ica = ica_result)
 ```
 """
-function plot_databrowser(dat::ContinuousData; 
+# TODO: cannot dispatch on kwargs so need another function name: is there a better way?
+function plot_databrowser_subset(dat::ContinuousData; 
                          channel_selection::Function = channels(), 
                          sample_selection::Function = samples(),
                          ica = nothing)
-    
-    # Create subset of data
+    # Create data subset and plot
     filtered_dat = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
-    
-    # Plot the filtered data
     return plot_databrowser(filtered_dat, ica)
 end
 
-function plot_databrowser(dat::EpochData; 
+function plot_databrowser_subset(dat::EpochData; 
                          channel_selection::Function = channels(), 
                          sample_selection::Function = samples(),
                          epoch_selection::Function = epochs(),
                          ica = nothing)
-    
-    # Create subset of data
+    # Create data subset and plot
     filtered_dat = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection, epoch_selection = epoch_selection)
-    
-    # Plot the filtered data
     return plot_databrowser(filtered_dat, ica)
 end
 
