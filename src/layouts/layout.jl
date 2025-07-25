@@ -394,6 +394,7 @@ print_neighbours_dict(neighbours, "neighbours.toml")
 function print_layout_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
     nneighbours = average_number_of_neighbours(neighbours_dict)
     toml_data = _format_neighbours_toml(neighbours_dict, nneighbours)
+    @info "Printing neighbours to $filename"
     open(filename, "w") do io
         TOML.print(io, toml_data)
     end
