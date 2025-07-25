@@ -55,29 +55,30 @@ eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 # how to rereference data
 eegfun.rereference!(dat, :avg)
 
+# databrowser
 eegfun.plot_databrowser(dat)
 
-eegfun.plot_topography(dat)
-
-
 # Subset channels/samples 
-# dat_subset = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
-# dat_subset = eegfun.subset(dat, sample_selection = x -> x.sample .<= 10_000) # first 10000 samples
-# dat_subset = eegfun.subset(dat, sample_selection = x -> x.time .<= 10) # first 10 seconds
-# we can get cleaner trigger info
-# eegfun.trigger_count(dat);
-# eegfun.plot_trigger_overview(dat)
-# eegfun.plot_trigger_timing(dat)
-# preprocessing steps
-eegfun.rereference!(dat, :avg)
-# eegfun.channel_difference!(dat)
+dat_subset = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+dat_subset = eegfun.subset(dat, sample_selection = x -> x.sample .<= 10_000) # first 10000 samples
+dat_subset = eegfun.subset(dat, sample_selection = x -> x.time .<= 10) # first 10 seconds
+
+# or subset data and plot
+eegfun.plot_databrowser_subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> x.time .< 20)
+
+# how to calculate channel differences
 eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:Fp1, :Fp2]), channels_in2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+
 eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:F9]), channels_in2 = eegfun.channels([:F10]), channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+
+# how to detect EOG onsets
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
-# eegfun.plot_databrowser(dat)
-# eegfun.plot_databrowser(dat, channel_selection = eegfun.channels_not([:Cz]), sample_selection = x -> x.time .< 20)
+dat_subset = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+
+eegfun.plot_databrowser_subset(dat, channel_selection = eegfun.channels([:Fp1,:vEOG, :hEOG]))
+
 
 eegfun.channels(dat)     # original channels in the layout
 eegfun.all_channels(dat) # all channels in the data
@@ -88,11 +89,11 @@ eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> x.sample .< 2000)
 eegfun.channel_summary(dat, channel_selection = x -> endswith.(string.(x), "z")) # all midline channels 
 eegfun.channel_summary(dat, channel_selection = x -> .!(endswith.(string.(x), "z"))) # all non-midline channels 
-eegfun.channel_summary(dat, include_additional_channels = true) # include additional channels (e.g. vEOG, hEOG)
+eegfun.channel_summary(dat, include_extra_channels = true) # include additional channels (e.g. vEOG, hEOG)
 
 # add bool columns to the data frame
 eegfun.is_extreme_value!(dat, 100);
-eegfun.is_extreme_value!(dat, 100; include_additional_channels = true);
+eegfun.is_extreme_value!(dat, 100; include_extra_channels = true);
 eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1, :Fp2]));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
@@ -100,7 +101,7 @@ eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.
 
 # retrun count of extreme values at specific electrodes at different thresholds
 eegfun.n_extreme_value(dat, 100)
-eegfun.n_extreme_value(dat, 100, include_additional_channels = true)
+eegfun.n_extreme_value(dat, 100, include_extra_channels = true)
 eegfun.n_extreme_value(dat, 100, channel_selection = eegfun.channels([:Fp1, :Fp2])) # count extreme values at Fp1 at 100 uV threshold
 eegfun.n_extreme_value(dat, 100, channel_selection = x -> endswith.(string.(x), "z"))
 eegfun.n_extreme_value(dat, 100, channel_selection = x -> .!(endswith.(string.(x), "z")), sample_selection = x -> x.sample .< 10)

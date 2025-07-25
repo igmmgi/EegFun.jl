@@ -275,8 +275,18 @@ end
 
 # Basic information functions right with the types
 channels(dat::EegData) = dat.layout.data.label
-all_channels(dat::EegData) = propertynames(dat.data)
-extra_channels(dat::EegData) = setdiff(propertynames(data(dat)), [channels(dat); :time; :sample; :triggers])
+
+# For SingleDataFrameEeg (ContinuousData, ErpData)
+all_channels(dat::SingleDataFrameEeg) = propertynames(dat.data)
+metadata_columns(dat::SingleDataFrameEeg) = all_channels(dat)[1:findfirst(col -> col in channels(dat), all_channels(dat)) - 1]
+extra_channels(dat::SingleDataFrameEeg) = setdiff(propertynames(data(dat)), [metadata_columns(dat); channels(dat)])
+
+# For MultiDataFrameEeg (EpochData)
+all_channels(dat::MultiDataFrameEeg) = propertynames(dat.data[1])  # Use first epoch as reference
+metadata_columns(dat::MultiDataFrameEeg) = all_channels(dat)[1:findfirst(col -> col in channels(dat), all_channels(dat)) - 1]
+extra_channels(dat::MultiDataFrameEeg) = setdiff(propertynames(data(dat)), [metadata_columns(dat); channels(dat)])
+
+
 times(dat::SingleDataFrameEeg) = dat.data.time
 times(dat::MultiDataFrameEeg) = first(dat.data).time  # assume all epochs are the same
 sample_rate(dat::ContinuousData) = dat.sample_rate

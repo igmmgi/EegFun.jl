@@ -99,8 +99,10 @@ function data_limits_y(dat::DataFrame, col)
     return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
 end
 
+
+
 """
-    subset(dat::SingleDataFrameEeg; 
+    subset_dataframe(dat::SingleDataFrameEeg; 
            channel_selection::Function = channels(), 
            sample_selection::Function = samples())
 
@@ -128,27 +130,29 @@ filtered_dat = subset(dat,
     sample_selection = x -> x.sample .< 1000)
 ```
 """
-# Internal function to filter data by samples and channels
-function _subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})
+function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})
     dat_subset = df[selected_samples, :]
-    dat_subset = select(dat_subset, vcat([:time, :sample, :triggers], selected_channels))
+    dat_subset = select(dat_subset, selected_channels)
     return dat_subset
 end
 
 function subset(dat::SingleDataFrameEeg; 
                channel_selection::Function = channels(), 
-               sample_selection::Function = samples())
-    
+               sample_selection::Function = samples(), 
+               include_extra_channels::Bool = false)
+   
+    @info "subset: Subsetting $(typeof(dat)) ..."
     # Get selected channels and samples 
-    selected_channels = get_selected_channels(dat, channel_selection)
+    selected_channels = get_selected_channels(dat, channel_selection, include_extra_channels = include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     
     # Filter data by samples and channels and match layout
-    dat_subset = _subset_dataframe(dat.data, selected_channels, selected_samples)
+    dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
     layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
     
     # Create new SingleDataFrameEeg object
     return typeof(dat)(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
+
 end
 
 """
@@ -189,15 +193,18 @@ filtered_dat = subset(dat,
 function subset(dat::EpochData; 
                channel_selection::Function = channels(), 
                sample_selection::Function = samples(),
-               epoch_selection::Function = epochs())
+               epoch_selection::Function = epochs(), 
+               include_extra_channels::Bool = false)
     
+    @info "subset: Subsetting $(typeof(dat)) ..."
+
     # Get selected channels, samples, and epochs
-    selected_channels = get_selected_channels(dat, channel_selection)
+    selected_channels = get_selected_channels(dat, channel_selection, include_extra_channels = include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
-    selected_epochs = findall(epoch_selection(1:length(dat.data)))
+    selected_epochs = get_selected_epochs(dat, epoch_selection)
     
     # Filter epochs first, then apply channel/sample filtering and match layout
-    epochs_subset = _subset_dataframe.(dat.data[selected_epochs], Ref(selected_channels), Ref(selected_samples))
+    epochs_subset = subset_dataframe.(dat.data[selected_epochs], Ref(selected_channels), Ref(selected_samples))
     layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
     
     # Create new EpochData object
