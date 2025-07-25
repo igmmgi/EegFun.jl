@@ -57,7 +57,7 @@ eegfun.rereference!(dat, :avg)
 
 eegfun.plot_databrowser(dat)
 
-eegfun.plot_topoplot(dat)
+eegfun.plot_topography(dat)
 
 
 # Subset channels/samples 
