@@ -15,24 +15,29 @@ using GLMakie
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
+# how to plot layout
 eegfun.plot_layout_2d(layout)
 
-# 2D layout with neighbours defined by distance
+# how to plot layout with neighbours
+eegfun.plot_layout_2d(layout, neighbours = true)
+eegfun.plot_layout_3d(layout, neighbours= true)
 
+# define neighbours 2D/3D defined by distance (mm)
 eegfun.get_layout_neighbours_xy!(layout, 40);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 
-# how to subset layout
-subset_layout = eegfun.subset_layout(layout, channel_selection = x -> .!endswith.(string.(x), "z"));
-
-eegfun.plot_layout_2d(subset_layout)
-
-
-eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
-
-eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
+# how to plot layout with neighbours
 eegfun.plot_layout_2d(layout, neighbours = true)
 eegfun.plot_layout_3d(layout, neighbours= true)
+
+# how to subset layout a layout
+subset_layout = eegfun.subset_layout(layout, channel_selection = x -> .!endswith.(string.(x), "z"));
+eegfun.plot_layout_2d(subset_layout);
+
+# how to print neighbours to a file
+eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
+eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
+
 
 dat = eegfun.create_eeg_dataframe(dat, layout);
 
