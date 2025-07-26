@@ -1,77 +1,40 @@
 """
-    _apply_filtfilt!(dat::DataFrame, columns, filter)
+    create_filter(filter_type::String, filter_method::String, filter_freq::Real, sample_rate::Real; 
+                 order::Integer = 3, transition_width::Real = 0.25, plot_filter::Bool = false, print_filter::Bool = false)
 
-Internal helper function to apply a digital filter (two-pass) to specified columns in a DataFrame.
-Modifies the data in place.
+Create a digital filter object for the specified parameters.
 
-Arguments:
-- `dat`: DataFrame containing the data to filter
-- `columns`: Vector of column names to filter
-- `filter`: Digital filter object to apply
-"""
-function _apply_filtfilt!(dat::DataFrame, columns, filter)
-    for col in propertynames(dat)
-        if col in columns
-            dat[:, col] .= filtfilt(filter, dat[:, col])
-        end
-    end
-end
-
-"""
-    _apply_filt!(dat::DataFrame, columns, filter)
-
-Internal helper function to apply a digital filter (forward-pass) to specified columns in a DataFrame.
-Modifies the data in place.
-
-Arguments:
-- `dat`: DataFrame containing the data to filter
-- `columns`: Vector of column names to filter
-- `filter`: Digital filter object to apply
-"""
-function _apply_filt!(dat::DataFrame, columns, filter)
-    for col in propertynames(dat)
-        if col in columns
-            dat[:, col] .= filt(filter, dat[:, col])
-        end
-    end
-end
-
-
-
-"""
-    filter_data!(dat::DataFrame, columns, filter_type, filter_method, filter_freq, sample_rate; 
-                order=3, transition_width=0.25, twopass=true, print_filter_characteristics=true, plot_filter_response=false)
-
-Apply a digital filter to specified columns in a DataFrame. Modifies the data in place.
-
-Arguments:
-- `dat`: DataFrame containing the data to filter
-- `columns`: Vector of column names to filter
+# Arguments
 - `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
 - `filter_method`: String specifying filter implementation ("iir" or "fir")
 - `filter_freq`: Cutoff frequency in Hz
 - `sample_rate`: Sampling rate in Hz
 - `order`: Filter order for IIR filters (default: 3)
 - `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.25)
-- `twopass`: Boolean flag to use two-pass filter (default: true)
-- `print_filter`: Boolean to print filter details (default: true)
 - `plot_filter`: Boolean to plot frequency response (default: false)
+- `print_filter`: Boolean to print filter characteristics (default: false)
+
+# Returns
+- Digital filter object that can be applied to data
+
+# Notes
+- Validates all input parameters
+- Creates appropriate filter prototype based on type and method
+- Returns a filter object that can be reused for multiple datasets
+- If plot_filter is true, displays the filter frequency response
+- If print_filter is true, prints detailed filter characteristics
 """
-function filter_data!(
-    dat::DataFrame,
-    columns,
+function create_filter(
     filter_type::String,
     filter_method::String,
     filter_freq::Real,
     sample_rate::Real;
     order::Integer = 3,
     transition_width::Real = 0.25,
-    twopass::Bool = true,
-    print_filter::Bool = false,
     plot_filter::Bool = false,
+    print_filter::Bool = false,
 )
-
-    # some basic input checks
+    # Input validation
     valid_types = ("hp", "lp")
     if !(filter_type in valid_types)
         @minimal_error "filter_type '$filter_type' must be one of: $valid_types"
@@ -107,39 +70,121 @@ function filter_data!(
         filter = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
     elseif filter_method == "fir"
         # Calculate number of taps ensuring it's a power of 2 for optimal FFT performance
-        n_taps = Int(ceil(3.3 * sample_rate / transition_band))
+        n_taps = Int(ceil(FIR_TAP_MULTIPLIER * sample_rate / transition_band))
         # Ensure odd number of taps for FIR filter
         if n_taps % 2 == 0  
             n_taps += 1     
         end
         # Ensure n_taps is not too small
-        n_taps = max(n_taps, 3)
+        n_taps = max(n_taps, MIN_FIR_TAPS)
         # For FFTW 1.9.0 compatibility, ensure n_taps is a power of 2
-        n_taps = nextpow(2, n_taps)
+        n_taps = nextpow(FFTW_COMPATIBILITY_POWER, n_taps)
         if n_taps % 2 == 0  
             n_taps += 1     
         end
         filter = digitalfilter(filter_prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
     end
 
-    @info "filter_data! filter_type: $filter_type, filter_freq: $filter_freq"
+    # Print filter characteristics if requested
     if print_filter
         print_filter_characteristics(filter, sample_rate, filter_freq, transition_band)
     end
 
+    # Plot filter response if requested
     if plot_filter
         plot_filter_response(filter, sample_rate, filter_freq, transition_band)
     end
-    
-    # Apply filter
-    if twopass
-        _apply_filtfilt!(dat, columns, filter)
-    else
-        _apply_filt!(dat, columns, filter)
-    end
 
+    return filter
 end
 
+"""
+    _apply_filter!(dat::DataFrame, channels, filter; filter_func = filtfilt)
+
+Internal helper function to apply a digital filter to specified columns in a DataFrame.
+Modifies the data in place.
+
+Arguments:
+- `dat`: DataFrame containing the data to filter
+- `channels`: Vector of column names to filter
+- `filter`: Digital filter object to apply
+- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+"""
+function _apply_filter!(dat::DataFrame, channels, filter; filter_func = filtfilt)
+    @inbounds for channel in channels
+        @views dat[:, channel] .= filter_func(filter, dat[:, channel])
+    end
+end
+
+"""
+    filter_data!(dat::DataFrame, filter, sample_rate::Real; 
+                channel_selection::Function = channels(), filter_func=filtfilt)
+
+Apply a pre-generated digital filter to selected channels in a DataFrame. Modifies the data in place.
+
+Arguments:
+- `dat`: DataFrame containing the data to filter
+- `filter`: Pre-generated digital filter object
+- `sample_rate`: Sampling rate in Hz (for filter characteristics display)
+- `channel_selection`: Channel selection predicate (default: channels() - all channels)
+- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+"""
+function filter_data!(
+    dat::DataFrame,
+    filter,
+    sample_rate::Real;
+    channel_selection::Function = channels(),
+    filter_func = filtfilt,
+)
+    selected_channels = get_selected_channels(dat, channel_selection)
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected for filtering"
+        return
+    end
+    @info "filter_data! applying filter to $(length(selected_channels)) channels"
+    
+    # Apply filter
+    _apply_filter!(dat, selected_channels, filter; filter_func = filter_func)
+end
+
+"""
+    filter_data!(dat::DataFrame, filter_type, filter_method, filter_freq, sample_rate; 
+                order=3, transition_width=0.25, channel_selection::Function = channels(), filter_func=filtfilt, plot_filter_response=false, print_filter=false)
+
+Apply a digital filter to selected channels in a DataFrame. Modifies the data in place.
+
+Arguments:
+- `dat`: DataFrame containing the data to filter
+- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
+- `filter_method`: String specifying filter implementation ("iir" or "fir")
+- `filter_freq`: Cutoff frequency in Hz
+- `sample_rate`: Sampling rate in Hz
+- `order`: Filter order for IIR filters (default: 3)
+- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.25)
+- `channel_selection`: Channel selection predicate (default: channels() - all channels)
+- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+- `plot_filter`: Boolean to plot frequency response (default: false)
+- `print_filter`: Boolean to print filter characteristics (default: false)
+"""
+function filter_data!(
+    dat::DataFrame,
+    filter_type::String,
+    filter_method::String,
+    filter_freq::Real,
+    sample_rate::Real;
+    order::Integer = 3,
+    transition_width::Real = 0.25,
+    channel_selection::Function = channels(),
+    filter_func = filtfilt,
+    plot_filter::Bool = false,
+    print_filter::Bool = false,
+)
+    # Create filter
+    filter = create_filter(filter_type, filter_method, filter_freq, sample_rate; order, transition_width, plot_filter, print_filter)
+    
+    # Apply filter
+    filter_data!(dat, filter, sample_rate; channel_selection, filter_func)
+end
 
 function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Real)
     if filter_type == "hp"
@@ -148,8 +193,6 @@ function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Re
         dat.analysis_info.lp_filter = filter_freq
     end
 end
-
-
 
 """
     filter_data!(dat::SingleDataFrameEeg, filter_type, filter_method, filter_freq; kwargs...)
@@ -161,6 +204,10 @@ Arguments:
 - `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
 - `filter_method`: String specifying filter implementation ("iir" or "fir")
 - `filter_freq`: Cutoff frequency in Hz
+- `channel_selection`: Channel selection predicate (default: channels() - all channels)
+- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+- `plot_filter`: Boolean to plot frequency response (default: false)
+- `print_filter`: Boolean to print filter characteristics (default: false)
 """
 function filter_data!(
     dat::SingleDataFrameEeg,
@@ -169,31 +216,34 @@ function filter_data!(
     filter_freq;
     order = 3,
     transition_width = 0.25,
-    twopass::Bool = true,
-    print_filter = false,
+    channel_selection::Function = channels(),
+    filter_func = filtfilt,
     plot_filter = false,
+    print_filter = false,
 )
     _update_filter_info!(dat, filter_type, filter_freq)
-    filter_data!(
-        dat.data,
-        dat.layout.data.label,
-        filter_type,
-        filter_method,
-        filter_freq,
-        dat.sample_rate;
-        order = order,
-        transition_width = transition_width,
-        twopass = twopass,
-        print_filter = print_filter,
-        plot_filter = plot_filter,
-    )
+    
+    # Create filter once
+    filter = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; order, transition_width, plot_filter, print_filter)
+    
+    # Apply filter
+    filter_data!(dat.data, filter, dat.sample_rate; channel_selection, filter_func)
 end
-
 
 """
     filter_data!(dat::MultiDataFrameEeg, filter_type, filter_method, filter_freq; kwargs...)
 
 Apply a filter to each epoch in an EpochData object. Modifies the data in place.
+
+Arguments:
+- `dat`: MultiDataFrameEeg object
+- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
+- `filter_method`: String specifying filter implementation ("iir" or "fir")
+- `filter_freq`: Cutoff frequency in Hz
+- `channel_selection`: Channel selection predicate (default: channels() - all channels)
+- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+- `plot_filter`: Boolean to plot frequency response (default: false)
+- `print_filter`: Boolean to print filter characteristics (default: false)
 """
 function filter_data!(
     dat::MultiDataFrameEeg,
@@ -202,30 +252,27 @@ function filter_data!(
     filter_freq;  
     order = 3,
     transition_width = 0.25,
-    twopass::Bool = true,
-    print_filter= false,
-    plot_filter= false,
+    channel_selection::Function = channels(),
+    filter_func = filtfilt,
+    plot_filter = false,
+    print_filter = false,
 )
     _update_filter_info!(dat, filter_type, filter_freq)
-    for epoch in eachindex(dat.data)
-        filter_data!(
-            dat.data[epoch],
-            dat.layout.data.label,
-            filter_type,
-            filter_method,
-            filter_freq,
-            dat.sample_rate;  
-            order = order,
-            transition_width = transition_width,
-            twopass = twopass,
-            print_filter= print_filter,
-            plot_filter= plot_filter,
-        )
-    end
+    
+    # Create filter once
+    filter = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; order, transition_width, plot_filter, print_filter)
+    
+    # Apply filter to each epoch using broadcasting
+    filter_data!.(dat.data, Ref(filter), Ref(dat.sample_rate); 
+                 channel_selection = Ref(channel_selection), filter_func = Ref(filter_func))
 end
 
 # generates all non-mutating versions
 @add_nonmutating filter_data!
+
+
+
+
 
 
 
@@ -528,38 +575,3 @@ function plot_filter_response(
     
     return fig, ax
 end
-
-
-
-
-# # Test print_filter_characteristics and plot_filter_response
-# # Set up filter parameters
-# sample_rate = 2048 # Hz
-# 
-# # low-pass
-# cutoff_freq = 50  # Hz  # Where we want the -3dB point
-# transition_band = 0.25 * cutoff_freq  # = 10 Hz
-#  
-# n_taps = Int(ceil(3.3 * sample_rate / transition_band))
-# lp_fir_filter = digitalfilter(Lowpass(cutoff_freq+(transition_band/2)), FIRWindow(hamming(n_taps)), fs=sample_rate)
-# print_filter_characteristics(lp_fir_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(lp_fir_filter, sample_rate, cutoff_freq, transition_band);
-#  
-# lp_irr_filter = digitalfilter(Lowpass(cutoff_freq+(transition_band/2)), Butterworth(12), fs=sample_rate)
-# print_filter_characteristics(lp_irr_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(lp_irr_filter, sample_rate, cutoff_freq, transition_band);
-# 
-# # high-pass
-# cutoff_freq = 1  # Hz  # Where we want the -3dB point
-# transition_band = 0.25 * cutoff_freq  # = 10 Hz
-# n_taps = Int(ceil(3.3 * sample_rate / transition_band))
-# if n_taps % 2 == 0  # If even
-#     n_taps += 1     # Make it odd
-# end
-# hp_fir_filter = digitalfilter(Highpass(cutoff_freq-(transition_band/2)), FIRWindow(hamming(n_taps)), fs=sample_rate)
-# print_filter_characteristics(hp_fir_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(hp_fir_filter, sample_rate, cutoff_freq, transition_band);
-# 
-# hp_irr_filter = digitalfilter(Highpass(cutoff_freq-(transition_band/2)), Butterworth(2), fs=sample_rate)
-# print_filter_characteristics(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
