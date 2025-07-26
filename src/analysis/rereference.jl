@@ -54,6 +54,10 @@ function calculate_reference(dat::DataFrame, reference_channels)
     return reference ./ length(reference_channels)
 end
 
+
+
+
+
 """
     rereference!(dat::DataFrame, reference_channels, channel_selection::Vector{Symbol})
 
