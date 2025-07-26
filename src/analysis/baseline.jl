@@ -2,13 +2,13 @@
 using Logging
 
 """
-    _apply_baseline!(dat::DataFrame, channel_indices::Vector{Int}, baseline_interval)
+    _apply_baseline!(dat::DataFrame, channels, baseline_interval)
 
 Internal function that applies baseline correction to specified channels in a DataFrame.
 
 # Arguments
 - `dat::DataFrame`: The data to baseline correct
-- `channel_indices::Vector{Int}`: Indices of channels to correct
+- `channels::Vector{Symbol}`: Names of channels to correct
 - `baseline_interval::Union{IntervalIdx,IntervalTime}`: Time interval for baseline calculation
 
 # Effects
@@ -17,108 +17,86 @@ Internal function that applies baseline correction to specified channels in a Da
 """
 function _apply_baseline!(
     dat::DataFrame,
-    channel_indices::Vector{Int},
-    baseline_interval
+    channels::Vector{Symbol},
+    baseline_interval::Union{IntervalIdx,IntervalTime}
 )
-
     # Compute the mean once for baseline interval
-    baseline_means =
-        mean.(eachcol(dat[baseline_interval.interval_start:baseline_interval.interval_end, channel_indices]))
+    baseline_means = mean.(eachcol(dat[baseline_interval.interval_start:baseline_interval.interval_end, channels]))
 
     # Apply baseline correction
-    for (col, mean_val) in zip(channel_labels, baseline_means)
-        @inbounds dat[!, col] .-= mean_val
+    @inbounds for (channel, mean_val) in zip(channels, baseline_means)
+        @views dat[!, channel] .-= mean_val
     end
-
 end
 
 """
-    baseline!(dat::Union{ContinuousData,ErpData}, channel_labels, baseline_interval)
-    baseline!(dat::Union{ContinuousData,ErpData}, channel_labels)
-    baseline!(dat::Union{ContinuousData,ErpData}, baseline_interval)
-    baseline!(dat::Union{ContinuousData,ErpData})
+    _apply_baseline!(dat::Vector{DataFrame}, channels, baseline_interval)
 
-Apply baseline correction in-place to continuous or ERP data.
+Internal function that applies baseline correction to each DataFrame in a vector using broadcasting.
+"""
+function _apply_baseline!(
+    dat::Vector{DataFrame},
+    channels::Vector{Symbol},
+    baseline_interval::Union{IntervalIdx,IntervalTime}
+)
+    _apply_baseline!.(dat, Ref(channels), Ref(baseline_interval))
+end
+
+"""
+    baseline!(dat::EegData, baseline_interval; channel_selection=channels())
+
+Apply baseline correction in-place to EEG data.
 
 # Arguments
-- `dat::Union{ContinuousData,ErpData}`: The data to baseline correct
-- `channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}}`: Names of channels to correct (optional)
-- `baseline_interval::Union{IntervalIdx,IntervalTime}`: Time interval for baseline calculation (optional)
+- `dat::EegData`: The data to baseline correct
+- `baseline_interval::Union{IntervalIdx,IntervalTime}`: Time interval for baseline calculation
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
 
 # Effects
 - Modifies the input data in-place by subtracting the baseline mean
-- If channel_labels omitted, uses all channels
-- If baseline_interval omitted, uses entire time range
+- Uses the specified time interval for baseline calculation
 """
 function baseline!(
-    dat::Union{ContinuousData,ErpData},
-    channel_labels::Vector{Symbol},
-    baseline_interval::Union{IntervalIdx,IntervalTime},
+    dat::EegData,
+    baseline_interval::Union{IntervalIdx,IntervalTime};
+    channel_selection::Function = channels()
 )
+    # Validate baseline interval
     baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
-    channel_indices = get_channel_indices(dat, channel_labels)
-    @info "Applying baseline correction to channel(s) $(_print_vector(channel_labels)) over IntervalIdx: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
-    _apply_baseline!(dat.data, channel_indices, baseline_interval)
+    
+    # Get selected channels
+    selected_channels = get_selected_channels(dat, channel_selection)
+    
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected for baseline correction"
+        return
+    end
+    
+    @info "Applying baseline correction to $(length(selected_channels)) channels over interval: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
+    
+    # Apply baseline correction (dispatch handles DataFrame vs Vector{DataFrame})
+    _apply_baseline!(dat.data, selected_channels, baseline_interval)
 end
-
-function baseline!(dat::Union{ContinuousData,ErpData}, channel_labels::Vector{Symbol})
-    baseline_interval = IntervalIdx(1, nrow(dat.data))
-    baseline!(dat, channel_labels, baseline_interval)
-end
-
-function baseline!(dat::Union{ContinuousData,ErpData}, baseline_interval::Union{IntervalIdx,IntervalTime})
-    baseline!(dat, dat.layout.label, baseline_interval)
-end
-
-function baseline!(dat::Union{ContinuousData,ErpData})
-    baseline_interval = IntervalIdx(1, nrow(dat.data))
-    baseline!(dat, dat.layout.label, baseline_interval)
-end
-
 
 """
-    baseline!(dat::EpochData, channel_labels, baseline_interval)
-    baseline!(dat::EpochData, channel_labels)
-    baseline!(dat::EpochData, baseline_interval)
-    baseline!(dat::EpochData)
+    baseline!(dat::EegData; channel_selection=channels())
 
-Apply baseline correction to epoched data.
+Apply baseline correction in-place to EEG data using the entire time range.
 
 # Arguments
-- `dat::EpochData`: The epoched data to baseline correct
-- `channel_labels::Union{Vector{Symbol},Vector{<:AbstractString}}`: Names of channels to correct (optional)
-- `baseline_interval::Union{IntervalIdx,IntervalTime}`: Time interval for baseline calculation (optional)
+- `dat::EegData`: The data to baseline correct
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
 
 # Effects
-- Modifies each epoch in-place
-- If channel_labels omitted, uses all channels
-- If baseline_interval omitted, uses entire time range
+- Modifies the input data in-place by subtracting the baseline mean
+- Uses the entire time range for baseline calculation
 """
 function baseline!(
-    dat::EpochData,
-    channel_labels::Vector{Symbol},
-    baseline_interval::Union{IntervalIdx,IntervalTime},
+    dat::EegData;
+    channel_selection::Function = channels()
 )
-    baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
-    channel_indices = get_channel_indices(dat, channel_labels)
-    @info "Applying baseline correction to channel(s) $(_print_vector(channel_labels)) over over IntervalIdx: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
-
-    for epoch in eachindex(dat.data)
-        _apply_baseline!(dat.data[epoch], channel_labels, baseline_interval)
-    end
-end
-
-function baseline!(dat::EpochData, channel_labels::Vector{Symbol})
     baseline_interval = IntervalIdx(1, nrow(dat.data))
-    baseline!(dat, channel_labels, baseline_interval)
-end
-
-function baseline!(dat::EpochData, baseline_interval::Union{IntervalIdx,IntervalTime})
-    baseline!(dat, dat.layout.label, baseline_interval)
-end
-
-function baseline!(dat::EpochData)
-    baseline!(dat, dat.layout.label, IntervalIdx(1, nrow(dat.data)))
+    baseline!(dat, baseline_interval; channel_selection)
 end
 
 # generates all non-mutating versions
