@@ -1,26 +1,37 @@
 """
-    _apply_rereference!(dat::DataFrame, channel_labels, reference::Vector{<:Real})
+    _apply_rereference!(dat::DataFrame, reference::Vector{<:Real}, channel_selection::Vector{Symbol})
 
 Internal function that applies rereferencing to specified channels in a DataFrame.
 
 # Arguments
 - `dat::DataFrame`: The data to rereference
-- `channel_labels::Vector{Symbol}`: Names of channels to rereference
 - `reference::Vector{<:Real}`: Reference signal to subtract from each channel
-
-# Effects
-- Modifies the input data in-place by subtracting the reference signal from specified channels
+- `channel_selection::Vector{Symbol}`: Names of channels to rereference
 """
 function _apply_rereference!(
     dat::DataFrame, 
-    channel_labels::Vector{Symbol}, 
-    reference::Vector{Float64}
+    reference::Vector{Float64},
+    channel_selection::Vector{Symbol}
 )
-    for col in propertynames(dat)
-        if col in channel_labels
-            dat[!, col] .-= reference
+    @inbounds for col in propertynames(dat)
+        if col in channel_selection
+            @views dat[!, col] .-= reference
         end
     end
+end
+
+"""
+    _apply_rereference!(dat::Vector{DataFrame}, reference::Vector{<:Real}, channel_selection::Vector{Symbol})
+
+Internal function that applies rereferencing to specified channels in a vector of DataFrames.
+"""
+function _apply_rereference!(
+    dat::Vector{DataFrame}, 
+    reference::Vector{Float64},
+    channel_selection::Vector{Symbol}
+)
+    _apply_rereference!.(dat, Ref(reference), Ref(channel_selection))
+    return nothing
 end
 
 """
@@ -34,199 +45,104 @@ Calculate reference signal from specified channels.
 
 # Returns
 - Vector containing the average of specified reference channels
-
-# Examples
-
-## Basic Usage
-```julia
-# Calculate average reference from all channels
-avg_ref = calculate_reference(dat, :avg)
-
-# Calculate mastoid reference (M1 + M2)
-mastoid_ref = calculate_reference(dat, :mastoid)
-mastoid_ref = calculate_reference(dat, [:M1, :M2])
-
-# Calculate single channel reference
-single_ref = calculate_reference(dat, [:M1])
-
-## Channel Filtering Examples
-# Reference from EEG channels only (exclude EOG, etc.)
-eeg_channels = channels_not([:vEOG, :hEOG, :M1, :M2])
-eeg_ref = calculate_reference(dat, eeg_channels)
-
-# Reference from frontal channels only
-frontal_channels = channels(x -> startswith.(string.(x), "F"))
-frontal_ref = calculate_reference(dat, frontal_channels)
-
-# Reference from parietal channels only
-parietal_channels = channels(x -> startswith.(string.(x), "P"))
-parietal_ref = calculate_reference(dat, parietal_channels)
-```
 """
 function calculate_reference(dat::DataFrame, reference_channels)
-    return reduce(+, eachcol(dat[:, reference_channels])) ./ length(reference_channels)
+    reference = zeros(n_samples(dat))
+    @inbounds for channel in reference_channels
+        @views reference .+= dat[!, channel]
+    end
+    return reference ./ length(reference_channels)
 end
 
 """
-    rereference!(dat::DataFrame, channel_labels, reference_channels)
+    rereference!(dat::DataFrame, reference_channels, channel_selection::Vector{Symbol})
 
 Apply rereferencing to specified channels in a DataFrame.
 
 # Arguments
-- `dat::DataFrame`: The data to rereference
-- `channel_labels::Vector{Union{Symbol, String}}`: Names of channels to rereference
+- `dat::DataFrame`: The data to rereference (should contain only EEG channels)
 - `reference_channels`: Channels to use as reference, can be:
-    - Channel names (as strings or symbols)
-    - Special strings: "avg" (average reference) or "mastoid" (M1+M2)
+    - Channel names (as symbols): `[:M1, :M2]`, `[:Cz]`, etc.
+    - Special symbols: `:avg` (average reference) or `:mastoid` (M1+M2)
+- `channel_selection::Vector{Symbol}`: Names of channels to rereference
 
 # Effects
 - Modifies input data in-place by subtracting reference signal from specified channels
+- If a channel is included in both reference and rereferenced set, it will become zero (e.g., Cz when referencing to Cz)
 """
 function rereference!(
     dat::DataFrame, 
-    channel_labels::Vector{Symbol}, 
-    reference_channels::Vector{Symbol}
+    reference_channels::Vector{Symbol},
+    channel_selection::Vector{Symbol}
 )
-    @info "Rereferencing using channel(s): $(_print_vector(reference_channels))"
+    @info "Rereferencing channels $(channel_selection) using reference: $(_print_vector(reference_channels))"
     reference = calculate_reference(dat, reference_channels)
-    _apply_rereference!(dat, channel_labels, reference)
+    _apply_rereference!(dat, reference, channel_selection)
 end
 
 """
-    rereference!(dat::Union{ContinuousData,ErpData,EpochData}, channel_labels, reference_channel)
-    rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_channel)
+    rereference!(dat::Union{ContinuousData,ErpData,EpochData}, reference_channel; channel_selection::Function = channels())
 
-Apply rereferencing to EEG data types.
+Apply rereferencing to EEG data types using predicate-based channel selection.
 
 # Arguments
-- `dat::Union{ContinuousData,ErpData,EpochData}`: The data to rereference
-- `channel_labels::Vector{Union{Symbol, String}}`: Names of channels to rereference (optional)
-- `reference_channel`: Channels to use as reference (see DataFrame method for options)
+- `dat::Union{ContinuousData,ErpData,EpochData}`: The EEG data to rereference
+- `reference_channel`: Channels to use as reference, can be:
+    - Channel names (as symbols): `[:M1, :M2]`, `[:Cz]`, etc.
+    - Special symbols: `:avg` (average reference) or `:mastoid` (M1+M2)
+- `channel_selection::Function`: Channel selection predicate (default: `channels()` - all EEG channels)
 
 # Effects
 - For ContinuousData/ErpData: Modifies data in-place
 - For EpochData: Modifies each epoch in-place
-- If channel_labels omitted, uses all channels from layout
+- Applies to channels selected by the predicate
+- If a channel is included in both reference and rereferenced set, it will become zero
 
-# Examples
-
-## Basic Usage
-```julia
-# Average reference (all channels)
-rereference!(dat, :avg)
-
-# Mastoid reference (M1 + M2)
-rereference!(dat, :mastoid)
-
-# Single channel reference
-rereference!(dat, :M1)
-
-# Multiple channel reference
-rereference!(dat, [:M1, :M2])
-```
-
-## Channel-Specific Rereferencing
-```julia
-# Rereference only EEG channels (exclude EOG, etc.)
-eeg_channels = channels_not([:vEOG, :hEOG, :M1, :M2])
-rereference!(dat, eeg_channels, :avg)
-
-# Rereference only frontal channels
-frontal_channels = channels(x -> startswith.(string.(x), "F"))
-rereference!(dat, frontal_channels, :mastoid)
-
-# Rereference specific channels
-rereference!(dat, [:Fp1, :Fp2, :F3, :F4], [:M1, :M2])
-```
-
-## Different Reference Types
-```julia
-# Average reference (most common)
-rereference!(dat, :avg)
-
-# Mastoid reference (traditional)
-rereference!(dat, :mastoid)
-
-# Single mastoid reference
-rereference!(dat, :M1)
-
-# Linked mastoids (average of M1 and M2)
-rereference!(dat, [:M1, :M2])
-
-# Custom reference channels
-rereference!(dat, [:P9, :P10])  # Posterior reference
-```
-
-## Data Type Specific Examples
-```julia
-# Continuous data
-rereference!(dat_continuous, :avg)
-
-# ERP data
-rereference!(dat_erp, :mastoid)
-
-# Epoch data (applies to all epochs)
-rereference!(dat_epochs, :avg)
-```
+# Notes
+- The reference signal is calculated per epoch for EpochData to maintain proper signal processing
+- Reference channels must exist in the EEG data layout
+- Uses efficient pre-allocated vectors and @views for better performance
+- For EpochData, the same reference channels are used across all epochs, but the reference signal is calculated from each epoch's data
 """
-
 # helper function to handle special reference cases such as :avg and :mastoid
-function resolve_reference(dat, reference_channel::Vector{Symbol})
+function _resolve_reference(dat, reference_channel::Vector{Symbol})
     if reference_channel[1] == :avg # all channels
-        reference_channel = channels(dat) 
+        return channels(dat) 
     elseif reference_channel[1] == :mastoid
-        reference_channel = [:M1, :M2]
+        return [:M1, :M2]
     end
-    dat.analysis_info.reference = reference_channel
     return reference_channel
 end
 
-function resolve_reference(dat::EegData, reference_channel::Symbol)
-    return resolve_reference(dat, [reference_channel])
+function _resolve_reference(dat::EegData, reference_channel::Symbol)
+    return _resolve_reference(dat, [reference_channel])
 end
 
-
-
-
-# Base methods for all references
+# Single method for all EEG data types
 function rereference!(
-    dat::SingleDataFrameEeg,
-    channel_labels::Vector{Symbol},
+    dat::EegData,
     reference_channel::Union{Symbol,Vector{Symbol}},
+    channel_selection::Function = channels()
 )
-    dat.analysis_info.reference = reference_channel
-    ref_channels = resolve_reference(dat, reference_channel)
-    rereference!(dat.data, channel_labels, ref_channels)
-    dat.analysis_info.reference =
-        reference_channel isa Symbol ? reference_channel : Symbol(join(reference_channel, '_'))
-    return nothing
-end
-
-function rereference!(
-    dat::MultiDataFrameEeg,
-    channel_labels::Vector{Symbol},
-    reference_channel::Union{Symbol,Vector{Symbol}},
-)
-    dat.analysis_info.reference = reference_channel
-    ref_channels = resolve_reference(dat, reference_channel)
-    for epoch in dat.data
-        rereference!(epoch, channel_labels, ref_channels)
+    ref_channels = _resolve_reference(dat, reference_channel)
+    selected_channels = get_selected_channels(dat, channel_selection)
+    
+    # Verify reference channels exist in the data
+    missing_channels = [ch for ch in ref_channels if ch ∉ channels(dat)]
+    if !isempty(missing_channels)
+        @minimal_error "Missing reference channels in data: $(missing_channels)"
     end
-    dat.analysis_info.reference =
-        reference_channel isa Symbol ? reference_channel : Symbol(join(reference_channel, '_'))
-    return nothing
-end
-
-function rereference!(dat::EegData, reference_channel::Union{Symbol,Vector{Symbol}})
-    dat.analysis_info.reference = reference_channel
-    rereference!(dat, channels(dat), reference_channel)
+    
+    @info "Rereferencing channels $(selected_channels) using: $(ref_channels)"
+    
+    # Calculate reference signal and apply rereferencing
+    reference = calculate_reference(dat.data isa Vector ? dat.data[1] : dat.data, ref_channels)
+    _apply_rereference!(dat.data, reference, selected_channels)
+    
+    # Store reference info
+    dat.analysis_info.reference = reference_channel isa Symbol ? reference_channel : Symbol(join(reference_channel, '_'))
     return nothing
 end
 
 # generates all non-mutating versions
 @add_nonmutating rereference!
-
-
-
-
-
