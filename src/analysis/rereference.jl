@@ -103,7 +103,7 @@ Apply rereferencing to EEG data types using predicate-based channel selection.
 - For EpochData, the same reference channels are used across all epochs, but the reference signal is calculated from each epoch's data
 """
 # helper function to handle special reference cases such as :avg and :mastoid
-function _resolve_reference(dat, reference_channel::Vector{Symbol})
+function get_reference_channels(dat, reference_channel::Vector{Symbol})
     if reference_channel[1] == :avg # all channels
         return channels(dat) 
     elseif reference_channel[1] == :mastoid
@@ -112,8 +112,8 @@ function _resolve_reference(dat, reference_channel::Vector{Symbol})
     return reference_channel
 end
 
-function _resolve_reference(dat::EegData, reference_channel::Symbol)
-    return _resolve_reference(dat, [reference_channel])
+function get_reference_channels(dat::EegData, reference_channel::Symbol)
+    return get_reference_channels(dat, [reference_channel])
 end
 
 # Single method for all EEG data types
@@ -122,7 +122,7 @@ function rereference!(
     reference_channel::Union{Symbol,Vector{Symbol}},
     channel_selection::Function = channels()
 )
-    ref_channels = _resolve_reference(dat, reference_channel)
+    ref_channels = get_reference_channels(dat, reference_channel)
     selected_channels = get_selected_channels(dat, channel_selection)
     
     # Verify reference channels exist in the data
