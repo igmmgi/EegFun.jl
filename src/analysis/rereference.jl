@@ -13,10 +13,8 @@ function _apply_rereference!(
     reference::Vector{Float64},
     channel_selection::Vector{Symbol}
 )
-    @inbounds for col in propertynames(dat)
-        if col in channel_selection
-            @views dat[!, col] .-= reference
-        end
+    @inbounds for channel in channel_selection
+        @views dat[!, channel] .-= reference
     end
 end
 
@@ -53,10 +51,6 @@ function calculate_reference(dat::DataFrame, reference_channels)
     end
     return reference ./ length(reference_channels)
 end
-
-
-
-
 
 """
     rereference!(dat::DataFrame, reference_channels, channel_selection::Vector{Symbol})

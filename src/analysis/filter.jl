@@ -147,45 +147,6 @@ function filter_data!(
     _apply_filter!(dat, selected_channels, filter; filter_func = filter_func)
 end
 
-"""
-    filter_data!(dat::DataFrame, filter_type, filter_method, filter_freq, sample_rate; 
-                order=3, transition_width=0.25, channel_selection::Function = channels(), filter_func=filtfilt, plot_filter_response=false, print_filter=false)
-
-Apply a digital filter to selected channels in a DataFrame. Modifies the data in place.
-
-Arguments:
-- `dat`: DataFrame containing the data to filter
-- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-- `filter_method`: String specifying filter implementation ("iir" or "fir")
-- `filter_freq`: Cutoff frequency in Hz
-- `sample_rate`: Sampling rate in Hz
-- `order`: Filter order for IIR filters (default: 3)
-- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.25)
-- `channel_selection`: Channel selection predicate (default: channels() - all channels)
-- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
-- `plot_filter`: Boolean to plot frequency response (default: false)
-- `print_filter`: Boolean to print filter characteristics (default: false)
-"""
-function filter_data!(
-    dat::DataFrame,
-    filter_type::String,
-    filter_method::String,
-    filter_freq::Real,
-    sample_rate::Real;
-    order::Integer = 3,
-    transition_width::Real = 0.25,
-    channel_selection::Function = channels(),
-    filter_func = filtfilt,
-    plot_filter::Bool = false,
-    print_filter::Bool = false,
-)
-    # Create filter
-    filter = create_filter(filter_type, filter_method, filter_freq, sample_rate; order, transition_width, plot_filter, print_filter)
-    
-    # Apply filter
-    filter_data!(dat, filter, sample_rate; channel_selection, filter_func)
-end
-
 function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Real)
     if filter_type == "hp"
         dat.analysis_info.hp_filter = filter_freq
@@ -195,22 +156,24 @@ function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Re
 end
 
 """
-    filter_data!(dat::SingleDataFrameEeg, filter_type, filter_method, filter_freq; kwargs...)
+    filter_data!(dat::EegData, filter_type, filter_method, filter_freq; kwargs...)
 
-Apply a filter to ContinuousData or ErpData objects. Modifies the data in place.
+Apply a digital filter to EEG data. Modifies the data in place.
 
 Arguments:
-- `dat`: ContinuousData or ErpData object
+- `dat`: EegData object (ContinuousData, ErpData, or EpochData)
 - `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
 - `filter_method`: String specifying filter implementation ("iir" or "fir")
 - `filter_freq`: Cutoff frequency in Hz
+- `order`: Filter order for IIR filters (default: 3)
+- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.25)
 - `channel_selection`: Channel selection predicate (default: channels() - all channels)
 - `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
 - `plot_filter`: Boolean to plot frequency response (default: false)
 - `print_filter`: Boolean to print filter characteristics (default: false)
 """
 function filter_data!(
-    dat::SingleDataFrameEeg,
+    dat::EegData,
     filter_type,
     filter_method,
     filter_freq;
@@ -224,47 +187,11 @@ function filter_data!(
     _update_filter_info!(dat, filter_type, filter_freq)
     
     # Create filter once
-    filter = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; order, transition_width, plot_filter, print_filter)
+    filter = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; 
+                         order, transition_width, plot_filter, print_filter)
     
-    # Apply filter
+    # Apply filter (dispatch handles DataFrame vs Vector{DataFrame})
     filter_data!(dat.data, filter, dat.sample_rate; channel_selection, filter_func)
-end
-
-"""
-    filter_data!(dat::MultiDataFrameEeg, filter_type, filter_method, filter_freq; kwargs...)
-
-Apply a filter to each epoch in an EpochData object. Modifies the data in place.
-
-Arguments:
-- `dat`: MultiDataFrameEeg object
-- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-- `filter_method`: String specifying filter implementation ("iir" or "fir")
-- `filter_freq`: Cutoff frequency in Hz
-- `channel_selection`: Channel selection predicate (default: channels() - all channels)
-- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
-- `plot_filter`: Boolean to plot frequency response (default: false)
-- `print_filter`: Boolean to print filter characteristics (default: false)
-"""
-function filter_data!(
-    dat::MultiDataFrameEeg,
-    filter_type,
-    filter_method,
-    filter_freq;  
-    order = 3,
-    transition_width = 0.25,
-    channel_selection::Function = channels(),
-    filter_func = filtfilt,
-    plot_filter = false,
-    print_filter = false,
-)
-    _update_filter_info!(dat, filter_type, filter_freq)
-    
-    # Create filter once
-    filter = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; order, transition_width, plot_filter, print_filter)
-    
-    # Apply filter to each epoch using broadcasting
-    filter_data!.(dat.data, Ref(filter), Ref(dat.sample_rate); 
-                 channel_selection = Ref(channel_selection), filter_func = Ref(filter_func))
 end
 
 # generates all non-mutating versions
