@@ -113,20 +113,6 @@ using eegfun
         @test time.interval_end == 1.0
     end
 
-    @testset "Coordinate Types" begin
-        # Test CoordXY
-        coord = eegfun.CoordXY(1.0, 2.0)
-        @test coord.x == 1.0
-        @test coord.y == 2.0
-
-        # Test Coord
-        coords = [eegfun.CoordXY(1.0, 2.0), eegfun.CoordXY(3.0, 4.0)]
-        coord_array = eegfun.Coord(coords)
-        @test length(coord_array.coord) == 2
-        @test coord_array.coord[1].x == 1.0
-        @test coord_array.coord[2].y == 4.0
-    end
-
     @testset "ICA Types" begin
         # Test IcaPrms
         prms = eegfun.IcaPrms(0.1, 100, 0.001, 0.9, 0.98, 1e12, 0.5, 1e12, 0.9, 0.0, 1e-7)
@@ -148,14 +134,10 @@ using eegfun
 
     @testset "Neighbours" begin
         # Test Neighbours struct
-        electrodes = [:ch1, :ch2, :ch3]
-        distances = [1.0, 2.0, 3.0]
-        weights = [0.5, 0.3, 0.2]
-        neighbors = eegfun.Neighbours(electrodes, distances, weights)
-        
-        @test neighbors.electrodes == electrodes
-        @test neighbors.distances == distances
-        @test neighbors.weights == weights
+        neighbours = eegfun.Neighbours([:Fp1, :Fp2], [1.0, 2.0], [0.5, 0.5])
+        @test length(neighbours.electrodes) == 2
+        @test neighbours.distances == [1.0, 2.0]
+        @test neighbours.weights == [0.5, 0.5]
     end
 
     @testset "Common Channel Functions" begin

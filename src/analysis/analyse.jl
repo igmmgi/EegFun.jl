@@ -101,6 +101,9 @@ function mark_epoch_windows!(
         end
 
     end
+    
+    # Add metadata for the derived column
+    _add_metadata!(dat.data, [channel_out], :derived)
 
 end
 
@@ -278,6 +281,9 @@ function mark_epoch_windows!(
             dat.data[in_window, channel_out] .= true
         end
     end
+    
+    # Add metadata for the derived column
+    _add_metadata!(dat.data, [channel_out], :derived)
 end
 
 
@@ -338,10 +344,18 @@ signals into single onset events. For example: [0, 1, 1, 0, 0, 2, 2, 2, 0, 0] be
 """
 function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame"
-    return hcat(
+    
+    # Create the DataFrame
+    df = hcat(
         DataFrame(time = data.time, sample = 1:length(data.time), triggers = _clean_triggers(data.triggers.raw)),
         DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:end-1])),  # assumes last channel is trigger
     )
+    
+    # Add metadata for column groups
+    _add_metadata!(df, [:time, :sample, :triggers], :metadata)
+    _add_metadata!(df, Symbol.(data.header.channel_labels[1:end-1]), :channels)
+    
+    return df
 end
 
 
@@ -361,6 +375,8 @@ A ContinuousData object containing the EEG data and layout information.
 function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::Layout)::ContinuousData
     return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
 end
+
+
 
 
 
@@ -815,6 +831,10 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] * step_size
     dat.data[!, channel_out] .= false
     dat.data[eog_idx, channel_out] .= true
+    
+    # Add metadata for the derived column
+    _add_metadata!(dat.data, [channel_out], :derived)
+    
     return nothing
 end
 
@@ -956,6 +976,9 @@ function is_extreme_value!(
     
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
     dat.data[!, channel_out] = _is_extreme_value(dat.data, criterion, selected_channels, selected_samples)
+    
+    # Add metadata for the derived column
+    _add_metadata!(dat.data, [channel_out], :derived)
 end
 
 

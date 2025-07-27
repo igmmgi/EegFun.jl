@@ -19,38 +19,6 @@ end
 
 
 """
-    _ensure_coordinates_2d!(layout::Layout)
-
-Helper function to ensure 2D coordinates exist in the layout DataFrame.
-Converts polar coordinates to Cartesian if needed.
-
-# Arguments
-- `layout::Layout`: The layout to check and potentially convert
-"""
-function _ensure_coordinates_2d!(layout::Layout)
-    if !has_2d_coords(layout)
-        @info "Converting polar coordinates to 2D Cartesian coordinates"
-        polar_to_cartesian_xy!(layout)
-    end
-end
-
-"""
-    _ensure_coordinates_3d!(layout::Layout)
-
-Helper function to ensure 3D coordinates exist in the layout DataFrame.
-Converts polar coordinates to Cartesian if needed.
-
-# Arguments
-- `layout::Layout`: The layout to check and potentially convert
-"""
-function _ensure_coordinates_3d!(layout::Layout)
-    if !has_3d_coords(layout)
-        @info "Converting polar coordinates to 3D Cartesian coordinates"
-        polar_to_cartesian_xyz!(layout)
-    end
-end
-
-"""
     plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout;
                   neighbours::Bool=false, head_kwargs::Dict=Dict(), 
                   point_kwargs::Dict=Dict(), label_kwargs::Dict=Dict())
