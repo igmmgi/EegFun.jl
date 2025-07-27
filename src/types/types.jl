@@ -314,6 +314,143 @@ n_average(dat::ErpData) = dat.n_epochs
 has_channels(dat::EegData, chans::Vector{Symbol}) = all(in(channels(dat)), chans)
 common_channels(dat1::EegData, dat2::EegData) = intersect(channels(dat1), channels(dat2))
 
+# Layout metadata group accessors
+"""
+    channels(layout::Layout) -> Vector{Symbol}
+
+Get electrode labels from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: Electrode labels
+
+# Examples
+```julia
+labels = channels(layout)
+```
+"""
+
+# Helper function for getting columns by metadata group
+function _get_cols_by_group(df::DataFrame, group::Symbol)
+    cols = propertynames(df)
+    return [col for col in cols if haskey(metadata(df), string(col)) && metadata(df, string(col)) == ("group" => group)]
+end
+
+
+channels(layout::Layout) = layout.data[:, _get_cols_by_group(layout.data, :label)]
+
+
+"""
+    positions_polar(layout::Layout) -> Vector{Symbol}
+
+Get polar coordinate column names from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: Polar coordinate column names (inc, azi)
+
+# Examples
+```julia
+polar_cols = positions_polar(layout)
+```
+"""
+_positions_polar(layout::Layout) = _get_cols_by_group(layout.data, :polar_coords)
+
+"""
+    positions_2D(layout::Layout) -> Vector{Symbol}
+
+Get 2D Cartesian coordinate column names from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: 2D Cartesian coordinate column names (x2, y2) if available
+
+# Examples
+```julia
+cartesian_2d_cols = positions_2D(layout)
+```
+"""
+_positions_2D(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_2d)
+
+"""
+    positions_3D(layout::Layout) -> Vector{Symbol}
+
+Get 3D Cartesian coordinate column names from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: 3D Cartesian coordinate column names (x3, y3, z3) if available
+
+# Examples
+```julia
+cartesian_3d_cols = positions_3D(layout)
+```
+"""
+_positions_3D(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_3d)
+
+# Functions that return the actual column data
+"""
+    positions_polar_data(layout::Layout) -> DataFrame
+
+Get polar coordinate data from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `DataFrame`: DataFrame containing polar coordinate columns (inc, azi)
+
+# Examples
+```julia
+polar_data = positions_polar_data(layout)
+```
+"""
+positions_polar(layout::Layout) = layout.data[:, _positions_polar(layout)]
+
+"""
+    positions_2D_data(layout::Layout) -> DataFrame
+
+Get 2D Cartesian coordinate data from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `DataFrame`: DataFrame containing 2D Cartesian coordinate columns (x2, y2) if available
+
+# Examples
+```julia
+cartesian_2d_data = positions_2D_data(layout)
+```
+"""
+positions_2D(layout::Layout) = layout.data[:, _positions_2D(layout)]
+
+"""
+    positions_3D_data(layout::Layout) -> DataFrame
+
+Get 3D Cartesian coordinate data from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `DataFrame`: DataFrame containing 3D Cartesian coordinate columns (x3, y3, z3) if available
+
+# Examples
+```julia
+cartesian_3d_data = positions_3D_data(layout)
+```
+"""
+positions_3D(layout::Layout) = layout.data[:, _positions_3D(layout)]
+
 
 function Base.show(io::IO, dat::EegData)
     println(io, "Type: $(typeof(dat))")
