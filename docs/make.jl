@@ -1,33 +1,17 @@
 using Documenter
 
-# Include the source files directly for now
-push!(LOAD_PATH, "../src")
+# Add the parent directory to the load path
+push!(LOAD_PATH, "..")
 
-# Load the main module
-include("../src/eegfun.jl")
+using eegfun
 
 makedocs(
     sitename = "eegfun",
     format = Documenter.HTML(
-        prettyurls = get(ENV, "CI", nothing) == "true",
-        canonical = "https://igmmgi.github.io/eegfun",
-        edit_link = "main",
-        size_threshold = nothing  # Disable size threshold checking
+        size_threshold = nothing  # Disable size threshold
     ),
-    modules = [eegfun],  # Enable automatic docstring extraction
-    pages = [
-        "Home" => "index.md",
-        "Data Loading & Types" => "data_types.md",
-        "Preprocessing" => "preprocessing.md",
-        "Analysis" => "analysis.md",
-        "ICA" => "ica.md",
-        "Plotting" => "plotting.md",
-        "Utilities" => "utilities.md"
-    ],
-    doctest = false,  # Disable doctests since we can't load the package
-    clean = true,
-    checkdocs = :none,  # Disable documentation checking entirely
-    linkcheck = false,  # Disable link checking
+    modules = [eegfun],
+    checkdocs = :none,  # Disable strict documentation checking
     warnonly = [:cross_references]  # Only warn about cross-references, don't fail
 )
 
@@ -35,6 +19,5 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 #=deploydocs(
-    repo = "github.com/igmmgi/eegfun.git",
-    push_preview = true
-)=# 
+    repo = "<repository url>"
+)=#
