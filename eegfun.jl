@@ -26,7 +26,16 @@ eegfun.plot_layout_2d(layout)
 eegfun.plot_layout_2d(layout, neighbours = true)
 eegfun.plot_layout_3d(layout, neighbours= true)
 
-eegfun.channels(layout)
+eegfun.channel_column_labels(layout)
+eegfun.channel_column_data(layout)
+eegfun.channel_column_data(layout, :label)
+eegfun.channel_column_data(layout, :label, :inc, :azi)
+
+eegfun.channel_column_data(layout, :label, :inc, :azi)
+
+
+
+
 eegfun.positions_polar(layout)
 eegfun.positions_2D(layout)
 eegfun.positions_3D(layout)

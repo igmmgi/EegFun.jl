@@ -21,6 +21,52 @@ function _get_cols_by_group(df::DataFrame, group::Symbol)
     return [col for col in cols if haskey(metadata(df), string(col)) && metadata(df, string(col)) == ("group" => group)]
 end
 
+"""
+    _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
+
+Add metadata to DataFrame columns while preserving existing metadata.
+
+This internal function adds metadata group tags to specified columns while
+preserving any existing metadata on those columns. It handles missing
+columns gracefully and provides warnings for non-existent columns.
+
+# Arguments
+- `df::DataFrame`: The DataFrame to add metadata to
+- `columns::Vector{Symbol}`: Column names to tag with metadata
+- `group::Symbol`: The metadata group to assign (e.g., :label, :channels, :polar_coords)
+
+# Modifies
+- `df`: Adds metadata to existing columns
+
+# Examples
+```julia
+_add_metadata!(df, [:label], :label)
+_add_metadata!(df, [:inc, :azi], :polar_coords)
+```
+"""
+function _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
+
+    # Filter to only existing columns
+    existing_cols = [col for col in columns if hasproperty(df, col)]
+    if isempty(existing_cols)
+        @minimal_error "No existing columns found for group $group"
+        return
+    end
+    
+    # Report any missing columns
+    missing_cols = setdiff(columns, existing_cols)
+    if !isempty(missing_cols)
+        @minimal_error "Columns not found in DataFrame: $missing_cols"
+    end
+
+    # Set metadata for each existing column
+    for col in existing_cols
+        col_str = string(col)
+        metadata!(df, col_str, "group" => group)
+    end
+
+end
+
 # === EEG DATA ACCESS FUNCTIONS ===
 """
     all_columns_data(dat::EegData) -> DataFrame
