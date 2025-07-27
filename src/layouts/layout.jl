@@ -1,6 +1,182 @@
 # Layout type is defined in types.jl
 
-# Validation function (separate from constructor)
+# === LAYOUT METADATA ACCESSORS ===
+# Layout metadata group accessors
+"""
+    channel_column_labels(layout::Layout) -> Vector{Symbol}
+
+Get electrode label column names from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: Electrode label column names
+
+# Examples
+```julia
+labels = channel_column_labels(layout)
+```
+"""
+channel_column_labels(layout::Layout) = _get_cols_by_group(layout.data, :label)
+
+"""
+    channel_column_data(layout::Layout) -> DataFrame
+
+Get electrode label data from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `DataFrame`: DataFrame containing electrode label data
+
+# Examples
+```julia
+data = channel_column_data(layout)
+```
+"""
+channel_column_data(layout::Layout) = layout.data[:, _get_cols_by_group(layout.data, :label)]
+
+"""
+    position_polar_labels(layout::Layout) -> Vector{Symbol}
+
+Get polar coordinate column names from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: Polar coordinate column names (inc, azi)
+
+# Examples
+```julia
+polar_cols = position_polar_labels(layout)
+```
+"""
+position_polar_labels(layout::Layout) = _get_cols_by_group(layout.data, :polar_coords)
+
+"""
+    position_2D_labels(layout::Layout) -> Vector{Symbol}
+
+Get 2D Cartesian coordinate column names from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: 2D Cartesian coordinate column names (x2, y2) if available
+
+# Examples
+```julia
+cartesian_2d_cols = position_2D_labels(layout)
+```
+"""
+position_2D_labels(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_2d)
+
+"""
+    position_3D_labels(layout::Layout) -> Vector{Symbol}
+
+Get 3D Cartesian coordinate column names from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: 3D Cartesian coordinate column names (x3, y3, z3) if available
+
+# Examples
+```julia
+cartesian_3d_cols = position_3D_labels(layout)
+```
+"""
+position_3D_labels(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_3d)
+
+# Layout coordinate data functions
+"""
+    positions_polar_data(layout::Layout) -> DataFrame
+
+Get polar coordinate data from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `DataFrame`: DataFrame containing polar coordinate columns (inc, azi)
+
+# Examples
+```julia
+polar_data = positions_polar_data(layout)
+```
+"""
+positions_polar_data(layout::Layout) = layout.data[:, position_polar_labels(layout)]
+
+"""
+    positions_2D_data(layout::Layout) -> DataFrame
+
+Get 2D Cartesian coordinate data from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `DataFrame`: DataFrame containing 2D Cartesian coordinate columns (x2, y2) if available
+
+# Examples
+```julia
+cartesian_2d_data = positions_2D_data(layout)
+```
+"""
+positions_2D_data(layout::Layout) = layout.data[:, position_2D_labels(layout)]
+
+"""
+    positions_3D_data(layout::Layout) -> DataFrame
+
+Get 3D Cartesian coordinate data from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `DataFrame`: DataFrame containing 3D Cartesian coordinate columns (x3, y3, z3) if available
+
+# Examples
+```julia
+cartesian_3d_data = positions_3D_data(layout)
+```
+"""
+positions_3D_data(layout::Layout) = layout.data[:, position_3D_labels(layout)]
+
+# === LAYOUT VALIDATION AND MANIPULATION ===
+"""
+    validate_layout(layout::Layout) -> Layout
+
+Validate that a layout contains all required columns and data.
+
+This function checks that the layout DataFrame contains the minimum required
+columns for EEG layout operations. It validates both column presence and
+data type requirements.
+
+# Arguments
+- `layout::Layout`: The layout object to validate
+
+# Returns
+- `Layout`: The validated layout object
+
+# Throws
+- `ArgumentError`: If required columns are missing
+
+# Required Columns
+- `:label`: Electrode labels (Symbol type)
+- `:inc`: Incidence angles in degrees
+- `:azi`: Azimuth angles in degrees
+
+# Examples
+```julia
+layout = read_layout("biosemi64.csv")
+validated_layout = validate_layout(layout)
+```
+"""
 function validate_layout(layout::Layout)
     required_cols = [:label, :inc, :azi]
     missing_cols = setdiff(required_cols, propertynames(layout.data))
@@ -10,7 +186,29 @@ function validate_layout(layout::Layout)
     return layout
 end
 
-# Internal function to add metadata while preserving existing metadata
+"""
+    _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
+
+Add metadata to DataFrame columns while preserving existing metadata.
+
+This internal function adds metadata group tags to specified columns while
+preserving any existing metadata on those columns. It handles missing
+columns gracefully and provides warnings for non-existent columns.
+
+# Arguments
+- `df::DataFrame`: The DataFrame to add metadata to
+- `columns::Vector{Symbol}`: Column names to tag with metadata
+- `group::Symbol`: The metadata group to assign (e.g., :label, :channels, :polar_coords)
+
+# Modifies
+- `df`: Adds metadata to existing columns
+
+# Examples
+```julia
+_add_metadata!(df, [:label], :label)
+_add_metadata!(df, [:inc, :azi], :polar_coords)
+```
+"""
 function _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
 
     # Filter to only existing columns
@@ -34,17 +232,66 @@ function _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
 
 end
 
-
-
 # Accessor methods
+"""
+    get_labels(layout::Layout) -> Vector{Symbol}
+
+Get all electrode labels from the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Vector{Symbol}`: Vector of electrode labels
+
+# Examples
+```julia
+labels = get_labels(layout)
+```
+"""
 get_labels(layout::Layout) = layout.data.label
+
+"""
+    has_2d_coords(layout::Layout) -> Bool
+
+Check if the layout has 2D Cartesian coordinates.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Bool`: True if x2 and y2 columns exist
+
+# Examples
+```julia
+if has_2d_coords(layout)
+    # Use 2D coordinates
+end
+```
+"""
 has_2d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x2, :y2])
+
+"""
+    has_3d_coords(layout::Layout) -> Bool
+
+Check if the layout has 3D Cartesian coordinates.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Bool`: True if x3, y3, and z3 columns exist
+
+# Examples
+```julia
+if has_3d_coords(layout)
+    # Use 3D coordinates
+end
+```
+"""
 has_3d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x3, :y3, :z3])
 
-
-
-
-
+# === LAYOUT I/O FUNCTIONS ===
 """
     read_layout(layout_file_name::String)
 
@@ -74,6 +321,54 @@ function read_layout(file)
     return Layout(df, nothing, nothing)
 end
 
+# === COORDINATE CONVERSIONS ===
+"""
+    _ensure_coordinates_2d!(layout::Layout)
+
+Helper function to ensure 2D coordinates exist in the layout DataFrame.
+Converts polar coordinates to Cartesian if needed.
+
+# Arguments
+- `layout::Layout`: The layout to check and potentially convert
+
+# Modifies
+- `layout`: Adds 2D Cartesian coordinates if they don't exist
+
+# Examples
+```julia
+_ensure_coordinates_2d!(layout)
+```
+"""
+function _ensure_coordinates_2d!(layout::Layout)
+    if !has_2d_coords(layout)
+        @info "Converting polar coordinates to 2D Cartesian coordinates"
+        polar_to_cartesian_xy!(layout)
+    end
+end
+
+"""
+    _ensure_coordinates_3d!(layout::Layout)
+
+Helper function to ensure 3D coordinates exist in the layout DataFrame.
+Converts polar coordinates to Cartesian if needed.
+
+# Arguments
+- `layout::Layout`: The layout to check and potentially convert
+
+# Modifies
+- `layout`: Adds 3D Cartesian coordinates if they don't exist
+
+# Examples
+```julia
+_ensure_coordinates_3d!(layout)
+```
+"""
+function _ensure_coordinates_3d!(layout::Layout)
+    if !has_3d_coords(layout)
+        @info "Converting polar coordinates to 3D Cartesian coordinates"
+        polar_to_cartesian_xyz!(layout)
+    end
+end
 
 """
     polar_to_cartesian_xy!(layout::Layout)
@@ -183,6 +478,7 @@ function polar_to_cartesian_xyz!(layout::Layout)
     return nothing
 end
 
+# === DISTANCE CALCULATIONS ===
 """
     calculate_distance_xy(x1::Real, y1::Real, x2::Real, y2::Real)
 
@@ -213,8 +509,6 @@ Calculates the squared distance between two points in 2D space.
     return (x1 - x2)^2 + (y1 - y2)^2
 end
 
-
-
 """
     calculate_distance_xyz(x1::Real, y1::Real, z1::Real, x2::Real, y2::Real, z2::Real)
 
@@ -229,7 +523,6 @@ Calculates the Euclidean distance between two points in 3D space.
 @inline function distance_xyz(x1::Real, y1::Real, z1::Real, x2::Real, y2::Real, z2::Real)::Float64
     return sqrt((x1 - x2)^2 + (y1 - y2)^2 + (z1 - z2)^2)
 end
-
 
 """
     squared_distance_xyz(x1, y1, z1, x2, y2, z2)
@@ -246,9 +539,7 @@ Calculates the squared distance between two points in 3D space.
     return (x1 - x2)^2 + (y1 - y2)^2 + (z1 - z2)^2
 end
 
-
-
-
+# === NEIGHBOR CALCULATIONS ===
 """
     get_electrode_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
@@ -391,7 +682,7 @@ function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
 end
 
-
+# === NEIGHBOR UTILITIES ===
 """
     _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real)
 
@@ -442,7 +733,7 @@ The electrode order from the original OrderedDict is preserved.
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-neighbours = get_electrode_neighbours_xy(layout, 40)
+neighbours = get_layout_neighbours_xy!(layout, 40)
 
 # Write to TOML file
 print_neighbours_dict(neighbours, "neighbours.toml")
@@ -464,8 +755,6 @@ function print_layout_neighbours(layout::Layout, filename::String)
     print_layout_neighbours(layout.neighbours, filename)
 end
 
-
-
 """
     average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
 
@@ -480,7 +769,7 @@ Calculate the average number of neighbours per electrode from a neighbours dicti
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-neighbours, _ = get_electrode_neighbours_xy(layout, 40)
+neighbours, _ = get_layout_neighbours_xy!(layout, 40)
 avg_neighbours = average_neighbours_per_electrode(neighbours)
 ```
 """
@@ -492,6 +781,204 @@ function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neigh
     return total_neighbours / length(neighbours_dict)
 end
 
+# Helper methods for neighbour management
+"""
+    has_neighbours(layout::Layout) -> Bool
+
+Check if the layout has calculated neighbor information.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Bool`: True if neighbors have been calculated and stored
+
+# Examples
+```julia
+if has_neighbours(layout)
+    # Use neighbor information
+end
+```
+"""
+has_neighbours(layout::Layout) = !isnothing(layout.neighbours)
+
+"""
+    neighbour_criterion(layout::Layout) -> Union{Nothing, Float64}
+
+Get the distance criterion used for neighbor calculations.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Union{Nothing, Float64}`: The distance criterion in mm, or nothing if not calculated
+
+# Examples
+```julia
+criterion = neighbour_criterion(layout)
+```
+"""
+neighbour_criterion(layout::Layout) = layout.criterion
+
+"""
+    neighbours(layout::Layout) -> Union{Nothing, OrderedDict{Symbol, Neighbours}}
+
+Get the neighbor information for all electrodes.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Union{Nothing, OrderedDict{Symbol, Neighbours}}`: Dictionary of neighbors for each electrode, or nothing if not calculated
+
+# Examples
+```julia
+neighbor_dict = neighbours(layout)
+```
+"""
+neighbours(layout::Layout) = layout.neighbours
+
+"""
+    clear_neighbours!(layout::Layout)
+
+Clear all neighbor information from the layout.
+
+This function removes all calculated neighbor data and resets the distance
+criterion. This is useful when layout coordinates change and neighbor
+calculations need to be redone.
+
+# Arguments
+- `layout::Layout`: The layout object to clear neighbors from
+
+# Modifies
+- `layout`: Removes neighbor data and criterion
+
+# Examples
+```julia
+clear_neighbours!(layout)
+```
+"""
+function clear_neighbours!(layout::Layout)
+    layout.neighbours = nothing
+    layout.criterion = nothing
+end
+
+"""
+    _format_electrode(io, electrode, neighbours)
+
+Helper function to format a single electrode entry for display.
+
+This internal function formats the neighbor information for a single
+electrode in a human-readable format, including neighbor count,
+average distance, and detailed neighbor information.
+
+# Arguments
+- `io`: Output stream for writing
+- `electrode`: Electrode symbol
+- `neighbours`: Neighbours struct containing neighbor information
+
+# Examples
+```julia
+_format_electrode(io, :Fp1, neighbours_struct)
+```
+"""
+function _format_electrode(io, electrode, neighbours)
+    n_neighbours = length(neighbours.electrodes)
+    avg_distance = round(mean(neighbours.distances), digits=1)
+    
+    println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance)mm)")
+    if n_neighbours > 0
+        neighbour_details = []
+        for j in 1:n_neighbours
+            neighbour = string(neighbours.electrodes[j])
+            distance = round(neighbours.distances[j], digits=1)
+            weight = round(neighbours.weights[j], digits=3)
+            push!(neighbour_details, "$(neighbour) ($(distance),$(weight))")
+        end
+        neighbour_list = join(neighbour_details, ", ")
+        println(io, "    Neighbours: $neighbour_list")
+    end
+    println(io)
+end
+
+# Get neighbours with automatic computation if needed (mutating)
+"""
+    get_neighbours_xy!(layout::Layout, distance_criterion::Real)
+
+Get neighbors with automatic computation if needed (mutating version).
+
+This function automatically calculates 2D neighbors if they don't exist or
+if the distance criterion has changed. It caches the results for efficiency.
+
+# Arguments
+- `layout::Layout`: The layout object
+- `distance_criterion::Real`: The distance criterion for neighbors in mm
+
+# Modifies
+- `layout`: Updates neighbor information and criterion
+
+# Examples
+```julia
+get_neighbours_xy!(layout, 40.0)
+```
+"""
+function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
+    if !has_neighbours(layout) || layout.criterion != distance_criterion
+        layout.neighbours = get_layout_neighbours_xy!(layout, distance_criterion)
+        layout.criterion = distance_criterion
+    end
+    return nothing
+end
+
+"""
+    get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
+
+Get neighbors with automatic computation if needed (mutating version).
+
+This function automatically calculates 3D neighbors if they don't exist or
+if the distance criterion has changed. It caches the results for efficiency.
+
+# Arguments
+- `layout::Layout`: The layout object
+- `distance_criterion::Real`: The distance criterion for neighbors in mm
+
+# Modifies
+- `layout`: Updates neighbor information and criterion
+
+# Examples
+```julia
+get_neighbours_xyz!(layout, 40.0)
+```
+"""
+function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
+    if !has_neighbours(layout) || layout.criterion != distance_criterion
+        layout.neighbours = get_layout_neighbours_xyz!(layout, distance_criterion)
+        layout.criterion = distance_criterion
+    end
+    return nothing
+end
+
+# === LAYOUT SUBSETTING ===
+"""
+    get_selected_channels(layout::Layout, channel_selection::Function) -> Vector{Symbol}
+
+Get channel labels that match the selection criteria.
+
+This helper function applies a channel selection predicate to the layout's
+electrode labels and returns the matching channels.
+
+# Arguments
+- `layout::Layout`: The layout object
+- `channel_selection::Function`: Channel selection predicate function
+
+# Returns
+- `Vector{Symbol}`: Vector of selected channel labels
+
+# Examples
+```julia
+selected = get_selected_channels(layout, channels([:Fp1, :Fp2]))
+```
+"""
 function get_selected_channels(layout::Layout, channel_selection::Function)
     # Get all channel labels from the layout and apply the channel selection predicate
     all_channels = layout.data.label

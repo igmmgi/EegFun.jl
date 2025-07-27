@@ -10,8 +10,8 @@ using eegfun
 using GLMakie
 # using CairoMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
-# load data
 
+# load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
@@ -35,12 +35,6 @@ eegfun.positions_3D(layout)
 subset_layout = eegfun.subset_layout(layout, channel_selection = x -> .!endswith.(string.(x), "z"));
 eegfun.plot_layout_2d(subset_layout);
 
-eegfun.channels(sublayout)
-eegfun.positions_polar(layout)
-eegfun.positions_2D(layout)
-eegfun.positions_3D(layout)
-
-
 
 # how to print neighbours to a file
 eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
@@ -53,6 +47,10 @@ eegfun.plot_trigger_timing(dat)
 
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+
+eegfun.metadata_columns(dat)
+eegfun.channel_columns(dat)
+eegfun.extra_columns(dat)
 
 # we can get raw trigger info 
 eegfun.trigger_count(dat);
@@ -133,9 +131,6 @@ layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # 2D layout
 eegfun.polar_to_cartesian_xy!(layout)
 fig, ax = eegfun.plot_layout_2d(layout);
-
-# 2D layout with neighbours defined by distance
-neighbours = eegfun.get_electrode_neighbours_xy(layout, 40);
 
 eegfun.print_neighbours_dict(neighbours, "electrode_neighbours.toml")
 eegfun.plot_layout_2d(layout, neighbours)

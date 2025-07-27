@@ -1,12 +1,46 @@
-# Abstract types
+# === ABSTRACT TYPES ===
+"""
+    EegData
+
+Abstract supertype for all EEG data structures.
+
+This type represents the base interface for EEG data objects, providing a common
+interface for different data formats including continuous data, event-related
+potentials, and epoch-based data.
+"""
 abstract type EegData end
+
+"""
+    SingleDataFrameEeg
+
+Abstract type for EEG data stored in a single DataFrame.
+
+This type represents EEG data where all samples are stored in a single DataFrame,
+typically used for continuous data or event-related potentials that have been
+averaged into a single time series.
+"""
 abstract type SingleDataFrameEeg <: EegData end
+
+"""
+    MultiDataFrameEeg
+
+Abstract type for EEG data stored across multiple DataFrames.
+
+This type represents EEG data where samples are distributed across multiple
+DataFrames, typically used for epoch-based data where each epoch is stored
+separately.
+"""
 abstract type MultiDataFrameEeg <: EegData end
 
+# === ANALYSIS TYPES ===
 """
     AnalysisInfo
 
-Basic information about data preprocessing.
+Stores metadata about data preprocessing and analysis parameters.
+
+This type contains information about how the EEG data has been processed,
+including filtering parameters, reference information, and other analysis
+settings that affect the interpretation of the data.
 
 # Fields
 - `reference::Symbol`: Reference type used (e.g., :avg, :mastoid, :none)
@@ -19,15 +53,20 @@ Basic information about data preprocessing.
     lp_filter::Float64 = 0.0
 end
 
-
+# === LAYOUT TYPES ===
 """
     Neighbours
 
-Stores neighbor information for an electrode in layout-based operations.
+Stores spatial neighbor information for an electrode in layout-based operations.
+
+This type contains information about neighboring electrodes for spatial
+interpolation, artifact detection, and other layout-dependent operations.
+The distances and weights are typically calculated based on electrode
+positions in 2D or 3D space.
 
 # Fields
 - `electrodes::Vector{Symbol}`: List of neighboring electrode labels
-- `distances::Vector{Float64}`: Distances to each neighbor
+- `distances::Vector{Float64}`: Distances to each neighbor in mm
 - `weights::Vector{Float64}`: Interpolation weights for each neighbor
 """
 struct Neighbours
@@ -36,21 +75,66 @@ struct Neighbours
     weights::Vector{Float64}
 end
 
+"""
+    Layout
+
+Stores electrode layout information and spatial relationships.
+
+This type contains the complete electrode layout information including
+electrode positions in various coordinate systems (polar, 2D Cartesian,
+3D Cartesian) and neighbor relationships for spatial operations.
+
+# Fields
+- `data::DataFrame`: DataFrame containing layout information with metadata groups
+- `neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}`: Dictionary of neighbours for each electrode
+- `criterion::Union{Nothing, Float64}`: Distance criterion for neighbour calculation in mm
+"""
 mutable struct Layout
     data::DataFrame
     neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}
     criterion::Union{Nothing, Float64}
 end
 
+# === EEG DATA TYPES ===
+"""
+    ContinuousData
 
-# Concrete types with basic fields
+Stores continuous EEG data with associated layout and analysis information.
+
+This type represents continuous EEG recordings where all time points are
+stored in a single DataFrame. The data typically includes time series
+for each electrode channel along with metadata columns.
+
+# Fields
+- `data::DataFrame`: DataFrame containing continuous data with metadata groups
+- `layout::Layout`: Layout object containing electrode positioning information
+- `sample_rate::Int64`: Sample rate of the data in Hz
+- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+"""
 mutable struct ContinuousData <: SingleDataFrameEeg
     data::DataFrame
     layout::Layout
     sample_rate::Int64
     analysis_info::AnalysisInfo
 end
- 
+   
+
+"""
+    ErpData
+
+Stores event-related potential data with associated layout and analysis information.
+
+This type represents averaged event-related potentials where multiple epochs
+have been averaged together into a single time series. The data includes
+the averaged ERP waveform for each electrode channel.
+
+# Fields
+- `data::DataFrame`: DataFrame containing averaged ERP data with metadata groups
+- `layout::Layout`: Layout object containing electrode positioning information
+- `sample_rate::Int64`: Sample rate of the data in Hz
+- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+- `n_epochs::Int64`: Number of epochs that were averaged together
+"""
 mutable struct ErpData <: SingleDataFrameEeg
     data::DataFrame
     layout::Layout
@@ -58,7 +142,23 @@ mutable struct ErpData <: SingleDataFrameEeg
     analysis_info::AnalysisInfo
     n_epochs::Int64
 end
- 
+
+
+"""
+    EpochData
+
+Stores epoch-based EEG data with associated layout and analysis information.
+
+This type represents EEG data organized into individual epochs, where each
+epoch is stored as a separate DataFrame. This format is useful for
+event-related potential analysis and other epoch-based processing.
+
+# Fields
+- `data::Vector{DataFrame}`: Vector of DataFrames, one for each epoch
+- `layout::Layout`: Layout object containing electrode positioning information
+- `sample_rate::Int64`: Sample rate of the data in Hz
+- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+"""
 mutable struct EpochData <: MultiDataFrameEeg
     data::Vector{DataFrame}
     layout::Layout
@@ -66,57 +166,143 @@ mutable struct EpochData <: MultiDataFrameEeg
     analysis_info::AnalysisInfo
 end
 
-mutable struct CoordXY
-    x::Any
-    y::Any
+"""
+    IntervalTime
+
+Defines a time interval with start and end times.
+
+This type represents a time window or interval, typically used for
+defining analysis windows, artifact rejection periods, or other
+time-based operations.
+
+# Fields
+- `interval_start::Float64`: Start time of the interval in seconds
+- `interval_end::Float64`: End time of the interval in seconds
+"""
+struct IntervalTime
+    interval_start::Float64
+    interval_end::Float64
 end
 
-mutable struct Coord
-    coord::Array{CoordXY}
+"""
+    EpochCondition
+
+Defines parameters for extracting epochs for a specific experimental condition.
+
+This type specifies the criteria for identifying and extracting epochs
+from continuous EEG data based on trigger sequences and timing constraints.
+It supports complex trigger patterns and timing relationships between events.
+
+# Fields
+- `name::String`: Descriptive condition name for identification
+- `trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}`: Trigger sequences to match (e.g., [[1, 2, 3]], [[1, :any, 3]], [[1:5], [10:15]])
+- `reference_index::Int`: Which trigger position is t=0 (1-based, default: 1)
+- `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
+- `min_interval::Union{Nothing,Float64}`: Minimum time between specified trigger pairs in seconds (optional, default: nothing)
+- `max_interval::Union{Nothing,Float64}`: Maximum time between specified trigger pairs in seconds (optional, default: nothing)
+- `after::Union{Nothing,Int}`: Only search for sequences after this trigger value (optional, default: nothing)
+- `before::Union{Nothing,Int}`: Only search for sequences before this trigger value (optional, default: nothing)
+"""
+@kwdef struct EpochCondition
+    name::String
+    trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}
+    reference_index::Int = 1
+    timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
+    min_interval::Union{Nothing,Float64} = nothing
+    max_interval::Union{Nothing,Float64} = nothing
+    after::Union{Nothing,Int} = nothing
+    before::Union{Nothing,Int} = nothing
 end
 
+"""
+    IntervalIdx
 
-# Helper methods for neighbour management
-has_neighbours(layout::Layout) = !isnothing(layout.neighbours)
-criterion(layout::Layout) = layout.criterion
+Defines a time interval using sample indices.
 
-# Helper function for average neighbours calculation
-function _average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
-    if isempty(neighbours_dict)
-        return 0.0
-    end
-    
-    total_neighbours = sum(length(neighbours.electrodes) for neighbours in values(neighbours_dict))
-    return total_neighbours / length(neighbours_dict)
+This type represents a time window or interval using sample indices rather
+than time values. This is useful for operations that work directly with
+sample positions, such as data slicing, artifact detection, or epoch
+extraction.
+
+# Fields
+- `interval_start::Int`: Start sample index (1-based)
+- `interval_end::Int`: End sample index (inclusive)
+"""
+struct IntervalIdx
+    interval_start::Int
+    interval_end::Int
 end
 
-# Get neighbours with automatic computation if needed (mutating)
-function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
-    if !has_neighbours(layout) || layout.criterion != distance_criterion
-        layout.neighbours = get_electrode_neighbours_xy(layout, distance_criterion)
-        layout.criterion = distance_criterion
-    end
-    return nothing
+# === ICA TYPES ===
+"""
+    IcaPrms
+
+Parameters for Independent Component Analysis (ICA) decomposition.
+
+This type contains all the parameters needed to configure ICA decomposition
+of EEG data, including learning rates, convergence criteria, and algorithm
+specific settings.
+
+# Fields
+- `l_rate::Float64`: Learning rate for the ICA algorithm
+- `max_iter::Int`: Maximum number of iterations for convergence
+- `w_change::Float64`: Weight change threshold for convergence
+- `anneal_deg::Float64`: Annealing degree for temperature scheduling
+- `anneal_step::Float64`: Annealing step size for temperature updates
+- `blowup::Float64`: Blowup factor for numerical stability
+- `blowup_fac::Float64`: Blowup factor for algorithm stability
+- `max_weight::Float64`: Maximum allowed weight value
+- `restart_factor::Float64`: Factor for restarting stuck algorithms
+- `degconst::Float64`: Degree constant for spherical coordinates
+- `default_stop::Float64`: Default stopping criterion threshold
+"""
+mutable struct IcaPrms
+    l_rate::Float64
+    max_iter::Int
+    w_change::Float64
+    anneal_deg::Float64
+    anneal_step::Float64
+    blowup::Float64
+    blowup_fac::Float64
+    max_weight::Float64
+    restart_factor::Float64
+    degconst::Float64
+    default_stop::Float64
 end
 
-function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
-    if !has_neighbours(layout) || layout.criterion != distance_criterion
-        layout.neighbours = get_electrode_neighbours_xyz(layout, distance_criterion)
-        layout.criterion = distance_criterion
-    end
-    return nothing
+"""
+    InfoIca
+
+Stores ICA analysis results and decomposition information.
+
+This type contains the complete results of ICA decomposition including
+the unmixing and mixing matrices, component statistics, and metadata
+about the decomposition process.
+
+# Fields
+- `unmixing::Matrix{Float64}`: Unmixing matrix (sources = unmixing × data)
+- `mixing::Matrix{Float64}`: Mixing matrix (data = mixing × sources)
+- `sphere::Matrix{Float64}`: Sphering matrix for data preprocessing
+- `variance::Vector{Float64}`: Variance explained by each component
+- `scale::Float64`: Scaling factor applied to the data
+- `mean::Vector{Float64}`: Mean vector subtracted from the data
+- `ica_label::Vector{Symbol}`: Component labels (e.g., [:IC1, :IC2, ...])
+- `data_label::Vector{Symbol}`: Original data channel labels
+- `removed_activations::OrderedDict{Int, Matrix{Float64}}`: Removed component activations by epoch
+"""
+struct InfoIca
+    unmixing::Matrix{Float64}
+    mixing::Matrix{Float64}
+    sphere::Matrix{Float64}
+    variance::Vector{Float64}
+    scale::Float64
+    mean::Vector{Float64}
+    ica_label::Vector{Symbol}
+    data_label::Vector{Symbol}
+    removed_activations::OrderedDict{Int, Matrix{Float64}}
 end
 
-# Getter functions that return the neighbours
-neighbours(layout::Layout) = layout.neighbours
-
-# Clear neighbours (useful when layout data changes)
-function clear_neighbours!(layout::Layout)
-    layout.neighbours = nothing
-    layout.criterion = nothing
-end
-
-# Display method for Layout
+# === DISPLAY FUNCTIONS ===
 function Base.show(io::IO, layout::Layout)
     # Show metadata first
     n_electrodes = size(layout.data, 1)
@@ -124,10 +310,10 @@ function Base.show(io::IO, layout::Layout)
     has_3d = has_3d_coords(layout)
     has_neigh = has_neighbours(layout)
     
-    println(io, "Layout ($n_electrodes electrodes)")
+    println(io, "Layout ($n_electrodes channels)")
     println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")")
     if has_neigh
-        avg_neighbours = _average_number_of_neighbours(layout.neighbours)
+        avg_neighbours = average_number_of_neighbours(layout.neighbours)
         println(io, "Criterion: $(layout.criterion), Avg neighbours: $(round(avg_neighbours, digits=1))")
     end
     println(io)
@@ -186,25 +372,7 @@ function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol, Neighbours})
     show(io, MIME"text/plain"(), neighbours_dict)
 end
 
-# Helper function to format a single electrode entry
-function _format_electrode(io, electrode, neighbours)
-    n_neighbours = length(neighbours.electrodes)
-    avg_distance = round(mean(neighbours.distances), digits=1)
-    
-    println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance)mm)")
-    if n_neighbours > 0
-        neighbour_details = []
-        for j in 1:n_neighbours
-            neighbour = string(neighbours.electrodes[j])
-            distance = round(neighbours.distances[j], digits=1)
-            weight = round(neighbours.weights[j], digits=3)
-            push!(neighbour_details, "$(neighbour) ($(distance),$(weight))")
-        end
-        neighbour_list = join(neighbour_details, ", ")
-        println(io, "    Neighbours: $neighbour_list")
-    end
-    println(io)
-end
+
 
 function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symbol, Neighbours})
     n_electrodes = length(neighbours_dict)
@@ -234,228 +402,11 @@ function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symb
     end
 end
 
-struct IntervalIdx
-    interval_start::Int
-    interval_end::Int
-end
-
-struct IntervalTime
-    interval_start::Float64
-    interval_end::Float64
-end
-
-"""
-    EpochCondition
-
-Defines parameters for extracting epochs for a specific experimental condition.
-
-# Fields
-- `name::String`: Descriptive condition name
-- `trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}`: Trigger sequences to match (e.g., [[1, 2, 3]], [[1, :any, 3]], [[1:5], [10:15]])
-- `reference_index::Int`: Which trigger position is t=0 (1-based, default: 1)
-- `timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}}`: Which trigger pairs to apply min/max intervals to (optional, default: nothing)
-- `min_interval::Union{Nothing,Float64}`: Minimum time between specified trigger pairs (optional, default: nothing)
-- `max_interval::Union{Nothing,Float64}`: Maximum time between specified trigger pairs (optional, default: nothing)
-- `after::Union{Nothing,Int}`: Only search for sequences after this trigger value (optional, default: nothing)
-- `before::Union{Nothing,Int}`: Only search for sequences before this trigger value (optional, default: nothing)
-"""
-@kwdef struct EpochCondition
-    name::String
-    trigger_sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}
-    reference_index::Int = 1
-    timing_pairs::Union{Nothing,Vector{Tuple{Int,Int}}} = nothing
-    min_interval::Union{Nothing,Float64} = nothing
-    max_interval::Union{Nothing,Float64} = nothing
-    after::Union{Nothing,Int} = nothing
-    before::Union{Nothing,Int} = nothing
-end
-
-
-
-
-# Basic information functions right with the types
-channels(dat::EegData) = dat.layout.data.label
-
-# For SingleDataFrameEeg (ContinuousData, ErpData)
-all_channels(dat::SingleDataFrameEeg) = propertynames(dat.data)
-metadata_columns(dat::SingleDataFrameEeg) = all_channels(dat)[1:findfirst(col -> col in channels(dat), all_channels(dat)) - 1]
-extra_channels(dat::SingleDataFrameEeg) = setdiff(propertynames(data(dat)), [metadata_columns(dat); channels(dat)])
-
-# For MultiDataFrameEeg (EpochData)
-all_channels(dat::MultiDataFrameEeg) = propertynames(dat.data[1])  # Use first epoch as reference
-metadata_columns(dat::MultiDataFrameEeg) = all_channels(dat)[1:findfirst(col -> col in channels(dat), all_channels(dat)) - 1]
-extra_channels(dat::MultiDataFrameEeg) = setdiff(propertynames(data(dat)), [metadata_columns(dat); channels(dat)])
-
-
-times(dat::SingleDataFrameEeg) = dat.data.time
-times(dat::MultiDataFrameEeg) = first(dat.data).time  # assume all epochs are the same
-sample_rate(dat::ContinuousData) = dat.sample_rate
-sample_rate(dat::EegData) = dat.sample_rate
-sample_rate(dat::DataFrame) = Int(1 / mean(diff(dat.time)))
-reference(dat::EegData) = dat.analysis_info.reference
-reference(dat::AnalysisInfo) = dat.reference
-filter_info(dat::AnalysisInfo) = [dat.hp_filter, dat.lp_filter]
-data(dat::SingleDataFrameEeg) = dat.data # single data frame
-data(dat::MultiDataFrameEeg) = to_data_frame(dat) # single data frame with all epochs
-
-# Timepoints, channel, epoch, and duration 
-samples(dat::SingleDataFrameEeg) = dat.data.sample
-samples(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch].sample
-n_samples(dat::SingleDataFrameEeg) = nrow(dat.data)
-n_samples(dat::MultiDataFrameEeg) = nrow(first(dat.data))
-n_channels(dat::EegData) = length(channels(dat))
-n_epochs(dat::SingleDataFrameEeg) = 1
-n_epochs(dat::MultiDataFrameEeg) = length(dat.data)
-duration(dat::EegData) = last(times(dat)) - first(times(dat))
-
-n_average(dat::ErpData) = dat.n_epochs
-
-# channel information
-has_channels(dat::EegData, chans::Vector{Symbol}) = all(in(channels(dat)), chans)
-common_channels(dat1::EegData, dat2::EegData) = intersect(channels(dat1), channels(dat2))
-
-# Layout metadata group accessors
-"""
-    channels(layout::Layout) -> Vector{Symbol}
-
-Get electrode labels from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: Electrode labels
-
-# Examples
-```julia
-labels = channels(layout)
-```
-"""
-
-# Helper function for getting columns by metadata group
-function _get_cols_by_group(df::DataFrame, group::Symbol)
-    cols = propertynames(df)
-    return [col for col in cols if haskey(metadata(df), string(col)) && metadata(df, string(col)) == ("group" => group)]
-end
-
-
-channels(layout::Layout) = layout.data[:, _get_cols_by_group(layout.data, :label)]
-
-
-"""
-    positions_polar(layout::Layout) -> Vector{Symbol}
-
-Get polar coordinate column names from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: Polar coordinate column names (inc, azi)
-
-# Examples
-```julia
-polar_cols = positions_polar(layout)
-```
-"""
-_positions_polar(layout::Layout) = _get_cols_by_group(layout.data, :polar_coords)
-
-"""
-    positions_2D(layout::Layout) -> Vector{Symbol}
-
-Get 2D Cartesian coordinate column names from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: 2D Cartesian coordinate column names (x2, y2) if available
-
-# Examples
-```julia
-cartesian_2d_cols = positions_2D(layout)
-```
-"""
-_positions_2D(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_2d)
-
-"""
-    positions_3D(layout::Layout) -> Vector{Symbol}
-
-Get 3D Cartesian coordinate column names from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: 3D Cartesian coordinate column names (x3, y3, z3) if available
-
-# Examples
-```julia
-cartesian_3d_cols = positions_3D(layout)
-```
-"""
-_positions_3D(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_3d)
-
-# Functions that return the actual column data
-"""
-    positions_polar_data(layout::Layout) -> DataFrame
-
-Get polar coordinate data from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `DataFrame`: DataFrame containing polar coordinate columns (inc, azi)
-
-# Examples
-```julia
-polar_data = positions_polar_data(layout)
-```
-"""
-positions_polar(layout::Layout) = layout.data[:, _positions_polar(layout)]
-
-"""
-    positions_2D_data(layout::Layout) -> DataFrame
-
-Get 2D Cartesian coordinate data from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `DataFrame`: DataFrame containing 2D Cartesian coordinate columns (x2, y2) if available
-
-# Examples
-```julia
-cartesian_2d_data = positions_2D_data(layout)
-```
-"""
-positions_2D(layout::Layout) = layout.data[:, _positions_2D(layout)]
-
-"""
-    positions_3D_data(layout::Layout) -> DataFrame
-
-Get 3D Cartesian coordinate data from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `DataFrame`: DataFrame containing 3D Cartesian coordinate columns (x3, y3, z3) if available
-
-# Examples
-```julia
-cartesian_3d_data = positions_3D_data(layout)
-```
-"""
-positions_3D(layout::Layout) = layout.data[:, _positions_3D(layout)]
-
 
 function Base.show(io::IO, dat::EegData)
     println(io, "Type: $(typeof(dat))")
-    println(io, "Size: $(n_epochs(dat)) (epoch) x $(n_samples(dat)) (rows) x $(n_channels(dat)) (columns)")
-    println(io, "Labels: ", print_vector(channels(dat)))
+    println(io, "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_column_labels(dat))) (columns)")
+    println(io, "Labels: ", print_vector(channel_column_labels(dat)))
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
 end
@@ -466,32 +417,6 @@ function Base.show(io::IO, dat::AnalysisInfo)
 end
 
 ########### ICA ##############
-mutable struct IcaPrms
-    l_rate::Float64
-    max_iter::Int
-    w_change::Float64
-    anneal_deg::Float64
-    anneal_step::Float64
-    blowup::Float64
-    blowup_fac::Float64
-    max_weight::Float64
-    restart_factor::Float64
-    degconst::Float64
-    default_stop::Float64
-end
-
-struct InfoIca
-    unmixing::Matrix{Float64}
-    mixing::Matrix{Float64}
-    sphere::Matrix{Float64}
-    variance::Vector{Float64}
-    scale::Float64
-    mean::Vector{Float64}
-    ica_label::Vector{Symbol}
-    data_label::Vector{Symbol}
-    removed_activations::OrderedDict{Int, Matrix{Float64}}
-end
-
 # Custom display method for InfoIca
 function Base.show(io::IO, ica::InfoIca)
     n_components = length(ica.ica_label)
