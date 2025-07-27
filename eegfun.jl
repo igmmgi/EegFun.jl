@@ -35,6 +35,13 @@ eegfun.positions_3D(layout)
 subset_layout = eegfun.subset_layout(layout, channel_selection = x -> .!endswith.(string.(x), "z"));
 eegfun.plot_layout_2d(subset_layout);
 
+eegfun.channels(sublayout)
+eegfun.positions_polar(layout)
+eegfun.positions_2D(layout)
+eegfun.positions_3D(layout)
+
+
+
 # how to print neighbours to a file
 eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
 eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
