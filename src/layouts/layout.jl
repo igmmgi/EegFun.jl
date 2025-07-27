@@ -12,14 +12,26 @@ end
 
 # Internal function to add metadata while preserving existing metadata
 function _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
-    for col in columns
-        if hasproperty(df, col)
-            col_str = string(col)
-            
-            # Set metadata for this specific column only
-            metadata!(df, col_str, "group" => group)
-        end
+
+    # Filter to only existing columns
+    existing_cols = [col for col in columns if hasproperty(df, col)]
+    if isempty(existing_cols)
+        @minimal_error "No existing columns found for group $group"
+        return
     end
+    
+    # Report any missing columns
+    missing_cols = setdiff(columns, existing_cols)
+    if !isempty(missing_cols)
+        @minimal_error "Columns not found in DataFrame: $missing_cols"
+    end
+
+    # Set metadata for each existing column
+    for col in existing_cols
+        col_str = string(col)
+        metadata!(df, col_str, "group" => group)
+    end
+
 end
 
 
