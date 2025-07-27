@@ -10,10 +10,28 @@ function validate_layout(layout::Layout)
     return layout
 end
 
+# Internal function to add metadata while preserving existing metadata
+function _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
+    for col in columns
+        if hasproperty(df, col)
+            col_str = string(col)
+            
+            # Set metadata for this specific column only
+            metadata!(df, col_str, "group" => group)
+        end
+    end
+end
+
+
+
 # Accessor methods
 get_labels(layout::Layout) = layout.data.label
 has_2d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x2, :y2])
 has_3d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x3, :y3, :z3])
+
+
+
+
 
 """
     read_layout(layout_file_name::String)
@@ -36,6 +54,11 @@ function read_layout(file)
     @info "Reading layout from $file"
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
+    
+    # Add metadata for column groups
+    _add_metadata!(df, [:label], :label)
+    _add_metadata!(df, [:inc, :azi], :polar_coords)
+    
     return Layout(df, nothing, nothing)
 end
 
@@ -73,8 +96,19 @@ function polar_to_cartesian_xy!(layout::Layout)
     inc = df[!, :inc] .* (pi / 180)
     azi = df[!, :azi] .* (pi / 180)
 
+    # Store existing metadata before adding columns
+    existing_metadata = copy(DataFrames.metadata(df))
+    
     df[!, :x2] = inc .* cos.(azi) .* radius
     df[!, :y2] = inc .* sin.(azi) .* radius
+
+    # Restore existing metadata
+    for (col, meta) in existing_metadata
+        DataFrames.metadata!(df, col, meta)
+    end
+    
+    # Add metadata for the new 2D Cartesian coordinates
+    _add_metadata!(df, [:x2, :y2], :cartesian_2d)
 
     # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)
@@ -115,10 +149,21 @@ function polar_to_cartesian_xyz!(layout::Layout)
     inc = df[!, :inc] .* (pi / 180)  # Convert to radians
     azi = df[!, :azi] .* (pi / 180)  # Convert to radians
 
+    # Store existing metadata before adding columns
+    existing_metadata = copy(DataFrames.metadata(df))
+    
     # Standard spherical to Cartesian conversion
     df[!, :x3] = radius .* sin.(inc) .* cos.(azi)
     df[!, :y3] = radius .* sin.(inc) .* sin.(azi)
     df[!, :z3] = radius .* cos.(inc)
+
+    # Restore existing metadata
+    for (col, meta) in existing_metadata
+        DataFrames.metadata!(df, col, meta)
+    end
+
+    # Add metadata for the new 3D Cartesian coordinates
+    _add_metadata!(df, [:x3, :y3, :z3], :cartesian_3d)
 
     # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)

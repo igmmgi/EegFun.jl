@@ -15,18 +15,21 @@ using GLMakie
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
-# how to plot layout
-eegfun.plot_layout_2d(layout)
-
 # define neighbours 2D/3D defined by distance (mm)
 eegfun.polar_to_cartesian_xy!(layout);
 eegfun.get_layout_neighbours_xy!(layout, 40);
 eegfun.polar_to_cartesian_xyz!(layout);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 
-# how to plot layout with neighbours
+# how to plot layout without/with neighbours
+eegfun.plot_layout_2d(layout)
 eegfun.plot_layout_2d(layout, neighbours = true)
 eegfun.plot_layout_3d(layout, neighbours= true)
+
+eegfun.channels(layout)
+eegfun.positions_polar(layout)
+eegfun.positions_2D(layout)
+eegfun.positions_3D(layout)
 
 # how to subset layout a layout
 subset_layout = eegfun.subset_layout(layout, channel_selection = x -> .!endswith.(string.(x), "z"));
@@ -46,6 +49,7 @@ dat = eegfun.create_eeg_dataframe(dat, layout);
 
 # we can get raw trigger info 
 eegfun.trigger_count(dat);
+
 eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
 
