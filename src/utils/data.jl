@@ -86,6 +86,7 @@ complete_df = all_data(dat)
 """
 all_data(dat::SingleDataFrameEeg) = dat.data # single data frame
 all_data(dat::MultiDataFrameEeg) = to_data_frame(dat) # single data frame with all epochs
+all_data(dat::DataFrame) = dat
 
 """
     all_labels(dat::EegData) -> Vector{Symbol}
@@ -105,6 +106,7 @@ all_cols = all_labels(dat)
 """
 all_labels(dat::SingleDataFrameEeg) = propertynames(dat.data)
 all_labels(dat::MultiDataFrameEeg) = propertynames(dat.data[1])
+all_labels(dat::DataFrame) = propertynames(dat)
 
 # === EEG METADATA GROUP ACCESSORS ===
 """
@@ -126,6 +128,7 @@ meta_data = meta_data(dat)
 meta_data(dat::SingleDataFrameEeg) = dat.data[:, _get_cols_by_group(dat.data, :metadata)]
 meta_data(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch][:, _get_cols_by_group(dat.data, :metadata)]
 meta_data(dat::MultiDataFrameEeg) = to_data_frame(dat)[:, _get_cols_by_group(dat.data, :metadata)] 
+meta_data(dat::DataFrame) = dat[:, _get_cols_by_group(dat, :metadata)] 
 
 """
     channel_data(eeg_data::EegData) -> DataFrame
@@ -146,6 +149,7 @@ channel_data = channel_data(dat)
 channel_data(dat::SingleDataFrameEeg) = dat.data[:, _get_cols_by_group(dat.data, :channels)]
 channel_data(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch][:, _get_cols_by_group(dat.data, :channels)]
 channel_data(dat::MultiDataFrameEeg) = to_data_frame(dat)[:, _get_cols_by_group(dat.data, :channels)] 
+channel_data(dat::DataFrame) = dat[:, _get_cols_by_group(dat, :channels)]
 
 """
     extra_data(eeg_data::EegData) -> DataFrame
@@ -166,6 +170,7 @@ extra_data = extra_data(dat)
 extra_data(dat::SingleDataFrameEeg) = dat.data[:, _get_cols_by_group(dat.data, :derived)]
 extra_data(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch][:, _get_cols_by_group(dat.data, :derived)]
 extra_data(dat::MultiDataFrameEeg) = to_data_frame(dat)[:, _get_cols_by_group(dat.data, :derived)]
+extra_data(dat::DataFrame) = dat[:, _get_cols_by_group(dat, :derived)]
 
 # === EEG METADATA LABEL ACCESSORS ===
 """
@@ -187,6 +192,7 @@ meta_labels = meta_labels(dat)
 meta_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :metadata)
 meta_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :metadata)
 meta_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :metadata)
+meta_labels(dat::DataFrame) = _get_cols_by_group(dat, :metadata)
 
 """
     channel_labels(eeg_data::EegData) -> Vector{Symbol}
@@ -207,6 +213,7 @@ channel_labels = channel_labels(dat)
 channel_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :channels)
 channel_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :channels)
 channel_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :channels)
+channel_labels(dat::DataFrame) = _get_cols_by_group(dat, :channels)
 
 """
     extra_labels(eeg_data::EegData) -> Vector{Symbol}
@@ -227,6 +234,7 @@ extra_labels = extra_labels(dat)
 extra_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :derived)
 extra_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :derived)
 extra_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :derived)
+extra_labels(dat::DataFrame) = _get_cols_by_group(dat, :derived)
 
 # === EEG CONVENIENCE FUNCTIONS ===
 # Basic information functions
@@ -288,6 +296,46 @@ filter_info(dat::AnalysisInfo) = [dat.hp_filter, dat.lp_filter]
 
 # Unique convenience functions (not available through metadata)
 """
+    n_samples(dat::EegData) -> Int
+
+Get the number of samples in the EEG data.
+
+# Arguments
+- `dat::EegData`: The EEG data object
+
+# Returns
+- `Int`: Number of samples
+
+# Examples
+```julia
+n = n_samples(dat)
+```
+"""
+n_samples(dat::SingleDataFrameEeg) = nrow(dat.data)
+n_samples(dat::MultiDataFrameEeg) = nrow(dat.data[1])
+n_samples(dat::DataFrame) = nrow(dat)
+
+"""
+    n_channels(dat::EegData) -> Int
+
+Get the number of channels in the EEG data.
+
+# Arguments
+- `dat::EegData`: The EEG data object
+
+# Returns
+- `Int`: Number of channels
+
+# Examples
+```julia
+n = n_channels(dat)
+```
+"""
+n_channels(dat::SingleDataFrameEeg) = length(channel_labels(dat))
+n_channels(dat::MultiDataFrameEeg) = length(channel_labels(dat))
+n_channels(dat::DataFrame) = length(channel_labels(dat))
+
+"""
     n_epochs(dat::EegData) -> Int
 
 Get the number of epochs in the EEG data.
@@ -322,7 +370,7 @@ Get the duration of the EEG data in seconds.
 dur = duration(dat)
 ```
 """
-duration(dat::EegData) = last(meta_data(dat).time) - first(meta_data(dat).time)
+duration(dat::SingleDataFrameEeg) = last(dat.data.time) - first(dat.data.time)
 
 """
     n_average(dat::ErpData) -> Int

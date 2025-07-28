@@ -405,8 +405,8 @@ end
 
 function Base.show(io::IO, dat::EegData)
     println(io, "Type: $(typeof(dat))")
-    println(io, "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_column_labels(dat))) (columns)")
-    println(io, "Labels: ", print_vector(channel_column_labels(dat)))
+    println(io, "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_labels(dat))) (columns)")
+    println(io, "Labels: ", print_vector(channel_labels(dat)))
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
 end
