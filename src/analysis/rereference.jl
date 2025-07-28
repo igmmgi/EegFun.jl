@@ -105,7 +105,7 @@ Apply rereferencing to EEG data types using predicate-based channel selection.
 # helper function to handle special reference cases such as :avg and :mastoid
 function get_reference_channels(dat, reference_channel::Vector{Symbol})
     if reference_channel[1] == :avg # all channels
-        return channels(dat) 
+        return channel_labels(dat) 
     elseif reference_channel[1] == :mastoid
         return [:M1, :M2]
     end
