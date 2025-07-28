@@ -26,19 +26,15 @@ eegfun.plot_layout_2d(layout)
 eegfun.plot_layout_2d(layout, neighbours = true)
 eegfun.plot_layout_3d(layout, neighbours= true)
 
-eegfun.channel_column_labels(layout)
-eegfun.channel_column_data(layout)
-eegfun.channel_column_data(layout, :label)
-eegfun.channel_column_data(layout, :label, :inc, :azi)
+eegfun.channel_labels(layout)
+eegfun.channel_data(layout)
+eegfun.position_polar_labels(layout)
+eegfun.position_polar_data(layout)
+eegfun.position_2D_labels(layout)
+eegfun.position_2D_data(layout)
+eegfun.position_3D_labels(layout)
+eegfun.position_3D_data(layout)
 
-eegfun.channel_column_data(layout, :label, :inc, :azi)
-
-
-
-
-eegfun.positions_polar(layout)
-eegfun.positions_2D(layout)
-eegfun.positions_3D(layout)
 
 # how to subset layout a layout
 subset_layout = eegfun.subset_layout(layout, channel_selection = x -> .!endswith.(string.(x), "z"));
@@ -57,9 +53,15 @@ eegfun.plot_trigger_timing(dat)
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 
-eegfun.metadata_columns(dat)
-eegfun.channel_columns(dat)
-eegfun.extra_columns(dat)
+eegfun.meta_labels(dat)
+eegfun.meta_data(dat)
+eegfun.all_labels(dat)
+eegfun.all_data(dat)
+eegfun.channel_labels(dat)
+eegfun.channel_data(dat)
+eegfun.extra_labels(dat)
+eegfun.extra_data(dat)
+
 
 # we can get raw trigger info 
 eegfun.trigger_count(dat);

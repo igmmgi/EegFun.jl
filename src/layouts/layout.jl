@@ -3,7 +3,7 @@
 # === LAYOUT METADATA ACCESSORS ===
 # Layout metadata group accessors
 """
-    channel_column_labels(layout::Layout) -> Vector{Symbol}
+    channel_labels(layout::Layout) -> Vector{Symbol}
 
 Get electrode label column names from the layout.
 
@@ -15,10 +15,10 @@ Get electrode label column names from the layout.
 
 # Examples
 ```julia
-labels = channel_column_labels(layout)
+labels = channel_labels(layout)
 ```
 """
-channel_column_labels(layout::Layout) = _get_cols_by_group(layout.data, :label)
+channel_labels(layout::Layout) = _get_cols_by_group(layout.data, :label)
 
 """
     channel_column_data(layout::Layout) -> DataFrame
@@ -33,10 +33,10 @@ Get electrode label data from the layout.
 
 # Examples
 ```julia
-data = channel_column_data(layout)
+data = channel_data(layout)
 ```
 """
-channel_column_data(layout::Layout) = layout.data[:, _get_cols_by_group(layout.data, :label)]
+channel_data(layout::Layout) = layout.data[:, _get_cols_by_group(layout.data, :label)]
 
 """
     position_polar_labels(layout::Layout) -> Vector{Symbol}

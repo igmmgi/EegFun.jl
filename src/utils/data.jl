@@ -69,7 +69,7 @@ end
 
 # === EEG DATA ACCESS FUNCTIONS ===
 """
-    all_columns_data(dat::EegData) -> DataFrame
+    all_data(dat::EegData) -> DataFrame
 
 Get the complete DataFrame with all columns.
 
@@ -81,14 +81,14 @@ Get the complete DataFrame with all columns.
 
 # Examples
 ```julia
-complete_df = all_columns_data(dat)
+complete_df = all_data(dat)
 ```
 """
-all_columns_data(dat::SingleDataFrameEeg) = dat.data # single data frame
-all_columns_data(dat::MultiDataFrameEeg) = to_data_frame(dat) # single data frame with all epochs
+all_data(dat::SingleDataFrameEeg) = dat.data # single data frame
+all_data(dat::MultiDataFrameEeg) = to_data_frame(dat) # single data frame with all epochs
 
 """
-    all_columns_labels(dat::EegData) -> Vector{Symbol}
+    all_labels(dat::EegData) -> Vector{Symbol}
 
 Get all column names from the complete DataFrame.
 
@@ -100,11 +100,11 @@ Get all column names from the complete DataFrame.
 
 # Examples
 ```julia
-all_cols = all_columns_labels(dat)
+all_cols = all_labels(dat)
 ```
 """
-all_columns_labels(dat::SingleDataFrameEeg) = propertynames(dat.data)
-all_columns_labels(dat::MultiDataFrameEeg) = propertynames(dat.data[1])
+all_labels(dat::SingleDataFrameEeg) = propertynames(dat.data)
+all_labels(dat::MultiDataFrameEeg) = propertynames(dat.data[1])
 
 # === EEG METADATA GROUP ACCESSORS ===
 """
@@ -169,7 +169,7 @@ extra_data(dat::MultiDataFrameEeg) = to_data_frame(dat)[:, _get_cols_by_group(da
 
 # === EEG METADATA LABEL ACCESSORS ===
 """
-    meta_data_labels(eeg_data::EegData) -> Vector{Symbol}
+    meta_labels(eeg_data::EegData) -> Vector{Symbol}
 
 Get metadata column names (time, sample, triggers) from the EEG data.
 
@@ -181,15 +181,15 @@ Get metadata column names (time, sample, triggers) from the EEG data.
 
 # Examples
 ```julia
-meta_labels = meta_data_labels(dat)
+meta_labels = meta_labels(dat)
 ```
 """
-meta_data_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :metadata)
-meta_data_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :metadata)
-meta_data_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :metadata)
+meta_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :metadata)
+meta_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :metadata)
+meta_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :metadata)
 
 """
-    channel_column_labels(eeg_data::EegData) -> Vector{Symbol}
+    channel_labels(eeg_data::EegData) -> Vector{Symbol}
 
 Get EEG channel column names from the EEG data.
 
@@ -201,15 +201,15 @@ Get EEG channel column names from the EEG data.
 
 # Examples
 ```julia
-channel_labels = channel_column_labels(dat)
+channel_labels = channel_labels(dat)
 ```
 """
-channel_column_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :channels)
-channel_column_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :channels)
-channel_column_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :channels)
+channel_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :channels)
+channel_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :channels)
+channel_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :channels)
 
 """
-    extra_column_labels(eeg_data::EegData) -> Vector{Symbol}
+    extra_labels(eeg_data::EegData) -> Vector{Symbol}
 
 Get extra/derived column names (EOG, flags, etc.) from the EEG data.
 
@@ -221,12 +221,12 @@ Get extra/derived column names (EOG, flags, etc.) from the EEG data.
 
 # Examples
 ```julia
-extra_labels = extra_column_labels(dat)
+extra_labels = extra_labels(dat)
 ```
 """
-extra_column_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :derived)
-extra_column_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :derived)
-extra_column_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :derived)
+extra_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :derived)
+extra_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :derived)
+extra_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :derived)
 
 # === EEG CONVENIENCE FUNCTIONS ===
 # Basic information functions
