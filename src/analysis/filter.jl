@@ -1,4 +1,82 @@
 """
+    FilterInfo
+
+A struct containing all information about a digital filter for EEG data processing.
+
+# Fields
+- `filter`: The actual DSP.jl filter object (ZeroPoleGain for IIR, Vector{Float64} for FIR)
+- `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
+- `filter_method::String`: Filter implementation ("iir" or "fir")
+- `cutoff_freq::Float64`: Cutoff frequency in Hz
+- `sample_rate::Float64`: Sampling rate in Hz
+- `order::Int`: Filter order (for IIR filters)
+- `n_taps::Union{Nothing,Int}`: Number of taps (for FIR filters, nothing for IIR)
+- `transition_band::Float64`: Width of transition band in Hz
+
+# Notes
+- This struct encapsulates all filter parameters and metadata
+- Makes it easy to pass filter information to print and plot functions
+- Provides a consistent interface regardless of filter type
+"""
+@kwdef struct FilterInfo
+    filter::Union{ZeroPoleGain, Vector{Float64}}
+    filter_type::String
+    filter_method::String
+    cutoff_freq::Float64
+    sample_rate::Float64
+    order::Int
+    n_taps::Union{Nothing,Int}
+    transition_band::Float64
+end
+
+# Constructor for creating FilterInfo from existing filter (for backward compatibility)
+"""
+    FilterInfo(filter, filter_type::String, filter_method::String, cutoff_freq::Real, sample_rate::Real; 
+               order::Int = 3, n_taps::Union{Nothing,Int} = nothing, transition_band::Real = 0.25)
+
+Create a FilterInfo struct from an existing filter object.
+
+# Arguments
+- `filter`: The actual DSP.jl filter object
+- `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
+- `filter_method::String`: Filter implementation ("iir" or "fir")
+- `cutoff_freq::Real`: Cutoff frequency in Hz
+- `sample_rate::Real`: Sampling rate in Hz
+
+# Keyword Arguments
+- `order::Int`: Filter order (default: 3)
+- `n_taps::Union{Nothing,Int}`: Number of taps for FIR filters (default: nothing)
+- `transition_band::Real`: Width of transition band in Hz (default: 0.25)
+
+# Returns
+- `FilterInfo`: A struct containing all filter information
+
+# Notes
+- This constructor is useful for creating FilterInfo from existing filter objects
+"""
+function FilterInfo(
+    filter, 
+    filter_type::String, 
+    filter_method::String, 
+    cutoff_freq::Real, 
+    sample_rate::Real;
+    order::Int = 3,
+    n_taps::Union{Nothing,Int} = nothing,
+    transition_band::Real = 0.25
+)
+    return FilterInfo(
+        filter = filter,
+        filter_type = filter_type,
+        filter_method = filter_method,
+        cutoff_freq = Float64(cutoff_freq),
+        sample_rate = Float64(sample_rate),
+        order = order,
+        n_taps = n_taps,
+        transition_band = Float64(transition_band)
+    )
+end
+
+"""
     create_filter(filter_type::String, filter_method::String, filter_freq::Real, sample_rate::Real; 
                  order::Integer = 3, transition_width::Real = 0.25, plot_filter::Bool = false, print_filter::Bool = false)
 
@@ -15,12 +93,12 @@ Create a digital filter object for the specified parameters.
 - `print_filter`: Boolean to print filter characteristics (default: false)
 
 # Returns
-- Digital filter object that can be applied to data
+- `FilterInfo`: A struct containing all filter information and the actual filter object
 
 # Notes
 - Validates all input parameters
 - Creates appropriate filter prototype based on type and method
-- Returns a filter object that can be reused for multiple datasets
+- Returns a FilterInfo object that can be reused for multiple datasets
 - If plot_filter is true, displays the filter frequency response
 - If print_filter is true, prints detailed filter characteristics
 """
@@ -66,6 +144,10 @@ function create_filter(
         filter_prototype = Lowpass(filter_freq + (transition_band/2))   # Add for lowpass
     end
 
+    # Initialize variables for FilterInfo
+    n_taps = nothing
+    window_type = nothing
+
     # Create filter with chosen method
     if filter_method == "iir"
         filter = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
@@ -77,48 +159,75 @@ function create_filter(
             n_taps += 1     
         end
         # Ensure n_taps is not too small
-        n_taps = max(n_taps, 3)
+        n_taps = max(n_taps, 51)
         # For FFTW 1.9.0 compatibility, ensure n_taps is a power of 2
         n_taps = nextpow(2, n_taps)
         if n_taps % 2 == 0  
             n_taps += 1     
         end
+        window_type = "hamming"
         filter = digitalfilter(filter_prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
     end
 
+    # Create FilterInfo struct
+    filter_info = FilterInfo(
+        filter = filter,
+        filter_type = filter_type,
+        filter_method = filter_method,
+        cutoff_freq = Float64(filter_freq),
+        sample_rate = Float64(sample_rate),
+        order = order,
+        n_taps = n_taps,
+        transition_band = Float64(transition_band),
+    )
+
     # Print filter characteristics if requested
     if print_filter
-        print_filter_characteristics(filter, sample_rate, filter_freq, transition_band)
+        print_filter_characteristics(filter_info)
     end
 
     # Plot filter response if requested
     if plot_filter
-        plot_filter_response(filter, sample_rate, filter_freq, transition_band)
+        plot_filter_response(filter_info)
     end
 
-    return filter
+    return filter_info
 end
 
+# Convenience method to extract the actual filter object
 """
-    _apply_filter!(dat::DataFrame, channels, filter; filter_func = filtfilt)
+    get_filter(filter_info::FilterInfo)
+
+Extract the actual DSP.jl filter object from a FilterInfo struct.
+
+# Arguments
+- `filter_info::FilterInfo`: The filter information struct
+
+# Returns
+- The actual filter object (ZeroPoleGain for IIR, Vector{Float64} for FIR)
+"""
+get_filter(filter_info::FilterInfo) = filter_info.filter
+
+"""
+    _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::Function = filtfilt)
 
 Internal helper function to apply a digital filter to specified columns in a DataFrame.
 Modifies the data in place.
 
-Arguments:
-- `dat`: DataFrame containing the data to filter
-- `channels`: Vector of column names to filter
-- `filter`: Digital filter object to apply
-- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+# Arguments
+- `dat::DataFrame`: DataFrame containing the data to filter
+- `channels::Vector{Symbol}`: Vector of column names to filter
+- `filter`: Digital filter object to apply (can be DSP.jl filter or FilterInfo)
+- `filter_func::Function`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
 """
-function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::Function = filtfilt)::Nothing
+function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::FilterInfo; filter_func::Function = filtfilt)::Nothing
     @inbounds for channel in channels
-        @views dat[:, channel] .= filter_func(filter, dat[:, channel])
+        @views dat[:, channel] .= filter_func(filter.filter, dat[:, channel])
     end
     return nothing
 end
 
-function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter; filter_func::Function = filtfilt)::Nothing
+function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter::FilterInfo; filter_func::Function = filtfilt)::Nothing
     _apply_filter!.(dat, Ref(channels), Ref(filter), Ref(filter_func))
     return nothing    
 end
@@ -134,21 +243,26 @@ function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Re
 end
 
 """
-    filter_data!(dat::EegData, filter_type, filter_method, filter_freq; kwargs...)
+    filter_data!(dat::EegData, filter_type::String, filter_method::String, filter_freq::Real; kwargs...)
 
 Apply a digital filter to EEG data. Modifies the data in place.
 
-Arguments:
-- `dat`: EegData object (ContinuousData, ErpData, or EpochData)
-- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-- `filter_method`: String specifying filter implementation ("iir" or "fir")
-- `filter_freq`: Cutoff frequency in Hz
-- `order`: Filter order for IIR filters (default: 3)
-- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.25)
-- `channel_selection`: Channel selection predicate (default: channels() - all channels)
-- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
-- `plot_filter`: Boolean to plot frequency response (default: false)
-- `print_filter`: Boolean to print filter characteristics (default: false)
+# Arguments
+- `dat::EegData`: EegData object (ContinuousData, ErpData, or EpochData)
+- `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
+- `filter_method::String`: Filter implementation ("iir" or "fir")
+- `filter_freq::Real`: Cutoff frequency in Hz
+
+# Keyword Arguments
+- `order::Integer`: Filter order for IIR filters (default: 3)
+- `transition_width::Real`: Relative width of transition band as fraction of cutoff (default: 0.25)
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+- `filter_func::Function`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+- `plot_filter::Bool`: Boolean to plot frequency response (default: false)
+- `print_filter::Bool`: Boolean to print filter characteristics (default: false)
+            order=5, 
+            channel_selection=channels([:Fp1, :Fp2, :F3, :F4]))
+```
 """
 function filter_data!(
     dat::EegData,
@@ -171,12 +285,12 @@ function filter_data!(
     @info "filter_data! applying filter to $(length(selected_channels)) channels"
 
     # Create filter once
-    filter = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; 
+    filter_info = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; 
                          order, transition_width, plot_filter, print_filter)
     _update_filter_info!(dat, filter_type, filter_freq)
     
     # Apply filter (dispatch handles DataFrame vs Vector{DataFrame})
-    _apply_filter!(dat.data, selected_channels, filter, filter_func = filter_func)
+    _apply_filter!(dat.data, selected_channels, filter_info.filter, filter_func = filter_func)
 
 end
 
@@ -202,13 +316,13 @@ end
 
 Calculate and return key characteristics of a digital filter.
 
-Arguments:
+# Arguments
 - `filter`: A digital filter object (FIR coefficients or DSP.jl filter)
-- `sample_rate`: Sampling rate in Hz
-- `transition_width`: Width of transition band in Hz
-- `npoints`: Number of frequency points for analysis (default: 1000)
+- `sample_rate::Real`: Sampling rate in Hz
+- `transition_width::Real`: Width of transition band in Hz
+- `npoints::Int`: Number of frequency points for analysis (default: 1000)
 
-Returns:
+# Returns
 A NamedTuple containing:
 - `cutoff_freq_3db`: Frequency at -3dB point(s) in Hz
 - `cutoff_freq_6db`: Frequency at -6dB point(s) in Hz
@@ -310,62 +424,77 @@ function get_filter_characteristics(filter, sample_rate::Real, transition_width:
 end
 
 """
-    print_filter_characteristics(filter, sample_rate::<:Real, filter_freq::Union{<:Real,Tuple}, transition_width::<:Real; npoints::Int=1000)
+    print_filter_characteristics(filter, sample_rate::Real, filter_freq::Union{Real,Tuple}, transition_width::Real; npoints::Int=1000)
 
 Print a formatted summary of filter characteristics.
 
-Arguments:
+# Arguments
 - `filter`: A digital filter object
-- `sample_rate`: Sampling rate in Hz
-- `filter_freq`: Cutoff frequency in Hz
-- `transition_width`: Width of transition band in Hz
-- `npoints`: Number of frequency points for analysis (default: 1000)
-"""
-function print_filter_characteristics(filter, sample_rate::Real, filter_freq::Union{Real,Tuple}, transition_width::Real; npoints::Int=1000)
+- `sample_rate::Real`: Sampling rate in Hz
+- `filter_freq::Union{Real,Tuple}`: Cutoff frequency in Hz
+- `transition_width::Real`: Width of transition band in Hz
+- `npoints::Int`: Number of frequency points for analysis (default: 1000)
 
-    chars = get_filter_characteristics(filter, sample_rate, transition_width; npoints=npoints)
+# Examples
+```julia
+# Print characteristics of a lowpass filter
+filter = create_filter("lp", "fir", 40.0, 1000.0)
+print_filter_characteristics(filter, 1000.0, 40.0, 10.0)
+```
+"""
+function print_filter_characteristics(filter::FilterInfo; npoints::Int=1000)
+
+    chars = get_filter_characteristics(filter.filter, filter.sample_rate, filter.transition_band; npoints=npoints)
     
     @info "--------------------------------------------------------------------------------" 
-    @info "Filter Characteristics: $(uppercase(chars.filter_type)) $(filter_freq) Hz" 
+    @info "Filter Characteristics: $(uppercase(chars.filter_type)) $(filter.cutoff_freq) Hz" 
     @info "Cutoff: -3 dB = $(round.(chars.cutoff_freq_3db, digits=2)) Hz, -6 dB = $(round.(chars.cutoff_freq_6db, digits=2)) Hz" 
     @info "Transition width: $(round(chars.transition_width, digits=1)) Hz" 
     @info "Stopband attenuation: $(round(chars.stopband_atten, digits=1)) dB" 
-    @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/sample_rate, digits=1)) ms " 
+    @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter.sample_rate, digits=1)) ms " 
 
 end
 
 """
     plot_filter_response(filter, sample_rate::Real, filter_freq::Real, transition_band::Real; 
-                        ylimit::Tuple=(-100, 5), xlimit::Union{Nothing,Tuple{Real,Real}}=nothing)
+                        ylimit::Tuple{Real,Real}=(-100, 5), xlimit::Union{Nothing,Tuple{Real,Real}}=nothing)
 
 Plot the frequency response of a digital filter with ideal response overlay.
 
-Arguments:
+# Arguments
 - `filter`: A digital filter object (FIR coefficients or DSP.jl filter)
-- `sample_rate`: Sampling rate in Hz
-- `filter_freq`: Cutoff frequency in Hz
-- `transition_band`: Width of transition band in Hz
-- `ylimit`: Y-axis limits in dB as (min, max) tuple (default: (-100, 5))
-- `xlimit`: Optional X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined.
+- `sample_rate::Real`: Sampling rate in Hz
+- `filter_freq::Real`: Cutoff frequency in Hz
+- `transition_band::Real`: Width of transition band in Hz
+- `ylimit::Tuple{Real,Real}`: Y-axis limits in dB as (min, max) tuple (default: (-100, 5))
+- `xlimit::Union{Nothing,Tuple{Real,Real}}`: Optional X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined.
 
-Returns:
+# Returns
 - `fig`: Makie Figure object
 - `ax`: Makie Axis object
+
+# Examples
+```julia
+# Plot a highpass filter response
+filter = create_filter("hp", "iir", 0.1, 1000.0)
+fig, ax = plot_filter_response(filter, 1000.0, 0.1, 0.025)
+
+# Plot with custom limits
+fig, ax = plot_filter_response(filter, 1000.0, 0.1, 0.025, 
+                              ylimit=(-80, 5), xlimit=(0.01, 1.0))
+```
 """
 function plot_filter_response(
-    filter,
-    sample_rate::Real,
-    filter_freq::Real,
-    transition_band::Real;
+    filter::FilterInfo;
     ylimit::Tuple = (-100, 5),
     xlimit::Union{Nothing,Tuple{Real,Real}} = nothing,
 )
     # Determine x-axis limits based on filter type and cutoff
     if isnothing(xlimit)
-        if filter_freq < 2
-            xlimit = (0, filter_freq * 10)
+        if filter.cutoff_freq < 2
+            xlimit = (0, filter.cutoff_freq * 10)
         else
-            xlimit = (0, sample_rate / 2)
+            xlimit = (0, filter.sample_rate / 2)
         end
     end
 
@@ -385,17 +514,17 @@ function plot_filter_response(
 
     # Simple logarithmic frequency spacing
     n_points = 2000
-    freqs = exp10.(range(log10(0.01), log10(sample_rate/2), length=n_points))
+    freqs = exp10.(range(log10(0.01), log10(filter.sample_rate/2), length=n_points))
     freqs = [0.0; freqs]  # Add DC point
     
-    w = 2π * freqs / sample_rate
+    w = 2π * freqs / filter.sample_rate
     
     # Get frequency response
-    if filter isa Vector  # FIR filter coefficients
-        n = 0:(length(filter)-1)
-        resp = [sum(filter .* exp.(-im * w_k * n)) for w_k in w]
+    if filter.filter isa Vector  # FIR filter coefficients
+        n = 0:(length(filter.filter)-1)
+        resp = [sum(filter.filter .* exp.(-im * w_k * n)) for w_k in w]
     else  # Other filter types
-        resp = freqresp(filter, w)
+        resp = freqresp(filter.filter, w)
     end
     
     mag_db = 20 * log10.(abs.(resp))
@@ -412,9 +541,9 @@ function plot_filter_response(
 
     # Calculate actual stopband attenuation
     if filter_type == "lp"
-        stopband_mask = freqs .>= (filter_freq + transition_band)
+        stopband_mask = freqs .>= (filter.cutoff_freq + filter.transition_band)
     elseif filter_type == "hp" 
-        stopband_mask = freqs .<= (filter_freq - transition_band)
+        stopband_mask = freqs .<= (filter.cutoff_freq - filter.transition_band)
     end
     
     stopband_db = mag_db[stopband_mask]
@@ -426,35 +555,35 @@ function plot_filter_response(
     ideal_response = zeros(length(freqs))
     for (i, f) in enumerate(freqs)
         if filter_type == "lp" 
-            if f <= filter_freq
+            if f <= filter.cutoff_freq
                 ideal_response[i] = 1.0
-            elseif f >= filter_freq + transition_band
+            elseif f >= filter.cutoff_freq + filter.transition_band
                 ideal_response[i] = actual_stopband_linear
             else
                 ideal_response[i] =
-                    1.0 * (filter_freq + transition_band - f) / transition_band +
-                    actual_stopband_linear * (f - filter_freq) / transition_band
+                    1.0 * (filter.cutoff_freq + filter.transition_band - f) / filter.transition_band +
+                    actual_stopband_linear * (f - filter.cutoff_freq) / filter.transition_band
             end
         elseif filter_type == "hp" 
-            if f >= filter_freq
+            if f >= filter.cutoff_freq
                 ideal_response[i] = 1.0
-            elseif f <= filter_freq - transition_band
+            elseif f <= filter.cutoff_freq - filter.transition_band
                 ideal_response[i] = actual_stopband_linear
             else
                 ideal_response[i] =
-                    1.0 * (f - (filter_freq - transition_band)) / transition_band +
-                    actual_stopband_linear * (filter_freq - f) / transition_band
+                    1.0 * (f - (filter.cutoff_freq - filter.transition_band)) / filter.transition_band +
+                    actual_stopband_linear * (filter.cutoff_freq - f) / filter.transition_band
             end
         end
     end
 
   # Define transition regions first
     if filter_type == "lp"
-        f_s = filter_freq + transition_band  # Add for lowpass
-        transition_regions = [(filter_freq, f_s)]
+        f_s = filter.cutoff_freq + filter.transition_band  # Add for lowpass
+        transition_regions = [(filter.cutoff_freq, f_s)]
     elseif filter_type == "hp"
-        f_s = filter_freq - transition_band  # Subtract for highpass
-        transition_regions = [(f_s, filter_freq)]
+        f_s = filter.cutoff_freq - filter.transition_band  # Subtract for highpass
+        transition_regions = [(f_s, filter.cutoff_freq)]
     end
 
     for (start_f, end_f) in transition_regions
@@ -469,14 +598,14 @@ function plot_filter_response(
     
     # Add reference lines
     hlines!(ax, [-3, -6], color=:gray, linestyle=:dash)
-    text!(ax, sample_rate/2, -3, text="-3 dB", align=(:right, :center), fontsize=22)
-    text!(ax, sample_rate/2, -6, text="-6 dB", align=(:right, :center), fontsize=22)
+    text!(ax, filter.sample_rate/2, -3, text="-3 dB", align=(:right, :center), fontsize=22)
+    text!(ax, filter.sample_rate/2, -6, text="-6 dB", align=(:right, :center), fontsize=22)
 
     # X-axis ticks based on xlimits
     if xlimit[2] <= 5  # For low frequency (typically highpass) plots
-        xticks = [0, 0.1, 0.2, 0.5, 1, 2, filter_freq, f_s, 5]
+        xticks = [0, 0.1, 0.2, 0.5, 1, 2, filter.cutoff_freq, f_s, 5]
     else  # For full range plots (typically lowpass)
-        xticks = [0, 1, 2, 5, 10, 20, 50, filter_freq, f_s, 100, sample_rate/2]
+        xticks = [0, 1, 2, 5, 10, 20, 50, filter.cutoff_freq, f_s, 100, filter.sample_rate/2]
     end
     
     # Filter out ticks beyond xlimit

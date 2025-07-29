@@ -15,6 +15,23 @@ dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+
+
+my_filter_iir = eegfun.create_filter("hp", "iir", 1, 256)
+my_filter_fir = eegfun.create_filter("hp", "fir", 1, 256)
+
+
+eegfun.print_filter_characteristics(my_filter_iir, 256, 1, 0.025)
+
+eegfun.plot_filter_response(my_filter_iir, 256, 40, 0.025)
+
+eegfun.plot_filter_response(my_filter_fir, 256, 1, 0.025)
+
+my_filter_iir = eegfun.create_filter("lp", "iir",256, 40)
+my_filter_fir = eegfun.create_filter("lp", "fir", 40, 256)
+
+
+
 # how to filter data
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
 # how to rereference data
