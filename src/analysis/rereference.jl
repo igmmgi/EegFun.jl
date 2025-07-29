@@ -1,12 +1,12 @@
 """
-    _apply_rereference!(dat::DataFrame, reference::Vector{<:Real}, channel_selection::Vector{Symbol})
+    _apply_rereference!(dat::DataFrame, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
 
 Internal function that applies rereferencing to specified channels in a DataFrame.
 
 # Arguments
 - `dat::DataFrame`: The data to rereference
 - `channel_selection::Vector{Symbol}`: Names of channels to rereference
-- `reference::Vector{<:Real}`: Reference signal to subtract from each channel
+- `reference_selection::Vector{Symbol}`: Names of channels to use for reference calculation
 """
 function _apply_rereference!(
     dat::DataFrame, 
@@ -21,7 +21,7 @@ function _apply_rereference!(
 end
 
 """
-    _apply_rereference!(dat::Vector{DataFrame}, reference::Vector{<:Real}, channel_selection::Vector{Symbol})
+    _apply_rereference!(dat::Vector{DataFrame}, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
 
 Internal function that applies rereferencing to specified channels in a vector of DataFrames.
 """
@@ -119,11 +119,10 @@ function rereference!(
     
     # Store reference info
     dat.analysis_info.reference = reference_selection isa Symbol ? reference_selection : Symbol(join(reference_selection, '_'))
+
     return nothing
 
 end
-
-
 
 # generates all non-mutating versions
 @add_nonmutating rereference!
