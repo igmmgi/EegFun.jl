@@ -1,71 +1,46 @@
-# === DATAFRAME METADATA UTILITIES ===
+# === COLUMN IDENTIFICATION SYSTEM ===
 """
-    _get_cols_by_group(df::DataFrame, group::Symbol) -> Vector{Symbol}
+    get_cols_by_group(dat::EegData, group::Symbol) -> Vector{Symbol}
 
-Get column names that belong to a specific metadata group.
+Get columns by group type for EegData objects using layout-based identification.
 
 # Arguments
-- `df::DataFrame`: The DataFrame to search
-- `group::Symbol`: The metadata group to search for
+- `dat::EegData`: The EEG data object
+- `group::Symbol`: The group type (:metadata, :channels, :extra)
 
 # Returns
-- `Vector{Symbol}`: Column names that belong to the specified group
+- `Vector{Symbol}`: Column names of the specified group
 
-# Examples
-```julia
-cols = _get_cols_by_group(df, :channels)
-```
+# Group Types
+- `:channels`: EEG channel columns (intersection of layout labels and DataFrame columns)
+- `:metadata`: System columns (all columns before first layout label)
+- `:extra`: Derived columns (all columns after last layout label)
+
 """
-function _get_cols_by_group(df::DataFrame, group::Symbol)
-    cols = propertynames(df)
-    return [col for col in cols if haskey(metadata(df), string(col)) && metadata(df, string(col)) == ("group" => group)]
+function get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}
+    if group == :channels
+        return intersect(dat.layout.data.label, all_labels(dat))
+    elseif group == :metadata
+        first_channel_symbol = first(dat.layout.data.label)
+        first_channel_idx = findfirst(col -> col == first_channel_symbol, all_labels(dat))
+        if isnothing(first_channel_idx)
+            @minimal_error "$first_channel_symbol not found in data"
+        else
+            return all_labels(dat)[1:first_channel_idx-1]
+        end
+    elseif group == :extra
+        last_channel_symbol = last(dat.layout.data.label)
+        last_channel_idx = findlast(col -> col == last_channel_symbol, all_labels(dat))
+        if isnothing(last_channel_idx)
+            @minimal_error "$last_channel_symbol not found in data"
+        else
+            return all_labels(dat)[last_channel_idx+1:end]
+        end
+    else
+        @minimal_error "Unknown group type: $group"
+    end
 end
 
-"""
-    _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
-
-Add metadata to DataFrame columns while preserving existing metadata.
-
-This internal function adds metadata group tags to specified columns while
-preserving any existing metadata on those columns. It handles missing
-columns gracefully and provides warnings for non-existent columns.
-
-# Arguments
-- `df::DataFrame`: The DataFrame to add metadata to
-- `columns::Vector{Symbol}`: Column names to tag with metadata
-- `group::Symbol`: The metadata group to assign (e.g., :label, :channels, :polar_coords)
-
-# Modifies
-- `df`: Adds metadata to existing columns
-
-# Examples
-```julia
-_add_metadata!(df, [:label], :label)
-_add_metadata!(df, [:inc, :azi], :polar_coords)
-```
-"""
-function _add_metadata!(df::DataFrame, columns::Vector{Symbol}, group::Symbol)
-
-    # Filter to only existing columns
-    existing_cols = [col for col in columns if hasproperty(df, col)]
-    if isempty(existing_cols)
-        @minimal_error "No existing columns found for group $group"
-        return
-    end
-    
-    # Report any missing columns
-    missing_cols = setdiff(columns, existing_cols)
-    if !isempty(missing_cols)
-        @minimal_error "Columns not found in DataFrame: $missing_cols"
-    end
-
-    # Set metadata for each existing column
-    for col in existing_cols
-        col_str = string(col)
-        metadata!(df, col_str, "group" => group)
-    end
-
-end
 
 # === EEG DATA ACCESS FUNCTIONS ===
 """
@@ -78,15 +53,9 @@ Get the complete DataFrame with all columns.
 
 # Returns
 - `DataFrame`: Complete DataFrame with all columns
-
-# Examples
-```julia
-complete_df = all_data(dat)
-```
 """
-all_data(dat::SingleDataFrameEeg) = dat.data # single data frame
-all_data(dat::MultiDataFrameEeg) = to_data_frame(dat) # single data frame with all epochs
-all_data(dat::DataFrame) = dat
+all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data # single data frame
+all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat) # single data frame with all epochs
 
 """
     all_labels(dat::EegData) -> Vector{Symbol}
@@ -98,37 +67,41 @@ Get all column names from the complete DataFrame.
 
 # Returns
 - `Vector{Symbol}`: All column names
-
-# Examples
-```julia
-all_cols = all_labels(dat)
-```
 """
-all_labels(dat::SingleDataFrameEeg) = propertynames(dat.data)
-all_labels(dat::MultiDataFrameEeg) = propertynames(dat.data[1])
-all_labels(dat::DataFrame) = propertynames(dat)
+all_labels(dat::SingleDataFrameEeg)::Vector{Symbol} = propertynames(dat.data)
+all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = propertynames(dat.data[1])
+all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
-# === EEG METADATA GROUP ACCESSORS ===
+
+"""
+    meta_labels(dat::EegData) -> Vector{Symbol}
+
+Get metadata column names from the EEG data.
+
+# Arguments
+- `dat::EegData`: The EEG data object
+
+# Returns
+- `Vector{Symbol}`: Vector of metadata column names
+"""
+meta_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :metadata)
+
+
 """
     meta_data(eeg_data::EegData) -> DataFrame
 
-Get metadata columns (time, sample, triggers) from the EEG data.
+Get meta data columns from the EEG data.
 
 # Arguments
 - `eeg_data::EegData`: The EEG data object
 
 # Returns
-- `DataFrame`: DataFrame containing metadata columns
-
-# Examples
-```julia
-meta_data = meta_data(dat)
-```
+- `DataFrame`: DataFrame containing EEG channel columns
 """
-meta_data(dat::SingleDataFrameEeg) = dat.data[:, _get_cols_by_group(dat.data, :metadata)]
-meta_data(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch][:, _get_cols_by_group(dat.data, :metadata)]
-meta_data(dat::MultiDataFrameEeg) = to_data_frame(dat)[:, _get_cols_by_group(dat.data, :metadata)] 
-meta_data(dat::DataFrame) = dat[:, _get_cols_by_group(dat, :metadata)] 
+meta_data(dat::SingleDataFrameEeg)::DataFrame = dat.data[:, get_cols_by_group(dat, :metadata)]
+meta_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = dat.data[epoch][:, get_cols_by_group(dat, :metadata)]
+meta_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)[:, get_cols_by_group(dat, :metadata)] 
+
 
 """
     channel_data(eeg_data::EegData) -> DataFrame
@@ -140,16 +113,41 @@ Get EEG channel data columns from the EEG data.
 
 # Returns
 - `DataFrame`: DataFrame containing EEG channel columns
-
-# Examples
-```julia
-channel_data = channel_data(dat)
-```
 """
-channel_data(dat::SingleDataFrameEeg) = dat.data[:, _get_cols_by_group(dat.data, :channels)]
-channel_data(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch][:, _get_cols_by_group(dat.data, :channels)]
-channel_data(dat::MultiDataFrameEeg) = to_data_frame(dat)[:, _get_cols_by_group(dat.data, :channels)] 
-channel_data(dat::DataFrame) = dat[:, _get_cols_by_group(dat, :channels)]
+channel_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :channels)
+
+
+
+"""
+    channel_data(eeg_data::EegData) -> DataFrame
+
+Get EEG channel data columns from the EEG data.
+
+# Arguments
+- `eeg_data::EegData`: The EEG data object
+
+# Returns
+- `DataFrame`: DataFrame containing EEG channel columns
+"""
+channel_data(dat::SingleDataFrameEeg)::DataFrame = dat.data[:, get_cols_by_group(dat, :channels)]
+channel_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = dat.data[epoch][:, get_cols_by_group(dat, :channels)]
+channel_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)[:, get_cols_by_group(dat, :channels)] 
+
+"""
+
+    extra_data(eeg_data::EegData) -> DataFrame
+
+Get extra/derived columns (EOG, flags, etc.) from the EEG data.
+
+# Arguments
+- `eeg_data::EegData`: The EEG data object
+
+# Returns
+- `DataFrame`: DataFrame containing extra/derived columns
+"""
+extra_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :extra)
+
+
 
 """
     extra_data(eeg_data::EegData) -> DataFrame
@@ -161,80 +159,12 @@ Get extra/derived columns (EOG, flags, etc.) from the EEG data.
 
 # Returns
 - `DataFrame`: DataFrame containing extra/derived columns
-
-# Examples
-```julia
-extra_data = extra_data(dat)
-```
 """
-extra_data(dat::SingleDataFrameEeg) = dat.data[:, _get_cols_by_group(dat.data, :derived)]
-extra_data(dat::MultiDataFrameEeg, epoch::Int) = dat.data[epoch][:, _get_cols_by_group(dat.data, :derived)]
-extra_data(dat::MultiDataFrameEeg) = to_data_frame(dat)[:, _get_cols_by_group(dat.data, :derived)]
-extra_data(dat::DataFrame) = dat[:, _get_cols_by_group(dat, :derived)]
+extra_data(dat::SingleDataFrameEeg)::DataFrame = dat.data[:, get_cols_by_group(dat, :extra)]
+extra_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = dat.data[epoch][:, get_cols_by_group(dat, :extra)]
+extra_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)[:, get_cols_by_group(dat, :extra)]
 
-# === EEG METADATA LABEL ACCESSORS ===
-"""
-    meta_labels(eeg_data::EegData) -> Vector{Symbol}
 
-Get metadata column names (time, sample, triggers) from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `Vector{Symbol}`: Vector of metadata column names
-
-# Examples
-```julia
-meta_labels = meta_labels(dat)
-```
-"""
-meta_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :metadata)
-meta_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :metadata)
-meta_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :metadata)
-meta_labels(dat::DataFrame) = _get_cols_by_group(dat, :metadata)
-
-"""
-    channel_labels(eeg_data::EegData) -> Vector{Symbol}
-
-Get EEG channel column names from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `Vector{Symbol}`: Vector of channel column names
-
-# Examples
-```julia
-channel_labels = channel_labels(dat)
-```
-"""
-channel_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :channels)
-channel_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :channels)
-channel_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :channels)
-channel_labels(dat::DataFrame) = _get_cols_by_group(dat, :channels)
-
-"""
-    extra_labels(eeg_data::EegData) -> Vector{Symbol}
-
-Get extra/derived column names (EOG, flags, etc.) from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `Vector{Symbol}`: Vector of extra column names
-
-# Examples
-```julia
-extra_labels = extra_labels(dat)
-```
-"""
-extra_labels(dat::SingleDataFrameEeg) = _get_cols_by_group(dat.data, :derived)
-extra_labels(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_by_group(dat.data[epoch], :derived)
-extra_labels(dat::MultiDataFrameEeg) = _get_cols_by_group(to_data_frame(dat), :derived)
-extra_labels(dat::DataFrame) = _get_cols_by_group(dat, :derived)
 
 # === EEG CONVENIENCE FUNCTIONS ===
 # Basic information functions
@@ -248,14 +178,9 @@ Get the sample rate of the EEG data.
 
 # Returns
 - `Int`: Sample rate in Hz
-
-# Examples
-```julia
-fs = sample_rate(dat)
-```
 """
-sample_rate(dat::EegData) = dat.sample_rate
-sample_rate(dat::DataFrame) = Int(1 / mean(diff(dat.time)))
+sample_rate(dat::EegData)::Int = dat.sample_rate
+sample_rate(dat::DataFrame)::Int = Int(1 / mean(diff(dat.time)))
 
 """
     reference(dat::EegData) -> String
@@ -267,14 +192,9 @@ Get the reference information from the EEG data.
 
 # Returns
 - `String`: Reference information
-
-# Examples
-```julia
-ref = reference(dat)
-```
 """
-reference(dat::EegData) = dat.analysis_info.reference
-reference(dat::AnalysisInfo) = dat.reference
+reference(dat::EegData)::String = dat.analysis_info.reference
+reference(dat::AnalysisInfo)::String = dat.reference
 
 """
     filter_info(dat::AnalysisInfo) -> Vector
@@ -286,13 +206,8 @@ Get filter information from the analysis info.
 
 # Returns
 - `Vector`: Filter information [hp_filter, lp_filter]
-
-# Examples
-```julia
-filters = filter_info(dat.analysis_info)
-```
 """
-filter_info(dat::AnalysisInfo) = [dat.hp_filter, dat.lp_filter]
+filter_info(dat::AnalysisInfo)::Vector{Float64} = [dat.hp_filter, dat.lp_filter]
 
 # Unique convenience functions (not available through metadata)
 """
@@ -305,15 +220,10 @@ Get the number of samples in the EEG data.
 
 # Returns
 - `Int`: Number of samples
-
-# Examples
-```julia
-n = n_samples(dat)
-```
 """
-n_samples(dat::SingleDataFrameEeg) = nrow(dat.data)
-n_samples(dat::MultiDataFrameEeg) = nrow(dat.data[1])
-n_samples(dat::DataFrame) = nrow(dat)
+n_samples(dat::SingleDataFrameEeg)::Int = nrow(dat.data)
+n_samples(dat::MultiDataFrameEeg)::Int = nrow(dat.data[1])
+n_samples(dat::DataFrame)::Int = nrow(dat)
 
 """
     n_channels(dat::EegData) -> Int
@@ -325,15 +235,10 @@ Get the number of channels in the EEG data.
 
 # Returns
 - `Int`: Number of channels
-
-# Examples
-```julia
-n = n_channels(dat)
-```
 """
-n_channels(dat::SingleDataFrameEeg) = length(channel_labels(dat))
-n_channels(dat::MultiDataFrameEeg) = length(channel_labels(dat))
-n_channels(dat::DataFrame) = length(channel_labels(dat))
+n_channels(dat::SingleDataFrameEeg)::Int = length(channel_labels(dat))
+n_channels(dat::MultiDataFrameEeg)::Int = length(channel_labels(dat))
+n_channels(dat::DataFrame)::Int = length(channel_labels(dat))
 
 """
     n_epochs(dat::EegData) -> Int
@@ -345,14 +250,9 @@ Get the number of epochs in the EEG data.
 
 # Returns
 - `Int`: Number of epochs
-
-# Examples
-```julia
-n = n_epochs(dat)
-```
 """
-n_epochs(dat::SingleDataFrameEeg) = 1
-n_epochs(dat::MultiDataFrameEeg) = length(dat.data)
+n_epochs(dat::SingleDataFrameEeg)::Int = 1
+n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 
 """
     duration(dat::EegData) -> Float64
@@ -364,16 +264,11 @@ Get the duration of the EEG data in seconds.
 
 # Returns
 - `Float64`: Duration in seconds
-
-# Examples
-```julia
-dur = duration(dat)
-```
 """
 duration(dat::SingleDataFrameEeg) = last(dat.data.time) - first(dat.data.time)
 
 """
-    n_average(dat::ErpData) -> Int
+    n_average(dat::ErpData) -> Float64
 
 Get the number of averaged epochs in ERP data.
 
@@ -381,14 +276,9 @@ Get the number of averaged epochs in ERP data.
 - `dat::ErpData`: The ERP data object
 
 # Returns
-- `Int`: Number of averaged epochs
-
-# Examples
-```julia
-n = n_average(dat)
-```
+- `Float64`: Number of averaged epochs
 """
-n_average(dat::ErpData) = dat.n_epochs
+n_average(dat::ErpData)::Float64 = dat.n_epochs
 
 # EEG channel information
 """
@@ -402,13 +292,8 @@ Check if the EEG data contains all specified channels.
 
 # Returns
 - `Bool`: True if all channels are present
-
-# Examples
-```julia
-has_all = has_channels(dat, [:Fp1, :Fp2])
-```
 """
-has_channels(dat::EegData, chans::Vector{Symbol}) = all(in(channel_column_labels(dat)), chans)
+has_channels(dat::EegData, chans::Vector{Symbol})::Bool = all(in(channel_labels(dat)), chans)
 
 """
     common_channels(dat1::EegData, dat2::EegData) -> Vector{Symbol}
@@ -421,13 +306,8 @@ Find common channels between two EEG data objects.
 
 # Returns
 - `Vector{Symbol}`: Vector of common channel symbols
-
-# Examples
-```julia
-common = common_channels(dat1, dat2)
-```
 """
-common_channels(dat1::EegData, dat2::EegData) = intersect(channel_column_labels(dat1), channel_column_labels(dat2))
+common_channels(dat1::EegData, dat2::EegData)::Vector{Symbol} = intersect(channel_labels(dat1), channel_labels(dat2))
 
 # === DATA VIEWING FUNCTIONS ===
 function viewer(dat)
@@ -475,13 +355,8 @@ Calculate the range of data (maximum - minimum).
 
 # Returns
 - `Float64`: Difference between maximum and minimum values
-
-# Example
-```julia
-datarange([1.0, 2.0, 3.0]) # returns 2.0
-```
 """
-datarange(x::AbstractVector) = -(-(extrema(x)...))
+datarange(x::AbstractVector)::Float64 = -(-(extrema(x)...))
 
 
 """
@@ -498,9 +373,9 @@ Calculate the mean of specified columns in a DataFrame.
 # Returns
 - `Vector{Float64}`: A vector containing the mean of each specified column.
 """
-colmeans(df::DataFrame, cols) = reduce(+, eachcol(df[!, cols])) ./ length(cols)
-colmeans(df::Matrix) = reduce(+, eachcol(df)) ./ size(df)[2]
-colmeans(df::Matrix, cols) = reduce(+, eachcol(df[:, cols])) ./ length(cols)
+colmeans(df::DataFrame, cols)::Vector{Float64} = reduce(+, eachcol(df[!, cols])) ./ length(cols)
+colmeans(df::Matrix)::Vector{Float64} = reduce(+, eachcol(df)) ./ size(df)[2]
+colmeans(df::Matrix, cols)::Vector{Float64} = reduce(+, eachcol(df[:, cols])) ./ length(cols)
 
 
 """
@@ -512,7 +387,7 @@ Get the time range of the data.
 - `Tuple{Float64,Float64}`: Minimum and maximum time values
 - `Nothing`: If the DataFrame is empty
 """
-function data_limits_x(dat::DataFrame; col = :time)
+function data_limits_x(dat::DataFrame; col::Symbol = :time)
     isempty(dat) && return nothing
     return extrema(dat[!, col])
 end
@@ -526,7 +401,7 @@ Get the value range for specified columns.
 - `Vector{Float64}`: [minimum, maximum] across specified columns
 - `Nothing`: If the DataFrame is empty
 """
-function data_limits_y(dat::DataFrame, col)
+function data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
     return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
 end
@@ -547,22 +422,8 @@ Create a subset of SingleDataFrameEeg (ContinuousData or ErpData) by applying ch
 
 # Returns
 - New SingleDataFrameEeg object with filtered channels and samples
-
-# Examples
-```julia
-# Subset by channels only
-filtered_dat = subset(dat, channel_selection = channels([:Fp1, :Fp2]))
-
-# Subset by samples only
-filtered_dat = subset(dat, sample_selection = x -> x.sample .< 1000)
-
-# Subset by both
-filtered_dat = subset(dat, 
-    channel_selection = channels([:Fp1, :Fp2]), 
-    sample_selection = x -> x.sample .< 1000)
-```
 """
-function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})
+function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::DataFrame
     dat_subset = df[selected_samples, :]
     dat_subset = select(dat_subset, selected_channels)
     return dat_subset
@@ -603,30 +464,12 @@ Create a subset of EpochData by applying channel, sample, and epoch predicates.
 
 # Returns
 - New EpochData object with filtered channels, samples, and epochs
-
-# Examples
-```julia
-# Subset by channels only
-filtered_dat = subset(dat, channel_selection = channels([:Fp1, :Fp2]))
-
-# Subset by samples only
-filtered_dat = subset(dat, sample_selection = x -> x.sample .< 1000)
-
-# Subset by epochs only
-filtered_dat = subset(dat, epoch_selection = epochs(1:10))
-
-# Subset by all three
-filtered_dat = subset(dat, 
-    channel_selection = channels([:Fp1, :Fp2]), 
-    sample_selection = x -> x.sample .< 1000,
-    epoch_selection = epochs([1, 3, 5]))
-```
 """
 function subset(dat::EpochData; 
                channel_selection::Function = channels(), 
                sample_selection::Function = samples(),
                epoch_selection::Function = epochs(), 
-               include_extra_channels::Bool = false)
+               include_extra_channels::Bool = false)::EpochData
     
     @info "subset: Subsetting $(typeof(dat)) ..."
 
@@ -641,4 +484,5 @@ function subset(dat::EpochData;
     
     # Create new EpochData object
     return EpochData(epochs_subset, layout_subset, dat.sample_rate, dat.analysis_info)
+
 end
