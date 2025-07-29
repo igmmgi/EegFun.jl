@@ -1,7 +1,4 @@
 # Layout type is defined in types.jl
-
-# === LAYOUT METADATA ACCESSORS ===
-# Layout metadata group accessors
 """
     channel_labels(layout::Layout) -> Vector{Symbol}
 
@@ -12,89 +9,11 @@ Get electrode label column names from the layout.
 
 # Returns
 - `Vector{Symbol}`: Electrode label column names
-
-# Examples
-```julia
-labels = channel_labels(layout)
-```
 """
-channel_labels(layout::Layout) = _get_cols_by_group(layout.data, :label)
+channel_labels(layout::Layout)::Vector{Symbol} = layout.data.label
 
 """
-    channel_column_data(layout::Layout) -> DataFrame
-
-Get electrode label data from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `DataFrame`: DataFrame containing electrode label data
-
-# Examples
-```julia
-data = channel_data(layout)
-```
-"""
-channel_data(layout::Layout) = layout.data[:, _get_cols_by_group(layout.data, :label)]
-
-"""
-    position_polar_labels(layout::Layout) -> Vector{Symbol}
-
-Get polar coordinate column names from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: Polar coordinate column names (inc, azi)
-
-# Examples
-```julia
-polar_cols = position_polar_labels(layout)
-```
-"""
-position_polar_labels(layout::Layout) = _get_cols_by_group(layout.data, :polar_coords)
-
-"""
-    position_2D_labels(layout::Layout) -> Vector{Symbol}
-
-Get 2D Cartesian coordinate column names from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: 2D Cartesian coordinate column names (x2, y2) if available
-
-# Examples
-```julia
-cartesian_2d_cols = position_2D_labels(layout)
-```
-"""
-position_2D_labels(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_2d)
-
-"""
-    position_3D_labels(layout::Layout) -> Vector{Symbol}
-
-Get 3D Cartesian coordinate column names from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: 3D Cartesian coordinate column names (x3, y3, z3) if available
-
-# Examples
-```julia
-cartesian_3d_cols = position_3D_labels(layout)
-```
-"""
-position_3D_labels(layout::Layout) = _get_cols_by_group(layout.data, :cartesian_3d)
-
-# Layout coordinate data functions
-"""
-    positions_polar_data(layout::Layout) -> DataFrame
+    positions_polar(layout::Layout) -> DataFrame
 
 Get polar coordinate data from the layout.
 
@@ -103,16 +22,11 @@ Get polar coordinate data from the layout.
 
 # Returns
 - `DataFrame`: DataFrame containing polar coordinate columns (inc, azi)
-
-# Examples
-```julia
-polar_data = positions_polar_data(layout)
-```
 """
-position_polar_data(layout::Layout) = layout.data[:, position_polar_labels(layout)]
+positions_polar(layout::Layout)::DataFrame = layout.data[:, [:inc, :azi]]
 
 """
-    position_2D_data(layout::Layout) -> DataFrame
+    positions_2D(layout::Layout) -> DataFrame
 
 Get 2D Cartesian coordinate data from the layout.
 
@@ -121,16 +35,11 @@ Get 2D Cartesian coordinate data from the layout.
 
 # Returns
 - `DataFrame`: DataFrame containing 2D Cartesian coordinate columns (x2, y2) if available
-
-# Examples
-```julia
-cartesian_2d_data = positions_2D_data(layout)
-```
 """
-position_2D_data(layout::Layout) = layout.data[:, position_2D_labels(layout)]
+positions_2D(layout::Layout)::DataFrame = layout.data[:, [:x2, :y2]]
 
 """
-    positions_3D_data(layout::Layout) -> DataFrame
+    positions_3D(layout::Layout) -> DataFrame
 
 Get 3D Cartesian coordinate data from the layout.
 
@@ -139,13 +48,11 @@ Get 3D Cartesian coordinate data from the layout.
 
 # Returns
 - `DataFrame`: DataFrame containing 3D Cartesian coordinate columns (x3, y3, z3) if available
-
-# Examples
-```julia
-cartesian_3d_data = positions_3D_data(layout)
-```
 """
-position_3D_data(layout::Layout) = layout.data[:, position_3D_labels(layout)]
+positions_3D(layout::Layout)::DataFrame = layout.data[:, [:x3, :y3, :z3]]
+
+
+
 
 # === LAYOUT VALIDATION AND MANIPULATION ===
 """
@@ -270,10 +177,6 @@ function read_layout(file)
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
     
-    # Add metadata for column groups
-    _add_metadata!(df, [:label], :label)
-    _add_metadata!(df, [:inc, :azi], :polar_coords)
-    
     return Layout(df, nothing, nothing)
 end
 
@@ -358,20 +261,9 @@ function polar_to_cartesian_xy!(layout::Layout)
     radius = 88 # mm
     inc = df[!, :inc] .* (pi / 180)
     azi = df[!, :azi] .* (pi / 180)
-
-    # Store existing metadata before adding columns
-    existing_metadata = copy(DataFrames.metadata(df))
     
     df[!, :x2] = inc .* cos.(azi) .* radius
     df[!, :y2] = inc .* sin.(azi) .* radius
-
-    # Restore existing metadata
-    for (col, meta) in existing_metadata
-        DataFrames.metadata!(df, col, meta)
-    end
-    
-    # Add metadata for the new 2D Cartesian coordinates
-    _add_metadata!(df, [:x2, :y2], :cartesian_2d)
 
     # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)
@@ -419,14 +311,6 @@ function polar_to_cartesian_xyz!(layout::Layout)
     df[!, :x3] = radius .* sin.(inc) .* cos.(azi)
     df[!, :y3] = radius .* sin.(inc) .* sin.(azi)
     df[!, :z3] = radius .* cos.(inc)
-
-    # Restore existing metadata
-    for (col, meta) in existing_metadata
-        DataFrames.metadata!(df, col, meta)
-    end
-
-    # Add metadata for the new 3D Cartesian coordinates
-    _add_metadata!(df, [:x3, :y3, :z3], :cartesian_3d)
 
     # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)

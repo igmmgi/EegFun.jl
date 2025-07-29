@@ -27,13 +27,9 @@ eegfun.plot_layout_2d(layout, neighbours = true)
 eegfun.plot_layout_3d(layout, neighbours= true)
 
 eegfun.channel_labels(layout)
-eegfun.channel_data(layout)
-eegfun.position_polar_labels(layout)
-eegfun.position_polar_data(layout)
-eegfun.position_2D_labels(layout)
-eegfun.position_2D_data(layout)
-eegfun.position_3D_labels(layout)
-eegfun.position_3D_data(layout)
+eegfun.positions_polar(layout)
+eegfun.positions_2D(layout)
+eegfun.positions_3D(layout)
 
 
 # how to subset layout a layout
