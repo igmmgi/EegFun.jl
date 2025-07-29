@@ -49,15 +49,15 @@ eegfun.plot_trigger_timing(dat)
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 
-eegfun.meta_labels(dat)
-eegfun.meta_data(dat)
-eegfun.all_labels(dat)
 eegfun.all_data(dat)
-eegfun.channel_labels(dat)
+eegfun.meta_data(dat)
 eegfun.channel_data(dat)
-eegfun.extra_labels(dat)
 eegfun.extra_data(dat)
 
+eegfun.all_labels(dat)
+eegfun.meta_labels(dat)
+eegfun.channel_labels(dat)
+eegfun.extra_labels(dat)
 
 # we can get raw trigger info 
 eegfun.trigger_count(dat);
