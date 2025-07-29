@@ -395,7 +395,7 @@ independence, while immutable fields are shared.
 function Base.copy(dat::ContinuousData)::ContinuousData
     return ContinuousData(
         copy(dat.data, copycols=true),  
-        copy(dat.layout, copycols=true), 
+        copy(dat.layout), 
         dat.sample_rate,                 
         copy(dat.analysis_info)          
     )
@@ -410,7 +410,7 @@ Each epoch DataFrame in the data vector is copied independently.
 function Base.copy(dat::EpochData)::EpochData
     return EpochData(
         [copy(epoch, copycols=true) for epoch in dat.data],  
-        copy(dat.layout, copycols=true), 
+        copy(dat.layout), 
         dat.sample_rate,                 
         copy(dat.analysis_info)          
     )
@@ -424,7 +424,7 @@ Create a copy of ErpData with copied data DataFrame and analysis info.
 function Base.copy(dat::ErpData)::ErpData
     return ErpData(
         copy(dat.data, copycols=true),   
-        copy(dat.layout, copycols=true), 
+        copy(dat.layout), 
         dat.sample_rate,                 
         copy(dat.analysis_info),         
         dat.n_epochs                     

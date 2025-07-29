@@ -79,21 +79,21 @@ end
 
 # Concrete data state implementations
 mutable struct ContinuousDataState <: AbstractDataState
-    current::Observable{DataFrame}
+    current::Observable{EegData}
     original::EegData
     filter_state::FilterState
     function ContinuousDataState(data::EegData)
-        new(Observable(copy(data.data)), data, FilterState())
+        new(Observable(copy(data)), data, FilterState())
     end
 end
 
 mutable struct EpochedDataState <: AbstractDataState
-    current::Vector{Observable{DataFrame}}
+    current::Observable{EegData}
     original::EegData
     filter_state::FilterState
     current_epoch::Observable{Int}
     function EpochedDataState(data::EegData)
-        new([Observable(copy(df)) for df in data.data], data, FilterState(), Observable(1))
+        new(Observable(copy(data)), data, FilterState(), Observable(1))
     end
 end
 
@@ -165,25 +165,23 @@ function create_browser_state(dat::EpochData, channel_labels, ax, ica)
 end
 
 # Helper functions for common data access/resetting/updating
-get_current_data(state::ContinuousDataState) = state.current[]
-get_current_data(state::EpochedDataState) = state.current[state.current_epoch[]][]
-get_time_bounds(dat::ContinuousDataState) = (dat.current[].time[1], dat.current[].time[end])
+get_current_data(state::ContinuousDataState) = state.current[].data
+get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
+get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
 get_time_bounds(dat::EpochedDataState) =
-    (dat.current[dat.current_epoch[]][].time[1], dat.current[dat.current_epoch[]][].time[end])
-has_column(state::ContinuousDataState, col::String) = col in names(state.current[])
-has_column(state::EpochedDataState, col::String) = col in names(state.current[state.current_epoch[]][])
+    (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
+has_column(state::ContinuousDataState, col::String) = col in names(state.current[].data)
+has_column(state::EpochedDataState, col::String) = col in names(state.current[].data[state.current_epoch[]])
 
 notify_data_update(state::ContinuousDataState) = notify(state.current)
-notify_data_update(state::EpochedDataState) = notify(state.current[state.current_epoch[]])
+notify_data_update(state::EpochedDataState) = notify(state.current)
 
 function reset_to_original!(state::ContinuousDataState)
-    state.current[] = copy(state.original.data)
+    state.current[] = copy(state.original)
 end
 
 function reset_to_original!(state::EpochedDataState)
-    for (i, df) in enumerate(state.original.data)
-        state.current[i][] = copy(df)
-    end
+    state.current[] = copy(state.original)
 end
 
 ############
@@ -463,17 +461,17 @@ function create_sliders(fig, state::ContinuousDataBrowserState, dat)
     
     # Add navigation sliders specific to continuous data
     slider_range = Slider(fig[3, 1], range = 100:50:30000, startvalue = state.view.xrange[][end], snap = true)
-    slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[]), startvalue = 1, snap = true)
+    slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
     
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[]), x + slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[]), (x + slider_range.value.val) - 1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -490,7 +488,7 @@ end
 function create_extra_channel_menu(fig, ax, state, dat)
     menu = Menu(
         fig,
-        options = [:none; extra_channels(dat)],
+        options = [:none; extra_labels(dat)],
         default = "none",
         direction = :down,
         fontsize = 18,
@@ -588,18 +586,18 @@ function xback!(ax, state::ContinuousDataBrowserState)
     state.view.xrange[] = state.view.xrange.val .- 200
     xlims!(
         ax,
-        state.data.current[].time[state.view.xrange.val[1]],
-        state.data.current[].time[state.view.xrange.val[end]],
+        state.data.current[].data.time[state.view.xrange.val[1]],
+        state.data.current[].data.time[state.view.xrange.val[end]],
     )
 end
 
 function xforward!(ax, state::ContinuousDataBrowserState)
-    state.view.xrange.val[1] + 200 > nrow(state.data.current[]) && return
+    state.view.xrange.val[1] + 200 > nrow(state.data.current[].data) && return
     state.view.xrange[] = state.view.xrange.val .+ 200
     xlims!(
         ax,
-        state.data.current[].time[state.view.xrange.val[1]],
-        state.data.current[].time[state.view.xrange.val[end]],
+        state.data.current[].data.time[state.view.xrange.val[1]],
+        state.data.current[].data.time[state.view.xrange.val[end]],
     )
 end
 
@@ -816,7 +814,7 @@ end
 function _handle_selection_movement_impl(ax, state::EpochedDataBrowserState, action::Symbol)
     width = state.selection.bounds[][2] - state.selection.bounds[][1]
     current_epoch = state.data.current_epoch[]
-    current_data = state.data.current[current_epoch][]
+    current_data = state.data.current[].data[current_epoch]
     time_start, time_end = current_data.time[1], current_data.time[end]
     
     if action == :left
@@ -853,8 +851,8 @@ end
 
 function get_x_region_data(state::ContinuousDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
-    time_mask = (x_min .<= state.data.current[].time .<= x_max)
-    selected_data = state.data.current[][time_mask, :]
+    time_mask = (x_min .<= state.data.current[].data.time .<= x_max)
+    selected_data = state.data.current[].data[time_mask, :]
     @info "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))"
     return selected_data
 end
@@ -862,10 +860,10 @@ end
 function get_x_region_data(state::EpochedDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
     current_epoch = state.data.current_epoch[]
-    current_data = state.data.current[current_epoch][]
+    current_data = state.data.current[].data[current_epoch]
     time_mask = (x_min .<= current_data.time .<= x_max)
     selected_data = current_data[time_mask, :]
-    @info "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))"
+    @info "Selected data: $(round(x_min, digits = 2)) to $(round(x_min, digits = 2)) S, size $(size(selected_data))"
     return selected_data
 end
 
@@ -875,30 +873,31 @@ end
 # Filtering
 ############
 function apply_filter!(state::ContinuousDataBrowserState, filter_type, freq)
-    state.data.current[] = filter_data(
-        state.data.current[],
-        state.channels.labels,
+    # Create new EegData with filtered data
+    filtered_data = copy(state.data.current[])
+    filter_data!(
+        filtered_data,
         String(filter_type),
         "iir",
         freq,
-        sample_rate(state.data.original),
         order = filter_type == :hp ? 1 : 3,
+        channel_selection = (channels) -> [ch in state.channels.labels for ch in channels]
     )
+    state.data.current[] = filtered_data
 end
 
 function apply_filter!(state::EpochedDataBrowserState, filter_type, freq)
-    for (i, df) in enumerate(state.data.current)
-        df[] = filter_data(
-            df[],
-            state.channels.labels,
-            String(filter_type),
-            "iir",
-            freq,
-            sample_rate(state.data.original),
-            order = filter_type == :hp ? 1 : 3,
-        )
-        notify(df)  # Notify each Observable individually
-    end
+    # Create new EegData with filtered data
+    filtered_data = copy(state.data.current[])
+    filter_data!(
+        filtered_data,
+        String(filter_type),
+        "iir",
+        freq,
+        order = filter_type == :hp ? 1 : 3,
+        channel_selection = (channels) -> [ch in state.channels.labels for ch in channels]
+    )
+    state.data.current[] = filtered_data
 end
 
 function apply_filters!(state)
@@ -943,13 +942,17 @@ end
 # Reference
 ########################
 function rereference!(state::ContinuousDataState, dat, ref)
-    rereference!(state.current[], channels(dat), resolve_reference(dat, ref))
+    # Create new EegData with rereferenced data
+    rereferenced_data = copy(state.current[])
+    rereference!(rereferenced_data, ref, channels())
+    state.current[] = rereferenced_data
 end
 
 function rereference!(state::EpochedDataState, dat, ref)
-    for df in state.current
-        rereference!(df[], channels(dat), resolve_reference(dat, ref))
-    end
+    # Create new EegData with rereferenced data
+    rereferenced_data = copy(state.current[])
+    rereference!(rereferenced_data, ref, channels())
+    state.current[] = rereferenced_data
 end
 
 ########################
@@ -958,20 +961,24 @@ end
 
 # Apply ICA component removal based on state type
 function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    df_new, activations = remove_ica_components(state.current[], ica, components_to_remove)
-    state.current[] = df_new # Update observable
+    # Create new EegData with ICA components removed
+    ica_data = copy(state.current[])
+    ica_data.data, activations = remove_ica_components(state.current[].data, ica, components_to_remove)
+    state.current[] = ica_data
     return activations
 end
 
 function apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
+    # Create new EegData with ICA components removed
+    ica_data = copy(state.current[])
     first_epoch_activations = nothing
-    for (i, df_obs) in enumerate(state.current)
-        df_new, activations = remove_ica_components(df_obs[], ica, components_to_remove)
-        df_obs[] = df_new # Update observable
+    for (i, epoch_df) in enumerate(ica_data.data)
+        ica_data.data[i], activations = remove_ica_components(epoch_df, ica, components_to_remove)
         if i == 1
             first_epoch_activations = activations
         end
     end
+    state.current[] = ica_data
     return first_epoch_activations
 end
 
@@ -981,8 +988,10 @@ function apply_ica_restore!(state::ContinuousDataState, ica::InfoIca, components
          @warn "Cannot restore ICA components: No previous activations stored."
          return
     end
-    df_new = restore_original_data(state.current[], ica, components_removed, removed_activations)
-    state.current[] = df_new # Update observable
+    # Create new EegData with restored data
+    restored_data = copy(state.current[])
+    restored_data.data = restore_original_data(state.current[].data, ica, components_removed, removed_activations)
+    state.current[] = restored_data
 end
 
 function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
@@ -990,10 +999,12 @@ function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_re
          @warn "Cannot restore ICA components: No previous activations stored."
          return
     end
-    for df_obs in state.current
-        df_new = restore_original_data(df_obs[], ica, components_removed, removed_activations)
-        df_obs[] = df_new # Update observable
+    # Create new EegData with restored data
+    restored_data = copy(state.current[])
+    for (i, epoch_df) in enumerate(restored_data.data)
+        restored_data.data[i] = restore_original_data(epoch_df, ica, components_removed, removed_activations)
     end
+    state.current[] = restored_data
 end
 
 
@@ -1058,14 +1069,14 @@ end
 function set_x_limits!(ax, state, data::ContinuousDataState)
     @lift xlims!(
         ax,
-        $(data.current).time[$(state.view.xrange)[1]],
-        $(data.current).time[$(state.view.xrange)[end]],
+        $(data.current).data.time[$(state.view.xrange)[1]],
+        $(data.current).data.time[$(state.view.xrange)[end]],
     )
 end
 
 # Type-specific x limit setting for epoched data
 function set_x_limits!(ax, state, data::EpochedDataState)
-    @lift xlims!(ax, $(data.current[1]).time[1], $(data.current[1]).time[end])
+    @lift xlims!(ax, $(data.current).data[1].time[1], $(data.current).data[1].time[end])
 end
 
 # Common marker initialization
@@ -1115,14 +1126,14 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
             is_selected = state.channels.selected[idx]
             
             # Set line properties based on selection
-            line_color = is_selected ? :black : @lift(abs.($(data.current)[!, $col]) .>= $(state.view.crit_val))
+            line_color = is_selected ? :black : @lift(abs.($(data.current).data[!, $col]) .>= $(state.view.crit_val))
             line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
             line_width = is_selected ? 4 : 2
             
             state.channels.data_lines[col] = lines!(
                 ax,
-                @lift($(data.current).time),
-                @lift($(data.current)[!, $col] .+ state.view.offset[idx]),
+                @lift($(data.current).data.time),
+                @lift($(data.current).data[!, $col] .+ state.view.offset[idx]),
                 color = line_color,
                 colormap = line_colormap,
                 linewidth = line_width,
@@ -1130,8 +1141,8 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
             if !state.view.butterfly[]
                 state.channels.data_labels[col] = text!(
                     ax,
-                    @lift($(data.current).time[$(state.view.xrange)[1]]),
-                    @lift($(data.current)[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]),
+                    @lift($(data.current).data.time[$(state.view.xrange)[1]]),
+                    @lift($(data.current).data[$(state.view.xrange)[1], $col] .+ state.view.offset[idx]),
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
@@ -1144,11 +1155,11 @@ end
 
 function _draw_implementation(ax, state, data::EpochedDataState)
     current_epoch = data.current_epoch[]  # Get current epoch value
-    current_data = data.current[current_epoch]  # Get current DataFrame Observable
+    current_epoch_data = data.current[].data[current_epoch]  # Get current epoch DataFrame
 
     # Ensure view range is within data bounds
-    n_samples = @lift(nrow($(current_data)))
-    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples[])
+    n_samples = nrow(current_epoch_data)
+    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
 
     for (idx, visible) in enumerate(state.channels.visible)
         if visible  # Only plot if channel is visible
@@ -1156,14 +1167,14 @@ function _draw_implementation(ax, state, data::EpochedDataState)
             is_selected = state.channels.selected[idx]
             
             # Set line properties based on selection
-            line_color = is_selected ? :black : @lift(abs.($(current_data)[!, $col]) .>= $(state.view.crit_val))
+            line_color = is_selected ? :black : @lift(abs.($(data.current).data[$(data.current_epoch)][!, $col]) .>= $(state.view.crit_val))
             line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
             line_width = is_selected ? 4 : 2
 
             state.channels.data_lines[col] = lines!(
                 ax,
-                @lift($(current_data).time),
-                @lift($(current_data)[!, $col] .+ state.view.offset[idx]),
+                @lift($(data.current).data[$(data.current_epoch)].time),
+                @lift($(data.current).data[$(data.current_epoch)][!, $col] .+ state.view.offset[idx]),
                 color = line_color,
                 colormap = line_colormap,
                 linewidth = line_width,
@@ -1171,8 +1182,8 @@ function _draw_implementation(ax, state, data::EpochedDataState)
             if !state.view.butterfly[]
                 state.channels.data_labels[col] = text!(
                     ax,
-                    @lift($(current_data).time[1]),
-                    @lift($(current_data)[!, $col][1] .+ state.view.offset[idx]),
+                    @lift($(data.current).data[$(data.current_epoch)].time[1]),
+                    @lift($(data.current).data[$(data.current_epoch)][!, $col][1] .+ state.view.offset[idx]),
                     text = String(col),
                     align = (:left, :center),
                     fontsize = 18,
@@ -1194,13 +1205,13 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
     if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
         current_offset = state.view.offset[end] + mean(diff(state.view.offset))
         channel = state.extra_channel.channel  # Get the channel symbol
-        if eltype(data.current[][!, channel]) == Bool
-            highlight_data = @views splitgroups(findall(data.current[][!, channel]))
+        if eltype(data.current[].data[!, channel]) == Bool
+            highlight_data = @views splitgroups(findall(data.current[].data[!, channel]))
             region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
             state.extra_channel.data_lines[channel] = vspan!(
                 ax,
-                data.current[][highlight_data[1], :time],
-                data.current[][highlight_data[2].+region_offset, :time],
+                data.current[].data[highlight_data[1], :time],
+                data.current[].data[highlight_data[2].+region_offset, :time],
                 color = :Red,
                 alpha = 0.5,
                 visible = true,
@@ -1208,9 +1219,9 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
         else
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
-                @lift($(data.current).time),
+                @lift($(data.current).data.time),
                 @lift(begin
-                    df = $(data.current)
+                    df = $(data.current).data
                     df[!, $channel] .+ current_offset
                 end),
                 color = :black,
@@ -1218,9 +1229,9 @@ function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState
             )
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                @lift($(data.current).time[$(state.view.xrange)[1]]),
+                @lift($(data.current).data.time[$(state.view.xrange)[1]]),
                 @lift(begin
-                    df = $(data.current)
+                    df = $(data.current).data
                     df[!, $channel][$(state.view.xrange)[1]] .+ current_offset
                 end),
                 text = String(channel),
@@ -1235,16 +1246,15 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
     if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
         current_offset = state.view.offset[end] + mean(diff(state.view.offset))
         channel = state.extra_channel.channel  # Get the channel symbol
-        current_epoch = state.data.current_epoch[]  # Get current epoch value
-        current_data = state.data.current[current_epoch]  # Get current DataFrame Observable
+        current_epoch = data.current_epoch[]  # Get current epoch value
 
-        if eltype(current_data[][!, channel]) == Bool
-            highlight_data = @views splitgroups(findall(current_data[][!, channel]))
+        if eltype(data.current[].data[current_epoch][!, channel]) == Bool
+            highlight_data = @views splitgroups(findall(data.current[].data[current_epoch][!, channel]))
             region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
             state.extra_channel.data_lines[channel] = vspan!(
                 ax,
-                current_data[][highlight_data[1], :time],
-                current_data[][highlight_data[2].+region_offset, :time],
+                data.current[].data[current_epoch][highlight_data[1], :time],
+                data.current[].data[current_epoch][highlight_data[2].+region_offset, :time],
                 color = :Red,
                 alpha = 0.5,
                 visible = true,
@@ -1252,9 +1262,9 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
         else
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
-                @lift($(current_data).time),
+                @lift($(data.current).data[$(data.current_epoch)].time),
                 @lift(begin
-                    df = $(current_data)
+                    df = $(data.current).data[$(data.current_epoch)]
                     df[!, $channel] .+ current_offset
                 end),
                 color = :black,
@@ -1262,9 +1272,9 @@ function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
             )
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                @lift($(current_data).time[1]),
+                @lift($(data.current).data[$(data.current_epoch)].time[1]),
                 @lift(begin
-                    df = $(current_data)
+                    df = $(data.current).data[$(data.current_epoch)]
                     df[!, $channel][1] .+ current_offset
                 end),
                 text = String(channel),

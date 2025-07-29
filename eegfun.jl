@@ -10,10 +10,18 @@ using eegfun
 using GLMakie
 # using CairoMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
-
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+# create our eeg ContinuousData type
+dat = eegfun.create_eeg_dataframe(dat, layout);
+# how to filter data
+eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
+# how to rereference data
+eegfun.rereference!(dat, :avg)
+# databrowser
+eegfun.plot_databrowser(dat)
+
 
 # define neighbours 2D/3D defined by distance (mm)
 eegfun.polar_to_cartesian_xy!(layout);
@@ -67,10 +75,8 @@ eegfun.plot_trigger_timing(dat)
 
 # how to filter data
 eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
-
 # how to rereference data
 eegfun.rereference!(dat, :avg)
-
 # databrowser
 eegfun.plot_databrowser(dat)
 
