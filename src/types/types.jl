@@ -95,6 +95,21 @@ mutable struct Layout
     criterion::Union{Nothing, Float64}
 end
 
+"""
+    Base.copy(layout::Layout) -> Layout
+
+Create a copy of Layout with copied DataFrame and shared immutable fields.
+The data DataFrame is copied with `copycols=true` to ensure independence,
+while neighbours and criterion are shared since they are immutable.
+"""
+function Base.copy(layout::Layout)::Layout
+    return Layout(
+        copy(layout.data, copycols=true),
+        layout.neighbours,  # Share since OrderedDict and Neighbours are immutable
+        layout.criterion    # Share since Float64 is immutable
+    )
+end
+
 # === EEG DATA TYPES ===
 """
     ContinuousData

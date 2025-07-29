@@ -435,7 +435,7 @@ epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_nu
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
 # Helper to select channels based on include_extra_channels and a predicate
-function get_selected_channels(dat, channel_selection::Function; include_extra_channels::Bool = true, keep_metadata_columns::Bool = false)
+function get_selected_channels(dat, channel_selection::Function; keep_metadata_columns::Bool = false, include_extra_channels::Bool = true)
     # Always include metadata columns
     if keep_metadata_columns
         metadata_cols = meta_labels(dat)

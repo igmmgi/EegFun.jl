@@ -34,6 +34,7 @@ function create_filter(
     plot_filter::Bool = false,
     print_filter::Bool = false,
 )
+
     # Input validation
     valid_types = ("hp", "lp")
     if !(filter_type in valid_types)
@@ -110,49 +111,26 @@ Arguments:
 - `filter`: Digital filter object to apply
 - `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
 """
-function _apply_filter!(dat::DataFrame, channels, filter; filter_func = filtfilt)
+function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::Function = filtfilt)::Nothing
     @inbounds for channel in channels
         @views dat[:, channel] .= filter_func(filter, dat[:, channel])
     end
+    return nothing
 end
 
-"""
-    filter_data!(dat::DataFrame, filter, sample_rate::Real; 
-                channel_selection::Function = channels(), filter_func=filtfilt)
-
-Apply a pre-generated digital filter to selected channels in a DataFrame. Modifies the data in place.
-
-Arguments:
-- `dat`: DataFrame containing the data to filter
-- `filter`: Pre-generated digital filter object
-- `sample_rate`: Sampling rate in Hz (for filter characteristics display)
-- `channel_selection`: Channel selection predicate (default: channels() - all channels)
-- `filter_func`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
-"""
-function filter_data!(
-    dat::DataFrame,
-    filter,
-    sample_rate::Real;
-    channel_selection::Function = channels(),
-    filter_func = filtfilt,
-)
-    selected_channels = get_selected_channels(dat, channel_selection)
-    if isempty(selected_channels)
-        @minimal_warning "No channels selected for filtering"
-        return
-    end
-    @info "filter_data! applying filter to $(length(selected_channels)) channels"
-    
-    # Apply filter
-    _apply_filter!(dat, selected_channels, filter; filter_func = filter_func)
+function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter; filter_func::Function = filtfilt)::Nothing
+    _apply_filter!.(dat, Ref(channels), Ref(filter), Ref(filter_func))
+    return nothing    
 end
 
-function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Real)
+
+function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Real)::Nothing
     if filter_type == "hp"
         dat.analysis_info.hp_filter = filter_freq
     elseif filter_type == "lp"
         dat.analysis_info.lp_filter = filter_freq
     end
+    return nothing
 end
 
 """
@@ -184,15 +162,24 @@ function filter_data!(
     plot_filter = false,
     print_filter = false,
 )
-    _update_filter_info!(dat, filter_type, filter_freq)
-    
+
+    selected_channels = get_selected_channels(dat, channel_selection)
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected for filtering"
+        return
+    end
+    @info "filter_data! applying filter to $(length(selected_channels)) channels"
+
     # Create filter once
     filter = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; 
                          order, transition_width, plot_filter, print_filter)
+    _update_filter_info!(dat, filter_type, filter_freq)
     
     # Apply filter (dispatch handles DataFrame vs Vector{DataFrame})
-    filter_data!(dat.data, filter, dat.sample_rate; channel_selection, filter_func)
+    _apply_filter!(dat.data, selected_channels, filter, filter_func = filter_func)
+
 end
+
 
 # generates all non-mutating versions
 @add_nonmutating filter_data!
