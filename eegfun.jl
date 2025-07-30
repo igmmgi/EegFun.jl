@@ -18,7 +18,8 @@ dat = eegfun.create_eeg_dataframe(dat, layout);
 # how to filter data
 eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 # how to rereference data
-eegfun.rereference!(dat, :avg)
+eegfun.rereference!(dat, :avg)a
+
 eegfun.plot_databrowser(dat)
 
 
