@@ -483,54 +483,63 @@ end
 
 # === VIEW TYPES ===
 """
-    EegDataView
+    SingleDataFrameEegView
 
-A true view wrapper for EegData objects that references the original data without any copying.
+A true view wrapper for SingleDataFrameEeg objects that references the original data without any copying.
 
-This type provides a view-like interface to EegData objects, storing only references
+This type provides a view-like interface to SingleDataFrameEeg objects, storing only references
 to the original data and selection indices. No data is ever copied.
 
 # Fields
-- `original_data::EegData`: The original EegData object
+- `original_data::SingleDataFrameEeg`: The original SingleDataFrameEeg object
 - `selected_samples::Vector{Int}`: Indices of selected samples
 - `selected_channels::Vector{Symbol}`: Names of selected channels
 - `original_layout::Layout`: Reference to the original layout
-- `_cached_data::Union{Nothing,SubDataFrame}`: Cached data view
-- `_cached_layout::Union{Nothing,Layout}`: Cached layout view
 """
-struct EegDataView <: EegData
-    original_data::EegData
+struct SingleDataFrameEegView <: SingleDataFrameEeg
+    original_data::SingleDataFrameEeg
     selected_samples::Vector{Int}
     selected_channels::Vector{Symbol}
     original_layout::Layout
-    _cached_data::Union{Nothing,SubDataFrame}
-    _cached_layout::Union{Nothing,Layout}
 end
 
-# Constructor that initializes without cached views
-function EegDataView(original_data::EegData, selected_samples::Vector{Int}, selected_channels::Vector{Symbol}, original_layout::Layout)
-    return EegDataView(original_data, selected_samples, selected_channels, original_layout, nothing, nothing)
+"""
+    MultiDataFrameEegView
+
+A true view wrapper for MultiDataFrameEeg objects that references the original data without any copying.
+
+This type provides a view-like interface to MultiDataFrameEeg objects, storing only references
+to the original data and selection indices. No data is ever copied.
+
+# Fields
+- `original_data::MultiDataFrameEeg`: The original MultiDataFrameEeg object
+- `selected_samples::Vector{Int}`: Indices of selected samples
+- `selected_channels::Vector{Symbol}`: Names of selected channels
+- `original_layout::Layout`: Reference to the original layout
+"""
+struct MultiDataFrameEegView <: MultiDataFrameEeg
+    original_data::MultiDataFrameEeg
+    selected_samples::Vector{Int}
+    selected_channels::Vector{Symbol}
+    original_layout::Layout
 end
 
-# Make EegDataView behave like EegData
-Base.size(view::EegDataView) = (length(view.selected_samples), length(view.selected_channels))
-Base.length(view::EegDataView) = length(view.selected_samples) * length(view.selected_channels)
 
-# Access data - creates view on-demand with caching
-function Base.getproperty(view::EegDataView, field::Symbol)
+
+# Make view types behave like their parent types
+Base.size(view::SingleDataFrameEegView) = (length(view.selected_samples), length(view.selected_channels))
+Base.length(view::SingleDataFrameEegView) = length(view.selected_samples) * length(view.selected_channels)
+
+Base.size(view::MultiDataFrameEegView) = (length(view.selected_samples), length(view.selected_channels))
+Base.length(view::MultiDataFrameEegView) = length(view.selected_samples) * length(view.selected_channels)
+
+# Access data - creates view on-demand (no caching)
+function Base.getproperty(view::SingleDataFrameEegView, field::Symbol)
     if field == :data
-        # Return cached data view or create and cache it
-        if isnothing(view._cached_data)
-            view._cached_data = @view view.original_data.data[view.selected_samples, view.selected_channels]
-        end
-        return view._cached_data
+        return view.original_data.data[view.selected_samples, view.selected_channels]
     elseif field == :layout
-        # Return cached layout view or create and cache it
-        if isnothing(view._cached_layout)
-            selected_layout_data = filter(:label => in(view.selected_channels), view.original_layout.data)
-            view._cached_layout = Layout(selected_layout_data, nothing, nothing)
-        end
-        return view._cached_layout
+        selected_layout_data = filter(:label => in(view.selected_channels), view.original_layout.data)
+        return Layout(selected_layout_data, nothing, nothing)
     elseif field == :sample_rate
         return view.original_data.sample_rate
     elseif field == :analysis_info
@@ -543,12 +552,32 @@ function Base.getproperty(view::EegDataView, field::Symbol)
         return getfield(view, :selected_channels)
     elseif field == :original_layout
         return getfield(view, :original_layout)
-    elseif field == :_cached_data
-        return getfield(view, :_cached_data)
-    elseif field == :_cached_layout
-        return getfield(view, :_cached_layout)
     else
-        error("EegDataView has no field $field")
+        error("SingleDataFrameEegView has no field $field")
+    end
+end
+
+function Base.getproperty(view::MultiDataFrameEegView, field::Symbol)
+    if field == :data
+        # For MultiDataFrameEeg, we need to handle the array of DataFrames
+        return [df[view.selected_samples, view.selected_channels] for df in view.original_data.data]
+    elseif field == :layout
+        selected_layout_data = filter(:label => in(view.selected_channels), view.original_layout.data)
+        return Layout(selected_layout_data, nothing, nothing)
+    elseif field == :sample_rate
+        return view.original_data.sample_rate
+    elseif field == :analysis_info
+        return view.original_data.analysis_info
+    elseif field == :original_data
+        return getfield(view, :original_data)
+    elseif field == :selected_samples
+        return getfield(view, :selected_samples)
+    elseif field == :selected_channels
+        return getfield(view, :selected_channels)
+    elseif field == :original_layout
+        return getfield(view, :original_layout)
+    else
+        error("MultiDataFrameEegView has no field $field")
     end
 end
 

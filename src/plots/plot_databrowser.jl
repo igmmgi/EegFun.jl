@@ -847,7 +847,8 @@ end
 function subset_selected_data(state::ContinuousDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
     selected_channels = state.channels.labels[state.channels.visible]
-    return subset(state.data.current[], sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max), channel_selection = channels(selected_channels)) 
+    # return subset(state.data.current[], sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max), channel_selection = channels(selected_channels)) 
+    return subset_view(state.data.current[], sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max), channel_selection = channels(selected_channels)) 
 end
 
 

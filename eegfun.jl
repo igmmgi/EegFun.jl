@@ -21,19 +21,10 @@ eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 eegfun.rereference!(dat, :avg)
 
 
-@btime eegfun.subset(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
-
-@btime eegfun.subset_view(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
-
-dat1.data
-dat2.data
-dat.data
-
-
-
-
-
-eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
+# @btime eegfun.subset(dat, sample_selection = x -> x.time .>= 200)
+# @btime eegfun.subset_view(dat, sample_selection = x -> x.time .>= 200)
+# @time eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
+# @btime eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
 
 # databrowser
 eegfun.plot_databrowser(dat)
