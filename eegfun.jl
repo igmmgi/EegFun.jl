@@ -19,10 +19,10 @@ dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 # how to rereference data
 eegfun.rereference!(dat, :avg)
+eegfun.plot_databrowser(dat)
 
 
 # @btime eegfun.subset(dat, sample_selection = x -> x.time .>= 200)
-# @btime eegfun.subset_view(dat, sample_selection = x -> x.time .>= 200)
 # @time eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
 # @btime eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
 

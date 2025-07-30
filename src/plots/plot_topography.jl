@@ -15,6 +15,10 @@ function _plot_topography!(
     method = :multiquadratic,  # :multiquadratic or :spherical_spline
 )
 
+    # ensure coordinates are 2d and 3d
+    _ensure_coordinates_2d!(layout)
+    _ensure_coordinates_3d!(layout)
+
     # deal with kwargs
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
@@ -36,14 +40,12 @@ function _plot_topography!(
 
     # actual data interpolation
     if method == :spherical_spline
-        _ensure_coordinates_3d!(layout)
         data = _data_interpolation_topo_spherical_spline(
             mean.(eachcol(dat[!, layout.data.label])),
             layout,
-            gridscale * 2,  
+            gridscale,  
         )
     elseif method == :multiquadratic  
-        _ensure_coordinates_2d!(layout)
         channel_data = mean.(eachcol(dat[!, layout.data.label]))
         points_matrix = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
         data = _data_interpolation_topo_multiquadratic(channel_data, points_matrix, gridscale)
@@ -122,7 +124,7 @@ end
 function plot_topography(dat::SingleDataFrameEeg; channel_selection::Function = channels(), sample_selection::Function = samples(), display_plot = true, kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    dat_subset = subset_view(dat, channel_selection = channel_selection, sample_selection = sample_selection)
+    dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
     if display_plot
         display_figure(fig)
