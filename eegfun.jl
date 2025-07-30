@@ -21,8 +21,9 @@ eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 eegfun.rereference!(dat, :avg)
 
 
-@time eegfun.subset(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
-@time eegfun.subset_view(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
+@btime eegfun.subset(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
+
+@btime eegfun.subset_view(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
 
 dat1.data
 dat2.data
