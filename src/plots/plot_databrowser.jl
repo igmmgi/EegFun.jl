@@ -678,16 +678,8 @@ function handle_mouse_events!(ax, state)
 
         if event.button == Mouse.left
             if event.action == Mouse.press
-                if shift_pressed[]
-                    # Shift+Left press: Start time selection
-                    handle_left_click!(ax, state, event, mouse_x)
-                else
-                    # Left press without Shift: Check for channel selection on release
-                    # (We'll handle this in the release event)
-                end
-            elseif event.action == Mouse.release
                 if ctrl_pressed[]
-                    # Ctrl+Left release: Check for channel selection
+                    # Ctrl+Left press: Check for channel selection (immediate response)
                     mouse_y = mouseposition(ax)[2]
                     clicked_channel = find_closest_channel(ax, state, mouse_x, mouse_y)
                     if !isnothing(clicked_channel)
@@ -695,6 +687,11 @@ function handle_mouse_events!(ax, state)
                         return
                     end
                 elseif shift_pressed[]
+                    # Shift+Left press: Start time selection
+                    handle_left_click!(ax, state, event, mouse_x)
+                end
+            elseif event.action == Mouse.release
+                if shift_pressed[]
                     # Shift+Left release: Finish time selection
                     handle_left_click!(ax, state, event, mouse_x)
                 end
@@ -770,7 +767,7 @@ function toggle_channel_visibility!(ax, state, channel_idx)
     # Toggle the selection of the clicked channel
     state.channels.selected[channel_idx] = !state.channels.selected[channel_idx]
     
-    # Clear and redraw the plot
+    # Immediate redraw for responsive feedback
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     draw(ax, state)
 end
