@@ -495,27 +495,42 @@ to the original data and selection indices. No data is ever copied.
 - `selected_samples::Vector{Int}`: Indices of selected samples
 - `selected_channels::Vector{Symbol}`: Names of selected channels
 - `original_layout::Layout`: Reference to the original layout
+- `_cached_data::Union{Nothing,SubDataFrame}`: Cached data view
+- `_cached_layout::Union{Nothing,Layout}`: Cached layout view
 """
 struct EegDataView <: EegData
     original_data::EegData
     selected_samples::Vector{Int}
     selected_channels::Vector{Symbol}
     original_layout::Layout
+    _cached_data::Union{Nothing,SubDataFrame}
+    _cached_layout::Union{Nothing,Layout}
+end
+
+# Constructor that initializes without cached views
+function EegDataView(original_data::EegData, selected_samples::Vector{Int}, selected_channels::Vector{Symbol}, original_layout::Layout)
+    return EegDataView(original_data, selected_samples, selected_channels, original_layout, nothing, nothing)
 end
 
 # Make EegDataView behave like EegData
 Base.size(view::EegDataView) = (length(view.selected_samples), length(view.selected_channels))
 Base.length(view::EegDataView) = length(view.selected_samples) * length(view.selected_channels)
 
-# Access data - creates view on-demand
+# Access data - creates view on-demand with caching
 function Base.getproperty(view::EegDataView, field::Symbol)
     if field == :data
-        # Create view of the original data
-        return @view view.original_data.data[view.selected_samples, view.selected_channels]
+        # Return cached data view or create and cache it
+        if isnothing(view._cached_data)
+            view._cached_data = @view view.original_data.data[view.selected_samples, view.selected_channels]
+        end
+        return view._cached_data
     elseif field == :layout
-        # Create view of the original layout (filter the channels)
-        selected_layout_data = filter(:label => in(view.selected_channels), view.original_layout.data)
-        return Layout(selected_layout_data, nothing, nothing)
+        # Return cached layout view or create and cache it
+        if isnothing(view._cached_layout)
+            selected_layout_data = filter(:label => in(view.selected_channels), view.original_layout.data)
+            view._cached_layout = Layout(selected_layout_data, nothing, nothing)
+        end
+        return view._cached_layout
     elseif field == :sample_rate
         return view.original_data.sample_rate
     elseif field == :analysis_info
@@ -528,6 +543,10 @@ function Base.getproperty(view::EegDataView, field::Symbol)
         return getfield(view, :selected_channels)
     elseif field == :original_layout
         return getfield(view, :original_layout)
+    elseif field == :_cached_data
+        return getfield(view, :_cached_data)
+    elseif field == :_cached_layout
+        return getfield(view, :_cached_layout)
     else
         error("EegDataView has no field $field")
     end
