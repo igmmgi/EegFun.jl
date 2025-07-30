@@ -1,11 +1,15 @@
+# =============================================================================
+# FILTER TYPES AND STRUCTURES
+# =============================================================================
+
 """
     FilterInfo
 
 A struct containing all information about a digital filter for EEG data processing.
 
 # Fields
-- `filter`: The actual DSP.jl filter object (ZeroPoleGain for IIR, Vector{Float64} for FIR)
 - `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
+- `filter_object`: The actual DSP.jl filter object (ZeroPoleGain for IIR, Vector{Float64} for FIR)
 - `filter_method::String`: Filter implementation ("iir" or "fir")
 - `cutoff_freq::Float64`: Cutoff frequency in Hz
 - `sample_rate::Float64`: Sampling rate in Hz
@@ -18,9 +22,9 @@ A struct containing all information about a digital filter for EEG data processi
 - Makes it easy to pass filter information to print and plot functions
 - Provides a consistent interface regardless of filter type
 """
-@kwdef struct FilterInfo
-    filter::Union{ZeroPoleGain, Vector{Float64}}
+struct FilterInfo
     filter_type::String
+    filter_object::Union{ZeroPoleGain, Vector{Float64}} # TODO: what is going on in DSP?
     filter_method::String
     cutoff_freq::Float64
     sample_rate::Float64
@@ -29,66 +33,24 @@ A struct containing all information about a digital filter for EEG data processi
     transition_band::Float64
 end
 
-# Constructor for creating FilterInfo from existing filter (for backward compatibility)
-"""
-    FilterInfo(filter, filter_type::String, filter_method::String, cutoff_freq::Real, sample_rate::Real; 
-               order::Int = 3, n_taps::Union{Nothing,Int} = nothing, transition_band::Real = 0.25)
 
-Create a FilterInfo struct from an existing filter object.
-
-# Arguments
-- `filter`: The actual DSP.jl filter object
-- `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
-- `filter_method::String`: Filter implementation ("iir" or "fir")
-- `cutoff_freq::Real`: Cutoff frequency in Hz
-- `sample_rate::Real`: Sampling rate in Hz
-
-# Keyword Arguments
-- `order::Int`: Filter order (default: 3)
-- `n_taps::Union{Nothing,Int}`: Number of taps for FIR filters (default: nothing)
-- `transition_band::Real`: Width of transition band in Hz (default: 0.25)
-
-# Returns
-- `FilterInfo`: A struct containing all filter information
-
-# Notes
-- This constructor is useful for creating FilterInfo from existing filter objects
-"""
-function FilterInfo(
-    filter, 
-    filter_type::String, 
-    filter_method::String, 
-    cutoff_freq::Real, 
-    sample_rate::Real;
-    order::Int = 3,
-    n_taps::Union{Nothing,Int} = nothing,
-    transition_band::Real = 0.25
-)
-    return FilterInfo(
-        filter = filter,
-        filter_type = filter_type,
-        filter_method = filter_method,
-        cutoff_freq = Float64(cutoff_freq),
-        sample_rate = Float64(sample_rate),
-        order = order,
-        n_taps = n_taps,
-        transition_band = Float64(transition_band)
-    )
-end
+# =============================================================================
+# FILTER CREATION
+# =============================================================================
 
 """
     create_filter(filter_type::String, filter_method::String, filter_freq::Real, sample_rate::Real; 
-                 order::Integer = 3, transition_width::Real = 0.25, plot_filter::Bool = false, print_filter::Bool = false)
+                 order::Integer = 2, transition_width::Real = 0.1, plot_filter::Bool = false, print_filter::Bool = false)
 
 Create a digital filter object for the specified parameters.
 
 # Arguments
 - `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
 - `filter_method`: String specifying filter implementation ("iir" or "fir")
-- `filter_freq`: Cutoff frequency in Hz
+- `cutoff_freq`: Cutoff frequency in Hz
 - `sample_rate`: Sampling rate in Hz
-- `order`: Filter order for IIR filters (default: 3)
-- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.25)
+- `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
+- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
 - `plot_filter`: Boolean to plot frequency response (default: false)
 - `print_filter`: Boolean to print filter characteristics (default: false)
 
@@ -101,14 +63,16 @@ Create a digital filter object for the specified parameters.
 - Returns a FilterInfo object that can be reused for multiple datasets
 - If plot_filter is true, displays the filter frequency response
 - If print_filter is true, prints detailed filter characteristics
+- Optimized for EEG analysis with appropriate defaults
+- NOTE: When using filtfilt (default), effective filter order is approximately doubled
 """
 function create_filter(
     filter_type::String,
     filter_method::String,
-    filter_freq::Real,
+    cutoff_freq::Real,
     sample_rate::Real;
-    order::Integer = 3,
-    transition_width::Real = 0.25,
+    order::Integer = 2,  
+    transition_width::Real = 0.1,  
     plot_filter::Bool = false,
     print_filter::Bool = false,
 )
@@ -132,81 +96,55 @@ function create_filter(
         @minimal_error "sample_rate must be positive: $sample_rate"
     end
 
-    if !(filter_freq > 0 && filter_freq < sample_rate / 2)
-        @minimal_error "filter_freq must be between 0 and Nyquist frequency ($(sample_rate/2) Hz): $filter_freq"
+    if !(cutoff_freq > 0 && cutoff_freq < sample_rate / 2)
+        @minimal_error "cutoff_freq must be between 0 and Nyquist frequency ($(sample_rate/2) Hz): $cutoff_freq"
     end
 
-    # Create filter prototype based on type
-    transition_band = transition_width * filter_freq
-    if filter_type == "hp"
-        filter_prototype = Highpass(filter_freq - (transition_band/2))  # Subtract for highpass
-    elseif filter_type == "lp"
-        filter_prototype = Lowpass(filter_freq + (transition_band/2))   # Add for lowpass
-    end
-
-    # Initialize variables for FilterInfo
+    # Create filter prototype/object based on type
+    filter_prototypes = Dict(
+        "hp" => Highpass,
+        "lp" => Lowpass
+    )
+    filter_prototype = filter_prototypes[filter_type](cutoff_freq)
+    transition_band = cutoff_freq * transition_width
     n_taps = nothing
-    window_type = nothing
 
     # Create filter with chosen method
     if filter_method == "iir"
-        filter = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
+        # For EEG, use higher order Butterworth for steeper rolloff
+        filter_object = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
     elseif filter_method == "fir"
-        # Calculate number of taps ensuring it's a power of 2 for optimal FFT performance
-        n_taps = Int(ceil(3.3 * sample_rate / transition_band))
-        # Ensure odd number of taps for FIR filter
-        if n_taps % 2 == 0  
-            n_taps += 1     
-        end
-        # Ensure n_taps is not too small
-        n_taps = max(n_taps, 51)
-        # For FFTW 1.9.0 compatibility, ensure n_taps is a power of 2
+        # Calculate number of taps (ensure not too small + next pow2 + odd) for FIR filter
+        n_taps = Int(ceil(4.0 * sample_rate / transition_band))
+        n_taps = max(n_taps, 101)
         n_taps = nextpow(2, n_taps)
-        if n_taps % 2 == 0  
-            n_taps += 1     
-        end
-        window_type = "hamming"
-        filter = digitalfilter(filter_prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
+        n_taps += 1  # Always add 1 to make odd as nextpow2 is even
+        filter_object = digitalfilter(filter_prototype, FIRWindow(hamming(n_taps)); fs = sample_rate)
     end
 
     # Create FilterInfo struct
     filter_info = FilterInfo(
-        filter = filter,
-        filter_type = filter_type,
-        filter_method = filter_method,
-        cutoff_freq = Float64(filter_freq),
-        sample_rate = Float64(sample_rate),
-        order = order,
-        n_taps = n_taps,
-        transition_band = Float64(transition_band),
+        filter_type,
+        filter_object,
+        filter_method, 
+        Float64(cutoff_freq),
+        Float64(sample_rate),
+        order,
+        n_taps,
+        Float64(transition_band),
     )
 
-    # Print filter characteristics if requested
-    if print_filter
-        print_filter_characteristics(filter_info)
-    end
-
-    # Plot filter response if requested
-    if plot_filter
-        plot_filter_response(filter_info)
-    end
+    # Print/plot filter characteristics if requested
+    print_filter && print_filter_characteristics(filter_info)
+    plot_filter && plot_filter_response(filter_info, filter_func = filtfilt)
 
     return filter_info
 end
 
-# Convenience method to extract the actual filter object
-"""
-    get_filter(filter_info::FilterInfo)
 
-Extract the actual DSP.jl filter object from a FilterInfo struct.
-
-# Arguments
-- `filter_info::FilterInfo`: The filter information struct
-
-# Returns
-- The actual filter object (ZeroPoleGain for IIR, Vector{Float64} for FIR)
-"""
-get_filter(filter_info::FilterInfo) = filter_info.filter
+# =============================================================================
+# FILTER APPLICATION
+# =============================================================================
 
 """
     _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::Function = filtfilt)
@@ -232,12 +170,11 @@ function _apply_filter!(dat::Vector{DataFrame}, channels::Vector{Symbol}, filter
     return nothing    
 end
 
-
-function _update_filter_info!(dat::EegData, filter_type::String, filter_freq::Real)::Nothing
-    if filter_type == "hp"
-        dat.analysis_info.hp_filter = filter_freq
-    elseif filter_type == "lp"
-        dat.analysis_info.lp_filter = filter_freq
+function _update_filter_info!(dat::EegData, filter_info::FilterInfo)::Nothing
+    if filter_info.filter_type == "hp"
+        dat.analysis_info.hp_filter = filter_info.cutoff_freq
+    elseif filter_info.filter_type == "lp"
+        dat.analysis_info.lp_filter = filter_info.cutoff_freq
     end
     return nothing
 end
@@ -251,7 +188,7 @@ Apply a digital filter to EEG data. Modifies the data in place.
 - `dat::EegData`: EegData object (ContinuousData, ErpData, or EpochData)
 - `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
 - `filter_method::String`: Filter implementation ("iir" or "fir")
-- `filter_freq::Real`: Cutoff frequency in Hz
+- `cutoff_freq::Real`: Cutoff frequency in Hz
 
 # Keyword Arguments
 - `order::Integer`: Filter order for IIR filters (default: 3)
@@ -260,17 +197,16 @@ Apply a digital filter to EEG data. Modifies the data in place.
 - `filter_func::Function`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
 - `plot_filter::Bool`: Boolean to plot frequency response (default: false)
 - `print_filter::Bool`: Boolean to print filter characteristics (default: false)
-            order=5, 
+            order=2, 
             channel_selection=channels([:Fp1, :Fp2, :F3, :F4]))
-```
 """
 function filter_data!(
     dat::EegData,
     filter_type,
     filter_method,
-    filter_freq;
-    order = 3,
-    transition_width = 0.25,
+    cutoff_freq;
+    order = 2,  
+    transition_width = 0.1,  
     channel_selection::Function = channels(),
     filter_func = filtfilt,
     plot_filter = false,
@@ -285,32 +221,23 @@ function filter_data!(
     @info "filter_data! applying filter to $(length(selected_channels)) channels"
 
     # Create filter once
-    filter_info = create_filter(filter_type, filter_method, filter_freq, dat.sample_rate; 
-                         order, transition_width, plot_filter, print_filter)
-    _update_filter_info!(dat, filter_type, filter_freq)
+    filter_info = create_filter(filter_type, filter_method, cutoff_freq, dat.sample_rate; 
+    order = order, transition_width = transition_width, plot_filter = plot_filter, print_filter = print_filter)
+    _update_filter_info!(dat, filter_info) # to help keep track of filters applied to the data
     
-    # Apply filter (dispatch handles DataFrame vs Vector{DataFrame})
+    # apply filter (dispatch handles DataFrame vs Vector{DataFrame})
     _apply_filter!(dat.data, selected_channels, filter_info.filter, filter_func = filter_func)
 
 end
-
 
 # generates all non-mutating versions
 @add_nonmutating filter_data!
 
 
+# =============================================================================
+# FILTER ANALYSIS AND CHARACTERIZATION
+# =============================================================================
 
-
-
-
-
-
-
-
-
-
-
-############################################################
 """
     get_filter_characteristics(filter, sample_rate::Real, transition_width::Real; npoints::Int=1000)
 
@@ -333,18 +260,21 @@ A NamedTuple containing:
 - `transition_width`: Width of transition band in Hz
 - `filter_type`: Detected filter type ("hp" or "lp")
 """
-function get_filter_characteristics(filter, sample_rate::Real, transition_width::Real; npoints::Int=1000)
+function get_filter_characteristics(filter_info::FilterInfo; npoints::Int=1000)
+    # Calculate transition_width from transition_band and cutoff_freq
+    transition_width = filter_info.transition_band / filter_info.cutoff_freq
+    
     # Calculate frequency response
-    freqs = exp10.(range(log10(0.01), log10(sample_rate/2), length=npoints))  # log spacing
+    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate/2), length=npoints))  # log spacing
     # freqs = range(0, sample_rate/2, length=npoints) # linear spacing
-    w = 2π * freqs / sample_rate
+    w = 2π * freqs / filter_info.sample_rate
     
     # Get frequency response based on filter type
-    if filter isa Vector  # FIR filter coefficients
-        n = 0:(length(filter)-1)
-        resp = [sum(filter .* exp.(-im * w_k * n)) for w_k in w]
+    if filter_info.filter_method == "fir"  # FIR filter coefficients
+        n = 0:(length(filter_info.filter_object)-1)
+        resp = [sum(filter_info.filter_object .* exp.(-im * w_k * n)) for w_k in w]
     else  # Other filter types
-        resp = freqresp(filter, w)
+        resp = freqresp(filter_info.filter_object, w)
     end   
 
     mag_db = 20 * log10.(abs.(resp))
@@ -389,12 +319,10 @@ function get_filter_characteristics(filter, sample_rate::Real, transition_width:
     end_response = mag_db[end]
 
     # Determine filter type and masks
-    if start_response > -3 && end_response < -20
-        filter_type = "lp"  # Lowpass
+    if filter_info.filter_type == "lp"
         passband_mask = freqs .<= cutoff_freq[1]
         stopband_mask = freqs .>= (cutoff_freq[1] + transition_width)
     else  # highpass
-        filter_type = "hp"
         passband_mask = freqs .>= cutoff_freq[1]
         stopband_mask = freqs .<= (cutoff_freq[1] - transition_width)
     end
@@ -419,7 +347,7 @@ function get_filter_characteristics(filter, sample_rate::Real, transition_width:
         phase_delay = mean(phase_delay[passband_mask]),
         group_delay = mean(group_delay[passband_mask[1:end-1]]),
         transition_width = transition_width,
-        filter_type = filter_type
+        filter_type = filter_info.filter_type
     )
 end
 
@@ -442,179 +370,141 @@ filter = create_filter("lp", "fir", 40.0, 1000.0)
 print_filter_characteristics(filter, 1000.0, 40.0, 10.0)
 ```
 """
-function print_filter_characteristics(filter::FilterInfo; npoints::Int=1000)
+function print_filter_characteristics(filter_info::FilterInfo; npoints::Int=1000)
 
-    chars = get_filter_characteristics(filter.filter, filter.sample_rate, filter.transition_band; npoints=npoints)
+    chars = get_filter_characteristics(filter_info; npoints=npoints)
     
     @info "--------------------------------------------------------------------------------" 
-    @info "Filter Characteristics: $(uppercase(chars.filter_type)) $(filter.cutoff_freq) Hz" 
+    @info "Filter Characteristics: $(uppercase(chars.filter_type)) $(filter_info.cutoff_freq) Hz" 
     @info "Cutoff: -3 dB = $(round.(chars.cutoff_freq_3db, digits=2)) Hz, -6 dB = $(round.(chars.cutoff_freq_6db, digits=2)) Hz" 
     @info "Transition width: $(round(chars.transition_width, digits=1)) Hz" 
     @info "Stopband attenuation: $(round(chars.stopband_atten, digits=1)) dB" 
-    @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter.sample_rate, digits=1)) ms " 
+    @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter_info.sample_rate, digits=1)) ms " 
 
 end
 
+
+# =============================================================================
+# FILTER VISUALIZATION
+# =============================================================================
+
 """
-    plot_filter_response(filter, sample_rate::Real, filter_freq::Real, transition_band::Real; 
-                        ylimit::Tuple{Real,Real}=(-100, 5), xlimit::Union{Nothing,Tuple{Real,Real}}=nothing)
+    plot_filter_response(filter_info::FilterInfo; xlimit::Union{Nothing,Tuple{Real,Real}} = nothing, xscale::Symbol = :log)
 
 Plot the frequency response of a digital filter with ideal response overlay.
 
 # Arguments
-- `filter`: A digital filter object (FIR coefficients or DSP.jl filter)
-- `sample_rate::Real`: Sampling rate in Hz
-- `filter_freq::Real`: Cutoff frequency in Hz
-- `transition_band::Real`: Width of transition band in Hz
-- `ylimit::Tuple{Real,Real}`: Y-axis limits in dB as (min, max) tuple (default: (-100, 5))
+- `filter_info::FilterInfo`: Filter information struct
 - `xlimit::Union{Nothing,Tuple{Real,Real}}`: Optional X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined.
+- `xscale::Symbol`: X-axis scale type, `:log` for logarithmic (default) or `:linear` for linear scale
 
 # Returns
 - `fig`: Makie Figure object
-- `ax`: Makie Axis object
-
-# Examples
-```julia
-# Plot a highpass filter response
-filter = create_filter("hp", "iir", 0.1, 1000.0)
-fig, ax = plot_filter_response(filter, 1000.0, 0.1, 0.025)
-
-# Plot with custom limits
-fig, ax = plot_filter_response(filter, 1000.0, 0.1, 0.025, 
-                              ylimit=(-80, 5), xlimit=(0.01, 1.0))
-```
+- `ax`: Tuple of Makie Axis objects (linear, dB, impulse)
 """
 function plot_filter_response(
-    filter::FilterInfo;
-    ylimit::Tuple = (-100, 5),
+    filter_info::FilterInfo;
     xlimit::Union{Nothing,Tuple{Real,Real}} = nothing,
+    xscale::Symbol = :log,  # :log or :linear
+    filter_func::Function = filtfilt,  # Default to zero-phase filtering
+    display_plot::Bool = true,
 )
     # Determine x-axis limits based on filter type and cutoff
     if isnothing(xlimit)
-        if filter.cutoff_freq < 2
-            xlimit = (0, filter.cutoff_freq * 10)
+        if filter_info.cutoff_freq < 2
+            xlimit = (0, filter_info.cutoff_freq * 10)
         else
-            xlimit = (0, filter.sample_rate / 2)
+            xlimit = (0, filter_info.sample_rate / 2)
         end
     end
 
     fig = Figure()
-    ax = Axis(fig[1, 1],
+    
+    # Base axis properties
+    base_props = (
         xlabel="Frequency (Hz)",
-        ylabel="Magnitude (dB)",
-        title="Filter Frequency Response",
-        titlesize=24,
-        xlabelsize=22,
-        ylabelsize=22,
-        xticklabelsize=20,
-        yticklabelsize=20,
-        xscale=Makie.Symlog10(10.0),
-        limits=(xlimit, ylimit)  
+        title="Magnitude response",
+        titlesize=20,
+        xlabelsize=18,
+        ylabelsize=18,
+        xticklabelsize=16,
+        yticklabelsize=16,
+    )
+    
+    # Add xscale conditionally
+    xscale_props = xscale == :log ? (xscale=Makie.Symlog10(10.0),) : NamedTuple()
+    
+    # Create three axes in a row
+    ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel="Magnitude (linear)", limits=(xlimit, (0, 1.1)))
+    ax2 = Axis(fig[1, 2]; base_props..., xscale_props..., ylabel="Magnitude (dB)", limits=(xlimit, (-200, 5)))
+    ax3 = Axis(fig[1, 3]; 
+        xlabel="Time (samples)", 
+        ylabel="Amplitude", 
+        title="Impulse response",
+        titlesize=20,
+        xlabelsize=18,
+        ylabelsize=18,
+        xticklabelsize=16,
+        yticklabelsize=16
     )
 
     # Simple logarithmic frequency spacing
     n_points = 2000
-    freqs = exp10.(range(log10(0.01), log10(filter.sample_rate/2), length=n_points))
+    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate/2), length=n_points))
     freqs = [0.0; freqs]  # Add DC point
     
-    w = 2π * freqs / filter.sample_rate
+    w = 2π * freqs / filter_info.sample_rate
     
     # Get frequency response
-    if filter.filter isa Vector  # FIR filter coefficients
-        n = 0:(length(filter.filter)-1)
-        resp = [sum(filter.filter .* exp.(-im * w_k * n)) for w_k in w]
+    if filter_info.filter_object isa Vector  # FIR filter coefficients
+        n = 0:(length(filter_info.filter_object)-1)
+        resp = [sum(filter_info.filter_object .* exp.(-im * w_k * n)) for w_k in w]
     else  # Other filter types
-        resp = freqresp(filter.filter, w)
+        resp = freqresp(filter_info.filter_object, w)
     end
     
-    mag_db = 20 * log10.(abs.(resp))
+    # Calculate magnitude responses
+    mag_linear = abs.(resp)
+    mag_db = 20 * log10.(mag_linear)
     
-    # Get filter type from response
-    start_response = mag_db[2]  # Use second point to avoid DC issues
-    end_response = mag_db[end]
+    # Plot actual responses
+    lines!(ax1, freqs, mag_linear, label="Actual", color=:black, linewidth=4)
+    lines!(ax2, freqs, mag_db, label="Actual", color=:black, linewidth=4)
     
-    # Determine filter type
-    filter_type = "hp"
-    if start_response > -3 && end_response < -20
-        filter_type = "lp"
-    end
-
-    # Calculate actual stopband attenuation
-    if filter_type == "lp"
-        stopband_mask = freqs .>= (filter.cutoff_freq + filter.transition_band)
-    elseif filter_type == "hp" 
-        stopband_mask = freqs .<= (filter.cutoff_freq - filter.transition_band)
-    end
-    
-    stopband_db = mag_db[stopband_mask]
-    stopband_db = replace(stopband_db, -Inf => -100.0)
-    actual_stopband_atten = mean(stopband_db)
-    actual_stopband_linear = 10^(actual_stopband_atten/20)
-    
-    # Calculate ideal response
-    ideal_response = zeros(length(freqs))
-    for (i, f) in enumerate(freqs)
-        if filter_type == "lp" 
-            if f <= filter.cutoff_freq
-                ideal_response[i] = 1.0
-            elseif f >= filter.cutoff_freq + filter.transition_band
-                ideal_response[i] = actual_stopband_linear
-            else
-                ideal_response[i] =
-                    1.0 * (filter.cutoff_freq + filter.transition_band - f) / filter.transition_band +
-                    actual_stopband_linear * (f - filter.cutoff_freq) / filter.transition_band
-            end
-        elseif filter_type == "hp" 
-            if f >= filter.cutoff_freq
-                ideal_response[i] = 1.0
-            elseif f <= filter.cutoff_freq - filter.transition_band
-                ideal_response[i] = actual_stopband_linear
-            else
-                ideal_response[i] =
-                    1.0 * (f - (filter.cutoff_freq - filter.transition_band)) / filter.transition_band +
-                    actual_stopband_linear * (filter.cutoff_freq - f) / filter.transition_band
-            end
-        end
-    end
-
-  # Define transition regions first
-    if filter_type == "lp"
-        f_s = filter.cutoff_freq + filter.transition_band  # Add for lowpass
-        transition_regions = [(filter.cutoff_freq, f_s)]
-    elseif filter_type == "hp"
-        f_s = filter.cutoff_freq - filter.transition_band  # Subtract for highpass
-        transition_regions = [(f_s, filter.cutoff_freq)]
-    end
-
-    for (start_f, end_f) in transition_regions
-        vspan!(ax, start_f, end_f, color=(:gray, 0.2))
-        vlines!(ax, [start_f, end_f], color=:gray, linestyle=:dash)
-    end
-    
-    # Plot responses
-    lines!(ax, freqs, mag_db, label="Actual", color=:black, linewidth=4)
-    ideal_mag_db = 20 * log10.(ideal_response)
-    lines!(ax, freqs, ideal_mag_db, color=:green, linestyle=:dash, label="Ideal",linewidth=3)
+    # Add vertical line at cutoff frequency to both subplots
+    vlines!(ax1, [filter_info.cutoff_freq], color=:red, linestyle=:dash, linewidth=2)
+    vlines!(ax2, [filter_info.cutoff_freq], color=:red, linestyle=:dash, linewidth=2)
     
     # Add reference lines
-    hlines!(ax, [-3, -6], color=:gray, linestyle=:dash)
-    text!(ax, filter.sample_rate/2, -3, text="-3 dB", align=(:right, :center), fontsize=22)
-    text!(ax, filter.sample_rate/2, -6, text="-6 dB", align=(:right, :center), fontsize=22)
+    hlines!(ax1, [0.707], color=:gray, linestyle=:dash, alpha=0.5)  # -3 dB point
+    hlines!(ax2, [-3, -6], color=:gray, linestyle=:dash, alpha=0.5)
+    
+    # Calculate and plot impulse response
+    # Create a unit impulse with samples before and after
+    n_samples_before = 200  # Samples before impulse
+    n_samples_after = 200  # Samples after impulse
+    n_total = n_samples_before + n_samples_after + 1
+    impulse = zeros(n_total)
+    impulse[n_samples_before + 1] = 1.0  # Unit impulse at t=0
 
-    # X-axis ticks based on xlimits
-    if xlimit[2] <= 5  # For low frequency (typically highpass) plots
-        xticks = [0, 0.1, 0.2, 0.5, 1, 2, filter.cutoff_freq, f_s, 5]
-    else  # For full range plots (typically lowpass)
-        xticks = [0, 1, 2, 5, 10, 20, 50, filter.cutoff_freq, f_s, 100, filter.sample_rate/2]
+    # Apply the specified filter function to get impulse response
+    if filter_info.filter_method == "fir"  
+        impulse_response = filter_info.filter_object
+        time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
+    else  # IIR filter
+        impulse_response = filter_func(filter_info.filter_object, impulse)
+        time_samples = (-n_samples_before):n_samples_after
     end
     
-    # Filter out ticks beyond xlimit
-    xticks = [x for x in xticks if x >= xlimit[1] && x <= xlimit[2]]
-    ax.xticks = (xticks, string.(round.(xticks, digits=1)))    
-
-    legend_position = filter_type == "lp" ? :lb : :rb
-    axislegend(;position=legend_position, labelsize=32)
-    display(fig)
+    # Plot impulse response
+    lines!(ax3, time_samples, impulse_response, color=:red, linewidth=2)
     
-    return fig, ax
+    # Add zero line for reference
+    hlines!(ax3, [0], color=:gray, linestyle=:dash, alpha=0.5)
+   
+    if display_plot
+        display_figure(fig)
+    end
+
+    return fig, (ax1, ax2, ax3)
 end
