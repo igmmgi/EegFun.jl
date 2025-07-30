@@ -168,8 +168,7 @@ end
 get_current_data(state::ContinuousDataState) = state.current[].data
 get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
 get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
-get_time_bounds(dat::EpochedDataState) =
-    (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
+get_time_bounds(dat::EpochedDataState) = (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
 has_column(state::ContinuousDataState, col::String) = col in names(state.current[].data)
 has_column(state::EpochedDataState, col::String) = col in names(state.current[].data[state.current_epoch[]])
 
@@ -400,21 +399,19 @@ function show_additional_menu(state)
 
     # Create the menu figure
     menu_fig = Figure()
-    plot_types = ["Topoplot", "Spectrum", "Plot3"]
+    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)", "Spectrum"]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
     for btn in menu_buttons
         on(btn.clicks) do n
-            selected_data = get_x_region_data(state)
-            if btn.label[] == "Topoplot"
-                plot_topography(selected_data, state.data.original.layout, method=:multiquadratic)
+            selected_data = subset_selected_data(state)
+            if btn.label[] == "Topoplot (multiquadratic)"
+                plot_topography(selected_data, method=:multiquadratic)
+            elseif btn.label[] == "Topoplot (spherical_spline)"
+                plot_topography(selected_data, method=:spherical_spline)
             elseif btn.label[] == "Spectrum"
-                selected_channel = state.channels.labels[state.channels.visible]
-                plot_selected_spectrum(selected_data, selected_channel)
-            elseif btn.label[] == "Plot3"
-                plot_topography(selected_data, state.data.original.layout, method=:spherical_spline)
-                @info "Plot3: TODO"
+                plot_channel_spectrum(selected_data)
             end
         end
     end
@@ -847,15 +844,12 @@ function clear_x_region_selection!(state)
     state.selection.rectangle.visible[] = false
 end
 
-
-
-function get_x_region_data(state::ContinuousDataBrowserState)
+function subset_selected_data(state::ContinuousDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
-    time_mask = (x_min .<= state.data.current[].data.time .<= x_max)
-    selected_data = state.data.current[].data[time_mask, :]
-    @info "Selected data: $(round(x_min, digits = 2)) to $(round(x_max, digits = 2)) S, size $(size(selected_data))"
-    return selected_data
+    selected_channels = state.channels.labels[state.channels.visible]
+    return subset(state.data.current[], sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max), channel_selection = channels(selected_channels)) 
 end
+
 
 function get_x_region_data(state::EpochedDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)

@@ -1,7 +1,7 @@
 ##########################################
 # 2D topographic plot
 ##########################################
-function plot_topography!(
+function _plot_topography!(
     fig::Figure, 
     ax::Axis,
     dat::DataFrame,
@@ -19,7 +19,6 @@ function plot_topography!(
 )
 
     # Ensure we have 2D coordinates
-    _ensure_coordinates_2d!(layout)
 
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
@@ -41,25 +40,19 @@ function plot_topography!(
     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
 
-    if isnothing(xlim)
-        xlim = [dat.time[1], dat.time[end]]
-        xlim_idx = 1:nrow(dat)
-    end
-
-    # convert xlim to index
-    xlim_idx = find_idx_range(dat.time, xlim[1], xlim[2])
-
     # interpolate data using chosen method
     if method == :spherical_spline
+        _ensure_coordinates_3d!(layout)
         data = _data_interpolation_topo_spherical_spline(
-            mean.(eachcol(dat[xlim_idx, layout.data.label])),
+            mean.(eachcol(dat[!, layout.data.label])),
             layout,
             gridscale,
             lambda=lambda
         )
     else  # default to multiquadratic
+        _ensure_coordinates_2d!(layout)
         data = _data_interpolation_topo(
-            mean.(eachcol(dat[xlim_idx, layout.data.label])),
+            mean.(eachcol(dat[!, layout.data.label])),
             permutedims(Matrix(layout.data[!, [:x2, :y2]])),
             gridscale,
         )
@@ -94,43 +87,6 @@ function plot_topography!(
 
 end
 
-function plot_topography(
-    dat::DataFrame,
-    layout::Layout;
-    display_plot = true,
-    kwargs...
-)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, dat, layout; kwargs...)
-    if display_plot
-        display_figure(fig)
-    end
-    return fig, ax
-end
-
-
-
-
-
-"""
-    plot_topography(dat::EpochData, epoch::Int; kwargs...)
-
-Create a topographic plot from epoched EEG data.
-
-# Arguments
-- `dat`: EpochData object
-- `kwargs...`: Additional keyword arguments passed to plot_topography!
-
-# Returns
-- Figure and Axis objects
-"""
-function plot_topography(dat::EpochData, epoch::Int; kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
-    return fig, ax
-end
 
 """
     plot_topography!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
@@ -147,16 +103,14 @@ function plot_topography!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
     plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
 end
 
-
-function plot_topography(dat::SingleDataFrameEeg; display_plot = true, kwargs...)
+function plot_topography(dat::EpochData, epoch::Int; kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
-    if display_plot
-        display_figure(fig)
-    end
+    plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
     return fig, ax
 end
+
+
 
 """
     plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
@@ -169,9 +123,27 @@ Add a topographic plot to existing figure/axis from single DataFrame EEG data.
 - `dat`: SingleDataFrameEeg object (ContinuousData or ErpData)
 - `kwargs...`: Additional keyword arguments
 """
-function plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
-    plot_topography!(fig, ax, dat.data, dat.layout; kwargs...)
+function plot_topography!(fig, ax, dat::SingleDataFrameEeg; channel_selection::Function = channels(), sample_selection::Function = samples(), kwargs...)
+    dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
+    plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
 end
+
+function plot_topography(dat::SingleDataFrameEeg; channel_selection::Function = channels(), sample_selection::Function = samples(), display_plot = true, kwargs...)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
+    @info "Plotting topography for $(n_channels(dat_subset)) channels and $(n_samples(dat_subset)) samples"
+    _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
+    if display_plot
+        display_figure(fig)
+    end
+    return fig, ax
+end
+
+
+
+
+
 
 
 """
@@ -272,19 +244,16 @@ Implementation follows MNE-Python exactly.
 """
 function _data_interpolation_topo_spherical_spline(
     dat::Vector{<:AbstractFloat}, 
-    layout::DataFrame, 
+    layout::Layout, 
     grid_scale::Int;
     lambda::Float64=1e-5
 )
-    # Ensure we have both 2D and 3D coordinates
-    _ensure_coordinates_3d!(layout)
-    
-    n_channels = length(dat)
     
     # Extract 3D coordinates as they are (no normalization needed)
+    n_channels = length(dat)
     coords = zeros(Float64, n_channels, 3)
     for i in 1:n_channels
-        coords[i, :] = [layout.x3[i], layout.y3[i], layout.z3[i]]
+        coords[i, :] = [layout.data.x3[i], layout.data.y3[i], layout.data.z3[i]]
     end
     
     # Find the actual radius of the electrode positions

@@ -1,4 +1,4 @@
-function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real;
+function plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real;
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     window_size::Int = 1024,
@@ -135,68 +135,27 @@ Plot power spectrum for specified channels from EEG data.
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot
 - `ax::Axis`: The axis containing the plot
-
-# Examples
-```julia
-# DataFrame with auto-extracted sample rate
-plot_channel_spectrum(selected_data, channel_selection = channels([:Fp1]))
-plot_channel_spectrum(selected_data, channel_selection = channels([:Fp1, :Fp2]))
-
-# DataFrame with explicit sample rate
-plot_channel_spectrum(df, 1000, channel_selection = channels([:Fp1]))
-plot_channel_spectrum(df, 1000, channel_selection = channels([:Fp1, :Fp2]))
-
-# ContinuousData (auto-extracts sample rate)
-plot_channel_spectrum(dat, channel_selection = channels([:Fp1]))
-plot_channel_spectrum(dat, channel_selection = channels_not([:M1, :M2]))
-
-# Function-based channel selection
-plot_channel_spectrum(dat, channel_selection = channels(x -> startswith.(string.(x), "F")))
-plot_channel_spectrum(dat, channel_selection = channels(1:10))
-
-# Sample and channel filtering
-plot_channel_spectrum(dat, 
-                     sample_selection = samples_not(:is_extreme_value_100),
-                     channel_selection = channels_not([:M1, :M2]))
-
-# Custom parameters
-plot_channel_spectrum(dat, channel_selection = channels([:Fp1, :Fp2]), 
-                     line_freq=60.0, max_freq=100.0, x_scale=:log10)
-```
 """
-function plot_channel_spectrum(dat::DataFrame; 
+
+function plot_channel_spectrum(dat::SingleDataFrameEeg; 
                               sample_selection::Function = samples(),
                               channel_selection::Function = channels(),
                               display_plot::Bool=true,
                               kwargs...)
 
-    # Get selected channels/samples and subsequent data subset
-    selected_channels = get_selected_channels(dat, channel_selection)
-    selected_samples = get_selected_samples(dat, sample_selection)
-    data_subset = dat[selected_samples, :]
-    
-    # Create figure and axis exactly like plot_topoplot
+    # data selection
+    dat_subset = subset(dat, sample_selection = sample_selection, channel_selection = channel_selection)
+
     fig = Figure()
     ax = Axis(fig[1, 1])
-    _plot_power_spectrum!(fig, ax, data_subset, selected_channels, sample_rate(dat); kwargs...)
+
+    plot_channel_spectrun!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
     if display_plot
         display_figure(fig)
     end
-    return fig, ax
-end
 
-function plot_channel_spectrum(dat::ContinuousData; 
-                              sample_selection::Function = samples(),
-                              channel_selection::Function = channels(),
-                              display_plot::Bool=true,
-                              kwargs...)
-    return plot_channel_spectrum(
-        dat.data, 
-        sample_selection = sample_selection, 
-        channel_selection = channel_selection, 
-        display_plot = display_plot, 
-        kwargs...
-    )
+    return fig, ax
+
 end
 
 

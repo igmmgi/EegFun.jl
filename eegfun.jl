@@ -13,55 +13,27 @@ using GLMakie
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
-
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
-my_filter_iir = eegfun.create_filter("hp", "iir", 1, 256, order = 2)
-
-my_filter_fir = eegfun.create_filter("hp", "fir", 1, 256, order = 2)
-eegfun.plot_filter_response(my_filter_fir)
-
-my_filter_fir = eegfun.create_filter("lp", "fir", 30, 256, order = 2)
-eegfun.plot_filter_response(my_filter_fir)
-
-my_filter_fir = eegfun.create_filter("lp", "iir", 30, 256, order = 6)
-eegfun.plot_filter_response(my_filter_fir)
-
-
-
-
-# get filter characteristics
-eegfun.get_filter_characteristics(my_filter_iir)
-eegfun.get_filter_characteristics(my_filter_fir)
-eegfun.print_filter_characteristics(my_filter_iir) 
-eegfun.print_filter_characteristics(my_filter_fir) 
-eegfun.plot_filter_response(my_filter_iir)
-
-
-my_filter_iir = eegfun.create_filter("lp", "iir", 30, 256)
-my_filter_fir = eegfun.create_filter("lp", "fir", 30, 256)
-
-
-my_filter_iir = eegfun.create_filter("hp", "iir", 1, 256, order = 2)
-eegfun.plot_filter_response(my_filter_iir)
-
-
-my_filter_iir = eegfun.create_filter("lp", "iir", 30, 256, order = 12)
-eegfun.plot_filter_response(my_filter_iir)
-
-
-
-
-my_filter_iir = eegfun.create_filter("lp", "iir", 30, 256, order = 6)
-eegfun.plot_filter_response(my_filter_iir, xlimit=(0, 500), xscale=:linear)
-
-
-
-
 # how to filter data
-eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
+eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
 # how to rereference data
 eegfun.rereference!(dat, :avg)
+
+
+@time eegfun.subset(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
+@time eegfun.subset_view(dat, channel_selection = eegfun.channels_not([:Fp1, :Fp2]))
+
+dat1.data
+dat2.data
+dat.data
+
+
+
+
+
+eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
+
 # databrowser
 eegfun.plot_databrowser(dat)
 

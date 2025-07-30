@@ -480,3 +480,57 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.removed_activations)
     )
 end
+
+# === VIEW TYPES ===
+"""
+    EegDataView
+
+A true view wrapper for EegData objects that references the original data without any copying.
+
+This type provides a view-like interface to EegData objects, storing only references
+to the original data and selection indices. No data is ever copied.
+
+# Fields
+- `original_data::EegData`: The original EegData object
+- `selected_samples::Vector{Int}`: Indices of selected samples
+- `selected_channels::Vector{Symbol}`: Names of selected channels
+- `original_layout::Layout`: Reference to the original layout
+"""
+struct EegDataView <: EegData
+    original_data::EegData
+    selected_samples::Vector{Int}
+    selected_channels::Vector{Symbol}
+    original_layout::Layout
+end
+
+# Make EegDataView behave like EegData
+Base.size(view::EegDataView) = (length(view.selected_samples), length(view.selected_channels))
+Base.length(view::EegDataView) = length(view.selected_samples) * length(view.selected_channels)
+
+# Access data - creates view on-demand
+function Base.getproperty(view::EegDataView, field::Symbol)
+    if field == :data
+        # Create view of the original data
+        return @view view.original_data.data[view.selected_samples, view.selected_channels]
+    elseif field == :layout
+        # Create view of the original layout (filter the channels)
+        selected_layout_data = filter(:label => in(view.selected_channels), view.original_layout.data)
+        return Layout(selected_layout_data, nothing, nothing)
+    elseif field == :sample_rate
+        return view.original_data.sample_rate
+    elseif field == :analysis_info
+        return view.original_data.analysis_info
+    elseif field == :original_data
+        return getfield(view, :original_data)
+    elseif field == :selected_samples
+        return getfield(view, :selected_samples)
+    elseif field == :selected_channels
+        return getfield(view, :selected_channels)
+    elseif field == :original_layout
+        return getfield(view, :original_layout)
+    else
+        error("EegDataView has no field $field")
+    end
+end
+
+

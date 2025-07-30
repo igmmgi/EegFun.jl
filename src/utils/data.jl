@@ -424,10 +424,9 @@ Create a subset of SingleDataFrameEeg (ContinuousData or ErpData) by applying ch
 - New SingleDataFrameEeg object with filtered channels and samples
 """
 function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::DataFrame
-    dat_subset = df[selected_samples, :]
-    dat_subset = select(dat_subset, selected_channels)
-    return dat_subset
+    return df[selected_samples, selected_channels] 
 end
+
 
 function subset(dat::SingleDataFrameEeg; 
                channel_selection::Function = channels(), 
@@ -435,7 +434,7 @@ function subset(dat::SingleDataFrameEeg;
                include_extra_channels::Bool = false)
    
     @info "subset: Subsetting $(typeof(dat)) ..."
-    # Get selected channels and samples 
+    # Get selected channels/samples 
     selected_channels = get_selected_channels(dat, channel_selection, include_extra_channels = include_extra_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
     
@@ -486,3 +485,65 @@ function subset(dat::EpochData;
     return EpochData(epochs_subset, layout_subset, dat.sample_rate, dat.analysis_info)
 
 end
+
+"""
+    subset_view(dat::SingleDataFrameEeg; 
+               channel_selection::Function = channels(), 
+               sample_selection::Function = samples(), 
+               include_extra_channels::Bool = false) -> EegDataView
+
+Create a true view of a subset of SingleDataFrameEeg without any copying.
+
+# Arguments
+- `dat`: SingleDataFrameEeg object to subset (ContinuousData or ErpData)
+- `channel_selection`: Function that returns channel labels to include (default: all channels)
+- `sample_selection`: Function that returns sample mask to include (default: all samples)
+- `include_extra_channels`: Whether to include additional channels (default: false)
+
+# Returns
+- EegDataView object that references the original data (no copying at all)
+"""
+function subset_view(dat::SingleDataFrameEeg; 
+                   channel_selection::Function = channels(), 
+                   sample_selection::Function = samples(), 
+                   include_extra_channels::Bool = false)
+   
+    @info "subset: Subsetting $(typeof(dat)) ..."
+    
+    # Get selected channels and samples 
+    selected_channels = get_selected_channels(dat, channel_selection, include_extra_channels = include_extra_channels)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    
+    # Create view wrapper that references the original data (no copying)
+    return EegDataView(dat, selected_samples, selected_channels, dat.layout)
+end
+
+# === EegDataView METHODS ===
+# Make EegDataView behave like other EegData objects
+
+# Sample count
+n_samples(view::EegDataView)::Int = length(view.selected_samples)
+
+# Epoch count (always 1 for SingleDataFrameEeg views)
+n_epochs(view::EegDataView)::Int = 1
+
+# Duration
+duration(view::EegDataView) = last(view.original_data.data.time[view.selected_samples]) - first(view.original_data.data.time[view.selected_samples])
+
+# Channel labels
+channel_labels(view::EegDataView)::Vector{Symbol} = view.selected_channels
+
+# All labels
+all_labels(view::EegDataView)::Vector{Symbol} = view.selected_channels
+
+# All data
+all_data(view::EegDataView)::DataFrame = view.data
+
+# Meta data
+meta_data(view::EegDataView)::DataFrame = view.original_data.data[view.selected_samples, get_cols_by_group(view.original_data, :metadata)]
+
+# Channel data
+channel_data(view::EegDataView)::DataFrame = view.data
+
+# Extra data
+extra_data(view::EegDataView)::DataFrame = view.original_data.data[view.selected_samples, get_cols_by_group(view.original_data, :extra)]
