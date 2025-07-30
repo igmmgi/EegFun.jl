@@ -6,7 +6,6 @@ function _plot_topography!(
     ax::Axis,
     dat::DataFrame,
     layout::Layout;
-    xlim = nothing,
     ylim = nothing,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
@@ -14,12 +13,9 @@ function _plot_topography!(
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
     method = :multiquadratic,  # :multiquadratic or :spherical_spline
-    m = 4,  # for spherical spline 
-    lambda = 1e-7,  # for spherical spline 
 )
 
-    # Ensure we have 2D coordinates
-
+    # deal with kwargs
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
 
@@ -29,10 +25,8 @@ function _plot_topography!(
     label_default_kwargs =
         Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
     label_kwargs = merge(label_default_kwargs, label_kwargs)
-    xoffset = pop!(label_kwargs, :xoffset)
-    yoffset = pop!(label_kwargs, :yoffset)
 
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 400)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 200)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = pop!(topo_kwargs, :gridscale)
 
@@ -40,29 +34,26 @@ function _plot_topography!(
     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
 
-    # interpolate data using chosen method
+    # actual data interpolation
     if method == :spherical_spline
         _ensure_coordinates_3d!(layout)
         data = _data_interpolation_topo_spherical_spline(
             mean.(eachcol(dat[!, layout.data.label])),
             layout,
-            gridscale,
-            lambda=lambda
+            gridscale * 2,  
         )
-    else  # default to multiquadratic
+    elseif method == :multiquadratic  
         _ensure_coordinates_2d!(layout)
-        data = _data_interpolation_topo(
-            mean.(eachcol(dat[!, layout.data.label])),
-            permutedims(Matrix(layout.data[!, [:x2, :y2]])),
-            gridscale,
-        )
+        channel_data = mean.(eachcol(dat[!, layout.data.label]))
+        points_matrix = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
+        data = _data_interpolation_topo_multiquadratic(channel_data, points_matrix, gridscale)
     end
 
     if isnothing(ylim)
         ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
     end
     
-    # Clear the axis to prevent double plotting
+    # Clear the axis 
     empty!(ax)
     
     # Use different ranges based on interpolation method
@@ -131,19 +122,13 @@ end
 function plot_topography(dat::SingleDataFrameEeg; channel_selection::Function = channels(), sample_selection::Function = samples(), display_plot = true, kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
-    @info "Plotting topography for $(n_channels(dat_subset)) channels and $(n_samples(dat_subset)) samples"
+    dat_subset = subset_view(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
     if display_plot
         display_figure(fig)
     end
     return fig, ax
 end
-
-
-
-
-
 
 
 """
@@ -193,7 +178,7 @@ Interpolate EEG data using scattered interpolation
 - `points::Matrix{<:AbstractFloat}`: 2×N matrix of electrode coordinates
 - `grid_scale::Int`: Size of the output grid
 """
-function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<:AbstractFloat}, grid_scale::Int)
+function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, points::Matrix{<:AbstractFloat}, grid_scale::Int)
     # Check input data
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
@@ -202,18 +187,22 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<
         throw(ArgumentError("Input points contain NaN or Inf values"))
     end
 
-    # Create grid using the same coordinate range as the plotting function
-    x_range = collect(range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale))
-    y_range = collect(range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale))
+    # Create grid more efficiently - avoid collect() and Iterators.product
+    x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
+    y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
 
-    # Create regular grid
+    # Create regular grid more efficiently
     grid_points = zeros(2, grid_scale^2)
-    @inbounds for (idx, (i, j)) in enumerate(Iterators.product(x_range, y_range))
-        grid_points[1, idx] = i
-        grid_points[2, idx] = j
+    idx = 1
+    @inbounds for y in y_range
+        for x in x_range
+            grid_points[1, idx] = x
+            grid_points[2, idx] = y
+            idx += 1
+        end
     end
 
-    # Perform interpolation
+    # Perform scattered interpolation (essential for proper EEG topography)
     try
         itp = ScatteredInterpolation.interpolate(Multiquadratic(), points, dat)
         result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
@@ -224,6 +213,8 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, points::Matrix{<
     end
 
 end
+
+
 
 
 """
@@ -246,7 +237,6 @@ function _data_interpolation_topo_spherical_spline(
     dat::Vector{<:AbstractFloat}, 
     layout::Layout, 
     grid_scale::Int;
-    lambda::Float64=1e-5
 )
     
     # Extract 3D coordinates as they are (no normalization needed)
@@ -281,7 +271,7 @@ function _data_interpolation_topo_spherical_spline(
     
     # Add regularization to diagonal (exactly like MNE)
     for i in 1:n_channels
-        G[i,i] += lambda
+        G[i,i] += 1e-5
     end
     
     # Add constraint rows/columns (exactly like MNE)
