@@ -1120,8 +1120,8 @@ function _draw_implementation(ax, state, data::ContinuousDataState)
     xrange_start_obs = @lift($(data.current).data.time[$(state.view.xrange)[1]])
     
     @sync for (idx, visible) in enumerate(state.channels.visible)
+        col = state.channels.labels[idx]  # Define col for all channels
         if visible
-            col = state.channels.labels[idx]
             is_selected = state.channels.selected[idx]
             
             # Set line properties based on selection - only visible range
@@ -1208,8 +1208,8 @@ function _draw_implementation(ax, state, data::EpochedDataState)
     epoch_time_start_obs = @lift($(data.current).data[$(data.current_epoch)].time[1])
 
     @sync for (idx, visible) in enumerate(state.channels.visible)
+        col = state.channels.labels[idx]  # Define col for all channels
         if visible  # Only plot if channel is visible
-            col = state.channels.labels[idx]
             is_selected = state.channels.selected[idx]
             
             # Set line properties based on selection - only visible range
