@@ -14,9 +14,7 @@ function _apply_rereference!(
     reference_selection::Vector{Symbol}
 )
     reference = calculate_reference(dat, reference_selection)
-    @inbounds for channel in channel_selection
-        @views dat[!, channel] .-= reference
-    end
+    @views dat[!, channel_selection] .-= reference
     return nothing
 end
 
@@ -30,12 +28,7 @@ function _apply_rereference!(
     channel_selection::Vector{Symbol},
     reference_selection::Vector{Symbol}
 )
-    for df in dat
-        reference = calculate_reference(df, reference_selection)
-        @inbounds for channel in channel_selection
-            @views df[!, channel] .-= reference
-        end
-    end
+    _apply_rereference!.(dat, Ref(channel_selection), Ref(reference_selection))
     return nothing
 end
 
