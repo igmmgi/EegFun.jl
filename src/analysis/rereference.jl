@@ -98,7 +98,7 @@ function rereference!(
     channel_selection::Function = channels()
 )
     reference_channels = get_reference_channels(dat, reference_selection)
-    selected_channels = get_selected_channels(dat, channel_selection)
+    selected_channels = get_selected_channels(dat, channel_selection, include_metadata_columns = false)
     
     # Verify reference channels exist in the data
     missing_channels = [ch for ch in reference_channels if ch ∉ channel_labels(dat)]

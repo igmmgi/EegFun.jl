@@ -160,7 +160,7 @@ Modifies the data in place.
 """
 function _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter::FilterInfo; filter_func::Function = filtfilt)::Nothing
     @inbounds for channel in channels
-        @views dat[:, channel] .= filter_func(filter.filter, dat[:, channel])
+        @views dat[:, channel] .= filter_func(filter.filter_object, dat[:, channel])
     end
     return nothing
 end
@@ -213,7 +213,7 @@ function filter_data!(
     print_filter = false,
 )
 
-    selected_channels = get_selected_channels(dat, channel_selection)
+    selected_channels = get_selected_channels(dat, channel_selection, include_metadata_columns = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for filtering"
         return
@@ -226,7 +226,7 @@ function filter_data!(
     _update_filter_info!(dat, filter_info) # to help keep track of filters applied to the data
     
     # apply filter (dispatch handles DataFrame vs Vector{DataFrame})
-    _apply_filter!(dat.data, selected_channels, filter_info.filter, filter_func = filter_func)
+    _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
 
 end
 
