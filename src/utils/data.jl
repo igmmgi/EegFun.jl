@@ -268,6 +268,19 @@ Get the duration of the EEG data in seconds.
 duration(dat::SingleDataFrameEeg) = last(dat.data.time) - first(dat.data.time)
 
 """
+    duration(dat::EpochData) -> Float64
+
+Get the duration of a single epoch.
+
+# Arguments
+- `dat::EpochData`: The epoched data object
+
+# Returns
+- `Float64`: Duration of first epoch in seconds
+"""
+duration(dat::EpochData) = last(dat.data[1].time) - first(dat.data[1].time)
+
+"""
     n_average(dat::ErpData) -> Float64
 
 Get the number of averaged epochs in ERP data.

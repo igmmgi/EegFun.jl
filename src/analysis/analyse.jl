@@ -68,7 +68,9 @@ function mark_epoch_windows!(
 
     # Input validation
     _validate_epoch_window_params(dat, time_window)
-    @assert !isempty(triggers_of_interest) "Must specify at least one trigger of interest"
+    if isempty(triggers_of_interest)
+        @minimal_error "Must specify at least one trigger of interest"
+    end
 
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
@@ -98,6 +100,7 @@ function mark_epoch_windows!(
             # Mark samples within the window
             in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
             dat.data[in_window, channel_out] .= true
+
         end
 
     end
@@ -142,7 +145,9 @@ function mark_epoch_windows!(
 
     # Input validation
     _validate_epoch_window_params(dat, time_window)
-    @assert !isempty(epoch_conditions) "Must specify at least one epoch condition"
+    if isempty(triggers_of_interest)
+        @minimal_error "Must specify at least one trigger of interest"
+    end
 
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
@@ -301,23 +306,17 @@ Converts sustained trigger signals into single onset events.
 ```
 """
 function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
-
-    # we need some triggers!
-    if isempty(trigger_data)
-        return trigger_data
-    end
-    
-    # initalize
-    cleaned = zeros(Int, length(trigger_data))
     
     # find where triggers change (onset detection)
     trigger_changes = diff(vcat(0, trigger_data))
+    onset_indices = trigger_changes .> 0
     
     # insert onsets
-    onset_indices = trigger_changes .> 0
+    cleaned = zeros(Int, length(trigger_data))
     cleaned[onset_indices] = trigger_data[onset_indices]
     
     return cleaned
+
 end
 
 
@@ -369,37 +368,20 @@ end
 
 # channel_summary
 function _channel_summary_impl(data::DataFrame, sample_selection::Vector{Int}, channel_selection::Vector{Symbol})::DataFrame
-
-    # Filter data by selected samples
-    selected_data = data[sample_selection, :]
+    selected_data = @view data[sample_selection, channel_selection]
     
-    # Initialize a matrix to store summary statistics
-    # 6 statistics: min, max, range, std, mad, var
-    summary_stats = Matrix{Float64}(undef, length(channel_selection), 6)
-
-    # Compute summary statistics for each column
-    for (i, col) in enumerate(channel_selection)
-        col_data = @view selected_data[!, col]
-        summary_stats[i, :] =
-            [minimum(col_data), maximum(col_data), datarange(col_data), std(col_data), mad(col_data), var(col_data)]
-    end
-
-    # Create a new DataFrame directly from the matrix and channel labels
-    summary_df = DataFrame(
-        channel = channel_selection,
-        min = summary_stats[:, 1],
-        max = summary_stats[:, 2],
-        range = summary_stats[:, 3],
-        std = summary_stats[:, 4],
-        mad = summary_stats[:, 5],
-        var = summary_stats[:, 6],
-    )
-
-    # Compute z-scores for channel variances
-    summary_df[!, :zvar] .= (summary_df[!, :var] .- mean(summary_df[!, :var])) ./ std(summary_df[!, :var])
-
-    return summary_df
-
+    # Get base statistics from describe
+    stats = describe(selected_data, :min, :max, :std)
+    
+    # Add our custom columns
+    stats.range = stats.max .- stats.min
+    stats.var = var.(eachcol(selected_data))
+    stats.zvar = zscore(stats.var)
+    
+    # Rename the variable column to channel
+    rename!(stats, :variable => :channel)
+    
+    return stats
 end
 
 # Helper function predicates for easier channel filtering
@@ -435,7 +417,7 @@ epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_nu
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
 # Helper to select channels based on include_extra_channels and a predicate
-function get_selected_channels(dat, channel_selection::Function; include_metadata_columns::Bool = true, include_extra_channels::Bool = true)
+function get_selected_channels(dat, channel_selection::Function; include_metadata_columns::Bool = true, include_extra_columns::Bool = true)
     # Always include metadata columns
     if include_metadata_columns
         metadata_cols = meta_labels(dat)
@@ -444,7 +426,7 @@ function get_selected_channels(dat, channel_selection::Function; include_metadat
     end
     
     # Get available non-metadata columns for selection
-    if include_extra_channels
+    if include_extra_columns
         selectable_cols = vcat(channel_labels(dat), extra_labels(dat))
     else
         selectable_cols = channel_labels(dat)
@@ -615,22 +597,78 @@ summary = channel_summary(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, 
 ```
 """
 function channel_summary(
-    dat::ContinuousData;
+    dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_extra_channels::Bool = false,
+    include_metadata_columns::Bool = false,
+    include_extra_columns::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_metadata_columns=include_metadata_columns, include_extra_columns=include_extra_columns)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
+end
+
+"""
+    convert(dat::MultiDataFrameEeg, epoch_idx::Int) -> SingleDataFrameEeg
+
+Convert a single epoch from MultiDataFrameEeg to SingleDataFrameEeg.
+
+# Arguments
+- `dat::MultiDataFrameEeg`: The multi-DataFrame EEG data
+- `epoch_idx::Int`: Index of the epoch to convert (1-based)
+
+# Returns
+- `SingleDataFrameEeg`: Single DataFrame containing only the specified epoch
+
+# Examples
+```julia
+# Convert epoch 3 to single DataFrame
+single_dat = convert(dat, 3)
+
+# Now you can use single DataFrame functions
+summary = channel_summary(single_dat)
+```
+"""
+function convert(dat::MultiDataFrameEeg, epoch_idx::Int)::SingleDataFrameEeg
+    # Validate epoch index
+    if epoch_idx < 1 || epoch_idx > length(dat.data)
+        @minimal_error "Epoch index $epoch_idx out of range (1:$(length(dat.data)))"
+    end
+    return ContinuousData(dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
 function channel_summary(
     dat::MultiDataFrameEeg;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-)::Vector{DataFrame}
-    return [channel_summary(dat.data[trial]; sample_selection = sample_selection, channel_selection = channel_selection) for trial in eachindex(dat.data)]
+    include_metadata_columns::Bool = false,
+    include_extra_columns::Bool = false,
+)::DataFrame
+    # Process each epoch and collect results
+    results = DataFrame[]
+    
+    for epoch_df in dat.data
+        # Get the original epoch number from the data
+        original_epoch_number = epoch_df.epoch[1]  # All rows in an epoch have the same epoch number
+        
+        # Create ContinuousData from this epoch DataFrame
+        single_dat = ContinuousData(epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
+        
+        # Get summary for this epoch
+        epoch_summary = channel_summary(single_dat; 
+                                       sample_selection = sample_selection, 
+                                       channel_selection = channel_selection,
+                                       include_metadata_columns = include_metadata_columns,
+                                       include_extra_columns = include_extra_columns)
+        
+        # Add epoch column as first column with original epoch number
+        insertcols!(epoch_summary, 1, :epoch => fill(original_epoch_number, nrow(epoch_summary)))
+        
+        push!(results, epoch_summary)
+    end
+    
+    # Combine all results
+    return vcat(results...)
 end
 
 

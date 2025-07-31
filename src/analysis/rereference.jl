@@ -8,11 +8,7 @@ Internal function that applies rereferencing to specified channels in a DataFram
 - `channel_selection::Vector{Symbol}`: Names of channels to rereference
 - `reference_selection::Vector{Symbol}`: Names of channels to use for reference calculation
 """
-function _apply_rereference!(
-    dat::DataFrame, 
-    channel_selection::Vector{Symbol},
-    reference_selection::Vector{Symbol}
-)
+function _apply_rereference!( dat::DataFrame, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
     reference = calculate_reference(dat, reference_selection)
     @views dat[!, channel_selection] .-= reference
     return nothing
@@ -23,11 +19,7 @@ end
 
 Internal function that applies rereferencing to specified channels in a vector of DataFrames.
 """
-function _apply_rereference!(
-    dat::Vector{DataFrame}, 
-    channel_selection::Vector{Symbol},
-    reference_selection::Vector{Symbol}
-)
+function _apply_rereference!( dat::Vector{DataFrame}, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
     _apply_rereference!.(dat, Ref(channel_selection), Ref(reference_selection))
     return nothing
 end
@@ -92,11 +84,8 @@ function get_reference_channels(dat::EegData, reference_channel::Symbol)
 end
 
 # Single method for all EEG data types
-function rereference!(
-    dat::EegData,
-    reference_selection::Union{Symbol,Vector{Symbol}},
-    channel_selection::Function = channels()
-)
+function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
+
     reference_channels = get_reference_channels(dat, reference_selection)
     selected_channels = get_selected_channels(dat, channel_selection, include_metadata_columns = false)
     

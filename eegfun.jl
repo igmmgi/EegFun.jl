@@ -8,6 +8,9 @@
 # package
 using eegfun
 using GLMakie
+using DataFrames
+using BenchmarkTools
+
 # using CairoMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
 # load data
@@ -15,20 +18,47 @@ dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+# EPOCHS
+epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epochs = []
+for (idx, epoch) in enumerate(epoch_cfg)
+     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+end
+df1 = eegfun.channel_summary(dat)
+df2 = eegfun.channel_summary(epochs[1])
+
+eegfun.plot_channel_summary(df1, :range)
+eegfun.plot_channel_summary(df1, :min)
+
+eegfun.plot_channel_summary(df2, :range, average_over=:epoch)
+eegfun.plot_channel_summary(df2, :min, average_over=:epoch)
+
+
+
+
+
+
 # how to filter data
-eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
+eegfun.filter_data!(dat, "hp", 1)
+eegfun.filter_data!(dat, "lp", 20)
+
 # how to rereference data
 eegfun.rereference!(dat, :avg)
 
+# how to create channel differences (e.g. EOG calculations)
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+
+# how to detect EOG onsets (a new Bool column is added to the data frame: :is_vEOG, :is_hEOG)
+eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+
+# how to mark epoch windows (a new Bool column is added to the data frame: :epoch_window)
+eegfun.mark_epoch_windows!(dat, [1, 3], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3
+
+# how to plot the databrowser
 eegfun.plot_databrowser(dat)
 
-
-# @btime eegfun.subset(dat, sample_selection = x -> x.time .>= 200)
-# @time eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
-# @btime eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 200)
-
-# databrowser
-eegfun.plot_databrowser(dat)
 
 
 # define neighbours 2D/3D defined by distance (mm)
@@ -62,8 +92,6 @@ eegfun.trigger_count(dat);
 eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
 
-# create our eeg ContinuousData type
-dat = eegfun.create_eeg_dataframe(dat, layout);
 
 eegfun.all_data(dat)
 eegfun.meta_data(dat)
@@ -82,7 +110,8 @@ eegfun.plot_trigger_overview(dat)
 eegfun.plot_trigger_timing(dat)
 
 # how to filter data
-eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
+eegfun.filter_data!(dat, "hp", 1)
+
 # how to rereference data
 eegfun.rereference!(dat, :avg)
 # databrowser
@@ -202,13 +231,7 @@ eegfun.rereference!(dat, :avg)
 # rereference!(dat, :mastoid)
 
 # initial high-pass filter to remove slow drifts
-# TODO: add @info within function for logging
-eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
-# eegfun.filter_data!(dat, "hp", "iir", 1, order=1)
-
-# caculate EOG diff channels channels
-eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
+eegfun.filter_data!(dat, "hp", 1)
 
 # autodetect vEOG/hEOG signals using simple step detection
 # a new Bool column is added to the data frame: :is_vEOG, :is_hEOG
