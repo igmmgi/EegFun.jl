@@ -1069,263 +1069,135 @@ function butterfly_plot!(ax, state)
     draw(ax, state)
 end
 
+# Single function with data access abstraction
 function draw(ax, state::DataBrowserState{<:AbstractDataState})
-    _draw_implementation(ax, state, state.data)
-end
-
-# Type-specific implementations
-function _draw_implementation(ax, state, data::ContinuousDataState)
-    # Pre-compute shared observables to avoid recreating them for each channel
-    # Only plot visible data range for better performance
-    visible_time_obs = @lift($(data.current).data.time[$(state.view.xrange)])
-    xrange_start_obs = @lift($(data.current).data.time[$(state.view.xrange)[1]])
+    # Get data access functions based on type
+    get_data, get_time, get_label_y = get_data_accessors(state.data)
+    
+    # Pre-compute shared observables
+    visible_time_obs = @lift(get_time($(state.data.current), $(state.view.xrange)))
+    time_start_obs = @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1])
     
     @sync for (idx, visible) in enumerate(state.channels.visible)
-        col = state.channels.labels[idx]  # Define col for all channels
+        col = state.channels.labels[idx]
         if visible
             is_selected = state.channels.selected[idx]
             
-            # Set line properties based on selection - only visible range
-            line_color = is_selected ? :black : @lift(abs.($(data.current).data[$(state.view.xrange), $col]) .>= $(state.view.crit_val))
+            # Line properties
+            line_color = is_selected ? :black : @lift(abs.(get_data($(state.data.current), $(state.view.xrange), $col)) .>= $(state.view.crit_val))
             line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
             line_width = is_selected ? 4 : 2
             
-            # Pre-compute channel data observable - only visible range
-            channel_data_obs = @lift($(data.current).data[$(state.view.xrange), $col])
+            # Channel data
+            channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), $col))
             channel_data_with_offset = @lift($(channel_data_obs) .+ state.view.offset[idx])
             
-            # Reuse existing line object or create new one
-            if haskey(state.channels.data_lines, col)
-                # Update existing line
-                state.channels.data_lines[col].x[] = visible_time_obs[]
-                state.channels.data_lines[col].y[] = channel_data_with_offset[]
-                state.channels.data_lines[col].color[] = line_color
-                state.channels.data_lines[col].colormap[] = line_colormap
-                state.channels.data_lines[col].linewidth[] = line_width
-                show!(state.channels.data_lines[col])
-            else
-                # Create new line only if needed
-                state.channels.data_lines[col] = lines!(
-                    ax,
-                    visible_time_obs,
-                    channel_data_with_offset,
-                    color = line_color,
-                    colormap = line_colormap,
-                    linewidth = line_width,
-                )
-            end
+            # Update or create line
+            update_or_create_line!(state.channels.data_lines, col, ax, visible_time_obs, channel_data_with_offset, line_color, line_colormap, line_width)
             
+            # Handle labels
             if !state.view.butterfly[]
-                # Pre-compute label position
-                label_y_obs = @lift($(data.current).data[$(state.view.xrange)[1], $col] .+ state.view.offset[idx])
-                
-                # Reuse existing label object or create new one
-                if haskey(state.channels.data_labels, col)
-                    # Update existing label
-                    state.channels.data_labels[col].position[] = Point2f(xrange_start_obs[], label_y_obs[])
-                    state.channels.data_labels[col].color[] = is_selected ? :red : :black
-                    show!(state.channels.data_labels[col])
-                else
-                    # Create new label only if needed
-                    state.channels.data_labels[col] = text!(
-                        ax,
-                        xrange_start_obs,
-                        label_y_obs,
-                        text = String(col),
-                        align = (:left, :center),
-                        fontsize = 18,
-                        color = is_selected ? :red : :black,
-                    )
-                end
+                label_y_obs = @lift(get_label_y($(state.data.current), $col, state.view.offset[idx]))
+                update_or_create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
             else
-                # Hide label if butterfly mode is on
-                if haskey(state.channels.data_labels, col)
-                    hide!(state.channels.data_labels[col])
-                end
+                hide_channel_label!(state.channels.data_labels, col)
             end
         else
-            # Hide plot objects for invisible channels
-            if haskey(state.channels.data_lines, col)
-                hide!(state.channels.data_lines[col])
-            end
-            if haskey(state.channels.data_labels, col)
-                hide!(state.channels.data_labels[col])
-            end
+            hide_channel_objects!(state.channels, col)
         end
     end
 end
 
-function _draw_implementation(ax, state, data::EpochedDataState)
-    current_epoch = data.current_epoch[]  # Get current epoch value
-    current_epoch_data = data.current[].data[current_epoch]  # Get current epoch DataFrame
+# Data accessor functions
+function get_data_accessors(data::ContinuousDataState)
+    get_data = (current, range, col) -> current.data[range, col]
+    get_time = (current, range) -> current.data.time[range]
+    get_label_y = (current, col, offset) -> current.data[1, col] .+ offset
+    return get_data, get_time, get_label_y
+end
 
-    # Ensure view range is within data bounds
-    n_samples = nrow(current_epoch_data)
-    state.view.xrange[] = 1:min(state.view.xrange[][end], n_samples)
+function get_data_accessors(data::EpochedDataState)
+    get_data = (current, range, col) -> current.data[current.current_epoch[]][range, col]
+    get_time = (current, range) -> current.data[current.current_epoch[]].time[range]
+    get_label_y = (current, col, offset) -> current.data[current.current_epoch[]][!, col][1] .+ offset
+    return get_data, get_time, get_label_y
+end
 
-    # Pre-compute shared observables to avoid recreating them for each channel
-    # Only plot visible data range for better performance
-    visible_epoch_time_obs = @lift($(data.current).data[$(data.current_epoch)].time[$(state.view.xrange)])
-    epoch_time_start_obs = @lift($(data.current).data[$(data.current_epoch)].time[1])
-
-    @sync for (idx, visible) in enumerate(state.channels.visible)
-        col = state.channels.labels[idx]  # Define col for all channels
-        if visible  # Only plot if channel is visible
-            is_selected = state.channels.selected[idx]
-            
-            # Set line properties based on selection - only visible range
-            line_color = is_selected ? :black : @lift(abs.($(data.current).data[$(data.current_epoch)][$(state.view.xrange), $col]) .>= $(state.view.crit_val))
-            line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
-            line_width = is_selected ? 4 : 2
-
-            # Pre-compute channel data observable - only visible range
-            channel_data_obs = @lift($(data.current).data[$(data.current_epoch)][$(state.view.xrange), $col])
-            channel_data_with_offset = @lift($(channel_data_obs) .+ state.view.offset[idx])
-
-            # Reuse existing line object or create new one
-            if haskey(state.channels.data_lines, col)
-                # Update existing line
-                state.channels.data_lines[col].x[] = visible_epoch_time_obs[]
-                state.channels.data_lines[col].y[] = channel_data_with_offset[]
-                state.channels.data_lines[col].color[] = line_color
-                state.channels.data_lines[col].colormap[] = line_colormap
-                state.channels.data_lines[col].linewidth[] = line_width
-                show!(state.channels.data_lines[col])
-            else
-                # Create new line only if needed
-                state.channels.data_lines[col] = lines!(
-                    ax,
-                    visible_epoch_time_obs,
-                    channel_data_with_offset,
-                    color = line_color,
-                    colormap = line_colormap,
-                    linewidth = line_width,
-                )
-            end
-            
-            if !state.view.butterfly[]
-                # Pre-compute label position
-                label_y_obs = @lift($(data.current).data[$(data.current_epoch)][!, $col][1] .+ state.view.offset[idx])
-                
-                # Reuse existing label object or create new one
-                if haskey(state.channels.data_labels, col)
-                    # Update existing label
-                    state.channels.data_labels[col].position[] = Point2f(epoch_time_start_obs[], label_y_obs[])
-                    state.channels.data_labels[col].color[] = is_selected ? :red : :black
-                    show!(state.channels.data_labels[col])
-                else
-                    # Create new label only if needed
-                    state.channels.data_labels[col] = text!(
-                        ax,
-                        epoch_time_start_obs,
-                        label_y_obs,
-                        text = String(col),
-                        align = (:left, :center),
-                        fontsize = 18,
-                        color = is_selected ? :red : :black,
-                    )
-                end
-            else
-                # Hide label if butterfly mode is on
-                if haskey(state.channels.data_labels, col)
-                    hide!(state.channels.data_labels[col])
-                end
-            end
-        else
-            # Hide plot objects for invisible channels
-            if haskey(state.channels.data_lines, col)
-                hide!(state.channels.data_lines[col])
-            end
-            if haskey(state.channels.data_labels, col)
-                hide!(state.channels.data_labels[col])
-            end
-        end
+# Helper functions for line/label management
+function update_or_create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth)
+    if haskey(data_lines, col)
+        data_lines[col].x[] = x_obs[]
+        data_lines[col].y[] = y_obs[]
+        data_lines[col].color[] = color
+        data_lines[col].colormap[] = colormap
+        data_lines[col].linewidth[] = linewidth
+        show!(data_lines[col])
+    else
+        data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth)
     end
 end
 
-# Generic draw_extra_channel function that dispatches based on data type
+function update_or_create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
+    if haskey(data_labels, col)
+        data_labels[col].position[] = Point2f(x_obs[], y_obs[])
+        data_labels[col].color[] = is_selected ? :red : :black
+        show!(data_labels[col])
+    else
+        data_labels[col] = text!(ax, x_obs, y_obs, text = String(col), align = (:left, :center), fontsize = 18, color = is_selected ? :red : :black)
+    end
+end
+
+function hide_channel_label!(data_labels, col)
+    if haskey(data_labels, col)
+        hide!(data_labels[col])
+    end
+end
+
+function hide_channel_objects!(channels, col)
+    if haskey(channels.data_lines, col)
+        hide!(channels.data_lines[col])
+    end
+    if haskey(channels.data_labels, col)
+        hide!(channels.data_labels[col])
+    end
+end
+
+# Single function with data access abstraction
 function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
     clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
-    _draw_extra_channel_implementation(ax, state, state.data)
-end
-
-# Type-specific implementations
-function _draw_extra_channel_implementation(ax, state, data::ContinuousDataState)
+    
     if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
         current_offset = state.view.offset[end] + mean(diff(state.view.offset))
-        channel = state.extra_channel.channel  # Get the channel symbol
-        if eltype(data.current[].data[!, channel]) == Bool
-            highlight_data = @views splitgroups(findall(data.current[].data[!, channel]))
+        channel = state.extra_channel.channel
+        
+        # Get data access functions based on type
+        get_data, get_time, get_label_y = get_data_accessors(state.data)
+        
+        if eltype(get_data(state.data.current[], 1:1, channel)) == Bool
+            # Boolean data - create highlights
+            highlight_data = @views splitgroups(findall(get_data(state.data.current[], :, channel)))
             region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
             state.extra_channel.data_lines[channel] = vspan!(
                 ax,
-                data.current[].data[highlight_data[1], :time],
-                data.current[].data[highlight_data[2].+region_offset, :time],
+                get_time(state.data.current[], highlight_data[1]),
+                get_time(state.data.current[], highlight_data[2].+region_offset),
                 color = :Red,
                 alpha = 0.5,
                 visible = true,
             )
         else
+            # Regular data - create line and label
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
-                @lift($(data.current).data.time),
-                @lift(begin
-                    df = $(data.current).data
-                    df[!, $channel] .+ current_offset
-                end),
+                @lift(get_time($(state.data.current), :)),
+                @lift(get_data($(state.data.current), :, $channel) .+ $current_offset),
                 color = :black,
                 linewidth = 2,
             )
             state.extra_channel.data_labels[channel] = text!(
                 ax,
-                @lift($(data.current).data.time[$(state.view.xrange)[1]]),
-                @lift(begin
-                    df = $(data.current).data
-                    df[!, $channel][$(state.view.xrange)[1]] .+ current_offset
-                end),
-                text = String(channel),
-                align = (:left, :center),
-                fontsize = 18,
-            )
-        end
-    end
-end
-
-function _draw_extra_channel_implementation(ax, state, data::EpochedDataState)
-    if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
-        current_offset = state.view.offset[end] + mean(diff(state.view.offset))
-        channel = state.extra_channel.channel  # Get the channel symbol
-        current_epoch = data.current_epoch[]  # Get current epoch value
-
-        if eltype(data.current[].data[current_epoch][!, channel]) == Bool
-            highlight_data = @views splitgroups(findall(data.current[].data[current_epoch][!, channel]))
-            region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
-            state.extra_channel.data_lines[channel] = vspan!(
-                ax,
-                data.current[].data[current_epoch][highlight_data[1], :time],
-                data.current[].data[current_epoch][highlight_data[2].+region_offset, :time],
-                color = :Red,
-                alpha = 0.5,
-                visible = true,
-            )
-        else
-            state.extra_channel.data_lines[channel] = lines!(
-                ax,
-                @lift($(data.current).data[$(data.current_epoch)].time),
-                @lift(begin
-                    df = $(data.current).data[$(data.current_epoch)]
-                    df[!, $channel] .+ current_offset
-                end),
-                color = :black,
-                linewidth = 2,
-            )
-            state.extra_channel.data_labels[channel] = text!(
-                ax,
-                @lift($(data.current).data[$(data.current_epoch)].time[1]),
-                @lift(begin
-                    df = $(data.current).data[$(data.current_epoch)]
-                    df[!, $channel][1] .+ current_offset
-                end),
+                @lift(get_time($(state.data.current), $(state.view.xrange)[1:1])[1]),
+                @lift(get_label_y($(state.data.current), $channel, $current_offset)),
                 text = String(channel),
                 align = (:left, :center),
                 fontsize = 18,

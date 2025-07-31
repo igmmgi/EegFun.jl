@@ -200,32 +200,29 @@ Apply a digital filter to EEG data. Modifies the data in place.
             order=2, 
             channel_selection=channels([:Fp1, :Fp2, :F3, :F4]))
 """
-function filter_data!(
-    dat::EegData,
-    filter_type,
-    filter_method,
-    cutoff_freq;
-    order = 2,  
-    transition_width = 0.1,  
+function filter_data!(dat::EegData, filter_type::String, cutoff_freq::Real; 
+    order::Int = filter_type == "hp" ? 1 : 3,  
+    transition_width::Real = filter_type == "hp" ? 0.25 : 0.1,  
+    filter_method::String="iir",
     channel_selection::Function = channels(),
-    filter_func = filtfilt,
-    plot_filter = false,
-    print_filter = false,
-)
+    filter_func::Function = filtfilt,
+    plot_filter::Bool = false,
+    print_filter::Bool = false)
 
-    selected_channels = get_selected_channels(dat, channel_selection, include_metadata_columns = false)
+    selected_channels = get_selected_channels(dat, channel_selection, include_metadata_columns = false, include_extra_columns = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for filtering"
-        return
+        return nothing
     end
-    @info "filter_data! applying filter to $(length(selected_channels)) channels"
+    @info "filter_data! applying $filter_type filter to $(length(selected_channels)) channels"
 
-    # Create filter once
+    # Create and apply filter
     filter_info = create_filter(filter_type, filter_method, cutoff_freq, dat.sample_rate; 
-    order = order, transition_width = transition_width, plot_filter = plot_filter, print_filter = print_filter)
-    _update_filter_info!(dat, filter_info) # to help keep track of filters applied to the data
-    
-    # apply filter (dispatch handles DataFrame vs Vector{DataFrame})
+                  order = order, 
+                  transition_width = transition_width, 
+                  plot_filter = plot_filter, 
+                  print_filter = print_filter)
+    _update_filter_info!(dat, filter_info)
     _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
 
 end

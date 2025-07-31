@@ -59,24 +59,24 @@ channel_difference!(dat)
 ```
 """
 function channel_difference!(
-    dat::EegData,
+    dat::EegData;
     channel_selection1::Function = channels(),
     channel_selection2::Function = channels(),
     channel_out::Symbol = :diff,
 )
     # Resolve predicates to get actual channel names for logging
-    channels_in1_selected = get_selected_channels(dat, channel_selection1)
-    channels_in2_selected = get_selected_channels(dat, channel_selection2)
+    channels_in1_selected = get_selected_channels(dat, channel_selection1, include_metadata_columns = false)
+    channels_in2_selected = get_selected_channels(dat, channel_selection2, include_metadata_columns = false)
     @info "Channel sets: $(channels_in1_selected) vs. $(channels_in2_selected) -> $(channel_out)"
 
     # Verify channels exist in data
-    missing_channels = [ch for ch in vcat(channels_in1_selected, channels_in2_selected) if ch ∉ all_channels(dat)]
+    missing_channels = [ch for ch in vcat(channels_in1_selected, channels_in2_selected) if ch ∉ all_labels(dat)]
     if !isempty(missing_channels)
         @minimal_error "Missing channels in data: $(missing_channels)"
     end
 
     # Check if difference channel already exists
-    if channel_out ∈ all_channels(dat)
+    if channel_out ∈ all_labels(dat)
         @minimal_warning "Overwriting existing channel '$(channel_out)'"
     end
 
