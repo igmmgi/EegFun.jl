@@ -313,7 +313,7 @@ function create_reference_menu(fig, state, dat)
     on(menu[1].selection) do s
         state.reference_state = s
         s == :none && return
-        rereference!(state.data, dat, s)
+        rereference!(state.data, s)
         notify_data_update(state.data)
     end
 
@@ -886,7 +886,7 @@ function apply_filters!(state)
     # Reset to original if no filters active
     if !state.data.filter_state.active[].hp && !state.data.filter_state.active[].lp
         reset_to_original!(state.data)
-        rereference!(state.data, state.data.original, state.reference_state)
+        rereference!(state.data, state.reference_state)
         notify_data_update(state.data)
         return
     end
@@ -894,7 +894,7 @@ function apply_filters!(state)
     # Start with fresh data if changing filter configuration
     if state.data.filter_state.active[].hp != state.data.filter_state.active[].lp
         reset_to_original!(state.data)
-        rereference!(state.data, state.data.original, state.reference_state)
+        rereference!(state.data, state.reference_state)
     end
 
     # Apply active filters
@@ -923,10 +923,8 @@ end
 ########################
 # Reference
 ########################
-function rereference!(state::AbstractDataState, dat, ref)
-    rereferenced_data = copy(state.current[])
-    rereference!(rereferenced_data, ref, channels())
-    state.current[] = rereferenced_data
+function rereference!(state::AbstractDataState, ref)
+    rereference!(state.current[], ref, channels())  
 end
 
 ########################
