@@ -29,7 +29,6 @@ mutable struct SelectionState
     visible::Observable{Bool}
     rectangle::Makie.Poly
     function SelectionState(ax)
-        # Initialize with a single point to avoid empty vector issues with CairoMakie
         initial_points = [Point2f(0.0, 0.0)]
         poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
         new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
@@ -55,6 +54,7 @@ mutable struct ViewState
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
     function ViewState(n_channels::Int)
+        # TODO: could this be done better?
         offset = n_channels > 1 ? LinRange(1500 * 0.9, -1500 * 0.9, n_channels + 2)[2:end-1] : zeros(n_channels)
         new(Observable(1:5000), Observable(-1500:1500), offset, Observable(0.0), Observable(false))
     end
@@ -143,26 +143,21 @@ end
 const ContinuousDataBrowserState = DataBrowserState{ContinuousDataState}
 const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
 
-# Create the appropriate state type
-function create_browser_state(dat::ContinuousData, channel_labels, ax, ica)
-    return DataBrowserState{ContinuousDataState}(
+# Single function using multiple dispatch for the data state creation
+function create_browser_state(dat::T, channel_labels, ax, ica) where T <: EegData
+    state_type = data_state_type(T)
+    return DataBrowserState{state_type}(
         view = ViewState(length(channel_labels)),
         channels = ChannelState(channel_labels),
-        data = ContinuousDataState(dat),
+        data = state_type(dat),  # This directly calls the constructor!
         selection = SelectionState(ax),
         ica_state = !isnothing(ica) ? IcaState() : nothing,
     )
 end
 
-function create_browser_state(dat::EpochData, channel_labels, ax, ica)
-    return DataBrowserState{EpochedDataState}(
-        view = ViewState(length(channel_labels)),
-        channels = ChannelState(channel_labels),
-        data = EpochedDataState(dat),
-        selection = SelectionState(ax),
-        ica_state = !isnothing(ica) ? IcaState() : nothing,
-    )
-end
+# Type mapping
+data_state_type(::Type{ContinuousData}) = ContinuousDataState
+data_state_type(::Type{EpochData}) = EpochedDataState
 
 # Helper functions for common data access/resetting/updating
 get_current_data(state::ContinuousDataState) = state.current[].data
@@ -172,14 +167,10 @@ get_time_bounds(dat::EpochedDataState) = (dat.current[].data[dat.current_epoch[]
 has_column(state::ContinuousDataState, col::String) = col in names(state.current[].data)
 has_column(state::EpochedDataState, col::String) = col in names(state.current[].data[state.current_epoch[]])
 
-notify_data_update(state::ContinuousDataState) = notify(state.current)
-notify_data_update(state::EpochedDataState) = notify(state.current)
+notify_data_update(state::AbstractDataState) = notify(state.current)
 
-function reset_to_original!(state::ContinuousDataState)
-    state.current[] = copy(state.original)
-end
-
-function reset_to_original!(state::EpochedDataState)
+# This single function works for BOTH types
+function reset_to_original!(state::AbstractDataState)
     state.current[] = copy(state.original)
 end
 
@@ -932,15 +923,7 @@ end
 ########################
 # Reference
 ########################
-function rereference!(state::ContinuousDataState, dat, ref)
-    # Create new EegData with rereferenced data
-    rereferenced_data = copy(state.current[])
-    rereference!(rereferenced_data, ref, channels())
-    state.current[] = rereferenced_data
-end
-
-function rereference!(state::EpochedDataState, dat, ref)
-    # Create new EegData with rereferenced data
+function rereference!(state::AbstractDataState, dat, ref)
     rereferenced_data = copy(state.current[])
     rereference!(rereferenced_data, ref, channels())
     state.current[] = rereferenced_data
@@ -1374,7 +1357,7 @@ end
 get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 
-function plot_databrowser(dat::Union{ContinuousData,EpochData}, ica = nothing)
+function plot_databrowser(dat::EegData, ica = nothing)
 
     @info "plot_databrowser: ..."
 
@@ -1383,16 +1366,10 @@ function plot_databrowser(dat::Union{ContinuousData,EpochData}, ica = nothing)
         @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
     end
 
-    # Common setup
+    # Common fig/ax/state/ui setup
     fig = Figure()
-
-    # Create axis with appropriate title using multiple dispatch
     ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (μV)", title = get_title(dat))
-
-    # Create appropriate state based on data type
     state = create_browser_state(dat, dat.layout.data.label, ax, ica)
-
-    # Common UI setup
     setup_ui(fig, ax, state, dat, ica)
 
     # Render and return
