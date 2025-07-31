@@ -854,32 +854,15 @@ end
 ############
 # Filtering
 ############
-function apply_filter!(state::ContinuousDataBrowserState, filter_type, freq)
-    # Create new EegData with filtered data
-    filtered_data = copy(state.data.current[])
+function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where T <: AbstractDataState
     filter_data!(
-        filtered_data,
+        state.data.current[],
         String(filter_type),
         "iir",
         freq,
         order = filter_type == :hp ? 1 : 3,
         channel_selection = (channels) -> [ch in state.channels.labels for ch in channels]
     )
-    state.data.current[] = filtered_data
-end
-
-function apply_filter!(state::EpochedDataBrowserState, filter_type, freq)
-    # Create new EegData with filtered data
-    filtered_data = copy(state.data.current[])
-    filter_data!(
-        filtered_data,
-        String(filter_type),
-        "iir",
-        freq,
-        order = filter_type == :hp ? 1 : 3,
-        channel_selection = (channels) -> [ch in state.channels.labels for ch in channels]
-    )
-    state.data.current[] = filtered_data
 end
 
 function apply_filters!(state)
