@@ -130,7 +130,7 @@ function run_ica(
     n_components::Union{Nothing,Int} = nothing,
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_extra_channels::Bool = false,
+    include_extra::Bool = false,
     hp_filter::Bool = true,
     lp_filter::Bool = false,
     hp_freq::Float64 = 1.0,
@@ -150,7 +150,7 @@ function run_ica(
         dat_ica = filter_data(dat_ica, "lp", "iir", lp_freq, order = 3)
     end
 
-    selected_channels = get_selected_channels(dat_ica, channel_selection; include_extra_channels=include_extra_channels)
+    selected_channels = get_selected_channels(dat_ica, channel_selection; include_extra=include_extra)
     if isempty(selected_channels)
         error("No channels available after applying channel filter")
     end

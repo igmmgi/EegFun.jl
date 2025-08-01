@@ -481,12 +481,12 @@ function subset(dat::EpochData;
                channel_selection::Function = channels(), 
                sample_selection::Function = samples(),
                epoch_selection::Function = epochs(), 
-               include_extra_channels::Bool = false)::EpochData
+               include_extra::Bool = false)::EpochData
     
     @info "subset: Subsetting $(typeof(dat)) ..."
 
     # Get selected channels, samples, and epochs
-    selected_channels = get_selected_channels(dat, channel_selection, include_extra_channels = include_extra_channels)
+    selected_channels = get_selected_channels(dat, channel_selection, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
     selected_epochs = get_selected_epochs(dat, epoch_selection)
     

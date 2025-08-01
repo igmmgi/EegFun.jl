@@ -380,7 +380,7 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
 
     # Columns/channels in dataframe to include
     metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
-    selectable_cols = include_extra ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
+    selectable_cols = include_extras ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
     
     # Apply channel selection to non-metadata columns
     selected_cols = selectable_cols[channel_selection(selectable_cols)]
@@ -446,7 +446,7 @@ end
 
 
 """
-    channel_summary(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::DataFrame
+    channel_summary(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extr ::Bool = false)::DataFrame
 
 Computes summary statistics for EEG channels.
 
@@ -454,7 +454,7 @@ Computes summary statistics for EEG channels.
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra::Bool`: Whether to include additional channels (default: false).
 
 # Returns
 A DataFrame containing summary statistics for each channel.
@@ -550,10 +550,10 @@ function channel_summary(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_metadata_columns::Bool = false,
-    include_extra_columns::Bool = false,
+    include_meta::Bool = false,
+    include_extra::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_metadata_columns=include_metadata_columns, include_extra_columns=include_extra_columns)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta=include_meta, include_extra=include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
 end
@@ -591,8 +591,8 @@ function channel_summary(
     dat::MultiDataFrameEeg;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_metadata_columns::Bool = false,
-    include_extra_columns::Bool = false,
+    include_meta::Bool = false,
+    include_extra::Bool = false,
 )::DataFrame
     # Process each epoch and collect results
     results = DataFrame[]
@@ -608,8 +608,8 @@ function channel_summary(
         epoch_summary = channel_summary(single_dat; 
                                        sample_selection = sample_selection, 
                                        channel_selection = channel_selection,
-                                       include_metadata_columns = include_metadata_columns,
-                                       include_extra_columns = include_extra_columns)
+                                       include_meta = include_meta,
+                                       include_extra = include_extra)
         
         # Add epoch column as first column with original epoch number
         insertcols!(epoch_summary, 1, :epoch => fill(original_epoch_number, nrow(epoch_summary)))
@@ -624,7 +624,7 @@ end
 
 
 """
-    correlation_matrix(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::Matrix{Float64}
+    correlation_matrix(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra::Bool = false)::Matrix{Float64}
 
 Calculates the correlation matrix for the EEG data.
 
@@ -632,7 +632,7 @@ Calculates the correlation matrix for the EEG data.
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra::Bool`: Whether to include additional channels (default: false).
 
 # Returns
 A matrix containing the correlation values between the specified channels.
@@ -731,9 +731,9 @@ function correlation_matrix(
     dat::ContinuousData;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_extra_channels::Bool = false,
+    include_extra::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra=include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
