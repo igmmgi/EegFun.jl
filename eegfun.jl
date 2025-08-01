@@ -10,7 +10,6 @@ using eegfun
 using GLMakie
 using DataFrames
 using BenchmarkTools
-
 # using CairoMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
 # load data
@@ -18,6 +17,15 @@ dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.rereference!(dat, :avg)
+eegfun.filter_data!(dat, "hp", 1)
+
+# eegfun.mark_epoch_windows!(dat, [1, 3, 22], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
+# eegfun.plot_databrowser(dat)
+
+epoch1 = eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1, 3], [3, :any]]) # 1 -> 3 or 3 -> any sequences
+@btime eegfun.mark_epoch_windows!(dat, [epoch1], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
+
 # EPOCHS
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = []
