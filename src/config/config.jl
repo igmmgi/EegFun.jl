@@ -35,227 +35,137 @@ end
 const PARAMETERS = Dict{String,ConfigParameter}(
 
     # File paths and settings
-    "files.input.directory" => ConfigParameter{String}(
-        description = "Directory containing raw data files.",
-        default = "."
-    ),
-    
+    "files.input.directory" =>
+        ConfigParameter{String}(description = "Directory containing raw data files.", default = "."),
     "files.input.raw_data_files" => ConfigParameter{Union{Vector{String},String}}(
         description = "Pattern (regex or explicit list) for raw data files to process.",
-        default = "\\.bdf"
+        default = "\\.bdf",
     ),
-    
-    "files.input.layout_file" => ConfigParameter{String}(
-        description = "Electrode layout file name (\"*.csv\")",
-        default = "biosemi72.csv"
-    ),
-   
+    "files.input.layout_file" =>
+        ConfigParameter{String}(description = "Electrode layout file name (\"*.csv\")", default = "biosemi72.csv"),
     "files.input.epoch_condition_file" => ConfigParameter{Union{Nothing,String}}(
         description = "TOML file that defines the condition epochs.",
-        default = ""
+        default = "",
     ),
-
     "files.output.directory" => ConfigParameter{String}(
         description = "Directory for processed output files",
-        default = "./preprocessed_files"
+        default = "./preprocessed_files",
     ),
 
     # What data should we save?
-    "files.output.save_continuous_data" => ConfigParameter{Bool}(
-        description = "Save continuous data?",
-        default = false
-    ),
-    
-    "files.output.save_ica_data" => ConfigParameter{Bool}(
-        description = "Save ICA results?",
-        default = true
-    ),
-    
-    "files.output.save_epoch_data_original" => ConfigParameter{Bool}(
-        description = "Save epoched data?",
-        default = true
-    ),
-
-    "files.output.save_epoch_data_cleaned" => ConfigParameter{Bool}(
-        description = "Save epoched data after cleaning?",
-        default = true
-    ),
-    
-    "files.output.save_erp_data_original" => ConfigParameter{Bool}(
-        description = "Save ERP data",
-        default = true
-    ),
-
-    "files.output.save_erp_data_cleaned" => ConfigParameter{Bool}(
-        description = "Save ERP data after cleaning?",
-        default = true
-    ),
-    
+    "files.output.save_continuous_data" =>
+        ConfigParameter{Bool}(description = "Save continuous data?", default = false),
+    "files.output.save_ica_data" => ConfigParameter{Bool}(description = "Save ICA results?", default = true),
+    "files.output.save_epoch_data_original" =>
+        ConfigParameter{Bool}(description = "Save epoched data?", default = true),
+    "files.output.save_epoch_data_cleaned" =>
+        ConfigParameter{Bool}(description = "Save epoched data after cleaning?", default = true),
+    "files.output.save_erp_data_original" => ConfigParameter{Bool}(description = "Save ERP data", default = true),
+    "files.output.save_erp_data_cleaned" =>
+        ConfigParameter{Bool}(description = "Save ERP data after cleaning?", default = true),
     "files.output.exit_early" => ConfigParameter{Bool}(
         description = "Exit early from preprocessing pipeline (i.e., quick epoching only)",
-        default = false
+        default = false,
     ),
 
     # Preprocessing settings
-    "preprocess.epoch_start" => ConfigParameter{Real}(
-        description = "Epoch start (seconds).",
-        default = -1,
-    ),
+    "preprocess.epoch_start" => ConfigParameter{Real}(description = "Epoch start (seconds).", default = -1),
     # Preprocessing settings
-    "preprocess.epoch_end" => ConfigParameter{Real}(
-        description = "Epoch end (seconds).",
-        default = 1,
-    ),
-
-    "preprocess.reference_channel" => ConfigParameter{String}(
-        description = "Channels(s) to use as reference",
-        default = "avg"
-    ),
-
+    "preprocess.epoch_end" => ConfigParameter{Real}(description = "Epoch end (seconds).", default = 1),
+    "preprocess.reference_channel" =>
+        ConfigParameter{String}(description = "Channels(s) to use as reference", default = "avg"),
     "preprocess.layout.neighbour_criterion" => ConfigParameter{Real}(
         description = "Distance criterion (in mm) for channel neighbour definition.",
         default = 40,
-        min = 0
+        min = 0,
     ),
-
     "preprocess.eog.vEOG_channels" => ConfigParameter{Vector{Vector{String}}}(
         description = "Channels used in the calculation of vertical eye movements (vEOG).",
         default = [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]],
     ),
-
     "preprocess.eog.hEOG_channels" => ConfigParameter{Vector{Vector{String}}}(
         description = "Channels used in the calculation of horizontal eye movements (hEOG).",
         default = [["F9"], ["F10"], ["hEOG"]],
     ),
-
     "preprocess.eog.vEOG_criterion" => ConfigParameter{Real}(
         description = "Distance criterion for vertical EOG channel definition.",
         default = 50,
-        min = 0
+        min = 0,
     ),
-
     "preprocess.eog.hEOG_criterion" => ConfigParameter{Real}(
         description = "Distance criterion for horizontal EOG channel definition.",
         default = 30,
-        min = 0
+        min = 0,
     ),
-
     "preprocess.eeg.extreme_value_criterion" => ConfigParameter{Real}(
         description = "Value (mV) for defining data section as an extreme value.",
         default = 500,
     ),
-
     "preprocess.eeg.artifact_value_criterion" => ConfigParameter{Real}(
         description = "Value (mV) for defining data section as an artifact value.",
         default = 100,
     ),
 
     # Filtering settings
-    "filter.highpass.on" => ConfigParameter{Bool}(
-        description = "Apply highpass filter true/false",
-        default = true
-    ),
-    
+    "filter.highpass.on" => ConfigParameter{Bool}(description = "Apply highpass filter true/false", default = true),
     "filter.highpass.type" => ConfigParameter{String}(
         description = "Type of highpass filter",
         default = "fir",
-        allowed_values = ["fir", "iir"]
+        allowed_values = ["fir", "iir"],
     ),
-    
     "filter.highpass.cutoff" => ConfigParameter{Real}(
         description = "High-pass filter cutoff frequency (Hz)",
         default = 0.1,
         min = 0.01,
-        max = 20.0
+        max = 20.0,
     ),
-    
-    "filter.highpass.order" => ConfigParameter{Int}(
-        description = "Filter order",
-        default = 1,
-        min = 1,
-        max = 8
-    ),
+    "filter.highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 8),
 
     # Lowpass filtering settings
-    "filter.lowpass.on" => ConfigParameter{Bool}(
-        description = "Apply lowpass filter true/false",
-        default = true
-    ),
-    
+    "filter.lowpass.on" => ConfigParameter{Bool}(description = "Apply lowpass filter true/false", default = true),
     "filter.lowpass.type" => ConfigParameter{String}(
         description = "Type of lowpass filter",
         default = "fir",
-        allowed_values = ["fir", "iir"]
+        allowed_values = ["fir", "iir"],
     ),
-    
     "filter.lowpass.cutoff" => ConfigParameter{Real}(
         description = "Low-pass filter cutoff frequency (Hz)",
         default = 40,
         min = 5,
-        max = 200
+        max = 200,
     ),
-    
-    "filter.lowpass.order" => ConfigParameter{Int}(
-        description = "Filter order",
-        default = 3,
-        min = 1,
-        max = 8
-    ),
+    "filter.lowpass.order" => ConfigParameter{Int}(description = "Filter order", default = 3, min = 1, max = 8),
 
     # ICA settings
     "ica.run" => ConfigParameter{Bool}(
         description = "Run Independent Component Analysis (ICA) true/false.",
-        default = false
+        default = false,
     ),
-
-    "ica.ica_filter.highpass.on" => ConfigParameter{Bool}(
-        description = "Apply highpass filter to ICA data true/false",
-        default = true
-    ),
-    
+    "ica.ica_filter.highpass.on" =>
+        ConfigParameter{Bool}(description = "Apply highpass filter to ICA data true/false", default = true),
     "ica.ica_filter.highpass.type" => ConfigParameter{String}(
         description = "Type of highpass filter",
         default = "fir",
-        allowed_values = ["fir", "iir"]
+        allowed_values = ["fir", "iir"],
     ),
-    
     "ica.ica_filter.highpass.cutoff" => ConfigParameter{Real}(
         description = "ICA high-pass filter cutoff frequency (Hz)",
         default = 1,
         min = 1,
-        max = 20.0
+        max = 20.0,
     ),
-    
-    "ica.ica_filter.highpass.order" => ConfigParameter{Int}(
-        description = "Filter order",
-        default = 1,
-        min = 1,
-        max = 8
-    ),
-
-    "ica.ica_filter.lowpass.on" => ConfigParameter{Bool}(
-        description = "Apply lowpass filter to ICA data true/false",
-        default = true
-    ),
-    
+    "ica.ica_filter.highpass.order" =>
+        ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 8),
+    "ica.ica_filter.lowpass.on" =>
+        ConfigParameter{Bool}(description = "Apply lowpass filter to ICA data true/false", default = true),
     "ica.ica_filter.lowpass.type" => ConfigParameter{String}(
         description = "Type of lowpass filter",
         default = "fir",
-        allowed_values = ["fir", "iir"]
+        allowed_values = ["fir", "iir"],
     ),
-    
-    "ica.ica_filter.lowpass.cutoff" => ConfigParameter{Real}(
-        description = "ICA low-pass filter cutoff frequency (Hz)",
-        default = 30,
-    ),
-    
-    "ica.ica_filter.lowpass.order" => ConfigParameter{Int}(
-        description = "Filter order",
-        default = 2,
-        min = 1,
-    )
-
-    
+    "ica.ica_filter.lowpass.cutoff" =>
+        ConfigParameter{Real}(description = "ICA low-pass filter cutoff frequency (Hz)", default = 30),
+    "ica.ica_filter.lowpass.order" => ConfigParameter{Int}(description = "Filter order", default = 2, min = 1),
 )
 
 # Used for some validation stuff
@@ -291,12 +201,12 @@ Load and merge configuration from a TOML file with defaults.
 function load_config(config_file::String)
     # Load default config
     default_config = TOML.parsefile(joinpath(@__DIR__, "default.toml"))
-    
+
     # Check if user config exists
     if !isfile(config_file)
         @minimal_error "Configuration file not found: $config_file"
     end
-    
+
     # Load user config
     user_config = Dict()
     @info "Loading config file: $config_file"
@@ -305,14 +215,14 @@ function load_config(config_file::String)
     catch e
         @minimal_error "Error parsing TOML file: $e"
     end
-    
+
     # Merge and validate
     config = _merge_configs(default_config, user_config)
     validation_result = _validate_config(config)
     if !validation_result.success
         @minimal_error validation_result.error
     end
-    
+
     return _extract_values(config)
 end
 
@@ -406,7 +316,7 @@ function _validate_config(config::Dict, path = "")
         end
     end
 
-    return ValidationResult(success=true)
+    return ValidationResult(success = true)
 end
 
 """
@@ -425,7 +335,7 @@ Helper function to validate a single parameter value against its specification.
 function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_name::String)
     # Get the type from the type parameter
     param_type = typeof(parameter_spec).parameters[1]
-    
+
     # For numeric types, allow conversion between numeric types
     if param_type <: Number
         # Check if value is any numeric type
@@ -463,7 +373,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
     # Check allowed values if they exist
     if !isnothing(parameter_spec.allowed_values)
         value_in_allowed = false
-        
+
         # Convert value to string for comparison if needed
         for allowed_value in parameter_spec.allowed_values
             if isequal(value, allowed_value)
@@ -471,7 +381,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
                 break
             end
         end
-        
+
         value_in_allowed || return ValidationResult(
             false,
             "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed_values, ", "))",
@@ -479,7 +389,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
         )
     end
 
-    return ValidationResult(success=true)
+    return ValidationResult(success = true)
 end
 
 
@@ -509,12 +419,12 @@ function show_parameter_info(parameter_name::String = "")
 
         # Group parameters by section and subsection
         sections = Dict{String,Dict{String,Vector{Tuple{String,ConfigParameter}}}}()
-        
+
         for (path, parameter_spec) in PARAMETERS
             parts = split(path, ".")
             section = parts[1]
             subsection = length(parts) > 1 ? parts[2] : ""
-            
+
             if !haskey(sections, section)
                 sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
             end
@@ -534,14 +444,14 @@ function show_parameter_info(parameter_name::String = "")
 
             # Sort subsections
             sorted_subsections = sort(collect(keys(sections[section])))
-            
+
             for subsection in sorted_subsections
                 if !isempty(subsection)
                     @info "  [$subsection]"
                 end
-                
+
                 # Sort parameters within subsection
-                sorted_params = sort(sections[section][subsection], by=first)
+                sorted_params = sort(sections[section][subsection], by = first)
                 for (path, parameter_spec) in sorted_params
                     # Get the parameter name (last part of the path)
                     param_name = last(split(path, "."))
@@ -595,10 +505,10 @@ Generate and save a template TOML configuration file with all available paramete
 # Arguments
 - `filename::String`: Name of the template file to create (default: "config_template.toml")
 """
-function generate_config_template(filename::String="config_template.toml")
+function generate_config_template(filename::String = "config_template.toml")
     try
         @info "Starting config template generation"
-        
+
         # Open file for writing
         open(filename, "w") do io
             # Write header
@@ -612,7 +522,7 @@ function generate_config_template(filename::String="config_template.toml")
 
             # Group parameters by section and subsection
             sections = _group_parameters_by_section()
-            
+
             # Sort sections
             sorted_sections = sort(collect(keys(sections)))
 
@@ -620,28 +530,28 @@ function generate_config_template(filename::String="config_template.toml")
             for section in sorted_sections
                 println(io, "\n# $section Settings")
                 println(io, "[$section]")
-                
+
                 # Sort subsections
                 sorted_subsections = sort(collect(keys(sections[section])))
-                
+
                 for subsection in sorted_subsections
                     if !isempty(subsection)
                         println(io, "\n# $subsection Settings")
                         println(io, "[$section.$subsection]")
                     end
-                    
+
                     # Sort parameters within subsection
-                    sorted_params = sort(sections[section][subsection], by=first)
+                    sorted_params = sort(sections[section][subsection], by = first)
                     for (path, parameter_spec) in sorted_params
                         # Get the parameter name (last part of the path)
                         param_name = last(split(path, "."))
-                        
+
                         # Write parameter documentation
                         _write_parameter_docs(io, parameter_spec)
-                        
+
                         # Use the default value from parameter_spec
                         value = parameter_spec.default
-                        
+
                         # Write parameter value in appropriate format
                         _write_parameter_value(io, param_name, value)
                     end
@@ -669,19 +579,19 @@ Group configuration parameters by section and subsection.
 """
 function _group_parameters_by_section()
     sections = Dict{String,Dict{String,Vector{Tuple{String,ConfigParameter}}}}()
-    
+
     for (path, parameter_spec) in PARAMETERS
         parts = split(path, ".")
         section = parts[1]
-        
+
         # For nested paths like "ica.ica_filter.highpass.on", 
         # we want subsection to be "ica_filter.highpass"
         if length(parts) > 2
-            subsection = join(parts[2:end-1], ".")  # Join all parts except first and last
+            subsection = join(parts[2:(end-1)], ".")  # Join all parts except first and last
         else
             subsection = ""
         end
-        
+
         if !haskey(sections, section)
             sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
         end
@@ -690,7 +600,7 @@ function _group_parameters_by_section()
         end
         push!(sections[section][subsection], (path, parameter_spec))
     end
-    
+
     return sections
 end
 
@@ -702,7 +612,7 @@ Write parameter documentation to the given IO stream.
 function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
     println(io, "\n# $(parameter_spec.description)")
     println(io, "# Type: $(typeof(parameter_spec).parameters[1])")
-    
+
     if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
         range_str = "# Range: "
         if !isnothing(parameter_spec.min)
@@ -714,16 +624,16 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
         end
         println(io, range_str)
     end
-    
+
     if !isnothing(parameter_spec.allowed_values)
         println(io, "# Allowed values: $(join(parameter_spec.allowed_values, ", "))")
     end
-    
+
     # Print default value if it exists
     if !isnothing(parameter_spec.default)
         println(io, "# Default: $(parameter_spec.default)")
     end
-    
+
     # Mark required fields
     if isnothing(parameter_spec.default)
         println(io, "# [REQUIRED]")
@@ -760,4 +670,3 @@ function _write_parameter_value(io::IO, param_name::Union{String,SubString{Strin
         println(io, "$(String(param_name)) = $value")
     end
 end
-

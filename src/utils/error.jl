@@ -20,6 +20,3 @@ macro minimal_warning(msg)
         @warn "Warning: " * $(esc(msg)) _module=nothing _file=nothing _line=nothing
     end
 end
-
-
-

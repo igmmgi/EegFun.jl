@@ -104,19 +104,19 @@ fig, ax = plot_epochs(dat, channels([1, 5, 10, 15, 20]))
 - `legend`: Whether to show legend (default: true)
 - `legend_label`: Label for legend (default: "")
 """
-function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dict())
+function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs = Dict())
     # Get all available channels (layout + additional)
     all_available_channels = _get_available_channels(dat, true)
     selected_channels = channels(all_available_channels)
 
     # Validate inputs
     isempty(selected_channels) && throw(ArgumentError("At least one channel must be specified"))
-    
+
     # For EEG channels, validate against layout
     eeg_channels = intersect(selected_channels, dat.layout.label)
     invalid_eeg_channels = setdiff(eeg_channels, dat.layout.label)
     !isempty(invalid_eeg_channels) && throw(ArgumentError("Invalid EEG channels: $(join(invalid_eeg_channels, ", "))"))
-    
+
     # Additional channels (not in layout) are allowed
     additional_channels = setdiff(selected_channels, dat.layout.label)
     if !isempty(additional_channels)
@@ -144,7 +144,7 @@ function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dic
     kwargs = merge(default_kwargs, kwargs)
 
     fig = Figure()
-    
+
     if kwargs[:average_channels]
 
         # Single plot averaging across channels
@@ -163,22 +163,22 @@ function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dic
         # Separate subplot for each channel
         n_channels = length(selected_channels)
         rows, cols = isnothing(kwargs[:layout]) ? best_rect(n_channels) : kwargs[:layout]
-        
+
         # Calculate global y-range if ylim is not provided
         ylim = kwargs[:ylim]
         if isnothing(ylim)
             ylim = _calculate_global_yrange(dat, selected_channels)
         end
-        
+
         for (idx, channel) in enumerate(selected_channels)
             row = fld(idx-1, cols) + 1
             col = mod(idx-1, cols) + 1
             ax = Axis(fig[row, col])
             _plot_epochs!(ax, dat, [channel], kwargs)
-            
+
             # Set axis properties with ylim
             axis_kwargs = merge(kwargs, Dict(:ylim => ylim))
-            
+
             # Only add x and y labels to outer left column and bottom row
             if col != 1
                 axis_kwargs = merge(axis_kwargs, Dict(:ylabel => ""))
@@ -188,14 +188,14 @@ function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dic
                 axis_kwargs = merge(axis_kwargs, Dict(:xlabel => ""))
                 ax.xticklabelsvisible = false
             end
-            
+
             _set_axis_properties!(ax, axis_kwargs, "$channel")
 
         end
     end
 
     # Theme adjustments
-    fontsize_theme = Theme(fontsize=kwargs[:theme_fontsize])
+    fontsize_theme = Theme(fontsize = kwargs[:theme_fontsize])
     update_theme!(fontsize_theme)
 
     display(fig)
@@ -204,7 +204,7 @@ function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs=Dic
 end
 
 # Backward compatibility - keep the old method for existing code
-function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs=Dict())
+function plot_epochs(dat::EpochData, channels::Vector{Symbol}; kwargs = Dict())
     channel_predicate = x -> x .∈ Ref(channels)
     return plot_epochs(dat, channel_predicate; kwargs = kwargs)
 end
@@ -222,16 +222,15 @@ Internal function to plot epoched data for specified channels on a given axis.
 """
 function _plot_epochs!(ax, dat, channels, kwargs)
     avg_data = zeros(nrow(dat.data[1]))
-    
+
     for trial in eachindex(dat.data)
         trial_data = colmeans(dat.data[trial], channels)
         avg_data .+= trial_data
-        lines!(ax, dat.data[trial][!, :time], trial_data, 
-               color=kwargs[:color][1], linewidth=kwargs[:linewidth][1])
+        lines!(ax, dat.data[trial][!, :time], trial_data, color = kwargs[:color][1], linewidth = kwargs[:linewidth][1])
     end
-    
+
     avg_data ./= length(dat.data)
-    lines!(ax, dat.data[1][!, :time], avg_data, color=kwargs[:color][2], linewidth=kwargs[:linewidth][2])
+    lines!(ax, dat.data[1][!, :time], avg_data, color = kwargs[:color][2], linewidth = kwargs[:linewidth][2])
 
 end
 
@@ -298,7 +297,7 @@ function _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol}; buff
             max_val = max(max_val, maximum(trial_data))
         end
     end
-    
+
     # Add a small buffer to the range
     buffer = buffer * (max_val - min_val)
     return (min_val - buffer, max_val + buffer)
@@ -319,30 +318,30 @@ Create a table showing the number of epochs for each condition.
 function plot_epochs_table(epochs::Vector{EpochData})
     # Create figure
     fig = Figure()
-    
+
     # Create table data
     conditions = [1, 4, 5, 3]  # The conditions used in your code
     n_epochs = [length(epoch.data) for epoch in epochs]
-    
+
     # Create table
     table = Table(fig[1, 1])
-    
+
     # Add headers
     header = ["Condition", "Number of Epochs"]
     for (i, h) in enumerate(header)
-        Label(table[1, i], h, fontsize=16, font=:bold)
+        Label(table[1, i], h, fontsize = 16, font = :bold)
     end
-    
+
     # Add data rows
     for (i, (cond, n)) in enumerate(zip(conditions, n_epochs))
-        Label(table[i+1, 1], string(cond), fontsize=14)
-        Label(table[i+1, 2], string(n), fontsize=14)
+        Label(table[i+1, 1], string(cond), fontsize = 14)
+        Label(table[i+1, 2], string(n), fontsize = 14)
     end
-    
+
     # Adjust table properties
     table.halign = :center
     table.valign = :center
-    
+
     return fig
 end
 
@@ -360,9 +359,6 @@ Create a DataFrame showing the number of epochs for each condition.
 function epochs_to_dataframe(epochs::Vector{EpochData})
     conditions = [1, 4, 5, 3]  # The conditions used in your code
     n_epochs = [length(epoch.data) for epoch in epochs]
-    
-    return DataFrame(
-        condition = conditions,
-        n_epochs = n_epochs
-    )
+
+    return DataFrame(condition = conditions, n_epochs = n_epochs)
 end

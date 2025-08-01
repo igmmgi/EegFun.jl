@@ -16,16 +16,16 @@ function preprocess_eeg_data(config::String)
 
     # set up the global log for overall processing
     global_log = setup_global_logging("preprocess_eeg_data.log")
-    
+
     # initialize variable for outer scope
     output_directory = ""
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
-    
+
     try
 
         @info "EEG Preprocessing started at $(now()) ..."
         @info "Configuration file: $config"
-        
+
         # check if config file exists and load
         if !isfile(config)
             error_msg = "Config file does not exist: $config"
@@ -85,7 +85,7 @@ function preprocess_eeg_data(config::String)
 
         neighbours_xy = get_electrode_neighbours_xy(layout, cfg["preprocess"]["layout"]["neighbour_criterion"])
         print_neighbours_dict(neighbours_xy, joinpath(output_directory, "neighbours_xy.toml"))
-        
+
         # Track processing results
         processed_files = 0
         failed_files = String[]
@@ -94,7 +94,7 @@ function preprocess_eeg_data(config::String)
         @threads for file in raw_data_files
             try
                 @info "Processing $file"
-                
+
                 # Set up per-file logging (temporarily replaces global logger)
                 setup_logging(joinpath(output_directory, "$(basename_without_ext(file)).log"))
 
@@ -107,7 +107,7 @@ function preprocess_eeg_data(config::String)
                 # Save the results
                 if cfg["files"]["output"]["save_continuous_data"]
                     @info "Saving continuous data"
-                    jldsave(make_output_filename(output_directory, file, "_continuous"); dat=dat)
+                    jldsave(make_output_filename(output_directory, file, "_continuous"); dat = dat)
                 end
 
                 # initial high-pass filter to remove DC offset/slow drifts
@@ -209,47 +209,69 @@ function preprocess_eeg_data(config::String)
 
 
                     # automatically identify components that are likely to be artifacts
-                    eog_comps, eog_comps_metrics_df = identify_eog_components(ica_result, dat, sample_selection = samples_not(
-                        Symbol(
-                            "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                    eog_comps, eog_comps_metrics_df = identify_eog_components(
+                        ica_result,
+                        dat,
+                        sample_selection = samples_not(
+                            Symbol(
+                                "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                            ),
                         ),
-                    ))
-                    ecg_comps, ecg_comps_metrics_df = identify_ecg_components(ica_result, dat, sample_selection = samples_not(
-                        Symbol(
-                            "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                    )
+                    ecg_comps, ecg_comps_metrics_df = identify_ecg_components(
+                        ica_result,
+                        dat,
+                        sample_selection = samples_not(
+                            Symbol(
+                                "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                            ),
                         ),
-                    ))
-                    line_noise_comps, line_noise_comps_metrics_df = identify_line_noise_components(ica_result, dat, sample_selection = samples_not(
-                        Symbol(
-                            "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                    )
+                    line_noise_comps, line_noise_comps_metrics_df = identify_line_noise_components(
+                        ica_result,
+                        dat,
+                        sample_selection = samples_not(
+                            Symbol(
+                                "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                            ),
                         ),
-                    ))
-                    channel_noise_comps, channel_noise_comps_metrics_df = identify_spatial_kurtosis_components(ica_result, dat)
+                    )
+                    channel_noise_comps, channel_noise_comps_metrics_df =
+                        identify_spatial_kurtosis_components(ica_result, dat)
 
                     # Combine above component artifact results into a single structure
-                    component_artifacts = combine_artifact_components(
-                        eog_comps,
-                        ecg_comps,
-                        line_noise_comps,
-                        channel_noise_comps
-                    )
+                    component_artifacts =
+                        combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
 
-                   remove_ica_components!(dat_cleaned, ica_result, component_selection = components(get_all_ica_components(component_artifacts)))
+                    remove_ica_components!(
+                        dat_cleaned,
+                        ica_result,
+                        component_selection = components(get_all_ica_components(component_artifacts)),
+                    )
 
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
                         @info "Saving ica data"
-                        jldsave(make_output_filename(output_directory, file, "_ica"); ica_result=ica_result)
+                        jldsave(make_output_filename(output_directory, file, "_ica"); ica_result = ica_result)
                     end
 
                 end
 
                 # epoch data
-                epochs_original = [extract_epochs(dat, idx, epoch_cfg, cfg["preprocess"]["epoch_start"], cfg["preprocess"]["epoch_end"]) 
-                                  for (idx, epoch_cfg) in enumerate(epoch_cfgs)]
+                epochs_original = [
+                    extract_epochs(
+                        dat,
+                        idx,
+                        epoch_cfg,
+                        cfg["preprocess"]["epoch_start"],
+                        cfg["preprocess"]["epoch_end"],
+                    ) for (idx, epoch_cfg) in enumerate(epoch_cfgs)
+                ]
 
                 # detect standard artifact values
-                println("cfg[preprocess][eeg][artifact_value_criterion]: $(cfg["preprocess"]["eeg"]["artifact_value_criterion"])")
+                println(
+                    "cfg[preprocess][eeg][artifact_value_criterion]: $(cfg["preprocess"]["eeg"]["artifact_value_criterion"])",
+                )
                 is_extreme_value!(
                     dat_cleaned,
                     cfg["preprocess"]["eeg"]["artifact_value_criterion"],
@@ -258,41 +280,57 @@ function preprocess_eeg_data(config::String)
                     ),
                 )
 
-                epochs_cleaned = [extract_epochs(dat_cleaned, idx, epoch_cfg, cfg["preprocess"]["epoch_start"], cfg["preprocess"]["epoch_end"]) 
-                                 for (idx, epoch_cfg) in enumerate(epoch_cfgs)]
+                epochs_cleaned = [
+                    extract_epochs(
+                        dat_cleaned,
+                        idx,
+                        epoch_cfg,
+                        cfg["preprocess"]["epoch_start"],
+                        cfg["preprocess"]["epoch_end"],
+                    ) for (idx, epoch_cfg) in enumerate(epoch_cfgs)
+                ]
 
-                epochs_cleaned = remove_bad_epochs.(epochs_cleaned, Ref(Symbol(
-                        "is_artifact_value" * "_" * string(cfg["preprocess"]["eeg"]["artifact_value_criterion"]),
-                    )));
+                epochs_cleaned = remove_bad_epochs.(
+                    epochs_cleaned,
+                    Ref(
+                        Symbol(
+                            "is_artifact_value" * "_" * string(cfg["preprocess"]["eeg"]["artifact_value_criterion"]),
+                        ),
+                    ),
+                );
 
                 # Log epoch counts
-                df = DataFrame(file = basename(file), condition = 1:length(epochs_original), n_epochs_total = n_epochs.(epochs_original),
-                n_epochs_cleaned = n_epochs.(epochs_cleaned))
+                df = DataFrame(
+                    file = basename(file),
+                    condition = 1:length(epochs_original),
+                    n_epochs_total = n_epochs.(epochs_original),
+                    n_epochs_cleaned = n_epochs.(epochs_cleaned),
+                )
                 push!(all_epoch_counts, df)  # Store the DataFrame
                 @info "Epoch counts (original) per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
 
                 # save epochs
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
-                    jldsave(make_output_filename(output_directory, file, "_epochs_original"); epochs=epochs_original)
+                    jldsave(make_output_filename(output_directory, file, "_epochs_original"); epochs = epochs_original)
                 end
 
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
                     @info "Saving epoch data (cleaned)"
-                    jldsave(make_output_filename(output_directory, file, "_epochs_cleaned"); epochs=epochs_cleaned)
+                    jldsave(make_output_filename(output_directory, file, "_epochs_cleaned"); epochs = epochs_cleaned)
                 end
 
                 # save erp data
                 if cfg["files"]["output"]["save_erp_data_original"]
                     erps_original = [average_epochs(epoch) for epoch in epochs_original]
                     @info "Saving erp data (original)"
-                    jldsave(make_output_filename(output_directory, file, "_erps_original"); erps=erps_original)
+                    jldsave(make_output_filename(output_directory, file, "_erps_original"); erps = erps_original)
                 end
 
                 if cfg["files"]["output"]["save_erp_data_cleaned"]
                     erps_cleaned = [average_epochs(epoch) for epoch in epochs_cleaned]
                     @info "Saving erp data (cleaned)"
-                    jldsave(make_output_filename(output_directory, file, "_erps_cleaned"); erps=erps_cleaned)
+                    jldsave(make_output_filename(output_directory, file, "_erps_cleaned"); erps = erps_cleaned)
                 end
 
                 df.percentage = (df.n_epochs_cleaned ./ df.n_epochs_total) .* 100
@@ -308,26 +346,24 @@ function preprocess_eeg_data(config::String)
                 close_logging()
             end
         end
-        
+
         # Write final summary
         @info "Preprocessing complete: $processed_files files processed successfully, $(length(failed_files)) files failed"
         if !isempty(failed_files)
             @info "Failed files: $(join(failed_files, ", "))"
         end
-        
+
         # Print combined epoch counts
         if !isempty(all_epoch_counts)
             combined_counts = vcat(all_epoch_counts...)
             @info "Combined epoch counts across all files:\n$(pretty_table(String, combined_counts, show_row_number=false, show_subheader=false))"
-            jldsave(joinpath(output_directory, "epoch_summary.jld2"); df=combined_counts)
+            jldsave(joinpath(output_directory, "epoch_summary.jld2"); df = combined_counts)
         end
-        
+
     finally
         # close global logging and move log file to output directory
         close_global_logging()
-        mv("preprocess_eeg_data.log", joinpath(output_directory, "preprocess_eeg_data.log"), force=true)
+        mv("preprocess_eeg_data.log", joinpath(output_directory, "preprocess_eeg_data.log"), force = true)
     end
 
 end
-
-

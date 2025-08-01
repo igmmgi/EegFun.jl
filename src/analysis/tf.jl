@@ -213,7 +213,7 @@ function tf_hanning(signal, times, sample_rate, frequencies, time_steps; window_
         timewin_indices[fi] = timewinidx
 
         # Pre-compute Hanning window
-        hann_windows[fi] = 0.5 * (1 .- cos.(2π * (0:timewinidx-1) / (timewinidx - 1)))
+        hann_windows[fi] = 0.5 * (1 .- cos.(2π * (0:(timewinidx-1)) / (timewinidx - 1)))
         frex_indices[fi] = round(Int, freq * timewinidx / sample_rate) + 1
     end
 
@@ -255,33 +255,53 @@ function tf_hanning(signal, times, sample_rate, frequencies, time_steps; window_
 end
 
 # very basic tf plot
-function plot_tf(tf_dat, time, freq; xlim=nothing, ylim=nothing, log_yscale=false, interpolate=false, colormap = :jet, colorrange=nothing, colorbar=false, colorbar_label = "")
-  fig = Figure()
-  # axes
-  if log_yscale
-    ax = Axis(fig[1, 1], yscale = log10)
-  else
-    ax = Axis(fig[1, 1])
-  end
-  # limits
-  if isnothing(xlim)
-    xlim = [time[1], time[end]]
-  end
-  if isnothing(ylim)
-    ylim = [freq[1], freq[end]]
-  end
-  if isnothing(colorrange)
-    colorrange = [minimum(tf_dat), maximum(tf_dat)]
-  end
-  hm = heatmap!(ax, times_out, freqs_out, transpose(tf_dat), colormap = colormap, interpolate = interpolate, colorrange=colorrange)
-  xlims!(ax, xlim[1], xlim[end])
-  ylims!(ax, ylim[1], ylim[end])
-  ax.yticks = round.(freq);
-  ax.ylabel = "Frequency [Hz]"
-  ax.xlabel = "Time [S]"
-  if colorbar
-    Colorbar(fig[:, end+1], hm, label = colorbar_label, labelrotation=deg2rad(270))
-  end
-  display(fig)
-  return fig, ax
+function plot_tf(
+    tf_dat,
+    time,
+    freq;
+    xlim = nothing,
+    ylim = nothing,
+    log_yscale = false,
+    interpolate = false,
+    colormap = :jet,
+    colorrange = nothing,
+    colorbar = false,
+    colorbar_label = "",
+)
+    fig = Figure()
+    # axes
+    if log_yscale
+        ax = Axis(fig[1, 1], yscale = log10)
+    else
+        ax = Axis(fig[1, 1])
+    end
+    # limits
+    if isnothing(xlim)
+        xlim = [time[1], time[end]]
+    end
+    if isnothing(ylim)
+        ylim = [freq[1], freq[end]]
+    end
+    if isnothing(colorrange)
+        colorrange = [minimum(tf_dat), maximum(tf_dat)]
+    end
+    hm = heatmap!(
+        ax,
+        times_out,
+        freqs_out,
+        transpose(tf_dat),
+        colormap = colormap,
+        interpolate = interpolate,
+        colorrange = colorrange,
+    )
+    xlims!(ax, xlim[1], xlim[end])
+    ylims!(ax, ylim[1], ylim[end])
+    ax.yticks = round.(freq);
+    ax.ylabel = "Frequency [Hz]"
+    ax.xlabel = "Time [S]"
+    if colorbar
+        Colorbar(fig[:, end+1], hm, label = colorbar_label, labelrotation = deg2rad(270))
+    end
+    display(fig)
+    return fig, ax
 end

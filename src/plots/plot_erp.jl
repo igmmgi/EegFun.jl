@@ -3,7 +3,7 @@
 function plot_erp!(fig, ax, dat::ErpData, channels::Function = channels(); kwargs = Dict())
     # Get layout channels by default
     layout_channels = channels(dat)
-    
+
     # Apply the channel predicate to layout channels
     selected_channels = channels(layout_channels)
 
@@ -11,7 +11,7 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Function = channels(); kwarg
     eeg_channels = intersect(selected_channels, dat.layout.label)
     invalid_eeg_channels = setdiff(eeg_channels, dat.layout.label)
     !isempty(invalid_eeg_channels) && throw(ArgumentError("Invalid EEG channels: $(join(invalid_eeg_channels, ", "))"))
-    
+
     # Additional channels (not in layout) are allowed
     additional_channels = setdiff(selected_channels, dat.layout.label)
     if !isempty(additional_channels)

@@ -6,5 +6,3 @@ function test_plot_eog_detection(dat, xlim, channel, detected)
     display(fig)
     return fig, ax
 end
-
-

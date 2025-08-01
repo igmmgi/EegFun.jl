@@ -19,7 +19,7 @@ times, signal = generate_signal(
 )
 #lines(times, vec(mean(signal, dims = 2)))
 sample_rate = 256;
-times = (-2:(1/sample_rate):3-(1/sample_rate));
+times = (-2:(1/sample_rate):(3-(1/sample_rate)));
 tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:50, [10]; log_freqs = false)
 # tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:50, [4]; log_freqs = false);
 tf = average_over_trials(tf_trials);
@@ -32,7 +32,7 @@ plot_tf(tf, times_out, freqs_out)
 signal = DataFrame(CSV.File("dataFIC.csv")).data
 signal = reshape(signal, 900, 76)
 sample_rate = 300
-times = (-1:(1/sample_rate):2-(1/sample_rate))
+times = (-1:(1/sample_rate):(2-(1/sample_rate)))
 
 # TODO: frequency offset?
 tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 1:1:50, [7], log_freqs = false, tois = -0.5:0.01:1.5)
@@ -60,7 +60,7 @@ plot_tf(tf, times_out, freqs_out, log_yscale = false, colorrange = [-2, 1.5], xl
 signal = DataFrame(CSV.File("data2.csv")).data
 signal = reshape(signal, 640, 99)
 sample_rate = 256
-times = (-1:(1/sample_rate):1.5-(1/sample_rate))
+times = (-1:(1/sample_rate):(1.5-(1/sample_rate)))
 
 # Figure A
 tf_trials, times_out, freqs_out = tf_morlet(signal, times, 256, 2:1:80, [3 10]; log_freqs = true);
@@ -95,7 +95,7 @@ times, signal = generate_signal(
 )
 #lines(times, vec(mean(signal, dims = 2)))
 sample_rate = 256;
-times = (-2:(1/sample_rate):3-(1/sample_rate));
+times = (-2:(1/sample_rate):(3-(1/sample_rate)));
 tf_trials, times_out, freqs_out = tf_hanning(signal, times, sample_rate, 1:1:50, -0.5:0.2:1.5, window_length = 0.5)
 #tf_trials, times_out, freqs_out = tf_hanning(signal, times, sample_rate, 1:1:50, -0.5:0.2:1.5, cycles = 5)
 tf = average_over_trials(tf_trials);
@@ -107,7 +107,7 @@ plot_tf(tf, times_out, freqs_out)
 signal = DataFrame(CSV.File("dataFIC.csv")).data
 signal = reshape(signal, 900, 76)
 sample_rate = 300
-times = (-1:(1/sample_rate):2-(1/sample_rate))
+times = (-1:(1/sample_rate):(2-(1/sample_rate)))
 #tf_trials, times_out, freqs_out = tf_hanning(signal, times, sample_rate, 1:1:80, -0.5:0.2:1.5, window_length = 0.2)
 tf_trials, times_out, freqs_out = tf_hanning(signal, times, sample_rate, 1:1:50, -0.5:0.01:1.5, cycles = 7)
 tf = average_over_trials(tf_trials)
@@ -142,4 +142,3 @@ plot_tf(
 plot_tf(tf_perchange_base, times_out, freqs_out, xlim = [-0.5, 1.5], colorrange = [-500, 500], log_yscale = true)
 plot_tf(tf_relchange_base, times_out, freqs_out, xlim = [-0.5, 1.5], colorrange = [-7.5, 7.5], log_yscale = true)
 plot_tf(tf_ztransform_base, times_out, freqs_out, xlim = [-0.5, 1.5], colorrange = [-3.5, 3.5], log_yscale = true)
-

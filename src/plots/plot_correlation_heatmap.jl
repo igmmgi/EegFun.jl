@@ -31,7 +31,12 @@ This is the mutating version that plots directly on the provided `fig` and `ax` 
     # Add a colorbar
     Colorbar(fig[1, 2], limits = (-1, 1), label = "Correlation")
 """
-function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame, mask_range::Union{Nothing,Tuple{Float64,Float64}} = nothing)
+function plot_correlation_heatmap!(
+    fig::Figure,
+    ax::Axis,
+    corr_df::DataFrame,
+    mask_range::Union{Nothing,Tuple{Float64,Float64}} = nothing,
+)
     # Extract the correlation matrix (excluding the row names column)
     # Convert to Float64 to handle potential NaNs from masking
     corr_matrix = Matrix{Float64}(corr_df[:, 2:end])
@@ -39,7 +44,7 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame, ma
     # Mask values within the specified range
     if !isnothing(mask_range)
         min_val, max_val = mask_range
-        corr_matrix[(corr_matrix.>=min_val).&(corr_matrix.<=max_val)] .= NaN
+        corr_matrix[(corr_matrix .>= min_val) .& (corr_matrix .<= max_val)] .= NaN
     end
 
     # Extract row and column names
@@ -91,14 +96,18 @@ variables (column names).
     fig_masked, ax_masked = plot_correlation_heatmap(corr_df, (-0.3, 0.3))
     # display(fig_masked)
 """
-function plot_correlation_heatmap(corr_df::DataFrame, mask_range::Union{Nothing,Tuple{Float64,Float64}} = nothing, display_plot::Bool = true)
+function plot_correlation_heatmap(
+    corr_df::DataFrame,
+    mask_range::Union{Nothing,Tuple{Float64,Float64}} = nothing,
+    display_plot::Bool = true,
+)
     # Create the figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
-    
+
     # Use the mutating version to plot
     plot_correlation_heatmap!(fig, ax, corr_df, mask_range)
-    
+
     # Add a colorbar
     Colorbar(fig[1, 2], limits = (-1, 1), label = "Correlation")
 

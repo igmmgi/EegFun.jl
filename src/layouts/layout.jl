@@ -176,7 +176,7 @@ function read_layout(file)
     @info "Reading layout from $file"
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
-    
+
     return Layout(df, nothing, nothing)
 end
 
@@ -247,7 +247,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 function polar_to_cartesian_xy!(layout::Layout)
     # Get the DataFrame from Layout
     df = layout.data
-    
+
     # Check for required columns
     if !all([col in propertynames(df) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
@@ -261,7 +261,7 @@ function polar_to_cartesian_xy!(layout::Layout)
     radius = 88 # mm
     inc = df[!, :inc] .* (pi / 180)
     azi = df[!, :azi] .* (pi / 180)
-    
+
     df[!, :x2] = inc .* cos.(azi) .* radius
     df[!, :y2] = inc .* sin.(azi) .* radius
 
@@ -289,7 +289,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 function polar_to_cartesian_xyz!(layout::Layout)
     # Get the DataFrame from Layout
     df = layout.data
-    
+
     # Check for required columns
     if !all([col in propertynames(df) for col in [:inc, :azi]])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
@@ -306,7 +306,7 @@ function polar_to_cartesian_xyz!(layout::Layout)
 
     # Store existing metadata before adding columns
     existing_metadata = copy(DataFrames.metadata(df))
-    
+
     # Standard spherical to Cartesian conversion
     df[!, :x3] = radius .* sin.(inc) .* cos.(azi)
     df[!, :y3] = radius .* sin.(inc) .* sin.(azi)
@@ -475,7 +475,7 @@ function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
     coords[:, 2] = layout.data.y3
     coords[:, 3] = layout.data.z3
 
-    neighbour_dict = OrderedDict{Symbol, Neighbours}()
+    neighbour_dict = OrderedDict{Symbol,Neighbours}()
 
     for (idx1, label1) in enumerate(layout.data.label)
 
@@ -529,29 +529,29 @@ end
 Helper function to format the neighbours dictionary as TOML structure.
 Preserves the order of electrodes from the original OrderedDict.
 """
-function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol, Neighbours}, nneighbours::Real)
-    toml_dict = OrderedDict{String, Any}()
-    
+function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol,Neighbours}, nneighbours::Real)
+    toml_dict = OrderedDict{String,Any}()
+
     # Add metadata first
     toml_dict["metadata"] = OrderedDict(
-        "average_neighbours_per_electrode" => round(nneighbours, digits=2),
+        "average_neighbours_per_electrode" => round(nneighbours, digits = 2),
         "total_electrodes" => length(neighbours_dict),
-        "generated_at" => string(now())
+        "generated_at" => string(now()),
     )
-    
+
     # Add electrode data in original order
-    toml_dict["electrodes"] = OrderedDict{String, Any}()
-    
+    toml_dict["electrodes"] = OrderedDict{String,Any}()
+
     for (electrode, neighbours) in neighbours_dict
         electrode_str = string(electrode)
         toml_dict["electrodes"][electrode_str] = OrderedDict(
             "neighbours" => [string(n) for n in neighbours.electrodes],
-            "distances" => [round(d, digits=4) for d in neighbours.distances],
-            "weights" => [round(w, digits=6) for w in neighbours.weights],
-            "neighbour_count" => length(neighbours.electrodes)
+            "distances" => [round(d, digits = 4) for d in neighbours.distances],
+            "weights" => [round(w, digits = 6) for w in neighbours.weights],
+            "neighbour_count" => length(neighbours.electrodes),
         )
     end
-    
+
     return toml_dict
 end
 
@@ -579,7 +579,7 @@ neighbours = get_layout_neighbours_xy!(layout, 40)
 print_neighbours_dict(neighbours, "neighbours.toml")
 ```
 """
-function print_layout_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours}, filename::String)
+function print_layout_neighbours(neighbours_dict::OrderedDict{Symbol,Neighbours}, filename::String)
     nneighbours = average_number_of_neighbours(neighbours_dict)
     toml_data = _format_neighbours_toml(neighbours_dict, nneighbours)
     @info "Printing neighbours to $filename"
@@ -613,7 +613,7 @@ neighbours, _ = get_layout_neighbours_xy!(layout, 40)
 avg_neighbours = average_neighbours_per_electrode(neighbours)
 ```
 """
-function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol, Neighbours})
+function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol,Neighbours})
     if isempty(neighbours_dict)
         return 0.0
     end
@@ -724,15 +724,15 @@ _format_electrode(io, :Fp1, neighbours_struct)
 """
 function _format_electrode(io, electrode, neighbours)
     n_neighbours = length(neighbours.electrodes)
-    avg_distance = round(mean(neighbours.distances), digits=1)
-    
+    avg_distance = round(mean(neighbours.distances), digits = 1)
+
     println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance)mm)")
     if n_neighbours > 0
         neighbour_details = []
-        for j in 1:n_neighbours
+        for j = 1:n_neighbours
             neighbour = string(neighbours.electrodes[j])
-            distance = round(neighbours.distances[j], digits=1)
-            weight = round(neighbours.weights[j], digits=3)
+            distance = round(neighbours.distances[j], digits = 1)
+            weight = round(neighbours.weights[j], digits = 3)
             push!(neighbour_details, "$(neighbour) ($(distance),$(weight))")
         end
         neighbour_list = join(neighbour_details, ", ")
@@ -839,19 +839,19 @@ Modifies the layout in place.
 - `nothing` (modifies the layout in place)
 """
 function subset_layout!(layout::Layout; channel_selection = channels())
-   
+
     n_channels_before = length(layout.data.label)
     selected_channels = get_selected_channels(layout, channel_selection)
-    
+
     # Filter the layout data to keep only selected channels
     layout.data = filter(:label => in(selected_channels), layout.data)
-    
+
     # Clear any cached neighbour information since channels have changed
     if has_neighbours(layout)
         @info "subset_layout!: Clearing neighbours since channels have changed"
         clear_neighbours!(layout)
     end
-    
+
     @info "subset_layout!: Subset layout from $(n_channels_before) to $(length(selected_channels)) channels"
 end
 

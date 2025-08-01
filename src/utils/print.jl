@@ -66,24 +66,24 @@ print_config(config)
 print_config(config, "config_output.toml")
 ```
 """
-function print_config(config, io::IO=stdout)
+function print_config(config, io::IO = stdout)
     # Use OrderedDict to ensure metadata appears first
-    config_with_meta = OrderedDict{String, Any}()
-    
+    config_with_meta = OrderedDict{String,Any}()
+
     # Always add fresh metadata first
     config_with_meta["metadata"] = OrderedDict(
         "generated_at" => string(now()),
         "eegfun_version" => get_eegfun_version(),
-        "git_commit" => get_git_commit()
+        "git_commit" => get_git_commit(),
     )
-    
+
     # Copy config content, ensuring string keys and skipping any existing metadata
     for (key, value) in config
         if string(key) != "metadata"  # Skip any existing metadata
             config_with_meta[string(key)] = value
         end
     end
-    
+
     TOML.print(io, config_with_meta)
 end
 
@@ -94,4 +94,3 @@ function print_config(config, filename::String)
     end
     @info "Configuration written to: $filename"
 end
-

@@ -46,7 +46,7 @@ signal = DataFrame(CSV.File("dataFIC.csv")).data
 # Reshape into trials
 signal = reshape(signal, 900, 76)
 sample_rate = 300
-t = -1:1/sample_rate:(2-(1/sample_rate))
+t = -1:(1/sample_rate):(2-(1/sample_rate))
 dsignal = detrend(t, signal)
 # Create figure
 fig = Figure()
@@ -85,12 +85,11 @@ for timepointi = 1:length(times2save)
         # Zero pad the data
         padded_data = vcat(taperdat, zeros(pad_samples - timewinidx, size(taperdat, 2)))
         fdat = fft(padded_data, 1)
-        tf[:, timepointi] = mean(abs2.(fdat[freq_idx, :]), dims=2)
+        tf[:, timepointi] = mean(abs2.(fdat[freq_idx, :]), dims = 2)
     end
 end
 # Plot using heatmap
-heatmap!(ax, times2save, frex, transpose(log10.(tf)), 
-         colormap=:viridis)
+heatmap!(ax, times2save, frex, transpose(log10.(tf)), colormap = :viridis)
 # Add title and labels
 ax.title = "Time-Frequency Analysis"
 ax.xlabel = "Time (s)"
@@ -102,7 +101,7 @@ signal = DataFrame(CSV.File("dataFIC.csv")).data
 # Reshape into trials
 signal = reshape(signal, 900, 76)
 sample_rate = 300
-t = -1:1/sample_rate:(2-(1/sample_rate))
+t = -1:(1/sample_rate):(2-(1/sample_rate))
 dsignal = detrend(t, signal)
 
 # Create figure
@@ -140,20 +139,19 @@ padded_data = zeros(pad_samples, size(dsignal, 2))
     half_win = div(timewinidx, 2)
     start_idx = max(1, center_idx - half_win)
     end_idx = min(size(dsignal, 1), center_idx + half_win)
-    
+
     # Only process if we have a full window
     if (end_idx - start_idx + 1) == timewinidx
         # Use views to avoid allocations
         padded_data .= 0  # Reset padding
         padded_data[1:timewinidx, :] .= dsignal[start_idx:end_idx, :] .* hann_win
         fdat = fft(padded_data, 1)
-        tf[:, timepointi] = mean(abs2.(fdat[freq_idx, :]), dims=2)
+        tf[:, timepointi] = mean(abs2.(fdat[freq_idx, :]), dims = 2)
     end
 end
 
 # Plot using heatmap
-heatmap!(ax, times2save, frex, transpose(log10.(tf)), 
-         colormap=:viridis)
+heatmap!(ax, times2save, frex, transpose(log10.(tf)), colormap = :viridis)
 
 # Add title and labels
 ax.title = "Time-Frequency Analysis"
@@ -171,19 +169,19 @@ n_trials = 76
 signal_2d = reshape(signal, :, n_trials)  # Auto-compute the first dimension
 
 # Define dimensions using DimensionalData
-time_dim = Dim{:time}(range(-1, step=1/300, length=size(signal_2d, 1)))
+time_dim = Dim{:time}(range(-1, step = 1/300, length = size(signal_2d, 1)))
 trial_dim = Dim{:trial}(1:n_trials)
-ds = DimArray(signal_2d, (time_dim, trial_dim); name="signal")
+ds = DimArray(signal_2d, (time_dim, trial_dim); name = "signal")
 
-ds[time=Where(x -> x <= 1.0 && x >= 0.0), trial=Where(x -> x <= 10)]
+ds[time=Where(x->x<=1.0&&x>=0.0), trial=Where(x->x<=10)]
 
 # Detrend along the time dimension
-ds_detrend = detrend(ds[Ti=1:end], dims=1)  # `Ti` is the time dimension selector
+ds_detrend = detrend(ds[Ti=1:end], dims = 1)  # `Ti` is the time dimension selector
 
 # Time-frequency parameters
 timewin = 0.5  # Window length (seconds)
 half_win = timewin / 2
-times2save = range(-0.5 + half_win, 1.5 - half_win; step=0.01)
+times2save = range(-0.5 + half_win, 1.5 - half_win; step = 0.01)
 times2save_idx = findall(t -> t ∈ times2save, ds[Ti].val)  # Find matching time indices
 
 # Convert timewin to samples (odd)
@@ -200,7 +198,7 @@ freq_idx = @. round(Int, (frex * pad_samples) / 300) + 1
 
 # Initialize time-frequency DimArray
 tf_data = zeros(length(frex), length(times2save))
-tf = DimArray(tf_data, (Dim(frex, :freq), Dim(times2save, :time)); name="power")
+tf = DimArray(tf_data, (Dim(frex, :freq), Dim(times2save, :time)); name = "power")
 
 # Preallocate padded data buffer
 padded_data = zeros(pad_samples, size(ds_detrend, 2))
@@ -215,16 +213,14 @@ padded_data = zeros(pad_samples, size(ds_detrend, 2))
         padded_data .= 0
         padded_data[1:timewin_samp, :] .= ds_detrend[Ti=win_start:win_end, :] .* hann_win
         fdat = fft(padded_data, 1)
-        tf[Fi=1:end, Ti=i] .= mean(abs2.(fdat[freq_idx, :]), dims=2)
+        tf[Fi=1:end, Ti=i] .= mean(abs2.(fdat[freq_idx, :]), dims = 2)
     end
 end
 
 # Plot using DimensionalData's automatic axis labeling
 fig = Figure()
 ax = Axis(fig[1, 1])
-heatmap!(ax, tf[Ti=1:end, Fi=1:end], colormap=:viridis)
+heatmap!(ax, tf[Ti=1:end, Fi=1:end], colormap = :viridis)
 ax.xlabel = "Time (s)"
 ax.ylabel = "Frequency (Hz)"
 fig
-
-

@@ -31,17 +31,23 @@ function plot_grid_topo(
     xpositions = (dat.layout.x2 ./ xminmaxrange) .* (xlim[2] - xlim[1]) .+ (xlim[1] + (xlim[2] - xlim[1])/2)
     ypositions = (dat.layout.y2 ./ yminmaxrange) .* (ylim[2] - ylim[1]) .+ (ylim[1] + (ylim[2] - ylim[1])/2)
     fig = Figure()
-    
+
     # Store normalized positions and their corresponding channels
     position_channel_map = Dict()
-    
+
     for (x, y, label) in zip(xpositions, ypositions, dat.layout.label)
         # Convert position to normalized coordinates for axis placement
         norm_x = (x - xlim[1]) / (xlim[2] - xlim[1])
         norm_y = (y - ylim[1]) / (ylim[2] - ylim[1])
-        ax = Axis(fig[1, 1], width = Relative(plot_width), height = Relative(plot_height), halign = norm_x, valign = norm_y)
+        ax = Axis(
+            fig[1, 1],
+            width = Relative(plot_width),
+            height = Relative(plot_height),
+            halign = norm_x,
+            valign = norm_y,
+        )
         position_channel_map[(norm_x, norm_y)] = label  # Store normalized coordinates
-        
+
         lines!(ax, dat.data[!, :time], dat.data[!, label])
         vlines!(ax, [0], color = :black)
         hlines!(ax, [0], color = :black)
@@ -62,7 +68,7 @@ function plot_grid_topo(
         xlims!(ax, xlim)
         ylims!(ax, ylim)
     end
-    
+
     if show_scale
         ax = Axis(
             fig[1, 1],
@@ -83,17 +89,17 @@ function plot_grid_topo(
     if !isnothing(on_click)
         # Get the main axis (the one in the grid cell)
         main_ax = fig[1, 1]
-        
+
         # Variables to track selection
         selection_start = nothing
         selection_rects = []  # Store all selection rectangles
         selection_coords_list = []  # Store normalized coordinates of all selection rectangles
-        
+
         # Function to convert screen coordinates to normalized coordinates
         function screen_to_normalized(pos, size)
             return (pos[1] / size[1], pos[2] / size[2])
         end
-        
+
         # Function to check if a point is inside any selection rectangle
         function is_point_in_any_rect(point, rects)
             for rect in rects
@@ -103,7 +109,7 @@ function plot_grid_topo(
             end
             return false
         end
-        
+
         # Function to check if a point is inside the selection rectangle
         function is_point_in_rect(point, rect)
             x, y = point
@@ -111,14 +117,14 @@ function plot_grid_topo(
             x2, y2 = rect[2]
             return min(x1, x2) <= x <= max(x1, x2) && min(y1, y2) <= y <= max(y1, y2)
         end
-        
+
         # Function to draw selection rectangle
         function update_selection_rect(start_pos, current_pos)
             if !isnothing(selection_start)
                 fig_size = size(fig.scene)
                 start_norm = screen_to_normalized(start_pos, fig_size)
                 current_norm = screen_to_normalized(current_pos, fig_size)
-                
+
                 # Draw the selection rectangle with a more visible style
                 rect = poly!(
                     fig.scene,
@@ -127,15 +133,15 @@ function plot_grid_topo(
                     strokecolor = :red,    # Red border
                     strokewidth = 2,       # Thicker border
                     overdraw = true,       # Ensure it's drawn on top
-                    space = :relative      # Use relative coordinates
+                    space = :relative,      # Use relative coordinates
                 )
-                
+
                 # Store the rectangle and its coordinates
                 push!(selection_rects, rect)
                 push!(selection_coords_list, (start_norm, current_norm))
             end
         end
-        
+
         # Mouse button press - start selection
         on(events(fig).mousebutton) do event
             if event.button == Mouse.left && event.action == Mouse.press
@@ -144,7 +150,7 @@ function plot_grid_topo(
                     click_pos = events(fig).mouseposition[]
                     fig_size = size(fig.scene)
                     click_norm = screen_to_normalized(click_pos, fig_size)
-                    
+
                     # Check if click is inside any selection rectangle
                     if is_point_in_any_rect(click_norm, selection_coords_list)
                         # Select only electrodes that are inside any of the selection rectangles
@@ -154,12 +160,12 @@ function plot_grid_topo(
                                 push!(selected_channels, Symbol(channel))
                             end
                         end
-                        
+
                         # Call the callback with selected channels
                         if !isempty(selected_channels)
                             on_click(selected_channels)
                         end
-                        
+
                         # Clean up all selection rectangles
                         for rect in selection_rects
                             delete!(fig.scene, rect)
@@ -169,7 +175,7 @@ function plot_grid_topo(
                         return
                     end
                 end
-                
+
                 # Start new selection
                 selection_start = events(fig).mouseposition[]
                 update_selection_rect(selection_start, selection_start)
@@ -181,7 +187,7 @@ function plot_grid_topo(
                 end
             end
         end
-        
+
         # Mouse movement - update selection rectangle
         on(events(fig).mouseposition) do pos
             if !isnothing(selection_start)
@@ -194,9 +200,8 @@ function plot_grid_topo(
             end
         end
     end
-    
+
     linkaxes!(filter(x -> x isa Axis, fig.content)...)
     display(GLMakie.Screen(), fig)
     return fig, position_channel_map
 end
-
