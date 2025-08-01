@@ -61,20 +61,26 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; dis
 
     fig = Figure()
     ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
-    
+
     # Pre-compute trigger data for each type to avoid repeated filtering
-    trigger_data = Dict{Int, Vector{Float64}}()
+    trigger_data = Dict{Int,Vector{Float64}}()
     for (key, _) in trigger_count
         trigger_data[key] = trigger_times[trigger_values .== key]
     end
-    
+
     for (unique, (key, value)) in enumerate(trigger_count)
         times = trigger_data[key]
         y_pos = fill(unique, length(times))
         scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = DEFAULT_MARKER_SIZE)
         # Add vertical lines
         for (t, y) in zip(times, y_pos)
-            lines!(ax, [t, t], [y - DEFAULT_LINE_OFFSET, y + DEFAULT_LINE_OFFSET], color = :black, linewidth = DEFAULT_LINE_WIDTH_TRIGGER)
+            lines!(
+                ax,
+                [t, t],
+                [y - DEFAULT_LINE_OFFSET, y + DEFAULT_LINE_OFFSET],
+                color = :black,
+                linewidth = DEFAULT_LINE_WIDTH_TRIGGER,
+            )
         end
     end
     fig[1, 2] = Legend(fig, ax)

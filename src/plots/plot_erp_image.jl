@@ -91,16 +91,16 @@ function plot_erp_image(
     display_plot::Bool = true,
 )
     channel_predicate = x -> x .∈ Ref(channels)
-    return plot_erp_image(dat, channel_predicate; 
-                        colorrange = colorrange, 
-                        erp_kwargs = erp_kwargs, 
-                        colorbar_kwargs = colorbar_kwargs, 
-                        display_plot = display_plot)
+    return plot_erp_image(
+        dat,
+        channel_predicate;
+        colorrange = colorrange,
+        erp_kwargs = erp_kwargs,
+        colorbar_kwargs = colorbar_kwargs,
+        display_plot = display_plot,
+    )
 end
 
 function plot_erp_image(dat::EpochData, channel::Symbol; kwargs...)
     plot_erp_image(dat, x -> x .== channel; kwargs...)
 end
-
-
-

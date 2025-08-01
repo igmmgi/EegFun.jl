@@ -60,12 +60,23 @@ function plot_layout_2d!(
     head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
     merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
 
-    point_default_kwargs = Dict(:plot_points => true, :marker => DEFAULT_POINT_MARKER, :markersize => DEFAULT_POINT_SIZE, :color => DEFAULT_POINT_COLOR)
+    point_default_kwargs = Dict(
+        :plot_points => true,
+        :marker => DEFAULT_POINT_MARKER,
+        :markersize => DEFAULT_POINT_SIZE,
+        :color => DEFAULT_POINT_COLOR,
+    )
     merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = merged_point_kwargs[:plot_points]
     point_plot_kwargs = extract_kwargs(merged_point_kwargs, [:plot_points])
 
-    label_default_kwargs = Dict(:plot_labels => true, :fontsize => DEFAULT_LABEL_FONTSIZE, :color => DEFAULT_LABEL_COLOR, :xoffset => 0, :yoffset => 0)
+    label_default_kwargs = Dict(
+        :plot_labels => true,
+        :fontsize => DEFAULT_LABEL_FONTSIZE,
+        :color => DEFAULT_LABEL_COLOR,
+        :xoffset => 0,
+        :yoffset => 0,
+    )
     merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
     plot_labels = merged_label_kwargs[:plot_labels]
     xoffset = merged_label_kwargs[:xoffset]
@@ -92,7 +103,7 @@ function plot_layout_2d!(
             text!(ax, position = (x_coords[i], y_coords[i]), labels[i]; label_plot_kwargs...)
         end
     end
-    
+
     if neighbours
         if isnothing(layout.neighbours)
             @minimal_warning "Layout has no neighbours data. Set neighbours=false or calculate neighbours first."
@@ -130,16 +141,12 @@ Create a new figure and plot a 2D EEG electrode layout.
     # With neighbour interactivity
     plot_layout_2d(layout, neighbours=true)
 """
-function plot_layout_2d(layout::Layout; 
-    neighbours::Bool = false,
-    display_plot::Bool = true,
-    kwargs...
-)
+function plot_layout_2d(layout::Layout; neighbours::Bool = false, display_plot::Bool = true, kwargs...)
     fig = Figure()
     ax = Axis(fig[1, 1])
-    
-    plot_layout_2d!(fig, ax, layout; neighbours=neighbours, kwargs...)
-        
+
+    plot_layout_2d!(fig, ax, layout; neighbours = neighbours, kwargs...)
+
     if display_plot
         display_figure(fig)
     end
@@ -163,18 +170,18 @@ Create a convex hull around a set of 2D points with a specified border size usin
 """
 function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
-    circle_points = 0:2π/361:2π
-    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
-    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
-    
+    circle_points = 0:(2π/361):2π
+    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
+    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
+
     # Convert to array of points
     points = [[xs[i], ys[i]] for i in eachindex(xs)]
     n = length(points)
-    
+
     # Find the bottommost point (and leftmost if tied)
     ymin = minimum(p -> p[2], points)
     p0 = points[findfirst(p -> p[2] == ymin, points)]
-    
+
     # Sort points by polar angle with respect to p0
     sort!(points, by = p -> begin
         if p == p0
@@ -182,23 +189,23 @@ function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, 
         end
         return atan(p[2] - p0[2], p[1] - p0[1])
     end)
-    
+
     # Initialize stack for Graham's scan
     stack = Vector{Vector{Float64}}()
     push!(stack, points[1])
     push!(stack, points[2])
-    
+
     # Process remaining points
-    for i in 3:n
+    for i = 3:n
         while length(stack) > 1 && orientation(stack[end-1], stack[end], points[i]) != 2
             pop!(stack)
         end
         push!(stack, points[i])
     end
-    
+
     # Close the hull by connecting back to the first point
     push!(stack, stack[1])
-    
+
     return stack
 end
 
@@ -235,17 +242,11 @@ function add_topo_rois!(
     roi_kwargs::Dict = Dict(),
 )
     # Default kwargs
-    default_kwargs = Dict(
-        :color => :black,
-        :linewidth => 2,
-        :fill => false,
-        :fillcolor => :gray,
-        :fillalpha => 0.2,
-    )
-    
+    default_kwargs = Dict(:color => :black, :linewidth => 2, :fill => false, :fillcolor => :gray, :fillalpha => 0.2)
+
     # Handle multiple ROIs with different styles
     n_rois = length(rois)
-    
+
     # Expand single values to arrays if needed
     for (key, value) in roi_kwargs
         if !isa(value, Vector)
@@ -254,7 +255,7 @@ function add_topo_rois!(
             throw(ArgumentError("Length of $(key) ($(length(value))) must match number of ROIs ($n_rois)"))
         end
     end
-    
+
     # Merge with defaults, ensuring all values are vectors
     merged_kwargs = Dict{Symbol,Vector}()
     for (key, default_value) in default_kwargs
@@ -264,7 +265,7 @@ function add_topo_rois!(
             merged_kwargs[key] = fill(default_value, n_rois)
         end
     end
-    
+
     # Create ROIs
     for (i, roi) in enumerate(rois)
         # Get coordinates for ROI electrodes
@@ -273,16 +274,12 @@ function add_topo_rois!(
             @minimal_warning "No electrodes found for ROI $i"
             continue
         end
-        
+
         # Create convex hull
-        hull_points = _create_convex_hull_graham(
-            layout.x2[roi_idx],
-            layout.y2[roi_idx],
-            border_size
-        )
+        hull_points = _create_convex_hull_graham(layout.x2[roi_idx], layout.y2[roi_idx], border_size)
         xs = [p[1] for p in hull_points]
         ys = [p[2] for p in hull_points]
-        
+
         # Draw the ROI
         if merged_kwargs[:fill][i]
             poly!(
@@ -291,16 +288,10 @@ function add_topo_rois!(
                 ys;
                 color = (merged_kwargs[:fillcolor][i], merged_kwargs[:fillalpha][i]),
                 strokecolor = merged_kwargs[:color][i],
-                strokewidth = merged_kwargs[:linewidth][i]
+                strokewidth = merged_kwargs[:linewidth][i],
             )
         else
-            lines!(
-                ax,
-                xs,
-                ys;
-                color = merged_kwargs[:color][i],
-                linewidth = merged_kwargs[:linewidth][i]
-            )
+            lines!(ax, xs, ys; color = merged_kwargs[:color][i], linewidth = merged_kwargs[:linewidth][i])
         end
     end
 end
@@ -350,12 +341,24 @@ function plot_layout_3d!(
     head_default_kwargs = Dict(:color => DEFAULT_HEAD_COLOR, :linewidth => DEFAULT_HEAD_LINEWIDTH)
     merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
 
-    point_default_kwargs = Dict(:plot_points => true, :marker => DEFAULT_POINT_MARKER, :markersize => DEFAULT_POINT_SIZE, :color => DEFAULT_POINT_COLOR)
+    point_default_kwargs = Dict(
+        :plot_points => true,
+        :marker => DEFAULT_POINT_MARKER,
+        :markersize => DEFAULT_POINT_SIZE,
+        :color => DEFAULT_POINT_COLOR,
+    )
     merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
     plot_points = merged_point_kwargs[:plot_points]
     point_plot_kwargs = extract_kwargs(merged_point_kwargs, [:plot_points])
 
-    label_default_kwargs = Dict(:plot_labels => true, :fontsize => DEFAULT_LABEL_FONTSIZE, :color => DEFAULT_LABEL_COLOR, :xoffset => 0, :yoffset => 0, :zoffset => 0)
+    label_default_kwargs = Dict(
+        :plot_labels => true,
+        :fontsize => DEFAULT_LABEL_FONTSIZE,
+        :color => DEFAULT_LABEL_COLOR,
+        :xoffset => 0,
+        :yoffset => 0,
+        :zoffset => 0,
+    )
     merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
     plot_labels = merged_label_kwargs[:plot_labels]
     xoffset = merged_label_kwargs[:xoffset]
@@ -415,16 +418,12 @@ Create a new figure and plot a 3D EEG electrode layout.
     # With neighbour interactivity
     plot_layout_3d(layout, neighbours=true)
 """
-function plot_layout_3d(layout::Layout; 
-    neighbours::Bool = false,
-    display_plot::Bool = true,
-    kwargs...
-)
+function plot_layout_3d(layout::Layout; neighbours::Bool = false, display_plot::Bool = true, kwargs...)
     fig = Figure()
     ax = Axis3(fig[1, 1])
-    
-    plot_layout_3d!(fig, ax, layout; neighbours=neighbours, kwargs...)
-    
+
+    plot_layout_3d!(fig, ax, layout; neighbours = neighbours, kwargs...)
+
     if display_plot
         display_figure(fig)
     end
@@ -460,7 +459,7 @@ function _add_interactive_points!(
     ax::Union{Axis,Axis3},
     layout::DataFrame,
     neighbours::OrderedDict,
-    positions::Union{Vector{Point2f}, Vector{Point3f}},  # Keep as regular vector
+    positions::Union{Vector{Point2f},Vector{Point3f}},  # Keep as regular vector
     is_3d::Bool = false,
 )
     base_size = 15
@@ -483,7 +482,7 @@ function _add_interactive_points!(
 
     # Pre-allocate vectors for better performance
     new_sizes = fill(base_size, length(layout.label))
-    max_neighbors = maximum(length.(neighbor_indices), init=0)
+    max_neighbors = maximum(length.(neighbor_indices), init = 0)
     new_lines = is_3d ? Vector{Point3f}(undef, max_neighbors * 2) : Vector{Point2f}(undef, max_neighbors * 2)
 
     # Add interactive scatter points
@@ -505,12 +504,12 @@ function _add_interactive_points!(
             # Create lines to neighboring electrodes
             hovered_pos = positions[i]
             line_count = 0
-            
+
             # Use pre-computed neighbor indices
             for neighbor_idx in neighbor_indices[i]
-                new_lines[line_count + 1] = hovered_pos
-                new_lines[line_count + 2] = positions[neighbor_idx]
-                line_count += 2
+                new_lines[line_count+1] = hovered_pos
+                new_lines[line_count+2] = positions[neighbor_idx]
+                line_count              += 2
             end
 
             # Only update with the actual lines we created

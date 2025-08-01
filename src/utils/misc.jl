@@ -40,7 +40,7 @@ filename = basename_without_ext("data/file.bdf")
 # Returns: "file"
 ```
 """
-function basename_without_ext(path::String) 
+function basename_without_ext(path::String)
     return splitext(basename(path))[1]
 end
 
@@ -87,7 +87,7 @@ function consecutive(f::Function, A::AbstractVector; step::Int = 1)
     if length(A) < step + 1
         throw(ArgumentError("Vector too short for given step size"))
     end
-    return [f(A[i+step], A[i]) for i = 1:length(A)-step]
+    return [f(A[i+step], A[i]) for i = 1:(length(A)-step)]
 end
 
 """
@@ -246,37 +246,37 @@ macro add_nonmutating(func)
     if !endswith(func_name, "!")
         error("Function name must end with !")
     end
-    
+
     # base names
-    non_mut_name = Symbol(func_name[1:end-1])
+    non_mut_name = Symbol(func_name[1:(end-1)])
     mut_name = Symbol(func_name)
-    
+
     # expressions for each method
     exprs = Expr(:block)
-    
+
     # Collect all method signatures first
     methods_list = String[]
     method_exprs = []
-    
+
     # all methods
     for method in methods(eval(func))
 
         sig = method.sig
         types = sig.parameters[2:end]
-        
+
         # original parameter names
         params = Base.method_argnames(method)[2:end]
         if isempty(params) || any(==(nothing), params)
-            params = [Symbol("arg", i) for i in 1:length(types)]
+            params = [Symbol("arg", i) for i = 1:length(types)]
         end
-        
+
         # signature string
-        sig_str = "$non_mut_name(" * join(["$p::$t" for (p,t) in zip(params, types)], ", ") * "; kwargs...)"
+        sig_str = "$non_mut_name(" * join(["$p::$t" for (p, t) in zip(params, types)], ", ") * "; kwargs...)"
         push!(methods_list, sig_str)
-        
+
         # method definition without docstring
         method_expr = quote
-            function $non_mut_name($([:($p::$t) for (p,t) in zip(params, types)]...); kwargs...)
+            function $non_mut_name($([:($p::$t) for (p, t) in zip(params, types)]...); kwargs...)
                 data_copy = copy($(params[1]))
                 $mut_name(data_copy, $(params[2:end]...); kwargs...)
                 return data_copy
@@ -286,7 +286,7 @@ macro add_nonmutating(func)
         push!(method_exprs, method_expr)
 
     end
-    
+
     # Create the main docstring 
     doc = """
         $(join(methods_list, "\n    "))
@@ -294,12 +294,12 @@ macro add_nonmutating(func)
     Non-mutating version of `$mut_name`. Creates a copy of the input data
     and applies the operation to the copy.
     """
-    
+
     push!(exprs.args, :(Base.@doc $doc $non_mut_name))
-    
+
     # add all method definitions
     append!(exprs.args, method_exprs)
-    
+
     return esc(exprs)
 
 end
@@ -344,18 +344,18 @@ Uses Graham's Scan algorithm for convex hull computation.
 """
 function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
-    circle_points = 0:2π/361:2π
-    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
-    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
-    
+    circle_points = 0:(2π/361):2π
+    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
+    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
+
     # Convert to array of points
     points = [[xs[i], ys[i]] for i in eachindex(xs)]
     n = length(points)
-    
+
     # Find the bottommost point (and leftmost if tied)
     ymin = minimum(p -> p[2], points)
     p0 = points[findfirst(p -> p[2] == ymin, points)]
-    
+
     # Sort points by polar angle with respect to p0
     sort!(points, by = p -> begin
         if p == p0
@@ -363,23 +363,23 @@ function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_s
         end
         return atan(p[2] - p0[2], p[1] - p0[1])
     end)
-    
+
     # Initialize stack for Graham's scan
     stack = Vector{Vector{Float64}}()
     push!(stack, points[1])
     push!(stack, points[2])
-    
+
     # Process remaining points
-    for i in 3:n
+    for i = 3:n
         while length(stack) > 1 && orientation(stack[end-1], stack[end], points[i]) != 2
             pop!(stack)
         end
         push!(stack, points[i])
     end
-    
+
     # Close the hull by connecting back to the first point
     push!(stack, stack[1])
-    
+
     return stack
 end
 
@@ -393,12 +393,7 @@ The data and layout DataFrames are copied with `copycols=true` to ensure
 independence, while immutable fields are shared.
 """
 function Base.copy(dat::ContinuousData)::ContinuousData
-    return ContinuousData(
-        copy(dat.data, copycols=true),  
-        copy(dat.layout), 
-        dat.sample_rate,                 
-        copy(dat.analysis_info)          
-    )
+    return ContinuousData(copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
 """
@@ -409,10 +404,10 @@ Each epoch DataFrame in the data vector is copied independently.
 """
 function Base.copy(dat::EpochData)::EpochData
     return EpochData(
-        [copy(epoch, copycols=true) for epoch in dat.data],  
-        copy(dat.layout), 
-        dat.sample_rate,                 
-        copy(dat.analysis_info)          
+        [copy(epoch, copycols = true) for epoch in dat.data],
+        copy(dat.layout),
+        dat.sample_rate,
+        copy(dat.analysis_info),
     )
 end
 
@@ -423,11 +418,11 @@ Create a copy of ErpData with copied data DataFrame and analysis info.
 """
 function Base.copy(dat::ErpData)::ErpData
     return ErpData(
-        copy(dat.data, copycols=true),   
-        copy(dat.layout), 
-        dat.sample_rate,                 
-        copy(dat.analysis_info),         
-        dat.n_epochs                     
+        copy(dat.data, copycols = true),
+        copy(dat.layout),
+        dat.sample_rate,
+        copy(dat.analysis_info),
+        dat.n_epochs,
     )
 end
 
@@ -438,10 +433,5 @@ Create a copy of AnalysisInfo. Since all fields are immutable (Symbol and Float6
 this creates a new instance with the same field values.
 """
 function Base.copy(info::AnalysisInfo)::AnalysisInfo
-    return AnalysisInfo(
-        info.reference,  
-        info.hp_filter,  
-        info.lp_filter   
-    )
+    return AnalysisInfo(info.reference, info.hp_filter, info.lp_filter)
 end
-

@@ -68,7 +68,7 @@ function plot_joint_probability(dat::DataFrame, display_plot::Bool = true)
     # Create the figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
-    
+
     # Use the mutating version to plot
     plot_joint_probability!(fig, ax, dat)
 
@@ -79,4 +79,3 @@ function plot_joint_probability(dat::DataFrame, display_plot::Bool = true)
     return fig, ax
 
 end
-

@@ -91,8 +91,8 @@ electrode positions in various coordinate systems (polar, 2D Cartesian,
 """
 mutable struct Layout
     data::DataFrame
-    neighbours::Union{Nothing, OrderedDict{Symbol, Neighbours}}
-    criterion::Union{Nothing, Float64}
+    neighbours::Union{Nothing,OrderedDict{Symbol,Neighbours}}
+    criterion::Union{Nothing,Float64}
 end
 
 """
@@ -104,9 +104,9 @@ while neighbours and criterion are shared since they are immutable.
 """
 function Base.copy(layout::Layout)::Layout
     return Layout(
-        copy(layout.data, copycols=true),
+        copy(layout.data, copycols = true),
         layout.neighbours,  # Share since OrderedDict and Neighbours are immutable
-        layout.criterion    # Share since Float64 is immutable
+        layout.criterion,    # Share since Float64 is immutable
     )
 end
 
@@ -132,7 +132,7 @@ mutable struct ContinuousData <: SingleDataFrameEeg
     sample_rate::Int64
     analysis_info::AnalysisInfo
 end
-   
+
 
 """
     ErpData
@@ -314,7 +314,7 @@ struct InfoIca
     mean::Vector{Float64}
     ica_label::Vector{Symbol}
     data_label::Vector{Symbol}
-    removed_activations::OrderedDict{Int, Matrix{Float64}}
+    removed_activations::OrderedDict{Int,Matrix{Float64}}
 end
 
 # === DISPLAY FUNCTIONS ===
@@ -324,15 +324,18 @@ function Base.show(io::IO, layout::Layout)
     has_2d = has_2d_coords(layout)
     has_3d = has_3d_coords(layout)
     has_neigh = has_neighbours(layout)
-    
+
     println(io, "Layout ($n_electrodes channels)")
-    println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")")
+    println(
+        io,
+        "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")",
+    )
     if has_neigh
         avg_neighbours = average_number_of_neighbours(layout.neighbours)
         println(io, "Criterion: $(layout.criterion), Avg neighbours: $(round(avg_neighbours, digits=1))")
     end
     println(io)
-    
+
     # Format the data for display
     display_data = copy(layout.data)
 
@@ -343,35 +346,39 @@ function Base.show(io::IO, layout::Layout)
             display_data[!, col] = [@sprintf("%.2f", val) for val in display_data[!, col]]
         end
     end
-    
+
     # Create a combined view with first and last rows
     if n_electrodes <= 10
         # Show all rows if 10 or fewer
-        PrettyTables.pretty_table(io, display_data, 
-            header=names(display_data),
-            alignment=:r,  # Right align all columns
-            crop=:none
+        PrettyTables.pretty_table(
+            io,
+            display_data,
+            header = names(display_data),
+            alignment = :r,  # Right align all columns
+            crop = :none,
         )
     else
         # Show first 5 and last 5 rows with ellipsis
         first_rows = display_data[1:5, :]
-        last_rows = display_data[end-4:end, :]
-        
+        last_rows = display_data[(end-4):end, :]
+
         # Create ellipsis row
         ellipsis_row = DataFrame()
         for col in names(display_data)
             ellipsis_row[!, col] = ["..."]
         end
-        
+
         # Combine the data
         combined_data = vcat(first_rows, ellipsis_row, last_rows)
-        
-        PrettyTables.pretty_table(io, combined_data, 
-            header=names(display_data),
-            alignment=:r,  # Right align all columns
-            crop=:none
+
+        PrettyTables.pretty_table(
+            io,
+            combined_data,
+            header = names(display_data),
+            alignment = :r,  # Right align all columns
+            crop = :none,
         )
-        
+
         println(io, "\n[showing first 5 and last 5 of $n_electrodes electrodes]")
     end
 end
@@ -382,22 +389,25 @@ function Base.show(io::IO, ::MIME"text/plain", layout::Layout)
 end
 
 # Custom show method for neighbours OrderedDict
-function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol, Neighbours})
+function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
     # Use the text/plain MIME type to ensure our custom method is used
     show(io, MIME"text/plain"(), neighbours_dict)
 end
 
 
 
-function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symbol, Neighbours})
+function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symbol,Neighbours})
     n_electrodes = length(neighbours_dict)
     avg_neighbours = average_number_of_neighbours(neighbours_dict)
-    
-    println(io, "Neighbours Dictionary ($n_electrodes electrodes): Average neighbours per electrode: $(round(avg_neighbours, digits=1))")
+
+    println(
+        io,
+        "Neighbours Dictionary ($n_electrodes electrodes): Average neighbours per electrode: $(round(avg_neighbours, digits=1))",
+    )
     println(io)
-    
+
     # Show entries based on size
-    if n_electrodes <= 6 
+    if n_electrodes <= 6
         # Show all entries
         for (electrode, neighbours) in neighbours_dict
             _format_electrode(io, electrode, neighbours)
@@ -405,14 +415,14 @@ function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symb
     else
         entries = collect(neighbours_dict)
         # First/last 3 entries
-        for i in 1:3
+        for i = 1:3
             _format_electrode(io, entries[i][1], entries[i][2])
         end
         println(io, "⋮")
-        for i in (n_electrodes-2):n_electrodes
+        for i = (n_electrodes-2):n_electrodes
             _format_electrode(io, entries[i][1], entries[i][2])
         end
-        
+
         println(io, "[showing first 3 and last 3 of $n_electrodes electrodes]")
     end
 end
@@ -420,7 +430,10 @@ end
 
 function Base.show(io::IO, dat::EegData)
     println(io, "Type: $(typeof(dat))")
-    println(io, "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_labels(dat))) (columns)")
+    println(
+        io,
+        "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_labels(dat))) (columns)",
+    )
     println(io, "Labels: ", print_vector(channel_labels(dat)))
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
@@ -436,28 +449,28 @@ end
 function Base.show(io::IO, ica::InfoIca)
     n_components = length(ica.ica_label)
     n_channels = length(ica.data_label)
-    
+
     println(io, "InfoIca Result")
     println(io, "├─ Components: $n_components")
     println(io, "├─ Channels: $n_channels")
     println(io, "├─ Scale: $(round(ica.scale, digits=3))")
     println(io, "├─ Top 5 variance explained:")
-    
+
     # Show top 5 components with their variance
-    for i in 1:min(5, n_components)
-        var_pct = round(ica.variance[i] * 100, digits=2)
+    for i = 1:min(5, n_components)
+        var_pct = round(ica.variance[i] * 100, digits = 2)
         println(io, "│  $(ica.ica_label[i]): $(var_pct)%")
     end
-    
+
     if n_components > 5
         println(io, "│  ... and $(n_components - 5) more components")
     end
-    
+
     println(io, "├─ Matrix sizes:")
     println(io, "│  ├─ Unmixing: $(size(ica.unmixing))")
     println(io, "│  ├─ Mixing: $(size(ica.mixing))")
     println(io, "│  └─ Sphere: $(size(ica.sphere))")
-    
+
     println(io, "└─ Channel labels: $(join(ica.data_label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")")
 end
 
@@ -477,6 +490,6 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.mean),
         copy(ica.ica_label),
         copy(ica.data_label),
-        copy(ica.removed_activations)
+        copy(ica.removed_activations),
     )
 end

@@ -150,7 +150,7 @@ function run_ica(
         dat_ica = filter_data(dat_ica, "lp", "iir", lp_freq, order = 3)
     end
 
-    selected_channels = get_selected_channels(dat_ica, channel_selection; include_extra=include_extra)
+    selected_channels = get_selected_channels(dat_ica, channel_selection; include_extra = include_extra)
     if isempty(selected_channels)
         error("No channels available after applying channel filter")
     end
@@ -388,7 +388,7 @@ function infomax_ica(
         original_mean,
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
         data_labels,
-        OrderedDict{Int, Matrix{Float64}}(),
+        OrderedDict{Int,Matrix{Float64}}(),
     )
 
 end
@@ -429,7 +429,7 @@ function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selectio
 
     # Get removed activations before transformation and store individually
     all_removed_activations = view(ica.unmixing, components_to_remove, :) * data
-    
+
     # Store each component's activations separately
     for (i, comp_idx) in enumerate(components_to_remove)
         ica.removed_activations[comp_idx] = all_removed_activations[i:i, :]
@@ -895,7 +895,7 @@ function identify_ecg_components(
 
         # Calculate heart rate if we have valid IBI
         heart_rate_bpm = isnan(mean_ibi) || mean_ibi <= 0 ? NaN : 60.0 / mean_ibi
-        
+
         # Store metrics 
         push!(
             metrics,
@@ -951,11 +951,7 @@ Identify ICA components with high spatial kurtosis (localized, spot-like activit
 - `Vector{Int}`: Indices of components with high spatial kurtosis.
 - `DataFrame`: DataFrame containing spatial kurtosis values and z-scores for all components.
 """
-function identify_spatial_kurtosis_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
-    z_threshold::Float64 = 3.0,
-)
+function identify_spatial_kurtosis_components(ica_result::InfoIca, dat::ContinuousData; z_threshold::Float64 = 3.0)
     # Calculate spatial kurtosis for each component's weights
     n_components = size(ica_result.mixing, 2)
     spatial_kurtosis = Float64[]
@@ -1133,7 +1129,7 @@ A structure to hold all identified artifact components from ICA analysis.
 - `channel_noise::Vector{Int}`: Vector of identified high spatial kurtosis (channel noise) components
 """
 struct ArtifactComponents
-    eog::Dict{Symbol, Vector{Int}}
+    eog::Dict{Symbol,Vector{Int}}
     ecg::Vector{Int}
     line_noise::Vector{Int}
     channel_noise::Vector{Int}
@@ -1154,17 +1150,12 @@ Combine all identified artifact components into a single ArtifactComponents stru
 - `ArtifactComponents`: Combined structure containing all artifact components
 """
 function combine_artifact_components(
-    eog_comps::Dict{Symbol, Vector{Int}},
+    eog_comps::Dict{Symbol,Vector{Int}},
     ecg_comps::Vector{Int},
     line_noise_comps::Vector{Int},
-    channel_noise_comps::Vector{Int}
+    channel_noise_comps::Vector{Int},
 )
-    return ArtifactComponents(
-        eog_comps,
-        ecg_comps,
-        line_noise_comps,
-        channel_noise_comps
-    )
+    return ArtifactComponents(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
 end
 
 
@@ -1181,17 +1172,17 @@ Get all unique artifact component indices as a single vector.
 """
 function get_all_ica_components(artifacts::ArtifactComponents)
     all_comps = Set{Int}()
-    
+
     # Add EOG components
     for (_, comps) in artifacts.eog
         union!(all_comps, comps)
     end
-    
+
     # Add other components
     union!(all_comps, artifacts.ecg)
     union!(all_comps, artifacts.line_noise)
     union!(all_comps, artifacts.channel_noise)
-    
+
     return sort(collect(all_comps))
 end
 
@@ -1213,5 +1204,3 @@ function Base.show(io::IO, artifacts::ArtifactComponents)
     println(io, "Channel Noise: $(artifacts.channel_noise)")
     println(io, "All: $all_comps")
 end
-
-

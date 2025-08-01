@@ -97,7 +97,7 @@ function mark_epoch_windows!(
         end
 
     end
-    
+
 end
 
 
@@ -166,7 +166,7 @@ function mark_epoch_windows!(
                         return false
                     end
                 end
-                
+
                 # Check before constraint  
                 if condition.before !== nothing
                     sequence_end = seq_start_idx + length(condition.trigger_sequence) - 1
@@ -175,7 +175,7 @@ function mark_epoch_windows!(
                         return false
                     end
                 end
-                
+
                 return true
             end
             if isempty(sequence_indices)
@@ -265,15 +265,15 @@ Converts sustained trigger signals into single onset events.
 ```
 """
 function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
-    
+
     # find where triggers change (onset detection)
     trigger_changes = diff(vcat(0, trigger_data))
     onset_indices = trigger_changes .> 0
-    
+
     # insert onsets
     cleaned = zeros(Int, length(trigger_data))
     cleaned[onset_indices] = trigger_data[onset_indices]
-    
+
     return cleaned
 
 end
@@ -298,7 +298,7 @@ function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame"
     df = hcat(
         DataFrame(time = data.time, sample = 1:length(data.time), triggers = _clean_triggers(data.triggers.raw)),
-        DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:end-1])),  # assumes last channel is trigger
+        DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
     )
     return df
 end
@@ -326,20 +326,24 @@ end
 
 
 # channel_summary
-function _channel_summary_impl(data::DataFrame, sample_selection::Vector{Int}, channel_selection::Vector{Symbol})::DataFrame
+function _channel_summary_impl(
+    data::DataFrame,
+    sample_selection::Vector{Int},
+    channel_selection::Vector{Symbol},
+)::DataFrame
     selected_data = @view data[sample_selection, channel_selection]
-    
+
     # Get base statistics from describe
     stats = describe(selected_data, :min, :max, :std)
-    
+
     # Add our custom columns
     stats.range = stats.max .- stats.min
     stats.var = var.(eachcol(selected_data))
     stats.zvar = zscore(stats.var)
-    
+
     # Rename the variable column to channel
     rename!(stats, :variable => :channel)
-    
+
     return stats
 end
 
@@ -365,8 +369,8 @@ samples(column::Symbol) = x -> x[!, column]
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
 samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])
-samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns)) 
-samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))  
+samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))
+samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))
 
 # Helper function predicates for easier epoch filtering
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
@@ -381,10 +385,10 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
     # Columns/channels in dataframe to include
     metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
     selectable_cols = include_extras ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
-    
+
     # Apply channel selection to non-metadata columns
     selected_cols = selectable_cols[channel_selection(selectable_cols)]
-    
+
     # Return metadata + selected channels
     return vcat(metadata_cols, selected_cols)
 end
@@ -553,7 +557,8 @@ function channel_summary(
     include_meta::Bool = false,
     include_extra::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta=include_meta, include_extra=include_extra)
+    selected_channels =
+        get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
 end
@@ -596,27 +601,29 @@ function channel_summary(
 )::DataFrame
     # Process each epoch and collect results
     results = DataFrame[]
-    
+
     for epoch_df in dat.data
         # Get the original epoch number from the data
         original_epoch_number = epoch_df.epoch[1]  # All rows in an epoch have the same epoch number
-        
+
         # Create ContinuousData from this epoch DataFrame
         single_dat = ContinuousData(epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
-        
+
         # Get summary for this epoch
-        epoch_summary = channel_summary(single_dat; 
-                                       sample_selection = sample_selection, 
-                                       channel_selection = channel_selection,
-                                       include_meta = include_meta,
-                                       include_extra = include_extra)
-        
+        epoch_summary = channel_summary(
+            single_dat;
+            sample_selection = sample_selection,
+            channel_selection = channel_selection,
+            include_meta = include_meta,
+            include_extra = include_extra,
+        )
+
         # Add epoch column as first column with original epoch number
         insertcols!(epoch_summary, 1, :epoch => fill(original_epoch_number, nrow(epoch_summary)))
-        
+
         push!(results, epoch_summary)
     end
-    
+
     # Combine all results
     return vcat(results...)
 end
@@ -733,7 +740,7 @@ function correlation_matrix(
     channel_selection::Function = channels(),
     include_extra::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra=include_extra)
+    selected_channels = get_selected_channels(dat, channel_selection; include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
@@ -751,5 +758,3 @@ function _correlation_matrix(
     insertcols!(df, 1, :row => selected_channels)
     return df
 end
-
-

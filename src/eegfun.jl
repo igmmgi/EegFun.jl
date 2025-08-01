@@ -1,4 +1,4 @@
-__precompile__(true)  
+__precompile__(true)
 
 module eegfun
 
@@ -35,7 +35,7 @@ using Base.Threads
 include("types/types.jl")
 
 # Utility functions
-include("utils/error.jl")  
+include("utils/error.jl")
 include("utils/data.jl")
 include("utils/files.jl")
 include("utils/logging.jl")

@@ -17,4 +17,3 @@ end
 function get_makie_screen(makie_backend::Symbol)
     return getfield(Main, makie_backend).Screen()
 end
-

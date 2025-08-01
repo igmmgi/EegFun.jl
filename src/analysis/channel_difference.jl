@@ -1,5 +1,10 @@
 # Internal function that only accepts resolved channels and mutates the DataFrame
-function _calculate_channel_difference!(dat::DataFrame, channels_in1::Vector{Symbol}, channels_in2::Vector{Symbol}, channel_out::Symbol)
+function _calculate_channel_difference!(
+    dat::DataFrame,
+    channels_in1::Vector{Symbol},
+    channels_in2::Vector{Symbol},
+    channel_out::Symbol,
+)
 
     # Pre-allocate vectors for better performance
     means = zeros(n_samples(dat), 2)
@@ -22,7 +27,12 @@ function _calculate_channel_difference!(dat::DataFrame, channels_in1::Vector{Sym
 end
 
 # Internal function that works on a vector of DataFrames
-function _calculate_channel_difference!(dat::Vector{DataFrame}, channels_in1::Vector{Symbol}, channels_in2::Vector{Symbol}, channel_out::Symbol)
+function _calculate_channel_difference!(
+    dat::Vector{DataFrame},
+    channels_in1::Vector{Symbol},
+    channels_in2::Vector{Symbol},
+    channel_out::Symbol,
+)
     _calculate_channel_difference!.(dat, Ref(channels_in1), Ref(channels_in2), Ref(channel_out))
     return nothing
 end

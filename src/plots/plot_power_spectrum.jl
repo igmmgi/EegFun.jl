@@ -1,4 +1,9 @@
-function plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real;
+function plot_power_spectrum!(
+    fig,
+    ax,
+    df::DataFrame,
+    channels_to_plot::Vector{Symbol},
+    fs::Real;
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
     window_size::Int = 1024,
@@ -49,7 +54,7 @@ function plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{S
     ax.xlabel = "Frequency (Hz)"
     ax.ylabel = "Power Spectral Density (μV²/Hz)"
     ax.title = "Channel Power Spectrum"
-    
+
     # Apply scale settings
     if x_scale == :log10
         xlims!(ax, (0.1, max_freq))
@@ -57,7 +62,7 @@ function plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{S
     else
         xlims!(ax, (0, max_freq))
     end
-    
+
     # Calculate max y-value for limits
     max_power = maximum([maximum(psd) for (_, psd) in values(spectra)])
     if y_scale == :log10
@@ -81,12 +86,7 @@ function plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{S
         freq = line_freq * h
         if freq <= max_freq
             # Add vertical line
-            vlines!(
-                ax,
-                [freq],
-                color = :red,
-                linestyle = :dash,
-            )
+            vlines!(ax, [freq], color = :red, linestyle = :dash)
 
             # Add shaded region
             band_x = [freq - freq_bandwidth, freq + freq_bandwidth]
@@ -137,11 +137,13 @@ Plot power spectrum for specified channels from EEG data.
 - `ax::Axis`: The axis containing the plot
 """
 
-function plot_channel_spectrum(dat::SingleDataFrameEeg; 
-                              sample_selection::Function = samples(),
-                              channel_selection::Function = channels(),
-                              display_plot::Bool=true,
-                              kwargs...)
+function plot_channel_spectrum(
+    dat::SingleDataFrameEeg;
+    sample_selection::Function = samples(),
+    channel_selection::Function = channels(),
+    display_plot::Bool = true,
+    kwargs...,
+)
 
     # data selection
     dat_subset = subset(dat, sample_selection = sample_selection, channel_selection = channel_selection)
@@ -212,85 +214,88 @@ function plot_ica_component_spectrum(
     dat::ContinuousData;
     component_selection::Function = components(),
     sample_selection::Function = samples(),
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    window_size::Int=1024,
-    overlap::Real=0.5,
-    max_freq::Real=100.0,
-    x_scale::Symbol=:linear,
-    y_scale::Symbol=:linear,
-    window_function::Function=DSP.hanning,
-    display_plot::Bool=true
+    line_freq::Real = 50.0,
+    freq_bandwidth::Real = 1.0,
+    window_size::Int = 1024,
+    overlap::Real = 0.5,
+    max_freq::Real = 100.0,
+    x_scale::Symbol = :linear,
+    y_scale::Symbol = :linear,
+    window_function::Function = DSP.hanning,
+    display_plot::Bool = true,
 )
     # Get selected components using the predicate
     selected_components = get_selected_components(ica_result, component_selection)
-    
+
     # If empty vector, use all components
     if isempty(selected_components)
         selected_components = 1:size(ica_result.unmixing, 1)
     end
     # Apply sample selection
     selected_samples = get_selected_samples(dat, sample_selection)
-    
+
     # Prepare data matrix for selected samples only
     relevant_cols = vcat(ica_result.data_label)
     dat_matrix = permutedims(Matrix(dat.data[selected_samples, relevant_cols]))
-    dat_matrix .-= mean(dat_matrix, dims=2)
+    dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica_result.scale
 
     # Calculate component activations for selected samples
     components = ica_result.unmixing * dat_matrix
     fs = dat.sample_rate
-    
+
     # Create a DataFrame to store all component signals
     component_df = DataFrame(:time => dat.data.time[selected_samples])
-    
+
     # Add each component to the DataFrame with consistent naming
     for comp_idx in selected_components
         component_name = Symbol("IC_$(comp_idx)")
         component_df[!, component_name] = components[comp_idx, :]
     end
-    
+
     # Create list of component symbols to plot
     components_to_plot = [Symbol("IC_$(comp_idx)") for comp_idx in selected_components]
-    
+
     # Create figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
-    _plot_power_spectrum!(fig, ax, component_df, components_to_plot, fs;
-                         line_freq = line_freq,
-                         freq_bandwidth = freq_bandwidth,
-                         window_size = window_size,
-                         overlap = overlap,
-                         max_freq = max_freq,
-                         x_scale = x_scale,
-                         y_scale = y_scale,
-                         window_function = window_function)
-    
-        ax.title = "ICA Component Power Spectra"
-        
-        # Add component variance percentages to the legend
-        component_labels = []
-        for comp_idx in selected_components
-            variance_pct = ica_result.variance[comp_idx] * 100
-            push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
-        end
-        
-        # Create a new legend with the custom labels
-        legend_entries = [LineElement(color=ax.scene.plots[i].color) for i in 1:length(selected_components)]
-        
-        # Calculate number of columns based on number of components
-        ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
-        
-        # Place legend - use multi-column for many components
-        Legend(fig[1, 2], legend_entries, component_labels, "Components", nbanks=ncols)
+    _plot_power_spectrum!(
+        fig,
+        ax,
+        component_df,
+        components_to_plot,
+        fs;
+        line_freq = line_freq,
+        freq_bandwidth = freq_bandwidth,
+        window_size = window_size,
+        overlap = overlap,
+        max_freq = max_freq,
+        x_scale = x_scale,
+        y_scale = y_scale,
+        window_function = window_function,
+    )
 
-        if display_plot
-            display_figure(fig)
-        end
+    ax.title = "ICA Component Power Spectra"
+
+    # Add component variance percentages to the legend
+    component_labels = []
+    for comp_idx in selected_components
+        variance_pct = ica_result.variance[comp_idx] * 100
+        push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
+    end
+
+    # Create a new legend with the custom labels
+    legend_entries = [LineElement(color = ax.scene.plots[i].color) for i = 1:length(selected_components)]
+
+    # Calculate number of columns based on number of components
+    ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
+
+    # Place legend - use multi-column for many components
+    Legend(fig[1, 2], legend_entries, component_labels, "Components", nbanks = ncols)
+
+    if display_plot
+        display_figure(fig)
+    end
 
     return fig, ax
 end
-
-
-

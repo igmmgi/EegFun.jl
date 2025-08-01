@@ -101,4 +101,3 @@ function plot_grid_rect(dat::ErpData; channels::Function = channels(), kwargs = 
     display(fig)
     return fig, ax
 end
-

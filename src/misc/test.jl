@@ -29,7 +29,7 @@ function my_conv(signal, kernel)
     # step 3: compute dot product for all points in signal
     out = zeros(length(signal))
     @inbounds for idx = kernel_length:length(signal)
-        @views out[idx] = dot(signal[idx-(kernel_length-1):idx], kernel)
+        @views out[idx] = dot(signal[(idx-(kernel_length-1)):idx], kernel)
     end
     # step 4: remove padding
     return out[kernel_length:(end-(kernel_length-1))]
@@ -375,7 +375,7 @@ display(fig)
 # Figure 13.13
 frequency = 10;
 sample_rate = 500;
-t = -0.5:1/sample_rate:0.5;
+t = -0.5:(1/sample_rate):0.5;
 numcycles = [3 7];
 fig = Figure()
 # make wavelet
@@ -525,9 +525,9 @@ end
 sample_rate = 300
 signal = generate_signal(sample_rate, [-1, 2.0], 76, [10, 10, 20], [1, 1, 1], [[0.0, 0.25], [0, 0.25], [0, 0.25]], 0);
 # time = -1:1/sample_rate:(2-(1/sample_rate));
-time = -1:1/sample_rate:(2-(1/sample_rate));
+time = -1:(1/sample_rate):(2-(1/sample_rate));
 time_steps = -0.5:0.05:1.5
-time = -1:1/sample_rate:(2-(1/sample_rate))
+time = -1:(1/sample_rate):(2-(1/sample_rate))
 frequencies = 1:2:30
 time_steps = -0.5:0.05:1.5
 @btime tf_trials = multitaper(signal, time, sample_rate, frequencies, toi = time_steps, tapsmofrq = 0.5)
@@ -715,7 +715,7 @@ for fi = 1:length(freqs)
     # run convolution
     convolution_result_fft = ifft(fft_wavelet .* fft_data)
     convolution_result_fft = convolution_result_fft[1:n_convolution] # note: here we remove the extra points from the power-of-2 FFT
-    convolution_result_fft = convolution_result_fft[half_of_wavelet_size+1:end-half_of_wavelet_size]
+    convolution_result_fft = convolution_result_fft[(half_of_wavelet_size+1):(end-half_of_wavelet_size)]
     # put power data into time-frequency matrix
     tf_data[fi, :] = abs2.(convolution_result_fft)
 end
@@ -745,6 +745,3 @@ f = 30
 filter = digitalfilter(Lowpass(f), Butterworth(o); fs = sample_rate)
 H, w = freqresp(filter::FilterCoefficients)
 lines!(abs.(H))
-
-
-

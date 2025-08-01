@@ -63,7 +63,7 @@ function plot_ica_topoplot_single(
     ax = Axis(gl[1, 1], title = @sprintf("IC %d (%.1f%%)", comp_idx, ica.variance[comp_idx] * 100))
 
     # Extract layout data
-    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :] # Corrected bracket
+    tmp_layout = layout[(layout.label .∈ Ref(ica.data_label)), :] # Corrected bracket
 
     # Create the topo data
     data = _data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
@@ -193,7 +193,8 @@ function plot_ica_topoplot(
     label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
     merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
 
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :radius => 88, :num_levels => 20, :nan_color => :transparent)
+    topo_default_kwargs =
+        Dict(:colormap => :jet, :gridscale => 300, :radius => 88, :num_levels => 20, :nan_color => :transparent)
     merged_topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = merged_topo_kwargs[:gridscale]
     radius = merged_topo_kwargs[:radius]
@@ -227,13 +228,14 @@ function plot_ica_topoplot(
     end
 
     # Extract layout data once for all plots
-    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+    tmp_layout = layout[(layout.label .∈ Ref(ica.data_label)), :]
 
     # Calculate all topo data first
     all_data = []
     for i in eachindex(comps)
         # Use gridscale accessed earlier
-        data = _data_interpolation_topo(ica.mixing[:, comps[i]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+        data =
+            _data_interpolation_topo(ica.mixing[:, comps[i]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
         push!(all_data, data)
     end
 
@@ -379,7 +381,7 @@ function plot_ica_topoplot(
     empty!(ax)
 
     # Extract layout data
-    tmp_layout = layout[(layout.label.∈Ref(ica.data_label)), :]
+    tmp_layout = layout[(layout.label .∈ Ref(ica.data_label)), :]
 
     # Create the topo data
     data = _data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
@@ -403,7 +405,7 @@ function plot_ica_topoplot(
         label_kwargs = merged_label_kwargs,
     )
 
-    ax.title = string(ica.ica_label[comp_idx]) 
+    ax.title = string(ica.ica_label[comp_idx])
 
     # Hide decorations for cleaner look
     hidedecorations!(ax, grid = false)
@@ -468,7 +470,7 @@ mutable struct IcaComponentState
         head_kwargs = Dict(),
         point_kwargs = Dict(),
         label_kwargs = Dict(),
-    ) 
+    )
         # Prepare data matrix
         dat_matrix = prepare_ica_data_matrix(dat, ica_result)
         components = ica_result.unmixing * dat_matrix
@@ -1271,9 +1273,9 @@ function add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times.>=state.dat.data.time[first(
+                visible_times = true_times[true_times .>= state.dat.data.time[first(
                     current_range,
-                )].&&true_times.<=state.dat.data.time[last(current_range)]]
+                )].&&true_times .<= state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1520,24 +1522,29 @@ Uses the results from `identify_eye_components`.
 # Returns
 - `fig::Figure`: The Makie Figure containing the z-score plots.
 """
-function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; z_threshold::Float64=3.0, display_plot::Bool=true)
+function plot_eog_component_features(
+    identified_comps::Dict,
+    metrics_df::DataFrame;
+    z_threshold::Float64 = 3.0,
+    display_plot::Bool = true,
+)
 
     # Extract data from inputs
     vEOG_corr_z = metrics_df.vEOG_zscore
     hEOG_corr_z = metrics_df.hEOG_zscore
-    final_vEOG = identified_comps[:vEOG] 
+    final_vEOG = identified_comps[:vEOG]
     final_hEOG = identified_comps[:hEOG]
-    
+
     # Check if data is empty
     if isempty(metrics_df) || isempty(vEOG_corr_z) || isempty(hEOG_corr_z)
         println("Warning: Could not plot eye component features, input DataFrame or z-scores are empty.")
         return Figure() # Return empty figure
     end
-    
+
     n_components = nrow(metrics_df)
 
     # Plot vEOG/hEOG Correlation Z-Scores
-    fig = Figure() 
+    fig = Figure()
     ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = "vEOG Correlation Z-Scores")
     # Use component indices from DataFrame for x-axis
     scatter!(ax_v, metrics_df.Component, vEOG_corr_z, color = :gray, markersize = 5)
@@ -1603,11 +1610,11 @@ and exceeds the threshold. Returns indices of peaks.
 - `min_prominence_std::Real`: Minimum prominence threshold in standard deviations (default: 2.0)
 - `window_size::Int`: Number of samples to look on each side for comparison (default: 1)
 """
-function _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0, window_size::Int=1)
+function _find_peaks(data::AbstractVector; min_prominence_std::Real = 2.0, window_size::Int = 1)
     if length(data) < 2 * window_size + 1
         return Int[]
     end
-    
+
     peaks = Int[]
     mean_val = mean(data)
     std_val = std(data)
@@ -1615,15 +1622,15 @@ function _find_peaks(data::AbstractVector; min_prominence_std::Real=2.0, window_
     threshold_pos = (std_val ≈ 0) ? mean_val : mean_val + min_prominence_std * std_val
     threshold_neg = (std_val ≈ 0) ? mean_val : mean_val - min_prominence_std * std_val
 
-    for i in (window_size + 1):(length(data) - window_size)
+    for i = (window_size+1):(length(data)-window_size)
         # Get the window around the current point
-        left_window = data[(i - window_size):(i - 1)]
-        right_window = data[(i + 1):(i + window_size)]
-        
+        left_window = data[(i-window_size):(i-1)]
+        right_window = data[(i+1):(i+window_size)]
+
         # Positive peaks (greater than all neighbors in window and above threshold)
         if all(data[i] .> left_window) && all(data[i] .> right_window) && data[i] > threshold_pos
             push!(peaks, i)
-        # Negative peaks (less than all neighbors in window and below threshold)
+            # Negative peaks (less than all neighbors in window and below threshold)
         elseif all(data[i] .< left_window) && all(data[i] .< right_window) && data[i] < threshold_neg
             push!(peaks, i)
         end
@@ -1661,34 +1668,41 @@ function plot_spatial_kurtosis_components(
 
     # Create figure
     fig = Figure()
-    
+
     # Plot spatial kurtosis z-scores
     ax = Axis(
         fig[1, 1],
         xlabel = "Component",
         ylabel = "Spatial Kurtosis Z-Score",
-        title = "Component Spatial Kurtosis Z-Scores"
+        title = "Component Spatial Kurtosis Z-Scores",
     )
-    
+
     # Plot all components
-    scatter!(ax, metrics_df.Component, metrics_df.SpatialKurtosisZScore, color=:gray)
-    
+    scatter!(ax, metrics_df.Component, metrics_df.SpatialKurtosisZScore, color = :gray)
+
     # Highlight high kurtosis components
     if !isempty(kurtosis_comps)
         kurtosis_values = metrics_df[in.(metrics_df.Component, Ref(kurtosis_comps)), :SpatialKurtosisZScore]
-        scatter!(ax, kurtosis_comps, kurtosis_values, color=:red, markersize=8)
-        
+        scatter!(ax, kurtosis_comps, kurtosis_values, color = :red, markersize = 8)
+
         # Add labels for high kurtosis components
         for (i, comp) in enumerate(kurtosis_comps)
-            text!(ax, comp, kurtosis_values[i], text=string(comp), 
-                  color=:red, align=(:center,:bottom), fontsize=10)
+            text!(
+                ax,
+                comp,
+                kurtosis_values[i],
+                text = string(comp),
+                color = :red,
+                align = (:center, :bottom),
+                fontsize = 10,
+            )
         end
     end
-    
+
     # Add reference lines
-    hlines!(ax, [z_threshold], color=:red, linestyle=:dash)
-    hlines!(ax, [0.0], color=:gray, linestyle=:dot)
-   
+    hlines!(ax, [z_threshold], color = :red, linestyle = :dash)
+    hlines!(ax, [0.0], color = :gray, linestyle = :dot)
+
     if display_plot
         display_figure(fig)
     end
@@ -1715,66 +1729,60 @@ Plot metrics used for ECG component identification.
 function plot_ecg_component_features_(
     identified_comps::Vector{Int},
     metrics_df::DataFrame;
-    min_bpm::Real=40,
-    max_bpm::Real=120,
-    max_ibi_std_s::Real=0.2,         
-    min_peak_ratio::Real=0.7,         
-    display_plot::Bool=true,
+    min_bpm::Real = 40,
+    max_bpm::Real = 120,
+    max_ibi_std_s::Real = 0.2,
+    min_peak_ratio::Real = 0.7,
+    display_plot::Bool = true,
 )
     # Create figure with two panels
     fig = Figure()
-    
+
     # Calculate heart rates
     heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
     metrics_df[!, :heart_rate_bpm] = heart_rates
-    
+
     # Left panel: Heart Rate vs Peak Ratio
-    ax1 = Axis( fig[1, 1], xlabel = "Heart Rate (BPM)", ylabel = "Peak Ratio (valid/total)")
+    ax1 = Axis(fig[1, 1], xlabel = "Heart Rate (BPM)", ylabel = "Peak Ratio (valid/total)")
     # Right panel: Heart Rate vs IBI Regularity (std)
-    ax2 = Axis( fig[1, 2], xlabel = "Heart Rate (BPM)", ylabel = "IBI Std Dev (seconds)")
-    
+    ax2 = Axis(fig[1, 2], xlabel = "Heart Rate (BPM)", ylabel = "IBI Std Dev (seconds)")
+
     # Plot non-ECG components
     non_ecg_idx = setdiff(1:nrow(metrics_df), identified_comps)
     non_ecg_df = metrics_df[non_ecg_idx, :]
-    
+
     # Filter out NaNs for plotting
     valid_non_ecg = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.peak_ratio))
     if !isempty(valid_non_ecg)
         scatter!(
-            ax1, 
-            non_ecg_df.heart_rate_bpm[valid_non_ecg], 
-            non_ecg_df.peak_ratio[valid_non_ecg], 
+            ax1,
+            non_ecg_df.heart_rate_bpm[valid_non_ecg],
+            non_ecg_df.peak_ratio[valid_non_ecg],
             color = :gray,
             markersize = 10,
         )
     end
-    
+
     # Filter valid points for second plot
     valid_non_ecg2 = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.std_ibi_s))
     if !isempty(valid_non_ecg2)
         scatter!(
-            ax2, 
-            non_ecg_df.heart_rate_bpm[valid_non_ecg2], 
-            non_ecg_df.std_ibi_s[valid_non_ecg2], 
+            ax2,
+            non_ecg_df.heart_rate_bpm[valid_non_ecg2],
+            non_ecg_df.std_ibi_s[valid_non_ecg2],
             color = :gray,
             markersize = 10,
         )
     end
-    
+
     # Plot ECG components
     ecg_df = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
-    
+
     # Filter out NaNs
     valid_ecg = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.peak_ratio))
     if !isempty(valid_ecg)
-        scatter!(
-            ax1, 
-            ecg_df.heart_rate_bpm[valid_ecg], 
-            ecg_df.peak_ratio[valid_ecg], 
-            color = :black,
-            markersize = 16,
-        )
-        
+        scatter!(ax1, ecg_df.heart_rate_bpm[valid_ecg], ecg_df.peak_ratio[valid_ecg], color = :black, markersize = 16)
+
         # Add component labels
         for i in valid_ecg
             text!(
@@ -1784,22 +1792,16 @@ function plot_ecg_component_features_(
                 text = string(ecg_df.Component[i]),
                 align = (:center, :bottom),
                 offset = (0, 3),
-                fontsize = 12
+                fontsize = 12,
             )
         end
     end
-    
+
     # Plot ECG components in second panel
     valid_ecg2 = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.std_ibi_s))
     if !isempty(valid_ecg2)
-        scatter!(
-            ax2, 
-            ecg_df.heart_rate_bpm[valid_ecg2], 
-            ecg_df.std_ibi_s[valid_ecg2], 
-            color = :black,
-            markersize = 16,
-        )
-        
+        scatter!(ax2, ecg_df.heart_rate_bpm[valid_ecg2], ecg_df.std_ibi_s[valid_ecg2], color = :black, markersize = 16)
+
         # Add component labels
         for i in valid_ecg2
             text!(
@@ -1809,17 +1811,17 @@ function plot_ecg_component_features_(
                 text = string(ecg_df.Component[i]),
                 align = (:center, :bottom),
                 offset = (0, 3),
-                fontsize = 12
+                fontsize = 12,
             )
         end
     end
-    
+
     # Add reference ranges for normal heart boundary and selection criterion
     vlines!(ax1, [min_bpm, max_bpm], color = (:black, 0.5), linestyle = :dash)
     vlines!(ax2, [min_bpm, max_bpm], color = (:black, 0.5), linestyle = :dash)
     hlines!(ax1, [min_peak_ratio], color = (:black, 0.5), linestyle = :dash)
     hlines!(ax2, [max_ibi_std_s], color = (:black, 0.5), linestyle = :dash)
-    
+
     if display_plot
         display_figure(fig)
     end
@@ -1860,82 +1862,91 @@ Plot spectral metrics used for line noise component identification.
 function plot_line_noise_components(
     line_noise_comps::Vector{Int},
     metrics_df::DataFrame,
-    line_freq::Real=50.0,
-    freq_bandwidth::Real=1.0,
-    z_threshold::Float64=3.0,
-    min_harmonic_power::Real=0.5,
-    display_plot::Bool=true,
+    line_freq::Real = 50.0,
+    freq_bandwidth::Real = 1.0,
+    z_threshold::Float64 = 3.0,
+    min_harmonic_power::Real = 0.5,
+    display_plot::Bool = true,
 )
-    
+
     # Create figure with two subplots
-    fig = Figure(size=(1000, 400))
-    
+    fig = Figure(size = (1000, 400))
+
     # Plot 1: Power Ratio Z-Scores
     ax1 = Axis(
         fig[1, 1],
         xlabel = "Component",
         ylabel = "Power Ratio Z-Score",
-        title = "Line Frequency Power Ratio Z-Scores"
+        title = "Line Frequency Power Ratio Z-Scores",
     )
-    
+
     # Plot all components with label
-    scatter!(ax1, metrics_df.Component, metrics_df.PowerRatioZScore, 
-             color=:gray, label="All Components")
-    
+    scatter!(ax1, metrics_df.Component, metrics_df.PowerRatioZScore, color = :gray, label = "All Components")
+
     # Highlight identified components with label
     if !isempty(line_noise_comps)
         identified_metrics = metrics_df[in.(metrics_df.Component, Ref(line_noise_comps)), :]
-        scatter!(ax1, identified_metrics.Component, identified_metrics.PowerRatioZScore,
-                color=:red, markersize=8, label="Line Noise Components")
-        
+        scatter!(
+            ax1,
+            identified_metrics.Component,
+            identified_metrics.PowerRatioZScore,
+            color = :red,
+            markersize = 8,
+            label = "Line Noise Components",
+        )
+
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
             row = metrics_df[metrics_df.Component .== comp, :]
-            text!(ax1, comp, row.PowerRatioZScore[1], text=string(comp),
-                  color=:red, align=(:center,:bottom), fontsize=10)
+            text!(
+                ax1,
+                comp,
+                row.PowerRatioZScore[1],
+                text = string(comp),
+                color = :red,
+                align = (:center, :bottom),
+                fontsize = 10,
+            )
         end
     end
-    
+
     # Add threshold line with label
-    hlines!(ax1, [z_threshold], color=:red, linestyle=:dash, label="Threshold")
-    
+    hlines!(ax1, [z_threshold], color = :red, linestyle = :dash, label = "Threshold")
+
     # Add legend
-    axislegend(ax1, position=(1.0, 1.0))
-    
+    axislegend(ax1, position = (1.0, 1.0))
+
     # Plot 2: Harmonic Ratios
-    ax2 = Axis(
-        fig[1, 2],
-        xlabel = "Component",
-        ylabel = "Power Ratio",
-        title = "Harmonic Power Ratios"
-    )
-    
+    ax2 = Axis(fig[1, 2], xlabel = "Component", ylabel = "Power Ratio", title = "Harmonic Power Ratios")
+
     # Plot harmonic ratios with labels
-    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic2Ratio,
-             color=:blue, label="2nd Harmonic")
-    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic3Ratio,
-             color=:green, label="3rd Harmonic")
-    
+    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic2Ratio, color = :blue, label = "2nd Harmonic")
+    scatter!(ax2, metrics_df.Component, metrics_df.Harmonic3Ratio, color = :green, label = "3rd Harmonic")
+
     # Add reference line for minimum harmonic power with label
-    hlines!(ax2, [min_harmonic_power], color=:gray, linestyle=:dash,
-            label="Min Harmonic Power")
-    
+    hlines!(ax2, [min_harmonic_power], color = :gray, linestyle = :dash, label = "Min Harmonic Power")
+
     # Highlight identified components with label
     if !isempty(line_noise_comps)
         identified_metrics = metrics_df[in.(metrics_df.Component, Ref(line_noise_comps)), :]
-        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic2Ratio,
-                color=:red, markersize=8, label="Line Noise Components")
-        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic3Ratio,
-                color=:red, markersize=8)
+        scatter!(
+            ax2,
+            identified_metrics.Component,
+            identified_metrics.Harmonic2Ratio,
+            color = :red,
+            markersize = 8,
+            label = "Line Noise Components",
+        )
+        scatter!(ax2, identified_metrics.Component, identified_metrics.Harmonic3Ratio, color = :red, markersize = 8)
     end
-    
+
     # Add legend
-    axislegend(ax2, position=(1.0, 1.0))
+    axislegend(ax2, position = (1.0, 1.0))
 
     if display_plot
         display_figure(fig)
     end
-    
+
     return fig, (ax1, ax2)
 end
 
@@ -1961,74 +1972,70 @@ Create a simplified visualization of ECG component detection metrics.
 """
 function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df::DataFrame)
     # Create figure with two panels
-    fig = Figure(size=(1000, 600))
-    
+    fig = Figure(size = (1000, 600))
+
     # Calculate heart rates
     heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
     metrics_df[!, :heart_rate_bpm] = heart_rates
-    
+
     # Left panel: Heart Rate vs Peak Ratio
     ax1 = Axis(
         fig[1, 1],
         xlabel = "Heart Rate (BPM)",
         ylabel = "Peak Ratio (valid/total)",
-        title = "ECG Detection Metrics"
+        title = "ECG Detection Metrics",
     )
-    
+
     # Right panel: Heart Rate vs IBI Regularity (std)
-    ax2 = Axis(
-        fig[1, 2],
-        xlabel = "Heart Rate (BPM)",
-        ylabel = "IBI Std Dev (seconds)",
-        title = "Heart Rate Regularity"
-    )
-    
+    ax2 =
+        Axis(fig[1, 2], xlabel = "Heart Rate (BPM)", ylabel = "IBI Std Dev (seconds)", title = "Heart Rate Regularity")
+
     # Plot non-ECG components
     non_ecg_idx = setdiff(1:nrow(metrics_df), identified_comps)
     non_ecg_df = metrics_df[non_ecg_idx, :]
-    
+
     # Filter out NaNs for plotting
     valid_non_ecg = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.peak_ratio))
     if !isempty(valid_non_ecg)
         scatter!(
-            ax1, 
-            non_ecg_df.heart_rate_bpm[valid_non_ecg], 
-            non_ecg_df.peak_ratio[valid_non_ecg], 
+            ax1,
+            non_ecg_df.heart_rate_bpm[valid_non_ecg],
+            non_ecg_df.peak_ratio[valid_non_ecg],
             color = :gray,
             markersize = 8,
-            label = "Non-ECG"
+            label = "Non-ECG",
         )
     end
-    
+
     # Filter valid points for second plot
     valid_non_ecg2 = findall(.!isnan.(non_ecg_df.heart_rate_bpm) .& .!isnan.(non_ecg_df.std_ibi_s))
     if !isempty(valid_non_ecg2)
         scatter!(
-            ax2, 
-            non_ecg_df.heart_rate_bpm[valid_non_ecg2], 
-            non_ecg_df.std_ibi_s[valid_non_ecg2], 
+            ax2,
+            non_ecg_df.heart_rate_bpm[valid_non_ecg2],
+            non_ecg_df.std_ibi_s[valid_non_ecg2],
             color = :gray,
             markersize = 8,
-            label = "Non-ECG"
+            label = "Non-ECG",
         )
     end
-    
+
     # Plot ECG components
     ecg_df = metrics_df[in.(metrics_df.Component, Ref(identified_comps)), :]
-    
+
     # Filter out NaNs
     valid_ecg = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.peak_ratio))
     if !isempty(valid_ecg)
         ecg_scatter1 = scatter!(
-            ax1, 
-            ecg_df.heart_rate_bpm[valid_ecg], 
-            ecg_df.peak_ratio[valid_ecg], 
+            ax1,
+            ecg_df.heart_rate_bpm[valid_ecg],
+            ecg_df.peak_ratio[valid_ecg],
             color = :red,
             markersize = 12,
             marker = :diamond,
-            label = "ECG"
+            label = "ECG",
         )
-        
+
         # Add component labels
         for i in valid_ecg
             text!(
@@ -2038,24 +2045,24 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
                 text = string(ecg_df.Component[i]),
                 align = (:center, :bottom),
                 offset = (0, 3),
-                fontsize = 12
+                fontsize = 12,
             )
         end
     end
-    
+
     # Plot ECG components in second panel
     valid_ecg2 = findall(.!isnan.(ecg_df.heart_rate_bpm) .& .!isnan.(ecg_df.std_ibi_s))
     if !isempty(valid_ecg2)
         scatter!(
-            ax2, 
-            ecg_df.heart_rate_bpm[valid_ecg2], 
-            ecg_df.std_ibi_s[valid_ecg2], 
+            ax2,
+            ecg_df.heart_rate_bpm[valid_ecg2],
+            ecg_df.std_ibi_s[valid_ecg2],
             color = :red,
             markersize = 12,
             marker = :diamond,
-            label = "ECG"
+            label = "ECG",
         )
-        
+
         # Add component labels
         for i in valid_ecg2
             text!(
@@ -2065,34 +2072,34 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
                 text = string(ecg_df.Component[i]),
                 align = (:center, :bottom),
                 offset = (0, 3),
-                fontsize = 12
+                fontsize = 12,
             )
         end
     end
-    
+
     # Add reference ranges using pre-defined values 
     # Normal heart rate range (typical values)
     vlines!(ax1, [60, 100], color = (:green, 0.5), linestyle = :dash, label = "Normal HR Range")
     vlines!(ax2, [60, 100], color = (:green, 0.5), linestyle = :dash)
-    
+
     # Get threshold values from actual data when possible
     min_peak_ratio = 0.7  # Default if no components found
     max_std = 0.12        # Default if no components found
-    
+
     if any(ecg_df.is_ecg_artifact)
         # Get actual values from data
         min_peak_ratio = minimum(ecg_df.peak_ratio[ecg_df.is_ecg_artifact])
         max_std = maximum(ecg_df.std_ibi_s[ecg_df.is_ecg_artifact])
     end
-    
+
     # Add threshold lines
     hlines!(ax1, [min_peak_ratio], color = (:red, 0.5), linestyle = :dash, label = "Min Peak Ratio")
     hlines!(ax2, [max_std], color = (:red, 0.5), linestyle = :dash, label = "Max StdDev")
-    
+
     # Add legends
     axislegend(ax1, position = :rt)
     axislegend(ax2, position = :rt)
-    
+
     # Calculate BPM range from actual data
     min_hr = 40   # Default minimum heart rate
     max_hr = 120  # Default maximum heart rate
@@ -2104,26 +2111,15 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
             max_hr = ceil(Int, maximum(valid_hrs))
         end
     end
-    
+
     # Display summary text
     Label(
-        fig[2, 1:2], 
+        fig[2, 1:2],
         "Found $(length(identified_comps)) ECG components: $(join(identified_comps, ", "))\n" *
         "Criteria: Heart rate $min_hr-$max_hr BPM, StdDev ≤ $(round(max_std, digits=3))s, Peak Ratio ≥ $(round(min_peak_ratio, digits=2))",
         fontsize = 14,
-        tellwidth = false
+        tellwidth = false,
     )
-    
+
     return fig
 end
-
-
-
-
-
-
-
-
-
-
-
