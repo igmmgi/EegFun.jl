@@ -20,11 +20,15 @@ dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
-# eegfun.mark_epoch_windows!(dat, [1, 3, 22], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
-# eegfun.plot_databrowser(dat)
+eegfun.mark_epoch_windows!(dat, [1, 3, 22], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
+eegfun.plot_databrowser(dat)
 
-epoch1 = eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1, 3], [3, :any]]) # 1 -> 3 or 3 -> any sequences
-@btime eegfun.mark_epoch_windows!(dat, [epoch1], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
+dat_subset = eegfun.subset(dat, sample_selection = x -> x.epoch_window)
+eegfun.plot_databrowser(dat_subset)
+
+
+
+
 
 # EPOCHS
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]

@@ -87,7 +87,7 @@ end
 function rereference!(dat::EegData, reference_selection::Union{Symbol,Vector{Symbol}}, channel_selection::Function = channels())
 
     reference_channels = get_reference_channels(dat, reference_selection)
-    selected_channels = get_selected_channels(dat, channel_selection, include_metadata_columns = false)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false)
     
     # Verify reference channels exist in the data
     missing_channels = [ch for ch in reference_channels if ch ∉ channel_labels(dat)]

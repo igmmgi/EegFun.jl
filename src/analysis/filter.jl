@@ -209,7 +209,7 @@ function filter_data!(dat::EegData, filter_type::String, cutoff_freq::Real;
     plot_filter::Bool = false,
     print_filter::Bool = false)
 
-    selected_channels = get_selected_channels(dat, channel_selection, include_metadata_columns = false, include_extra_columns = false)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for filtering"
         return nothing

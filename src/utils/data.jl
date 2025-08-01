@@ -444,11 +444,11 @@ end
 function subset(dat::SingleDataFrameEeg; 
                channel_selection::Function = channels(), 
                sample_selection::Function = samples(), 
-               include_extra_channels::Bool = false)
+               include_extra::Bool = false)
    
     @info "subset: Subsetting $(typeof(dat)) ..."
     # Get selected channels/samples 
-    selected_channels = get_selected_channels(dat, channel_selection, include_extra_channels = include_extra_channels)
+    selected_channels = get_selected_channels(dat, channel_selection, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
     
     # Filter data by samples and channels and match layout
