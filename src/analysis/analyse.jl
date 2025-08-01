@@ -68,26 +68,19 @@ function mark_epoch_windows!(
 
     # Input validation
     _validate_epoch_window_params(dat, time_window)
-    if isempty(triggers_of_interest)
-        @minimal_error "Must specify at least one trigger of interest"
-    end
 
-    # Initialize result vector with false
+    # Initialize result vector with false 
     dat.data[!, channel_out] .= false
-
-    # Only need unique trigers
-    unique_triggers = unique(dat.data.triggers)
 
     # For each trigger of interest
     for trigger in triggers_of_interest
 
-        if !(trigger in unique_triggers)
+        # Find all samples where this trigger occurs
+        trigger_indices = findall(dat.data.triggers .== trigger)
+        if isempty(trigger_indices)
             @minimal_warning "Trigger $trigger not found in data"
             continue
         end
-
-        # Find all samples where this trigger occurs
-        trigger_indices = findall(dat.data.triggers .== trigger)
 
         # For each trigger occurrence
         for idx in trigger_indices
@@ -106,6 +99,9 @@ function mark_epoch_windows!(
     end
     
 end
+
+
+
 
 """
     mark_epoch_windows!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; 
@@ -145,18 +141,15 @@ function mark_epoch_windows!(
 
     # Input validation
     _validate_epoch_window_params(dat, time_window)
-    if isempty(triggers_of_interest)
-        @minimal_error "Must specify at least one trigger of interest"
-    end
 
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
 
     # For each epoch condition
     for condition in epoch_conditions
+
         # Find all occurrences of the trigger sequences (unified approach)
         sequence_indices = search_sequences(dat.data.triggers, condition.trigger_sequences)
-
         if isempty(sequence_indices)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
             continue
@@ -164,49 +157,27 @@ function mark_epoch_windows!(
 
         # Apply after/before filtering if specified
         if condition.after !== nothing || condition.before !== nothing
-            filtered_indices = Int[]
 
-            for seq_start_idx in sequence_indices
-                # Check if this sequence meets the after/before constraints
-                valid_position = true
-
+            sequence_indices = filter(sequence_indices) do seq_start_idx
+                # Check after constraint
                 if condition.after !== nothing
-                    # Check if there's a trigger with value 'after' before this sequence
-                    # Look backwards from sequence start to find the trigger
-                    found_after_trigger = false
-                    for i = (seq_start_idx-1):-1:1
-                        if dat.data.triggers[i] == condition.after
-                            found_after_trigger = true
-                            break
-                        end
-                    end
-                    if !found_after_trigger
-                        valid_position = false
+                    found_after = any(dat.data.triggers[1:(seq_start_idx-1)] .== condition.after)
+                    if !found_after
+                        return false
                     end
                 end
-
+                
+                # Check before constraint  
                 if condition.before !== nothing
-                    # Check if there's a trigger with value 'before' after this sequence
-                    # Look forwards from sequence end to find the trigger
                     sequence_end = seq_start_idx + length(condition.trigger_sequence) - 1
-                    found_before_trigger = false
-                    for i = (sequence_end+1):length(dat.data.triggers)
-                        if dat.data.triggers[i] == condition.before
-                            found_before_trigger = true
-                            break
-                        end
-                    end
-                    if !found_before_trigger
-                        valid_position = false
+                    found_before = any(dat.data.triggers[(sequence_end+1):end] .== condition.before)
+                    if !found_before
+                        return false
                     end
                 end
-
-                if valid_position
-                    push!(filtered_indices, seq_start_idx)
-                end
+                
+                return true
             end
-
-            sequence_indices = filtered_indices
             if isempty(sequence_indices)
                 after_msg = condition.after !== nothing ? " after trigger $(condition.after)" : ""
                 before_msg = condition.before !== nothing ? " before trigger $(condition.before)" : ""
@@ -220,12 +191,7 @@ function mark_epoch_windows!(
            condition.min_interval !== nothing &&
            condition.max_interval !== nothing
 
-            valid_indices = Int[]
-
-            for seq_start_idx in sequence_indices
-                # Check if this sequence meets all timing constraints
-                valid_sequence = true
-
+            sequence_indices = filter(sequence_indices) do seq_start_idx
                 for (start_idx, end_idx) in condition.timing_pairs
                     # Calculate actual indices in the trigger array
                     actual_start_idx = seq_start_idx + (start_idx - 1)
@@ -233,8 +199,7 @@ function mark_epoch_windows!(
 
                     # Check bounds
                     if actual_start_idx < 1 || actual_end_idx > length(dat.data.triggers)
-                        valid_sequence = false
-                        break
+                        return false
                     end
 
                     # Calculate time interval between the two triggers
@@ -244,17 +209,11 @@ function mark_epoch_windows!(
 
                     # Check if interval meets constraints
                     if interval < condition.min_interval || interval > condition.max_interval
-                        valid_sequence = false
-                        break
+                        return false
                     end
                 end
-
-                if valid_sequence
-                    push!(valid_indices, seq_start_idx)
-                end
+                return true
             end
-
-            sequence_indices = valid_indices
             if isempty(sequence_indices)
                 @minimal_warning "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
                 continue
@@ -263,10 +222,9 @@ function mark_epoch_windows!(
 
         # For each valid sequence occurrence, find the reference point (t=0 position)
         for seq_start_idx in sequence_indices
+
             # Calculate the reference index (t=0 position) within the sequence
             reference_idx = seq_start_idx + (condition.reference_index - 1)
-
-            # Check if reference index is within bounds
             if reference_idx > length(dat.data.triggers)
                 @minimal_warning "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
                 continue
@@ -281,6 +239,7 @@ function mark_epoch_windows!(
             # Mark samples within the window
             in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
             dat.data[in_window, channel_out] .= true
+
         end
     end
 end
@@ -418,19 +377,10 @@ epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
 # Helper to select channels based on include_extra_channels and a predicate
 function get_selected_channels(dat, channel_selection::Function; include_metadata_columns::Bool = true, include_extra_columns::Bool = true)
-    # Always include metadata columns
-    if include_metadata_columns
-        metadata_cols = meta_labels(dat)
-    else
-        metadata_cols = Symbol[]
-    end
-    
-    # Get available non-metadata columns for selection
-    if include_extra_columns
-        selectable_cols = vcat(channel_labels(dat), extra_labels(dat))
-    else
-        selectable_cols = channel_labels(dat)
-    end
+
+    # Columns/channels in dataframe to include
+    metadata_cols = include_metadata_columns ? meta_labels(dat) : Symbol[]
+    selectable_cols = include_extra_columns ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
     
     # Apply channel selection to non-metadata columns
     selected_cols = selectable_cols[channel_selection(selectable_cols)]
@@ -802,649 +752,4 @@ function _correlation_matrix(
     return df
 end
 
-
-
-"""
-    detect_eog_onsets!(dat::ContinuousData, criterion::Float64, channel_in::Symbol, channel_out::Symbol)
-
-Detects EOG (electrooculogram) onsets in the EEG data based on a specified criterion.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `criterion::Real`: The threshold for detecting EOG onsets.
-- `channel_in::Symbol`: The channel from which to detect EOG onsets.
-- `channel_out::Symbol`: The channel where the detected EOG onsets will be recorded as boolean values, indicating the presence of an EOG event.
-
-# Returns
-Nothing. The function modifies the input data in place.
-
-# Examples
-
-## Basic Usage
-```julia
-# Detect vertical EOG onsets
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
-
-# Detect horizontal EOG onsets
-detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
-
-# Combine for any EOG artifact
-combine_boolean_columns!(dat, [:is_vEOG, :is_hEOG], :or, output_column = :is_any_EOG)
-
-# Create quality flags
-combine_boolean_columns!(dat, [:is_extreme_value, :is_any_EOG], :nor, output_column = :is_good_data)
-
-# Complex quality control (good samples = not extreme AND not any EOG)
-combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :nor, output_column = :is_clean_data)
-
-## Multiple EOG Channels
-```julia
-# Detect both vertical and horizontal EOG
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
-detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
-
-# Combine for any EOG artifact
-# dat.data[!, :is_any_EOG] = dat.data[!, :is_vEOG] .| dat.data[!, :is_hEOG]
-```
-"""
-function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
-    @info "detect_eog_onsets!: Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion)"
-    step_size = div(dat.sample_rate, 20)
-    eog_signal = dat.data[1:step_size:end, channel_in]
-    eog_diff = diff(eog_signal)
-    eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
-    eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] * step_size
-    dat.data[!, channel_out] .= false
-    dat.data[eog_idx, channel_out] .= true
-    
-    return nothing
-end
-
-# Internal function for plain DataFrames with explicit channel specification
-function _is_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Vector{Bool}
-    # Initialize result vector with false for all samples
-    result = fill(false, nrow(dat))
-    
-    # Check for extreme values only in selected samples
-    if !isempty(selected_samples)
-        data_subset = select(dat[selected_samples, :], selected_channels)
-        extreme_mask = any(x -> abs.(x) >= criterion, Matrix(data_subset), dims = 2)[:]
-        result[selected_samples] = extreme_mask
-    end
-    
-    return result
-end
-
-# Internal function for plain DataFrames with explicit channel specification
-function _is_extreme_value!(
-    dat::DataFrame,
-    criterion::Number,
-    selected_channels::Vector{Symbol};
-    channel_out::Symbol = :is_extreme_value,
-)
-    dat[!, channel_out] .= any(x -> abs.(x) >= criterion, Matrix(select(dat, selected_channels)), dims = 2)[:]
-end
-
-"""
-    is_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::Vector{Bool}
-
-Checks if any values in the specified channels exceed a given criterion.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `criterion::Number`: The threshold for determining extreme values.
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
-
-# Returns
-A Boolean vector indicating whether any extreme values were found for each row. Only samples selected by sample_selection are checked for extreme values.
-
-# Examples
-```julia
-# Check extreme values in layout channels only (default)
-is_extreme_value(dat, 100)
-
-# Check extreme values in specific layout channels
-is_extreme_value(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
-
-# Check extreme values only in good samples (exclude already detected extreme values)
-is_extreme_value(dat, 100, sample_selection = samples_not(:is_extreme_value_100))
-
-# Check extreme values only within epoch windows
-is_extreme_value(dat, 100, sample_selection = samples(:epoch_window))
-
-# Check extreme values in additional channels (automatically detected)
-is_extreme_value(dat, 100, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
-
-# Exclude reference channels from layout
-is_extreme_value(dat, 100, channel_selection = channels_not([:M1, :M2]))
-
-# Combined filtering: check specific channels only in good samples
-is_extreme_value(dat, 100, 
-    sample_selection = samples_and([:epoch_window, samples_not(:is_vEOG)]),
-    channel_selection = channels([:Fp1, :Fp2, :F3, :F4])
-)
-```
-"""
-function is_extreme_value(
-    dat::ContinuousData,
-    criterion::Number;
-    sample_selection::Function = samples(),
-    channel_selection::Function = channels(),
-    include_extra_channels::Bool = false,
-)::Vector{Bool}
-
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
-    selected_samples = get_selected_samples(dat, sample_selection)
-    
-    @info "is_extreme_value: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
-    return _is_extreme_value(dat.data, criterion, selected_channels, selected_samples)
-end
-
-"""
-    is_extreme_value!(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false, channel_out::Symbol = :is_extreme_value)
-
-Checks if any values in the specified channels exceed a given criterion and adds the result as a new column.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `criterion::Number`: The threshold for determining extreme values.
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
-- `channel_out::Symbol`: Name of the output column (default: :is_extreme_value).
-
-# Returns
-Nothing. The function modifies the input data in place.
-
-# Examples
-```julia
-# Check extreme values in layout channels only (default)
-is_extreme_value!(dat, 100)
-
-# Check extreme values in specific layout channels
-is_extreme_value!(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
-
-# Check extreme values only in good samples (exclude already detected extreme values)
-is_extreme_value!(dat, 100, sample_selection = samples_not(:is_extreme_value_100))
-
-# Check extreme values only within epoch windows
-is_extreme_value!(dat, 100, sample_selection = samples(:epoch_window))
-
-# Check extreme values in additional channels (automatically detected)
-is_extreme_value!(dat, 100, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
-
-# Exclude reference channels from layout
-is_extreme_value!(dat, 100, channel_selection = channels_not([:M1, :M2]))
-
-# Combined filtering: check specific channels only in good samples
-is_extreme_value!(dat, 100, 
-    sample_selection = samples_and([:epoch_window, samples_not(:is_vEOG)]),
-    channel_selection = channels([:Fp1, :Fp2, :F3, :F4])
-)
-```
-"""
-function is_extreme_value!(
-    dat::ContinuousData,
-    criterion::Number;
-    sample_selection::Function = samples(),
-    channel_selection::Function = channels(),
-    include_extra_channels::Bool = false,
-    channel_out::Symbol = :is_extreme_value,
-)
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
-    selected_samples = get_selected_samples(dat, sample_selection)
-    
-    @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
-    dat.data[!, channel_out] = _is_extreme_value(dat.data, criterion, selected_channels, selected_samples)
-    
-end
-
-
-
-"""
-    n_extreme_value(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false)::Int
-
-Counts the number of extreme values in the specified channels.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `criterion::Number`: The threshold for determining extreme values.
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
-
-# Returns
-An integer count of the number of extreme values found in the selected samples and channels.
-
-# Examples
-```julia
-# Count extreme values in layout channels only (default)
-n_extreme_value(dat, 100)
-
-# Count extreme values in specific layout channels
-n_extreme_value(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
-
-# Count extreme values only in good samples (exclude already detected extreme values)
-n_extreme_value(dat, 100, sample_selection = samples_not(:is_extreme_value_100))
-
-# Count extreme values only within epoch windows
-n_extreme_value(dat, 100, sample_selection = samples(:epoch_window))
-
-# Count extreme values excluding reference channels from layout
-n_extreme_value(dat, 100, channel_selection = channels_not([:M1, :M2]))
-
-# Count extreme values in additional channels (EOG, extreme value flags, etc.)
-n_extreme_value(dat, 100, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
-
-# Combined filtering: count extreme values in specific channels only in good samples
-n_extreme_value(dat, 100, 
-    sample_selection = samples_and([:epoch_window, samples_not(:is_vEOG)]),
-    channel_selection = channels([:Fp1, :Fp2, :F3, :F4])
-)
-```
-"""
-function n_extreme_value(
-    dat::ContinuousData,
-    criterion::Number;
-    sample_selection::Function = samples(),
-    channel_selection::Function = channels(),
-    include_extra_channels::Bool = false,
-)::Int
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
-    selected_samples = get_selected_samples(dat, sample_selection)
-    
-    return _n_extreme_value(dat.data, criterion, selected_channels, selected_samples)
-end
-
-# Internal function for plain DataFrames with explicit channel specification
-function _n_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Int
-    @info "n_extreme_value: Counting extreme values in channel $(_print_vector(selected_channels)) with criterion $(criterion)"
-    
-    # Only count extreme values in selected samples
-    if isempty(selected_samples)
-        return 0
-    end
-    
-    data_subset = select(dat[selected_samples, :], selected_channels)
-    return sum(sum.(eachcol(abs.(data_subset) .>= criterion)))
-end
-
-# Internal function for plain DataFrames with explicit channel specification
-function _channel_joint_probability(
-    dat::DataFrame,
-    selected_samples::Vector{Int},
-    selected_channels::Vector{Symbol};
-    threshold::Float64 = 5.0,
-    normval::Int = 2,
-)::DataFrame
-    @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
-
-    # Select the specified channels and filter by samples
-    data = select(dat[selected_samples, :], selected_channels)
-
-    # Convert to matrix and compute joint probability
-    jp, indelec = _joint_probability(Matrix(data)', threshold, normval)
-    return DataFrame(channel = selected_channels, jp = jp, rejection = indelec)
-end
-
-"""
-    channel_joint_probability(dat::ContinuousData; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra_channels::Bool = false, threshold::Real = 3.0, normval::Real = 2)::DataFrame
-
-Computes joint probability for EEG channels.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_extra_channels::Bool`: Whether to include additional channels (default: false).
-- `threshold::Real`: Threshold for joint probability (default: 3.0).
-- `normval::Real`: Normalization value (default: 2).
-
-# Returns
-A DataFrame containing joint probability values for each channel.
-
-# Examples
-```julia
-# Basic joint probability for layout channels only (default)
-channel_joint_probability(dat)
-
-# Filter samples where epoch_window is true
-channel_joint_probability(dat, sample_selection = samples(:epoch_window))
-
-# Filter to specific layout channels
-channel_joint_probability(dat, channel_selection = channels([:Fp1, :Fp2]))
-
-# Filter to additional channels (EOG, extreme value flags, etc.)
-channel_joint_probability(dat, channel_selection = channels([:Fp1, :vEOG, :is_extreme_value500]))
-
-# Combine both filters
-channel_joint_probability(dat, 
-    sample_selection = samples(:epoch_window),
-    channel_selection = channels_not([:M1, :M2])
-)
-```
-"""
-function channel_joint_probability(
-    dat::ContinuousData;
-    sample_selection::Function = samples(),
-    channel_selection::Function = channels(),
-    include_extra_channels::Bool = false,
-    threshold::Real = 3.0,
-    normval::Real = 2,
-)::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra_channels=include_extra_channels)
-    selected_samples = get_selected_samples(dat, sample_selection)
-    
-    return _channel_joint_probability(dat.data, selected_samples, selected_channels; threshold=threshold, normval=normval)
-end
-
-
-function _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
-    nbchan = size(signal, 1)
-    jp = zeros(nbchan)
-    dataProba = Vector{Float64}(undef, size(signal, 2)) # Pre-allocate
-
-    @inbounds for rc = 1:nbchan
-        compute_probability!(dataProba, view(signal, rc, :), discret)
-        jp[rc] = -sum(log, dataProba)
-    end
-
-    # Normalize the joint probability
-    if normalize != 0
-        tmpjp = normalize == 2 ? _trim_extremes(jp) : jp
-        jp .= (jp .- mean(tmpjp)) ./ std(tmpjp)
-    end
-
-    rej = threshold != 0 ? abs.(jp) .> threshold : falses(nbchan)
-    return jp, rej
-end
-
-"""
-    compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
-
-Computes the probability of each value in the data vector.
-
-# Arguments
-- `probaMap::Vector{Float64}`: The vector to store the computed probabilities.
-- `data::AbstractVector{Float64}`: The data vector to compute the probabilities for.
-- `bins::Int`: The number of bins to use for the probability computation.
-
-# Returns
-A vector of probabilities.
-
-"""
-function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
-
-    if bins > 0
-        min_val, max_val = extrema(data)
-        range_val = max_val - min_val
-        sortbox = zeros(Int, bins)
-
-        # Single-pass binning and counting
-        @inbounds for x in data
-            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
-            sortbox[bin] += 1
-        end
-
-        # Compute probabilities
-        n = length(data)
-        @inbounds for (i, x) in enumerate(data)
-            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
-            probaMap[i] = sortbox[bin] / n
-        end
-    else
-        # Gaussian approximation
-        μ, σ = mean(data), std(data)
-        inv_sqrt2pi = 1 / (√(2π))
-        @inbounds for (i, x) in enumerate(data)
-            z = (x - μ) / σ
-            probaMap[i] = exp(-0.5 * z * z) * inv_sqrt2pi
-        end
-        sum_p = sum(probaMap)
-        probaMap ./= sum_p
-    end
-
-    return probaMap
-
-end
-
-
-function _trim_extremes(x::Vector{Float64})
-    n = length(x)
-    trim = round(Int, n * 0.1)
-    sorted = sort(x)
-    return view(sorted, trim+1:n-trim)
-end
-
-
-
-"""
-    get_mean_amplitude(erp_data::ErpData, time_window::Tuple{<:Real, <:Real})
-
-Calculates the mean amplitude for each electrode within a specified time window.
-
-# Arguments
-- `erp_data::ErpData`: ERP data structure
-- `time_window::Tuple{<:Real, <:Real}`: Time window as (start_time, end_time) in seconds
-
-# Returns
-- `DataFrame`: A DataFrame with electrode labels as column names and corresponding mean amplitudes
-"""
-function get_mean_amplitude(erp_data::ErpData, time_window::Tuple{<:Real,<:Real})
-    # Find time indices within the window
-    time_indices = findall(x -> x >= time_window[1] && x <= time_window[2], erp_data.time)
-
-    if isempty(time_indices)
-        error("No data points found within the specified time window")
-    end
-
-    # Calculate mean amplitude for each electrode
-    mean_amplitudes = Dict{Symbol,Float64}()
-    for electrode in erp_data.layout.label
-        if haskey(erp_data.data, electrode)
-            mean_amplitudes[electrode] = mean(erp_data.data[time_indices, electrode])
-        end
-    end
-
-    return DataFrame(mean_amplitudes)
-end
-
-
-
-
-
-
-
-"""
-    trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
-
-Counts the number of occurrences of each trigger value in the data and optionally prints a formatted table.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `print_table::Bool`: Whether to print the trigger count table (default: true).
-
-# Returns
-A DataFrame with columns `trigger` and `count` showing trigger values and their counts, excluding zero values.
-
-# Examples
-```julia
-# Get trigger counts and print table
-trigger_counts = trigger_count(dat)
-
-# Get trigger counts without printing
-trigger_counts = trigger_count(dat, print_table = false)
-```
-"""
-function trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
-    @info "trigger_count: Counting triggers in ContinuousData"
-    return _count_triggers([dat.data.triggers], print_table = print_table, 
-                          title = "Trigger Count Summary",
-                          headers = ["Trigger", "Count"], 
-                          is_biosemi = false)
-end
-
-"""
-    trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
-
-Counts the number of occurrences of each trigger value in BioSemi data (both raw and cleaned) and optionally prints a formatted table.
-
-# Arguments
-- `dat::BioSemiBDF.BioSemiData`: The BioSemiData object containing EEG data.
-- `print_table::Bool`: Whether to print the trigger count table (default: true).
-
-# Returns
-A DataFrame with columns `trigger`, `raw_count`, and `cleaned_count` showing trigger values and their counts in both raw and cleaned data, excluding zero values.
-
-# Examples
-```julia
-# Get trigger counts and print table
-trigger_counts = trigger_count(dat)
-
-# Get trigger counts without printing
-trigger_counts = trigger_count(dat, print_table = false)
-```
-"""
-function trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
-    @info "trigger_count: Counting triggers in BioSemiData"
-    cleaned_triggers = _clean_triggers(dat.triggers.raw) # cleaned triggers
-    return _count_triggers([dat.triggers.raw, cleaned_triggers], print_table = print_table,
-                          title = "Trigger Count Summary (Raw vs Cleaned)",
-                          headers = ["Trigger", "Raw Count", "Cleaned Count"],
-                          is_biosemi = true)
-end
-
-# Core function that handles both single and multiple trigger datasets
-function _count_triggers(trigger_datasets::Vector{<:Vector{<:Integer}}; 
-                        print_table::Bool = true, 
-                        title::String = "Trigger Count Summary",
-                        headers::Vector{String} = ["Trigger", "Count"],
-                        is_biosemi::Bool = false)
-    
-    # Get unique non-zero trigger values from all datasets
-    all_triggers = vcat(trigger_datasets...)
-    unique_triggers = unique(all_triggers)
-    non_zero_triggers = filter(x -> x != 0, unique_triggers)
-    
-    if isempty(non_zero_triggers)
-        @minimal_warning "No non-zero triggers found in the data."
-        return DataFrame()
-    end
-    
-    # Count occurrences of each trigger value in each dataset
-    trigger_values = Int[]
-    counts_matrix = Vector{Int}[]
-    
-    for trigger in sort(non_zero_triggers)
-        push!(trigger_values, trigger)
-        trigger_counts = Int[]
-        for dataset in trigger_datasets
-            push!(trigger_counts, count(x -> x == trigger, dataset))
-        end
-        push!(counts_matrix, trigger_counts)
-    end
-    
-    # Create DataFrame
-    if length(trigger_datasets) == 1
-        result_df = DataFrame(trigger = trigger_values, count = [counts[1] for counts in counts_matrix])
-    else
-        # For BioSemi with raw and cleaned counts
-        result_df = DataFrame(
-            trigger = trigger_values, 
-            raw_count = [counts[1] for counts in counts_matrix],
-            cleaned_count = [counts[2] for counts in counts_matrix]
-        )
-    end
-    
-    # Print table if requested
-    if print_table
-        println()
-        pretty_table(result_df, 
-                    title = title,
-                    header = headers,
-                    alignment = fill(:r, length(headers)),
-                    crop = :none)
-        println()
-        if is_biosemi
-            println("Note: Cleaned counts show only trigger onset events (sustained signals converted to single onsets)")
-        end
-    end
-    
-    return result_df
-end
-
-
-
-
-
-
-
-
-"""
-    combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
-
-Combines multiple boolean columns using a specified logical operation and stores the result in a new column.
-
-# Arguments
-- `dat::ContinuousData`: The ContinuousData object containing the boolean columns
-- `columns::Vector{Symbol}`: Vector of column names to combine
-- `operation::Symbol`: Logical operation to apply (:and, :or, :xor, :nand, :nor, :xnor)
-- `output_column::Symbol`: Name of the output column (default: :combined_flags)
-
-# Returns
-Nothing. The function modifies the input data in place.
-
-# Examples
-```julia
-# Combine EOG artifacts (any EOG = vertical OR horizontal)
-combine_boolean_columns!(dat, [:is_vEOG, :is_hEOG], :or, output_column = :is_any_EOG)
-
-# Combine quality flags (good data = NOT extreme AND NOT EOG)
-combine_boolean_columns!(dat, [:is_extreme_value, :is_any_EOG], :nor, output_column = :is_good_data)
-
-# Combine multiple artifact types (any artifact)
-combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :or, output_column = :is_any_artifact)
-
-# Create clean data flag (no artifacts)
-combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :nor, output_column = :is_clean_data)
-```
-
-# Available Operations
-- `:and` - All columns must be true (logical AND)
-- `:or` - At least one column must be true (logical OR)
-- `:nand` - Not all columns are true (logical NAND)
-- `:nor` - No columns are true (logical NOR)
-"""
-function combine_boolean_columns!(
-    dat::ContinuousData, 
-    columns::Vector{Symbol}, 
-    operation::Symbol; 
-    output_column::Symbol = :combined_flags
-)
-    # Input validation
-    @assert !isempty(columns) "Must specify at least one column to combine"
-    @assert all(col -> hasproperty(dat.data, col), columns) "All specified columns must exist in the data"
-    @assert operation in [:and, :or, :nand, :nor] "Invalid operation. Must be one of: :and, :or, :nand, :nor"
-    
-    # Get the boolean columns
-    bool_columns = [dat.data[!, col] for col in columns]
-    
-    # Apply the logical operation
-    result = if operation == :and
-        all.(zip(bool_columns...))
-    elseif operation == :or
-        any.(zip(bool_columns...))
-    elseif operation == :nand
-        .!(all.(zip(bool_columns...)))
-    elseif operation == :nor
-        .!(any.(zip(bool_columns...)))
-    end
-    
-    # Store the result
-    dat.data[!, output_column] = result
-    
-    @info "combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
-end
 
