@@ -15,7 +15,7 @@ function parse_epoch_conditions(config::Dict)
         # Parse trigger sequences (unified approach)
         trigger_sequences_raw = get(condition_config, "trigger_sequences", nothing)
         if trigger_sequences_raw === nothing
-            error("trigger_sequences must be specified for condition '$name'")
+            @minimal_error("trigger_sequences must be specified for condition '$name'")
         end
 
         # Parse the unified format
@@ -29,7 +29,7 @@ function parse_epoch_conditions(config::Dict)
                 # Range - convert to single-element sequence
                 push!(trigger_sequences, [sequence])
             else
-                error("Invalid trigger sequence format: $sequence")
+                @minimal_error("Invalid trigger sequence format: $sequence")
             end
         end
 
@@ -51,7 +51,7 @@ function parse_epoch_conditions(config::Dict)
 
             # Validate that both min and max intervals are specified if timing_pairs is specified
             if min_interval === nothing || max_interval === nothing
-                error(
+                @minimal_error(
                     "Both min_interval and max_interval must be specified when timing_pairs is specified for condition '$name'",
                 )
             end
@@ -63,7 +63,7 @@ function parse_epoch_conditions(config::Dict)
 
         # Validation
         if reference_index < 1 || reference_index > length(trigger_sequences[1])
-            error("reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'")
+            @minimal_error("reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'")
         end
 
         # Only validate timing constraints if they're specified
@@ -78,19 +78,19 @@ function parse_epoch_conditions(config::Dict)
                    start_idx > length(trigger_sequences[1]) ||
                    end_idx < 1 ||
                    end_idx > length(trigger_sequences[1])
-                    error(
+                    @minimal_error(
                         "timing_pairs contains invalid indices for sequence of length $(length(trigger_sequences[1])) in condition '$name'",
                     )
                 end
                 if start_idx >= end_idx
-                    error("timing_pairs must have start_idx < end_idx for condition '$name'")
+                    @minimal_error("timing_pairs must have start_idx < end_idx for condition '$name'")
                 end
             end
         end
 
         # Validate after/before constraints
         if after !== nothing && before !== nothing
-            error("Cannot specify both 'after' and 'before' constraints for condition '$name'")
+            @minimal_error("Cannot specify both 'after' and 'before' constraints for condition '$name'")
         end
 
         push!(
@@ -134,8 +134,8 @@ idx = search_sequences([1, 2, 3, 4, 5], [[1, 2:4, 5]])
 ```
 """
 function search_sequences(array, sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}})
-    all_indices = Int[]
 
+    all_indices = Int[]
     for sequence in sequences
         indices = search_single_sequence(array, sequence)
         append!(all_indices, indices)
@@ -152,19 +152,18 @@ function search_single_sequence(array, sequence::Vector{Union{Int,Symbol,UnitRan
     # Handle single trigger case
     if length(sequence) == 1
         if sequence[1] isa Int
-            # Use search_sequence from misc.jl to find sequence starts, not all occurrences
             return eegfun.search_sequence(array, sequence[1])
         elseif sequence[1] isa UnitRange
             return search_trigger_ranges(array, [sequence[1]])
         else
-            error("Single wildcard sequences not supported")
+            @minimal_error("Single wildcard sequences not supported")
         end
     end
 
     # Find starting positions for the first trigger
     first_trigger = sequence[1]
     if first_trigger isa Symbol
-        error("First element in sequence cannot be a wildcard")
+        @minimal_error("First element in sequence cannot be a wildcard")
     elseif first_trigger isa UnitRange
         # For ranges, find all possible starting positions
         idx_start_positions = search_trigger_ranges(array, [first_trigger])
@@ -202,7 +201,7 @@ function search_single_sequence(array, sequence::Vector{Union{Int,Symbol,UnitRan
                     break
                 end
             else
-                error("Unsupported trigger type: $expected_trigger")
+                @minimal_error("Unsupported trigger type: $expected_trigger")
             end
         end
         if good_sequence
@@ -223,7 +222,6 @@ idx = search_trigger_ranges([1, 2, 3, 4, 5, 6], [1:3, 5:6])  # Returns indices o
 """
 function search_trigger_ranges(array, trigger_ranges::Vector{UnitRange{Int}})
     idx_positions = Int[]
-
     for (i, trigger) in enumerate(array)
         for range in trigger_ranges
             if trigger in range
