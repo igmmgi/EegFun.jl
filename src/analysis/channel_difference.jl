@@ -65,8 +65,8 @@ function channel_difference!(
     channel_out::Symbol = :diff,
 )
     # Resolve predicates to get actual channel names for logging
-    channels_in1_selected = get_selected_channels(dat, channel_selection1, include_metadata_columns = false)
-    channels_in2_selected = get_selected_channels(dat, channel_selection2, include_metadata_columns = false)
+    channels_in1_selected = get_selected_channels(dat, channel_selection1, include_meta = false)
+    channels_in2_selected = get_selected_channels(dat, channel_selection2, include_meta = false)
     @info "Channel sets: $(channels_in1_selected) vs. $(channels_in2_selected) -> $(channel_out)"
 
     # Verify channels exist in data

@@ -160,11 +160,11 @@ eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> x.sample .< 2000)
 eegfun.channel_summary(dat, channel_selection = x -> endswith.(string.(x), "z")) # all midline channels 
 eegfun.channel_summary(dat, channel_selection = x -> .!(endswith.(string.(x), "z"))) # all non-midline channels 
-eegfun.channel_summary(dat, include_extra_channels = true) # include additional channels (e.g. vEOG, hEOG)
+eegfun.channel_summary(dat, include_extra = true) # include additional channels (e.g. vEOG, hEOG)
 
 # add bool columns to the data frame
 eegfun.is_extreme_value!(dat, 100);
-eegfun.is_extreme_value!(dat, 100; include_extra_channels = true);
+eegfun.is_extreme_value!(dat, 100; include_extra = true);
 eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1, :Fp2]));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
@@ -172,7 +172,7 @@ eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.
 
 # retrun count of extreme values at specific electrodes at different thresholds
 eegfun.n_extreme_value(dat, 100)
-eegfun.n_extreme_value(dat, 100, include_extra_channels = true)
+eegfun.n_extreme_value(dat, 100, include_extra = true)
 eegfun.n_extreme_value(dat, 100, channel_selection = eegfun.channels([:Fp1, :Fp2])) # count extreme values at Fp1 at 100 uV threshold
 eegfun.n_extreme_value(dat, 100, channel_selection = x -> endswith.(string.(x), "z"))
 eegfun.n_extreme_value(dat, 100, channel_selection = x -> .!(endswith.(string.(x), "z")), sample_selection = x -> x.sample .< 10)
