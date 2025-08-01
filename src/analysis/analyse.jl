@@ -375,12 +375,12 @@ epochs(epoch_number::Int) = x -> x .== epoch_number
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
-# Helper to select channels based on include_extra_channels and a predicate
-function get_selected_channels(dat, channel_selection::Function; include_metadata_columns::Bool = true, include_extra_columns::Bool = true)
+# Helper to select channels/columns based on a predicate (+ which to include)
+function get_selected_channels(dat, channel_selection::Function; include_meta::Bool = true, include_extra::Bool = true)
 
     # Columns/channels in dataframe to include
-    metadata_cols = include_metadata_columns ? meta_labels(dat) : Symbol[]
-    selectable_cols = include_extra_columns ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
+    metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
+    selectable_cols = include_extra ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
     
     # Apply channel selection to non-metadata columns
     selected_cols = selectable_cols[channel_selection(selectable_cols)]
