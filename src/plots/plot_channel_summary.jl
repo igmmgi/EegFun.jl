@@ -41,88 +41,49 @@ function plot_channel_summary!(
     end
 
     # If averaging is requested, compute mean and std
+    n_epochs = nothing
     if average_over !== nothing
+
         if average_over ∉ propertynames(dat)
             @minimal_error("Column :$average_over not found in DataFrame for averaging.")
         end
 
-        # Group by channel and compute statistics
-        grouped = groupby(dat, :channel)
-
-        # Compute 95% confidence intervals around the mean
-        summary_stats = combine(grouped, col => mean => :mean, col => std => :std, col => length => :n_samples)
-
-        # Calculate margin of error for 95% confidence intervals
-        summary_stats.margin_of_error = 1.96 .* (summary_stats.std ./ sqrt.(summary_stats.n_samples))
-
-        # Use the averaged data for plotting
-        plot_dat = summary_stats
-
-        # Update y-axis label to indicate averaging and number of epochs
         # Count unique values in the averaging column to get number of epochs
         n_epochs = length(unique(dat[!, average_over]))
-        ax.ylabel = "$(String(col)) (mean ± 95% CI over $(String(average_over)), n=$n_epochs epochs)"
-    else
-        # Use original data
-        plot_dat = dat
-        ax.ylabel = String(col)
+
+        # Group by channel and compute statistics
+        grouped = groupby(dat, :channel)
+        dat = combine(grouped, col => mean => :mean, col => std => :std, col => length => :n_samples)
+        dat.margin_of_error = 1.96 .* (dat.std ./ sqrt.(dat.n_samples))
     end
 
     # Optionally sort data
     if sort_values
         sort_column = average_over !== nothing ? :mean : col
-        plot_dat = sort(plot_dat, sort_column, rev = true)
+        dat = sort(dat, sort_column, rev = true)
     end
 
     # Extract plotting variables after sorting
-    channel_names = String.(plot_dat.channel)
+    channel_names = String.(dat.channel)
     if average_over !== nothing
-        values_to_plot = plot_dat.mean
-        margin_of_error = plot_dat.margin_of_error
+        values_to_plot = dat.mean
+        margin_of_error = dat.margin_of_error
     else
-        values_to_plot = plot_dat[!, col]
+        values_to_plot = dat[!, col]
         margin_of_error = nothing
     end
 
     # Configure the axis
+    ax.ylabel = average_over !== nothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
     ax.xticks = (1:length(channel_names), channel_names)
     ax.xticklabelrotation = pi / 4
     ax.xlabel = "Electrode"
 
     # Create the bar plot
-    if average_over !== nothing
-        # Plot with error bars and whiskers
-        bars = barplot!(ax, 1:length(values_to_plot), values_to_plot)
-
-        # Add error bars with whiskers
-        for i = 1:length(values_to_plot)
-            x_pos = i
-            y_pos = values_to_plot[i]
-            error = margin_of_error[i]
-
-            # Draw vertical error bar line
-            lines!(ax, [x_pos, x_pos], [y_pos - error, y_pos + error], color = :black, linewidth = 2)
-
-            # Draw whisker caps (horizontal lines at top and bottom)
-            whisker_length = 0.1
-            lines!(
-                ax,
-                [x_pos - whisker_length, x_pos + whisker_length],
-                [y_pos - error, y_pos - error],
-                color = :black,
-                linewidth = 2,
-            )
-            lines!(
-                ax,
-                [x_pos - whisker_length, x_pos + whisker_length],
-                [y_pos + error, y_pos + error],
-                color = :black,
-                linewidth = 2,
-            )
-        end
-    else
-        # Plot without error bars
-        barplot!(ax, 1:length(values_to_plot), values_to_plot)
+    barplot!(ax, 1:length(values_to_plot), values_to_plot)
+    if average_over !== nothing # add error bars
+        errorbars!(ax, 1:length(values_to_plot), values_to_plot, margin_of_error, 
+                  color = :black, linewidth = 2)
     end
 
     return nothing
@@ -166,8 +127,6 @@ function plot_channel_summary(
     # Create the figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
-
-    # Use the mutating version to plot
     plot_channel_summary!(fig, ax, dat, col; sort_values = sort_values, average_over = average_over)
 
     if display_plot

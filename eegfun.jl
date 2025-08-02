@@ -21,6 +21,11 @@ eegfun.plot_trigger_timing(dat)
 
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+df = eegfun.channel_summary(dat)
+eegfun.plot_channel_summary(df, :range)
+
+
+
 eegfun.plot_trigger_overview(dat)
 
 eegfun.plot_trigger_timing(dat)
