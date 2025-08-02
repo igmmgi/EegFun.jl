@@ -17,8 +17,15 @@ using AlgebraOfGraphics
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+eegfun.plot_trigger_timing(dat)
+
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.plot_trigger_overview(dat)
+eegfun.plot_trigger_timing(dat)
+
+
+
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
