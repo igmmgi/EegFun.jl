@@ -15,6 +15,8 @@ using BenchmarkTools
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+
+
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.rereference!(dat, :avg)

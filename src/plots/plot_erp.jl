@@ -15,7 +15,7 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Function = channels(); kwarg
     # Additional channels (not in layout) are allowed
     additional_channels = setdiff(selected_channels, dat.layout.label)
     if !isempty(additional_channels)
-        @info "plot_erp!: Including additional channels not in layout: $(_print_vector(additional_channels))"
+        @info "plot_erp!: Including additional channels not in layout: $(print_vector(additional_channels))"
     end
 
     default_kwargs = Dict(
@@ -70,7 +70,7 @@ function plot_erp!(fig, ax, dat::ErpData, channels::Function = channels(); kwarg
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
     !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
     if isnothing(kwargs[:title])
-        ax.title = "$(_print_vector(selected_channels))"
+        ax.title = "$(print_vector(selected_channels))"
     else
         ax.title = kwargs[:title]
     end

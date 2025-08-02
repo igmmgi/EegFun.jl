@@ -1,16 +1,18 @@
-function _print_vector(v::Vector; max_length::Int = 10, n_ends::Int = 5)
+"""
+    print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
+
+Print a vector with a maximum length and number of ends.
+
+# Arguments
+- `v::AbstractVector`: The vector to print
+- `max_length::Int`: The maximum length of the vector to print
+- `n_ends::Int`: The number of ends to print
+"""
+function print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
     if length(v) > max_length
         v = vcat(first(v, n_ends), "...", last(v, n_ends))
     end
-    return join(v, ", ")
-end
-
-function print_vector(v::UnitRange; max_length::Int = 10, n_ends::Int = 5)
-    _print_vector(collect(v), max_length = max_length, n_ends = n_ends)
-end
-
-function print_vector(v::Vector; max_length::Int = 10, n_ends::Int = 5)
-    _print_vector(collect(v), max_length = max_length, n_ends = n_ends)
+    return join(string.(v), ", ")
 end
 
 """
