@@ -154,36 +154,3 @@ function plot_filter_response(
 
     return fig, ax
 end
-
-
-# # Test print_filter_characteristics and plot_filter_response
-# # Set up filter parameters
-# sample_rate = 2048 # Hz
-# 
-# # low-pass
-# cutoff_freq = 50  # Hz  # Where we want the -3dB point
-# transition_band = 0.25 * cutoff_freq  # = 10 Hz
-#  
-# n_taps = Int(ceil(3.3 * sample_rate / transition_band))
-# lp_fir_filter = digitalfilter(Lowpass(cutoff_freq+(transition_band/2)), FIRWindow(hamming(n_taps)), fs=sample_rate)
-# print_filter_characteristics(lp_fir_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(lp_fir_filter, sample_rate, cutoff_freq, transition_band);
-#  
-# lp_irr_filter = digitalfilter(Lowpass(cutoff_freq+(transition_band/2)), Butterworth(12), fs=sample_rate)
-# print_filter_characteristics(lp_irr_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(lp_irr_filter, sample_rate, cutoff_freq, transition_band);
-# 
-# # high-pass
-# cutoff_freq = 1  # Hz  # Where we want the -3dB point
-# transition_band = 0.25 * cutoff_freq  # = 10 Hz
-# n_taps = Int(ceil(3.3 * sample_rate / transition_band))
-# if n_taps % 2 == 0  # If even
-#     n_taps += 1     # Make it odd
-# end
-# hp_fir_filter = digitalfilter(Highpass(cutoff_freq-(transition_band/2)), FIRWindow(hamming(n_taps)), fs=sample_rate)
-# print_filter_characteristics(hp_fir_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(hp_fir_filter, sample_rate, cutoff_freq, transition_band);
-# 
-# hp_irr_filter = digitalfilter(Highpass(cutoff_freq-(transition_band/2)), Butterworth(2), fs=sample_rate)
-# print_filter_characteristics(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
-# plot_filter_response(hp_irr_filter, sample_rate, cutoff_freq, transition_band);
