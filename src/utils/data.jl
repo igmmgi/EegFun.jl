@@ -24,12 +24,18 @@ function get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}
     if group == :channels
         return intersect(channel_labels, labels)
     elseif group == :metadata
-        first_channel_idx = findfirst(col -> col == first(channel_labels), labels)
-        isnothing(first_channel_idx) && @minimal_error "$(first(channel_labels)) not found in data"
+        if isempty(channel_labels)
+            return Symbol[]
+        end
+        first_channel_idx = findfirst(col -> col == channel_labels[1], labels)
+        isnothing(first_channel_idx) && @minimal_error "First channel label not found in data"
         return labels[1:(first_channel_idx-1)]
     elseif group == :extra
-        last_channel_idx = findlast(col -> col == last(channel_labels), labels)
-        isnothing(last_channel_idx) && @minimal_error "$(last(channel_labels)) not found in data"
+        if isempty(channel_labels)
+            return Symbol[]
+        end
+        last_channel_idx = findlast(col -> col == channel_labels[end], labels)
+        isnothing(last_channel_idx) && @minimal_error "Last channel label not found in data"
         return labels[(last_channel_idx+1):end]
     else
         @minimal_error "Unknown group type: $group"
@@ -264,9 +270,9 @@ Get the duration of the EEG data in seconds.
 # Returns
 - `Float64`: Duration in seconds
 """
-duration(dat::SingleDataFrameEeg) = last(dat.data.time) - first(dat.data.time)
-duration(dat::MultiDataFrameEeg) = last(dat.data[1].time) - first(dat.data[1].time)
-duration(dat::MultiDataFrameEeg, epoch::Int) = last(dat.data[epoch].time) - first(dat.data[epoch].time)
+duration(dat::SingleDataFrameEeg) = isempty(dat.data.time) ? 0.0 : last(dat.data.time) - first(dat.data.time)
+duration(dat::MultiDataFrameEeg) = isempty(dat.data[1].time) ? 0.0 : last(dat.data[1].time) - first(dat.data[1].time)
+duration(dat::MultiDataFrameEeg, epoch::Int) = isempty(dat.data[epoch].time) ? 0.0 : last(dat.data[epoch].time) - first(dat.data[epoch].time)
 
 
 """

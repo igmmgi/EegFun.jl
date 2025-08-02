@@ -4,11 +4,21 @@
 Displays an error message and stops execution without showing a full stacktrace.
 """
 macro minimal_error(msg)
-    # TODO: This is a hack to get a quick basic error message without a full stacktrace,
-    # but only works if the error is not in a subfunction.
     quote
         @error "Error: " * $(esc(msg)) _module=nothing _file=nothing _line=nothing
         return nothing
+    end
+end
+
+"""
+    @minimal_error_throw(msg)
+
+Displays an error message and throws an error without showing a full stacktrace.
+"""
+macro minimal_error_throw(msg)
+    quote
+        @error "Error: " * $(esc(msg)) _module=nothing _file=nothing _line=nothing
+        error($(esc(msg)))
     end
 end
 

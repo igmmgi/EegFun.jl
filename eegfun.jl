@@ -10,6 +10,7 @@ using eegfun
 using GLMakie
 using DataFrames
 using BenchmarkTools
+
 # using CairoMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
 # load data
