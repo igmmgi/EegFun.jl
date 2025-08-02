@@ -74,7 +74,6 @@ using eegfun
         @test eegfun.n_samples(data) == 1001
         @test eegfun.n_channels(data) == 2
         @test eegfun.n_epochs(data) == 1
-        @test eegfun.n_average(data) == 10
         @test eegfun.duration(data) ≈ 1.0
     end
 

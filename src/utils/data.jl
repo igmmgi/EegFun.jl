@@ -18,24 +18,19 @@ Get columns by group type for EegData objects using layout-based identification.
 
 """
 function get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}
+    labels = all_labels(dat)
+    channel_labels = dat.layout.data.label
+    
     if group == :channels
-        return intersect(dat.layout.data.label, all_labels(dat))
+        return intersect(channel_labels, labels)
     elseif group == :metadata
-        first_channel_symbol = first(dat.layout.data.label)
-        first_channel_idx = findfirst(col -> col == first_channel_symbol, all_labels(dat))
-        if isnothing(first_channel_idx)
-            @minimal_error "$first_channel_symbol not found in data"
-        else
-            return all_labels(dat)[1:(first_channel_idx-1)]
-        end
+        first_channel_idx = findfirst(col -> col == first(channel_labels), labels)
+        isnothing(first_channel_idx) && @minimal_error "$(first(channel_labels)) not found in data"
+        return labels[1:(first_channel_idx-1)]
     elseif group == :extra
-        last_channel_symbol = last(dat.layout.data.label)
-        last_channel_idx = findlast(col -> col == last_channel_symbol, all_labels(dat))
-        if isnothing(last_channel_idx)
-            @minimal_error "$last_channel_symbol not found in data"
-        else
-            return all_labels(dat)[(last_channel_idx+1):end]
-        end
+        last_channel_idx = findlast(col -> col == last(channel_labels), labels)
+        isnothing(last_channel_idx) && @minimal_error "$(last(channel_labels)) not found in data"
+        return labels[(last_channel_idx+1):end]
     else
         @minimal_error "Unknown group type: $group"
     end
@@ -70,6 +65,7 @@ Get all column names from the complete DataFrame.
 """
 all_labels(dat::SingleDataFrameEeg)::Vector{Symbol} = propertynames(dat.data)
 all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = propertynames(dat.data[1])
+all_labels(dat::MultiDataFrameEeg, epoch::Int)::Vector{Symbol} = propertynames(dat.data[epoch])
 all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
 
@@ -195,8 +191,8 @@ Get the reference information from the EEG data.
 # Returns
 - `String`: Reference information
 """
-reference(dat::EegData)::String = dat.analysis_info.reference
-reference(dat::AnalysisInfo)::String = dat.reference
+reference(dat::EegData)::Symbol = dat.analysis_info.reference
+reference(dat::AnalysisInfo)::Symbol = dat.reference
 
 """
     filter_info(dat::AnalysisInfo) -> Vector
@@ -225,6 +221,7 @@ Get the number of samples in the EEG data.
 """
 n_samples(dat::SingleDataFrameEeg)::Int = nrow(dat.data)
 n_samples(dat::MultiDataFrameEeg)::Int = nrow(dat.data[1])
+n_samples(dat::MultiDataFrameEeg, epoch::Int)::Int = nrow(dat.data[epoch])
 n_samples(dat::DataFrame)::Int = nrow(dat)
 
 """
@@ -238,8 +235,7 @@ Get the number of channels in the EEG data.
 # Returns
 - `Int`: Number of channels
 """
-n_channels(dat::SingleDataFrameEeg)::Int = length(channel_labels(dat))
-n_channels(dat::MultiDataFrameEeg)::Int = length(channel_labels(dat))
+n_channels(dat::EegData)::Int = length(channel_labels(dat))
 n_channels(dat::DataFrame)::Int = length(channel_labels(dat))
 
 """
@@ -255,6 +251,7 @@ Get the number of epochs in the EEG data.
 """
 n_epochs(dat::SingleDataFrameEeg)::Int = 1
 n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
+n_epochs(dat::ErpData)::Int = dat.n_epochs
 
 """
     duration(dat::EegData) -> Float64
@@ -268,34 +265,10 @@ Get the duration of the EEG data in seconds.
 - `Float64`: Duration in seconds
 """
 duration(dat::SingleDataFrameEeg) = last(dat.data.time) - first(dat.data.time)
+duration(dat::MultiDataFrameEeg) = last(dat.data[1].time) - first(dat.data[1].time)
+duration(dat::MultiDataFrameEeg, epoch::Int) = last(dat.data[epoch].time) - first(dat.data[epoch].time)
 
-"""
-    duration(dat::EpochData) -> Float64
 
-Get the duration of a single epoch.
-
-# Arguments
-- `dat::EpochData`: The epoched data object
-
-# Returns
-- `Float64`: Duration of first epoch in seconds
-"""
-duration(dat::EpochData) = last(dat.data[1].time) - first(dat.data[1].time)
-
-"""
-    n_average(dat::ErpData) -> Float64
-
-Get the number of averaged epochs in ERP data.
-
-# Arguments
-- `dat::ErpData`: The ERP data object
-
-# Returns
-- `Float64`: Number of averaged epochs
-"""
-n_average(dat::ErpData)::Float64 = dat.n_epochs
-
-# EEG channel information
 """
     has_channels(dat::EegData, chans::Vector{Symbol}) -> Bool
 
