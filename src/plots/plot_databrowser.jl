@@ -1312,8 +1312,8 @@ function plot_databrowser_subset(
     ica = nothing,
 )
     # Create data subset and plot
-    filtered_dat = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
-    return plot_databrowser(filtered_dat, ica)
+    dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
+    return plot_databrowser(dat_subset, ica)
 end
 
 function plot_databrowser_subset(
@@ -1324,11 +1324,11 @@ function plot_databrowser_subset(
     ica = nothing,
 )
     # Create data subset and plot
-    filtered_dat = subset(
+    dat_subset = subset(
         dat,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         epoch_selection = epoch_selection,
     )
-    return plot_databrowser(filtered_dat, ica)
+    return plot_databrowser(dat_subset, ica)
 end

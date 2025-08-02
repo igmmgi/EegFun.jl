@@ -10,6 +10,7 @@ using eegfun
 using GLMakie
 using DataFrames
 using BenchmarkTools
+using AlgebraOfGraphics
 
 # using CairoMakie
 # eegfun.preprocess_eeg_data("pipeline.toml")
@@ -26,19 +27,20 @@ eegfun.filter_data!(dat, "hp", 1)
 eegfun.mark_epoch_windows!(dat, [1, 3, 22], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
 eegfun.plot_databrowser(dat)
 
-dat_subset = eegfun.subset(dat, sample_selection = x -> x.epoch_window)
-eegfun.plot_databrowser(dat_subset)
+# set_aog_theme!()
+# fig = Figure()
+# all_data = eegfun.all_data(epochs[1])
+# mydata = stack(all_data, [:Fp1, :Fp2], variable_name = :channel, value_name = :value)
+# plt =
+#     data(mydata) *
+#     mapping(:time => "Time [ms]", :value => "Amplitude [μV]", color = :channel => nonnumeric) *
+#     visual(Lines) *
+#     mapping(layout = :epoch => nonnumeric) 
+# # plt = paginate(plt, layout = 4)
+# # draw(plt, 2)
+# draw(plt)
 
 
-
-
-
-# EPOCHS
-epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = []
-for (idx, epoch) in enumerate(epoch_cfg)
-     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
-end
 df1 = eegfun.channel_summary(dat)
 df2 = eegfun.channel_summary(epochs[1])
 
