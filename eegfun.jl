@@ -18,13 +18,12 @@ using AlgebraOfGraphics
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 
-
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
-eegfun.mark_epoch_windows!(dat, [1, 3, 22], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
+eegfun.mark_epoch_windows!(dat, [1, 3], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
 eegfun.plot_databrowser(dat)
 
 # set_aog_theme!()
