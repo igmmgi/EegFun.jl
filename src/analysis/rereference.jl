@@ -95,7 +95,7 @@ function rereference!(
 )
 
     reference_channels = get_reference_channels(dat, reference_selection)
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     # Verify reference channels exist in the data
     missing_channels = [ch for ch in reference_channels if ch ∉ channel_labels(dat)]
@@ -104,7 +104,7 @@ function rereference!(
     end
 
     # Calculate reference signal and apply rereferencing
-    @info "Rereferencing channels ($(print_vector(selected_channels))) using: $(reference_selection) ($(print_vector(reference_channels)))"
+    @info "Rereference channels: $(reference_selection) ($(print_vector(reference_channels; n_ends=3)))"
     _apply_rereference!(dat.data, selected_channels, reference_channels)
 
     # Store reference info

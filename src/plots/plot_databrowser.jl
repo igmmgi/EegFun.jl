@@ -854,7 +854,6 @@ function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:
         state.data.current[],
         String(filter_type),
         freq;
-        channel_selection = (channels) -> [ch in state.channels.labels for ch in channels],
     )
 end
 
@@ -1191,6 +1190,7 @@ function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
         get_data, get_time, get_label_y = get_data_accessors(state.data)
 
         if eltype(get_data(state.data.current[], 1:1, channel)) == Bool
+            println("Boolean data")
             # Boolean data - create highlights
             highlight_data = @views splitgroups(findall(get_data(state.data.current[], :, channel)))
             region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
