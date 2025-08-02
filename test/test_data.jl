@@ -8,16 +8,16 @@ using eegfun
     @testset "head and tail" begin
 
         df = DataFrame(time = (0:9) ./ 1000, a=1:10, b=11:20)
-        layout = DataFrame(label=[:a, :b])
+        layout = eegfun.Layout(DataFrame(label=[:a, :b]), nothing, nothing)
         eeg = eegfun.ContinuousData(df, layout, 1000, eegfun.AnalysisInfo())
 
         # Test head
-        @test eegfun.head(eeg) === nothing  # Default n=5
-        @test eegfun.head(eeg, n=3) === nothing
+        @test eegfun.head(eeg) isa DataFrame  # Default n=5
+        @test eegfun.head(eeg, n=3) isa DataFrame
 
         # Test tail
-        @test eegfun.tail(eeg) === nothing  # Default n=5
-        @test eegfun.tail(eeg, n=3) === nothing
+        @test eegfun.tail(eeg) isa DataFrame  # Default n=5
+        @test eegfun.tail(eeg, n=3) isa DataFrame
     end
 
     # Test datarange
@@ -51,14 +51,13 @@ using eegfun
         @test eegfun.data_limits_x(df, col=:value) == (4.0, 6.0)
 
         # Test data_limits_y
-        @test eegfun.data_limits_y(df, [:value]) == [4.0, 6.0]
-        @test eegfun.data_limits_y(df, [:time, :value]) == [1.0, 6.0]
-        @test eegfun.data_limits_y(df, [:time]) == [1.0, 3.0]  # Single column
+        @test eegfun.data_limits_y(df, :value) == [4.0, 6.0]
+        @test eegfun.data_limits_y(df, :time) == [1.0, 3.0]  # Single column
 
         # Test empty data
         empty_df = DataFrame(time=Float64[], value=Float64[])
         @test eegfun.data_limits_x(empty_df) === nothing
-        @test eegfun.data_limits_y(empty_df, [:value]) === nothing
+        @test eegfun.data_limits_y(empty_df, :value) === nothing
     end
 
     # Test to_data_frame
@@ -66,7 +65,7 @@ using eegfun
         # Create test epoch data
         epoch1 = DataFrame(time=[1.0, 2.0], value=[3.0, 4.0])
         epoch2 = DataFrame(time=[5.0, 6.0], value=[7.0, 8.0])
-        layout = DataFrame(label=[:time, :value])
+        layout = eegfun.Layout(DataFrame(label=[:time, :value]), nothing, nothing)
         epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 1000, eegfun.AnalysisInfo())
         
         # Test single EpochData

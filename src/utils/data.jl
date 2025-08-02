@@ -323,12 +323,16 @@ end
 
 function head(dat::EegData; n = nothing)
     isnothing(n) && (n=5)
-    viewer(data(dat)[1:n, :])
+    result = all_data(dat)[1:n, :]
+    viewer(result)
+    return result
 end
 
 function tail(dat::EegData; n = nothing)
     isnothing(n) && (n=5)
-    viewer(data(dat)[(end-n+1):end, :])
+    result = all_data(dat)[(end-n+1):end, :]
+    viewer(result)
+    return result
 end
 
 function to_data_frame(dat::EpochData)
@@ -398,7 +402,7 @@ Get the value range for specified columns.
 """
 function data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
-    return [minimum(Matrix(dat[!, col])), maximum(Matrix(dat[!, col]))]
+    return [minimum(dat[!, col]), maximum(dat[!, col])]
 end
 
 
