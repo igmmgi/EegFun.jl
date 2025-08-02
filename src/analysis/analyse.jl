@@ -384,7 +384,7 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
 
     # Columns/channels in dataframe to include
     metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
-    selectable_cols = include_extras ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
+    selectable_cols = include_extra ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
 
     # Apply channel selection to non-metadata columns
     selected_cols = selectable_cols[channel_selection(selectable_cols)]
