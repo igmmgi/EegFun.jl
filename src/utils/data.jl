@@ -115,7 +115,9 @@ Get EEG channel data columns from the EEG data.
 - `DataFrame`: DataFrame containing EEG channel columns
 """
 channel_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :channels)
-
+channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbol} = channel_labels(dat)[channel_numbers...]
+channel_labels(dat::EegData, channel_numbers)::Vector{Symbol} = channel_labels(dat)[channel_numbers]
+channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_labels(dat)[[channel_numbers]]
 
 
 """

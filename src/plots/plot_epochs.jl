@@ -120,7 +120,7 @@ function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs = D
     # Additional channels (not in layout) are allowed
     additional_channels = setdiff(selected_channels, dat.layout.label)
     if !isempty(additional_channels)
-        @info "plot_epochs: Including additional channels not in layout: $(_print_vector(additional_channels))"
+        @info "plot_epochs: Including additional channels not in layout: $(print_vector(additional_channels))"
     end
 
     # Default keyword arguments
@@ -155,7 +155,7 @@ function plot_epochs(dat::EpochData, channels::Function = channels(); kwargs = D
         if length(selected_channels) == 1
             _set_axis_properties!(ax, kwargs, "$(selected_channels[1])")
         else
-            _set_axis_properties!(ax, kwargs, "Avg: $(_print_vector(selected_channels, max_length = 8, n_ends = 3))")
+            _set_axis_properties!(ax, kwargs, "Avg: $(print_vector(selected_channels, max_length = 8, n_ends = 3))")
         end
 
     else

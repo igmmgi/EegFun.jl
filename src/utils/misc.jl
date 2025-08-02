@@ -46,27 +46,6 @@ end
 
 
 
-
-
-"""
-    channel_number_to_channel_label(channel_labels::Vector{Symbol}, channel_numbers::Union{Int,Vector{Int},UnitRange}) -> Vector{Symbol}
-
-Convert channel numbers to their corresponding labels.
-
-# Arguments
-- `channel_labels::Vector{Symbol}`: List of all channel labels
-- `channel_numbers`: Channel number(s) to convert (can be Int, Vector{Int}, or UnitRange)
-
-# Returns
-- `Vector{Symbol}`: Channel labels corresponding to the input numbers
-"""
-function channel_number_to_channel_label(channel_labels, channel_numbers::Union{Int,Vector{Int},UnitRange})
-    return channel_labels[channel_numbers]
-end
-
-
-
-
 """
     consecutive(f::Function, A::AbstractVector; step::Int=1) -> Vector
 
@@ -81,12 +60,8 @@ Apply function f to consecutive pairs of elements in vector A.
 - `Vector`: Results of applying f to consecutive pairs
 """
 function consecutive(f::Function, A::AbstractVector; step::Int = 1)
-    if step < 1
-        throw(ArgumentError("Step must be positive"))
-    end
-    if length(A) < step + 1
-        throw(ArgumentError("Vector too short for given step size"))
-    end
+    step < 1               && @minimal_error "Step must be positive"
+    (length(A) < step + 1) && @minimal_error "Vector too short for given step size"
     return [f(A[i+step], A[i]) for i = 1:(length(A)-step)]
 end
 
@@ -99,14 +74,10 @@ Split vector into groups based on consecutive numbers.
 - `Tuple{Vector{Int64},Vector{Int64}}`: Start and end indices of groups
 """
 function splitgroups(v::AbstractVector{<:Integer})
-    if isempty(v)
-        return Int64[], Int64[]
-    end
 
-    start = 1
-    start_idx = Int64[]
-    end_idx = Int64[]
+    isempty(v) && return Int64[], Int64[] 
 
+    start, start_idx, end_idx = 1, Int64[], Int64[]
     for stop in [findall(diff(v) .> 1); lastindex(v)]
         push!(start_idx, v[start])
         push!(end_idx, v[stop])
@@ -114,10 +85,6 @@ function splitgroups(v::AbstractVector{<:Integer})
     end
     return start_idx, end_idx
 end
-
-# data limits
-
-
 
 
 """
@@ -147,7 +114,7 @@ function validate_baseline_interval(
     if !(1 <= baseline_interval.interval_start <= length(time)) ||
        !(1 <= baseline_interval.interval_end <= length(time)) ||
        !(baseline_interval.interval_start <= baseline_interval.interval_end)
-        throw(ArgumentError("Invalid baseline_interval: $baseline_interval"))
+        @minimal_error "Invalid baseline_interval: $baseline_interval"
     end
 
     return baseline_interval
@@ -171,14 +138,10 @@ Get column indices for specified channel labels.
 - `ArgumentError`: If no matching channels found
 """
 function get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
-    if isempty(channel_labels)
-        throw(ArgumentError("channel_labels cannot be empty"))
-    end
+    isempty(channel_labels) && @minimal_error "channel_labels cannot be empty"
 
     channel_indices = findall(col -> col in channel_labels, names(dat))
-    if isempty(channel_indices)
-        throw(ArgumentError("No matching channel_labels found in the data frame"))
-    end
+    isempty(channel_indices) && @minimal_error "No matching channel_labels found in the data frame"
 
     return channel_indices
 end
@@ -304,24 +267,32 @@ macro add_nonmutating(func)
 
 end
 
+"""
+    best_rect(n)
 
+Find the best rectangle for a given number n.
+
+# Arguments
+- `n`: Number 
+
+# Returns
+- `Vector{Int}`: Dimensions of the best rectangle
+"""
 function best_rect(n)
-    dim1 = ceil(Int, sqrt(n))
-    dim2 = ceil(Int, n ./ dim1)
-    return [dim1, dim2]
+    return [ceil(Int, sqrt(n)), ceil(Int, n ./ dim1)]
 end
 
 """
-    orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
+    orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float64})
 
-Helper function to find orientation of triplet (p, q, r).
+Helper function to find orientation of point triplet (p1, p2, p3).
 Returns:
- 0 --> p, q and r are collinear
- 1 --> Clockwise
- 2 --> Counterclockwise
+ 0 --> p1, p2 and p3 are collinear (on same line)
+ 1 --> Clockwise 
+ 2 --> Counterclockwise 
 """
-function orientation(p::Vector{Float64}, q::Vector{Float64}, r::Vector{Float64})
-    val = (q[2] - p[2]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[2] - q[2])
+function orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float64})
+    val = (p2[2] - p1[2]) * (p3[1] - p2[1]) - (p2[1] - p1[1]) * (p3[2] - p2[2])
     if val ≈ 0
         return 0
     end
