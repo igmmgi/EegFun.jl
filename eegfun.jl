@@ -17,13 +17,13 @@ using AlgebraOfGraphics
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
-
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
-eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
-
+eegfun.rereference!(dat, :avg)
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 eegfun.mark_epoch_windows!(dat, [1, 3], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
+
 eegfun.plot_databrowser(dat)
 
 # set_aog_theme!()
