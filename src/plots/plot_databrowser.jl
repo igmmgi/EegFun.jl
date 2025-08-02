@@ -846,7 +846,6 @@ function get_x_region_data(state::EpochedDataBrowserState)
 end
 
 
-
 ############
 # Filtering
 ############
@@ -854,9 +853,7 @@ function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:
     filter_data!(
         state.data.current[],
         String(filter_type),
-        "iir",
-        freq,
-        order = filter_type == :hp ? 1 : 3,
+        freq;
         channel_selection = (channels) -> [ch in state.channels.labels for ch in channels],
     )
 end
