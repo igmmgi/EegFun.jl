@@ -32,7 +32,7 @@ using eegfun
     @testset "ContinuousData" begin
         # Create test data
         df = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
-        layout = DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         
         # Test constructor
@@ -43,8 +43,8 @@ using eegfun
         @test data.analysis_info == info
 
         # Test basic functions
-        @test eegfun.channels(data) == [:ch1, :ch2]
-        @test eegfun.times(data) == df.time
+        @test eegfun.channel_labels(data) == [:ch1, :ch2]
+        @test eegfun.all_data(data).time == df.time
         @test eegfun.sample_rate(data) == 1000
         @test eegfun.n_samples(data) == 1001
         @test eegfun.n_channels(data) == 2
@@ -56,7 +56,7 @@ using eegfun
     @testset "ErpData" begin
         # Create test data
         df = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
-        layout = DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         
         # Test constructor
@@ -68,19 +68,19 @@ using eegfun
         @test data.n_epochs == 10
 
         # Test basic functions
-        @test eegfun.channels(data) == [:ch1, :ch2]
-        @test eegfun.times(data) == df.time
+        @test eegfun.channel_labels(data) == [:ch1, :ch2]
+        @test eegfun.all_data(data).time == df.time
         @test eegfun.sample_rate(data) == 1000
         @test eegfun.n_samples(data) == 1001
         @test eegfun.n_channels(data) == 2
-        @test eegfun.n_epochs(data) == 1
+        @test eegfun.n_epochs(data) == 10
         @test eegfun.duration(data) ≈ 1.0
     end
 
     @testset "EpochData" begin
         # Create test data
         epochs = [DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001)) for _ in 1:3]
-        layout = DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         
         # Test constructor
@@ -91,8 +91,8 @@ using eegfun
         @test data.analysis_info == info
 
         # Test basic functions
-        @test eegfun.channels(data) == [:ch1, :ch2]
-        @test eegfun.times(data) == epochs[1].time
+        @test eegfun.channel_labels(data) == [:ch1, :ch2]
+        @test data.data[1].time == epochs[1].time
         @test eegfun.sample_rate(data) == 1000
         @test eegfun.n_samples(data) == 1001
         @test eegfun.n_channels(data) == 2
@@ -124,7 +124,7 @@ using eegfun
         mixing = rand(3, 3)
         sphere = rand(3, 3)
         variance = rand(3)
-        info = eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, zeros(3), [:ic1, :ic2, :ic3], [:ch1, :ch2, :ch3], Dict{Int, Matrix{Float64}}())
+        info = eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, zeros(3), [:ic1, :ic2, :ic3], [:ch1, :ch2, :ch3], eegfun.OrderedDict{Int, Matrix{Float64}}())
         @test size(info.unmixing) == (3, 3)
         @test size(info.mixing) == (3, 3)
         @test length(info.ica_label) == 3
@@ -143,8 +143,8 @@ using eegfun
         # Create two datasets with different channels
         df1 = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
         df2 = DataFrame(time=0:0.001:1, ch2=rand(1001), ch3=rand(1001))
-        layout1 = DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0])
-        layout2 = DataFrame(label=[:ch2, :ch3], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout1 = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        layout2 = eegfun.Layout(DataFrame(label=[:ch2, :ch3], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         
         data1 = eegfun.ContinuousData(df1, layout1, 1000, info)
@@ -177,17 +177,17 @@ using eegfun
             extra1=rand(1001),
             extra2=rand(1001)
         )
-        layout = DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         data = eegfun.ContinuousData(df, layout, 1000, info)
 
-        # Test extra_channels
-        extra = eegfun.extra_channels(data)
+        # Test extra_labels
+        extra = eegfun.extra_labels(data)
         @test :extra1 in extra
         @test :extra2 in extra
-        @test !(:time in extra)  # time should be excluded
-        @test !(:sample in extra)  # sample should be excluded
-        @test !(:triggers in extra)  # triggers should be excluded
+        @test :sample in extra  # sample is after channels, so it's extra
+        @test :triggers in extra  # triggers is after channels, so it's extra
+        @test !(:time in extra)  # time should be excluded (it's metadata)
         @test !(:ch1 in extra)  # channel should be excluded
         @test !(:ch2 in extra)  # channel should be excluded
 
@@ -199,7 +199,7 @@ using eegfun
 
         # Test common_channels with no overlap
         df2 = DataFrame(time=0:0.001:1, ch3=rand(1001), ch4=rand(1001))
-        layout2 = DataFrame(label=[:ch3, :ch4], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout2 = eegfun.Layout(DataFrame(label=[:ch3, :ch4], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         data2 = eegfun.ContinuousData(df2, layout2, 1000, info)
         @test isempty(eegfun.common_channels(data, data2))
     end
@@ -211,12 +211,12 @@ using eegfun
             DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001)),
             DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
         ]
-        layout = DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         data = eegfun.EpochData(epochs, layout, 1000, info)
 
-        # Test data function for MultiDataFrameEeg
-        combined_data = eegfun.data(data)
+        # Test all_data function for MultiDataFrameEeg
+        combined_data = eegfun.all_data(data)
         @test combined_data isa DataFrame
         @test nrow(combined_data) == 3003  # 3 epochs * 1001 samples
         @test :ch1 in propertynames(combined_data)
@@ -227,7 +227,7 @@ using eegfun
     @testset "Display Functions" begin
         # Create test data
         df = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
-        layout = DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0])
+        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         data = eegfun.ContinuousData(df, layout, 1000, info)
 
