@@ -243,6 +243,7 @@ Get the number of channels in the EEG data.
 """
 n_channels(dat::EegData)::Int = length(channel_labels(dat))
 n_channels(dat::DataFrame)::Int = length(channel_labels(dat))
+n_layout(layout::Layout)::Int = nrow(layout.data)
 
 """
     n_epochs(dat::EegData) -> Int
