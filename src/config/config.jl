@@ -168,21 +168,22 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "ica.ica_filter.lowpass.order" => ConfigParameter{Int}(description = "Filter order", default = 2, min = 1),
 )
 
-# Used for some validation stuff
 """
     ValidationResult
 
-A struct to track validation results for configuration parameters.
+Result of parameter validation.
 
 # Fields
-- `success::Bool`: Whether the validation was successful
-- `error::Union{Nothing,String}`: Error message if validation failed, nothing otherwise (default: nothing)
+- `success::Bool`: Whether validation succeeded
+- `error::Union{Nothing,String}`: Error message if validation failed, nothing if validation succeeded (default: nothing)
 - `path::Union{Nothing,String}`: Path to the parameter that failed validation, nothing if validation succeeded (default: nothing)
+- `converted_value::Any`: The converted value if validation succeeded, nothing if validation failed (default: nothing)
 """
 @kwdef struct ValidationResult
     success::Bool
     error::Union{Nothing,String} = nothing
     path::Union{Nothing,String} = nothing
+    converted_value::Any = nothing
 end
 
 
@@ -205,6 +206,7 @@ function load_config(config_file::String)
     # Check if user config exists
     if !isfile(config_file)
         @minimal_error "Configuration file not found: $config_file"
+        return nothing
     end
 
     # Load user config
@@ -214,6 +216,7 @@ function load_config(config_file::String)
         user_config = TOML.parsefile(config_file)
     catch e
         @minimal_error "Error parsing TOML file: $e"
+        return nothing
     end
 
     # Merge and validate
@@ -221,6 +224,7 @@ function load_config(config_file::String)
     validation_result = _validate_config(config)
     if !validation_result.success
         @minimal_error validation_result.error
+        return nothing
     end
 
     return _extract_values(config)
@@ -245,16 +249,12 @@ function _merge_configs(default_config::Dict, user_config::Dict)
     function merge_nested!(target::Dict, source::Dict)
         for (key, value) in source
             if !haskey(target, key)
-                # New key, add it directly
                 target[key] = value
                 continue
             end
-
             if isa(value, Dict) && isa(target[key], Dict)
-                # Both are dictionaries, merge recursively
                 merge_nested!(target[key], value)
             else
-                # Simple value or non-dict, update directly
                 target[key] = value
             end
         end
@@ -309,14 +309,16 @@ function _validate_config(config::Dict, path = "")
             else
                 # Check if we have metadata for this parameter
                 if haskey(PARAMETERS, new_path)
-                    result = _validate_parameter(value, PARAMETERS[new_path], new_path)
+                    result = _validate_and_convert_parameter(value, PARAMETERS[new_path], new_path)
                     !result.success && return result
+                    # Update the config with the potentially converted value
+                    current_config[key] = result.converted_value
                 end
             end
         end
     end
 
-    return ValidationResult(success = true)
+    return ValidationResult(success = true, converted_value = nothing)
 end
 
 """
@@ -340,56 +342,105 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
     if param_type <: Number
         # Check if value is any numeric type
         isa(value, Number) ||
-            return ValidationResult(false, "$parameter_name must be a number, got $(typeof(value))", parameter_name)
+            return ValidationResult(success = false, error = "$parameter_name must be a number, got $(typeof(value))", path = parameter_name)
 
-        # Convert to the target type
-        try
-            value = convert(param_type, value)
-        catch
-            return ValidationResult(
-                false,
-                "$parameter_name must be convertible to $param_type, got $(typeof(value))",
-                parameter_name,
-            )
-        end
-
-        # Check min/max constraints
-        !isnothing(parameter_spec.min) &&
-            value < parameter_spec.min &&
-            return ValidationResult(false, "$parameter_name ($value) must be >= $(parameter_spec.min)", parameter_name)
-
-        !isnothing(parameter_spec.max) &&
-            value > parameter_spec.max &&
-            return ValidationResult(false, "$parameter_name ($value) must be <= $(parameter_spec.max)", parameter_name)
-    else
-        # For non-numeric types, require exact type match
-        isa(value, param_type) || return ValidationResult(
-            false,
-            "$parameter_name must be of type $param_type, got $(typeof(value))",
-            parameter_name,
-        )
-    end
-
-    # Check allowed values if they exist
-    if !isnothing(parameter_spec.allowed_values)
-        value_in_allowed = false
-
-        # Convert value to string for comparison if needed
-        for allowed_value in parameter_spec.allowed_values
-            if isequal(value, allowed_value)
-                value_in_allowed = true
-                break
+        # For abstract types, just check if the value is a subtype
+        if isabstracttype(param_type)
+            isa(value, param_type) ||
+                return ValidationResult(success = false, error = "$parameter_name must be a $param_type, got $(typeof(value))", path = parameter_name)
+        else
+            # For concrete types, only convert if the type doesn't already match
+            if !isa(value, param_type)
+                try
+                    # For Float64 to Int64 conversion, round first to avoid precision issues
+                    if isa(value, Float64) && param_type == Int64
+                        value = round(Int64, value)
+                    else
+                        value = Base.convert(param_type, value)
+                    end
+                catch e
+                    return ValidationResult(
+                        success = false,
+                        error = "$parameter_name must be convertible to $param_type, got $(typeof(value)): $e",
+                        path = parameter_name
+                    )
+                end
             end
         end
 
-        value_in_allowed || return ValidationResult(
-            false,
-            "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed_values, ", "))",
-            parameter_name,
-        )
-    end
+        # Check min/max constraints using the potentially converted value
+        !isnothing(parameter_spec.min) &&
+            value < parameter_spec.min &&
+            return ValidationResult(success = false, error = "$parameter_name ($value) must be >= $(parameter_spec.min)", path = parameter_name)
 
-    return ValidationResult(success = true)
+        !isnothing(parameter_spec.max) &&
+            value > parameter_spec.max &&
+            return ValidationResult(success = false, error = "$parameter_name ($value) must be <= $(parameter_spec.max)", path = parameter_name)
+
+        # Check allowed values if they exist
+        if !isnothing(parameter_spec.allowed_values)
+            value_in_allowed = false
+
+            for allowed_value in parameter_spec.allowed_values
+                if isequal(value, allowed_value)
+                    value_in_allowed = true
+                    break
+                end
+            end
+
+            value_in_allowed || return ValidationResult(
+                success = false,
+                error = "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed_values, ", "))",
+                path = parameter_name
+            )
+        end
+
+        return ValidationResult(success = true, converted_value = value)
+    else
+        # For non-numeric types, require exact type match
+        isa(value, param_type) || return ValidationResult(
+            success = false,
+            error = "$parameter_name must be of type $param_type, got $(typeof(value))",
+            path = parameter_name
+        )
+
+        # Check allowed values if they exist
+        if !isnothing(parameter_spec.allowed_values)
+            value_in_allowed = false
+
+            for allowed_value in parameter_spec.allowed_values
+                if isequal(value, allowed_value)
+                    value_in_allowed = true
+                    break
+                end
+            end
+
+            value_in_allowed || return ValidationResult(
+                success = false,
+                error = "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed_values, ", "))",
+                path = parameter_name
+            )
+        end
+
+        return ValidationResult(success = true, converted_value = value)
+    end
+end
+
+"""
+    _validate_and_convert_parameter(value, parameter_spec::ConfigParameter, parameter_name::String)
+
+Helper function to validate a single parameter value and return the converted value.
+
+# Arguments
+- `value`: The value to validate
+- `parameter_spec::ConfigParameter`: The parameter specification to validate against
+- `parameter_name::String`: The full name of the parameter in the configuration
+
+# Returns
+- `ValidationResult`: Result of the validation with converted value
+"""
+function _validate_and_convert_parameter(value, parameter_spec::ConfigParameter, parameter_name::String)
+    return _validate_parameter(value, parameter_spec, parameter_name)
 end
 
 

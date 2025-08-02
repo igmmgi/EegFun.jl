@@ -9,7 +9,9 @@ Print a vector with a maximum length and number of ends.
 - `n_ends::Int`: The number of ends to print
 """
 function print_vector(v::AbstractVector; max_length::Int = 10, n_ends::Int = 5)
-    if length(v) > max_length
+    if isempty(v)
+        return "[]"
+    elseif length(v) > max_length
         v = vcat(first(v, n_ends), "...", last(v, n_ends))
     end
     return join(string.(v), ", ")
