@@ -1,10 +1,46 @@
 ########################################################
-# Trigger timing plotting functions
+# Trigger plotting functions
 ########################################################
 
 # Pre-allocated vectors for performance
 const VERTICAL_LINE_X = Ref([0.0, 0.0])
 const VERTICAL_LINE_Y = Ref([0.0, EVENT_LINE_HEIGHT])
+
+########################################################
+# Shared trigger utilities
+########################################################
+
+"""
+    _trigger_time_count(time, triggers)
+
+Internal function to process trigger data and count occurrences.
+
+# Arguments
+- `time`: Vector of time points
+- `triggers`: Vector of trigger values
+
+# Returns
+- `trigger_times`: Vector of times when triggers occurred
+- `trigger_values`: Vector of trigger values at those times
+- `trigger_count`: OrderedDict mapping trigger values to their counts
+"""
+function _trigger_time_count(time, triggers)
+    # Since triggers are already cleaned (only onset values), just find non-zero values
+    trigger_indices = findall(triggers .!= 0)
+
+    if isempty(trigger_indices)
+        return Float64[], Int[], OrderedDict{Int,Int}()
+    end
+
+    trigger_values = triggers[trigger_indices]
+    trigger_times = time[trigger_indices]
+    trigger_count = OrderedDict(i => 0 for i in sort!(collect(Set(trigger_values))))
+    for val in trigger_values
+        trigger_count[val] += 1
+    end
+
+    return trigger_times, trigger_values, trigger_count
+end
 
 """
     _extract_trigger_data(dat::BioSemiBDF.BioSemiData)
@@ -36,6 +72,140 @@ function _extract_trigger_data(dat::ContinuousData)
     trigger_times = dat.data[trigger_positions, :time]
     return trigger_codes, trigger_times
 end
+
+"""
+    _count_triggers(trigger_codes::Vector{Int16})
+
+Count occurrences of each trigger code.
+"""
+function _count_triggers(trigger_codes::Vector{Int16})
+    trigger_count = OrderedDict{Int,Int}()
+    for code in sort!(collect(Set(trigger_codes)))
+        trigger_count[code] = count(x -> x == code, trigger_codes)
+    end
+    return trigger_count
+end
+
+"""
+    _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,Int})
+
+Add invisible scatter points with labels for legend creation.
+"""
+function _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,Int})
+    if isempty(trigger_count)
+        return
+    end
+    
+    # Add invisible scatter points with labels for each trigger type
+    for (key, value) in trigger_count
+        # Place invisible points far outside the plot area
+        scatter!(ax, [-1000], [-1000], label = "$key: $value", 
+                markersize = 0, color = :transparent, alpha = 0)
+    end
+end
+
+########################################################
+# Trigger overview plotting functions
+########################################################
+
+"""
+    plot_trigger_overview(trigger_times, trigger_values, trigger_count)
+
+Plot trigger events as a scatter plot with vertical lines.
+
+# Arguments
+- `trigger_times`: Vector of times when triggers occurred
+- `trigger_values`: Vector of trigger values at those times
+- `trigger_count`: OrderedDict mapping trigger values to their counts
+
+# Returns
+- `fig`: The Makie Figure object
+- `ax`: The Axis object containing the plot
+"""
+function plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = true)
+
+    if isempty(trigger_count)
+        @warn "No triggers found in the data"
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        return fig, ax
+    end
+
+    fig = Figure()
+    ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
+
+    # Pre-compute trigger data for each type to avoid repeated filtering
+    trigger_data = Dict{Int,Vector{Float64}}()
+    for (key, _) in trigger_count
+        trigger_data[key] = trigger_times[trigger_values .== key]
+    end
+
+    for (unique, (key, value)) in enumerate(trigger_count)
+        times = trigger_data[key]
+        y_pos = fill(unique, length(times))
+        scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = DEFAULT_MARKER_SIZE)
+        # Add vertical lines
+        for (t, y) in zip(times, y_pos)
+            lines!(
+                ax,
+                [t, t],
+                [y - DEFAULT_LINE_OFFSET, y + DEFAULT_LINE_OFFSET],
+                color = :black,
+                linewidth = DEFAULT_LINE_WIDTH_TRIGGER,
+            )
+        end
+    end
+    fig[1, 2] = Legend(fig, ax)
+    ax.ylabel = "Trigger Value"
+    ax.xlabel = "Time (S)"
+
+    if display_plot
+        display(fig)
+    end
+
+    return fig, ax
+
+end
+
+"""
+    plot_trigger_overview(dat::BioSemiBDF.BioSemiData)
+
+Plot trigger events from BioSemi BDF data.
+
+# Arguments
+- `dat`: BioSemiData object containing the EEG data
+
+# Returns
+- `fig`: The Makie Figure object
+- `ax`: The Axis object containing the plot
+"""
+function plot_trigger_overview(dat::BioSemiBDF.BioSemiData; display_plot = true)
+    @info "Plotting trigger (raw) overview for BioSemi data"
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
+    return plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
+end
+
+"""
+    plot_trigger_overview(dat::ContinuousData)
+
+Plot trigger events from ContinuousData object.
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+
+# Returns
+- `fig`: The Makie Figure object
+- `ax`: The Axis object containing the plot
+"""
+function plot_trigger_overview(dat::ContinuousData; display_plot = true)
+    @info "Plotting trigger (cleaned) overview for ContinuousData"
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
+    return plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
+end
+
+########################################################
+# Trigger timing plotting functions
+########################################################
 
 """
     _setup_axis_properties!(ax::Axis)
@@ -89,6 +259,12 @@ Core function to plot trigger events on the given axis.
 """
 function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger_codes::Vector{Int16}; 
                               use_preallocated::Bool=false)
+    # Early return if no triggers to plot
+    if isempty(trigger_times)
+        @minimal_error "No triggers to plot"
+        return
+    end
+    
     # Pre-compute string conversions
     code_strings = [string(Int(code)) for code in trigger_codes]
     time_strings = [string(round(time, digits = 2)) for time in trigger_times]
@@ -166,9 +342,14 @@ function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_
     # Calculate time range
     end_time = trigger_times[end] + 2.0
     
-    # Create figure and axis
+    # Create figure with grid layout to accommodate legend
     fig = Figure()
     ax = Axis(fig[1, 1])
+    
+    # Add trigger count legend entries
+    trigger_count = _count_triggers(trigger_codes)
+    _add_trigger_legend_entries!(ax, trigger_count)
+    fig[1, 2] = Legend(fig, ax)
     
     # Create Observables for reactive plotting
     window_size = Observable(DEFAULT_WINDOW_SIZE)
@@ -255,6 +436,13 @@ function plot_trigger_timing!(
 )
     _plot_trigger_events!(ax, trigger_times, codes, use_preallocated=false)
     _setup_axis_properties!(ax)
+    
+    # Add trigger count legend if not empty
+    if !isempty(trigger_times)
+        trigger_count = _count_triggers(codes)
+        _add_trigger_legend_entries!(ax, trigger_count)
+        fig[1, 2] = Legend(fig, ax)
+    end
     
     return fig, ax
 end

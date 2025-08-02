@@ -77,7 +77,6 @@ include("plots/plot_joint_probability.jl")
 include("plots/plot_layout.jl")
 include("plots/plot_power_spectrum.jl")
 include("plots/plot_topography.jl")
-include("plots/plot_trigger_overview.jl")
-include("plots/plot_trigger_timing.jl")
+include("plots/plot_triggers.jl")
 
 end # module eegfun 

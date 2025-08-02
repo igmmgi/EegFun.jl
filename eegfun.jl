@@ -22,6 +22,7 @@ eegfun.plot_trigger_timing(dat)
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.plot_trigger_overview(dat)
+
 eegfun.plot_trigger_timing(dat)
 
 
