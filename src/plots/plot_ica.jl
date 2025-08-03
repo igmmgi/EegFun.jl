@@ -103,12 +103,7 @@ function plot_ica_topoplot(
     # Calculate all topo data first
     all_data = []
     for i in eachindex(comps)
-        # Use gridscale accessed earlier
-        if method == :spherical_spline
-            data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comps[i]], ica.layout, gridscale)
-        elseif method == :multiquadratic
-            data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comps[i]], ica.layout, gridscale)
-        end
+        data = _prepare_ica_topo_data(ica, comps[i], method, gridscale)
         push!(all_data, data)
     end
 
@@ -159,18 +154,19 @@ function plot_ica_topoplot(
         data = all_data[i]
         levels_to_use = use_global_scale ? global_levels : all_local_levels[i]
 
-        co = _plot_topo_on_axis!(
+        co = _plot_ica_topo_on_axis!(
             ax,
             fig,
             data,
-            ica.layout,
+            ica,
             method,
             levels_to_use;
             gridscale = gridscale,
+            colormap = topo_kwargs[:colormap],
+            nan_color = topo_kwargs[:nan_color],
             head_kwargs = head_kwargs,
             point_kwargs = point_kwargs,
             label_kwargs = label_kwargs,
-            topo_kwargs...,
         )
 
         # Do we want to add a colourbar?
@@ -474,8 +470,6 @@ function prepare_ica_data_matrix(dat::ContinuousData, ica_result::InfoIca)
 end
 
 
-
-
 # Internal helper to calculate contour levels
 """
     _calculate_topo_levels(data::AbstractMatrix{<:Real}; ...)
@@ -597,8 +591,8 @@ function _plot_topo_on_axis!(
 end
 
 # Create a simpler override specifically for the component viewer
-# Now uses the internal helpers
-function plot_topoplot_in_viewer!(
+# Internal function for viewer integration
+function _plot_ica_topo_in_viewer!(
     fig,
     topo_ax,
     ica,
@@ -615,15 +609,8 @@ function plot_topoplot_in_viewer!(
     label_kwargs = Dict(),
     method = :spherical_spline,
 )
-    # Clear the axis
-    empty!(topo_ax)
-
-    # Create the topo data
-    if method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
-    elseif method == :multiquadratic
-        data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], ica.layout, gridscale)
-    end
+    # Prepare data using the new internal function
+    data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
 
     # Calculate levels using helper
     levels = _calculate_topo_levels(
@@ -634,12 +621,12 @@ function plot_topoplot_in_viewer!(
         num_levels = num_levels,
     )
 
-    # Plot using helper
-    co = _plot_topo_on_axis!(
+    # Plot using the new internal function
+    co = _plot_ica_topo_on_axis!(
         topo_ax,
         fig,
         data,
-        ica.layout,
+        ica,
         method,
         levels;
         gridscale = gridscale,
@@ -649,8 +636,6 @@ function plot_topoplot_in_viewer!(
         point_kwargs = point_kwargs,
         label_kwargs = label_kwargs,
     )
-
-    # No title setting here, handled by calling function (create_component_plots!)
 
     return co
 end
@@ -682,10 +667,6 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
             state.components[i]
         end
         
-
-        
-
-
         # Time series axis creation (now on the right)
         ax = Axis(
             fig[i, 2],
@@ -770,7 +751,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
         # Create the topo plot using the dedicated viewer function
         if comp_idx <= state.total_components
             # --- Pass parameters from state ---
-            plot_topoplot_in_viewer!(
+            _plot_ica_topo_in_viewer!(
                 fig,
                 topo_ax,
                 state.ica_result,
@@ -1292,7 +1273,7 @@ function update_components!(state)
             if i <= length(state.topo_axs)
                 topo_ax = state.topo_axs[i]
                 # --- Pass parameters from state ---
-                plot_topoplot_in_viewer!(
+                _plot_ica_topo_in_viewer!(
                     topo_ax.parent, # Pass the figure associated with the axis
                     topo_ax,
                     state.ica_result,
@@ -1335,8 +1316,6 @@ function update_components!(state)
         end
     end
 end
-
-
 
 
 """
@@ -1471,8 +1450,6 @@ function _find_peaks(data::AbstractVector; min_prominence_std::Real = 2.0, windo
     end
     return peaks
 end
-
-
 
 
 """
@@ -1665,10 +1642,6 @@ function plot_ecg_component_features_(
 end
 
 
-
-
-
-
 """
     plot_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
                              exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
@@ -1783,13 +1756,6 @@ function plot_line_noise_components(
 
     return fig, (ax1, ax2)
 end
-
-
-
-
-
-
-
 
 
 """
@@ -1956,4 +1922,56 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     )
 
     return fig
+end
+
+# Internal function to prepare ICA topoplot data (interpolation only)
+function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
+    if method == :spherical_spline
+        return _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
+    elseif method == :multiquadratic
+        return _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], ica.layout, gridscale)
+    else
+        throw(ArgumentError("Unknown interpolation method: $method"))
+    end
+end
+
+# Internal function to plot ICA topoplot on an axis
+function _plot_ica_topo_on_axis!(
+    topo_ax,
+    fig,
+    data::Matrix{Float64},
+    ica::InfoIca,
+    method::Symbol,
+    levels;
+    gridscale::Int = 100,
+    colormap::Symbol = :jet,
+    nan_color::Symbol = :transparent,
+    head_kwargs::Dict = Dict(),
+    point_kwargs::Dict = Dict(),
+    label_kwargs::Dict = Dict(),
+)
+    # Clear the axis
+    empty!(topo_ax)
+
+    # Plot using the existing low-level function
+    co = _plot_topo_on_axis!(
+        topo_ax,
+        fig,
+        data,
+        ica.layout,
+        method,
+        levels;
+        gridscale = gridscale,
+        colormap = colormap,
+        nan_color = nan_color,
+        head_kwargs = head_kwargs,
+        point_kwargs = point_kwargs,
+        label_kwargs = label_kwargs,
+    )
+
+    # Hide decorations
+    hidexdecorations!(topo_ax, grid = false)
+    hideydecorations!(topo_ax, grid = false)
+
+    return co
 end
