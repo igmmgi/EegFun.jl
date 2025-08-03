@@ -222,13 +222,22 @@ function plot_ica_topoplot(
 end
 
 
+# Channel visualization info (similar to plot_databrowser approach)
+mutable struct ChannelInfo
+    channel::Union{Nothing,Symbol}
+    visible::Bool
+    data_lines::Dict{Symbol,Any}  # Maps channel symbols to plot elements
+    data_labels::Dict{Symbol,Any}  # Maps channel symbols to text labels
+    ChannelInfo() = new(nothing, false, Dict{Symbol,Any}(), Dict{Symbol,Any}())
+end
+
 # Plot elements for the interactive visualization
 mutable struct PlotElements
     axs::Vector{Axis}                    # Main component time series axes
     channel_axs::Vector{Union{Axis,Nothing}}  # Channel overlay axes (allow for nothing values)
     topo_axs::Vector{Axis}               # Topography axes
     lines_obs::Vector{Observable{Vector{Float64}}}  # Observable lines for component data
-    channel_bool_indicators::Dict{Int,Any}  # Boolean channel indicators
+    channel_info::ChannelInfo            # Channel visualization info
 end
 
 # Create a state structure to hold the visualization state
@@ -341,7 +350,7 @@ mutable struct IcaComponentState
             Vector{Union{Axis,Nothing}}(),     # channel_axs
             Vector{Axis}(),                    # topo_axs
             Vector{Observable{Vector{Float64}}}(), # lines_obs
-            Dict{Int,Any}()                    # channel_bool_indicators
+            ChannelInfo()                      # channel_info
         )
 
         new(
@@ -970,14 +979,9 @@ function update_view_range!(state, start_pos)
     end
 
     # If we have a boolean channel selected, update its indicators
-    if state.show_channel[] && !isempty(state.plot_elements.channel_bool_indicators)
-        # Clear existing indicators
-        for (i, indicator) in state.plot_elements.channel_bool_indicators
-            if !isnothing(indicator)
-                delete!(state.plot_elements.channel_axs[i], indicator)
-            end
-        end
-        empty!(state.plot_elements.channel_bool_indicators)
+    if state.show_channel[] && state.plot_elements.channel_info.visible
+        # Clear existing channel visualization
+        clear_channel_visualization!(state)
 
         # Find the current channel
         current_channel = state.selected_channel[]
@@ -1009,18 +1013,21 @@ function add_channel_menu!(fig, state)
     return menu_layout
 end
 
-# Helper function to update channel selection (matches databrowser pattern)
-function update_channel_selection!(state, selected)
-    # Clear previous channel visualizations from all axes
-    for i = 1:state.n_visible_components
-        if i <= length(state.plot_elements.channel_axs) &&
-           haskey(state.plot_elements.channel_bool_indicators, i) &&
-           !isnothing(state.plot_elements.channel_bool_indicators[i])
-            delete!(state.plot_elements.channel_axs[i], state.plot_elements.channel_bool_indicators[i])
-            state.plot_elements.channel_bool_indicators[i] = nothing
+# Helper function to clear channel visualization (similar to plot_databrowser)
+function clear_channel_visualization!(state)
+    # Clear all channel axes
+    for ax in state.plot_elements.channel_axs
+        if !isnothing(ax)
+            clear_axes!(ax, [state.plot_elements.channel_info.data_lines, state.plot_elements.channel_info.data_labels])
         end
     end
-    empty!(state.plot_elements.channel_bool_indicators)
+    state.plot_elements.channel_info.visible = false
+end
+
+# Helper function to update channel selection (matches databrowser pattern)
+function update_channel_selection!(state, selected)
+    # Clear previous channel visualizations
+    clear_channel_visualization!(state)
 
     if selected == "None"
         state.show_channel[] = false
@@ -1039,9 +1046,13 @@ function update_channel_selection!(state, selected)
     end
 end
 
-# Helper function to add boolean indicators (matching databrowser pattern)
+# Helper function to add boolean indicators (similar to plot_databrowser pattern)
 function add_boolean_indicators!(state, channel_sym)
-    # For each component axis, create a vertical line at each true position
+    # Update channel info
+    state.plot_elements.channel_info.channel = channel_sym
+    state.plot_elements.channel_info.visible = true
+    
+    # For each component axis, create vertical lines at each true position
     for i = 1:state.n_visible_components
         if i <= length(state.plot_elements.channel_axs)
             ax_channel = state.plot_elements.channel_axs[i]
@@ -1063,8 +1074,8 @@ function add_boolean_indicators!(state, channel_sym)
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
 
-                    # Store the reference to the lines
-                    state.plot_elements.channel_bool_indicators[i] = lines
+                    # Store the reference to the lines using channel symbol as key
+                    state.plot_elements.channel_info.data_lines[channel_sym] = lines
                 end
             end
         end
@@ -1083,7 +1094,7 @@ function setup_keyboard_interactions!(fig, state)
                     state.xrange[] = new_start:(new_start+state.window_size-1)
                 else  # right
                     new_start =
-                        min(size(state.components, 2) - state.window_size + 1, first(current_range) + state.window_size)
+                        min(size(state.component_data, 2) - state.window_size + 1, first(current_range) + state.window_size)
                     state.xrange[] = new_start:(new_start+state.window_size-1)
                 end
 
