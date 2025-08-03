@@ -24,32 +24,29 @@ Plot multiple ICA component topographies in a grid layout within a new Figure.
 
 ## Basic Usage
 ```julia
-# Plot all components (default)
-fig = plot_ica_topoplot(ica_result, layout)
+# Plot first 10 components (default)
+fig = plot_ica_component_activation(dat, ica_result)
+
+# Plot specific range of components
+fig = plot_ica_component_activation(dat, ica_result, components = 5:15)
 
 # Plot specific components
-fig = plot_ica_topoplot(ica_result, layout, component_selection = components([1, 3, 5]))
+fig = plot_ica_component_activation(dat, ica_result, components = [1, 3, 5, 7])
 
-# Plot components 1-10
-fig = plot_ica_topoplot(ica_result, layout, component_selection = components(1:10))
-
-# Plot all components except 1 and 2
-fig = plot_ica_topoplot(ica_result, layout, component_selection = components_not([1, 2]))
-
-# Plot only component 1
-fig = plot_ica_topoplot(ica_result, layout, component_selection = components(1))
+# Plot all components (if screen can handle it)
+fig = plot_ica_component_activation(dat, ica_result, components = 1:64)
 ```
 
 ## Advanced Selection
 ```julia
-# Plot components with custom selection function
-fig = plot_ica_topoplot(ica_result, layout, 
-    component_selection = x -> x .<= 10  # Only first 10 components
+# Plot components with custom selection
+fig = plot_ica_component_activation(dat, ica_result, 
+    components = 1:10  # First 10 components
 )
 
 # Plot even-numbered components
-fig = plot_ica_topoplot(ica_result, layout, 
-    component_selection = x -> iseven.(x)
+fig = plot_ica_component_activation(dat, ica_result, 
+    components = 2:2:20  # Even components 2, 4, 6, ..., 20
 )
 ```
 """
@@ -69,27 +66,27 @@ function plot_ica_topoplot(
 )
 
     # default kwargs and merged kwargs
-    head_default_kwargs = Dict()
-    merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
+    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
+    head_kwargs = merge(head_default_kwargs, head_kwargs)
 
     point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    merged_point_kwargs = merge(point_default_kwargs, point_kwargs)
+    point_kwargs = merge(point_default_kwargs, point_kwargs)
 
     label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
-    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
+    label_kwargs = merge(label_default_kwargs, label_kwargs)
 
     topo_default_kwargs =
         Dict(:colormap => :jet, :gridscale => 100, :num_levels => 20, :nan_color => :transparent)
-    merged_topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = merged_topo_kwargs[:gridscale]
-    num_levels = merged_topo_kwargs[:num_levels]
-    merged_topo_kwargs = filter(p -> p.first ∉ (:gridscale, :num_levels, :levels), merged_topo_kwargs)
+    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
+    gridscale = topo_kwargs[:gridscale]
+    num_levels = topo_kwargs[:num_levels]
+    topo_kwargs = filter(p -> p.first ∉ (:gridscale, :num_levels, :levels), topo_kwargs)
 
     colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30, :colorbar_plot_numbers => [])
-    merged_colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = merged_colorbar_kwargs[:plot_colorbar]
-    colorbar_plot_numbers = merged_colorbar_kwargs[:colorbar_plot_numbers]
-    merged_colorbar_kwargs = filter(p -> p.first ∉ (:plot_colorbar, :colorbar_plot_numbers), merged_colorbar_kwargs)
+    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
+    plot_colorbar = colorbar_kwargs[:plot_colorbar]
+    colorbar_plot_numbers = colorbar_kwargs[:colorbar_plot_numbers]
+    colorbar_kwargs = filter(p -> p.first ∉ (:plot_colorbar, :colorbar_plot_numbers), colorbar_kwargs)
 
     # Get selected components using the component_selection function
     all_components = 1:size(ica.mixing, 2)
@@ -177,18 +174,18 @@ function plot_ica_topoplot(
             method,
             levels_to_use;
             gridscale = gridscale,
-            head_kwargs = merged_head_kwargs,
-            point_kwargs = merged_point_kwargs,
-            label_kwargs = merged_label_kwargs,
-            merged_topo_kwargs...,
+            head_kwargs = head_kwargs,
+            point_kwargs = point_kwargs,
+            label_kwargs = label_kwargs,
+            topo_kwargs...,
         )
 
         # Set up colorbar space for ALL plots for consistent sizing
         if plot_colorbar # Use accessed flag
             # Default values from filtered kwargs
-            width = get(merged_colorbar_kwargs, :width, 10)
-            height = get(merged_colorbar_kwargs, :height, Relative(0.8))
-            ticksize = get(merged_colorbar_kwargs, :ticklabelsize, 10)
+            width = get(colorbar_kwargs, :width, 10)
+            height = get(colorbar_kwargs, :height, Relative(0.8))
+            ticksize = get(colorbar_kwargs, :ticklabelsize, 10)
 
             # Create colorbar or placeholder in second column
             if i in colorbar_plot_numbers # Use accessed list
@@ -199,7 +196,7 @@ function plot_ica_topoplot(
                     width = width,
                     height = height,
                     ticklabelsize = ticksize,
-                    merged_colorbar_kwargs...,
+                    colorbar_kwargs...,
                 )
             else
                 # Pass filtered styling args (though Box might not use them all)
@@ -209,7 +206,7 @@ function plot_ica_topoplot(
                     height = height,
                     color = :transparent,
                     strokewidth = 0,
-                    merged_colorbar_kwargs...,
+                    colorbar_kwargs...,
                 )
             end
 
@@ -235,8 +232,9 @@ mutable struct IcaComponentState
     # Data
     dat::ContinuousData
     ica_result::InfoIca
-    components::Matrix{Float64}
+    component_data::Matrix{Float64}
     total_components::Int
+    subsetted_layout::Layout  # Store the subsetted layout to avoid repeated calls
 
     # View settings
     n_visible_components::Int
@@ -252,8 +250,8 @@ mutable struct IcaComponentState
     use_global_scale::Observable{Bool}
     invert_scale::Observable{Bool}
 
-    # New field for specific components
-    specific_components::Union{Nothing,Vector{Int}}
+    # Components to display
+    components::Vector{Int}
 
     #  Topoplot Kwargs 
     topo_gridscale::Int
@@ -278,9 +276,9 @@ mutable struct IcaComponentState
     function IcaComponentState(
         dat,
         ica_result,
+        component_selection,
         n_visible_components,
-        window_size,
-        specific_components = nothing;
+        window_size;
         topo_kwargs = Dict(),
         head_kwargs = Dict(),
         point_kwargs = Dict(),
@@ -289,8 +287,11 @@ mutable struct IcaComponentState
     )
         # Prepare data matrix
         dat_matrix = prepare_ica_data_matrix(dat, ica_result)
-        components = ica_result.unmixing * dat_matrix
-        total_components = size(components, 1)
+        component_data = ica_result.unmixing * dat_matrix
+        total_components = size(component_data, 1)
+        
+        # Create subsetted layout once to avoid repeated calls
+        subsetted_layout = subset_layout(dat.layout, channel_selection=channels(ica_result.data_label))
 
         # Create observables
         comp_start = Observable(1)
@@ -301,25 +302,22 @@ mutable struct IcaComponentState
         time_zero_idx = findmin(abs.(dat.data.time))[2]
         half_window = div(window_size, 2)
         start_idx = max(1, time_zero_idx - half_window)
-        end_idx = min(size(components, 2), start_idx + window_size - 1)
+        end_idx = min(size(component_data, 2), start_idx + window_size - 1)
 
         # Adjust start_idx if end_idx reached the boundary
-        if end_idx == size(components, 2)
+        if end_idx == size(component_data, 2)
             start_idx = max(1, end_idx - window_size + 1)
         end
 
         xrange = Observable(start_idx:end_idx)
 
-        # Set initial range based on specific components if provided
-        comps_to_use = if !isnothing(specific_components)
-            specific_components
-        else
-            1:min(n_visible_components, total_components) # Ensure range is valid
-        end
+        # Use the component selection predicate to get the actual component indices
+        component_mask = component_selection(1:total_components)
+        comps_to_use = findall(component_mask)  # Convert boolean mask to actual indices
 
         # Calculate initial y-range based on components we'll show
         initial_range_data = if !isempty(comps_to_use) && all(idx -> idx <= total_components, comps_to_use)
-            components[comps_to_use, start_idx:end_idx]
+            component_data[comps_to_use, start_idx:end_idx]
         else
             zeros(0, length(start_idx:end_idx)) # Empty if no valid components
         end
@@ -365,8 +363,9 @@ mutable struct IcaComponentState
         new(
             dat,
             ica_result,
-            components,
+            component_data,
             total_components,
+            subsetted_layout,
             n_visible_components,
             window_size,
             comp_start,
@@ -377,7 +376,7 @@ mutable struct IcaComponentState
             channel_yscale,
             use_global_scale,
             invert_scale,
-            specific_components,
+            comps_to_use,
             # Pass stored kwargs
             topo_gridscale,
             topo_colormap,
@@ -409,13 +408,13 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 - `ica_result::InfoIca`: ICA result object (must match `dat`).
 
 # Keyword Arguments
-- `n_visible_components::Int=10`: Number of components visible vertically at once.
+- `component_selection=components()`: Component selection predicate (see `components()`). Defaults to all available components.
+- `n_visible_components::Int=10`: Number of components visible vertically at once (controls the "window" size for scrolling).
 - `window_size::Int=2000`: Initial time window size in samples.
 - `topo_kwargs::Dict=Dict()`: Keyword arguments passed down for topography plots (see `_plot_topo_on_axis!`).
 - `head_kwargs::Dict=Dict()`: Keyword arguments passed down for head outlines.
 - `point_kwargs::Dict=Dict()`: Keyword arguments passed down for channel markers.
 - `label_kwargs::Dict=Dict()`: Keyword arguments passed down for channel labels.
-- `specific_components=nothing`: An optional vector of specific component indices to display initially. If provided, `n_visible_components` is ignored, and only these components are shown without scrolling capability (PageUp/PageDown disabled).
 
 # Returns
 - `fig::Figure`: The Makie Figure object containing the interactive plot.
@@ -423,27 +422,22 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 function plot_ica_component_activation(
     dat::ContinuousData,
     ica_result::InfoIca;
-    n_visible_components::Int = 10,
+    component_selection = components(),  # Use the established predicate pattern
+    n_visible_components::Int = 10,  # How many to show per screen
     window_size::Int = 2000,
     topo_kwargs = Dict(),
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
-    specific_components = nothing,
     method = :multiquadratic,  # :multiquadratic or :spherical_spline
 )
-    # Create state, using specific components if provided
-    if !isnothing(specific_components)
-        n_visible_components = length(specific_components)
-    end
-
     # Pass kwargs to constructor
     state = IcaComponentState(
         dat,
         ica_result,
+        component_selection,
         n_visible_components,
-        window_size,
-        specific_components;
+        window_size;
         topo_kwargs = topo_kwargs,
         head_kwargs = head_kwargs,
         point_kwargs = point_kwargs,
@@ -501,6 +495,9 @@ function prepare_ica_data_matrix(dat::ContinuousData, ica_result::InfoIca)
     return dat_matrix
 end
 
+
+
+
 # Internal helper to calculate contour levels
 """
     _calculate_topo_levels(data::AbstractMatrix{<:Real}; ...)
@@ -528,24 +525,22 @@ function _calculate_topo_levels(
     global_max = nothing,
     num_levels = 20,
 )
-    local_min, local_max = NaN, NaN
+    # Input validation
+    num_levels > 0 || throw(ArgumentError("num_levels must be positive, got $num_levels"))
 
     # Find local min/max, ignoring NaNs
-    valid_values = [v for v in data if !isnan(v)]
+    local_min, local_max = -1.0, 1.0
+    valid_values = filter(!isnan, data)
     if !isempty(valid_values)
         local_min = minimum(valid_values)
         local_max = maximum(valid_values)
-    else
-        # Default if data is all NaN
-        local_min = -1.0
-        local_max = 1.0
     end
 
     # Determine final min/max for levels
-    final_min, final_max = if use_global_scale && !isnothing(global_min) && !isnothing(global_max)
-        global_min, global_max
+    if use_global_scale && !isnothing(global_min) && !isnothing(global_max) 
+        final_min, final_max = global_min, global_max
     else
-        local_min, local_max
+        final_min, final_max = local_min, local_max
     end
 
     # Ensure min != max to avoid range error
@@ -593,22 +588,19 @@ function _plot_topo_on_axis!(
     point_kwargs = Dict(),
     label_kwargs = Dict(), 
     kwargs...,
-) # Use kwargs... to capture filtered contourf args
+) 
 
     # Use different ranges based on interpolation method
     contour_range = method == :spherical_spline ? DEFAULT_HEAD_RADIUS * 4 : DEFAULT_HEAD_RADIUS * 2
-
     co = contourf!(
         ax,
         range(-contour_range, contour_range, length = gridscale),
         range(-contour_range, contour_range, length = gridscale),
         data;
         levels = levels,
-        kwargs..., # Pass the filtered contourf args directly
+        kwargs..., 
     )
 
-    # Add head shape using plot_layout_2d!
-    # Pass the ALREADY MERGED kwargs it received directly to plot_layout_2d!
     plot_layout_2d!(
         fig,
         ax,
@@ -623,6 +615,7 @@ function _plot_topo_on_axis!(
     hideydecorations!(ax, grid = false)
 
     return co
+
 end
 
 # Create a simpler override specifically for the component viewer
@@ -632,7 +625,7 @@ function plot_topoplot_in_viewer!(
     topo_ax,
     ica,
     comp_idx,
-    layout;
+    subsetted_layout;
     use_global_scale = false,
     global_min = nothing,
     global_max = nothing,
@@ -648,14 +641,11 @@ function plot_topoplot_in_viewer!(
     # Clear the axis
     empty!(topo_ax)
 
-    # Extract layout data
-    tmp_layout = subset_layout(layout, channel_selection=channels(ica.data_label))
-
     # Create the topo data
     if method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], tmp_layout, gridscale)
+        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], subsetted_layout, gridscale)
     elseif method == :multiquadratic
-        data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], tmp_layout, gridscale)
+        data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], subsetted_layout, gridscale)
     end
 
     # Calculate levels using helper
@@ -672,7 +662,7 @@ function plot_topoplot_in_viewer!(
         topo_ax,
         fig,
         data,
-        layout,
+        subsetted_layout,
         method,
         levels;
         gridscale = gridscale,
@@ -693,17 +683,31 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
     # --- No local merging needed anymore ---
 
     # Create axes for the time series plots
-    for i = 1:state.n_visible_components
+    # For subsets, show all components in the subset
+    # For all components, create n_visible_components plots
+    num_plots = if length(state.components) == state.total_components
+        state.n_visible_components
+    else
+        length(state.components)  # Show all components in the subset
+    end
+    
+    for i = 1:num_plots
         # Create topo plot axis first (now on the left)
         topo_ax = Axis(fig[i, 1])
         push!(state.topo_axs, topo_ax)
 
         # Get the actual component number
-        comp_idx = if !isnothing(state.specific_components) && i <= length(state.specific_components)
-            state.specific_components[i]
-        else
+        comp_idx = if length(state.components) == state.total_components
+            # Using all components - use scrolling logic
             state.comp_start[] + i - 1
+        else
+            # Using a subset of components - use the subset directly
+            state.components[i]
         end
+        
+
+        
+
 
         # Time series axis creation (now on the right)
         ax = Axis(
@@ -765,9 +769,9 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
         # Observable creation for component plot
         # Handle potential invalid comp_idx robustly
         comp_data = if comp_idx <= state.total_components
-            state.components[comp_idx, :]
+            state.component_data[comp_idx, :]
         else
-            zeros(Float64, size(state.components, 2)) # Placeholder data
+            zeros(Float64, size(state.component_data, 2)) # Placeholder data
         end
         lines_obs = Observable(comp_data)
         push!(state.lines_obs, lines_obs)
@@ -786,7 +790,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
                 topo_ax,
                 state.ica_result,
                 comp_idx,
-                state.dat.layout;
+                state.subsetted_layout;
                 use_global_scale = state.use_global_scale[],
                 gridscale = state.topo_gridscale,
                 colormap = state.topo_colormap,
@@ -844,7 +848,6 @@ function add_navigation_controls!(fig, state)
     rowgap!(topo_nav, 3, 35)
     # --- End Gap settings ---
 
-
     # Connect checkboxes to state
     on(global_scale_check.checked) do checked
         state.use_global_scale[] = checked
@@ -886,9 +889,7 @@ function add_navigation_controls!(fig, state)
                 new_fig = plot_ica_component_activation(
                     state.dat,
                     state.ica_result,
-                    specific_components = comps,
-                    n_visible_components = length(comps),
-                    window_size = state.window_size,
+                    component_selection = components(comps),
                 )
             end
         end
@@ -1165,16 +1166,25 @@ function setup_keyboard_interactions!(fig, state)
                     end
 
                     # Force a redraw of the plots with scale inversion
-                    for i = 1:state.n_visible_components
-                        # Get the correct component index based on whether we're using specific components
-                        comp_idx = if !isnothing(state.specific_components) && i <= length(state.specific_components)
-                            state.specific_components[i]
-                        else
+                    # For subsets, update all components in the subset
+                    num_plots = if length(state.components) == state.total_components
+                        state.n_visible_components
+                    else
+                        length(state.components)  # Update all components in the subset
+                    end
+                    
+                    for i = 1:num_plots
+                        # Get the correct component index
+                        comp_idx = if length(state.components) == state.total_components
+                            # Using all components - use scrolling logic
                             state.comp_start[] + i - 1
+                        else
+                            # Using a subset of components - use the subset directly
+                            state.components[i]
                         end
 
                         if comp_idx <= state.total_components
-                            component_data = state.components[comp_idx, :]
+                            component_data = state.component_data[comp_idx, :]
                             if state.invert_scale[]
                                 component_data = -component_data
                             end
@@ -1193,8 +1203,8 @@ function setup_keyboard_interactions!(fig, state)
                 end
 
             elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
-                # Only handle page up/down if we're not using specific components
-                if isnothing(state.specific_components)
+                # Only handle page up/down if we're not using fixed components
+                if length(state.components) == state.total_components
                     # Handle component scrolling
                     current_start = state.comp_start[]
                     if event.key == Keyboard.page_up
@@ -1225,25 +1235,33 @@ function update_components!(state)
         # --- Use gridscale from state ---
         gridscale = state.topo_gridscale
         # --- End Use gridscale ---
-        for i = 1:state.n_visible_components
-            comp_idx = if !isnothing(state.specific_components) && i <= length(state.specific_components)
-                state.specific_components[i]
-            else
+        # For subsets, update all components in the subset
+        num_plots = if length(state.components) == state.total_components
+            state.n_visible_components
+        else
+            length(state.components)  # Update all components in the subset
+        end
+        
+        for i = 1:num_plots
+            comp_idx = if length(state.components) == state.total_components
+                # Using all components - use scrolling logic
                 state.comp_start[] + i - 1
+            else
+                # Using a subset of components - use the subset directly
+                state.components[i]
             end
 
             if comp_idx <= state.total_components
-                tmp_layout = subset_layout(state.dat.layout, channel_selection=channels(state.ica_result.data_label))
                 if state.topo_method == :spherical_spline
                     data = _data_interpolation_topo_spherical_spline(
                         state.ica_result.mixing[:, comp_idx],
-                        tmp_layout,
+                        state.subsetted_layout,
                         gridscale, # Use state value
                     )
                 elseif state.topo_method == :multiquadratic
                     data = _data_interpolation_topo_multiquadratic(
                         state.ica_result.mixing[:, comp_idx],
-                        tmp_layout,
+                        state.subsetted_layout,
                         gridscale, # Use state value
                     )
                 end
@@ -1257,16 +1275,25 @@ function update_components!(state)
         end
     end
 
-    for i = 1:state.n_visible_components
-        comp_idx = if !isnothing(state.specific_components) && i <= length(state.specific_components)
-            state.specific_components[i]
-        else
+    # For subsets, update all components in the subset
+    num_plots = if length(state.components) == state.total_components
+        state.n_visible_components
+    else
+        length(state.components)  # Update all components in the subset
+    end
+    
+    for i = 1:num_plots
+        comp_idx = if length(state.components) == state.total_components
+            # Using all components - use scrolling logic
             state.comp_start[] + i - 1
+        else
+            # Using a subset of components - use the subset directly
+            state.components[i]
         end
 
         if comp_idx <= state.total_components
             # Update component time series data with possible inversion
-            component_data = state.components[comp_idx, :]
+            component_data = state.component_data[comp_idx, :]
             if state.invert_scale[]
                 component_data = -component_data
             end
@@ -1286,7 +1313,7 @@ function update_components!(state)
                     topo_ax,
                     state.ica_result,
                     comp_idx,
-                    state.dat.layout; # Semicolon for kwargs
+                    state.subsetted_layout; # Pass the pre-computed subsetted layout
                     use_global_scale = state.use_global_scale[],
                     global_min = global_min,
                     global_max = global_max,
@@ -1313,7 +1340,7 @@ function update_components!(state)
         else
             # Handle invalid comp_idx: clear plots and labels
             if i <= length(state.lines_obs)
-                state.lines_obs[i][] = zeros(Float64, size(state.components, 2)) # Clear line
+                state.lines_obs[i][] = zeros(Float64, size(state.component_data, 2)) # Clear line
             end
             if i <= length(state.topo_axs)
                 empty!(state.topo_axs[i])

@@ -11,7 +11,6 @@ using GLMakie
 # using CairoMakie
 using DataFrames
 using BenchmarkTools
-
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
@@ -29,7 +28,6 @@ eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),    
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 eegfun.is_extreme_value!(dat, 100);
-
 # ICA "continuous" data
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value))
 # ica_result = eegfun.run_ica(dat; exclude_samples = [:is_extreme_value])
