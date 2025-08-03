@@ -124,11 +124,13 @@ using eegfun
         mixing = rand(3, 3)
         sphere = rand(3, 3)
         variance = rand(3)
-        info = eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, zeros(3), [:ic1, :ic2, :ic3], [:ch1, :ch2, :ch3], eegfun.OrderedDict{Int, Matrix{Float64}}())
+        # Create a simple layout for testing
+        test_layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2, :ch3], x=[0.0, 1.0, 2.0], y=[0.0, 0.0, 0.0]), nothing, nothing)
+        info = eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, zeros(3), [:ic1, :ic2, :ic3], eegfun.OrderedDict{Int, Matrix{Float64}}(), test_layout)
         @test size(info.unmixing) == (3, 3)
         @test size(info.mixing) == (3, 3)
         @test length(info.ica_label) == 3
-        @test length(info.data_label) == 3
+        @test length(info.layout.data.label) == 3
     end
 
     @testset "Neighbours" begin

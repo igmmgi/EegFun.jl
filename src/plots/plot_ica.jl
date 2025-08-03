@@ -1,11 +1,10 @@
 """
-    plot_ica_topoplot(ica, layout; ...)
+    plot_ica_topoplot(ica; ...)
 
 Plot multiple ICA component topographies in a grid layout within a new Figure.
 
 # Arguments
-- `ica::InfoIca`: The ICA result object.
-- `layout::DataFrame`: DataFrame containing channel layout information (needs `x`, `y` or `x2`, `y2`).
+- `ica::InfoIca`: The ICA result object (contains layout information).
 
 # Keyword Arguments
 - `component_selection::Function`: Function that returns boolean vector for component filtering (default: all components).
@@ -25,34 +24,33 @@ Plot multiple ICA component topographies in a grid layout within a new Figure.
 ## Basic Usage
 ```julia
 # Plot first 10 components (default)
-fig = plot_ica_component_activation(dat, ica_result)
+fig = plot_ica_topoplot(ica_result)
 
 # Plot specific range of components
-fig = plot_ica_component_activation(dat, ica_result, components = 5:15)
+fig = plot_ica_topoplot(ica_result, component_selection = components(5:15))
 
 # Plot specific components
-fig = plot_ica_component_activation(dat, ica_result, components = [1, 3, 5, 7])
+fig = plot_ica_topoplot(ica_result, component_selection = components([1, 3, 5, 7]))
 
 # Plot all components (if screen can handle it)
-fig = plot_ica_component_activation(dat, ica_result, components = 1:64)
+fig = plot_ica_topoplot(ica_result, component_selection = components())
 ```
 
 ## Advanced Selection
 ```julia
 # Plot components with custom selection
-fig = plot_ica_component_activation(dat, ica_result, 
-    components = 1:10  # First 10 components
+fig = plot_ica_topoplot(ica_result, 
+    component_selection = components(1:10)  # First 10 components
 )
 
 # Plot even-numbered components
-fig = plot_ica_component_activation(dat, ica_result, 
-    components = 2:2:20  # Even components 2, 4, 6, ..., 20
+fig = plot_ica_topoplot(ica_result, 
+    component_selection = components(2:2:20)  # Even components 2, 4, 6, ..., 20
 )
 ```
 """
 function plot_ica_topoplot(
-    ica,
-    layout;
+    ica;
     component_selection::Function = components(),
     dims = nothing,
     head_kwargs = Dict(),
@@ -103,17 +101,14 @@ function plot_ica_topoplot(
         dims = best_rect(length(comps))
     end
 
-    # Extract layout data once for all plots
-    tmp_layout = subset_layout(layout, channel_selection=channels(ica.data_label))
-
     # Calculate all topo data first
     all_data = []
     for i in eachindex(comps)
         # Use gridscale accessed earlier
         if method == :spherical_spline
-            data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comps[i]], tmp_layout, gridscale)
+            data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comps[i]], ica.layout, gridscale)
         elseif method == :multiquadratic
-            data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comps[i]], tmp_layout, gridscale)
+            data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comps[i]], ica.layout, gridscale)
         end
         push!(all_data, data)
     end
@@ -170,7 +165,7 @@ function plot_ica_topoplot(
             ax,
             fig,
             data,
-            layout,
+            ica.layout,
             method,
             levels_to_use;
             gridscale = gridscale,
@@ -234,7 +229,6 @@ mutable struct IcaComponentState
     ica_result::InfoIca
     component_data::Matrix{Float64}
     total_components::Int
-    subsetted_layout::Layout  # Store the subsetted layout to avoid repeated calls
 
     # View settings
     n_visible_components::Int
@@ -290,8 +284,8 @@ mutable struct IcaComponentState
         component_data = ica_result.unmixing * dat_matrix
         total_components = size(component_data, 1)
         
-        # Create subsetted layout once to avoid repeated calls
-        subsetted_layout = subset_layout(dat.layout, channel_selection=channels(ica_result.data_label))
+        # Use the layout from the ICA result (already subsetted to match the channels used in ICA)
+        subsetted_layout = ica_result.layout
 
         # Create observables
         comp_start = Observable(1)
@@ -365,7 +359,6 @@ mutable struct IcaComponentState
             ica_result,
             component_data,
             total_components,
-            subsetted_layout,
             n_visible_components,
             window_size,
             comp_start,
@@ -489,7 +482,7 @@ Selects, centers, scales, and transposes data for ICA unmixing.
 - `Matrix{Float64}`: Data matrix ready for `ica_result.unmixing * dat_matrix`. (channels x samples)
 """
 function prepare_ica_data_matrix(dat::ContinuousData, ica_result::InfoIca)
-    dat_matrix = permutedims(Matrix(dat.data[!, ica_result.data_label]))
+    dat_matrix = permutedims(Matrix(dat.data[!, ica_result.layout.data.label]))
     dat_matrix .-= mean(dat_matrix, dims = 2) # TODO: check if this is correct
     dat_matrix ./= ica_result.scale
     return dat_matrix
@@ -624,8 +617,7 @@ function plot_topoplot_in_viewer!(
     fig,
     topo_ax,
     ica,
-    comp_idx,
-    subsetted_layout;
+    comp_idx;
     use_global_scale = false,
     global_min = nothing,
     global_max = nothing,
@@ -643,9 +635,9 @@ function plot_topoplot_in_viewer!(
 
     # Create the topo data
     if method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], subsetted_layout, gridscale)
+        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
     elseif method == :multiquadratic
-        data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], subsetted_layout, gridscale)
+        data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], ica.layout, gridscale)
     end
 
     # Calculate levels using helper
@@ -662,7 +654,7 @@ function plot_topoplot_in_viewer!(
         topo_ax,
         fig,
         data,
-        subsetted_layout,
+        ica.layout,
         method,
         levels;
         gridscale = gridscale,
@@ -789,8 +781,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
                 fig,
                 topo_ax,
                 state.ica_result,
-                comp_idx,
-                state.subsetted_layout;
+                comp_idx;
                 use_global_scale = state.use_global_scale[],
                 gridscale = state.topo_gridscale,
                 colormap = state.topo_colormap,
@@ -1255,13 +1246,13 @@ function update_components!(state)
                 if state.topo_method == :spherical_spline
                     data = _data_interpolation_topo_spherical_spline(
                         state.ica_result.mixing[:, comp_idx],
-                        state.subsetted_layout,
+                        state.ica_result.layout,
                         gridscale, # Use state value
                     )
                 elseif state.topo_method == :multiquadratic
                     data = _data_interpolation_topo_multiquadratic(
                         state.ica_result.mixing[:, comp_idx],
-                        state.subsetted_layout,
+                        state.ica_result.layout,
                         gridscale, # Use state value
                     )
                 end
@@ -1312,8 +1303,7 @@ function update_components!(state)
                     topo_ax.parent, # Pass the figure associated with the axis
                     topo_ax,
                     state.ica_result,
-                    comp_idx,
-                    state.subsetted_layout; # Pass the pre-computed subsetted layout
+                    comp_idx;
                     use_global_scale = state.use_global_scale[],
                     global_min = global_min,
                     global_max = global_max,

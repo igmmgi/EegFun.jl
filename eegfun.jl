@@ -40,20 +40,15 @@ eegfun.plot_ica_topoplot(ica_result, dat.layout; component_selection = eegfun.co
 eegfun.plot_ica_topoplot(ica_result, dat.layout; component_selection = eegfun.components(1:10), method = :multiquadratic)
 
 
-eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, use_global_scale = true)
 
 
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15))
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15); use_global_scale = true)
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]))
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]);  use_global_scale = true)
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5]);
-                  use_global_scale = true,
-                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3),
-                  use_global_scale = true,
-                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
-
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15))
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15); use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1,3]))
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1,3]);  use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1, 3, 5]); use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3), use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
 
 eegfun.plot_ica_component_activation(dat, ica_result)
 
