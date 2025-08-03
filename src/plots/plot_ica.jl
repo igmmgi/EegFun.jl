@@ -1,120 +1,3 @@
-# Add imports at the top of the file
-"""
-    plot_ica_topoplot_single(fig, position, ica, comp_idx, layout; ...)
-
-Plot a single ICA component topography on a given figure and position.
-
-# Arguments
-- `fig::Figure`: The target Makie Figure.
-- `position`: The position within the figure's layout (e.g., `fig[1, 1]`).
-- `ica::InfoIca`: The ICA result object.
-- `comp_idx::Int`: The index of the component to plot.
-- `layout::DataFrame`: DataFrame containing channel layout information (needs `x`, `y` or `x2`, `y2`).
-
-# Keyword Arguments
-- `colorbar_kwargs::Dict`: Controls the colorbar (e.g., `plot_colorbar=true`, `width=10`).
-- `head_kwargs::Dict`: Controls the head outline (e.g., `color=:black`, `linewidth=2`).
-- `point_kwargs::Dict`: Controls channel markers (e.g., `plot_points=false`).
-- `label_kwargs::Dict`: Controls channel labels (e.g., `plot_labels=false`).
-- `topo_kwargs::Dict`: Controls the topography plot (e.g., `colormap=:jet`, `gridscale=300`, `radius=88`, `levels=...`, `nan_color=:transparent`). If `levels` is not provided, local scaling is used.
-
-# Returns
-- `ax::Axis`: The Makie Axis containing the plot.
-- `co`: The contour plot object.
-"""
-function plot_ica_topoplot_single(
-    fig,
-    position,
-    ica,
-    comp_idx,
-    layout;
-    colorbar_kwargs = Dict(),
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    topo_kwargs = Dict(),
-)
-
-    # default kwargs and merged kwargs
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    merged_head_kwargs = merge(head_default_kwargs, head_kwargs) # Keep full merged dict
-
-    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    merged_point_kwargs = merge(point_default_kwargs, point_kwargs) # Keep full merged dict
-
-    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0) # Removed duplicate :color
-    merged_label_kwargs = merge(label_default_kwargs, label_kwargs) # Keep full merged dict
-
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :radius => 88) # Added radius default
-    merged_topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = merged_topo_kwargs[:gridscale]     # Access gridscale
-    radius = merged_topo_kwargs[:radius]           # Access radius
-    merged_topo_kwargs = filter(p -> p.first ∉ (:gridscale, :radius, :levels), merged_topo_kwargs)
-
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
-    merged_colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = merged_colorbar_kwargs[:plot_colorbar] # Access flag
-    colorbar_default_kwargs = filter(p -> p.first != :plot_colorbar, merged_colorbar_kwargs)
-
-    # Create a consistent GridLayout at this position - always the same structure
-    gl = fig[position...] = GridLayout()
-
-    # Create main axis in the first column
-    ax = Axis(gl[1, 1], title = @sprintf("IC %d (%.1f%%)", comp_idx, ica.variance[comp_idx] * 100))
-
-    # Extract layout data
-    tmp_layout = layout[(layout.label .∈ Ref(ica.data_label)), :] # Corrected bracket
-
-    # Create the topo data
-    data = _data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
-
-    # Calculate levels for the plot
-    # Use get on merged_topo_kwargs to check if user provided levels
-    levels = get(merged_topo_kwargs, :levels, _calculate_topo_levels(data))
-
-    # Create the plot using filtered kwargs
-    co = contourf!(
-        ax,
-        range(-radius * 2, radius * 2, length = gridscale),
-        range(-radius * 2, radius * 2, length = gridscale),
-        data;
-        levels = levels, # Pass levels explicitly
-        merged_topo_kwargs..., # Pass filtered styling args
-    )
-
-    # Add head shape
-    plot_layout_2d!(
-        fig,
-        ax,
-        layout,
-        head_kwargs = merged_head_kwargs,
-        point_kwargs = merged_point_kwargs,
-        label_kwargs = merged_label_kwargs,
-    )
-
-    # Hide decorations for cleaner look
-    hidedecorations!(ax, grid = false)
-
-    # Add colorbar if requested
-    if plot_colorbar # Use accessed flag
-        width = get(colorbar_plot_kwargs, :width, 10)
-        height = get(colorbar_plot_kwargs, :height, Relative(0.8))
-        ticksize = get(colorbar_plot_kwargs, :ticklabelsize, 10)
-
-        Colorbar(gl[1, 2], co; ticklabelsize = ticksize, merged_colorbar_kwargs...)
-
-        # Set column sizes
-        colsize!(gl, 1, Relative(0.85))  # Plot column
-        colsize!(gl, 2, Relative(0.15))  # Colorbar column
-    else
-        # If no colorbar, make the plot take the full width
-        colsize!(gl, 1, Relative(1.0))
-    end
-
-    return ax, coa
-
-end
-
 """
     plot_ica_topoplot(ica, layout; ...)
 
@@ -130,7 +13,7 @@ Plot multiple ICA component topographies in a grid layout within a new Figure.
 - `head_kwargs::Dict`: Controls the head outline for all plots.
 - `point_kwargs::Dict`: Controls channel markers for all plots.
 - `label_kwargs::Dict`: Controls channel labels for all plots.
-- `topo_kwargs::Dict`: Controls the topography plots (e.g., `colormap`, `gridscale`, `radius`, `num_levels`, `nan_color`).
+- `topo_kwargs::Dict`: Controls the topography plots (e.g., `colormap`, `gridscale`, `num_levels`, `nan_color`).
 - `colorbar_kwargs::Dict`: Controls colorbars (e.g., `plot_colorbar`, `width`, `colorbar_plot_numbers`). `colorbar_plot_numbers` specifies which plot indices (1-based) should have a visible colorbar.
 - `use_global_scale::Bool=false`: If `true`, all topoplots share the same color scale based on the min/max across all plotted components. If `false`, each plot is scaled independently.
 
@@ -181,6 +64,8 @@ function plot_ica_topoplot(
     topo_kwargs = Dict(),
     colorbar_kwargs = Dict(),
     use_global_scale = false,
+    method = :multiquadratic,  # :multiquadratic or :spherical_spline
+    display_plot = true,
 )
 
     # default kwargs and merged kwargs
@@ -194,23 +79,17 @@ function plot_ica_topoplot(
     merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
 
     topo_default_kwargs =
-        Dict(:colormap => :jet, :gridscale => 300, :radius => 88, :num_levels => 20, :nan_color => :transparent)
+        Dict(:colormap => :jet, :gridscale => 100, :num_levels => 20, :nan_color => :transparent)
     merged_topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = merged_topo_kwargs[:gridscale]
-    radius = merged_topo_kwargs[:radius]
     num_levels = merged_topo_kwargs[:num_levels]
-    merged_topo_kwargs = filter(p -> p.first ∉ (:gridscale, :radius, :num_levels, :levels), merged_topo_kwargs)
+    merged_topo_kwargs = filter(p -> p.first ∉ (:gridscale, :num_levels, :levels), merged_topo_kwargs)
 
     colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30, :colorbar_plot_numbers => [])
     merged_colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
     plot_colorbar = merged_colorbar_kwargs[:plot_colorbar]
     colorbar_plot_numbers = merged_colorbar_kwargs[:colorbar_plot_numbers]
     merged_colorbar_kwargs = filter(p -> p.first ∉ (:plot_colorbar, :colorbar_plot_numbers), merged_colorbar_kwargs)
-
-    # Process inputs (keep propertynames check for now)
-    if (:x2 ∉ propertynames(layout) || :y2 ∉ propertynames(layout))
-        polar_to_cartesian_xy!(layout)
-    end
 
     # Get selected components using the component_selection function
     all_components = 1:size(ica.mixing, 2)
@@ -228,14 +107,17 @@ function plot_ica_topoplot(
     end
 
     # Extract layout data once for all plots
-    tmp_layout = layout[(layout.label .∈ Ref(ica.data_label)), :]
+    tmp_layout = subset_layout(layout, channel_selection=channels(ica.data_label))
 
     # Calculate all topo data first
     all_data = []
     for i in eachindex(comps)
         # Use gridscale accessed earlier
-        data =
-            _data_interpolation_topo(ica.mixing[:, comps[i]], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
+        if method == :spherical_spline
+            data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comps[i]], tmp_layout, gridscale)
+        elseif method == :multiquadratic
+            data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comps[i]], tmp_layout, gridscale)
+        end
         push!(all_data, data)
     end
 
@@ -292,9 +174,9 @@ function plot_ica_topoplot(
             fig,
             data,
             layout,
+            method,
             levels_to_use;
             gridscale = gridscale,
-            radius = radius,
             head_kwargs = merged_head_kwargs,
             point_kwargs = merged_point_kwargs,
             label_kwargs = merged_label_kwargs,
@@ -340,77 +222,10 @@ function plot_ica_topoplot(
         end
     end
 
+    if display_plot
+        display_figure(fig)
+    end
     return fig
-
-end
-
-# Version for the component viewer to use
-function plot_ica_topoplot(
-    fig,
-    ax,
-    ica,
-    comp_idx,
-    layout;
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    topo_kwargs = Dict(),
-    colorbar_kwargs = Dict(),
-)
-
-    # default kwargs and merged kwargs
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    merged_head_kwargs = merge(head_default_kwargs, head_kwargs)
-
-    point_default_kwargs = Dict(:plot_points => false, :marker => :circle, :markersize => 12, :color => :black)
-    merged_point_kwargs = merge(point_defaults, point_kwargs)
-
-    label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0) # Removed duplicate :color
-    merged_label_kwargs = merge(label_default_kwargs, label_kwargs)
-
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 300, :radius => 88, :nan_color => :transparent) # Added radius, nan_color defaults
-    merged_topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = merged_topo_kwargs[:gridscale]     # Access gridscale
-    radius = merged_topo_kwargs[:radius]           # Access radius
-    merged_topo_kwargs = filter(p -> p.first ∉ (:gridscale, :radius), merged_topo_kwargs)
-
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30, :colorbar_plot_numbers => [])
-    merged_colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-
-    # Clear the axis before drawing
-    empty!(ax)
-
-    # Extract layout data
-    tmp_layout = layout[(layout.label .∈ Ref(ica.data_label)), :]
-
-    # Create the topo data
-    data = _data_interpolation_topo(ica.mixing[:, comp_idx], permutedims(Matrix(tmp_layout[!, [:x2, :y2]])), gridscale)
-
-    # Create the plot directly on the existing axis using filtered kwargs
-    co = contourf!(
-        ax,
-        range(-radius * 2, radius * 2, length = gridscale),
-        range(-radius * 2, radius * 2, length = gridscale),
-        data;
-        merged_topo_kwargs...,
-    )
-
-    # Add head shape
-    plot_layout_2d!(
-        fig,
-        ax,
-        layout,
-        head_kwargs = merged_head_kwargs,
-        point_kwargs = merged_point_kwargs,
-        label_kwargs = merged_label_kwargs,
-    )
-
-    ax.title = string(ica.ica_label[comp_idx])
-
-    # Hide decorations for cleaner look
-    hidedecorations!(ax, grid = false)
-
-    return co
 
 end
 
@@ -442,10 +257,10 @@ mutable struct IcaComponentState
 
     #  Topoplot Kwargs 
     topo_gridscale::Int
-    topo_radius::Real
     topo_colormap::Symbol
     topo_num_levels::Int
     topo_nan_color::Union{Symbol,Makie.Colorant}
+    topo_method::Symbol  # :multiquadratic or :spherical_spline
     topo_head_kwargs::Dict
     topo_point_kwargs::Dict
     topo_label_kwargs::Dict
@@ -470,6 +285,7 @@ mutable struct IcaComponentState
         head_kwargs = Dict(),
         point_kwargs = Dict(),
         label_kwargs = Dict(),
+        method = :multiquadratic,  # :multiquadratic or :spherical_spline
     )
         # Prepare data matrix
         dat_matrix = prepare_ica_data_matrix(dat, ica_result)
@@ -519,7 +335,7 @@ mutable struct IcaComponentState
 
         # --- Process and store Topo Kwargs ---
         topo_defaults =
-            Dict(:gridscale => 300, :radius => 88, :colormap => :jet, :num_levels => 20, :nan_color => :transparent)
+            Dict(:gridscale => 300, :colormap => :jet, :num_levels => 20, :nan_color => :transparent)
         processed_topo_kwargs = merge(topo_defaults, topo_kwargs)
 
         head_defaults = Dict(:color => :black, :linewidth => 2)
@@ -533,10 +349,10 @@ mutable struct IcaComponentState
 
         # Store processed values
         topo_gridscale = processed_topo_kwargs[:gridscale]
-        topo_radius = processed_topo_kwargs[:radius]
         topo_colormap = processed_topo_kwargs[:colormap]
         topo_num_levels = processed_topo_kwargs[:num_levels]
         topo_nan_color = processed_topo_kwargs[:nan_color]
+        topo_method = method
         # --- End Process and store ---
 
         # Initialize empty plot element arrays
@@ -564,10 +380,10 @@ mutable struct IcaComponentState
             specific_components,
             # Pass stored kwargs
             topo_gridscale,
-            topo_radius,
             topo_colormap,
             topo_num_levels,
             topo_nan_color,
+            topo_method,
             processed_head_kwargs,
             processed_point_kwargs,
             processed_label_kwargs,
@@ -614,6 +430,7 @@ function plot_ica_component_activation(
     point_kwargs = Dict(),
     label_kwargs = Dict(),
     specific_components = nothing,
+    method = :multiquadratic,  # :multiquadratic or :spherical_spline
 )
     # Create state, using specific components if provided
     if !isnothing(specific_components)
@@ -631,6 +448,7 @@ function plot_ica_component_activation(
         head_kwargs = head_kwargs,
         point_kwargs = point_kwargs,
         label_kwargs = label_kwargs,
+        method = method,
     )
 
     # Create figure with padding on the right for margin
@@ -754,7 +572,6 @@ Draws the topographic contour plot and head shape onto a specified `Axis`.
 
 # Keyword Arguments
 - `gridscale::Int=300`: Resolution of the interpolation grid.
-- `radius::Real=88`: Radius used for coordinate scaling.
 - `colormap=:jet`: Colormap for the contour plot.
 - `nan_color=:transparent`: Color for NaN values in the data.
 - `head_kwargs=Dict()`: Keyword arguments passed to `plot_layout_2d!` for the head outline.
@@ -768,22 +585,23 @@ function _plot_topo_on_axis!(
     ax::Axis,
     fig::Figure,
     data::AbstractMatrix{<:Real},
-    layout::DataFrame,
+    layout::Layout,
+    method::Symbol,
     levels;
     gridscale = 300,
-    radius = 88,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
-    label_kwargs = Dict(), # These are NOW the merged versions from the caller
-    # Remaining kwargs are for contourf!
+    label_kwargs = Dict(), 
     kwargs...,
 ) # Use kwargs... to capture filtered contourf args
 
-    # Plot contour using the passed kwargs...
+    # Use different ranges based on interpolation method
+    contour_range = method == :spherical_spline ? DEFAULT_HEAD_RADIUS * 4 : DEFAULT_HEAD_RADIUS * 2
+
     co = contourf!(
         ax,
-        range(-radius * 2, radius * 2, length = gridscale),
-        range(-radius * 2, radius * 2, length = gridscale),
+        range(-contour_range, contour_range, length = gridscale),
+        range(-contour_range, contour_range, length = gridscale),
         data;
         levels = levels,
         kwargs..., # Pass the filtered contourf args directly
@@ -812,34 +630,33 @@ end
 function plot_topoplot_in_viewer!(
     fig,
     topo_ax,
-    ica_result,
+    ica,
     comp_idx,
     layout;
     use_global_scale = false,
     global_min = nothing,
     global_max = nothing,
-    gridscale = 300,
-    radius = 88,
+    gridscale = 100,
     colormap = :jet,
     num_levels = 20,
     nan_color = :transparent,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
+    method = :spherical_spline,
 )
     # Clear the axis
     empty!(topo_ax)
 
     # Extract layout data
-    tmp_layout = layout[(in.(layout.label, Ref(ica_result.data_label))), :] # Use 'in.'
-    _ensure_coordinates_2d!(tmp_layout)
+    tmp_layout = subset_layout(layout, channel_selection=channels(ica.data_label))
 
     # Create the topo data
-    data = _data_interpolation_topo(
-        ica_result.mixing[:, comp_idx],
-        permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
-        gridscale,
-    )
+    if method == :spherical_spline
+        data = _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], tmp_layout, gridscale)
+    elseif method == :multiquadratic
+        data = _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], tmp_layout, gridscale)
+    end
 
     # Calculate levels using helper
     levels = _calculate_topo_levels(
@@ -856,9 +673,9 @@ function plot_topoplot_in_viewer!(
         fig,
         data,
         layout,
+        method,
         levels;
         gridscale = gridscale,
-        radius = radius,
         colormap = colormap,
         nan_color = nan_color,
         head_kwargs = head_kwargs,
@@ -972,7 +789,6 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
                 state.dat.layout;
                 use_global_scale = state.use_global_scale[],
                 gridscale = state.topo_gridscale,
-                radius = state.topo_radius,
                 colormap = state.topo_colormap,
                 num_levels = state.topo_num_levels,
                 nan_color = state.topo_nan_color,
@@ -1062,7 +878,7 @@ function add_navigation_controls!(fig, state)
         if !isempty(text_value)
             comps = parse_component_input(text_value, state.total_components)
             if !isempty(comps)
-                println("Creating new plot with components: $comps")
+                @info "Creating new plot with components: $comps"
                 current_channel = state.channel_data[]
                 show_channel = state.show_channel[]
                 use_global = state.use_global_scale[]
@@ -1417,12 +1233,20 @@ function update_components!(state)
             end
 
             if comp_idx <= state.total_components
-                tmp_layout = state.dat.layout[(in.(state.dat.layout.label, Ref(state.ica_result.data_label))), :]
-                data = _data_interpolation_topo(
-                    state.ica_result.mixing[:, comp_idx],
-                    permutedims(Matrix(tmp_layout[!, [:x2, :y2]])),
-                    gridscale, # Use state value
-                )
+                tmp_layout = subset_layout(state.dat.layout, channel_selection=channels(state.ica_result.data_label))
+                if state.topo_method == :spherical_spline
+                    data = _data_interpolation_topo_spherical_spline(
+                        state.ica_result.mixing[:, comp_idx],
+                        tmp_layout,
+                        gridscale, # Use state value
+                    )
+                elseif state.topo_method == :multiquadratic
+                    data = _data_interpolation_topo_multiquadratic(
+                        state.ica_result.mixing[:, comp_idx],
+                        tmp_layout,
+                        gridscale, # Use state value
+                    )
+                end
                 append!(all_values, [v for v in data if !isnan(v)])
             end
         end
@@ -1450,7 +1274,7 @@ function update_components!(state)
             if i <= length(state.lines_obs)
                 state.lines_obs[i][] = component_data
             else
-                println("Warning: Trying to update non-existent lines_obs at index $i")
+                @warn "Trying to update non-existent lines_obs at index $i"
             end
 
             # Clear and redraw topography using the viewer function
@@ -1468,10 +1292,10 @@ function update_components!(state)
                     global_max = global_max,
                     # Pass stored kwargs from state
                     gridscale = state.topo_gridscale,
-                    radius = state.topo_radius,
                     colormap = state.topo_colormap,
                     num_levels = state.topo_num_levels,
                     nan_color = state.topo_nan_color,
+                    method = state.topo_method,
                     head_kwargs = state.topo_head_kwargs,
                     point_kwargs = state.topo_point_kwargs,
                     label_kwargs = state.topo_label_kwargs,
@@ -1480,7 +1304,7 @@ function update_components!(state)
                 # Update title
                 topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
             else
-                println("Warning: Trying to update non-existent topo_axs at index $i")
+                @warn "Trying to update non-existent topo_axs at index $i"
             end
             # Update y-axis label
             if i <= length(state.axs)
@@ -1537,7 +1361,7 @@ function plot_eog_component_features(
 
     # Check if data is empty
     if isempty(metrics_df) || isempty(vEOG_corr_z) || isempty(hEOG_corr_z)
-        println("Warning: Could not plot eye component features, input DataFrame or z-scores are empty.")
+        @warn "Could not plot eye component features, input DataFrame or z-scores are empty."
         return Figure() # Return empty figure
     end
 

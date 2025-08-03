@@ -279,7 +279,9 @@ Find the best rectangle for a given number n.
 - `Vector{Int}`: Dimensions of the best rectangle
 """
 function best_rect(n)
-    return [ceil(Int, sqrt(n)), ceil(Int, n ./ dim1)]
+    dim1 = ceil(Int, sqrt(n))
+    dim2 = ceil(Int, n ./ dim1)
+    return [dim1, dim2]
 end
 
 """
@@ -406,3 +408,18 @@ this creates a new instance with the same field values.
 function Base.copy(info::AnalysisInfo)::AnalysisInfo
     return AnalysisInfo(info.reference, info.hp_filter, info.lp_filter)
 end
+
+
+
+# set_aog_theme!()
+# fig = Figure()
+# all_data = eegfun.all_data(epochs[1])
+# mydata = stack(all_data, [:Fp1, :Fp2], variable_name = :channel, value_name = :value)
+# plt =
+#     data(mydata) *
+#     mapping(:time => "Time [ms]", :value => "Amplitude [μV]", color = :channel => nonnumeric) *
+#     visual(Lines) *
+#     mapping(layout = :epoch => nonnumeric) 
+# # plt = paginate(plt, layout = 4)
+# # draw(plt, 2)
+# draw(plt)

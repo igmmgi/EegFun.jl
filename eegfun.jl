@@ -8,34 +8,68 @@
 # package
 using eegfun
 using GLMakie
+# using CairoMakie
 using DataFrames
 using BenchmarkTools
-using AlgebraOfGraphics
 
-# using CairoMakie
-# eegfun.preprocess_eeg_data("pipeline.toml")
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
-eegfun.plot_trigger_timing(dat)
-
+# define neighbours 2D/3D defined by distance (mm)
+eegfun.polar_to_cartesian_xy!(layout);
+eegfun.get_layout_neighbours_xy!(layout, 40);
+eegfun.polar_to_cartesian_xyz!(layout);
+eegfun.get_layout_neighbours_xyz!(layout, 40);
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
-df = eegfun.channel_summary(dat)
-eegfun.plot_channel_summary(df, :range)
-
-
-
-eegfun.plot_trigger_overview(dat)
-
-eegfun.plot_trigger_timing(dat)
-
-
-
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.mark_epoch_windows!(dat, [1, 3], [-0.5, 1.0]) # simple epoch marking with trigger 1 and 3;
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+eegfun.is_extreme_value!(dat, 100);
+
+# ICA "continuous" data
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value))
+# ica_result = eegfun.run_ica(dat; exclude_samples = [:is_extreme_value])
+
+eegfun.plot_topography(dat; method = :spherical_spline)
+eegfun.plot_topography(dat; method = :multiquadratic)
+
+# plot ICA components (TODO: plot size for spherical spline)
+eegfun.plot_ica_topoplot(ica_result, dat.layout; component_selection = eegfun.components(1:10), method = :spherical_spline)
+eegfun.plot_ica_topoplot(ica_result, dat.layout; component_selection = eegfun.components(1:10), method = :multiquadratic)
+
+
+eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
+
+
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15))
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15); use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]))
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]);  use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5]);
+                  use_global_scale = true,
+                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3),
+                  use_global_scale = true,
+                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
+
+
+eegfun.plot_ica_component_activation(dat, ica_result)
+
+
+dat1, ica_result1 = eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components([1, 3, 5]))
+ica_result1.removed_activations
+
+
+eegfun.plot_databrowser(dat, ica_result)
+
+
+
+
+
 
 eegfun.plot_databrowser(dat)
 
