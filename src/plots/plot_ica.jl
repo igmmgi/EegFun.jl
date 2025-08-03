@@ -222,13 +222,64 @@ function plot_ica_topoplot(
 end
 
 
-# Channel visualization info (similar to plot_databrowser approach)
-mutable struct ChannelInfo
-    channel::Union{Nothing,Symbol}
-    visible::Bool
+# Ica-specific view state for time and component navigation (avoid name collision)
+mutable struct IcaViewState
+    xrange::Observable{UnitRange{Int}}
+    ylims::Observable{Tuple{Float64,Float64}}
+    comp_start::Observable{Int}
+    n_visible_components::Int
+    window_size::Int
+    function IcaViewState(n_visible_components::Int, window_size::Int, total_samples::Int)
+        # Find index closest to time 0 to center the initial view
+        half_window = div(window_size, 2)
+        start_idx = max(1, div(total_samples, 2) - half_window)
+        end_idx = min(total_samples, start_idx + window_size - 1)
+        
+        # Adjust start_idx if end_idx reached the boundary
+        if end_idx == total_samples
+            start_idx = max(1, end_idx - window_size + 1)
+        end
+        
+        new(
+            Observable(start_idx:end_idx),
+            Observable((-1.0, 1.0)),  # Will be updated with actual data
+            Observable(1),
+            n_visible_components,
+            window_size
+        )
+    end
+end
+
+# Ica-specific channel state for channel selection and visualization
+mutable struct IcaChannelState
+    selected::Observable{Union{Nothing,Symbol}}
+    show_channel::Observable{Bool}
+    yscale::Observable{Float64}
     data_lines::Dict{Symbol,Any}  # Maps channel symbols to plot elements
     data_labels::Dict{Symbol,Any}  # Maps channel symbols to text labels
-    ChannelInfo() = new(nothing, false, Dict{Symbol,Any}(), Dict{Symbol,Any}())
+    function IcaChannelState()
+        new(
+            Observable(nothing),
+            Observable(false),
+            Observable(1.0),
+            Dict{Symbol,Any}(),
+            Dict{Symbol,Any}()
+        )
+    end
+end
+
+# Display state for plot appearance settings
+mutable struct DisplayState
+    use_global_scale::Observable{Bool}
+    invert_scale::Observable{Bool}
+    method::Symbol  # :multiquadratic or :spherical_spline
+    function DisplayState(method::Symbol = :multiquadratic)
+        new(
+            Observable(false),
+            Observable(false),
+            method
+        )
+    end
 end
 
 # Plot elements for the interactive visualization
@@ -237,32 +288,20 @@ mutable struct PlotElements
     channel_axs::Vector{Union{Axis,Nothing}}  # Channel overlay axes (allow for nothing values)
     topo_axs::Vector{Axis}               # Topography axes
     lines_obs::Vector{Observable{Vector{Float64}}}  # Observable lines for component data
-    channel_info::ChannelInfo            # Channel visualization info
 end
 
-# Create a state structure to hold the visualization state
+# Create a state structure to hold the visualization state (following plot_databrowser pattern)
 mutable struct IcaComponentState
     # Data
     dat::ContinuousData
     ica_result::InfoIca
     component_data::Matrix{Float64}
-
-    # View settings
-    n_visible_components::Int
-    window_size::Int
-
-    # Observables
-    comp_start::Observable{Int}
-    xrange::Observable{UnitRange{Int}}
-    ylims::Observable{Tuple{Float64,Float64}}
-    selected_channel::Observable{Union{Nothing,Symbol}}
-    show_channel::Observable{Bool}
-    channel_yscale::Observable{Float64}
-    use_global_scale::Observable{Bool}
-    invert_scale::Observable{Bool}
-
-    # Components to display
     components::Vector{Int}
+
+    # State components (following plot_databrowser pattern)
+    view::IcaViewState
+    channels::IcaChannelState
+    display::DisplayState
 
     # Topography plotting parameters
     topo_kwargs::Dict
@@ -273,7 +312,7 @@ mutable struct IcaComponentState
     # Plot elements
     plot_elements::PlotElements
 
-    # Constructor updated to accept and store topo_kwargs
+    # Constructor following plot_databrowser pattern
     function IcaComponentState(
         dat,
         ica_result,
@@ -290,44 +329,28 @@ mutable struct IcaComponentState
         dat_matrix = prepare_ica_data_matrix(dat, ica_result)
         component_data = ica_result.unmixing * dat_matrix
 
-        # Create observables
-        comp_start = Observable(1)
-        use_global_scale = Observable(false)
-        invert_scale = Observable(false)
-
-        # Find index closest to time 0 to center the initial view
-        time_zero_idx = findmin(abs.(dat.data.time))[2]
-        half_window = div(window_size, 2)
-        start_idx = max(1, time_zero_idx - half_window)
-        end_idx = min(size(component_data, 2), start_idx + window_size - 1)
-
-        # Adjust start_idx if end_idx reached the boundary
-        if end_idx == size(component_data, 2)
-            start_idx = max(1, end_idx - window_size + 1)
-        end
-
-        xrange = Observable(start_idx:end_idx)
-
         # Use the component selection predicate to get the actual component indices
         total_components = size(component_data, 1)
         component_mask = component_selection(1:total_components)
         comps_to_use = findall(component_mask)  # Convert boolean mask to actual indices
 
+        # Create state components (following plot_databrowser pattern)
+        view = IcaViewState(n_visible_components, window_size, size(component_data, 2))
+        channels = IcaChannelState()
+        display = DisplayState(method)
+
         # Calculate initial y-range based on components we'll show
         initial_range_data = if !isempty(comps_to_use) && all(idx -> idx <= total_components, comps_to_use)
-            component_data[comps_to_use, start_idx:end_idx]
+            component_data[comps_to_use, view.xrange[]]
         else
-            zeros(0, length(start_idx:end_idx)) # Empty if no valid components
+            zeros(0, length(view.xrange[])) # Empty if no valid components
         end
         initial_range = if !isempty(initial_range_data)
             maximum(abs.(extrema(initial_range_data)))
         else
             1.0 # Default range if no data
         end
-        ylims = Observable((-initial_range, initial_range))
-        selected_channel = Observable(nothing)
-        show_channel = Observable(false)
-        channel_yscale = Observable(1.0)
+        view.ylims[] = (-initial_range, initial_range)
 
         # --- Process and store plotting parameters ---
         topo_defaults =
@@ -350,30 +373,20 @@ mutable struct IcaComponentState
             Vector{Union{Axis,Nothing}}(),     # channel_axs
             Vector{Axis}(),                    # topo_axs
             Vector{Observable{Vector{Float64}}}(), # lines_obs
-            ChannelInfo()                      # channel_info
         )
 
         new(
             dat,
             ica_result,
             component_data,
-            n_visible_components,
-            window_size,
-            comp_start,
-            xrange,
-            ylims,
-            selected_channel,
-            show_channel,
-            channel_yscale,
-            use_global_scale,
-            invert_scale,
             comps_to_use,
-            # Pass plotting parameters
+            view,
+            channels,
+            display,
             processed_topo_kwargs,
             processed_head_kwargs,
             processed_point_kwargs,
             processed_label_kwargs,
-            # Plot elements
             plot_elements,
         )
     end
@@ -452,7 +465,7 @@ function plot_ica_component_activation(
     # --- Layout Adjustments ---
     colsize!(fig.layout, 1, Relative(0.15))
     colsize!(fig.layout, 2, Relative(0.85))
-    rowgap!(fig.layout, state.n_visible_components, 30)
+    rowgap!(fig.layout, state.view.n_visible_components, 30)
     # --- End Layout Adjustments ---
 
     display(fig)
@@ -669,7 +682,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
     # For all components, create n_visible_components plots
     total_components = size(state.component_data, 1)
     num_plots = if length(state.components) == total_components
-        state.n_visible_components
+        state.view.n_visible_components
     else
         length(state.components)  # Show all components in the subset
     end
@@ -682,7 +695,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
         # Get the actual component number
         comp_idx = if length(state.components) == total_components
             # Using all components - use scrolling logic
-            state.comp_start[] + i - 1
+            state.view.comp_start[] + i - 1
         else
             # Using a subset of components - use the subset directly
             state.components[i]
@@ -699,8 +712,8 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
             yaxisposition = :left,
             yticklabelsvisible = false,
             yticksvisible = true,
-            xticklabelsvisible = (i == state.n_visible_components),
-            xticksvisible = (i == state.n_visible_components),
+            xticklabelsvisible = (i == state.view.n_visible_components),
+            xticksvisible = (i == state.view.n_visible_components),
             xgridvisible = false,
             ygridvisible = false,
             xminorgridvisible = false,
@@ -738,16 +751,16 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
         # Channel overlay plot
         lines!(
             ax_channel,
-            @lift(state.dat.data.time[$(state.xrange)]),
+            @lift(state.dat.data.time[$(state.view.xrange)]),
             @lift(
-                $(state.show_channel) && !isnothing($(state.selected_channel)) ? state.dat.data[!, $(state.selected_channel)][$(state.xrange)] .* $(state.channel_yscale) :
-                zeros(Float64, length($(state.xrange)))
+                $(state.channels.show_channel) && !isnothing($(state.channels.selected)) ? state.dat.data[!, $(state.channels.selected)][$(state.view.xrange)] .* $(state.channels.yscale) :
+                zeros(Float64, length($(state.view.xrange)))
             ),
             color = :grey,
         )
 
         # Set initial x-axis limits
-        xlims!(ax_channel, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
+        xlims!(ax_channel, (state.dat.data.time[first(state.view.xrange[])], state.dat.data.time[last(state.view.xrange[])]))
 
         # Observable creation for component plot
         # Handle potential invalid comp_idx robustly
@@ -760,10 +773,10 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
         push!(state.plot_elements.lines_obs, lines_obs)
 
         # Component line plot
-        lines!(ax, @lift(state.dat.data.time[$(state.xrange)]), @lift($(lines_obs)[$(state.xrange)]), color = :black)
+        lines!(ax, @lift(state.dat.data.time[$(state.view.xrange)]), @lift($(lines_obs)[$(state.view.xrange)]), color = :black)
 
         # Set initial x-axis limits for component plot
-        xlims!(ax, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
+        xlims!(ax, (state.dat.data.time[first(state.view.xrange[])], state.dat.data.time[last(state.view.xrange[])]))
 
         # Create the topo plot using the dedicated viewer function
         if comp_idx <= total_components
@@ -773,7 +786,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
                     topo_ax,
                     state.ica_result,
                     comp_idx;
-                    use_global_scale = state.use_global_scale[],
+                    use_global_scale = state.display.use_global_scale[],
                     state.topo_kwargs...,
                     head_kwargs = state.head_kwargs,
                     point_kwargs = state.point_kwargs,
@@ -793,7 +806,7 @@ end
 function add_navigation_controls!(fig, state)
     # Add navigation buttons below topo plots in column 1
     # Remove padding here
-    topo_nav = GridLayout(fig[state.n_visible_components+1, 1], tellheight = false)
+    topo_nav = GridLayout(fig[state.view.n_visible_components+1, 1], tellheight = false)
 
     # --- Add an empty column 1 for spacing ---
     colsize!(topo_nav, 1, 40) # Set width of the empty first column
@@ -809,11 +822,11 @@ function add_navigation_controls!(fig, state)
     apply_button = Button(topo_nav[2, 4], label = "Apply", tellheight = false)
 
     # Global scale checkbox now in row 3, columns 2 & 3
-    global_scale_check = Checkbox(topo_nav[3, 2], checked = state.use_global_scale[], tellheight = false)
+    global_scale_check = Checkbox(topo_nav[3, 2], checked = state.display.use_global_scale[], tellheight = false)
     Label(topo_nav[3, 3], "Use Global Scale", tellwidth = false, tellheight = false)
 
     # Invert scale checkbox now in row 4, columns 2 & 3
-    invert_scale_check = Checkbox(topo_nav[4, 2], checked = state.invert_scale[], tellheight = false)
+    invert_scale_check = Checkbox(topo_nav[4, 2], checked = state.display.invert_scale[], tellheight = false)
     Label(topo_nav[4, 3], "Invert Scale", tellwidth = false, tellheight = false)
 
     # --- Gap settings (adjust column indices) ---
@@ -829,29 +842,29 @@ function add_navigation_controls!(fig, state)
 
     # Connect checkboxes to state
     on(global_scale_check.checked) do checked
-        state.use_global_scale[] = checked
+        state.display.use_global_scale[] = checked
         update_components!(state)
     end
 
     on(invert_scale_check.checked) do checked
-        state.invert_scale[] = checked
+        state.display.invert_scale[] = checked
         update_components!(state)
     end
 
     # Connect navigation buttons
     on(prev_topo.clicks) do _
-        new_start = max(1, state.comp_start[] - state.n_visible_components)
-        state.comp_start[] = new_start
+        new_start = max(1, state.view.comp_start[] - state.view.n_visible_components)
+        state.view.comp_start[] = new_start
         update_components!(state)
     end
 
     on(next_topo.clicks) do _
         total_components = size(state.component_data, 1)
         new_start = min(
-            total_components - state.n_visible_components + 1,
-            state.comp_start[] + state.n_visible_components,
+            total_components - state.view.n_visible_components + 1,
+            state.view.comp_start[] + state.view.n_visible_components,
         )
-        state.comp_start[] = new_start
+        state.view.comp_start[] = new_start
         update_components!(state)
     end
 
@@ -863,10 +876,10 @@ function add_navigation_controls!(fig, state)
         comps = parse_component_input(text_value, total_components)
             if !isempty(comps)
                 @info "Creating new plot with components: $comps"
-                current_channel = state.selected_channel[]
-                show_channel = state.show_channel[]
-                use_global = state.use_global_scale[]
-                invert = state.invert_scale[]
+                current_channel = state.channels.selected[]
+                show_channel = state.channels.show_channel[]
+                use_global = state.display.use_global_scale[]
+                invert = state.display.invert_scale[]
                 new_fig = plot_ica_component_activation(
                     state.dat,
                     state.ica_result,
@@ -932,7 +945,7 @@ end
 # Update add_navigation_sliders! to match new layout
 function add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
-    slider_row = state.n_visible_components + 3  # Move slider to a new row
+    slider_row = state.view.n_visible_components + 3  # Move slider to a new row
 
     # Calculate the step size for the slider (1% of the data length)
     step_size = max(1, div(length(state.dat.data.time), 100))
@@ -941,7 +954,7 @@ function add_navigation_sliders!(fig, state)
     x_slider = Slider(
         fig[slider_row, 2],
         range = 1:step_size:length(state.dat.data.time),
-        startvalue = first(state.xrange[]),
+        startvalue = first(state.view.xrange[]),
         tellwidth = false,
         tellheight = false,
         width = Auto(),
@@ -955,17 +968,17 @@ end
 # Helper function to update view range (similar to plot_databrowser style)
 function update_view_range!(state, start_pos)
     # Ensure we stay within data bounds
-    if start_pos + state.window_size > length(state.dat.data.time)
-        start_pos = length(state.dat.data.time) - state.window_size + 1
+    if start_pos + state.view.window_size > length(state.dat.data.time)
+        start_pos = length(state.dat.data.time) - state.view.window_size + 1
     end
-    end_pos = start_pos + state.window_size - 1
+    end_pos = start_pos + state.view.window_size - 1
 
     # Update range
-    state.xrange[] = start_pos:end_pos
+    state.view.xrange[] = start_pos:end_pos
 
     # Update axis limits based on the current view range
-    first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
-    last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
+    first_idx = clamp(first(state.view.xrange[]), 1, length(state.dat.data.time))
+    last_idx = clamp(last(state.view.xrange[]), 1, length(state.dat.data.time))
     new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
 
     # Update all axes including channel axes
@@ -979,12 +992,12 @@ function update_view_range!(state, start_pos)
     end
 
     # If we have a boolean channel selected, update its indicators
-    if state.show_channel[] && state.plot_elements.channel_info.visible
+    if state.channels.show_channel[] && state.channels.selected[] !== nothing
         # Clear existing channel visualization
         clear_channel_visualization!(state)
 
         # Find the current channel
-        current_channel = state.selected_channel[]
+        current_channel = state.channels.selected[]
 
         # If we found a boolean channel, redraw its indicators
         if !isnothing(current_channel) && eltype(state.dat.data[!, current_channel]) == Bool
@@ -996,7 +1009,7 @@ end
 # Update add_channel_menu! to match new layout
 function add_channel_menu!(fig, state)
     # Create a menu layout in column 2
-    menu_row = state.n_visible_components + 2  # Keep menu in its own row
+    menu_row = state.view.n_visible_components + 2  # Keep menu in its own row
 
     # Create a simple grid layout
     menu_layout = GridLayout(fig[menu_row, 2], tellheight = false)
@@ -1018,10 +1031,10 @@ function clear_channel_visualization!(state)
     # Clear all channel axes
     for ax in state.plot_elements.channel_axs
         if !isnothing(ax)
-            clear_axes!(ax, [state.plot_elements.channel_info.data_lines, state.plot_elements.channel_info.data_labels])
+            clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
         end
     end
-    state.plot_elements.channel_info.visible = false
+    state.channels.show_channel[] = false
 end
 
 # Helper function to update channel selection (matches databrowser pattern)
@@ -1030,30 +1043,30 @@ function update_channel_selection!(state, selected)
     clear_channel_visualization!(state)
 
     if selected == "None"
-        state.show_channel[] = false
-        state.selected_channel[] = nothing
+        state.channels.show_channel[] = false
+        state.channels.selected[] = nothing
     else
         selected_sym = Symbol(selected)
-        state.selected_channel[] = selected_sym
+        state.channels.selected[] = selected_sym
 
         # Only show overlay plot for non-Boolean channels
         if eltype(state.dat.data[!, selected_sym]) == Bool
-            state.show_channel[] = false
+            state.channels.show_channel[] = false
             add_boolean_indicators!(state, selected_sym)
         else
-            state.show_channel[] = true
+            state.channels.show_channel[] = true
         end
     end
 end
 
 # Helper function to add boolean indicators (similar to plot_databrowser pattern)
 function add_boolean_indicators!(state, channel_sym)
-    # Update channel info
-    state.plot_elements.channel_info.channel = channel_sym
-    state.plot_elements.channel_info.visible = true
+    # Update channel state
+    state.channels.selected[] = channel_sym
+    state.channels.show_channel[] = true
     
     # For each component axis, create vertical lines at each true position
-    for i = 1:state.n_visible_components
+    for i = 1:state.view.n_visible_components
         if i <= length(state.plot_elements.channel_axs)
             ax_channel = state.plot_elements.channel_axs[i]
 
@@ -1066,7 +1079,7 @@ function add_boolean_indicators!(state, channel_sym)
 
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
-                current_range = state.xrange[]
+                current_range = state.view.xrange[]
                 visible_times = true_times[true_times .>= state.dat.data.time[first(
                     current_range,
                 )].&&true_times .<= state.dat.data.time[last(current_range)]]
@@ -1075,7 +1088,7 @@ function add_boolean_indicators!(state, channel_sym)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
 
                     # Store the reference to the lines using channel symbol as key
-                    state.plot_elements.channel_info.data_lines[channel_sym] = lines
+                    state.channels.data_lines[channel_sym] = lines
                 end
             end
         end
@@ -1088,20 +1101,20 @@ function setup_keyboard_interactions!(fig, state)
         if event.action in (Keyboard.press,)
             if event.key == Keyboard.left || event.key == Keyboard.right
                 # Handle x-axis scrolling
-                current_range = state.xrange[]
+                current_range = state.view.xrange[]
                 if event.key == Keyboard.left
-                    new_start = max(1, first(current_range) - state.window_size)
-                    state.xrange[] = new_start:(new_start+state.window_size-1)
+                    new_start = max(1, first(current_range) - state.view.window_size)
+                    state.view.xrange[] = new_start:(new_start+state.view.window_size-1)
                 else  # right
                     new_start =
-                        min(size(state.component_data, 2) - state.window_size + 1, first(current_range) + state.window_size)
-                    state.xrange[] = new_start:(new_start+state.window_size-1)
+                        min(size(state.component_data, 2) - state.view.window_size + 1, first(current_range) + state.view.window_size)
+                    state.view.xrange[] = new_start:(new_start+state.view.window_size-1)
                 end
 
                 # Update x-axis limits for all axes
                 # Ensure the indices are within bounds
-                first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
-                last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
+                first_idx = clamp(first(state.view.xrange[]), 1, length(state.dat.data.time))
+                last_idx = clamp(last(state.view.xrange[]), 1, length(state.dat.data.time))
                 new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
                 for ax in state.plot_elements.axs
                     xlims!(ax, new_xlims)
@@ -1119,7 +1132,7 @@ function setup_keyboard_interactions!(fig, state)
 
                 if !shift_pressed
                     # Handle y-axis scaling
-                    current_range = state.ylims[][2]  # Just take the positive limit
+                    current_range = state.view.ylims[][2]  # Just take the positive limit
                     if event.key == Keyboard.up
                         # Zoom in - decrease range by 20%
                         new_range = current_range * 0.8
@@ -1129,16 +1142,16 @@ function setup_keyboard_interactions!(fig, state)
                     end
 
                     # Keep centered on zero
-                    state.ylims[] = (-new_range, new_range)
+                    state.view.ylims[] = (-new_range, new_range)
 
                     # Update y-axis limits for all axes
                     for ax in state.plot_elements.axs
-                        ylims!(ax, state.ylims[])
+                        ylims!(ax, state.view.ylims[])
                     end
                     # Also update channel axes to maintain alignment
                     for ax in state.plot_elements.channel_axs
                         if !isnothing(ax)
-                            ylims!(ax, state.ylims[])
+                            ylims!(ax, state.view.ylims[])
                         end
                     end
 
@@ -1146,7 +1159,7 @@ function setup_keyboard_interactions!(fig, state)
                     # For subsets, update all components in the subset
                     total_components = size(state.component_data, 1)
                     num_plots = if length(state.components) == total_components
-                        state.n_visible_components
+                        state.view.n_visible_components
                     else
                         length(state.components)  # Update all components in the subset
                     end
@@ -1155,7 +1168,7 @@ function setup_keyboard_interactions!(fig, state)
                         # Get the correct component index
                         comp_idx = if length(state.components) == total_components
                             # Using all components - use scrolling logic
-                            state.comp_start[] + i - 1
+                            state.view.comp_start[] + i - 1
                         else
                             # Using a subset of components - use the subset directly
                             state.components[i]
@@ -1163,7 +1176,7 @@ function setup_keyboard_interactions!(fig, state)
 
                         if comp_idx <= total_components
                             component_data = state.component_data[comp_idx, :]
-                            if state.invert_scale[]
+                            if state.display.invert_scale[]
                                 component_data = -component_data
                             end
                             state.plot_elements.lines_obs[i][] = component_data
@@ -1172,9 +1185,9 @@ function setup_keyboard_interactions!(fig, state)
                 else
                     # With shift - adjust ONLY channel scale without changing axis limits
                     if event.key == Keyboard.up && shift_pressed
-                        state.channel_yscale[] = state.channel_yscale[] * 1.1
+                        state.channels.yscale[] = state.channels.yscale[] * 1.1
                     elseif event.key == Keyboard.down && shift_pressed
-                        state.channel_yscale[] = state.channel_yscale[] / 1.1
+                        state.channels.yscale[] = state.channels.yscale[] / 1.1
                     end
                     # We don't modify any axis limits here, only the scaling factor
                     # This will affect how the channel data is plotted through the Observable
@@ -1185,18 +1198,18 @@ function setup_keyboard_interactions!(fig, state)
                 total_components = size(state.component_data, 1)
                 if length(state.components) == total_components
                     # Handle component scrolling
-                    current_start = state.comp_start[]
+                    current_start = state.view.comp_start[]
                     if event.key == Keyboard.page_up
-                        new_start = max(1, current_start - state.n_visible_components)
+                        new_start = max(1, current_start - state.view.n_visible_components)
                     else  # page_down
                         new_start = min(
-                            total_components - state.n_visible_components + 1,
-                            current_start + state.n_visible_components,
+                            total_components - state.view.n_visible_components + 1,
+                            current_start + state.view.n_visible_components,
                         )
                     end
 
                     if new_start != current_start
-                        state.comp_start[] = new_start
+                        state.view.comp_start[] = new_start
                         update_components!(state)
                     end
                 end
@@ -1209,7 +1222,7 @@ end
 function update_components!(state)
     # Calculate global min/max if using global scale
     global_min, global_max = nothing, nothing
-    if state.use_global_scale[]
+    if state.display.use_global_scale[]
         all_values = Float64[]
         # --- Use gridscale from state ---
         gridscale = state.topo_kwargs[:gridscale]
@@ -1217,7 +1230,7 @@ function update_components!(state)
         # For subsets, update all components in the subset
         total_components = size(state.component_data, 1)
         num_plots = if length(state.components) == total_components
-            state.n_visible_components
+            state.view.n_visible_components
         else
             length(state.components)  # Update all components in the subset
         end
@@ -1225,7 +1238,7 @@ function update_components!(state)
         for i = 1:num_plots
             comp_idx = if length(state.components) == total_components
                 # Using all components - use scrolling logic
-                state.comp_start[] + i - 1
+                state.view.comp_start[] + i - 1
             else
                 # Using a subset of components - use the subset directly
                 state.components[i]
@@ -1258,7 +1271,7 @@ function update_components!(state)
     # For subsets, update all components in the subset
     total_components = size(state.component_data, 1)
     num_plots = if length(state.components) == total_components
-        state.n_visible_components
+        state.view.n_visible_components
     else
         length(state.components)  # Update all components in the subset
     end
@@ -1266,7 +1279,7 @@ function update_components!(state)
     for i = 1:num_plots
         comp_idx = if length(state.components) == total_components
             # Using all components - use scrolling logic
-            state.comp_start[] + i - 1
+            state.view.comp_start[] + i - 1
         else
             # Using a subset of components - use the subset directly
             state.components[i]
@@ -1275,7 +1288,7 @@ function update_components!(state)
         if comp_idx <= total_components
             # Update component time series data with possible inversion
             component_data = state.component_data[comp_idx, :]
-            if state.invert_scale[]
+            if state.display.invert_scale[]
                 component_data = -component_data
             end
             # Check if lines_obs exists for this index before updating
@@ -1294,7 +1307,7 @@ function update_components!(state)
                     topo_ax,
                     state.ica_result,
                     comp_idx;
-                    use_global_scale = state.use_global_scale[],
+                    use_global_scale = state.display.use_global_scale[],
                     global_min = global_min,
                     global_max = global_max,
                     # Pass stored kwargs from state
