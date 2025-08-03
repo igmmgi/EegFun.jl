@@ -222,13 +222,21 @@ function plot_ica_topoplot(
 end
 
 
+# Plot elements for the interactive visualization
+mutable struct PlotElements
+    axs::Vector{Axis}                    # Main component time series axes
+    channel_axs::Vector{Union{Axis,Nothing}}  # Channel overlay axes (allow for nothing values)
+    topo_axs::Vector{Axis}               # Topography axes
+    lines_obs::Vector{Observable{Vector{Float64}}}  # Observable lines for component data
+    channel_bool_indicators::Dict{Int,Any}  # Boolean channel indicators
+end
+
 # Create a state structure to hold the visualization state
 mutable struct IcaComponentState
     # Data
     dat::ContinuousData
     ica_result::InfoIca
     component_data::Matrix{Float64}
-    total_components::Int
 
     # View settings
     n_visible_components::Int
@@ -238,7 +246,7 @@ mutable struct IcaComponentState
     comp_start::Observable{Int}
     xrange::Observable{UnitRange{Int}}
     ylims::Observable{Tuple{Float64,Float64}}
-    channel_data::Observable{Vector{Float64}}
+    selected_channel::Observable{Union{Nothing,Symbol}}
     show_channel::Observable{Bool}
     channel_yscale::Observable{Float64}
     use_global_scale::Observable{Bool}
@@ -247,24 +255,14 @@ mutable struct IcaComponentState
     # Components to display
     components::Vector{Int}
 
-    #  Topoplot Kwargs 
-    topo_gridscale::Int
-    topo_colormap::Symbol
-    topo_num_levels::Int
-    topo_nan_color::Union{Symbol,Makie.Colorant}
-    topo_method::Symbol  # :multiquadratic or :spherical_spline
-    topo_head_kwargs::Dict
-    topo_point_kwargs::Dict
-    topo_label_kwargs::Dict
+    # Topography plotting parameters
+    topo_kwargs::Dict
+    head_kwargs::Dict
+    point_kwargs::Dict
+    label_kwargs::Dict
 
     # Plot elements
-    axs::Vector{Axis}
-    channel_axs::Vector{Union{Axis,Nothing}}  # Allow for nothing values
-    topo_axs::Vector{Axis}
-    lines_obs::Vector{Observable{Vector{Float64}}}
-
-    # New field for boolean indicators
-    channel_bool_indicators::Dict{Int,Any}
+    plot_elements::PlotElements
 
     # Constructor updated to accept and store topo_kwargs
     function IcaComponentState(
@@ -282,10 +280,6 @@ mutable struct IcaComponentState
         # Prepare data matrix
         dat_matrix = prepare_ica_data_matrix(dat, ica_result)
         component_data = ica_result.unmixing * dat_matrix
-        total_components = size(component_data, 1)
-        
-        # Use the layout from the ICA result (already subsetted to match the channels used in ICA)
-        subsetted_layout = ica_result.layout
 
         # Create observables
         comp_start = Observable(1)
@@ -306,6 +300,7 @@ mutable struct IcaComponentState
         xrange = Observable(start_idx:end_idx)
 
         # Use the component selection predicate to get the actual component indices
+        total_components = size(component_data, 1)
         component_mask = component_selection(1:total_components)
         comps_to_use = findall(component_mask)  # Convert boolean mask to actual indices
 
@@ -321,13 +316,13 @@ mutable struct IcaComponentState
             1.0 # Default range if no data
         end
         ylims = Observable((-initial_range, initial_range))
-        channel_data = Observable(zeros(size(dat.data, 1)))
+        selected_channel = Observable(nothing)
         show_channel = Observable(false)
         channel_yscale = Observable(1.0)
 
-        # --- Process and store Topo Kwargs ---
+        # --- Process and store plotting parameters ---
         topo_defaults =
-            Dict(:gridscale => 300, :colormap => :jet, :num_levels => 20, :nan_color => :transparent)
+            Dict(:gridscale => 300, :colormap => :jet, :num_levels => 20, :nan_color => :transparent, :method => method)
         processed_topo_kwargs = merge(topo_defaults, topo_kwargs)
 
         head_defaults = Dict(:color => :black, :linewidth => 2)
@@ -338,53 +333,39 @@ mutable struct IcaComponentState
 
         label_defaults = Dict(:plot_labels => false)
         processed_label_kwargs = merge(label_defaults, label_kwargs)
-
-        # Store processed values
-        topo_gridscale = processed_topo_kwargs[:gridscale]
-        topo_colormap = processed_topo_kwargs[:colormap]
-        topo_num_levels = processed_topo_kwargs[:num_levels]
-        topo_nan_color = processed_topo_kwargs[:nan_color]
-        topo_method = method
         # --- End Process and store ---
 
-        # Initialize empty plot element arrays
-        axs = Vector{Axis}()
-        channel_axs = Vector{Union{Axis,Nothing}}()
-        topo_axs = Vector{Axis}()
-        lines_obs = Vector{Observable{Vector{Float64}}}()
-        channel_bool_indicators = Dict{Int,Any}()
+        # Initialize plot elements
+        plot_elements = PlotElements(
+            Vector{Axis}(),                    # axs
+            Vector{Union{Axis,Nothing}}(),     # channel_axs
+            Vector{Axis}(),                    # topo_axs
+            Vector{Observable{Vector{Float64}}}(), # lines_obs
+            Dict{Int,Any}()                    # channel_bool_indicators
+        )
 
         new(
             dat,
             ica_result,
             component_data,
-            total_components,
             n_visible_components,
             window_size,
             comp_start,
             xrange,
             ylims,
-            channel_data,
+            selected_channel,
             show_channel,
             channel_yscale,
             use_global_scale,
             invert_scale,
             comps_to_use,
-            # Pass stored kwargs
-            topo_gridscale,
-            topo_colormap,
-            topo_num_levels,
-            topo_nan_color,
-            topo_method,
+            # Pass plotting parameters
+            processed_topo_kwargs,
             processed_head_kwargs,
             processed_point_kwargs,
             processed_label_kwargs,
             # Plot elements
-            axs,
-            channel_axs,
-            topo_axs,
-            lines_obs,
-            channel_bool_indicators,
+            plot_elements,
         )
     end
 end
@@ -677,7 +658,8 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
     # Create axes for the time series plots
     # For subsets, show all components in the subset
     # For all components, create n_visible_components plots
-    num_plots = if length(state.components) == state.total_components
+    total_components = size(state.component_data, 1)
+    num_plots = if length(state.components) == total_components
         state.n_visible_components
     else
         length(state.components)  # Show all components in the subset
@@ -686,10 +668,10 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
     for i = 1:num_plots
         # Create topo plot axis first (now on the left)
         topo_ax = Axis(fig[i, 1])
-        push!(state.topo_axs, topo_ax)
+        push!(state.plot_elements.topo_axs, topo_ax)
 
         # Get the actual component number
-        comp_idx = if length(state.components) == state.total_components
+        comp_idx = if length(state.components) == total_components
             # Using all components - use scrolling logic
             state.comp_start[] + i - 1
         else
@@ -718,7 +700,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
             yticklabelpad = 0.0,
             yticklabelspace = 0.0,
         )
-        push!(state.axs, ax)
+        push!(state.plot_elements.axs, ax)
 
         # Always create channel overlay axis (keep spines hidden)
         ax_channel = Axis(
@@ -738,7 +720,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
             rightspinevisible = false,
             leftspinevisible = false,
         )
-        push!(state.channel_axs, ax_channel)
+        push!(state.plot_elements.channel_axs, ax_channel)
 
         # Link axes
         linkyaxes!(ax, ax_channel)
@@ -749,7 +731,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
             ax_channel,
             @lift(state.dat.data.time[$(state.xrange)]),
             @lift(
-                $(state.show_channel) ? $(state.channel_data)[$(state.xrange)] .* $(state.channel_yscale) :
+                $(state.show_channel) && !isnothing($(state.selected_channel)) ? state.dat.data[!, $(state.selected_channel)][$(state.xrange)] .* $(state.channel_yscale) :
                 zeros(Float64, length($(state.xrange)))
             ),
             color = :grey,
@@ -760,13 +742,13 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
 
         # Observable creation for component plot
         # Handle potential invalid comp_idx robustly
-        comp_data = if comp_idx <= state.total_components
+        comp_data = if comp_idx <= total_components
             state.component_data[comp_idx, :]
         else
             zeros(Float64, size(state.component_data, 2)) # Placeholder data
         end
         lines_obs = Observable(comp_data)
-        push!(state.lines_obs, lines_obs)
+        push!(state.plot_elements.lines_obs, lines_obs)
 
         # Component line plot
         lines!(ax, @lift(state.dat.data.time[$(state.xrange)]), @lift($(lines_obs)[$(state.xrange)]), color = :black)
@@ -775,22 +757,19 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
         xlims!(ax, (state.dat.data.time[first(state.xrange[])], state.dat.data.time[last(state.xrange[])]))
 
         # Create the topo plot using the dedicated viewer function
-        if comp_idx <= state.total_components
+        if comp_idx <= total_components
             # --- Pass parameters from state ---
-            plot_topoplot_in_viewer!(
-                fig,
-                topo_ax,
-                state.ica_result,
-                comp_idx;
-                use_global_scale = state.use_global_scale[],
-                gridscale = state.topo_gridscale,
-                colormap = state.topo_colormap,
-                num_levels = state.topo_num_levels,
-                nan_color = state.topo_nan_color,
-                head_kwargs = state.topo_head_kwargs,
-                point_kwargs = state.topo_point_kwargs,
-                label_kwargs = state.topo_label_kwargs,
-            )
+                            plot_topoplot_in_viewer!(
+                    fig,
+                    topo_ax,
+                    state.ica_result,
+                    comp_idx;
+                    use_global_scale = state.use_global_scale[],
+                    state.topo_kwargs...,
+                    head_kwargs = state.head_kwargs,
+                    point_kwargs = state.point_kwargs,
+                    label_kwargs = state.label_kwargs,
+                )
             # --- End Pass parameters ---
             # Set title here
             topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
@@ -858,8 +837,9 @@ function add_navigation_controls!(fig, state)
     end
 
     on(next_topo.clicks) do _
+        total_components = size(state.component_data, 1)
         new_start = min(
-            state.total_components - state.n_visible_components + 1,
+            total_components - state.n_visible_components + 1,
             state.comp_start[] + state.n_visible_components,
         )
         state.comp_start[] = new_start
@@ -870,10 +850,11 @@ function add_navigation_controls!(fig, state)
     on(apply_button.clicks) do _
         text_value = text_input.displayed_string[]
         if !isempty(text_value)
-            comps = parse_component_input(text_value, state.total_components)
+            total_components = size(state.component_data, 1)
+        comps = parse_component_input(text_value, total_components)
             if !isempty(comps)
                 @info "Creating new plot with components: $comps"
-                current_channel = state.channel_data[]
+                current_channel = state.selected_channel[]
                 show_channel = state.show_channel[]
                 use_global = state.use_global_scale[]
                 invert = state.invert_scale[]
@@ -979,33 +960,27 @@ function update_view_range!(state, start_pos)
     new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
 
     # Update all axes including channel axes
-    for ax in state.axs
+    for ax in state.plot_elements.axs
         xlims!(ax, new_xlims)
     end
-    for ax in state.channel_axs
+    for ax in state.plot_elements.channel_axs
         if !isnothing(ax)  # Only update if the axis exists
             xlims!(ax, new_xlims)
         end
     end
 
     # If we have a boolean channel selected, update its indicators
-    if state.show_channel[] && !isempty(state.channel_bool_indicators)
+    if state.show_channel[] && !isempty(state.plot_elements.channel_bool_indicators)
         # Clear existing indicators
-        for (i, indicator) in state.channel_bool_indicators
+        for (i, indicator) in state.plot_elements.channel_bool_indicators
             if !isnothing(indicator)
-                delete!(state.channel_axs[i], indicator)
+                delete!(state.plot_elements.channel_axs[i], indicator)
             end
         end
-        empty!(state.channel_bool_indicators)
+        empty!(state.plot_elements.channel_bool_indicators)
 
         # Find the current channel
-        current_channel = nothing
-        for col in names(state.dat.data)
-            if state.dat.data[!, col] == state.channel_data[]
-                current_channel = Symbol(col)
-                break
-            end
-        end
+        current_channel = state.selected_channel[]
 
         # If we found a boolean channel, redraw its indicators
         if !isnothing(current_channel) && eltype(state.dat.data[!, current_channel]) == Bool
@@ -1038,21 +1013,21 @@ end
 function update_channel_selection!(state, selected)
     # Clear previous channel visualizations from all axes
     for i = 1:state.n_visible_components
-        if i <= length(state.channel_axs) &&
-           haskey(state.channel_bool_indicators, i) &&
-           !isnothing(state.channel_bool_indicators[i])
-            delete!(state.channel_axs[i], state.channel_bool_indicators[i])
-            state.channel_bool_indicators[i] = nothing
+        if i <= length(state.plot_elements.channel_axs) &&
+           haskey(state.plot_elements.channel_bool_indicators, i) &&
+           !isnothing(state.plot_elements.channel_bool_indicators[i])
+            delete!(state.plot_elements.channel_axs[i], state.plot_elements.channel_bool_indicators[i])
+            state.plot_elements.channel_bool_indicators[i] = nothing
         end
     end
-    empty!(state.channel_bool_indicators)
+    empty!(state.plot_elements.channel_bool_indicators)
 
     if selected == "None"
         state.show_channel[] = false
-        state.channel_data[] = zeros(Float64, size(state.dat.data, 1))
+        state.selected_channel[] = nothing
     else
         selected_sym = Symbol(selected)
-        state.channel_data[] = state.dat.data[!, selected_sym]
+        state.selected_channel[] = selected_sym
 
         # Only show overlay plot for non-Boolean channels
         if eltype(state.dat.data[!, selected_sym]) == Bool
@@ -1068,8 +1043,8 @@ end
 function add_boolean_indicators!(state, channel_sym)
     # For each component axis, create a vertical line at each true position
     for i = 1:state.n_visible_components
-        if i <= length(state.channel_axs)
-            ax_channel = state.channel_axs[i]
+        if i <= length(state.plot_elements.channel_axs)
+            ax_channel = state.plot_elements.channel_axs[i]
 
             # Find all time points where the boolean is true
             true_indices = findall(state.dat.data[!, channel_sym])
@@ -1089,7 +1064,7 @@ function add_boolean_indicators!(state, channel_sym)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
 
                     # Store the reference to the lines
-                    state.channel_bool_indicators[i] = lines
+                    state.plot_elements.channel_bool_indicators[i] = lines
                 end
             end
         end
@@ -1117,10 +1092,10 @@ function setup_keyboard_interactions!(fig, state)
                 first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
                 last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
                 new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
-                for ax in state.axs
+                for ax in state.plot_elements.axs
                     xlims!(ax, new_xlims)
                 end
-                for ax in state.channel_axs
+                for ax in state.plot_elements.channel_axs
                     if !isnothing(ax)
                         xlims!(ax, new_xlims)
                     end
@@ -1146,11 +1121,11 @@ function setup_keyboard_interactions!(fig, state)
                     state.ylims[] = (-new_range, new_range)
 
                     # Update y-axis limits for all axes
-                    for ax in state.axs
+                    for ax in state.plot_elements.axs
                         ylims!(ax, state.ylims[])
                     end
                     # Also update channel axes to maintain alignment
-                    for ax in state.channel_axs
+                    for ax in state.plot_elements.channel_axs
                         if !isnothing(ax)
                             ylims!(ax, state.ylims[])
                         end
@@ -1158,7 +1133,8 @@ function setup_keyboard_interactions!(fig, state)
 
                     # Force a redraw of the plots with scale inversion
                     # For subsets, update all components in the subset
-                    num_plots = if length(state.components) == state.total_components
+                    total_components = size(state.component_data, 1)
+                    num_plots = if length(state.components) == total_components
                         state.n_visible_components
                     else
                         length(state.components)  # Update all components in the subset
@@ -1166,7 +1142,7 @@ function setup_keyboard_interactions!(fig, state)
                     
                     for i = 1:num_plots
                         # Get the correct component index
-                        comp_idx = if length(state.components) == state.total_components
+                        comp_idx = if length(state.components) == total_components
                             # Using all components - use scrolling logic
                             state.comp_start[] + i - 1
                         else
@@ -1174,12 +1150,12 @@ function setup_keyboard_interactions!(fig, state)
                             state.components[i]
                         end
 
-                        if comp_idx <= state.total_components
+                        if comp_idx <= total_components
                             component_data = state.component_data[comp_idx, :]
                             if state.invert_scale[]
                                 component_data = -component_data
                             end
-                            state.lines_obs[i][] = component_data
+                            state.plot_elements.lines_obs[i][] = component_data
                         end
                     end
                 else
@@ -1195,14 +1171,15 @@ function setup_keyboard_interactions!(fig, state)
 
             elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
                 # Only handle page up/down if we're not using fixed components
-                if length(state.components) == state.total_components
+                total_components = size(state.component_data, 1)
+                if length(state.components) == total_components
                     # Handle component scrolling
                     current_start = state.comp_start[]
                     if event.key == Keyboard.page_up
                         new_start = max(1, current_start - state.n_visible_components)
                     else  # page_down
                         new_start = min(
-                            state.total_components - state.n_visible_components + 1,
+                            total_components - state.n_visible_components + 1,
                             current_start + state.n_visible_components,
                         )
                     end
@@ -1224,17 +1201,18 @@ function update_components!(state)
     if state.use_global_scale[]
         all_values = Float64[]
         # --- Use gridscale from state ---
-        gridscale = state.topo_gridscale
+        gridscale = state.topo_kwargs[:gridscale]
         # --- End Use gridscale ---
         # For subsets, update all components in the subset
-        num_plots = if length(state.components) == state.total_components
+        total_components = size(state.component_data, 1)
+        num_plots = if length(state.components) == total_components
             state.n_visible_components
         else
             length(state.components)  # Update all components in the subset
         end
         
         for i = 1:num_plots
-            comp_idx = if length(state.components) == state.total_components
+            comp_idx = if length(state.components) == total_components
                 # Using all components - use scrolling logic
                 state.comp_start[] + i - 1
             else
@@ -1242,20 +1220,20 @@ function update_components!(state)
                 state.components[i]
             end
 
-            if comp_idx <= state.total_components
-                if state.topo_method == :spherical_spline
-                    data = _data_interpolation_topo_spherical_spline(
-                        state.ica_result.mixing[:, comp_idx],
-                        state.ica_result.layout,
-                        gridscale, # Use state value
-                    )
-                elseif state.topo_method == :multiquadratic
-                    data = _data_interpolation_topo_multiquadratic(
-                        state.ica_result.mixing[:, comp_idx],
-                        state.ica_result.layout,
-                        gridscale, # Use state value
-                    )
-                end
+            if comp_idx <= total_components
+                            if state.topo_kwargs[:method] == :spherical_spline
+                data = _data_interpolation_topo_spherical_spline(
+                    state.ica_result.mixing[:, comp_idx],
+                    state.ica_result.layout,
+                    gridscale, # Use state value
+                )
+            elseif state.topo_kwargs[:method] == :multiquadratic
+                data = _data_interpolation_topo_multiquadratic(
+                    state.ica_result.mixing[:, comp_idx],
+                    state.ica_result.layout,
+                    gridscale, # Use state value
+                )
+            end
                 append!(all_values, [v for v in data if !isnan(v)])
             end
         end
@@ -1267,14 +1245,15 @@ function update_components!(state)
     end
 
     # For subsets, update all components in the subset
-    num_plots = if length(state.components) == state.total_components
+    total_components = size(state.component_data, 1)
+    num_plots = if length(state.components) == total_components
         state.n_visible_components
     else
         length(state.components)  # Update all components in the subset
     end
     
     for i = 1:num_plots
-        comp_idx = if length(state.components) == state.total_components
+        comp_idx = if length(state.components) == total_components
             # Using all components - use scrolling logic
             state.comp_start[] + i - 1
         else
@@ -1282,22 +1261,22 @@ function update_components!(state)
             state.components[i]
         end
 
-        if comp_idx <= state.total_components
+        if comp_idx <= total_components
             # Update component time series data with possible inversion
             component_data = state.component_data[comp_idx, :]
             if state.invert_scale[]
                 component_data = -component_data
             end
             # Check if lines_obs exists for this index before updating
-            if i <= length(state.lines_obs)
-                state.lines_obs[i][] = component_data
+            if i <= length(state.plot_elements.lines_obs)
+                state.plot_elements.lines_obs[i][] = component_data
             else
                 @warn "Trying to update non-existent lines_obs at index $i"
             end
 
             # Clear and redraw topography using the viewer function
-            if i <= length(state.topo_axs)
-                topo_ax = state.topo_axs[i]
+            if i <= length(state.plot_elements.topo_axs)
+                topo_ax = state.plot_elements.topo_axs[i]
                 # --- Pass parameters from state ---
                 plot_topoplot_in_viewer!(
                     topo_ax.parent, # Pass the figure associated with the axis
@@ -1308,14 +1287,10 @@ function update_components!(state)
                     global_min = global_min,
                     global_max = global_max,
                     # Pass stored kwargs from state
-                    gridscale = state.topo_gridscale,
-                    colormap = state.topo_colormap,
-                    num_levels = state.topo_num_levels,
-                    nan_color = state.topo_nan_color,
-                    method = state.topo_method,
-                    head_kwargs = state.topo_head_kwargs,
-                    point_kwargs = state.topo_point_kwargs,
-                    label_kwargs = state.topo_label_kwargs,
+                    state.topo_kwargs...,
+                    head_kwargs = state.head_kwargs,
+                    point_kwargs = state.point_kwargs,
+                    label_kwargs = state.label_kwargs,
                 )
                 # --- End Pass parameters ---
                 # Update title
@@ -1324,20 +1299,20 @@ function update_components!(state)
                 @warn "Trying to update non-existent topo_axs at index $i"
             end
             # Update y-axis label
-            if i <= length(state.axs)
-                state.axs[i].ylabel = @sprintf("IC %d", comp_idx)
+            if i <= length(state.plot_elements.axs)
+                state.plot_elements.axs[i].ylabel = @sprintf("IC %d", comp_idx)
             end
         else
             # Handle invalid comp_idx: clear plots and labels
-            if i <= length(state.lines_obs)
-                state.lines_obs[i][] = zeros(Float64, size(state.component_data, 2)) # Clear line
+            if i <= length(state.plot_elements.lines_obs)
+                state.plot_elements.lines_obs[i][] = zeros(Float64, size(state.component_data, 2)) # Clear line
             end
-            if i <= length(state.topo_axs)
-                empty!(state.topo_axs[i])
-                state.topo_axs[i].title = @sprintf("Invalid IC %d", comp_idx)
+            if i <= length(state.plot_elements.topo_axs)
+                empty!(state.plot_elements.topo_axs[i])
+                state.plot_elements.topo_axs[i].title = @sprintf("Invalid IC %d", comp_idx)
             end
-            if i <= length(state.axs)
-                state.axs[i].ylabel = ""
+            if i <= length(state.plot_elements.axs)
+                state.plot_elements.axs[i].ylabel = ""
             end
         end
     end
