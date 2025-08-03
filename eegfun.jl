@@ -36,8 +36,8 @@ eegfun.plot_topography(dat; method = :spherical_spline)
 eegfun.plot_topography(dat; method = :multiquadratic)
 
 # plot ICA components (TODO: plot size for spherical spline)
-eegfun.plot_ica_topoplot(ica_result, dat.layout; component_selection = eegfun.components(1:10), method = :spherical_spline)
-eegfun.plot_ica_topoplot(ica_result, dat.layout; component_selection = eegfun.components(1:10), method = :multiquadratic)
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:10), method = :spherical_spline)
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:10), method = :multiquadratic)
 
 
 eegfun.plot_ica_topoplot(ica_result, use_global_scale = true)
