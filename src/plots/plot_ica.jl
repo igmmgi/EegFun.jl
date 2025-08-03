@@ -73,8 +73,7 @@ function plot_ica_topoplot(
     label_default_kwargs = Dict(:plot_labels => false, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
     label_kwargs = merge(label_default_kwargs, label_kwargs)
 
-    topo_default_kwargs =
-        Dict(:colormap => :jet, :gridscale => 100, :num_levels => 20, :nan_color => :transparent)
+    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 100, :num_levels => 20, :nan_color => :transparent)
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = topo_kwargs[:gridscale]
     num_levels = topo_kwargs[:num_levels]
@@ -134,10 +133,8 @@ function plot_ica_topoplot(
             num_levels = num_levels,
         )
     else
-        # Pre-calculate all local levels using helper
         for data in all_data
-            # Use the helper which handles NaN safely
-            push!(all_local_levels, _calculate_topo_levels(data; num_levels = num_levels)) # Use accessed num_levels
+            push!(all_local_levels, _calculate_topo_levels(data; num_levels = num_levels)) 
         end
     end
 
@@ -152,9 +149,10 @@ function plot_ica_topoplot(
 
     # Now add the plots and colorbars
     for i in eachindex(comps)
+      
+        # grid layout and axis
         gl = grids[i]
-
-        # Create main axis in the first column
+        # colsize!(gl, 1, Relative(1.0))
         ax = Axis(gl[1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
 
         # Get pre-calculated data and levels
@@ -175,16 +173,17 @@ function plot_ica_topoplot(
             topo_kwargs...,
         )
 
-        # Set up colorbar space for ALL plots for consistent sizing
-        if plot_colorbar # Use accessed flag
-            # Default values from filtered kwargs
+        # Do we want to add a colourbar?
+        if plot_colorbar 
+
             width = get(colorbar_kwargs, :width, 10)
             height = get(colorbar_kwargs, :height, Relative(0.8))
             ticksize = get(colorbar_kwargs, :ticklabelsize, 10)
 
             # Create colorbar or placeholder in second column
+            # TODO: I do not really follow colourbar logic in Makie
+            # This seems a bit awkward!
             if i in colorbar_plot_numbers # Use accessed list
-                # Pass filtered styling args
                 Colorbar(
                     gl[1, 2],
                     co;
@@ -194,7 +193,6 @@ function plot_ica_topoplot(
                     colorbar_kwargs...,
                 )
             else
-                # Pass filtered styling args (though Box might not use them all)
                 Box(
                     gl[1, 2];
                     width = width,
@@ -208,10 +206,10 @@ function plot_ica_topoplot(
             # Set column sizes after creating the colorbar column
             colsize!(gl, 1, Relative(0.85))  # Plot column
             colsize!(gl, 2, Relative(0.15))  # Colorbar column
-        else
-            # If no colorbar, make the plot take the full width
-            colsize!(gl, 1, Relative(1.0))
+        # else
+        #     colsize!(gl, 1, Relative(1.0))
         end
+
     end
 
     if display_plot
@@ -415,8 +413,8 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 function plot_ica_component_activation(
     dat::ContinuousData,
     ica_result::InfoIca;
-    component_selection = components(),  # Use the established predicate pattern
-    n_visible_components::Int = 10,  # How many to show per screen
+    component_selection = components(),  
+    n_visible_components::Int = 10,  
     window_size::Int = 2000,
     topo_kwargs = Dict(),
     head_kwargs = Dict(),
@@ -439,31 +437,18 @@ function plot_ica_component_activation(
     )
 
     # Create figure with padding on the right for margin
-    fig = Figure(
-        figure_padding = (0, 60, 0, 0), # Keep right padding
-        backgroundcolor = :white,
-    )
+    fig = Figure( figure_padding = (0, 20, 0, 0)) 
 
-    # Setup plots (no need to pass topo_kwargs here anymore)
-    create_component_plots!(fig, state) # Removed topo_kwargs argument
-
-    # Add controls
+    # Setup GUI interface
+    create_component_plots!(fig, state) 
     add_navigation_controls!(fig, state)
-
-    # Add navigation sliders
     add_navigation_sliders!(fig, state)
-
-    # Add channel menu
     add_channel_menu!(fig, state)
-
-    # Add keyboard interactions
     setup_keyboard_interactions!(fig, state)
 
-    # --- Layout Adjustments ---
     colsize!(fig.layout, 1, Relative(0.15))
     colsize!(fig.layout, 2, Relative(0.85))
     rowgap!(fig.layout, state.n_visible_components, 30)
-    # --- End Layout Adjustments ---
 
     display(fig)
     return fig
@@ -576,7 +561,7 @@ function _plot_topo_on_axis!(
     layout::Layout,
     method::Symbol,
     levels;
-    gridscale = 300,
+    gridscale = 200,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(), 
