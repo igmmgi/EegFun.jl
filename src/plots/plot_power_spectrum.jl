@@ -235,7 +235,7 @@ function plot_ica_component_spectrum(
     selected_samples = get_selected_samples(dat, sample_selection)
 
     # Prepare data matrix for selected samples only
-    relevant_cols = vcat(ica_result.data_label)
+    relevant_cols = vcat(ica_result.layout.data.label)
     dat_matrix = permutedims(Matrix(dat.data[selected_samples, relevant_cols]))
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica_result.scale

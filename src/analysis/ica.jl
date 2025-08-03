@@ -171,9 +171,12 @@ function run_ica(
 
     @info "Running ICA: $(length(selected_channels)) channels x $(length(sample_indices)) samples -> $(n_components) components"
 
+    # Create subsetted layout that matches the selected channels
+    ica_layout = subset_layout(dat_ica.layout, channel_selection=channels(selected_channels))
+
     # Create data matrix and run ICA
     dat_for_ica = create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
-    ica_result = infomax_ica(dat_for_ica, selected_channels, n_components = n_components, params = params)
+    ica_result = infomax_ica(dat_for_ica, ica_layout, n_components = n_components, params = params)
 
     return ica_result
 end
@@ -252,7 +255,7 @@ end
 
 function infomax_ica(
     dat_ica::Matrix{Float64},
-    data_labels;
+    layout::Layout;
     n_components::Union{Nothing,Int} = nothing,
     params::IcaPrms = IcaPrms(),
 )
@@ -387,8 +390,8 @@ function infomax_ica(
         scale,
         original_mean,
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
-        data_labels,
         OrderedDict{Int,Matrix{Float64}}(),
+        layout,
     )
 
 end
@@ -420,10 +423,10 @@ function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selectio
     end
 
     # Get data dimensions
-    n_channels = length(ica.data_label)
+    n_channels = length(ica.layout.data.label)
 
     # Get data and scale it
-    data = permutedims(Matrix(dat[!, ica.data_label]))
+    data = permutedims(Matrix(dat[!, ica.layout.data.label]))
     data .-= ica.mean
     data ./= ica.scale
 
@@ -446,7 +449,7 @@ function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selectio
     cleaned_data .+= ica.mean
 
     # Update DataFrame in-place
-    dat[!, ica.data_label] .= permutedims(cleaned_data)
+    dat[!, ica.layout.data.label] .= permutedims(cleaned_data)
 
     return dat
 end
@@ -560,7 +563,7 @@ function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selecti
     end
 
     # Get data and scale it
-    data = permutedims(Matrix(dat[!, ica.data_label]))
+    data = permutedims(Matrix(dat[!, ica.layout.data.label]))
     data .-= ica.mean
     data ./= ica.scale
 
@@ -578,7 +581,7 @@ function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selecti
     restored_data .+= ica.mean
 
     # Update DataFrame in-place
-    dat[!, ica.data_label] .= permutedims(restored_data)
+    dat[!, ica.layout.data.label] .= permutedims(restored_data)
 
     # Remove restored components from the removed_activations dictionary
     for comp in components_to_restore
@@ -720,7 +723,7 @@ function identify_eog_components(
     hEOG = dat.data[selected_samples, hEOG_channel]
 
     # Prepare data matrix for valid samples
-    relevant_cols = vcat(ica_result.data_label)
+    relevant_cols = vcat(ica_result.layout.data.label)
     data_subset_df = dat.data[selected_samples, relevant_cols]
     dat_matrix = permutedims(Matrix(data_subset_df))
     dat_matrix .-= mean(dat_matrix, dims = 2)
@@ -829,7 +832,7 @@ function identify_ecg_components(
     end
 
     # Process data
-    relevant_cols = ica_result.data_label
+    relevant_cols = ica_result.layout.data.label
     data_subset_df = dat.data[selected_samples, relevant_cols]
     dat_matrix_subset = permutedims(Matrix(data_subset_df))
     dat_matrix_subset .-= mean(dat_matrix_subset, dims = 2)
@@ -1026,7 +1029,7 @@ function identify_line_noise_components(
     end
 
     # Prepare data matrix for valid samples
-    relevant_cols = vcat(ica_result.data_label)
+    relevant_cols = vcat(ica_result.layout.data.label)
     data_subset_df = dat.data[samples_to_use, relevant_cols]
     dat_matrix = permutedims(Matrix(data_subset_df))
     dat_matrix .-= mean(dat_matrix, dims = 2)

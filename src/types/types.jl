@@ -302,7 +302,7 @@ about the decomposition process.
 - `scale::Float64`: Scaling factor applied to the data
 - `mean::Vector{Float64}`: Mean vector subtracted from the data
 - `ica_label::Vector{Symbol}`: Component labels (e.g., [:IC1, :IC2, ...])
-- `data_label::Vector{Symbol}`: Original data channel labels
+- `layout::Layout`: Layout information for the ICA components (contains channel labels)
 - `removed_activations::OrderedDict{Int, Matrix{Float64}}`: Removed component activations by epoch
 """
 struct InfoIca
@@ -313,9 +313,11 @@ struct InfoIca
     scale::Float64
     mean::Vector{Float64}
     ica_label::Vector{Symbol}
-    data_label::Vector{Symbol}
     removed_activations::OrderedDict{Int,Matrix{Float64}}
+    layout::Layout  # Layout information for the ICA components
 end
+
+
 
 # === DISPLAY FUNCTIONS ===
 function Base.show(io::IO, layout::Layout)
@@ -448,7 +450,7 @@ end
 # Custom display method for InfoIca
 function Base.show(io::IO, ica::InfoIca)
     n_components = length(ica.ica_label)
-    n_channels = length(ica.data_label)
+    n_channels = length(ica.layout.data.label)
 
     println(io, "InfoIca Result")
     println(io, "├─ Components: $n_components")
@@ -471,7 +473,7 @@ function Base.show(io::IO, ica::InfoIca)
     println(io, "│  ├─ Mixing: $(size(ica.mixing))")
     println(io, "│  └─ Sphere: $(size(ica.sphere))")
 
-    println(io, "└─ Channel labels: $(join(ica.data_label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")")
+    println(io, "└─ Channel labels: $(join(ica.layout.data.label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")")
 end
 
 # Compact display for arrays
@@ -488,8 +490,8 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.variance),
         ica.scale,
         copy(ica.mean),
-        copy(ica.ica_label),
-        copy(ica.data_label),
-        copy(ica.removed_activations),
+            copy(ica.ica_label),
+    copy(ica.removed_activations),
+    ica.layout,  # Layout is shared, no need to copy
     )
 end
