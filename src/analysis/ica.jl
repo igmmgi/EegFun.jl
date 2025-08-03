@@ -143,14 +143,14 @@ function run_ica(
     # Apply filters if requested
     if hp_filter
         @info "Applying high-pass filter"
-        dat_ica = filter_data(dat_ica, "hp", "iir", hp_freq, order = 1)
+        dat_ica = filter_data(dat_ica, "hp", hp_freq)
     end
     if lp_filter
         @info "Applying low-pass filter"
-        dat_ica = filter_data(dat_ica, "lp", "iir", lp_freq, order = 3)
+        dat_ica = filter_data(dat_ica, "lp", lp_freq)
     end
 
-    selected_channels = get_selected_channels(dat_ica, channel_selection; include_extra = include_extra)
+    selected_channels = get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
     if isempty(selected_channels)
         error("No channels available after applying channel filter")
     end
@@ -552,6 +552,7 @@ function restore_ica_components!(dat::DataFrame, ica::InfoIca; component_selecti
     end
 
     # Check that all components to restore have stored activations
+    println("components_to_restore: $components_to_restore")
     for comp in components_to_restore
         if !haskey(ica.removed_activations, comp)
             throw(ArgumentError("Component $comp has no stored activations to restore"))

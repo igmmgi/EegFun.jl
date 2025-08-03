@@ -11,12 +11,7 @@ mutable struct Marker
     visible::Bool
 end
 
-mutable struct IcaState
-    removed_activations::Union{Nothing,Any}
-    components_to_remove::Union{Nothing,Vector{Int}}
-    components_removed::Union{Nothing,Vector{Int}}
-    IcaState() = new(nothing, nothing, nothing)
-end
+# IcaState removed - using InfoIca directly which already tracks removed components
 
 mutable struct ExtraChannelVis
     visualization::Union{Nothing,Makie.Lines,Makie.PolyElement,Any}
@@ -113,7 +108,8 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     data::T
     selection::SelectionState
     markers::Vector{Marker}
-    ica_state::Union{Nothing,IcaState}
+    ica_original::Union{Nothing,InfoIca}
+    ica_current::Union{Nothing,InfoIca}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
 
@@ -123,7 +119,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
         channels::ChannelState,
         data::T,
         selection::SelectionState,
-        ica_state::Union{Nothing,IcaState} = nothing,
+        ica_original::Union{Nothing,InfoIca} = nothing,
         extra_channel::ExtraChannelInfo = ExtraChannelInfo(),
     ) where {T<:AbstractDataState}
         return new{T}(
@@ -132,7 +128,8 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             data,
             selection,
             Vector{Marker}(),
-            ica_state,
+            ica_original,
+            isnothing(ica_original) ? nothing : copy(ica_original),
             extra_channel,
             data.original.analysis_info.reference,
         )
@@ -151,7 +148,7 @@ function create_browser_state(dat::T, channel_labels, ax, ica) where {T<:EegData
         channels = ChannelState(channel_labels),
         data = state_type(dat),  # This directly calls the constructor!
         selection = SelectionState(ax),
-        ica_state = !isnothing(ica) ? IcaState() : nothing,
+        ica_original = ica,
     )
 end
 
@@ -201,7 +198,7 @@ function setup_ui_base(fig, ax, state, dat, ica = nothing)
 
     # Create optional menus
     ica_menu = nothing
-    if !isnothing(ica) && !isnothing(state.ica_state)
+    if !isnothing(ica) && !isnothing(state.ica_original)
         ica_menu = create_ica_menu(fig, ax, state, ica)
     end
 
@@ -330,35 +327,17 @@ function create_ica_menu(fig, ax, state, ica)
     on(menu[1].selection) do s
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
         component_to_remove_int = extract_int(String(s))
-        state.ica_state.components_to_remove = isnothing(component_to_remove_int) ? nothing : [component_to_remove_int]
 
-        if !isnothing(state.ica_state.components_to_remove)
-            # Restore previous state if necessary before applying new removal
-            if !isnothing(state.ica_state.components_removed)
-                apply_ica_restore!(
-                    state.data,
-                    ica,
-                    state.ica_state.components_removed,
-                    state.ica_state.removed_activations,
-                )
-            end
-            # Apply removal using the helper function
-            state.ica_state.removed_activations =
-                apply_ica_removal!(state.data, ica, state.ica_state.components_to_remove)
-            state.ica_state.components_removed = state.ica_state.components_to_remove
+        if !isnothing(component_to_remove_int)
+            # Apply removal using the current ICA result
+            apply_ica_removal!(state.data, state.ica_current, [component_to_remove_int])
+            # Update current ICA to reflect the removal
+            state.ica_current = copy(state.ica_current)
         else # Selected "None"
-            # Restore previous state if components were removed
-            if !isnothing(state.ica_state.components_removed)
-                apply_ica_restore!(
-                    state.data,
-                    ica,
-                    state.ica_state.components_removed,
-                    state.ica_state.removed_activations,
-                )
-                # Reset ICA state tracking
-                state.ica_state.removed_activations = nothing
-                state.ica_state.components_removed = nothing
-            end
+            # Reset to original ICA state
+            state.ica_current = copy(state.ica_original)
+            # Reset data to original state
+            reset_to_original!(state.data)
         end
 
         notify_data_update(state.data)
@@ -908,56 +887,21 @@ end
 
 # Apply ICA component removal based on state type
 function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    # Create new EegData with ICA components removed
-    ica_data = copy(state.current[])
-    ica_data.data, activations = remove_ica_components(state.current[].data, ica, components_to_remove)
-    state.current[] = ica_data
-    return activations
+    # Remove ICA components and update the ICA struct with removed activations
+    remove_ica_components!(state.current[].data, ica, component_selection = components(components_to_remove))
+    return nothing  # Activations are now stored in ica.removed_activations
 end
 
 function apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    # Create new EegData with ICA components removed
-    ica_data = copy(state.current[])
-    first_epoch_activations = nothing
-    for (i, epoch_df) in enumerate(ica_data.data)
-        ica_data.data[i], activations = remove_ica_components(epoch_df, ica, components_to_remove)
-        if i == 1
-            first_epoch_activations = activations
-        end
+    # Remove ICA components from all epochs and update the ICA struct with removed activations
+    for (i, epoch_df) in enumerate(state.current[].data)
+        remove_ica_components!(epoch_df, ica, component_selection = components(components_to_remove))
     end
-    state.current[] = ica_data
-    return first_epoch_activations
+    return nothing  # Activations are now stored in ica.removed_activations
 end
 
-# Apply ICA component restoration based on state type
-function apply_ica_restore!(
-    state::ContinuousDataState,
-    ica::InfoIca,
-    components_removed::Vector{Int},
-    removed_activations,
-)
-    if isnothing(removed_activations)
-        @warn "Cannot restore ICA components: No previous activations stored."
-        return
-    end
-    # Create new EegData with restored data
-    restored_data = copy(state.current[])
-    restored_data.data = restore_original_data(state.current[].data, ica, components_removed, removed_activations)
-    state.current[] = restored_data
-end
-
-function apply_ica_restore!(state::EpochedDataState, ica::InfoIca, components_removed::Vector{Int}, removed_activations)
-    if isnothing(removed_activations)
-        @warn "Cannot restore ICA components: No previous activations stored."
-        return
-    end
-    # Create new EegData with restored data
-    restored_data = copy(state.current[])
-    for (i, epoch_df) in enumerate(restored_data.data)
-        restored_data.data[i] = restore_original_data(epoch_df, ica, components_removed, removed_activations)
-    end
-    state.current[] = restored_data
-end
+# ICA restoration functions removed - we now use reset_to_original! to restore data
+# and copy the original ICA result to reset the ICA state
 
 
 ########################

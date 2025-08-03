@@ -39,12 +39,11 @@ function _plot_topography!(
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
 
     # actual data interpolation
+    channel_data = mean.(eachcol(dat[!, layout.data.label]))
     if method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(mean.(eachcol(dat[!, layout.data.label])), layout, gridscale)
+        data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
     elseif method == :multiquadratic
-        channel_data = mean.(eachcol(dat[!, layout.data.label]))
-        points_matrix = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
-        data = _data_interpolation_topo_multiquadratic(channel_data, points_matrix, gridscale)
+        data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
     end
 
     if isnothing(ylim)
@@ -198,17 +197,16 @@ Interpolate EEG data using scattered interpolation
 """
 function _data_interpolation_topo_multiquadratic(
     dat::Vector{<:AbstractFloat},
-    points::Matrix{<:AbstractFloat},
+    layout::Layout,
     grid_scale::Int,
 )
     # Check input data
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
     end
-    if any(isnan, points) || any(isinf, points)
-        throw(ArgumentError("Input points contain NaN or Inf values"))
-    end
 
+    points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
+    
     # Create grid more efficiently - avoid collect() and Iterators.product
     x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
     y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
