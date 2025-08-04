@@ -344,32 +344,33 @@ function create_ica_menu(fig, ax, state, ica)
 end
 
 function create_epoch_menu(fig, ax, state)
-    # Create a textbox for epoch input
-    textbox = Textbox(fig, placeholder = "Enter epoch number", stored_string = string(state.data.current_epoch[]), width = 100)
-    label = Label(fig, "Epoch", fontsize = 22, halign = :left, tellwidth = false)
+    # Create an epoch slider
+    slider_epoch = Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
+    label = Label(fig, @lift("Epoch: $($(slider_epoch.value))/$(n_epochs(state.data.original))"), fontsize = 22, halign = :left, tellwidth = false)
     
-    # Handle textbox input
-    on(textbox.stored_string) do s
-        try
-            epoch_num = parse(Int, s)
-            if 1 <= epoch_num <= n_epochs(state.data.original)
-                clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-                state.data.current_epoch[] = epoch_num
-                ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
-                update_markers!(ax, state)
-                draw(ax, state)
-                draw_extra_channel!(ax, state)
-            else
-                # Invalid epoch number - revert to current value
-                textbox.stored_string[] = string(state.data.current_epoch[])
-            end
-        catch
-            # Invalid input - revert to current value
-            textbox.stored_string[] = string(state.data.current_epoch[])
+    # Flag to prevent circular updates
+    updating_from_keyboard = Ref(false)
+    
+    # Handle slider input
+    on(slider_epoch.value) do epoch_num
+        if !updating_from_keyboard[]
+            clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+            state.data.current_epoch[] = epoch_num
+            ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
+            update_markers!(ax, state)
+            draw(ax, state)
+            draw_extra_channel!(ax, state)
         end
     end
     
-    return hcat(textbox, label)
+    # Make slider observe current_epoch changes (for left/right key navigation)
+    on(state.data.current_epoch) do epoch_num
+        updating_from_keyboard[] = true
+        slider_epoch.value[] = epoch_num
+        updating_from_keyboard[] = false
+    end
+    
+    return hcat(slider_epoch, label)
 end
 
 function show_additional_menu(state)
