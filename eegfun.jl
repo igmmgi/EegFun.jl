@@ -24,10 +24,10 @@ dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 # eegfun.plot_databrowser(dat)
-
-
 # eegfun.plot_channel_spectrum(dat)
-eegfun.plot_channel_spectrum(dat)
+
+eegfun.plot_channel_spectrum(dat, interactive = true)
+
 
 #eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 #eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
