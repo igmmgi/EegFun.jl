@@ -12,7 +12,7 @@ using GLMakie
 using DataFrames
 using BenchmarkTools
 # load data
-dat = eegfun.read_bdf("../pt_1.bdf");
+dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # define neighbours 2D/3D defined by distance (mm)
 eegfun.polar_to_cartesian_xy!(layout);
