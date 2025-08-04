@@ -26,7 +26,7 @@ eegfun.rereference!(dat, :avg)
 # eegfun.plot_databrowser(dat)
 # eegfun.plot_channel_spectrum(dat)
 
-eegfun.plot_channel_spectrum(dat, interactive = true)
+eegfun.plot_channel_spectrum(dat)
 
 
 #eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
