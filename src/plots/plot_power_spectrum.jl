@@ -26,7 +26,8 @@ function _plot_power_spectrum!(
     ax,
     df::DataFrame,
     channels_to_plot::Vector{Symbol},
-    fs::Real;
+    fs::Real,
+    controls_area;
     window_size::Int = 1024,
     overlap::Real = 0.5,
     max_freq::Real = 200.0,
@@ -34,8 +35,6 @@ function _plot_power_spectrum!(
     y_scale::Symbol = :linear,
     window_function::Function = DSP.hanning,
     show_freq_bands::Bool = true,
-    interactive::Bool = false,
-    controls_area = nothing,
 )
 
     # Validate scale parameters
@@ -63,30 +62,24 @@ function _plot_power_spectrum!(
     ax.ylabel = "Power Spectral Density (μV²/Hz)"
     ax.title = "Power Spectrum"
 
-    # Create Observables for interactive controls if requested
-    if interactive && controls_area !== nothing
-        x_scale_obs = Observable(x_scale)
-        y_scale_obs = Observable(y_scale)
-        
-        # Add checkboxes for axis types with labels
-        x_log_checkbox = Checkbox(controls_area[1, 1], checked = x_scale == :log10)
-        Label(controls_area[1, 2], "X-axis Log")
-        
-        y_log_checkbox = Checkbox(controls_area[2, 1], checked = y_scale == :log10)
-        Label(controls_area[2, 2], "Y-axis Log")
-        
-        # Update Observables when checkboxes change
-        on(x_log_checkbox.checked) do checked
-            x_scale_obs[] = checked ? :log10 : :linear
-        end
-        
-        on(y_log_checkbox.checked) do checked
-            y_scale_obs[] = checked ? :log10 : :linear
-        end
-    else
-        # Use regular variables for non-interactive mode
-        x_scale_obs = x_scale
-        y_scale_obs = y_scale
+    # Create interactive controls
+    x_scale_obs = Observable(x_scale)
+    y_scale_obs = Observable(y_scale)
+    
+    # Add checkboxes for axis types with labels
+    x_log_checkbox = Checkbox(controls_area[1, 1], checked = x_scale == :log10)
+    Label(controls_area[1, 2], "X: Linear/Log")
+    
+    y_log_checkbox = Checkbox(controls_area[2, 1], checked = y_scale == :log10)
+    Label(controls_area[2, 2], "Y: Linear/Log")
+    
+    # Update Observables when checkboxes change
+    on(x_log_checkbox.checked) do checked
+        x_scale_obs[] = checked ? :log10 : :linear
+    end
+    
+    on(y_log_checkbox.checked) do checked
+        y_scale_obs[] = checked ? :log10 : :linear
     end
 
       # Apply scale settings
@@ -155,46 +148,36 @@ function _plot_power_spectrum!(
         end
     end
     
-    # Add reactive updates for axis scales if interactive
-    if interactive
-        # Function to update x-axis scale
-        function update_x_scale(scale)
-            if scale == :log10
-                xlims!(ax, (0.1, max_freq))
-                ax.xscale = log10
-            else
-                xlims!(ax, (0.1, max_freq))
-                ax.xscale = identity
-            end
+    # Add reactive updates for axis scales
+    # Function to update x-axis scale
+    function update_x_scale(scale)
+        if scale == :log10
+            xlims!(ax, (0.1, max_freq))
+            ax.xscale = log10
+        else
+            xlims!(ax, (0.1, max_freq))
+            ax.xscale = identity
         end
-        
-        # Function to update y-axis scale
-        function update_y_scale(scale)
-            if scale == :log10
-                ylims!(ax, (0.1, max_power))
-                ax.yscale = log10
-            else
-                ylims!(ax, (0.1, max_power))
-                ax.yscale = identity
-            end
-        end
-        
-        # Set up reactive updates
-        on(x_scale_obs) do scale
-            update_x_scale(scale)
-        end
-        
-        on(y_scale_obs) do scale
-            update_y_scale(scale)
-        end
-    else
-        # Set y-axis limits for non-interactive mode
-        if y_scale == :log10
-            ylims!(ax, (1e-10, max_power))
+    end
+    
+    # Function to update y-axis scale
+    function update_y_scale(scale)
+        if scale == :log10
+            ylims!(ax, (0.1, max_power))
             ax.yscale = log10
         else
-            ylims!(ax, (0, max_power))
+            ylims!(ax, (0.1, max_power))
+            ax.yscale = identity
         end
+    end
+    
+    # Set up reactive updates
+    on(x_scale_obs) do scale
+        update_x_scale(scale)
+    end
+    
+    on(y_scale_obs) do scale
+        update_y_scale(scale)
     end
     
 
@@ -223,7 +206,6 @@ Plot power spectrum for specified channels from EEG data.
 - `y_scale::Symbol`: Scale for y-axis, one of :linear or :log10 (default: :linear)
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning)
 - `show_legend::Bool`: Whether to show the legend (default: true)
-- `interactive::Bool`: Whether to add interactive checkboxes for axis scaling (default: false)
 
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot
@@ -231,16 +213,17 @@ Plot power spectrum for specified channels from EEG data.
 
 # Examples
 ```julia
-# Basic usage
+# Basic usage with interactive controls
 fig, ax = plot_channel_spectrum(dat)
 
-# With interactive axis controls
-fig, ax = plot_channel_spectrum(dat, interactive = true)
-
-# With specific channels and interactive controls
+# With specific channels
 fig, ax = plot_channel_spectrum(dat, 
-    channel_selection = channels([:Fp1, :Fp2]), 
-    interactive = true)
+    channel_selection = channels([:Fp1, :Fp2]))
+
+# With log scales
+fig, ax = plot_channel_spectrum(dat, 
+    x_scale = :log10, 
+    y_scale = :log10)
 ```
 """
 
@@ -250,7 +233,6 @@ function plot_channel_spectrum(
     channel_selection::Function = channels(),
     show_legend::Bool = true,
     display_plot::Bool = true,
-    interactive::Bool = false,
     kwargs...,
 )
 
@@ -259,27 +241,22 @@ function plot_channel_spectrum(
 
     fig = Figure()
     
-    if interactive
-        # Create a proper grid layout for interactive mode
-        # Main plot takes most of the width and full height
-        main_plot_area = fig[1, 1] = GridLayout()
-        # Controls take a small portion of width and are positioned at the top
-        controls_area = fig[1, 2] = GridLayout()
-        
-        # Set the column proportions using colsize!
-        colsize!(fig.layout, 1, Relative(0.9))  # Main plot column
-        colsize!(fig.layout, 2, Relative(0.1))  # Controls column
-        
-        # Set the row proportions - controls only take top portion
-        rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
-        
-        ax = Axis(main_plot_area[1, 1])
-    else
-        # Simple layout for non-interactive mode
-        ax = Axis(fig[1, 1])
-    end
+    # Create a proper grid layout with interactive controls
+    # Main plot takes most of the width and full height
+    main_plot_area = fig[1, 1] = GridLayout()
+    # Controls take a small portion of width and are positioned at the top
+    controls_area = fig[1, 2] = GridLayout()
+    
+    # Set the column proportions using colsize!
+    colsize!(fig.layout, 1, Relative(0.9))  # Main plot column
+    colsize!(fig.layout, 2, Relative(0.1))  # Controls column
+    
+    # Set the row proportions - controls only take top portion
+    rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
+    
+    ax = Axis(main_plot_area[1, 1])
 
-    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); interactive=interactive, controls_area=controls_area, kwargs...)
+    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset), controls_area; kwargs...)
     
     # Add legend if requested
     if show_legend
@@ -287,7 +264,6 @@ function plot_channel_spectrum(
         n_channels = length(dat_subset.layout.data.label)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
         axislegend(ax, nbanks = n_cols)
-        # axislegend(ax)
     end
     if display_plot
         display_figure(fig)
