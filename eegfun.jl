@@ -29,6 +29,19 @@ eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),    
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 eegfun.is_extreme_value!(dat, 100);
+
+eegfun.plot_databrowser(dat)
+
+
+epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epochs = []
+for (idx, epoch) in enumerate(epoch_cfg)
+     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+end
+eegfun.plot_databrowser(epochs[1])
+
+
+
 # ICA "continuous" data
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value))
 # ica_result = eegfun.run_ica(dat; exclude_samples = [:is_extreme_value])
