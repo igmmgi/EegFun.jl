@@ -1,4 +1,27 @@
-function plot_power_spectrum!(
+"""
+    _plot_power_spectrum!(fig, ax, df, channels_to_plot, fs; kwargs...)
+
+Internal function to plot power spectra on an existing axis.
+
+# Arguments
+- `fig`: Makie Figure
+- `ax`: Makie Axis to plot on
+- `df`: DataFrame containing the data
+- `channels_to_plot`: Vector of channel symbols to plot
+- `fs`: Sampling frequency in Hz
+
+# Keyword Arguments
+- `window_size::Int`: Size of the FFT window (default: 1024)
+- `overlap::Real`: Overlap between windows (default: 0.5)
+- `max_freq::Real`: Maximum frequency to display (default: 200.0)
+- `x_scale::Symbol`: X-axis scale, :linear or :log10 (default: :linear)
+- `y_scale::Symbol`: Y-axis scale, :linear or :log10 (default: :linear)
+- `window_function::Function`: Window function for spectral estimation (default: DSP.hanning)
+- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
+
+This is an internal function used by the public plotting functions.
+"""
+function _plot_power_spectrum!(
     fig,
     ax,
     df::DataFrame,
@@ -12,7 +35,6 @@ function plot_power_spectrum!(
     window_function::Function = DSP.hanning,
     show_freq_bands::Bool = true,
 )
-
 
     # Validate scale parameters
     valid_scales = [:linear, :log10]
@@ -109,8 +131,6 @@ function plot_power_spectrum!(
 end
 
 
-
-
 """
     plot_channel_spectrum(data; kwargs...)
     plot_channel_spectrum(data, fs; kwargs...)
@@ -154,7 +174,7 @@ function plot_channel_spectrum(
     fig = Figure()
     ax = Axis(fig[1, 1])
 
-    plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
+    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
     
     # Add legend if requested
     if show_legend
@@ -172,10 +192,8 @@ function plot_channel_spectrum(
 end
 
 
-
-
 """
-    plot_ica_component_spectrum(ica_result::InfoIca, dat::ContinuousData; component_selection::Function = components(), kwargs...)
+    plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData; component_selection::Function = components(), kwargs...)
 
 Plot power spectrum of ICA component(s) using a component selection predicate.
 
@@ -194,6 +212,8 @@ Plot power spectrum of ICA component(s) using a component selection predicate.
 - `x_scale::Symbol`: Scale for x-axis, one of :linear or :log10 (default: :linear).
 - `y_scale::Symbol`: Scale for y-axis, one of :linear or :log10 (default: :linear).
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+- `show_legend::Bool`: Whether to show the legend with component variance percentages (default: true).
+- `display_plot::Bool`: Whether to display the plot (default: true).
 
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
@@ -202,22 +222,22 @@ Plot power spectrum of ICA component(s) using a component selection predicate.
 # Examples
 ```julia
 # Plot all components (default)
-plot_ica_component_spectrum(ica_result, dat)
+plot_component_spectrum(ica_result, dat)
 
 # Plot specific components
-plot_ica_component_spectrum(ica_result, dat, component_selection = components([1, 3, 5]))
+plot_component_spectrum(ica_result, dat, component_selection = components([1, 3, 5]))
 
 # Plot components 1-10
-plot_ica_component_spectrum(ica_result, dat, component_selection = components(1:10))
+plot_component_spectrum(ica_result, dat, component_selection = components(1:10))
 
 # Plot all components except 1 and 2
-plot_ica_component_spectrum(ica_result, dat, component_selection = components_not([1, 2]))
+plot_component_spectrum(ica_result, dat, component_selection = components_not([1, 2]))
 
 # Plot component 1 only
-plot_ica_component_spectrum(ica_result, dat, component_selection = components(1))
+plot_component_spectrum(ica_result, dat, component_selection = components(1))
 
 # With sample selection
-plot_ica_component_spectrum(ica_result, dat, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
+plot_component_spectrum(ica_result, dat, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
 ```
 """
 function plot_component_spectrum(
@@ -272,8 +292,8 @@ function plot_component_spectrum(
     fig = Figure()
     ax = Axis(fig[1, 1])
     
-    # Use the improved plot_power_spectrum! function
-    plot_power_spectrum!(
+    # Use the improved _plot_power_spectrum! function
+    _plot_power_spectrum!(
         fig,
         ax,
         component_df,
