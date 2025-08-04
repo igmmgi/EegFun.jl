@@ -23,6 +23,8 @@ eegfun.get_layout_neighbours_xyz!(layout, 40);
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
+eegfun.plot_databrowser(dat)
+
 # eegfun.plot_channel_spectrum(dat)
 eegfun.plot_channel_spectrum(dat; sample_selection = x -> x.time .> 1000) 
 
