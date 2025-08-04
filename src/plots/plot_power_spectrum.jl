@@ -240,21 +240,15 @@ plot_component_spectrum(ica_result, dat, component_selection = components(1))
 plot_component_spectrum(ica_result, dat, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
 ```
 """
+
 function plot_component_spectrum(
     ica_result::InfoIca,
     dat::ContinuousData;
-    component_selection::Function = components(),
     sample_selection::Function = samples(),
-    line_freq::Real = 50.0,
-    freq_bandwidth::Real = 1.0,
-    window_size::Int = 1024,
-    overlap::Real = 0.5,
-    max_freq::Real = 100.0,
-    x_scale::Symbol = :linear,
-    y_scale::Symbol = :linear,
-    window_function::Function = DSP.hanning,
+    component_selection::Function = components(),
     show_legend::Bool = true,
     display_plot::Bool = true,
+    kwards...,
 )
     # Get selected components using the predicate
     selected_components = get_selected_components(ica_result, component_selection)
@@ -291,24 +285,9 @@ function plot_component_spectrum(
     # Create figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
-    
-    # Use the improved _plot_power_spectrum! function
-    _plot_power_spectrum!(
-        fig,
-        ax,
-        component_df,
-        components_to_plot,
-        fs;
-        line_freq = line_freq,
-        freq_bandwidth = freq_bandwidth,
-        window_size = window_size,
-        overlap = overlap,
-        max_freq = max_freq,
-        x_scale = x_scale,
-        y_scale = y_scale,
-        window_function = window_function,
-    )
-    
+
+    _plot_power_spectrum!(fig, ax, component_df, components_to_plot, sample_rate(dat_subset); kwargs...)
+   
     # Add custom legend with component variance percentages if requested
     if show_legend
         # Create component labels with variance percentages
