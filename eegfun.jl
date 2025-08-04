@@ -12,7 +12,7 @@ using GLMakie
 using DataFrames
 using BenchmarkTools
 # load data
-dat = eegfun.read_bdf("../Flank_C_3.bdf");
+dat = eegfun.read_bdf("../pt_1.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # define neighbours 2D/3D defined by distance (mm)
 eegfun.polar_to_cartesian_xy!(layout);
@@ -23,11 +23,22 @@ eegfun.get_layout_neighbours_xyz!(layout, 40);
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
-eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
-eegfun.is_extreme_value!(dat, 100);
+# eegfun.plot_channel_spectrum(dat)
+eegfun.plot_channel_spectrum(dat; sample_selection = x -> x.time .> 1000) 
+
+#eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+#eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+#eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+#eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+#eegfun.is_extreme_value!(dat, 100);
+
+
+eegfun.plot_channel_spectrum(dat; y_scale = :log10, sample_selection = x -> x.time .< 1000, channel_selection = eegfun.channels(:Fp1))
+
+
+eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+
+
 
 eegfun.plot_databrowser(dat)
 

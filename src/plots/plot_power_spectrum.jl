@@ -4,24 +4,15 @@ function plot_power_spectrum!(
     df::DataFrame,
     channels_to_plot::Vector{Symbol},
     fs::Real;
-    line_freq::Real = 50.0,
-    freq_bandwidth::Real = 1.0,
     window_size::Int = 1024,
     overlap::Real = 0.5,
     max_freq::Real = 200.0,
     x_scale::Symbol = :linear,
     y_scale::Symbol = :linear,
     window_function::Function = DSP.hanning,
+    show_freq_bands::Bool = true,
 )
-    # Check if we have enough data and adjust window size if needed
-    if size(df, 1) < window_size
-        @minimal_warning "Selected region is too short for the specified window size. Adjusting window size..."
-        window_size = 2^floor(Int, log2(size(df, 1) / 2))
-        if window_size < 32
-            @minimal_warning "Selected region is too short for meaningful spectral analysis. Minimum window size of 32 samples required."
-            return
-        end
-    end
+
 
     # Validate scale parameters
     valid_scales = [:linear, :log10]
@@ -34,26 +25,19 @@ function plot_power_spectrum!(
         y_scale = :linear
     end
 
-    # Prepare signals dictionary
-    signals = Dict{Symbol,Vector{Float64}}()
-    for ch in channels_to_plot
-        signals[ch] = Vector{Float64}(df[!, ch])
-    end
-
-    # Calculate spectra for all requested channels
-    noverlap = Int(round(window_size * overlap))
-    spectra = Dict{Symbol,Tuple{Vector{Float64},Vector{Float64}}}()
-
-    for ch in channels_to_plot
-        signal = signals[ch]
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = fs, window = window_function)
-        spectra[ch] = (DSP.freq(pgram), DSP.power(pgram))
-    end
+    # Define EEG frequency bands
+    freq_bands = Dict(
+        "δ" => (0.5, 4.0),    # Delta
+        "θ" => (4.0, 8.0),    # Theta
+        "α" => (8.0, 13.0),   # Alpha
+        "β" => (13.0, 30.0),  # Beta
+        "γ" => (30.0, 100.0)  # Gamma
+    )
 
     # Set axis labels and title
     ax.xlabel = "Frequency (Hz)"
     ax.ylabel = "Power Spectral Density (μV²/Hz)"
-    ax.title = "Channel Power Spectrum"
+    ax.title = "Power Spectrum"
 
     # Apply scale settings
     if x_scale == :log10
@@ -63,49 +47,67 @@ function plot_power_spectrum!(
         xlims!(ax, (0, max_freq))
     end
 
-    # Calculate max y-value for limits
-    max_power = maximum([maximum(psd) for (_, psd) in values(spectra)])
+    # Calculate and plot spectra for all channels in a single loop
+    noverlap = Int(round(window_size * overlap))
+    max_power = 0.0
+    
+    @views for ch in channels_to_plot
+        signal = df[!, ch]
+        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = fs, window = window_function)
+        freqs, psd = DSP.freq(pgram), DSP.power(pgram)
+        
+        # Track max power for y-axis limits
+        max_power = max(max_power, maximum(psd))
+        
+        # Plot this channel's spectrum
+        lines!(ax, freqs, psd, label = string(ch))
+    end
+    
+    # Add frequency band indicators below the x-axis if requested
+    if show_freq_bands
+        # Create a small axis below the main plot for frequency bands
+        band_ax = Axis(fig[2, 1], height = 30)
+        linkxaxes!(ax, band_ax)
+        
+        # Set limits and hide decorations
+        xlims!(band_ax, 0, max_freq)
+        ylims!(band_ax, 0, 1)
+        hideydecorations!(band_ax)
+        
+        # Hide all spines and ticks
+        band_ax.leftspinevisible = false
+        band_ax.rightspinevisible = false
+        band_ax.topspinevisible = false
+        band_ax.bottomspinevisible = false
+        band_ax.xticksvisible = false
+        band_ax.xticklabelsvisible = false
+        
+        band_colors = [:lightblue, :lightgreen, :yellow, :orange, :lightcoral]
+        for (i, (band_name, (fmin, fmax))) in enumerate(freq_bands)
+            if fmax <= max_freq
+                # Add colored bar
+                bar_x = [fmin, fmax]
+                bar_y = [0.5, 0.5]
+                lines!(band_ax, bar_x, bar_y, color = band_colors[i], linewidth = 8)
+                
+                # Add band label
+                text!(band_ax, (fmin + fmax) / 2, 0.5, text = band_name, 
+                      align = (:center, :center), fontsize = 26, color = :black)
+            end
+        end
+    end
+    
+    # Set y-axis limits
     if y_scale == :log10
         ylims!(ax, (1e-10, max_power))
         ax.yscale = log10
     else
         ylims!(ax, (0, max_power))
     end
-
-    # Plot spectra for all channels
-    for ch in channels_to_plot
-        freqs, psd = spectra[ch]
-        lines!(ax, freqs, psd, label = string(ch))
-    end
-
-    # Calculate max value for vertical lines
-    max_power = maximum([maximum(psd) for (_, psd) in values(spectra)])
-
-    # Highlight line frequency and harmonics
-    for h = 1:3
-        freq = line_freq * h
-        if freq <= max_freq
-            # Add vertical line
-            vlines!(ax, [freq], color = :red, linestyle = :dash)
-
-            # Add shaded region
-            band_x = [freq - freq_bandwidth, freq + freq_bandwidth]
-            band_y = [0, max_power]
-            poly!(
-                ax,
-                [
-                    Point2f(band_x[1], band_y[1]),
-                    Point2f(band_x[2], band_y[1]),
-                    Point2f(band_x[2], band_y[2]),
-                    Point2f(band_x[1], band_y[2]),
-                ],
-                color = (:red, 0.1),
-            )
-
-        end
-    end
+    
 
 end
+
 
 
 
@@ -141,6 +143,7 @@ function plot_channel_spectrum(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
+    show_legend::Bool = true,
     display_plot::Bool = true,
     kwargs...,
 )
@@ -151,7 +154,15 @@ function plot_channel_spectrum(
     fig = Figure()
     ax = Axis(fig[1, 1])
 
-    plot_channel_spectrun!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
+    plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
+    
+    # Add legend if requested
+    if show_legend
+        # Automatically arrange legend in multiple columns if many channels
+        n_channels = length(dat_subset.layout.data.label)
+        nbanks = n_channels > 10 ? 2 : 1
+        axislegend(ax, nbanks = nbanks)
+    end
     if display_plot
         display_figure(fig)
     end
@@ -209,7 +220,7 @@ plot_ica_component_spectrum(ica_result, dat, component_selection = components(1)
 plot_ica_component_spectrum(ica_result, dat, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
 ```
 """
-function plot_ica_component_spectrum(
+function plot_component_spectrum(
     ica_result::InfoIca,
     dat::ContinuousData;
     component_selection::Function = components(),
@@ -222,6 +233,7 @@ function plot_ica_component_spectrum(
     x_scale::Symbol = :linear,
     y_scale::Symbol = :linear,
     window_function::Function = DSP.hanning,
+    show_legend::Bool = true,
     display_plot::Bool = true,
 )
     # Get selected components using the predicate
@@ -259,7 +271,9 @@ function plot_ica_component_spectrum(
     # Create figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
-    _plot_power_spectrum!(
+    
+    # Use the improved plot_power_spectrum! function
+    plot_power_spectrum!(
         fig,
         ax,
         component_df,
@@ -274,24 +288,25 @@ function plot_ica_component_spectrum(
         y_scale = y_scale,
         window_function = window_function,
     )
-
-    ax.title = "ICA Component Power Spectra"
-
-    # Add component variance percentages to the legend
-    component_labels = []
-    for comp_idx in selected_components
-        variance_pct = ica_result.variance[comp_idx] * 100
-        push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
+    
+    # Add custom legend with component variance percentages if requested
+    if show_legend
+        # Create component labels with variance percentages
+        component_labels = []
+        for comp_idx in selected_components
+            variance_pct = ica_result.variance[comp_idx] * 100
+            push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
+        end
+        
+        # Create legend entries from the plotted lines
+        legend_entries = [LineElement(color = ax.scene.plots[i].color) for i = 1:length(selected_components)]
+        
+        # Calculate number of columns based on number of components
+        ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
+        
+        # Place legend - use multi-column for many components
+        Legend(fig[1, 2], legend_entries, component_labels, "Components", nbanks = ncols)
     end
-
-    # Create a new legend with the custom labels
-    legend_entries = [LineElement(color = ax.scene.plots[i].color) for i = 1:length(selected_components)]
-
-    # Calculate number of columns based on number of components
-    ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
-
-    # Place legend - use multi-column for many components
-    Legend(fig[1, 2], legend_entries, component_labels, "Components", nbanks = ncols)
 
     if display_plot
         display_figure(fig)
