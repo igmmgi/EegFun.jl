@@ -1227,8 +1227,7 @@ end
 
 # Internal function to calculate ICA topoplot levels (global or local)
 function _calculate_ica_topo_levels(all_data::Vector{Matrix{Float64}}, use_global_scale::Bool, num_levels::Int; global_min=nothing, global_max=nothing)
-    if use_global_scale
-        # Find global min/max across all data 
+    if use_global_scale # Find global min/max across all data 
         valid_data = filter(!isnan, vcat(all_data...))
         if !isempty(valid_data)
             actual_min, actual_max = extrema(valid_data)
@@ -1244,11 +1243,9 @@ function _calculate_ica_topo_levels(all_data::Vector{Matrix{Float64}}, use_globa
                 num_levels = num_levels,
             )
         else
-            # No valid data - this indicates a problem with the input
-            throw(ArgumentError("No valid (non-NaN) data found in any of the $(length(all_data)) matrices. Cannot calculate topographic levels."))
+            throw(ArgumentError("No valid (non-NaN) data. Cannot calculate topographic levels."))
         end
-    else
-        # Calculate local levels for each component
+    else # Calculate local levels for each component
         return [_calculate_topo_levels(data; num_levels = num_levels) for data in all_data]
     end
 end
@@ -1265,6 +1262,10 @@ end
 
 
 
+
+
+
+################################################################################
 
 
 

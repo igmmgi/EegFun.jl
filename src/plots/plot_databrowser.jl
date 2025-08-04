@@ -1,4 +1,3 @@
-
 # Base type for data states
 abstract type AbstractDataState end
 
@@ -10,8 +9,6 @@ mutable struct Marker
     name::Symbol
     visible::Bool
 end
-
-# IcaState removed - using InfoIca directly which already tracks removed components
 
 mutable struct ExtraChannelVis
     visualization::Union{Nothing,Makie.Lines,Makie.PolyElement,Any}
@@ -48,10 +45,10 @@ mutable struct ViewState
     offset::Vector{Float64}
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
-    function ViewState(n_channels::Int)
+    function ViewState(n_channels::Int, n_samples::Int = 5000)
         # TODO: could this be done better?
         offset = n_channels > 1 ? LinRange(1500 * 0.9, -1500 * 0.9, n_channels + 2)[2:(end-1)] : zeros(n_channels)
-        new(Observable(1:5000), Observable(-1500:1500), offset, Observable(0.0), Observable(false))
+        new(Observable(1:n_samples), Observable(-1500:1500), offset, Observable(0.0), Observable(false))
     end
 end
 
@@ -143,14 +140,19 @@ const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
 # Single function using multiple dispatch for the data state creation
 function create_browser_state(dat::T, channel_labels, ax, ica) where {T<:EegData}
     state_type = data_state_type(T)
+    initial_window = get_initial_window_size(dat)
     return DataBrowserState{state_type}(
-        view = ViewState(length(channel_labels)),
+        view = ViewState(length(channel_labels), initial_window),
         channels = ChannelState(channel_labels),
         data = state_type(dat),  # This directly calls the constructor!
         selection = SelectionState(ax),
         ica_original = ica,
     )
 end
+
+# Helper function to get initial window size based on data type
+get_initial_window_size(dat::ContinuousData) = min(5000, nrow(dat.data))  # Show reasonable window, not entire dataset
+get_initial_window_size(dat::EpochData) = nrow(dat.data[1])  # Show entire epoch
 
 # Type mapping
 data_state_type(::Type{ContinuousData}) = ContinuousDataState
@@ -160,8 +162,7 @@ data_state_type(::Type{EpochData}) = EpochedDataState
 get_current_data(state::ContinuousDataState) = state.current[].data
 get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
 get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
-get_time_bounds(dat::EpochedDataState) =
-    (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
+get_time_bounds(dat::EpochedDataState) = (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
 has_column(state::ContinuousDataState, col::String) = col in names(state.current[].data)
 has_column(state::EpochedDataState, col::String) = col in names(state.current[].data[state.current_epoch[]])
 
@@ -186,24 +187,22 @@ function setup_ui_base(fig, ax, state, dat, ica = nothing)
     handle_mouse_events!(ax, state)
     handle_keyboard_events!(fig, ax, state)
 
-    # Create toggles
+    # Create toggles/markers/menus
     toggles = create_toggles(fig, ax, state)
-
-    # Vertical line markers
     state.markers = init_markers(ax, state)
-
-    # Create standard menus
     labels_menu = create_labels_menu(fig, ax, state)
     reference_menu = create_reference_menu(fig, state, dat)
 
-    # Create optional menus
+    # Create optional menus (ica/extra channels)
     ica_menu = nothing
     if !isnothing(ica) && !isnothing(state.ica_original)
         ica_menu = create_ica_menu(fig, ax, state, ica)
     end
 
-    # Extra channel menu
-    extra_menu = create_extra_channel_menu(fig, ax, state, dat)
+    extra_menu = nothing
+    if !isempty(extra_labels(state.data.original))
+        extra_menu = create_extra_channel_menu(fig, ax, state, dat)
+    end
 
     return (toggles, labels_menu, reference_menu, ica_menu, extra_menu)
 end
@@ -329,14 +328,10 @@ function create_ica_menu(fig, ax, state, ica)
         component_to_remove_int = extract_int(String(s))
 
         if !isnothing(component_to_remove_int)
-            # Apply removal using the current ICA result
             apply_ica_removal!(state.data, state.ica_current, [component_to_remove_int])
-            # Update current ICA to reflect the removal
             state.ica_current = copy(state.ica_current)
-        else # Selected "None"
-            # Reset to original ICA state
+        else # Selected "None" so reset to original ICA state
             state.ica_current = copy(state.ica_original)
-            # Reset data to original state
             reset_to_original!(state.data)
         end
 
@@ -612,7 +607,6 @@ function finish_selection!(ax, state, mouse_x)
     state.selection.visible[] = true
     state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
     update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
-    # Make sure the polygon is visible when selection is visible
     state.selection.rectangle.visible[] = true
 end
 
@@ -621,7 +615,6 @@ function handle_mouse_events!(ax, state)
     shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
 
-    # Listen for keyboard events to track Shift and Ctrl state
     on(events(ax).keyboardbutton) do key_event
         if key_event.key == Keyboard.left_shift
             shift_pressed[] = key_event.action == Keyboard.press
@@ -641,7 +634,6 @@ function handle_mouse_events!(ax, state)
         if event.button == Mouse.left
             if event.action == Mouse.press
                 if ctrl_pressed[]
-                    # Ctrl+Left press: Check for channel selection (immediate response)
                     mouse_y = mouseposition(ax)[2]
                     clicked_channel = find_closest_channel(ax, state, mouse_x, mouse_y)
                     if !isnothing(clicked_channel)
@@ -649,12 +641,10 @@ function handle_mouse_events!(ax, state)
                         return
                     end
                 elseif shift_pressed[]
-                    # Shift+Left press: Start time selection
                     handle_left_click!(ax, state, event, mouse_x)
                 end
             elseif event.action == Mouse.release
                 if shift_pressed[]
-                    # Shift+Left release: Finish time selection
                     handle_left_click!(ax, state, event, mouse_x)
                 end
             end
@@ -690,11 +680,10 @@ function handle_right_click!(ax, state, mouse_x)
     end
 end
 
-
-
 # Helper function to find the closest channel to a click
 function find_closest_channel(ax, state, mouse_x, mouse_y)
     current_data = get_current_data(state.data)
+    tolerance = 10  # 50 pixel tolerance
 
     min_distance = Inf
     closest_channel = nothing
@@ -713,11 +702,14 @@ function find_closest_channel(ax, state, mouse_x, mouse_y)
             # Calculate distance to the clicked point
             distance = abs(mouse_y - channel_y)
 
-            # If this is the closest channel so far and within reasonable distance
-            if distance < min_distance && distance < 50  # 50 pixel tolerance
+            # If this is the closest channel so far
+            if distance < min_distance 
                 min_distance = distance
                 closest_channel = idx
             end
+                if distance < tolerance
+                    return closest_channel
+                end
         end
     end
 
@@ -769,10 +761,7 @@ end
 
 function _handle_selection_movement_impl(ax, state::EpochedDataBrowserState, action::Symbol)
     width = state.selection.bounds[][2] - state.selection.bounds[][1]
-    current_epoch = state.data.current_epoch[]
-    current_data = state.data.current[].data[current_epoch]
-    time_start, time_end = current_data.time[1], current_data.time[end]
-
+    time_start, time_end = get_time_bounds(state.data)
     if action == :left
         new_start = max(time_start, state.selection.bounds[][1] - width / 5)
     else  # :right
@@ -790,7 +779,6 @@ function update_x_region_selection!(ax, state, x1, x2)
         Point2f(Float64(x2), Float64(ylims[2])),
         Point2f(Float64(x1), Float64(ylims[2])),
     ]
-    # Ensure the polygon is visible when it has valid points
     state.selection.rectangle.visible[] = true
 end
 
@@ -799,7 +787,6 @@ function clear_x_region_selection!(state)
     state.selection.rectangle[1] = [Point2f(0.0, 0.0)]
     state.selection.bounds[] = (0.0, 0.0)
     state.selection.visible[] = false
-    # Make sure the polygon is hidden when selection is cleared
     state.selection.rectangle.visible[] = false
 end
 
@@ -813,15 +800,29 @@ function subset_selected_data(state::ContinuousDataBrowserState)
     )
 end
 
-
-function get_x_region_data(state::EpochedDataBrowserState)
+function subset_selected_data(state::EpochedDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
+    selected_channels = state.channels.labels[state.channels.visible]
     current_epoch = state.data.current_epoch[]
-    current_data = state.data.current[].data[current_epoch]
-    time_mask = (x_min .<= current_data.time .<= x_max)
-    selected_data = current_data[time_mask, :]
-    @info "Selected data: $(round(x_min, digits = 2)) to $(round(x_min, digits = 2)) S, size $(size(selected_data))"
-    return selected_data
+    
+    # Create a sample_selection function that works with epoch array
+    # Use the current epoch to get the time-based boolean mask
+    sample_selection = epochs -> begin
+        # Use the current epoch to get the time-based boolean mask
+        current_epoch_data = epochs[current_epoch]
+        time_mask = (current_epoch_data.time .>= x_min) .& (current_epoch_data.time .<= x_max)
+        return time_mask  # Return boolean vector, not indices
+    end
+    
+    epoch_data = subset(
+        state.data.current[],
+        sample_selection = sample_selection,
+        channel_selection = channels(selected_channels),
+        epoch_selection = epochs([current_epoch]),
+    )
+    
+    # Convert to SingleDataFrameEeg for consistent return type
+    return convert(epoch_data, 1)
 end
 
 
@@ -829,11 +830,7 @@ end
 # Filtering
 ############
 function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:AbstractDataState}
-    filter_data!(
-        state.data.current[],
-        String(filter_type),
-        freq;
-    )
+    filter_data!( state.data.current[], String(filter_type), freq;)
 end
 
 function apply_filters!(state)
@@ -887,21 +884,16 @@ end
 
 # Apply ICA component removal based on state type
 function apply_ica_removal!(state::ContinuousDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    # Remove ICA components and update the ICA struct with removed activations
     remove_ica_components!(state.current[].data, ica, component_selection = components(components_to_remove))
     return nothing  # Activations are now stored in ica.removed_activations
 end
 
 function apply_ica_removal!(state::EpochedDataState, ica::InfoIca, components_to_remove::Vector{Int})
-    # Remove ICA components from all epochs and update the ICA struct with removed activations
     for (i, epoch_df) in enumerate(state.current[].data)
         remove_ica_components!(epoch_df, ica, component_selection = components(components_to_remove))
     end
     return nothing  # Activations are now stored in ica.removed_activations
 end
-
-# ICA restoration functions removed - we now use reset_to_original! to restore data
-# and copy the original ICA result to reset the ICA state
 
 
 ########################
@@ -912,6 +904,10 @@ function add_marker!(markers, ax, data, col; label = nothing, trial = nothing, v
         marker_data = data[findall(x -> x != 0, data[!, col]), [:time, col]]
     else
         marker_data = data[trial][findall(x -> x != 0, data[trial][!, col]), [:time, col]]
+    end
+    # if no markers, return
+    if nrow(marker_data) == 0
+        return
     end
     if isnothing(label)
         label = string.(marker_data[!, col])
@@ -1068,10 +1064,10 @@ function get_data_accessors(data::ContinuousDataState)
     return get_data, get_time, get_label_y
 end
 
-function get_data_accessors(data::EpochedDataState)
-    get_data = (current, range, col) -> current.data[current.current_epoch[]][range, col]
-    get_time = (current, range) -> current.data[current.current_epoch[]].time[range]
-    get_label_y = (current, col, offset) -> current.data[current.current_epoch[]][!, col][1] .+ offset
+function get_data_accessors(state::EpochedDataState)
+    get_data = (current, range, col) -> current.data[state.current_epoch[]][range, col]
+    get_time = (current, range) -> current.data[state.current_epoch[]].time[range]
+    get_label_y = (current, col, offset) -> current.data[state.current_epoch[]][!, col][1] .+ offset
     return get_data, get_time, get_label_y
 end
 
@@ -1133,9 +1129,7 @@ function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
         # Get data access functions based on type
         get_data, get_time, get_label_y = get_data_accessors(state.data)
 
-        if eltype(get_data(state.data.current[], 1:1, channel)) == Bool
-            println("Boolean data")
-            # Boolean data - create highlights
+        if eltype(get_data(state.data.current[], 1:1, channel)) == Bool # Boolean data - create highlights
             highlight_data = @views splitgroups(findall(get_data(state.data.current[], :, channel)))
             region_offset = all(iszero, highlight_data[2] .- highlight_data[1]) ? 5 : 0
             state.extra_channel.data_lines[channel] = vspan!(
@@ -1146,8 +1140,7 @@ function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
                 alpha = 0.5,
                 visible = true,
             )
-        else
-            # Regular data - create line and label
+        else # Regular data - create line and label
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
                 @lift(get_time($(state.data.current), :)),
