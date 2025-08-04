@@ -11,7 +11,6 @@ using GLMakie
 # using CairoMakie
 using DataFrames
 using BenchmarkTools
-
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
