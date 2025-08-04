@@ -180,8 +180,9 @@ function plot_channel_spectrum(
     if show_legend
         # Automatically arrange legend in multiple columns if many channels
         n_channels = length(dat_subset.layout.data.label)
-        nbanks = n_channels > 10 ? 2 : 1
-        axislegend(ax, nbanks = nbanks)
+        n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
+        axislegend(ax, nbanks = n_cols)
+        # axislegend(ax)
     end
     if display_plot
         display_figure(fig)
