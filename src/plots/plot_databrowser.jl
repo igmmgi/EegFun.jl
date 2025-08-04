@@ -344,18 +344,32 @@ function create_ica_menu(fig, ax, state, ica)
 end
 
 function create_epoch_menu(fig, ax, state)
-    menu = create_menu(fig, 1:n_epochs(state.data.original), state.data.current_epoch[], "Epoch")
-
-    on(menu[1].selection) do s
-        clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        state.data.current_epoch[] = s
-        ax.title = "Epoch $(s)/$(n_epochs(state.data.original))"
-        update_markers!(ax, state)
-        draw(ax, state)
-        draw_extra_channel!(ax, state)
+    # Create a textbox for epoch input
+    textbox = Textbox(fig, placeholder = "Enter epoch number", stored_string = string(state.data.current_epoch[]), width = 100)
+    label = Label(fig, "Epoch", fontsize = 22, halign = :left, tellwidth = false)
+    
+    # Handle textbox input
+    on(textbox.stored_string) do s
+        try
+            epoch_num = parse(Int, s)
+            if 1 <= epoch_num <= n_epochs(state.data.original)
+                clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+                state.data.current_epoch[] = epoch_num
+                ax.title = "Epoch $(epoch_num)/$(n_epochs(state.data.original))"
+                update_markers!(ax, state)
+                draw(ax, state)
+                draw_extra_channel!(ax, state)
+            else
+                # Invalid epoch number - revert to current value
+                textbox.stored_string[] = string(state.data.current_epoch[])
+            end
+        catch
+            # Invalid input - revert to current value
+            textbox.stored_string[] = string(state.data.current_epoch[])
+        end
     end
-
-    return menu
+    
+    return hcat(textbox, label)
 end
 
 function show_additional_menu(state)
