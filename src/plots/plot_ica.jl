@@ -99,6 +99,17 @@ function plot_ica_topoplot(
     if isnothing(dims)
         dims = best_rect(length(comps))
     end
+    
+    # Validate dimensions
+    if length(dims) != 2 || any(dims .<= 0)
+        throw(ArgumentError("Invalid dimensions: $dims. Expected [rows, cols] with positive values."))
+    end
+    
+    # Ensure we have enough grid cells
+    total_cells = dims[1] * dims[2]
+    if total_cells < length(comps)
+        throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $(length(comps)) for $(length(comps)) components."))
+    end
 
     # Calculate all topo data first
     n_components = length(comps)
@@ -110,21 +121,15 @@ function plot_ica_topoplot(
     # Calculate levels for all plots (global or local)
     levels_result = _calculate_ica_topo_levels(all_data, use_global_scale, num_levels)
 
-    # First create all the GridLayouts for consistent sizing
+    # Create grid layouts and add plots in a single pass
     grids = Vector{GridLayout}(undef, n_components)
     for i in eachindex(comps)
-        row = ceil(Int, i / dims[2])
-        col = ((i - 1) % dims[2]) + 1
-        grids[i] = fig[row, col] = GridLayout()
-    end
 
-    # Now add the plots and colorbars
-    for i in eachindex(comps)
-      
+        row, col = divrem(i - 1, dims[2]) .+ (1, 1)
+        grids[i] = fig[row, col] = GridLayout()
+        
         # grid layout and axis
-        gl = grids[i]
-        # colsize!(gl, 1, Relative(1.0))
-        ax = Axis(gl[1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+        ax = Axis(grids[i][1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
 
         # Get pre-calculated data and levels
         data = all_data[i]
@@ -142,6 +147,7 @@ function plot_ica_topoplot(
             head_kwargs = head_kwargs,
             point_kwargs = point_kwargs,
             label_kwargs = label_kwargs,
+            method = method,
         )
 
         # Do we want to add a colourbar?
@@ -156,7 +162,7 @@ function plot_ica_topoplot(
             # This seems a bit awkward!
             if i in colorbar_plot_numbers # Use accessed list
                 Colorbar(
-                    gl[1, 2],
+                    grids[i][1, 2],
                     co;
                     width = width,
                     height = height,
@@ -165,7 +171,7 @@ function plot_ica_topoplot(
                 )
             else
                 Box(
-                    gl[1, 2];
+                    grids[i][1, 2];
                     width = width,
                     height = height,
                     color = :transparent,
@@ -175,10 +181,9 @@ function plot_ica_topoplot(
             end
 
             # Set column sizes after creating the colorbar column
-            colsize!(gl, 1, Relative(0.85))  # Plot column
-            colsize!(gl, 2, Relative(0.15))  # Colorbar column
-        # else
-        #     colsize!(gl, 1, Relative(1.0))
+            colsize!(grids[i], 1, Relative(0.85))  # Plot column
+            colsize!(grids[i], 2, Relative(0.15))  # Colorbar column
+
         end
 
     end
@@ -278,15 +283,15 @@ mutable struct IcaComponentState
         comps_to_use = findall(component_mask)  # Convert boolean mask to actual indices
 
         # Calculate initial y-range based on components we'll show
-        initial_range_data = if !isempty(comps_to_use) && all(idx -> idx <= total_components, comps_to_use)
-            component_data[comps_to_use, start_idx:end_idx]
+        if !isempty(comps_to_use) && all(idx -> idx <= total_components, comps_to_use)
+            initial_range_data =component_data[comps_to_use, start_idx:end_idx]
         else
-            zeros(0, length(start_idx:end_idx)) # Empty if no valid components
+            initial_range_data = zeros(0, length(start_idx:end_idx)) # Empty if no valid components 
         end
-        initial_range = if !isempty(initial_range_data)
-            maximum(abs.(extrema(initial_range_data)))
+        if !isempty(initial_range_data)
+            initial_range = maximum(abs.(extrema(initial_range_data)))
         else
-            1.0 # Default range if no data
+            initial_range = 1.0 # Default range if no data
         end
         ylims = Observable((-initial_range, initial_range))
         channel_data = Observable(zeros(size(dat.data, 1)))
@@ -471,7 +476,7 @@ function _calculate_topo_levels(
     num_levels = 20,
 )
     # Input validation
-    num_levels > 0 || throw(ArgumentError("num_levels must be positive, got $num_levels"))
+    num_levels <= 0 && throw(ArgumentError("num_levels must be positive, got $num_levels"))
 
     # Find local min/max, ignoring NaNs
     local_min, local_max = -1.0, 1.0
@@ -534,30 +539,19 @@ function _plot_topo_on_axis!(
     label_kwargs = Dict(), 
     kwargs...,
 ) 
+    
+    # Validate gridscale
+    gridscale <= 0 && throw(ArgumentError("gridscale must be positive, got $gridscale"))
 
-    # Use different ranges based on interpolation method
-    contour_range = method == :spherical_spline ? DEFAULT_HEAD_RADIUS * 4 : DEFAULT_HEAD_RADIUS * 2
-    co = contourf!(
-        ax,
-        range(-contour_range, contour_range, length = gridscale),
-        range(-contour_range, contour_range, length = gridscale),
-        data;
-        levels = levels,
-        kwargs..., 
-    )
+    # Calculate contour/coord range based on interpolation method
+    contour_range_multiplier = method == :spherical_spline ? 4.0 : 2.0
+    contour_range = DEFAULT_HEAD_RADIUS * contour_range_multiplier
+    coord_range = range(-contour_range, contour_range, length = gridscale)
+    
+    co = contourf!( ax, coord_range, coord_range, data; levels = levels, kwargs...)
+    plot_layout_2d!( fig, ax, layout; head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
 
-    plot_layout_2d!(
-        fig,
-        ax,
-        layout;
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
-    )
-
-    # Hide decorations
-    hidexdecorations!(ax, grid = false)
-    hideydecorations!(ax, grid = false)
+    hidedecorations!(ax, grid = false)
 
     return co
 
@@ -585,14 +579,10 @@ function _plot_ica_topo_in_viewer!(
     data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
 
     # Use pre-calculated levels if provided, otherwise calculate levels
-    levels = if isnothing(pre_calculated_levels)
-        _calculate_topo_levels(
-            data;
-            use_global_scale = use_global_scale,
-            num_levels = num_levels,
-        )
+    if isnothing(pre_calculated_levels)
+        levels = _calculate_topo_levels(data; use_global_scale = use_global_scale, num_levels = num_levels)
     else
-        pre_calculated_levels
+        levels = pre_calculated_levels
     end
 
     # Plot using the new internal function
@@ -608,26 +598,23 @@ function _plot_ica_topo_in_viewer!(
         head_kwargs = head_kwargs,
         point_kwargs = point_kwargs,
         label_kwargs = label_kwargs,
+        method = method,
     )
 
     return co
 end
 
-# Update create_component_plots! - Remove topo_kwargs argument
-function create_component_plots!(fig, state) # Removed topo_kwargs argument
-    # --- No local merging needed anymore ---
+function create_component_plots!(fig, state) 
 
-    # Create axes for the time series plots
-    # For subsets, show all components in the subset
-    # For all components, create n_visible_components plots
-    num_plots = if length(state.components) == size(state.component_data, 1)
-        state.n_visible_components
+    # Number of plots
+    if length(state.components) == size(state.component_data, 1)
+        num_plots = state.n_visible_components
     else
-        length(state.components)  # Show all components in the subset
+        num_plots = length(state.components)  # Show all components in the subset
     end
     
     for i = 1:num_plots
-        # Create topo plot axis first (now on the left)
+
         topo_ax = Axis(fig[i, 1])
         push!(state.topo_axs, topo_ax)
 
@@ -673,9 +660,7 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
         )
         push!(state.channel_axs, ax_channel)
 
-        # Link axes
-        linkyaxes!(ax, ax_channel)
-        linkxaxes!(ax, ax_channel)
+        linkaxes!(ax, ax_channel)
 
         # Channel overlay plot
         lines!(
@@ -701,10 +686,10 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
 
         # Observable creation for component plot
         # Handle potential invalid comp_idx robustly
-        comp_data = if comp_idx <= size(state.component_data, 1)
-            state.component_data[comp_idx, :]
+        if comp_idx <= size(state.component_data, 1)
+            comp_data = state.component_data[comp_idx, :]
         else
-            zeros(Float64, size(state.component_data, 2)) # Placeholder data
+            comp_data = zeros(Float64, size(state.component_data, 2)) # Placeholder data
         end
         lines_obs = Observable(comp_data)
         push!(state.lines_obs, lines_obs)
@@ -717,7 +702,6 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
 
         # Create the topo plot using the dedicated viewer function
         if comp_idx <= size(state.component_data, 1)
-            # --- Pass parameters from state ---
             _plot_ica_topo_in_viewer!(
                 fig,
                 topo_ax,
@@ -731,9 +715,8 @@ function create_component_plots!(fig, state) # Removed topo_kwargs argument
                 head_kwargs = state.topo_head_kwargs,
                 point_kwargs = state.topo_point_kwargs,
                 label_kwargs = state.topo_label_kwargs,
+                method = state.topo_method,
             )
-            # --- End Pass parameters ---
-            # Set title here
             topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
         else
             empty!(topo_ax) # Clear axis if comp_idx is invalid
@@ -744,14 +727,13 @@ end
 
 # Update add_navigation_controls! to include the global scale checkbox
 function add_navigation_controls!(fig, state)
+
     # Add navigation buttons below topo plots in column 1
-    # Remove padding here
     topo_nav = GridLayout(fig[state.n_visible_components+1, 1], tellheight = false)
 
-    # --- Add an empty column 1 for spacing ---
+    # Column 1 spacing 
     colsize!(topo_nav, 1, 40) # Set width of the empty first column
 
-    # --- Shift all widgets one column to the right ---
     # Navigation buttons now in row 1, columns 2 & 3
     prev_topo = Button(topo_nav[1, 2], label = "◄ Previous", tellheight = false)
     next_topo = Button(topo_nav[1, 3], label = "Next ►", tellheight = false)
@@ -769,16 +751,14 @@ function add_navigation_controls!(fig, state)
     invert_scale_check = Checkbox(topo_nav[4, 2], checked = state.invert_scale[], tellheight = false)
     Label(topo_nav[4, 3], "Invert Scale", tellwidth = false, tellheight = false)
 
-    # --- Gap settings (adjust column indices) ---
     # Add column gaps for better spacing
-    colgap!(topo_nav, 2, 10) # Gap after the *new* column 2 (was 1)
-    colgap!(topo_nav, 3, 5)  # Gap after the *new* column 3 (was 2)
+    colgap!(topo_nav, 2, 10) 
+    colgap!(topo_nav, 3, 5)  
 
     # Add row gaps for vertical spacing (unchanged values, indices okay)
     rowgap!(topo_nav, 1, 35)
     rowgap!(topo_nav, 2, 45)
     rowgap!(topo_nav, 3, 35)
-    # --- End Gap settings ---
 
     # Connect checkboxes to state
     on(global_scale_check.checked) do checked
@@ -849,12 +829,10 @@ function parse_component_input(text::String, total_components::Int)
         return components
     end
 
-    try
-        # Split by comma
+    try # Split by comma
         parts = strip.(split(text, ','))
         for part in parts
-            if occursin(':', part)
-                # Handle ranges like "1:5"
+            if occursin(':', part) # Handle ranges like "1:5"
                 range_parts = strip.(split(part, ':'))
                 if length(range_parts) == 2
                     start_num = parse(Int, range_parts[1])
@@ -863,8 +841,7 @@ function parse_component_input(text::String, total_components::Int)
                         append!(components, start_num:end_num)
                     end
                 end
-            else
-                # Handle single numbers
+            else # Handle single numbers
                 num = parse(Int, part)
                 if 1 <= num <= total_components
                     push!(components, num)
@@ -1048,8 +1025,7 @@ function setup_keyboard_interactions!(fig, state)
                     new_start = max(1, first(current_range) - state.window_size)
                     state.xrange[] = new_start:(new_start+state.window_size-1)
                 else  # right
-                    new_start =
-                        min(size(state.component_data, 2) - state.window_size + 1, first(current_range) + state.window_size)
+                    new_start = min(size(state.component_data, 2) - state.window_size + 1, first(current_range) + state.window_size)
                     state.xrange[] = new_start:(new_start+state.window_size-1)
                 end
 
@@ -1154,11 +1130,11 @@ end
 
 # Update component data when navigating
 function update_components!(state)
-    # Collect all data for level calculation
-    num_plots = if length(state.components) == size(state.component_data, 1)
-        state.n_visible_components
+    # Number of plots
+    if length(state.components) == size(state.component_data, 1)
+        num_plots = state.n_visible_components
     else
-        length(state.components)  # Update all components in the subset
+        num_plots = length(state.components)  # Update all components in the subset
     end
     
     # Pre-allocate data vector
@@ -1167,7 +1143,6 @@ function update_components!(state)
     
     for i = 1:num_plots
         comp_idx = _get_component_index(state, i)
-
         if comp_idx <= size(state.component_data, 1)
             data_count += 1
             all_data[data_count] = _prepare_ica_topo_data(state.ica_result, comp_idx, state.topo_method, state.topo_gridscale)
@@ -1180,14 +1155,8 @@ function update_components!(state)
     # Calculate levels using the simplified function
     levels_result = _calculate_ica_topo_levels(all_data, state.use_global_scale[], state.topo_num_levels)
 
-    # For subsets, update all components in the subset
-    num_plots = if length(state.components) == size(state.component_data, 1)
-        state.n_visible_components
-    else
-        length(state.components)  # Update all components in the subset
-    end
-    
     for i = 1:num_plots
+
         comp_idx = _get_component_index(state, i)
 
         if comp_idx <= size(state.component_data, 1)
@@ -1207,20 +1176,18 @@ function update_components!(state)
             if i <= length(state.topo_axs)
                 topo_ax = state.topo_axs[i]
                 # Determine which level to use for this component
-                level_to_use = if state.use_global_scale[]
-                    levels_result  # Use global levels for all components
+                if state.use_global_scale[]
+                    level_to_use = levels_result  # Use global levels for all components
                 else
-                    levels_result[i]  # Use local levels for this specific component
+                    level_to_use = levels_result[i]  # Use local levels for this specific component
                 end
                 
-                # --- Pass parameters from state ---
                 _plot_ica_topo_in_viewer!(
                     topo_ax.parent, # Pass the figure associated with the axis
                     topo_ax,
                     state.ica_result,
                     comp_idx;
                     use_global_scale = state.use_global_scale[],
-                    # Pass stored kwargs from state
                     gridscale = state.topo_gridscale,
                     colormap = state.topo_colormap,
                     num_levels = state.topo_num_levels,
@@ -1231,7 +1198,6 @@ function update_components!(state)
                     label_kwargs = state.topo_label_kwargs,
                     pre_calculated_levels = level_to_use,
                 )
-                # --- End Pass parameters ---
                 # Update title
                 topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
             else
@@ -1256,6 +1222,102 @@ function update_components!(state)
         end
     end
 end
+
+
+
+
+# Internal function to prepare ICA topoplot data (interpolation only)
+function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
+    if method == :spherical_spline
+        return _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
+    elseif method == :multiquadratic
+        return _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], ica.layout, gridscale)
+    else
+        throw(ArgumentError("Unknown interpolation method: $method"))
+    end
+end
+
+# Internal function to plot ICA topoplot on an axis
+function _plot_ica_topo_on_axis!(
+    topo_ax,
+    fig,
+    data::Matrix{Float64},
+    ica::InfoIca,
+    levels;
+    gridscale::Int = 100,
+    colormap::Symbol = :jet,
+    nan_color::Symbol = :transparent,
+    head_kwargs::Dict = Dict(),
+    point_kwargs::Dict = Dict(),
+    label_kwargs::Dict = Dict(),
+    method::Symbol = :spherical_spline,
+)
+    # Clear the axis
+    empty!(topo_ax)
+
+    # Plot using the existing low-level function
+    co = _plot_topo_on_axis!(
+        topo_ax,
+        fig,
+        data,
+        ica.layout,
+        method,
+        levels;
+        gridscale = gridscale,
+        colormap = colormap,
+        nan_color = nan_color,
+        head_kwargs = head_kwargs,
+        point_kwargs = point_kwargs,
+        label_kwargs = label_kwargs,
+    )
+
+    hidedecorations!(topo_ax, grid = false)
+
+    return co
+end
+
+# Internal function to calculate ICA topoplot levels (global or local)
+function _calculate_ica_topo_levels(all_data::Vector{Matrix{Float64}}, use_global_scale::Bool, num_levels::Int; global_min=nothing, global_max=nothing)
+    if use_global_scale
+        # Find global min/max across all data 
+        valid_data = filter(!isnan, vcat(all_data...))
+        if !isempty(valid_data)
+            actual_min, actual_max = extrema(valid_data)
+            # Use provided min/max if given, otherwise use actual min/max
+            min_val = isnothing(global_min) ? actual_min : global_min
+            max_val = isnothing(global_max) ? actual_max : global_max
+            # Calculate global levels using base function
+            return _calculate_topo_levels(
+                reshape([min_val, max_val], 1, 2);
+                use_global_scale = true,
+                global_min = min_val,
+                global_max = max_val,
+                num_levels = num_levels,
+            )
+        else
+            # No valid data - this indicates a problem with the input
+            throw(ArgumentError("No valid (non-NaN) data found in any of the $(length(all_data)) matrices. Cannot calculate topographic levels."))
+        end
+    else
+        # Calculate local levels for each component
+        return [_calculate_topo_levels(data; num_levels = num_levels) for data in all_data]
+    end
+end
+
+# Helper function to get component index based on state
+function _get_component_index(state, i::Int)
+    if length(state.components) == size(state.component_data, 1)
+        return state.comp_start[] + i - 1
+    else
+        return state.components[i]
+    end
+end
+
+
+
+
+
+
 
 
 """
@@ -1862,110 +1924,4 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     )
 
     return fig
-end
-
-# Internal function to prepare ICA topoplot data (interpolation only)
-function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
-    if method == :spherical_spline
-        return _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
-    elseif method == :multiquadratic
-        return _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], ica.layout, gridscale)
-    else
-        throw(ArgumentError("Unknown interpolation method: $method"))
-    end
-end
-
-# Internal function to plot ICA topoplot on an axis
-function _plot_ica_topo_on_axis!(
-    topo_ax,
-    fig,
-    data::Matrix{Float64},
-    ica::InfoIca,
-    levels;
-    gridscale::Int = 100,
-    colormap::Symbol = :jet,
-    nan_color::Symbol = :transparent,
-    head_kwargs::Dict = Dict(),
-    point_kwargs::Dict = Dict(),
-    label_kwargs::Dict = Dict(),
-)
-    # Clear the axis
-    empty!(topo_ax)
-
-    # Plot using the existing low-level function
-    co = _plot_topo_on_axis!(
-        topo_ax,
-        fig,
-        data,
-        ica.layout,
-        levels;
-        gridscale = gridscale,
-        colormap = colormap,
-        nan_color = nan_color,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
-    )
-
-    # Hide decorations
-    hidexdecorations!(topo_ax, grid = false)
-    hideydecorations!(topo_ax, grid = false)
-
-    return co
-end
-
-# Internal function to calculate ICA topoplot levels (global or local)
-function _calculate_ica_topo_levels(all_data::Vector{Matrix{Float64}}, use_global_scale::Bool, num_levels::Int; global_min=nothing, global_max=nothing)
-    if use_global_scale
-        # Find global min/max across all data more efficiently
-        actual_min, actual_max = Inf, -Inf
-        has_valid_data = false
-        
-        for data in all_data
-            for v in data
-                if !isnan(v)
-                    actual_min = min(actual_min, v)
-                    actual_max = max(actual_max, v)
-                    has_valid_data = true
-                end
-            end
-        end
-        
-        if has_valid_data
-            # Use provided min/max if given, otherwise use actual min/max
-            min_val = isnothing(global_min) ? actual_min : global_min
-            max_val = isnothing(global_max) ? actual_max : global_max
-            # Calculate global levels
-            return _calculate_topo_levels(
-                reshape([min_val, max_val], 1, 2); # Pass minimal matrix with min/max
-                use_global_scale = true,
-                global_min = min_val,
-                global_max = max_val,
-                num_levels = num_levels,
-            )
-        else
-            # Fallback if no valid data
-            return _calculate_topo_levels(zeros(1, 1); num_levels = num_levels)
-        end
-    else
-        # Calculate local levels for each component with pre-allocation
-        n_components = length(all_data)
-        all_local_levels = Vector{Any}(undef, n_components)
-        
-        for i in eachindex(all_data)
-            all_local_levels[i] = _calculate_topo_levels(all_data[i]; num_levels = num_levels)
-        end
-        return all_local_levels
-    end
-end
-
-# Helper function to get component index based on state
-function _get_component_index(state, i::Int)
-    if length(state.components) == size(state.component_data, 1)
-        # Using all components - use scrolling logic
-        return state.comp_start[] + i - 1
-    else
-        # Using a subset of components - use the subset directly
-        return state.components[i]
-    end
 end
