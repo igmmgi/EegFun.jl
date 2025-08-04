@@ -1,7 +1,7 @@
 """
     _plot_power_spectrum!(fig, ax, df, channels_to_plot, fs; kwargs...)
 
-Internal function to plot power spectra on an existing axis.
+Internal function to plot power spectra on an existing axis with interactive controls.
 
 # Arguments
 - `fig`: Makie Figure
@@ -19,6 +19,11 @@ Internal function to plot power spectra on an existing axis.
 - `window_function::Function`: Window function for spectral estimation (default: DSP.hanning)
 - `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
 
+# Features
+- Creates interactive checkboxes for toggling between linear and log scales
+- Automatically sets up grid layout with controls in the top-right corner
+- Shows frequency band indicators below the main plot when enabled
+
 This is an internal function used by the public plotting functions.
 """
 function _plot_power_spectrum!(
@@ -26,8 +31,7 @@ function _plot_power_spectrum!(
     ax,
     df::DataFrame,
     channels_to_plot::Vector{Symbol},
-    fs::Real,
-    controls_area;
+    fs::Real;
     window_size::Int = 1024,
     overlap::Real = 0.5,
     max_freq::Real = 200.0,
@@ -62,14 +66,20 @@ function _plot_power_spectrum!(
     ax.ylabel = "Power Spectral Density (μV²/Hz)"
     ax.title = "Power Spectrum"
 
-    # Create interactive controls
+    # Create interactive controls in the figure
+    controls_area = fig[1, 2] = GridLayout()
+    
+    # Set the column/row proportions 
+    colsize!(fig.layout, 1, Relative(0.9))  # Main plot column
+    colsize!(fig.layout, 2, Relative(0.1))  # Controls column
+    rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
+    
     x_scale_obs = Observable(x_scale)
     y_scale_obs = Observable(y_scale)
     
-    # Add checkboxes for axis types with labels
+    # Add x/y checkboxes for axis types with labels
     x_log_checkbox = Checkbox(controls_area[1, 1], checked = x_scale == :log10)
     Label(controls_area[1, 2], "X: Linear/Log")
-    
     y_log_checkbox = Checkbox(controls_area[2, 1], checked = y_scale == :log10)
     Label(controls_area[2, 2], "Y: Linear/Log")
     
@@ -77,13 +87,12 @@ function _plot_power_spectrum!(
     on(x_log_checkbox.checked) do checked
         x_scale_obs[] = checked ? :log10 : :linear
     end
-    
     on(y_log_checkbox.checked) do checked
         y_scale_obs[] = checked ? :log10 : :linear
     end
 
-      # Apply scale settings
-      if x_scale == :log10
+    # Apply scale settings
+    if x_scale == :log10
         xlims!(ax, (0.1, max_freq))
         ax.xscale = log10
     else
@@ -116,32 +125,23 @@ function _plot_power_spectrum!(
     
     # Add frequency band indicators below the x-axis if requested
     if show_freq_bands
-        # Create a small axis below the main plot for frequency bands
+
         band_ax = Axis(fig[2, 1], height = 30)
         linkxaxes!(ax, band_ax)
         
         # Set limits and hide decorations
         xlims!(band_ax, 0, max_freq)
         ylims!(band_ax, 0, 1)
-        hideydecorations!(band_ax)
-        
-        # Hide all spines and ticks
-        band_ax.leftspinevisible = false
-        band_ax.rightspinevisible = false
-        band_ax.topspinevisible = false
-        band_ax.bottomspinevisible = false
-        band_ax.xticksvisible = false
-        band_ax.xticklabelsvisible = false
+        hidedecorations!(band_ax)
+        hidespines!(band_ax)
         
         band_colors = [:lightblue, :lightgreen, :yellow, :orange, :lightcoral]
         for (i, (band_name, (fmin, fmax))) in enumerate(freq_bands)
             if fmax <= max_freq
-                # Add colored bar
+                # Add colored bar and label
                 bar_x = [fmin, fmax]
                 bar_y = [0.5, 0.5]
                 lines!(band_ax, bar_x, bar_y, color = band_colors[i], linewidth = 8)
-                
-                # Add band label
                 text!(band_ax, (fmin + fmax) / 2, 0.5, text = band_name, 
                       align = (:center, :center), fontsize = 26, color = :black)
             end
@@ -185,27 +185,31 @@ end
 
 
 """
-    plot_channel_spectrum(data; kwargs...)
-    plot_channel_spectrum(data, fs; kwargs...)
+    plot_channel_spectrum(dat; kwargs...)
 
-Plot power spectrum for specified channels from EEG data.
+Plot power spectrum for specified channels from EEG data with interactive controls.
 
 # Arguments
-- `data`: DataFrame or ContinuousData object containing EEG data
-- `fs`: Sampling frequency in Hz (optional, extracted from data if not provided)
+- `dat::SingleDataFrameEeg`: The EEG data object
 
 # Keyword Arguments
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
-- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0)
-- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz)
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024)
 - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5)
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 200.0)
-- `x_scale::Symbol`: Scale for x-axis, one of :linear or :log10 (default: :linear)
-- `y_scale::Symbol`: Scale for y-axis, one of :linear or :log10 (default: :linear)
+- `x_scale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear)
+- `y_scale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear)
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning)
+- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
 - `show_legend::Bool`: Whether to show the legend (default: true)
+- `display_plot::Bool`: Whether to display the plot (default: true)
+
+# Features
+- Interactive checkboxes to toggle between linear and log scales for both axes
+- Automatic multi-column legend for many channels
+- Frequency band indicators (δ, θ, α, β, γ) below the main plot
+- Responsive grid layout with controls in the top-right corner
 
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot
@@ -239,32 +243,19 @@ function plot_channel_spectrum(
     # data selection
     dat_subset = subset(dat, sample_selection = sample_selection, channel_selection = channel_selection)
 
+    # Create figure and main axis
     fig = Figure()
-    
-    # Create a proper grid layout with interactive controls
-    # Main plot takes most of the width and full height
-    main_plot_area = fig[1, 1] = GridLayout()
-    # Controls take a small portion of width and are positioned at the top
-    controls_area = fig[1, 2] = GridLayout()
-    
-    # Set the column proportions using colsize!
-    colsize!(fig.layout, 1, Relative(0.9))  # Main plot column
-    colsize!(fig.layout, 2, Relative(0.1))  # Controls column
-    
-    # Set the row proportions - controls only take top portion
-    rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
-    
-    ax = Axis(main_plot_area[1, 1])
+    ax = Axis(fig[1, 1])
 
-    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset), controls_area; kwargs...)
+    _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
     
     # Add legend if requested
     if show_legend
-        # Automatically arrange legend in multiple columns if many channels
         n_channels = length(dat_subset.layout.data.label)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
         axislegend(ax, nbanks = n_cols)
     end
+
     if display_plot
         display_figure(fig)
     end
@@ -277,7 +268,7 @@ end
 """
     plot_component_spectrum(ica_result::InfoIca, dat::ContinuousData; component_selection::Function = components(), kwargs...)
 
-Plot power spectrum of ICA component(s) using a component selection predicate.
+Plot power spectrum of ICA component(s) with interactive controls for axis scaling.
 
 # Arguments
 - `ica_result::InfoIca`: The ICA result object.
@@ -286,16 +277,21 @@ Plot power spectrum of ICA component(s) using a component selection predicate.
 
 # Keyword Arguments
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
-- `line_freq::Real`: Line frequency in Hz to highlight (default: 50.0).
-- `freq_bandwidth::Real`: Bandwidth around line frequency to highlight (default: 1.0 Hz).
 - `window_size::Int`: Size of the FFT window for spectral estimation (default: 1024).
 - `overlap::Real`: Overlap between windows for Welch's method (default: 0.5).
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
-- `x_scale::Symbol`: Scale for x-axis, one of :linear or :log10 (default: :linear).
-- `y_scale::Symbol`: Scale for y-axis, one of :linear or :log10 (default: :linear).
+- `x_scale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear).
+- `y_scale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear).
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
+- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true).
 - `show_legend::Bool`: Whether to show the legend with component variance percentages (default: true).
 - `display_plot::Bool`: Whether to display the plot (default: true).
+
+# Features
+- Interactive checkboxes to toggle between linear and log scales for both axes
+- Automatic multi-column legend for many components with variance percentages
+- Frequency band indicators (δ, θ, α, β, γ) below the main plot
+- Responsive grid layout with controls in the top-right corner
 
 # Returns
 - `fig::Figure`: The Makie Figure containing the power spectrum plot.
@@ -330,7 +326,7 @@ function plot_component_spectrum(
     component_selection::Function = components(),
     show_legend::Bool = true,
     display_plot::Bool = true,
-    kwards...,
+    kwargs...,
 )
     # Get selected components using the predicate
     selected_components = get_selected_components(ica_result, component_selection)
@@ -379,14 +375,12 @@ function plot_component_spectrum(
             push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
         end
         
-        # Create legend entries from the plotted lines
-        legend_entries = [LineElement(color = ax.scene.plots[i].color) for i = 1:length(selected_components)]
-        
+        # Use axislegend for consistency with plot_channel_spectrum
         # Calculate number of columns based on number of components
         ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
         
-        # Place legend - use multi-column for many components
-        Legend(fig[1, 2], legend_entries, component_labels, "Components", nbanks = ncols)
+        # Place legend on the axis itself
+        axislegend(ax, nbanks = ncols)
     end
 
     if display_plot
