@@ -85,9 +85,8 @@ function plot_ica_topoplot(
     colorbar_plot_numbers = colorbar_kwargs[:colorbar_plot_numbers]
     colorbar_kwargs = filter(p -> p.first ∉ (:plot_colorbar, :colorbar_plot_numbers), colorbar_kwargs)
 
-    # Get selected components using the component_selection function
-    all_components = 1:size(ica.mixing, 2)
-    comps = all_components[component_selection(all_components)]
+    # Get selected components using the helper function
+    comps = get_selected_components(ica, component_selection)
 
     # Create figure with reduced margins
     fig = Figure(
@@ -95,7 +94,7 @@ function plot_ica_topoplot(
         backgroundcolor = :white,
     )
 
-    # Calculate layout dimensions
+    # Deal with plot dimensions
     if isnothing(dims)
         dims = best_rect(length(comps))
     end
@@ -108,7 +107,7 @@ function plot_ica_topoplot(
     # Ensure we have enough grid cells
     total_cells = dims[1] * dims[2]
     if total_cells < length(comps)
-        throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $(length(comps)) for $(length(comps)) components."))
+        throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $(length(comps))."))
     end
 
     # Calculate all topo data first
@@ -420,8 +419,7 @@ function plot_ica_component_activation(
     add_channel_menu!(fig, state)
     setup_keyboard_interactions!(fig, state)
 
-    colsize!(fig.layout, 1, Relative(0.15))
-    colsize!(fig.layout, 2, Relative(0.85))
+    colsize!(fig.layout, (1, 2), (Relative(0.15), Relative(0.85)))
     rowgap!(fig.layout, state.n_visible_components, 30)
 
     display(fig)
@@ -751,11 +749,9 @@ function add_navigation_controls!(fig, state)
     invert_scale_check = Checkbox(topo_nav[4, 2], checked = state.invert_scale[], tellheight = false)
     Label(topo_nav[4, 3], "Invert Scale", tellwidth = false, tellheight = false)
 
-    # Add column gaps for better spacing
+    # Add column/row gaps for better spacing
     colgap!(topo_nav, 2, 10) 
     colgap!(topo_nav, 3, 5)  
-
-    # Add row gaps for vertical spacing (unchanged values, indices okay)
     rowgap!(topo_nav, 1, 35)
     rowgap!(topo_nav, 2, 45)
     rowgap!(topo_nav, 3, 35)
@@ -791,7 +787,7 @@ function add_navigation_controls!(fig, state)
     on(apply_button.clicks) do _
         text_value = text_input.displayed_string[]
         if !isempty(text_value)
-            comps = parse_component_input(text_value, size(state.component_data, 1))
+            comps = parse_string_to_ints(text_value, size(state.component_data, 1))
             if !isempty(comps)
                 @info "Creating new plot with components: $comps"
                 current_channel = state.channel_data[]
@@ -808,54 +804,7 @@ function add_navigation_controls!(fig, state)
     end
 end
 
-# Function to parse component input text into a list of component indices
-"""
-    parse_component_input(text::String, total_components::Int)
 
-Parses a comma-separated string potentially containing ranges (e.g., "1,3-5,8")
-into a sorted, unique vector of valid component indices.
-
-# Arguments
-- `text::String`: The input string.
-- `total_components::Int`: The maximum valid component index.
-
-# Returns
-- `Vector{Int}`: Sorted, unique vector of valid component indices found in the text.
-                 Returns an empty vector if input is empty or invalid.
-"""
-function parse_component_input(text::String, total_components::Int)
-    components = Int[]
-    if isempty(text)
-        return components
-    end
-
-    try # Split by comma
-        parts = strip.(split(text, ','))
-        for part in parts
-            if occursin(':', part) # Handle ranges like "1:5"
-                range_parts = strip.(split(part, ':'))
-                if length(range_parts) == 2
-                    start_num = parse(Int, range_parts[1])
-                    end_num = parse(Int, range_parts[2])
-                    if 1 <= start_num <= end_num <= total_components
-                        append!(components, start_num:end_num)
-                    end
-                end
-            else # Handle single numbers
-                num = parse(Int, part)
-                if 1 <= num <= total_components
-                    push!(components, num)
-                end
-            end
-        end
-    catch e
-        @minimal_warning e
-    end
-
-    # Remove duplicates and sort
-    unique!(sort!(components))
-    return components
-end
 
 # Update add_navigation_sliders! to match new layout
 function add_navigation_sliders!(fig, state)

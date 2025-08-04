@@ -409,7 +409,71 @@ function Base.copy(info::AnalysisInfo)::AnalysisInfo
     return AnalysisInfo(info.reference, info.hp_filter, info.lp_filter)
 end
 
+# Function to parse component input text into a list of component indices
+"""
+    parse_string_to_ints(text::String, total_components::Int)
 
+Parses a comma-separated string potentially containing ranges (e.g., "1,3-5,8")
+into a sorted, unique vector of valid component indices.
+
+# Arguments
+- `text::String`: The input string.
+- `total_components::Int`: The maximum valid component index.
+
+# Returns
+- `Vector{Int}`: Sorted, unique vector of valid component indices found in the text.
+                 Returns an empty vector if input is empty or invalid.
+"""
+function parse_string_to_ints(text::String)
+
+    components = Int[]
+    if isempty(text)
+        return components
+    end
+
+    # Check for decimal points and error
+    if occursin('.', text)
+        throw(ArgumentError("Decimal points not allowed in int selection: '$text'"))
+    end
+    
+    # Split by comma or semicolon and filter empty parts
+    parts = filter(!isempty, strip.(split(text, r"[,;]")))
+    
+    # Filter non-numeric parts (except :) and warn
+    numeric_parts = []
+    for part in parts
+        if all(c -> isdigit(c) || c == ':', part)
+            push!(numeric_parts, part)
+        else
+            @minimal_warning "Skipping non-numeric component: '$part'"
+        end
+    end
+    
+    for part in numeric_parts
+        if occursin(':', part) # Handle ranges like "1:5"
+            range_parts = strip.(split(part, ':'))
+            if length(range_parts) == 2
+                start_num = parse(Int, range_parts[1])
+                end_num = parse(Int, range_parts[2])
+                if start_num <= end_num
+                    append!(components, start_num:end_num)
+                end
+            end
+        else # Handle single numbers
+            num = parse(Int, part)
+            push!(components, num)
+        end
+    end
+
+    # Remove duplicates and sort
+    unique!(sort!(components))
+    return components
+end
+
+function parse_string_to_ints(text::String, max_count::Int)
+    all_components = parse_string_to_ints(text)
+    return all_components[1:min(length(all_components), max_count)]
+end
 
 # set_aog_theme!()
 # fig = Figure()
