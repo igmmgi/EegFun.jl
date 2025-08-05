@@ -82,8 +82,7 @@ function plot_channel_summary!(
     # Create the bar plot
     barplot!(ax, 1:length(values_to_plot), values_to_plot)
     if average_over !== nothing # add error bars
-        errorbars!(ax, 1:length(values_to_plot), values_to_plot, margin_of_error, 
-                  color = :black, linewidth = 2)
+        errorbars!(ax, 1:length(values_to_plot), values_to_plot, margin_of_error, color = :black, linewidth = 2)
     end
 
     return nothing

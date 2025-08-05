@@ -98,12 +98,12 @@ function plot_ica_topoplot(
     if isnothing(dims)
         dims = best_rect(length(comps))
     end
-    
+
     # Validate dimensions
     if length(dims) != 2 || any(dims .<= 0)
         throw(ArgumentError("Invalid dimensions: $dims. Expected [rows, cols] with positive values."))
     end
-    
+
     # Ensure we have enough grid cells
     total_cells = dims[1] * dims[2]
     if total_cells < length(comps)
@@ -126,7 +126,7 @@ function plot_ica_topoplot(
 
         row, col = divrem(i - 1, dims[2]) .+ (1, 1)
         grids[i] = fig[row, col] = GridLayout()
-        
+
         # grid layout and axis
         ax = Axis(grids[i][1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
 
@@ -150,7 +150,7 @@ function plot_ica_topoplot(
         )
 
         # Do we want to add a colourbar?
-        if plot_colorbar 
+        if plot_colorbar
 
             width = get(colorbar_kwargs, :width, 10)
             height = get(colorbar_kwargs, :height, Relative(0.8))
@@ -255,7 +255,7 @@ mutable struct IcaComponentState
         dat_matrix = prepare_ica_data_matrix(dat, ica_result)
         component_data = ica_result.unmixing * dat_matrix
         total_components = size(component_data, 1)
-        
+
         # Use the layout from the ICA result (already subsetted to match the channels used in ICA)
         subsetted_layout = ica_result.layout
 
@@ -283,7 +283,7 @@ mutable struct IcaComponentState
 
         # Calculate initial y-range based on components we'll show
         if !isempty(comps_to_use) && all(idx -> idx <= total_components, comps_to_use)
-            initial_range_data =component_data[comps_to_use, start_idx:end_idx]
+            initial_range_data = component_data[comps_to_use, start_idx:end_idx]
         else
             initial_range_data = zeros(0, length(start_idx:end_idx)) # Empty if no valid components 
         end
@@ -298,8 +298,7 @@ mutable struct IcaComponentState
         channel_yscale = Observable(1.0)
 
         # --- Process and store Topo Kwargs ---
-        topo_defaults =
-            Dict(:gridscale => 300, :colormap => :jet, :num_levels => 20, :nan_color => :transparent)
+        topo_defaults = Dict(:gridscale => 300, :colormap => :jet, :num_levels => 20, :nan_color => :transparent)
         processed_topo_kwargs = merge(topo_defaults, topo_kwargs)
 
         head_defaults = Dict(:color => :black, :linewidth => 2)
@@ -386,8 +385,8 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 function plot_ica_component_activation(
     dat::ContinuousData,
     ica_result::InfoIca;
-    component_selection = components(),  
-    n_visible_components::Int = 10,  
+    component_selection = components(),
+    n_visible_components::Int = 10,
     window_size::Int = 2000,
     topo_kwargs = Dict(),
     head_kwargs = Dict(),
@@ -410,10 +409,10 @@ function plot_ica_component_activation(
     )
 
     # Create figure with padding on the right for margin
-    fig = Figure( figure_padding = (0, 20, 0, 0)) 
+    fig = Figure(figure_padding = (0, 20, 0, 0))
 
     # Setup GUI interface
-    create_component_plots!(fig, state) 
+    create_component_plots!(fig, state)
     add_navigation_controls!(fig, state)
     add_navigation_sliders!(fig, state)
     add_channel_menu!(fig, state)
@@ -485,7 +484,7 @@ function _calculate_topo_levels(
     end
 
     # Determine final min/max for levels
-    if use_global_scale && !isnothing(global_min) && !isnothing(global_max) 
+    if use_global_scale && !isnothing(global_min) && !isnothing(global_max)
         final_min, final_max = global_min, global_max
     else
         final_min, final_max = local_min, local_max
@@ -534,10 +533,10 @@ function _plot_topo_on_axis!(
     gridscale = 200,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
-    label_kwargs = Dict(), 
+    label_kwargs = Dict(),
     kwargs...,
-) 
-    
+)
+
     # Validate gridscale
     gridscale <= 0 && throw(ArgumentError("gridscale must be positive, got $gridscale"))
 
@@ -545,9 +544,16 @@ function _plot_topo_on_axis!(
     contour_range_multiplier = method == :spherical_spline ? 4.0 : 2.0
     contour_range = DEFAULT_HEAD_RADIUS * contour_range_multiplier
     coord_range = range(-contour_range, contour_range, length = gridscale)
-    
-    co = contourf!( ax, coord_range, coord_range, data; levels = levels, kwargs...)
-    plot_layout_2d!( fig, ax, layout; head_kwargs = head_kwargs, point_kwargs = point_kwargs, label_kwargs = label_kwargs)
+
+    co = contourf!(ax, coord_range, coord_range, data; levels = levels, kwargs...)
+    plot_layout_2d!(
+        fig,
+        ax,
+        layout;
+        head_kwargs = head_kwargs,
+        point_kwargs = point_kwargs,
+        label_kwargs = label_kwargs,
+    )
 
     hidedecorations!(ax, grid = false)
 
@@ -602,7 +608,7 @@ function _plot_ica_topo_in_viewer!(
     return co
 end
 
-function create_component_plots!(fig, state) 
+function create_component_plots!(fig, state)
 
     # Number of plots
     if length(state.components) == size(state.component_data, 1)
@@ -610,7 +616,7 @@ function create_component_plots!(fig, state)
     else
         num_plots = length(state.components)  # Show all components in the subset
     end
-    
+
     for i = 1:num_plots
 
         topo_ax = Axis(fig[i, 1])
@@ -618,7 +624,7 @@ function create_component_plots!(fig, state)
 
         # Get the actual component number
         comp_idx = _get_component_index(state, i)
-        
+
         # Time series axis creation (now on the right)
         ax = Axis(
             fig[i, 2],
@@ -664,18 +670,16 @@ function create_component_plots!(fig, state)
         lines!(
             ax_channel,
             @lift(state.dat.data.time[$(state.xrange)]),
-            @lift(
-                if $(state.show_channel)
-                    xrange = $(state.xrange)
-                    if first(xrange) >= 1 && last(xrange) <= length($(state.channel_data))
-                        $(state.channel_data)[xrange] .* $(state.channel_yscale)
-                    else
-                        zeros(Float64, length(xrange))
-                    end
+            @lift(if $(state.show_channel)
+                xrange = $(state.xrange)
+                if first(xrange) >= 1 && last(xrange) <= length($(state.channel_data))
+                    $(state.channel_data)[xrange] .* $(state.channel_yscale)
                 else
-                    zeros(Float64, length($(state.xrange)))
+                    zeros(Float64, length(xrange))
                 end
-            ),
+            else
+                zeros(Float64, length($(state.xrange)))
+            end),
             color = :grey,
         )
 
@@ -750,8 +754,8 @@ function add_navigation_controls!(fig, state)
     Label(topo_nav[4, 3], "Invert Scale", tellwidth = false, tellheight = false)
 
     # Add column/row gaps for better spacing
-    colgap!(topo_nav, 2, 10) 
-    colgap!(topo_nav, 3, 5)  
+    colgap!(topo_nav, 2, 10)
+    colgap!(topo_nav, 3, 5)
     rowgap!(topo_nav, 1, 35)
     rowgap!(topo_nav, 2, 45)
     rowgap!(topo_nav, 3, 35)
@@ -794,11 +798,8 @@ function add_navigation_controls!(fig, state)
                 show_channel = state.show_channel[]
                 use_global = state.use_global_scale[]
                 invert = state.invert_scale[]
-                new_fig = plot_ica_component_activation(
-                    state.dat,
-                    state.ica_result,
-                    component_selection = components(comps),
-                )
+                new_fig =
+                    plot_ica_component_activation(state.dat, state.ica_result, component_selection = components(comps))
             end
         end
     end
@@ -974,7 +975,10 @@ function setup_keyboard_interactions!(fig, state)
                     new_start = max(1, first(current_range) - state.window_size)
                     state.xrange[] = new_start:(new_start+state.window_size-1)
                 else  # right
-                    new_start = min(size(state.component_data, 2) - state.window_size + 1, first(current_range) + state.window_size)
+                    new_start = min(
+                        size(state.component_data, 2) - state.window_size + 1,
+                        first(current_range) + state.window_size,
+                    )
                     state.xrange[] = new_start:(new_start+state.window_size-1)
                 end
 
@@ -1029,7 +1033,7 @@ function setup_keyboard_interactions!(fig, state)
                     else
                         length(state.components)  # Update all components in the subset
                     end
-                    
+
                     for i = 1:num_plots
                         # Get the correct component index
                         comp_idx = _get_component_index(state, i)
@@ -1085,19 +1089,20 @@ function update_components!(state)
     else
         num_plots = length(state.components)  # Update all components in the subset
     end
-    
+
     # Pre-allocate data vector
     all_data = Vector{Matrix{Float64}}(undef, num_plots)
     data_count = 0
-    
+
     for i = 1:num_plots
         comp_idx = _get_component_index(state, i)
         if comp_idx <= size(state.component_data, 1)
             data_count += 1
-            all_data[data_count] = _prepare_ica_topo_data(state.ica_result, comp_idx, state.topo_method, state.topo_gridscale)
+            all_data[data_count] =
+                _prepare_ica_topo_data(state.ica_result, comp_idx, state.topo_method, state.topo_gridscale)
         end
     end
-    
+
     # Resize to actual count
     resize!(all_data, data_count)
 
@@ -1130,7 +1135,7 @@ function update_components!(state)
                 else
                     level_to_use = levels_result[i]  # Use local levels for this specific component
                 end
-                
+
                 _plot_ica_topo_in_viewer!(
                     topo_ax.parent, # Pass the figure associated with the axis
                     topo_ax,
@@ -1226,7 +1231,13 @@ function _plot_ica_topo_on_axis!(
 end
 
 # Internal function to calculate ICA topoplot levels (global or local)
-function _calculate_ica_topo_levels(all_data::Vector{Matrix{Float64}}, use_global_scale::Bool, num_levels::Int; global_min=nothing, global_max=nothing)
+function _calculate_ica_topo_levels(
+    all_data::Vector{Matrix{Float64}},
+    use_global_scale::Bool,
+    num_levels::Int;
+    global_min = nothing,
+    global_max = nothing,
+)
     if use_global_scale # Find global min/max across all data 
         valid_data = filter(!isnan, vcat(all_data...))
         if !isempty(valid_data)

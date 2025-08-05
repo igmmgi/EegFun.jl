@@ -66,7 +66,7 @@ function _extract_trigger_data(dat::ContinuousData)
     if !hasproperty(dat.data, trigger_col)
         error("No triggers column found in data. Expected column name: $trigger_col")
     end
-    
+
     trigger_positions = findall(x -> x != 0, dat.data[!, trigger_col])
     trigger_codes = Int16.(dat.data[trigger_positions, trigger_col])
     trigger_times = dat.data[trigger_positions, :time]
@@ -95,12 +95,11 @@ function _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,I
     if isempty(trigger_count)
         return
     end
-    
+
     # Add invisible scatter points with labels for each trigger type
     for (key, value) in trigger_count
         # Place invisible points far outside the plot area
-        scatter!(ax, [-1000], [-1000], label = "$key: $value", 
-                markersize = 0, color = :transparent, alpha = 0)
+        scatter!(ax, [-1000], [-1000], label = "$key: $value", markersize = 0, color = :transparent, alpha = 0)
     end
 end
 
@@ -229,25 +228,21 @@ Create interactive sliders for position and window size.
 """
 function _create_interactive_sliders(fig::Figure, end_time::Float64)
     initial_position = -2.0
-    
-    slider_position = Slider(
-        fig[2, 1], 
-        range = initial_position:POSITION_STEP:end_time, 
-        startvalue = initial_position, 
-        snap = true
-    )
-    
+
+    slider_position =
+        Slider(fig[2, 1], range = initial_position:POSITION_STEP:end_time, startvalue = initial_position, snap = true)
+
     slider_size = Slider(
         fig[3, 1],
         range = MIN_WINDOW_SIZE:WINDOW_SIZE_STEP:MAX_WINDOW_SIZE,
         startvalue = DEFAULT_WINDOW_SIZE,
         snap = true,
     )
-    
+
     # Create labels for sliders
     position_label = Label(fig[2, 2], @lift("Position: $(round($(slider_position.value), digits=1))s"), fontsize = 20)
     size_label = Label(fig[3, 2], @lift("Window Size: $(round($(slider_size.value), digits=1))s"), fontsize = 20)
-    
+
     return slider_position, slider_size, initial_position
 end
 
@@ -257,27 +252,31 @@ end
 
 Core function to plot trigger events on the given axis.
 """
-function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger_codes::Vector{Int16}; 
-                              use_preallocated::Bool=false)
+function _plot_trigger_events!(
+    ax::Axis,
+    trigger_times::Vector{Float64},
+    trigger_codes::Vector{Int16};
+    use_preallocated::Bool = false,
+)
     # Early return if no triggers to plot
     if isempty(trigger_times)
         @minimal_error "No triggers to plot"
         return
     end
-    
+
     # Pre-compute string conversions
     code_strings = [string(Int(code)) for code in trigger_codes]
     time_strings = [string(round(time, digits = 2)) for time in trigger_times]
-    
+
     # Pre-compute intervals and their string representations
     intervals = diff(trigger_times)
     interval_strings = [string(round(interval, digits = 2)) for interval in intervals]
     interval_positions = [(trigger_times[i] + trigger_times[i+1]) / 2 for i = 1:length(intervals)]
-    
+
     # Plot horizontal timeline
     timeline_start = 0.0
     lines!(ax, [timeline_start, trigger_times[end]], [0, 0], color = :black, linewidth = DEFAULT_TIMELINE_WIDTH)
-    
+
     # Plot vertical lines for each event
     for (time, code_str, time_str) in zip(trigger_times, code_strings, time_strings)
         if use_preallocated
@@ -288,7 +287,7 @@ function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger
             # Create new vectors (for non-interactive plotting)
             lines!(ax, [time, time], [0, EVENT_LINE_HEIGHT], color = :black, linewidth = DEFAULT_EVENT_LINE_WIDTH)
         end
-        
+
         # Add trigger code at the top of the line
         text!(
             ax,
@@ -299,7 +298,7 @@ function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger
             color = :black,
             fontsize = DEFAULT_FONT_SIZE,
         )
-        
+
         # Add time value below the line
         text!(
             ax,
@@ -311,18 +310,10 @@ function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger
             fontsize = DEFAULT_FONT_SIZE,
         )
     end
-    
+
     # Plot intervals as text
     for (x, interval_str) in zip(interval_positions, interval_strings)
-        text!(
-            ax,
-            x,
-            0,
-            text = interval_str,
-            align = (:center, :top),
-            color = :black,
-            fontsize = DEFAULT_FONT_SIZE,
-        )
+        text!(ax, x, 0, text = interval_str, align = (:center, :top), color = :black, fontsize = DEFAULT_FONT_SIZE)
     end
 end
 
@@ -338,75 +329,75 @@ function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_
         ax = Axis(fig[1, 1])
         return fig, ax
     end
-    
+
     # Calculate time range
     end_time = trigger_times[end] + 2.0
-    
+
     # Create figure with grid layout to accommodate legend
     fig = Figure()
     ax = Axis(fig[1, 1])
-    
+
     # Add trigger count legend entries
     trigger_count = _count_triggers(trigger_codes)
     _add_trigger_legend_entries!(ax, trigger_count)
     fig[1, 2] = Legend(fig, ax)
-    
+
     # Create Observables for reactive plotting
     window_size = Observable(DEFAULT_WINDOW_SIZE)
     slider_position, slider_size, initial_position = _create_interactive_sliders(fig, end_time)
     window_position = Observable(initial_position)
-    
+
     # Update Observables when sliders change
     on(slider_position.value) do pos
         window_position[] = pos
     end
-    
+
     on(slider_size.value) do size
         window_size[] = size
     end
-    
+
     # Reactive plotting function
     function update_plot!()
         empty!(ax)
-        
+
         # Get current window bounds
         current_start = window_position[]
         current_end = min(current_start + window_size[], end_time)
-        
+
         # Filter triggers within the current window
         window_mask = (trigger_times .>= current_start) .&& (trigger_times .<= current_end)
         window_times = trigger_times[window_mask]
         window_codes = trigger_codes[window_mask]
-        
+
         if !isempty(window_times)
-            _plot_trigger_events!(ax, window_times, window_codes, use_preallocated=true)
+            _plot_trigger_events!(ax, window_times, window_codes, use_preallocated = true)
         end
-        
+
         # Update only x-axis limits
         xlims!(ax, current_start, current_end)
     end
-    
+
     # Set up reactive updates
     on(window_position) do _
         update_plot!()
     end
-    
+
     on(window_size) do _
         update_plot!()
     end
-    
+
     # Set axis properties once
     _setup_axis_properties!(ax)
-    
+
     # Initial plot
     update_plot!()
-    
+
     # Handle display
     display_plot = get(kwargs, :display_plot, true)
     if display_plot
         display(fig)
     end
-    
+
     return fig, ax
 end
 
@@ -434,16 +425,16 @@ function plot_trigger_timing!(
     trigger_times::Vector{Float64};
     kwargs...,
 )
-    _plot_trigger_events!(ax, trigger_times, codes, use_preallocated=false)
+    _plot_trigger_events!(ax, trigger_times, codes, use_preallocated = false)
     _setup_axis_properties!(ax)
-    
+
     # Add trigger count legend if not empty
     if !isempty(trigger_times)
         trigger_count = _count_triggers(codes)
         _add_trigger_legend_entries!(ax, trigger_count)
         fig[1, 2] = Legend(fig, ax)
     end
-    
+
     return fig, ax
 end
 

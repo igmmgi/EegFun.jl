@@ -162,7 +162,8 @@ data_state_type(::Type{EpochData}) = EpochedDataState
 get_current_data(state::ContinuousDataState) = state.current[].data
 get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
 get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
-get_time_bounds(dat::EpochedDataState) = (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
+get_time_bounds(dat::EpochedDataState) =
+    (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
 has_column(state::ContinuousDataState, col::String) = col in names(state.current[].data)
 has_column(state::EpochedDataState, col::String) = col in names(state.current[].data[state.current_epoch[]])
 
@@ -345,12 +346,19 @@ end
 
 function create_epoch_menu(fig, ax, state)
     # Create an epoch slider
-    slider_epoch = Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
-    label = Label(fig, @lift("Epoch: $($(slider_epoch.value))/$(n_epochs(state.data.original))"), fontsize = 22, halign = :left, tellwidth = false)
-    
+    slider_epoch =
+        Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
+    label = Label(
+        fig,
+        @lift("Epoch: $($(slider_epoch.value))/$(n_epochs(state.data.original))"),
+        fontsize = 22,
+        halign = :left,
+        tellwidth = false,
+    )
+
     # Flag to prevent circular updates
     updating_from_keyboard = Ref(false)
-    
+
     # Handle slider input
     on(slider_epoch.value) do epoch_num
         if !updating_from_keyboard[]
@@ -362,14 +370,14 @@ function create_epoch_menu(fig, ax, state)
             draw_extra_channel!(ax, state)
         end
     end
-    
+
     # Make slider observe current_epoch changes (for left/right key navigation)
     on(state.data.current_epoch) do epoch_num
         updating_from_keyboard[] = true
         slider_epoch.value[] = epoch_num
         updating_from_keyboard[] = false
     end
-    
+
     return hcat(slider_epoch, label)
 end
 
@@ -718,13 +726,13 @@ function find_closest_channel(ax, state, mouse_x, mouse_y)
             distance = abs(mouse_y - channel_y)
 
             # If this is the closest channel so far
-            if distance < min_distance 
+            if distance < min_distance
                 min_distance = distance
                 closest_channel = idx
             end
-                if distance < tolerance
-                    return closest_channel
-                end
+            if distance < tolerance
+                return closest_channel
+            end
         end
     end
 
@@ -819,23 +827,24 @@ function subset_selected_data(state::EpochedDataBrowserState)
     x_min, x_max = minmax(state.selection.bounds[]...)
     selected_channels = state.channels.labels[state.channels.visible]
     current_epoch = state.data.current_epoch[]
-    
+
     # Create a sample_selection function that works with epoch array
     # Use the current epoch to get the time-based boolean mask
-    sample_selection = epochs -> begin
-        # Use the current epoch to get the time-based boolean mask
-        current_epoch_data = epochs[current_epoch]
-        time_mask = (current_epoch_data.time .>= x_min) .& (current_epoch_data.time .<= x_max)
-        return time_mask  # Return boolean vector, not indices
-    end
-    
+    sample_selection =
+        epochs -> begin
+            # Use the current epoch to get the time-based boolean mask
+            current_epoch_data = epochs[current_epoch]
+            time_mask = (current_epoch_data.time .>= x_min) .& (current_epoch_data.time .<= x_max)
+            return time_mask  # Return boolean vector, not indices
+        end
+
     epoch_data = subset(
         state.data.current[],
         sample_selection = sample_selection,
         channel_selection = channels(selected_channels),
         epoch_selection = epochs([current_epoch]),
     )
-    
+
     # Convert to SingleDataFrameEeg for consistent return type
     return convert(epoch_data, 1)
 end
@@ -845,7 +854,7 @@ end
 # Filtering
 ############
 function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:AbstractDataState}
-    filter_data!( state.data.current[], String(filter_type), freq;)
+    filter_data!(state.data.current[], String(filter_type), freq;)
 end
 
 function apply_filters!(state)

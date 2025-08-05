@@ -58,7 +58,7 @@ function _plot_power_spectrum!(
         "θ" => (4.0, 8.0),    # Theta
         "α" => (8.0, 13.0),   # Alpha
         "β" => (13.0, 30.0),  # Beta
-        "γ" => (30.0, 100.0)  # Gamma
+        "γ" => (30.0, 100.0),  # Gamma
     )
 
     # Set axis labels and title
@@ -68,21 +68,21 @@ function _plot_power_spectrum!(
 
     # Create interactive controls in the figure
     controls_area = fig[1, 2] = GridLayout()
-    
+
     # Set the column/row proportions 
     colsize!(fig.layout, 1, Relative(0.9))  # Main plot column
     colsize!(fig.layout, 2, Relative(0.1))  # Controls column
     rowsize!(fig.layout, 1, Relative(0.7))  # Main content row
-    
+
     x_scale_obs = Observable(x_scale)
     y_scale_obs = Observable(y_scale)
-    
+
     # Add x/y checkboxes for axis types with labels
     x_log_checkbox = Checkbox(controls_area[1, 1], checked = x_scale == :log10)
     Label(controls_area[1, 2], "X: Linear/Log")
     y_log_checkbox = Checkbox(controls_area[2, 1], checked = y_scale == :log10)
     Label(controls_area[2, 2], "Y: Linear/Log")
-    
+
     # Update Observables when checkboxes change
     on(x_log_checkbox.checked) do checked
         x_scale_obs[] = checked ? :log10 : :linear
@@ -102,39 +102,39 @@ function _plot_power_spectrum!(
     # Calculate and plot spectra for all channels in a single loop
     noverlap = Int(round(window_size * overlap))
     max_power = 0.0
-    
+
     # Store frequency and power data for reactive updates
     freq_data = []
     power_data = []
-    
+
     @views for ch in channels_to_plot
         signal = df[!, ch]
         pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = fs, window = window_function)
         freqs, psd = DSP.freq(pgram), DSP.power(pgram)
-        
+
         # Track max power for y-axis limits
         max_power = max(max_power, maximum(psd))
-        
+
         # Store data for reactive updates
         push!(freq_data, freqs)
         push!(power_data, psd)
-        
+
         # Plot this channel's spectrum
         lines!(ax, freqs, psd, label = string(ch))
     end
-    
+
     # Add frequency band indicators below the x-axis if requested
     if show_freq_bands
 
         band_ax = Axis(fig[2, 1], height = 30)
         linkxaxes!(ax, band_ax)
-        
+
         # Set limits and hide decorations
         xlims!(band_ax, 0, max_freq)
         ylims!(band_ax, 0, 1)
         hidedecorations!(band_ax)
         hidespines!(band_ax)
-        
+
         band_colors = [:lightblue, :lightgreen, :yellow, :orange, :lightcoral]
         for (i, (band_name, (fmin, fmax))) in enumerate(freq_bands)
             if fmax <= max_freq
@@ -142,12 +142,19 @@ function _plot_power_spectrum!(
                 bar_x = [fmin, fmax]
                 bar_y = [0.5, 0.5]
                 lines!(band_ax, bar_x, bar_y, color = band_colors[i], linewidth = 8)
-                text!(band_ax, (fmin + fmax) / 2, 0.5, text = band_name, 
-                      align = (:center, :center), fontsize = 26, color = :black)
+                text!(
+                    band_ax,
+                    (fmin + fmax) / 2,
+                    0.5,
+                    text = band_name,
+                    align = (:center, :center),
+                    fontsize = 26,
+                    color = :black,
+                )
             end
         end
     end
-    
+
     # Add reactive updates for axis scales
     # Function to update x-axis scale
     function update_x_scale(scale)
@@ -159,7 +166,7 @@ function _plot_power_spectrum!(
             ax.xscale = identity
         end
     end
-    
+
     # Function to update y-axis scale
     function update_y_scale(scale)
         if scale == :log10
@@ -170,16 +177,16 @@ function _plot_power_spectrum!(
             ax.yscale = identity
         end
     end
-    
+
     # Set up reactive updates
     on(x_scale_obs) do scale
         update_x_scale(scale)
     end
-    
+
     on(y_scale_obs) do scale
         update_y_scale(scale)
     end
-    
+
 
 end
 
@@ -248,7 +255,7 @@ function plot_channel_spectrum(
     ax = Axis(fig[1, 1])
 
     _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
-    
+
     # Add legend if requested
     if show_legend
         n_channels = length(dat_subset.layout.data.label)
@@ -365,7 +372,7 @@ function plot_component_spectrum(
     ax = Axis(fig[1, 1])
 
     _plot_power_spectrum!(fig, ax, component_df, components_to_plot, sample_rate(dat); kwargs...)
-   
+
     # Add custom legend with component variance percentages if requested
     if show_legend
         # Create component labels with variance percentages
@@ -374,11 +381,11 @@ function plot_component_spectrum(
             variance_pct = ica_result.variance[comp_idx] * 100
             push!(component_labels, @sprintf("IC %d (%.1f%%)", comp_idx, variance_pct))
         end
-        
+
         # Use axislegend for consistency with plot_channel_spectrum
         # Calculate number of columns based on number of components
         ncols = length(selected_components) > 10 ? ceil(Int, length(selected_components) / 10) : 1
-        
+
         # Place legend on the axis itself
         axislegend(ax, nbanks = ncols)
     end

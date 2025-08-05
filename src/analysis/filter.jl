@@ -159,8 +159,9 @@ function _apply_filter!(
     dat::DataFrame,
     channels::Vector{Symbol},
     filter::FilterInfo;
-    filter_func::Function = filtfilt,
+    filter_func::String = "filtfilt",
 )::Nothing
+    filter_func = filter_func == "filtfilt" ? filtfilt : filt
     @inbounds for channel in channels
         @views dat[:, channel] .= filter_func(filter.filter_object, dat[:, channel])
     end
@@ -171,7 +172,7 @@ function _apply_filter!(
     dat::Vector{DataFrame},
     channels::Vector{Symbol},
     filter::FilterInfo;
-    filter_func::Function = filtfilt,
+    filter_func::String = "filtfilt",
 )::Nothing
     _apply_filter!.(dat, Ref(channels), Ref(filter), Ref(filter_func))
     return nothing
@@ -201,7 +202,7 @@ Apply a digital filter to EEG data. Modifies the data in place.
 - `order::Integer`: Filter order for IIR filters (default: 3)
 - `transition_width::Real`: Relative width of transition band as fraction of cutoff (default: 0.25)
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-- `filter_func::Function`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+- `filter_func::String`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
 - `plot_filter::Bool`: Boolean to plot frequency response (default: false)
 - `print_filter::Bool`: Boolean to print filter characteristics (default: false)
             order=2, 
@@ -215,7 +216,7 @@ function filter_data!(
     transition_width::Real = filter_type == "hp" ? 0.25 : 0.1,
     filter_method::String = "iir",
     channel_selection::Function = channels(),
-    filter_func::Function = filtfilt,
+    filter_func::String = "filtfilt",
     plot_filter::Bool = false,
     print_filter::Bool = false,
 )

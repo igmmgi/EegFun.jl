@@ -816,17 +816,22 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
 end
 
 # Internal function for plain DataFrames with explicit channel specification
-function _is_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Vector{Bool}
+function _is_extreme_value(
+    dat::DataFrame,
+    criterion::Number,
+    selected_channels::Vector{Symbol},
+    selected_samples::Vector{Int},
+)::Vector{Bool}
     # Initialize result vector with false for all samples
     result = fill(false, nrow(dat))
-    
+
     # Check for extreme values only in selected samples
     if !isempty(selected_samples)
         data_subset = select(dat[selected_samples, :], selected_channels)
         extreme_mask = any(x -> abs.(x) >= criterion, Matrix(data_subset), dims = 2)[:]
         result[selected_samples] = extreme_mask
     end
-    
+
     return result
 end
 
@@ -890,9 +895,10 @@ function is_extreme_value(
     include_additional_channels::Bool = false,
 )::Vector{Bool}
 
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels =
+        get_selected_channels(dat, channel_selection; include_additional_channels = include_additional_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
+
     @info "is_extreme_value: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
     return _is_extreme_value(dat.data, criterion, selected_channels, selected_samples)
 end
@@ -949,9 +955,10 @@ function is_extreme_value!(
     include_extra::Bool = false,
     channel_out::Symbol = :is_extreme_value,
 )
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta=include_meta, include_extra=include_extra)
+    selected_channels =
+        get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
+
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
     dat.data[!, channel_out] = _is_extreme_value(dat.data, criterion, selected_channels, selected_samples)
 end
@@ -1007,21 +1014,27 @@ function n_extreme_value(
     channel_selection::Function = channels(),
     include_additional_channels::Bool = false,
 )::Int
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels =
+        get_selected_channels(dat, channel_selection; include_additional_channels = include_additional_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
+
     return _n_extreme_value(dat.data, criterion, selected_channels, selected_samples)
 end
 
 # Internal function for plain DataFrames with explicit channel specification
-function _n_extreme_value(dat::DataFrame, criterion::Number, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Int
+function _n_extreme_value(
+    dat::DataFrame,
+    criterion::Number,
+    selected_channels::Vector{Symbol},
+    selected_samples::Vector{Int},
+)::Int
     @info "n_extreme_value: Counting extreme values in channel $(_print_vector(selected_channels)) with criterion $(criterion)"
-    
+
     # Only count extreme values in selected samples
     if isempty(selected_samples)
         return 0
     end
-    
+
     data_subset = select(dat[selected_samples, :], selected_channels)
     return sum(sum.(eachcol(abs.(data_subset) .>= criterion)))
 end
@@ -1089,10 +1102,17 @@ function channel_joint_probability(
     threshold::Real = 3.0,
     normval::Real = 2,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_additional_channels=include_additional_channels)
+    selected_channels =
+        get_selected_channels(dat, channel_selection; include_additional_channels = include_additional_channels)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
-    return _channel_joint_probability(dat.data, selected_samples, selected_channels; threshold=threshold, normval=normval)
+
+    return _channel_joint_probability(
+        dat.data,
+        selected_samples,
+        selected_channels;
+        threshold = threshold,
+        normval = normval,
+    )
 end
 
 
@@ -1170,7 +1190,7 @@ function _trim_extremes(x::Vector{Float64})
     n = length(x)
     trim = round(Int, n * 0.1)
     sorted = sort(x)
-    return view(sorted, trim+1:n-trim)
+    return view(sorted, (trim+1):(n-trim))
 end
 
 
@@ -1239,85 +1259,87 @@ function trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
 end
 
 # Helper function for trigger counting logic
-function _trigger_count_impl(trigger_data::Vector{<:Integer}; print_table::Bool = true, title::String = "Trigger Count Summary")
+function _trigger_count_impl(
+    trigger_data::Vector{<:Integer};
+    print_table::Bool = true,
+    title::String = "Trigger Count Summary",
+)
     # Get unique non-zero trigger values
     unique_triggers = unique(trigger_data)
     non_zero_triggers = filter(x -> x != 0, unique_triggers)
-    
+
     if isempty(non_zero_triggers)
         if print_table
             println("No non-zero triggers found in the data.")
         end
         return DataFrame()
     end
-    
+
     # Count occurrences of each trigger value
     trigger_values = Int[]
     trigger_counts = Int[]
-    
+
     for trigger in sort(non_zero_triggers)
         push!(trigger_values, trigger)
         push!(trigger_counts, count(x -> x == trigger, trigger_data))
     end
-    
+
     # Create DataFrame
     result_df = DataFrame(trigger = trigger_values, count = trigger_counts)
-    
+
     # Print table if requested
     if print_table
-        pretty_table(result_df, 
-                    title = title,
-                    header = ["Trigger", "Count"],
-                    alignment = [:r, :r],
-                    crop = :none)
+        pretty_table(result_df, title = title, header = ["Trigger", "Count"], alignment = [:r, :r], crop = :none)
         println()
     end
-    
+
     return result_df
 end
 
 # Helper function for BioSemi data with both raw and cleaned counts
-function _trigger_count_biosemi_impl(raw_triggers::Vector{<:Integer}, cleaned_triggers::Vector{<:Integer}; print_table::Bool = true)
+function _trigger_count_biosemi_impl(
+    raw_triggers::Vector{<:Integer},
+    cleaned_triggers::Vector{<:Integer};
+    print_table::Bool = true,
+)
     # Get unique non-zero trigger values from both raw and cleaned data
     unique_triggers = unique(vcat(raw_triggers, cleaned_triggers))
     non_zero_triggers = filter(x -> x != 0, unique_triggers)
-    
+
     if isempty(non_zero_triggers)
         if print_table
             @minimal_warning "No non-zero triggers found in the data."
         end
         return DataFrame()
     end
-    
+
     # Count occurrences of each trigger value in both raw and cleaned data
     trigger_values = Int[]
     raw_counts = Int[]
     cleaned_counts = Int[]
-    
+
     for trigger in sort(non_zero_triggers)
         push!(trigger_values, trigger)
         push!(raw_counts, count(x -> x == trigger, raw_triggers))
         push!(cleaned_counts, count(x -> x == trigger, cleaned_triggers))
     end
-    
+
     # Create DataFrame
-    result_df = DataFrame(
-        trigger = trigger_values, 
-        raw_count = raw_counts, 
-        cleaned_count = cleaned_counts
-    )
-    
+    result_df = DataFrame(trigger = trigger_values, raw_count = raw_counts, cleaned_count = cleaned_counts)
+
     # Print table if requested
     if print_table
-        pretty_table(result_df, 
-                    title = "Trigger Count Summary (Raw vs Cleaned)",
-                    header = ["Trigger", "Raw Count", "Cleaned Count"],
-                    alignment = [:r, :r, :r],
-                    crop = :none)
+        pretty_table(
+            result_df,
+            title = "Trigger Count Summary (Raw vs Cleaned)",
+            header = ["Trigger", "Raw Count", "Cleaned Count"],
+            alignment = [:r, :r, :r],
+            crop = :none,
+        )
         println()
         println("Note: Cleaned counts show only trigger onset events (sustained signals converted to single onsets)")
     end
-    
+
     return result_df
 end
 
@@ -1391,19 +1413,19 @@ combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :nor, out
 - `:nor` - No columns are true (logical NOR)
 """
 function combine_boolean_columns!(
-    dat::ContinuousData, 
-    columns::Vector{Symbol}, 
-    operation::Symbol; 
-    output_column::Symbol = :combined_flags
+    dat::ContinuousData,
+    columns::Vector{Symbol},
+    operation::Symbol;
+    output_column::Symbol = :combined_flags,
 )
     # Input validation
     @assert !isempty(columns) "Must specify at least one column to combine"
     @assert all(col -> hasproperty(dat.data, col), columns) "All specified columns must exist in the data"
     @assert operation in [:and, :or, :nand, :nor] "Invalid operation. Must be one of: :and, :or, :nand, :nor"
-    
+
     # Get the boolean columns
     bool_columns = [dat.data[!, col] for col in columns]
-    
+
     # Apply the logical operation
     result = if operation == :and
         all.(zip(bool_columns...))
@@ -1414,10 +1436,9 @@ function combine_boolean_columns!(
     elseif operation == :nor
         .!(any.(zip(bool_columns...)))
     end
-    
+
     # Store the result
     dat.data[!, output_column] = result
-    
+
     @info "combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
 end
-

@@ -150,7 +150,8 @@ function run_ica(
         dat_ica = filter_data(dat_ica, "lp", lp_freq)
     end
 
-    selected_channels = get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
+    selected_channels =
+        get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
     if isempty(selected_channels)
         error("No channels available after applying channel filter")
     end
@@ -172,7 +173,7 @@ function run_ica(
     @info "Running ICA: $(length(selected_channels)) channels x $(length(sample_indices)) samples -> $(n_components) components"
 
     # Create subsetted layout that matches the selected channels
-    ica_layout = subset_layout(dat_ica.layout, channel_selection=channels(selected_channels))
+    ica_layout = subset_layout(dat_ica.layout, channel_selection = channels(selected_channels))
 
     # Create data matrix and run ICA
     dat_for_ica = create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)

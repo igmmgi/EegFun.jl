@@ -6,99 +6,98 @@ A struct to define configuration parameters with type and validation constraints
 
 # Fields
 - `description::String`: Human-readable description of the parameter
+- `default::Union{Nothing,T}`: Default value (or nothing if required)
+- `allowed::Union{Nothing,Vector{String}}`: List of allowed values (or nothing if any value is allowed)
 - `min::Union{Nothing,T}`: Minimum value for numeric parameters (or nothing)
 - `max::Union{Nothing,T}`: Maximum value for numeric parameters (or nothing)
-- `allowed_values::Union{Nothing,Vector{T}}`: List of allowed values (or nothing if any value is allowed)
-- `default::Union{Nothing,T}`: Default value (or nothing if required)
 """
 struct ConfigParameter{T}
     description::String
+    default::Union{Nothing,T}
+    allowed::Union{Nothing,Vector{String}}
     min::Union{Nothing,T}
     max::Union{Nothing,T}
-    allowed_values::Union{Nothing,Vector{T}}
-    default::Union{Nothing,T}
 end
 
-# Keyword constructor with defaults
+# Keyword constructor with defaults + helper for parameter definitions
 function ConfigParameter{T}(;
     description::String,
     default::Union{Nothing,T} = nothing,
+    allowed::Union{Nothing,Vector{String}} = nothing,
     min::Union{Nothing,T} = nothing,
     max::Union{Nothing,T} = nothing,
-    allowed_values::Union{Nothing,Vector{T}} = nothing,
 ) where {T}
-    ConfigParameter{T}(description, min, max, allowed_values, default)
+    ConfigParameter{T}(description, default, allowed, min, max)
 end
 
-
-# Helper functions for parameter definitions
-string_param(desc, default = "") = ConfigParameter{String}(description = desc, default = default)
+string_param(desc, default = ""; allowed = nothing) =
+    ConfigParameter{Union{Vector{String},String}}(description = desc, default = default, allowed = allowed)
 bool_param(desc, default = false) = ConfigParameter{Bool}(description = desc, default = default)
-number_param(desc, default, min = nothing, max = nothing) = ConfigParameter{Real}(description = desc, default = default, min = min, max = max)
-function_param(desc, default, allowed_values) = ConfigParameter{Function}(description = desc, default = default, allowed_values = allowed_values)
+number_param(desc, default, min = nothing, max = nothing) =
+    ConfigParameter{Real}(description = desc, default = default, min = min, max = max)
 channel_groups_param(desc, default) = ConfigParameter{Vector{Vector{String}}}(description = desc, default = default)
 
+
 # Store parameter definitions as a constant
+# fmt: off
 const PARAMETERS = Dict{String,ConfigParameter}(
 
     # File paths and settings
-    "files.input.directory" => string_param("Directory containing raw data files.", "."),
-    "files.input.raw_data_files" => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
-    "files.input.layout_file" => string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
-    "files.input.epoch_condition_file" => string_param("TOML file that defines the condition epochs."),
-    "files.output.directory" => string_param("Directory for processed output files", "./preprocessed_files"),
+    "files.input.directory"            => string_param("Directory containing raw data files.", "."),
+    "files.input.raw_data_files"       => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
+    "files.input.layout_file"          => string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
+    "files.input.epoch_condition_file" => string_param("TOML file that defines the condition epochs.", ""),
+    "files.output.directory"           => string_param("Directory for processed output files", "./preprocessed_files"),
 
     # What data should we save?
-    "files.output.save_continuous_data" => bool_param("Save continuous data?", false),
-    "files.output.save_ica_data" => bool_param("Save ICA results?", true),
+    "files.output.save_continuous_data"     => bool_param("Save continuous data?", false),
+    "files.output.save_ica_data"            => bool_param("Save ICA results?", true),
     "files.output.save_epoch_data_original" => bool_param("Save epoched data?", true),
-    "files.output.save_epoch_data_cleaned" => bool_param("Save epoched data after cleaning?", true),
-    "files.output.save_erp_data_original" => bool_param("Save ERP data", true),
-    "files.output.save_erp_data_cleaned" => bool_param("Save ERP data after cleaning?", true),
-    "files.output.exit_early" => bool_param("Exit early from preprocessing pipeline (i.e., quick epoching only)", false),
+    "files.output.save_epoch_data_cleaned"  => bool_param("Save epoched data after cleaning?", true),
+    "files.output.save_erp_data_original"   => bool_param("Save ERP data", true),
+    "files.output.save_erp_data_cleaned"    => bool_param("Save ERP data after cleaning?", true),
+    "files.output.exit_early"               => bool_param("Exit early from preprocessing pipeline (i.e., quick epoching only)", false),
 
     # Preprocessing settings
-    "preprocess.epoch_start" => number_param("Epoch start (seconds).", -1),
-    "preprocess.epoch_end" => number_param("Epoch end (seconds).", 1),
-    "preprocess.reference_channel" => string_param("Channels(s) to use as reference", "avg"),
-    "preprocess.layout.neighbour_criterion" => number_param("Distance criterion (in mm) for channel neighbour definition.", 40, 0),
-    "preprocess.eog.vEOG_channels" => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]),
-    "preprocess.eog.hEOG_channels" => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
-    "preprocess.eog.vEOG_criterion" => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
-    "preprocess.eog.hEOG_criterion" => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
-    "preprocess.eeg.extreme_value_criterion" => number_param("Value (mV) for defining data section as an extreme value.", 500),
+    "preprocess.epoch_start"                  => number_param("Epoch start (seconds).", -1),
+    "preprocess.epoch_end"                    => number_param("Epoch end (seconds).", 1),
+    "preprocess.reference_channel"            => string_param("Channels(s) to use as reference", "avg"),
+    "preprocess.layout.neighbour_criterion"   => number_param("Distance criterion (in mm) for channel neighbour definition.", 40, 0),
+    "preprocess.eog.vEOG_channels"            => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]),
+    "preprocess.eog.hEOG_channels"            => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
+    "preprocess.eog.vEOG_criterion"           => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
+    "preprocess.eog.hEOG_criterion"           => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
+    "preprocess.eeg.extreme_value_criterion"  => number_param("Value (mV) for defining data section as an extreme value.", 500),
     "preprocess.eeg.artifact_value_criterion" => number_param("Value (mV) for defining data section as an artifact value.", 100),
 
     # Filtering settings
-    "filter.highpass.on" => bool_param("Apply highpass filter true/false", true),
-    "filter.highpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
-    "filter.highpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
+    "filter.highpass.on"          => bool_param("Apply highpass filter true/false", true),
+    "filter.highpass.method"      => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
+    "filter.highpass.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
     "filter.highpass.cutoff_freq" => number_param("High-pass filter cutoff frequency (Hz)", 0.1, 0.01, 20.0),
-    "filter.highpass.order" => number_param("Filter order", 1, 1, 4),
+    "filter.highpass.order"       => number_param("Filter order", 1, 1, 4),
 
     # Lowpass filtering settings
-    "filter.lowpass.on" => bool_param("Apply lowpass filter true/false", true),
-    "filter.lowpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
-    "filter.lowpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
+    "filter.lowpass.on"          => bool_param("Apply lowpass filter true/false", true),
+    "filter.lowpass.method"      => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
+    "filter.lowpass.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
     "filter.lowpass.cutoff_freq" => number_param("Low-pass filter cutoff frequency (Hz)", 30, 5, 500),
-    "filter.lowpass.order" => number_param("Filter order", 3, 1, 8),
+    "filter.lowpass.order"       => number_param("Filter order", 3, 1, 8),
 
     # ICA settings
-    "ica.run" => bool_param("Run Independent Component Analysis (ICA) true/false."),
-
-    "filter.ica_highpass.on" => bool_param("Apply highpass filter ICA data true/false", true),
-    "filter.ica_highpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
-    "filter.ica_highpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
+    "ica.run"                         => bool_param("Run Independent Component Analysis (ICA) true/false."),
+    "filter.ica_highpass.on"          => bool_param("Apply highpass filter ICA data true/false", true),
+    "filter.ica_highpass.method"      => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
+    "filter.ica_highpass.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
     "filter.ica_highpass.cutoff_freq" => number_param("High-pass filter cutoff frequency (Hz)", 1, 1, 20.0),
-    "filter.ica_highpass.order" => number_param("Filter order", 1, 1, 4),
-
-    "filter.ica_lowpass.on" => bool_param("Apply lowpass filter ICA data true/false", true),
-    "filter.ica_lowpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
-    "filter.ica_lowpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
-    "filter.ica_lowpass.cutoff_freq" => number_param("Low-pass filter cutoff frequency (Hz)", 30, 5, 500),
-    "filter.ica_highpass.order" => number_param("Filter order", 3, 1, 4),
-   
+    "filter.ica_highpass.order"       => number_param("Filter order", 1, 1, 4),
+    "filter.ica_lowpass.on"           => bool_param("Apply lowpass filter ICA data true/false", true),
+    "filter.ica_lowpass.method"       => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
+    "filter.ica_lowpass.filter_func"  => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
+    "filter.ica_lowpass.cutoff_freq"  => number_param("Low-pass filter cutoff frequency (Hz)", 30, 5, 500),
+    "filter.ica_lowpass.order"        => number_param("Filter order", 3, 1, 4),
 )
+# fmt: on
 
 """
     ValidationResult
@@ -118,22 +117,20 @@ end
 
 
 """
-    load_config(config_file::String; validate::Bool=true)
+    load_config(config_file::String)
 
 Load and merge configuration from a TOML file with defaults.
 
 # Arguments
 - `config_file::String`: Path to the configuration file
-- `validate::Bool`: Whether to validate the configuration after loading
 
 # Returns
 - `Union{Dict,Nothing}`: The loaded configuration or nothing if loading failed
 """
 function load_config(config_file::String)
+
     # Load default config
     default_config = TOML.parsefile(joinpath(@__DIR__, "default.toml"))
-
-    # Check if user config exists
     if !isfile(config_file)
         @minimal_error "Configuration file not found: $config_file"
         return nothing
@@ -157,7 +154,7 @@ function load_config(config_file::String)
         return nothing
     end
 
-    return _extract_values(config)
+    return config
 end
 
 
@@ -175,44 +172,27 @@ Merge user config onto defaults, maintaining simple value structure.
 """
 function _merge_configs(default_config::Dict, user_config::Dict)
     result = copy(default_config)
-
-    function merge_nested!(target::Dict, source::Dict)
-        for (key, value) in source
-            if !haskey(target, key)
-                target[key] = value
-                continue
-            end
-            if isa(value, Dict) && isa(target[key], Dict)
-                merge_nested!(target[key], value)
-            else
-                target[key] = value
-            end
-        end
-    end
-
-    merge_nested!(result, user_config)
+    _merge_nested!(result, user_config)
     return result
 end
 
-"""
-    _extract_values(config::Dict)
-
-Extract final values from config.
-"""
-function _extract_values(config::Dict)
-    result = Dict()
-    for (key, value) in config
-        if isa(value, Dict) # nested 
-            result[key] = _extract_values(value)
-        else # simple value
-            result[key] = value
+function _merge_nested!(target::Dict, source::Dict)
+    for (key, value) in source
+        if !haskey(target, key)
+            target[key] = value
+            continue
+        end
+        if isa(value, Dict) && isa(target[key], Dict)
+            _merge_nested!(target[key], value)
+        else
+            target[key] = value
         end
     end
-    return result
 end
 
+
 """
-    _validate_config(config::Dict, path="")
+    _validate_config(config::Dict; path="")
 
 Validate config values against their metadata definitions.
 
@@ -223,25 +203,26 @@ Validate config values against their metadata definitions.
 # Returns
 - `ValidationResult`: Result of the validation
 """
-function _validate_config(config::Dict, path = "")
-    # Use a stack to track nested dictionaries to validate
-    stack = [(config, path)]
+function _validate_config(config::Dict; path = "")
+    for (key, value) in config
+        new_path = isempty(path) ? key : "$path.$key"
 
-    while !isempty(stack)
-        current_config, current_path = pop!(stack)
-
-        for (key, value) in current_config
-            new_path = isempty(current_path) ? key : "$current_path.$key"
-
-            if isa(value, Dict)
-                # Add nested dictionary to stack
-                push!(stack, (value, new_path))
+        if isa(value, Dict)
+            # Recursively validate nested dictionary
+            result = _validate_config(value; path = new_path)
+            !result.success && return result
+        else
+            # Check if we have metadata for this parameter
+            if haskey(PARAMETERS, new_path)
+                result = _validate_parameter(value, PARAMETERS[new_path], new_path)
+                !result.success && return result
             else
-                # Check if we have metadata for this parameter
-                if haskey(PARAMETERS, new_path)
-                    result = _validate_parameter(value, PARAMETERS[new_path], new_path)
-                    !result.success && return result
-                end
+                # Unknown parameter - this is an error
+                return ValidationResult(
+                    success = false,
+                    error = "Unknown parameter: $new_path",
+                    path = new_path
+                )
             end
         end
     end
@@ -269,28 +250,49 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
     # Check if value is the right type
     if param_type <: Number
         # For numeric types, accept any number
-        isa(value, Number) ||
-            return ValidationResult(success = false, error = "$parameter_name must be a number, got $(typeof(value))", path = parameter_name)
+        isa(value, Number) || return ValidationResult(
+            success = false,
+            error = "$parameter_name must be a number, got $(typeof(value))",
+            path = parameter_name,
+        )
+    elseif param_type <: Union
+        # For Union types, check if value matches any of the union types
+        isa(value, param_type) || return ValidationResult(
+            success = false,
+            error = "$parameter_name must be one of the types in $param_type, got $(typeof(value))",
+            path = parameter_name,
+        )
     else
         # For non-numeric types, require exact type match
-        isa(value, param_type) ||
-            return ValidationResult(success = false, error = "$parameter_name must be of type $param_type, got $(typeof(value))", path = parameter_name)
+        isa(value, param_type) || return ValidationResult(
+            success = false,
+            error = "$parameter_name must be of type $param_type, got $(typeof(value))",
+            path = parameter_name,
+        )
     end
 
     # Check min/max constraints
     if !isnothing(parameter_spec.min) && value < parameter_spec.min
-        return ValidationResult(success = false, error = "$parameter_name ($value) must be >= $(parameter_spec.min)", path = parameter_name)
+        return ValidationResult(
+            success = false,
+            error = "$parameter_name ($value) must be >= $(parameter_spec.min)",
+            path = parameter_name,
+        )
     end
     if !isnothing(parameter_spec.max) && value > parameter_spec.max
-        return ValidationResult(success = false, error = "$parameter_name ($value) must be <= $(parameter_spec.max)", path = parameter_name)
+        return ValidationResult(
+            success = false,
+            error = "$parameter_name ($value) must be <= $(parameter_spec.max)",
+            path = parameter_name,
+        )
     end
 
     # Check allowed values if they exist
-    if !isnothing(parameter_spec.allowed_values) && !(value in parameter_spec.allowed_values)
+    if !isnothing(parameter_spec.allowed) && !(value in parameter_spec.allowed)
         return ValidationResult(
             success = false,
-            error = "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed_values, ", "))",
-            path = parameter_name
+            error = "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed, ", "))",
+            path = parameter_name,
         )
     end
 
@@ -301,43 +303,15 @@ end
 
 
 """
-    show_parameter_info(parameter_name::String="")
+    show_parameter_info(; parameter_name::String="")
 
 Display information about configuration parameters. If parameter_name is empty, shows all parameters.
 If parameter_name is provided, shows detailed information about that specific parameter.
 
 # Arguments
 - `parameter_name::String`: Optional path to a specific parameter (e.g., "filtering.highpass.cutoff")
-
-# Example
-```julia
-# Show all parameters
-show_parameter_info()
-
-# Show specific parameter
-show_parameter_info("filtering.highpass.cutoff")
-
-Show information about configuration parameters.
-
-# Arguments
-- `parameter_name::String`: Parameter name or section name (default: "" for overview)
-
-# Examples
-```julia
-# Show overview of all parameters
-show_parameter_info()
-
-# Show all parameters in a section
-show_parameter_info("preprocess")
-
-# Show all parameters in a subsection
-show_parameter_info("files.input")
-
-# Show specific parameter details
-show_parameter_info("preprocess.epoch_start")
-```
 """
-function show_parameter_info(parameter_name::String = "")
+function show_parameter_info(; parameter_name::String = "")
     if isempty(parameter_name)
         # Show all parameters
         @info "Available Configuration Parameters:"
@@ -384,7 +358,7 @@ function show_parameter_info(parameter_name::String = "")
             matching_params = collect(filter(keys(PARAMETERS)) do key
                 startswith(key, parameter_name)
             end)
-            
+
             if !isempty(matching_params)
                 _show_section_overview(parameter_name, matching_params)
             else
@@ -419,8 +393,8 @@ function _show_parameter_details(parameter_name::String)
         @info range_str
     end
 
-    if !isnothing(parameter_spec.allowed_values)
-        @info "Allowed values: $(join(parameter_spec.allowed_values, ", "))"
+    if !isnothing(parameter_spec.allowed)
+        @info "Allowed values: $(join(parameter_spec.allowed, ", "))"
     end
 
     if !isnothing(parameter_spec.default)
@@ -436,45 +410,40 @@ Show overview of all parameters in a section.
 function _show_section_overview(section_name::String, matching_params::Vector{String})
     @info "Section: $section_name"
     @info "="^(length(section_name) + 9)
-    
+
     # Group parameters by subsection
     sections = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
-    
+
     for param_path in matching_params
         parts = split(param_path, ".")
+        subsection = ""
         if length(parts) > 1
             # For nested paths like "files.input.directory", 
             # subsection is everything after the section name
             section_prefix = section_name * "."
             if startswith(param_path, section_prefix)
-                subsection_path = param_path[length(section_prefix)+1:end]
+                subsection_path = param_path[(length(section_prefix)+1):end]
                 subsection_parts = split(subsection_path, ".")
                 if length(subsection_parts) > 1
-                    subsection = join(subsection_parts[1:end-1], ".")
-                else
-                    subsection = ""
+                    subsection = join(subsection_parts[1:(end-1)], ".")
                 end
-            else
-                subsection = ""
             end
-        else
-            subsection = ""
         end
-        
+
         if !haskey(sections, subsection)
             sections[subsection] = Tuple{String,ConfigParameter}[]
         end
         push!(sections[subsection], (param_path, PARAMETERS[param_path]))
     end
-    
+
     # Sort and display subsections
     sorted_subsections = sort(collect(keys(sections)))
-    
+
     for subsection in sorted_subsections
         if !isempty(subsection)
             @info "  [$subsection]"
         end
-        
+
         # Sort parameters within subsection
         sorted_params = sort(sections[subsection], by = first)
         for (path, parameter_spec) in sorted_params
@@ -484,7 +453,7 @@ function _show_section_overview(section_name::String, matching_params::Vector{St
             @info "$indent$param_name: $(parameter_spec.description)"
         end
     end
-    
+
     @info ""
     @info "Use show_parameter_info(\"$section_name.parameter_name\") for detailed information about a specific parameter"
 end
@@ -497,7 +466,7 @@ Generate and save a template TOML configuration file with all available paramete
 # Arguments
 - `filename::String`: Name of the template file to create (default: "config_template.toml")
 """
-function generate_config_template(filename::String = "config_template.toml")
+function generate_config_template(; filename::String = "config_template.toml")
     try
         @info "Starting config template generation"
 
@@ -552,12 +521,7 @@ function generate_config_template(filename::String = "config_template.toml")
         end
         @info "Configuration template saved to: $filename"
     catch e
-        @error "Error in generate_config_template" exception=(e, catch_backtrace())
-        if e isa MethodError
-            @minimal_error "Failed to save configuration template: Method error occurred"
-        else
-            @minimal_error "Failed to save configuration template: $e"
-        end
+        @minimal_error "Failed to save configuration template: $e"
     end
 end
 
@@ -578,10 +542,9 @@ function _group_parameters_by_section()
 
         # For nested paths like "ica.ica_filter.highpass.on", 
         # we want subsection to be "ica_filter.highpass"
+        subsection = ""
         if length(parts) > 2
             subsection = join(parts[2:(end-1)], ".")  # Join all parts except first and last
-        else
-            subsection = ""
         end
 
         if !haskey(sections, section)
@@ -617,8 +580,8 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
         println(io, range_str)
     end
 
-    if !isnothing(parameter_spec.allowed_values)
-        println(io, "# Allowed values: $(join(parameter_spec.allowed_values, ", "))")
+    if !isnothing(parameter_spec.allowed)
+        println(io, "# Allowed values: $(join(parameter_spec.allowed, ", "))")
     end
 
     # Print default value if it exists

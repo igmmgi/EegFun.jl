@@ -22,7 +22,7 @@ function preprocess_eeg_data(config::String)
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
 
     try
-
+        @info "hewhehehhwhwhahahahahahahahahah"
         @info "EEG Preprocessing started at $(now()) ..."
         @info "Configuration file: $config"
 
@@ -31,12 +31,15 @@ function preprocess_eeg_data(config::String)
             error_msg = "Config file does not exist: $config"
             @minimal_error error_msg
         end
+        @info "?????"
         cfg = load_config(config)
+        @info "xxxxxx"
 
         # try and merge user config above with default config
         default_config = load_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
         cfg = _merge_configs(default_config, cfg)
         @info "Configuration loaded and merged successfully ..."
+        @info "heheheheh"
 
         # check if all requested raw data files exist
         @info "Checking if raw data file(s) exist ..."
@@ -131,7 +134,6 @@ function preprocess_eeg_data(config::String)
                         order = cfg["filter"]["lowpass"]["order"],
                         filter_method = cfg["filter"]["lowpass"]["method"],
                         filter_func = cfg["filter"]["lowpass"]["filter_func"],
-
                     )
                 end
 
@@ -181,26 +183,26 @@ function preprocess_eeg_data(config::String)
 
                     if cfg["ica"]["ica_filter"]["highpass"]["on"]
                         # apply high-pass filter to data
-                                            filter_data!(
-                        dat_ica,
-                        "hp",
-                        cfg["ica"]["ica_filter"]["highpass"]["cutoff"];
-                        order = cfg["ica"]["ica_filter"]["highpass"]["order"],
-                        filter_method = cfg["ica"]["ica_filter"]["highpass"]["method"],
-                        filter_func = cfg["ica"]["ica_filter"]["highpass"]["filter_func"],
-                    )
+                        filter_data!(
+                            dat_ica,
+                            "hp",
+                            cfg["ica"]["ica_filter"]["highpass"]["cutoff"];
+                            order = cfg["ica"]["ica_filter"]["highpass"]["order"],
+                            filter_method = cfg["ica"]["ica_filter"]["highpass"]["method"],
+                            filter_func = cfg["ica"]["ica_filter"]["highpass"]["filter_func"],
+                        )
                     end
 
                     if cfg["ica"]["ica_filter"]["lowpass"]["on"]
                         # apply low-pass filter to data
                         filter_data!(
-                        dat_ica,
-                        "lp",
-                        cfg["ica"]["ica_filter"]["lowpass"]["cutoff"];
-                        order = cfg["ica"]["ica_filter"]["lowpass"]["order"],
-                        filter_method = cfg["ica"]["ica_filter"]["lowpass"]["method"],
-                        filter_func = cfg["ica"]["ica_filter"]["highpass"]["filter_func"],
-                    )
+                            dat_ica,
+                            "lp",
+                            cfg["ica"]["ica_filter"]["lowpass"]["cutoff"];
+                            order = cfg["ica"]["ica_filter"]["lowpass"]["order"],
+                            filter_method = cfg["ica"]["ica_filter"]["lowpass"]["method"],
+                            filter_func = cfg["ica"]["ica_filter"]["highpass"]["filter_func"],
+                        )
                     end
 
                     ica_result = run_ica(
@@ -368,7 +370,11 @@ function preprocess_eeg_data(config::String)
     finally
         # close global logging and move log file to output directory
         close_global_logging()
-        mv("preprocess_eeg_data.log", joinpath(output_directory, "preprocess_eeg_data.log"), force = true)
+        log_source = "preprocess_eeg_data.log"
+        log_dest = joinpath(output_directory, "preprocess_eeg_data.log")
+        if log_source != log_dest
+            mv(log_source, log_dest, force = true)
+        end
     end
 
 end

@@ -473,7 +473,10 @@ function Base.show(io::IO, ica::InfoIca)
     println(io, "│  ├─ Mixing: $(size(ica.mixing))")
     println(io, "│  └─ Sphere: $(size(ica.sphere))")
 
-    println(io, "└─ Channel labels: $(join(ica.layout.data.label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")")
+    println(
+        io,
+        "└─ Channel labels: $(join(ica.layout.data.label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")",
+    )
 end
 
 # Compact display for arrays
@@ -490,8 +493,8 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.variance),
         ica.scale,
         copy(ica.mean),
-            copy(ica.ica_label),
-    copy(ica.removed_activations),
-    ica.layout,  # Layout is shared, no need to copy
+        copy(ica.ica_label),
+        copy(ica.removed_activations),
+        ica.layout,  # Layout is shared, no need to copy
     )
 end

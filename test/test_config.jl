@@ -17,13 +17,11 @@ using eegfun
             default = 1.0,
             min = 0.0,
             max = 2.0,
-            allowed_values = [0.5, 1.0, 1.5]
         )
         @test param.description == "Test parameter"
         @test param.default == 1.0
         @test param.min == 0.0
         @test param.max == 2.0
-        @test param.allowed_values == [0.5, 1.0, 1.5]
 
         # Test ConfigParameter with nothing values
         param = eegfun.ConfigParameter{String}(
@@ -31,13 +29,13 @@ using eegfun
             default = nothing,
             min = nothing,
             max = nothing,
-            allowed_values = nothing
+            allowed = nothing
         )
         @test param.description == "Test parameter"
         @test param.default === nothing
         @test param.min === nothing
         @test param.max === nothing
-        @test param.allowed_values === nothing
+        @test param.allowed === nothing
     end
 
     @testset "PARAMETERS Dictionary Tests" begin
@@ -45,15 +43,15 @@ using eegfun
         @test haskey(eegfun.PARAMETERS, "files.input.directory")
         @test haskey(eegfun.PARAMETERS, "files.input.raw_data_files")
         @test haskey(eegfun.PARAMETERS, "files.input.layout_file")
-        @test haskey(eegfun.PARAMETERS, "filter.highpass.cutoff")
-        @test haskey(eegfun.PARAMETERS, "filter.lowpass.cutoff")
+        @test haskey(eegfun.PARAMETERS, "filter.highpass.cutoff_freq")
+        @test haskey(eegfun.PARAMETERS, "filter.lowpass.cutoff_freq")
         @test haskey(eegfun.PARAMETERS, "preprocess.epoch_start")
         @test haskey(eegfun.PARAMETERS, "preprocess.epoch_end")
 
         # Test parameter types
-        @test eegfun.PARAMETERS["files.input.directory"] isa eegfun.ConfigParameter{String}
-        @test eegfun.PARAMETERS["filter.highpass.cutoff"] isa eegfun.ConfigParameter{Real}
-        @test eegfun.PARAMETERS["filter.highpass.order"] isa eegfun.ConfigParameter{Int}
+        @test eegfun.PARAMETERS["files.input.directory"] isa eegfun.ConfigParameter{Union{Vector{String},String}}
+        @test eegfun.PARAMETERS["filter.highpass.cutoff_freq"] isa eegfun.ConfigParameter{Real}
+        @test eegfun.PARAMETERS["filter.highpass.order"] isa eegfun.ConfigParameter{Real}
         @test eegfun.PARAMETERS["files.output.save_continuous_data"] isa eegfun.ConfigParameter{Bool}
     end
 
@@ -70,7 +68,7 @@ using eegfun
             user_config_path = joinpath(test_dir, "valid_config.toml")
             open(user_config_path, "w") do io
                 println(io, "[filter.highpass]")
-                println(io, "cutoff = 1.0")
+                println(io, "cutoff_freq = 1.0")
                 println(io, "on = true")
                 println(io, "")
                 println(io, "[preprocess]")
@@ -80,13 +78,13 @@ using eegfun
             
             config = eegfun.load_config(user_config_path)
             @test config isa Dict
-            @test config["filter"]["highpass"]["cutoff"] == 1.0
+            @test config["filter"]["highpass"]["cutoff_freq"] == 1.0
             @test config["filter"]["highpass"]["on"] == true
             @test config["preprocess"]["epoch_start"] == -2.0
             @test config["preprocess"]["epoch_end"] == 3.0
             
             # Test 3: Verify default values are preserved when not overridden
-            @test config["filter"]["lowpass"]["cutoff"] == 40  # default value
+            @test config["filter"]["lowpass"]["cutoff_freq"] == 30  # default value
             @test config["preprocess"]["reference_channel"] == "avg"  # default value
             
             # Test 4: Test that logging occurs but doesn't prevent successful loading
@@ -100,19 +98,19 @@ using eegfun
             open(nested_config_path, "w") do io
                 println(io, "[files.output]")
                 println(io, "directory = \"/custom/output\"")
-                println(io, "save_erp_data = false")
+                println(io, "save_erp_data_original = false")
                 println(io, "")
-                println(io, "[ica.filter.highpass]")
-                println(io, "cutoff = 2.5")
+                println(io, "[filter.ica_highpass]")
+                println(io, "cutoff_freq = 2.5")
                 println(io, "on = true")  # Add the "on" key that the test expects
             end
             
             config = eegfun.load_config(nested_config_path)
             @test config["files"]["output"]["directory"] == "/custom/output"
-            @test config["files"]["output"]["save_erp_data"] == false
+            @test config["files"]["output"]["save_erp_data_original"] == false
             @test config["files"]["output"]["save_ica_data"] == true  # default preserved
-            @test config["ica"]["filter"]["highpass"]["cutoff"] == 2.5
-            @test config["ica"]["filter"]["highpass"]["on"] == true  # now present in test config
+            @test config["filter"]["ica_highpass"]["cutoff_freq"] == 2.5
+            @test config["filter"]["ica_highpass"]["on"] == true  # now present in test config
         end
         
         @testset "Error Handling" begin
@@ -133,7 +131,7 @@ using eegfun
             invalid_values_path = joinpath(test_dir, "invalid_values.toml")
             open(invalid_values_path, "w") do io
                 println(io, "[filter.highpass]")
-                println(io, "cutoff = -5.0")  # Below minimum
+                println(io, "cutoff_freq = -5.0")  # Below minimum
             end
             result = eegfun.load_config(invalid_values_path)
             @test result === nothing
@@ -142,7 +140,7 @@ using eegfun
             invalid_type_path = joinpath(test_dir, "invalid_type.toml")
             open(invalid_type_path, "w") do io
                 println(io, "[filter.highpass]")
-                println(io, "cutoff = \"not_a_number\"")  # Wrong type
+                println(io, "cutoff_freq = \"not_a_number\"")  # Wrong type
             end
             result = eegfun.load_config(invalid_type_path)
             @test result === nothing
@@ -162,25 +160,25 @@ using eegfun
             min_boundary_path = joinpath(test_dir, "min_boundary.toml")
             open(min_boundary_path, "w") do io
                 println(io, "[filter.highpass]")
-                println(io, "cutoff = 0.01")  # Minimum allowed
+                println(io, "cutoff_freq = 0.01")  # Minimum allowed
                 println(io, "order = 1")      # Minimum allowed
             end
             
             config = eegfun.load_config(min_boundary_path)
-            @test config["filter"]["highpass"]["cutoff"] == 0.01
+            @test config["filter"]["highpass"]["cutoff_freq"] == 0.01
             @test config["filter"]["highpass"]["order"] == 1
             
             # Test 12: Maximum boundary values
             max_boundary_path = joinpath(test_dir, "max_boundary.toml")
             open(max_boundary_path, "w") do io
                 println(io, "[filter.highpass]")
-                println(io, "cutoff = 20.0")  # Maximum allowed
-                println(io, "order = 8")      # Maximum allowed
+                println(io, "cutoff_freq = 20.0")  # Maximum allowed
+                println(io, "order = 4")      # Maximum allowed
             end
             
             config = eegfun.load_config(max_boundary_path)
-            @test config["filter"]["highpass"]["cutoff"] == 20.0
-            @test config["filter"]["highpass"]["order"] == 8
+            @test config["filter"]["highpass"]["cutoff_freq"] == 20.0
+            @test config["filter"]["highpass"]["order"] == 4
         end
         
         @testset "Data Type Conversions" begin
@@ -188,12 +186,12 @@ using eegfun
             conversion_path = joinpath(test_dir, "conversion.toml")
             open(conversion_path, "w") do io
                 println(io, "[filter.highpass]")
-                println(io, "cutoff = 1")     # Int should convert to Float
+                println(io, "cutoff_freq = 1")     # Int should convert to Float
                 println(io, "order = 2.0")    # Float should convert to Int
             end
             
             config = eegfun.load_config(conversion_path)
-            @test config["filter"]["highpass"]["cutoff"] == 1.0  # Converted to Float
+            @test config["filter"]["highpass"]["cutoff_freq"] == 1.0  # Converted to Float
             @test config["filter"]["highpass"]["order"] == 2     # Converted to Int
         end
         
@@ -245,11 +243,11 @@ using eegfun
             special_chars_path = joinpath(test_dir, "special_chars.toml")
             open(special_chars_path, "w") do io
                 println(io, "[files.input]")
-                println(io, "path = \"/path/with spaces/and/special@chars\"")
+                println(io, "directory = \"/path/with spaces/and/special@chars\"")
             end
             
             config = eegfun.load_config(special_chars_path)
-            @test config["files"]["input"]["path"] == "/path/with spaces/and/special@chars"
+            @test config["files"]["input"]["directory"] == "/path/with spaces/and/special@chars"
         end
 
          @testset "Complex Configuration Scenarios" begin
@@ -291,7 +289,7 @@ using eegfun
              range_config_path = joinpath(test_dir, "range_config.toml")
              open(range_config_path, "w") do io
                  println(io, "[filter.highpass]")
-                 println(io, "cutoff = 0.005")  # Below minimum
+                 println(io, "cutoff_freq = 0.005")  # Below minimum
              end
              result = eegfun.load_config(range_config_path)
              @test result === nothing
@@ -300,7 +298,7 @@ using eegfun
              allowed_config_path = joinpath(test_dir, "allowed_config.toml")
              open(allowed_config_path, "w") do io
                  println(io, "[filter.highpass]")
-                 println(io, "type = \"invalid\"")  # Not in allowed values
+                 println(io, "method = \"invalid\"")  # Not in allowed values
              end
              result = eegfun.load_config(allowed_config_path)
              @test result === nothing
@@ -320,19 +318,19 @@ using eegfun
              valid_config_path = joinpath(test_dir, "valid.toml")
              open(valid_config_path, "w") do io
                  println(io, "[filter.highpass]")
-                 println(io, "cutoff = 0.5")
-                 println(io, "type = \"fir\"")
+                 println(io, "cutoff_freq = 0.5")
+                 println(io, "method = \"fir\"")
                  println(io, "order = 2")
              end
              config = eegfun.load_config(valid_config_path)
              @test config !== nothing
-             @test config["filter"]["highpass"]["cutoff"] == 0.5
+             @test config["filter"]["highpass"]["cutoff_freq"] == 0.5
 
              # Test invalid parameter value
              invalid_value_path = joinpath(test_dir, "invalid_value.toml")
              open(invalid_value_path, "w") do io
                  println(io, "[filter.highpass]")
-                 println(io, "cutoff = -1.0")  # Below minimum
+                 println(io, "cutoff_freq = -1.0")  # Below minimum
              end
              result = eegfun.load_config(invalid_value_path)
              @test result === nothing
@@ -352,12 +350,12 @@ using eegfun
              custom_config_path = joinpath(test_dir, "custom.toml")
              open(custom_config_path, "w") do io
                  println(io, "[filter.highpass]")
-                 println(io, "cutoff = 0.5")
+                 println(io, "cutoff_freq = 0.5")
              end
              config = eegfun.load_config(custom_config_path)
              @test config !== nothing
-             @test config["filter"]["highpass"]["cutoff"] == 0.5
-             @test config["filter"]["highpass"]["type"] == "fir"  # Default value
+             @test config["filter"]["highpass"]["cutoff_freq"] == 0.5
+             @test config["filter"]["highpass"]["method"] == "fir"  # Default value
              @test config["filter"]["highpass"]["order"] == 1     # Default value
 
              # Test nested merging
@@ -378,7 +376,7 @@ using eegfun
              range_config_path = joinpath(test_dir, "range_config.toml")
              open(range_config_path, "w") do io
                  println(io, "[filter.highpass]")
-                 println(io, "cutoff = 0.005")  # Below minimum
+                 println(io, "cutoff_freq = 0.005")  # Below minimum
              end
              result = eegfun.load_config(range_config_path)
              @test result === nothing
@@ -387,7 +385,7 @@ using eegfun
              allowed_config_path = joinpath(test_dir, "allowed_config.toml")
              open(allowed_config_path, "w") do io
                  println(io, "[filter.highpass]")
-                 println(io, "type = \"invalid\"")  # Not in allowed values
+                 println(io, "method = \"invalid\"")  # Not in allowed values
              end
              result = eegfun.load_config(allowed_config_path)
              @test result === nothing
@@ -436,7 +434,7 @@ using eegfun
      @testset "Config Template Generation" begin
          # Test template generation
          template_path = joinpath(test_dir, "template.toml")
-         eegfun.generate_config_template(template_path)
+         eegfun.generate_config_template(filename = template_path)
          @test isfile(template_path)
 
          # Verify template contents
@@ -447,7 +445,7 @@ using eegfun
 
          # Test template with custom filename
          custom_path = joinpath(test_dir, "custom.toml")
-         eegfun.generate_config_template(custom_path)
+         eegfun.generate_config_template(filename = custom_path)
          @test isfile(custom_path)
      end
 
@@ -459,7 +457,7 @@ using eegfun
          end
 
          # Test specific parameter properties
-         param = eegfun.PARAMETERS["filter.highpass.cutoff"]
+         param = eegfun.PARAMETERS["filter.highpass.cutoff_freq"]
          @test param.description == "High-pass filter cutoff frequency (Hz)"
          @test param.min == 0.01
          @test param.max == 20.0
@@ -469,36 +467,7 @@ using eegfun
          @test !haskey(eegfun.PARAMETERS, "nonexistent")
      end
 
-     @testset "Config Value Extraction" begin
-         # Test simple value extraction
-         simple_config = Dict("key" => "value")
-         result = eegfun._extract_values(simple_config)
-         @test result["key"] == "value"
-
-         # Test nested value extraction
-         nested_config = Dict(
-             "outer" => Dict(
-                 "inner" => Dict(
-                     "value" => 42
-                 )
-             )
-         )
-         result = eegfun._extract_values(nested_config)
-         @test result["outer"]["inner"]["value"] == 42
-
-         # Test mixed value extraction
-         mixed_config = Dict(
-             "simple" => "value",
-             "nested" => Dict(
-                 "number" => 42,
-                 "array" => [1, 2, 3]
-             )
-         )
-         result = eegfun._extract_values(mixed_config)
-         @test result["simple"] == "value"
-         @test result["nested"]["number"] == 42
-         @test result["nested"]["array"] == [1, 2, 3]
-     end
+     
 
      @testset "Config Merging" begin
          # Test merging with empty config
@@ -579,29 +548,7 @@ using eegfun
          @test merged["a"]["b"]["d"] == 2
      end
 
-     @testset "_extract_values Tests" begin
-         # Test simple values
-         config = Dict("a" => 1, "b" => "test")
-         extracted = eegfun._extract_values(config)
-         @test extracted["a"] == 1
-         @test extracted["b"] == "test"
-
-         # Test nested values
-         config = Dict("a" => Dict("x" => 1, "y" => 2))
-         extracted = eegfun._extract_values(config)
-         @test extracted["a"]["x"] == 1
-         @test extracted["a"]["y"] == 2
-
-         # Test deep nested values
-         config = Dict("a" => Dict("b" => Dict("c" => 1)))
-         extracted = eegfun._extract_values(config)
-         @test extracted["a"]["b"]["c"] == 1
-
-         # Test empty dictionary
-         config = Dict()
-         extracted = eegfun._extract_values(config)
-         @test isempty(extracted)
-     end
+     
 
      @testset "_validate_parameter Tests" begin
          # Test numeric validation
@@ -619,7 +566,7 @@ using eegfun
          # Test string validation with allowed values
          param = eegfun.ConfigParameter{String}(
              description = "Test parameter",
-             allowed_values = ["a", "b", "c"],
+             allowed = ["a", "b", "c"],
              default = "a"
          )
          @test eegfun._validate_parameter("a", param, "test").success
@@ -656,7 +603,7 @@ using eegfun
      @testset "generate_config_template" begin
          # Test template generation
          template_file = "test_template.toml"
-         eegfun.generate_config_template(template_file)
+         eegfun.generate_config_template(filename = template_file)
          @test isfile(template_file)
          
          # Read and verify template content
@@ -676,13 +623,11 @@ using eegfun
              default = 5,
              min = 1,
              max = 10,
-             allowed_values = [1, 2, 3]
          )
          @test param.description == "Test parameter"
          @test param.default == 5
          @test param.min == 1
          @test param.max == 10
-         @test param.allowed_values == [1, 2, 3]
 
          # Test with minimal fields
          param = eegfun.ConfigParameter{String}(
@@ -692,7 +637,7 @@ using eegfun
          @test param.default === nothing
          @test param.min === nothing
          @test param.max === nothing
-         @test param.allowed_values === nothing
+         @test param.allowed === nothing
 
          # Test with some fields
          param = eegfun.ConfigParameter{Float64}(
@@ -704,7 +649,7 @@ using eegfun
          @test param.default == 1.0
          @test param.min == 0.0
          @test param.max === nothing
-         @test param.allowed_values === nothing
+         @test param.allowed === nothing
      end
 
      @testset "load_config Error Handling" begin
@@ -719,14 +664,14 @@ using eegfun
              "filter" => Dict{String,Any}(
                  "highpass" => Dict{String,Any}(
                      "on" => true,
-                     "type" => "fir",
-                     "cutoff" => 0.1,
+                     "method" => "fir",
+                     "cutoff_freq" => 0.1,
                      "order" => 1
                  ),
                  "lowpass" => Dict{String,Any}(
                      "on" => true,
-                     "type" => "fir",
-                     "cutoff" => 40,
+                     "method" => "fir",
+                     "cutoff_freq" => 40,
                      "order" => 3
                  )
              )
@@ -739,8 +684,8 @@ using eegfun
              "filter" => Dict{String,Any}(
                  "highpass" => Dict{String,Any}(
                      "on" => "true",  # Should be Bool
-                     "type" => "fir",
-                     "cutoff" => 0.1,
+                     "method" => "fir",
+                     "cutoff_freq" => 0.1,
                      "order" => 1
                  )
              )
@@ -755,8 +700,8 @@ using eegfun
              "filter" => Dict{String,Any}(
                  "highpass" => Dict{String,Any}(
                      "on" => true,
-                     "type" => "fir",
-                     "cutoff" => -1,  # Below minimum
+                     "method" => "fir",
+                     "cutoff_freq" => -1,  # Below minimum
                      "order" => 1
                  )
              )
@@ -771,8 +716,8 @@ using eegfun
              "filter" => Dict{String,Any}(
                  "highpass" => Dict{String,Any}(
                      "on" => true,
-                     "type" => "invalid",  # Not in allowed_values
-                     "cutoff" => 0.1,
+                     "method" => "invalid",  # Not in allowed_values
+                     "cutoff_freq" => 0.1,
                      "order" => 1
                  )
              )
