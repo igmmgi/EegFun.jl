@@ -407,6 +407,25 @@ show_parameter_info()
 
 # Show specific parameter
 show_parameter_info("filtering.highpass.cutoff")
+
+Show information about configuration parameters.
+
+# Arguments
+- `parameter_name::String`: Parameter name or section name (default: "" for overview)
+
+# Examples
+```julia
+# Show overview of all parameters
+show_parameter_info()
+
+# Show all parameters in a section
+show_parameter_info("preprocess")
+
+# Show all parameters in a subsection
+show_parameter_info("files.input")
+
+# Show specific parameter details
+show_parameter_info("preprocess.epoch_start")
 ```
 """
 function show_parameter_info(parameter_name::String = "")
@@ -416,21 +435,7 @@ function show_parameter_info(parameter_name::String = "")
         @info "==================================="
 
         # Group parameters by section and subsection
-        sections = Dict{String,Dict{String,Vector{Tuple{String,ConfigParameter}}}}()
-
-        for (path, parameter_spec) in PARAMETERS
-            parts = split(path, ".")
-            section = parts[1]
-            subsection = length(parts) > 1 ? parts[2] : ""
-
-            if !haskey(sections, section)
-                sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
-            end
-            if !haskey(sections[section], subsection)
-                sections[section][subsection] = Tuple{String,ConfigParameter}[]
-            end
-            push!(sections[section][subsection], (path, parameter_spec))
-        end
+        sections = _group_parameters_by_section()
 
         # Sort sections
         sorted_sections = sort(collect(keys(sections)))
@@ -459,40 +464,120 @@ function show_parameter_info(parameter_name::String = "")
             end
         end
 
-        @info "Use show_parameter_info(\"section.parameter\") for detailed information about a specific parameter."
+        @info "Use show_parameter_info(\"section\") for section overview"
+        @info "Use show_parameter_info(\"section.parameter\") for specific parameter details"
     else
-        # Show specific parameter
-        if !haskey(PARAMETERS, parameter_name)
-            @warn "Parameter not found: $parameter_name"
-            return
-        end
-
-        parameter_spec = PARAMETERS[parameter_name]
-        @info "Parameter: $parameter_name"
-        @info "="^(length(parameter_name) + 11)
-        @info "Description: $(parameter_spec.description)"
-        @info "Type: $(typeof(parameter_spec).parameters[1])"
-
-        if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
-            range_str = "Range: "
-            if !isnothing(parameter_spec.min)
-                range_str *= "$(parameter_spec.min) ≤ "
+        # Check if it's an exact parameter match first
+        if haskey(PARAMETERS, parameter_name)
+            _show_parameter_details(parameter_name)
+        else
+            # Check if it's a section or partial match
+            matching_params = collect(filter(keys(PARAMETERS)) do key
+                startswith(key, parameter_name)
+            end)
+            
+            if !isempty(matching_params)
+                _show_section_overview(parameter_name, matching_params)
+            else
+                @warn "Parameter or section not found: $parameter_name"
+                @info "Use show_parameter_info() to see all available parameters and sections"
             end
-            range_str *= "value"
-            if !isnothing(parameter_spec.max)
-                range_str *= " ≤ $(parameter_spec.max)"
-            end
-            @info range_str
-        end
-
-        if !isnothing(parameter_spec.allowed_values)
-            @info "Allowed values: $(join(parameter_spec.allowed_values, ", "))"
-        end
-
-        if !isnothing(parameter_spec.default)
-            @info "Default: $(parameter_spec.default)"
         end
     end
+end
+
+"""
+    _show_parameter_details(parameter_name::String)
+
+Show detailed information about a specific parameter.
+"""
+function _show_parameter_details(parameter_name::String)
+    parameter_spec = PARAMETERS[parameter_name]
+    @info "Parameter: $parameter_name"
+    @info "="^(length(parameter_name) + 11)
+    @info "Description: $(parameter_spec.description)"
+    @info "Type: $(typeof(parameter_spec).parameters[1])"
+
+    if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
+        range_str = "Range: "
+        if !isnothing(parameter_spec.min)
+            range_str *= "$(parameter_spec.min) ≤ "
+        end
+        range_str *= "value"
+        if !isnothing(parameter_spec.max)
+            range_str *= " ≤ $(parameter_spec.max)"
+        end
+        @info range_str
+    end
+
+    if !isnothing(parameter_spec.allowed_values)
+        @info "Allowed values: $(join(parameter_spec.allowed_values, ", "))"
+    end
+
+    if !isnothing(parameter_spec.default)
+        @info "Default: $(parameter_spec.default)"
+    end
+end
+
+"""
+    _show_section_overview(section_name::String, matching_params::Vector{String})
+
+Show overview of all parameters in a section.
+"""
+function _show_section_overview(section_name::String, matching_params::Vector{String})
+    @info "Section: $section_name"
+    @info "="^(length(section_name) + 9)
+    
+    # Group parameters by subsection
+    sections = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
+    
+    for param_path in matching_params
+        parts = split(param_path, ".")
+        if length(parts) > 1
+            # For nested paths like "files.input.directory", 
+            # subsection is everything after the section name
+            section_prefix = section_name * "."
+            if startswith(param_path, section_prefix)
+                subsection_path = param_path[length(section_prefix)+1:end]
+                subsection_parts = split(subsection_path, ".")
+                if length(subsection_parts) > 1
+                    subsection = join(subsection_parts[1:end-1], ".")
+                else
+                    subsection = ""
+                end
+            else
+                subsection = ""
+            end
+        else
+            subsection = ""
+        end
+        
+        if !haskey(sections, subsection)
+            sections[subsection] = Tuple{String,ConfigParameter}[]
+        end
+        push!(sections[subsection], (param_path, PARAMETERS[param_path]))
+    end
+    
+    # Sort and display subsections
+    sorted_subsections = sort(collect(keys(sections)))
+    
+    for subsection in sorted_subsections
+        if !isempty(subsection)
+            @info "  [$subsection]"
+        end
+        
+        # Sort parameters within subsection
+        sorted_params = sort(sections[subsection], by = first)
+        for (path, parameter_spec) in sorted_params
+            # Get the parameter name (last part of the path)
+            param_name = last(split(path, "."))
+            indent = isempty(subsection) ? "  " : "    "
+            @info "$indent$param_name: $(parameter_spec.description)"
+        end
+    end
+    
+    @info ""
+    @info "Use show_parameter_info(\"$section_name.parameter_name\") for detailed information about a specific parameter"
 end
 
 """
