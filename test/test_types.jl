@@ -17,7 +17,7 @@ using eegfun
         @test info.lp_filter == 0.0
 
         # Test custom constructor
-        info = eegfun.AnalysisInfo(reference=:avg, hp_filter=0.1, lp_filter=30.0)
+        info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
         @test info.reference == :avg
         @test info.hp_filter == 0.1
         @test info.lp_filter == 30.0
@@ -31,10 +31,10 @@ using eegfun
 
     @testset "ContinuousData" begin
         # Create test data
-        df = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
-        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        df = DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001))
+        layout = eegfun.Layout(DataFrame(label = [:ch1, :ch2], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
-        
+
         # Test constructor
         data = eegfun.ContinuousData(df, layout, 1000, info)
         @test data isa eegfun.ContinuousData
@@ -55,10 +55,10 @@ using eegfun
 
     @testset "ErpData" begin
         # Create test data
-        df = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
-        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        df = DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001))
+        layout = eegfun.Layout(DataFrame(label = [:ch1, :ch2], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
-        
+
         # Test constructor
         data = eegfun.ErpData(df, layout, 1000, info, 10)
         @test data isa eegfun.ErpData
@@ -79,10 +79,10 @@ using eegfun
 
     @testset "EpochData" begin
         # Create test data
-        epochs = [DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001)) for _ in 1:3]
-        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        epochs = [DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001)) for _ = 1:3]
+        layout = eegfun.Layout(DataFrame(label = [:ch1, :ch2], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
-        
+
         # Test constructor
         data = eegfun.EpochData(epochs, layout, 1000, info)
         @test data isa eegfun.EpochData
@@ -125,8 +125,22 @@ using eegfun
         sphere = rand(3, 3)
         variance = rand(3)
         # Create a simple layout for testing
-        test_layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2, :ch3], x=[0.0, 1.0, 2.0], y=[0.0, 0.0, 0.0]), nothing, nothing)
-        info = eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, zeros(3), [:ic1, :ic2, :ic3], eegfun.OrderedDict{Int, Matrix{Float64}}(), test_layout)
+        test_layout = eegfun.Layout(
+            DataFrame(label = [:ch1, :ch2, :ch3], x = [0.0, 1.0, 2.0], y = [0.0, 0.0, 0.0]),
+            nothing,
+            nothing,
+        )
+        info = eegfun.InfoIca(
+            unmixing,
+            mixing,
+            sphere,
+            variance,
+            1.0,
+            zeros(3),
+            [:ic1, :ic2, :ic3],
+            eegfun.OrderedDict{Int,Matrix{Float64}}(),
+            test_layout,
+        )
         @test size(info.unmixing) == (3, 3)
         @test size(info.mixing) == (3, 3)
         @test length(info.ica_label) == 3
@@ -143,12 +157,12 @@ using eegfun
 
     @testset "Common Channel Functions" begin
         # Create two datasets with different channels
-        df1 = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
-        df2 = DataFrame(time=0:0.001:1, ch2=rand(1001), ch3=rand(1001))
-        layout1 = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
-        layout2 = eegfun.Layout(DataFrame(label=[:ch2, :ch3], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        df1 = DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001))
+        df2 = DataFrame(time = 0:0.001:1, ch2 = rand(1001), ch3 = rand(1001))
+        layout1 = eegfun.Layout(DataFrame(label = [:ch1, :ch2], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
+        layout2 = eegfun.Layout(DataFrame(label = [:ch2, :ch3], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
-        
+
         data1 = eegfun.ContinuousData(df1, layout1, 1000, info)
         data2 = eegfun.ContinuousData(df2, layout2, 1000, info)
 
@@ -158,28 +172,28 @@ using eegfun
 
     @testset "DataFrame Functions" begin
         # Test sample_rate for DataFrame with different sampling rates
-        df = DataFrame(time=0:0.001:1)  # 1000 Hz
+        df = DataFrame(time = 0:0.001:1)  # 1000 Hz
         @test eegfun.sample_rate(df) == 1000
 
-        df = DataFrame(time=0:0.002:1)  # 500 Hz
+        df = DataFrame(time = 0:0.002:1)  # 500 Hz
         @test eegfun.sample_rate(df) == 500
 
-        df = DataFrame(time=0:0.0005:1)  # 2000 Hz
+        df = DataFrame(time = 0:0.0005:1)  # 2000 Hz
         @test eegfun.sample_rate(df) == 2000
     end
 
     @testset "Channel Functions" begin
         # Create test data with extra columns
         df = DataFrame(
-            time=0:0.001:1,
-            ch1=rand(1001),
-            ch2=rand(1001),
-            sample=1:1001,
-            triggers=zeros(1001),
-            extra1=rand(1001),
-            extra2=rand(1001)
+            time = 0:0.001:1,
+            ch1 = rand(1001),
+            ch2 = rand(1001),
+            sample = 1:1001,
+            triggers = zeros(1001),
+            extra1 = rand(1001),
+            extra2 = rand(1001),
         )
-        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        layout = eegfun.Layout(DataFrame(label = [:ch1, :ch2], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         data = eegfun.ContinuousData(df, layout, 1000, info)
 
@@ -200,8 +214,8 @@ using eegfun
         @test !eegfun.has_channels(data, [:nonexistent])
 
         # Test common_channels with no overlap
-        df2 = DataFrame(time=0:0.001:1, ch3=rand(1001), ch4=rand(1001))
-        layout2 = eegfun.Layout(DataFrame(label=[:ch3, :ch4], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        df2 = DataFrame(time = 0:0.001:1, ch3 = rand(1001), ch4 = rand(1001))
+        layout2 = eegfun.Layout(DataFrame(label = [:ch3, :ch4], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         data2 = eegfun.ContinuousData(df2, layout2, 1000, info)
         @test isempty(eegfun.common_channels(data, data2))
     end
@@ -209,11 +223,11 @@ using eegfun
     @testset "MultiDataFrameEeg Functions" begin
         # Create test data with multiple epochs
         epochs = [
-            DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001)),
-            DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001)),
-            DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
+            DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001)),
+            DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001)),
+            DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001)),
         ]
-        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        layout = eegfun.Layout(DataFrame(label = [:ch1, :ch2], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         data = eegfun.EpochData(epochs, layout, 1000, info)
 
@@ -228,8 +242,8 @@ using eegfun
 
     @testset "Display Functions" begin
         # Create test data
-        df = DataFrame(time=0:0.001:1, ch1=rand(1001), ch2=rand(1001))
-        layout = eegfun.Layout(DataFrame(label=[:ch1, :ch2], x=[0.0, 1.0], y=[0.0, 0.0]), nothing, nothing)
+        df = DataFrame(time = 0:0.001:1, ch1 = rand(1001), ch2 = rand(1001))
+        layout = eegfun.Layout(DataFrame(label = [:ch1, :ch2], x = [0.0, 1.0], y = [0.0, 0.0]), nothing, nothing)
         info = eegfun.AnalysisInfo()
         data = eegfun.ContinuousData(df, layout, 1000, info)
 
@@ -251,4 +265,4 @@ using eegfun
         @test occursin("HP Filter: 0.0", output)
         @test occursin("LP Filter: 0.0", output)
     end
-end 
+end

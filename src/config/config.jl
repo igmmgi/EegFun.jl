@@ -1,4 +1,7 @@
-# configuration parameter
+# =============================================================================
+# TYPES AND STRUCTURES
+# =============================================================================
+
 """
     ConfigParameter{T}
 
@@ -30,15 +33,45 @@ function ConfigParameter{T}(;
     ConfigParameter{T}(description, default, allowed, min, max)
 end
 
-string_param(desc, default = ""; allowed = nothing) =
-    ConfigParameter{Union{Vector{String},String}}(description = desc, default = default, allowed = allowed)
-bool_param(desc, default = false) = ConfigParameter{Bool}(description = desc, default = default)
-number_param(desc, default, min = nothing, max = nothing) =
-    ConfigParameter{Real}(description = desc, default = default, min = min, max = max)
-channel_groups_param(desc, default) = ConfigParameter{Vector{Vector{String}}}(description = desc, default = default)
+# =============================================================================
+# PARAMETER CONSTRUCTOR HELPERS
+# =============================================================================
 
+# Helper to create ConfigParameter with common defaults
+function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where T
+    ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
+end
 
-# Store parameter definitions as a constant
+string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
+bool_param(desc, default = false) = _param(Bool, desc, default)
+number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
+channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, default)
+
+# Helper function to create filter parameter specifications
+function _filter_param_spec(
+    prefix,
+    description,
+    default_cutoff,
+    min_cutoff,
+    max_cutoff,
+    default_order,
+    min_order,
+    max_order,
+)
+    Dict(
+        "$prefix.on" => bool_param("Apply $description true/false", true),
+        "$prefix.method" => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
+        "$prefix.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
+        "$prefix.cutoff_freq" =>
+            number_param("$description cutoff frequency (Hz)", default_cutoff, min_cutoff, max_cutoff),
+        "$prefix.order" => number_param("Filter order", default_order, min_order, max_order),
+    )
+end
+
+# =============================================================================
+# PARAMETER DEFINITIONS
+# =============================================================================
+
 # fmt: off
 const PARAMETERS = Dict{String,ConfigParameter}(
 
@@ -70,34 +103,21 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.eeg.extreme_value_criterion"  => number_param("Value (mV) for defining data section as an extreme value.", 500),
     "preprocess.eeg.artifact_value_criterion" => number_param("Value (mV) for defining data section as an artifact value.", 100),
 
-    # Filtering settings
-    "filter.highpass.on"          => bool_param("Apply highpass filter true/false", true),
-    "filter.highpass.method"      => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
-    "filter.highpass.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
-    "filter.highpass.cutoff_freq" => number_param("High-pass filter cutoff frequency (Hz)", 0.1, 0.01, 20.0),
-    "filter.highpass.order"       => number_param("Filter order", 1, 1, 4),
-
-    # Lowpass filtering settings
-    "filter.lowpass.on"          => bool_param("Apply lowpass filter true/false", true),
-    "filter.lowpass.method"      => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
-    "filter.lowpass.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
-    "filter.lowpass.cutoff_freq" => number_param("Low-pass filter cutoff frequency (Hz)", 30, 5, 500),
-    "filter.lowpass.order"       => number_param("Filter order", 3, 1, 8),
-
     # ICA settings
-    "ica.run"                         => bool_param("Run Independent Component Analysis (ICA) true/false."),
-    "filter.ica_highpass.on"          => bool_param("Apply highpass filter ICA data true/false", true),
-    "filter.ica_highpass.method"      => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
-    "filter.ica_highpass.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
-    "filter.ica_highpass.cutoff_freq" => number_param("High-pass filter cutoff frequency (Hz)", 1, 1, 20.0),
-    "filter.ica_highpass.order"       => number_param("Filter order", 1, 1, 4),
-    "filter.ica_lowpass.on"           => bool_param("Apply lowpass filter ICA data true/false", true),
-    "filter.ica_lowpass.method"       => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
-    "filter.ica_lowpass.filter_func"  => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
-    "filter.ica_lowpass.cutoff_freq"  => number_param("Low-pass filter cutoff frequency (Hz)", 30, 5, 500),
-    "filter.ica_lowpass.order"        => number_param("Filter order", 3, 1, 4),
+    "ica.run" => bool_param("Run Independent Component Analysis (ICA) true/false."),
+
+    # Filtering settings - using helper function
+    _filter_param_spec("filter.highpass", "High-pass filter", 0.1, 0.01, 20.0, 1, 1, 4)...,
+    _filter_param_spec("filter.lowpass", "Low-pass filter", 30.0, 5.0, 500.0, 3, 1, 8)...,
+    _filter_param_spec("filter.ica_highpass", "High-pass filter ICA data", 1.0, 1.0, 20.0, 1, 1, 4)...,
+    _filter_param_spec("filter.ica_lowpass", "Low-pass filter ICA data", 30.0, 5.0, 500.0, 3, 1, 4)...,
+
 )
 # fmt: on
+
+# =============================================================================
+# VALIDATION TYPES
+# =============================================================================
 
 """
     ValidationResult
@@ -107,14 +127,18 @@ Result of parameter validation.
 # Fields
 - `success::Bool`: Whether validation succeeded
 - `error::Union{Nothing,String}`: Error message if validation failed, nothing if validation succeeded (default: nothing)
-- `path::Union{Nothing,String}`: Path to the parameter that failed validation, nothing if validation succeeded (default: nothing)
+- `key_path::Union{Nothing,String}`: Path of TOML keys to the parameter that failed validation, nothing if validation succeeded (default: nothing)
 """
 @kwdef struct ValidationResult
     success::Bool
     error::Union{Nothing,String} = nothing
-    path::Union{Nothing,String} = nothing
+    key_path::Union{Nothing,String} = nothing
 end
 
+
+# =============================================================================
+# MAIN CONFIGURATION FUNCTIONS
+# =============================================================================
 
 """
     load_config(config_file::String)
@@ -158,6 +182,10 @@ function load_config(config_file::String)
 end
 
 
+# =============================================================================
+# CONFIGURATION MERGING FUNCTIONS
+# =============================================================================
+
 """
     _merge_configs(default_config::Dict, user_config::Dict)
 
@@ -191,6 +219,10 @@ function _merge_nested!(target::Dict, source::Dict)
 end
 
 
+# =============================================================================
+# CONFIGURATION VALIDATION FUNCTIONS
+# =============================================================================
+
 """
     _validate_config(config::Dict; path="")
 
@@ -206,27 +238,18 @@ Validate config values against their metadata definitions.
 function _validate_config(config::Dict; path = "")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
-
-        if isa(value, Dict)
-            # Recursively validate nested dictionary
+        if isa(value, Dict) # Recursively validate nested dictionary
             result = _validate_config(value; path = new_path)
             !result.success && return result
-        else
-            # Check if we have metadata for this parameter
+        else # Check if we have data for this parameter
             if haskey(PARAMETERS, new_path)
                 result = _validate_parameter(value, PARAMETERS[new_path], new_path)
                 !result.success && return result
-            else
-                # Unknown parameter - this is an error
-                return ValidationResult(
-                    success = false,
-                    error = "Unknown parameter: $new_path",
-                    path = new_path
-                )
+            else # Unknown parameter?
+                return ValidationResult(success = false, error = "Unknown parameter: $new_path", key_path = new_path)
             end
         end
     end
-
     return ValidationResult(success = true)
 end
 
@@ -247,60 +270,42 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
     # Get the type from the type parameter
     param_type = typeof(parameter_spec).parameters[1]
 
+    # Helper function for creating validation errors
+    function validation_error(msg)
+        ValidationResult(success = false, error = msg, key_path = parameter_name)
+    end
+
     # Check if value is the right type
     if param_type <: Number
-        # For numeric types, accept any number
-        isa(value, Number) || return ValidationResult(
-            success = false,
-            error = "$parameter_name must be a number, got $(typeof(value))",
-            path = parameter_name,
-        )
-    elseif param_type <: Union
-        # For Union types, check if value matches any of the union types
-        isa(value, param_type) || return ValidationResult(
-            success = false,
-            error = "$parameter_name must be one of the types in $param_type, got $(typeof(value))",
-            path = parameter_name,
-        )
+        value isa Number || return validation_error("$parameter_name must be a number, got $(typeof(value))")
     else
-        # For non-numeric types, require exact type match
-        isa(value, param_type) || return ValidationResult(
-            success = false,
-            error = "$parameter_name must be of type $param_type, got $(typeof(value))",
-            path = parameter_name,
-        )
+        value isa param_type ||
+            return validation_error("$parameter_name must be of type $param_type, got $(typeof(value))")
     end
 
     # Check min/max constraints
-    if !isnothing(parameter_spec.min) && value < parameter_spec.min
-        return ValidationResult(
-            success = false,
-            error = "$parameter_name ($value) must be >= $(parameter_spec.min)",
-            path = parameter_name,
-        )
-    end
-    if !isnothing(parameter_spec.max) && value > parameter_spec.max
-        return ValidationResult(
-            success = false,
-            error = "$parameter_name ($value) must be <= $(parameter_spec.max)",
-            path = parameter_name,
-        )
-    end
+    !isnothing(parameter_spec.min) &&
+        value < parameter_spec.min &&
+        return validation_error("$parameter_name ($value) must be >= $(parameter_spec.min)")
+
+    !isnothing(parameter_spec.max) &&
+        value > parameter_spec.max &&
+        return validation_error("$parameter_name ($value) must be <= $(parameter_spec.max)")
 
     # Check allowed values if they exist
-    if !isnothing(parameter_spec.allowed) && !(value in parameter_spec.allowed)
-        return ValidationResult(
-            success = false,
-            error = "$parameter_name ($value) must be one of: $(join(parameter_spec.allowed, ", "))",
-            path = parameter_name,
-        )
-    end
+    !isnothing(parameter_spec.allowed) &&
+        !(value in parameter_spec.allowed) &&
+        return validation_error("$parameter_name ($value) must be one of: $(join(parameter_spec.allowed, ", "))")
 
     return ValidationResult(success = true)
 end
 
 
 
+
+# =============================================================================
+# PARAMETER INFORMATION DISPLAY FUNCTIONS
+# =============================================================================
 
 """
     show_parameter_info(; parameter_name::String="")
@@ -312,59 +317,59 @@ If parameter_name is provided, shows detailed information about that specific pa
 - `parameter_name::String`: Optional path to a specific parameter (e.g., "filtering.highpass.cutoff")
 """
 function show_parameter_info(; parameter_name::String = "")
-    if isempty(parameter_name)
-        # Show all parameters
-        @info "Available Configuration Parameters:"
-        @info "==================================="
+    isempty(parameter_name) ? _show_all_parameters() : _show_specific_parameter(parameter_name)
+end
 
-        # Group parameters by section and subsection
-        sections = _group_parameters_by_section()
+function _show_all_parameters()
+    @info "Available Configuration Parameters:"
+    @info "==================================="
 
-        # Sort sections
-        sorted_sections = sort(collect(keys(sections)))
+    sections = _group_parameters_by_section()
+    sorted_sections = sort(collect(keys(sections)))
 
-        # Display each section
-        for section in sorted_sections
-            @info "[$section]"
-            @info "-"^(length(section) + 2)
+    for section in sorted_sections
+        _display_section(section, sections[section])
+    end
 
-            # Sort subsections
-            sorted_subsections = sort(collect(keys(sections[section])))
+    @info "Use show_parameter_info(\"section\") for section overview"
+    @info "Use show_parameter_info(\"section.parameter\") for specific parameter details"
+end
 
-            for subsection in sorted_subsections
-                if !isempty(subsection)
-                    @info "  [$subsection]"
-                end
+function _display_section(section, section_data)
+    @info "[$section]"
+    @info "-"^(length(section) + 2)
 
-                # Sort parameters within subsection
-                sorted_params = sort(sections[section][subsection], by = first)
-                for (path, parameter_spec) in sorted_params
-                    # Get the parameter name (last part of the path)
-                    param_name = last(split(path, "."))
-                    indent = isempty(subsection) ? "  " : "    "
-                    @info "$indent$param_name: $(parameter_spec.description)"
-                end
-            end
-        end
+    sorted_subsections = sort(collect(keys(section_data)))
 
-        @info "Use show_parameter_info(\"section\") for section overview"
-        @info "Use show_parameter_info(\"section.parameter\") for specific parameter details"
+    for subsection in sorted_subsections
+        _display_subsection(subsection, section_data[subsection])
+    end
+end
+
+function _display_subsection(subsection, params)
+    !isempty(subsection) && @info "  [$subsection]"
+
+    sorted_params = sort(params, by = first)
+    for (path, parameter_spec) in sorted_params
+        param_name = String(last(split(path, ".")))
+        indent = isempty(subsection) ? "  " : "    "
+        @info "$indent$param_name: $(parameter_spec.description)"
+    end
+end
+
+function _show_specific_parameter(parameter_name)
+    if haskey(PARAMETERS, parameter_name)
+        _show_parameter_details(parameter_name)
     else
-        # Check if it's an exact parameter match first
-        if haskey(PARAMETERS, parameter_name)
-            _show_parameter_details(parameter_name)
-        else
-            # Check if it's a section or partial match
-            matching_params = collect(filter(keys(PARAMETERS)) do key
-                startswith(key, parameter_name)
-            end)
+        matching_params = collect(filter(keys(PARAMETERS)) do key
+            startswith(key, parameter_name)
+        end)
 
-            if !isempty(matching_params)
-                _show_section_overview(parameter_name, matching_params)
-            else
-                @warn "Parameter or section not found: $parameter_name"
-                @info "Use show_parameter_info() to see all available parameters and sections"
-            end
+        if !isempty(matching_params)
+            _show_section_overview(parameter_name, matching_params)
+        else
+            @warn "Parameter or section not found: $parameter_name"
+            @info "Use show_parameter_info() to see all available parameters and sections"
         end
     end
 end
@@ -382,22 +387,19 @@ function _show_parameter_details(parameter_name::String)
     @info "Type: $(typeof(parameter_spec).parameters[1])"
 
     if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
-        range_str = "Range: "
-        if !isnothing(parameter_spec.min)
-            range_str *= "$(parameter_spec.min) ≤ "
-        end
-        range_str *= "value"
-        if !isnothing(parameter_spec.max)
-            range_str *= " ≤ $(parameter_spec.max)"
-        end
-        @info range_str
+        min_str = isnothing(parameter_spec.min) ? "" : "$(parameter_spec.min) ≤ "
+        max_str = isnothing(parameter_spec.max) ? "" : " ≤ $(parameter_spec.max)"
+        @info "Range: $(min_str)value$(max_str)"
     end
 
     if !isnothing(parameter_spec.allowed)
         @info "Allowed values: $(join(parameter_spec.allowed, ", "))"
     end
 
-    if !isnothing(parameter_spec.default)
+    # Print default value or mark as required
+    if isnothing(parameter_spec.default)
+        @info "[REQUIRED]"
+    else
         @info "Default: $(parameter_spec.default)"
     end
 end
@@ -411,52 +413,55 @@ function _show_section_overview(section_name::String, matching_params::Vector{St
     @info "Section: $section_name"
     @info "="^(length(section_name) + 9)
 
-    # Group parameters by subsection
-    sections = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
-
-    for param_path in matching_params
-        parts = split(param_path, ".")
-        subsection = ""
-        if length(parts) > 1
-            # For nested paths like "files.input.directory", 
-            # subsection is everything after the section name
-            section_prefix = section_name * "."
-            if startswith(param_path, section_prefix)
-                subsection_path = param_path[(length(section_prefix)+1):end]
-                subsection_parts = split(subsection_path, ".")
-                if length(subsection_parts) > 1
-                    subsection = join(subsection_parts[1:(end-1)], ".")
-                end
-            end
-        end
-
-        if !haskey(sections, subsection)
-            sections[subsection] = Tuple{String,ConfigParameter}[]
-        end
-        push!(sections[subsection], (param_path, PARAMETERS[param_path]))
-    end
-
-    # Sort and display subsections
-    sorted_subsections = sort(collect(keys(sections)))
-
-    for subsection in sorted_subsections
-        if !isempty(subsection)
-            @info "  [$subsection]"
-        end
-
-        # Sort parameters within subsection
-        sorted_params = sort(sections[subsection], by = first)
-        for (path, parameter_spec) in sorted_params
-            # Get the parameter name (last part of the path)
-            param_name = last(split(path, "."))
-            indent = isempty(subsection) ? "  " : "    "
-            @info "$indent$param_name: $(parameter_spec.description)"
-        end
-    end
+    grouped_params = _group_params_by_subsection(section_name, matching_params)
+    _display_grouped_params(grouped_params)
 
     @info ""
     @info "Use show_parameter_info(\"$section_name.parameter_name\") for detailed information about a specific parameter"
 end
+
+function _group_params_by_subsection(section_name::String, matching_params::Vector{String})
+    sections = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
+
+    for param_path in matching_params
+        subsection = _extract_subsection(section_name, param_path)
+        get!(sections, subsection, Tuple{String,ConfigParameter}[])
+        push!(sections[subsection], (param_path, PARAMETERS[param_path]))
+    end
+
+    return sections
+end
+
+function _extract_subsection(section_name::String, param_path::String)
+    section_prefix = section_name * "."
+    if !startswith(param_path, section_prefix)
+        return ""
+    end
+
+    subsection_path = param_path[(length(section_prefix)+1):end]
+    subsection_parts = split(subsection_path, ".")
+
+    return length(subsection_parts) > 1 ? join(subsection_parts[1:(end-1)], ".") : ""
+end
+
+function _display_grouped_params(grouped_params::Dict{String,Vector{Tuple{String,ConfigParameter}}})
+    sorted_subsections = sort(collect(keys(grouped_params)))
+
+    for subsection in sorted_subsections
+        !isempty(subsection) && @info "  [$subsection]"
+
+        sorted_params = sort(grouped_params[subsection], by = first)
+        for (path, parameter_spec) in sorted_params
+            param_name = String(last(split(path, ".")))
+            indent = isempty(subsection) ? "  " : "    "
+            @info "$indent$param_name: $(parameter_spec.description)"
+        end
+    end
+end
+
+# =============================================================================
+# TEMPLATE GENERATION FUNCTIONS
+# =============================================================================
 
 """
     generate_config_template(filename::String="config_template.toml")
@@ -469,61 +474,63 @@ Generate and save a template TOML configuration file with all available paramete
 function generate_config_template(; filename::String = "config_template.toml")
     try
         @info "Starting config template generation"
-
-        # Open file for writing
         open(filename, "w") do io
-            # Write header
-            println(io, "# EEG Processing Configuration Template")
-            println(io, "# Generated on ", Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
-            println(io)
-            println(io, "# This template shows all available configuration options.")
-            println(io, "# Required fields are marked with [REQUIRED]")
-            println(io, "# Default values are shown where available")
-            println(io)
-
-            # Group parameters by section and subsection
-            sections = _group_parameters_by_section()
-
-            # Sort sections
-            sorted_sections = sort(collect(keys(sections)))
-
-            # Write each section
-            for section in sorted_sections
-                println(io, "\n# $section Settings")
-                println(io, "[$section]")
-
-                # Sort subsections
-                sorted_subsections = sort(collect(keys(sections[section])))
-
-                for subsection in sorted_subsections
-                    if !isempty(subsection)
-                        println(io, "\n# $subsection Settings")
-                        println(io, "[$section.$subsection]")
-                    end
-
-                    # Sort parameters within subsection
-                    sorted_params = sort(sections[section][subsection], by = first)
-                    for (path, parameter_spec) in sorted_params
-                        # Get the parameter name (last part of the path)
-                        param_name = last(split(path, "."))
-
-                        # Write parameter documentation
-                        _write_parameter_docs(io, parameter_spec)
-
-                        # Use the default value from parameter_spec
-                        value = parameter_spec.default
-
-                        # Write parameter value in appropriate format
-                        _write_parameter_value(io, param_name, value)
-                    end
-                end
-            end
+            _write_template_header(io)
+            _write_template_sections(io)
         end
         @info "Configuration template saved to: $filename"
     catch e
         @minimal_error "Failed to save configuration template: $e"
     end
 end
+
+function _write_template_header(io::IO)
+    println(io, "# EEG Processing Configuration Template")
+    println(io, "# Generated on ", Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))
+    println(io)
+    println(io, "# This template shows all available configuration options.")
+    println(io, "# Required fields are marked with [REQUIRED]")
+    println(io, "# Default values are shown where available")
+    println(io)
+end
+
+function _write_template_sections(io::IO)
+    sections = _group_parameters_by_section()
+    sorted_sections = sort(collect(keys(sections)))
+
+    for section in sorted_sections
+        _write_section(io, section, sections[section])
+    end
+end
+
+function _write_section(io::IO, section::String, section_data::Dict{String,Vector{Tuple{String,ConfigParameter}}})
+    println(io, "\n# $section Settings")
+    println(io, "[$section]")
+
+    sorted_subsections = sort(collect(keys(section_data)))
+
+    for subsection in sorted_subsections
+        _write_subsection(io, section, subsection, section_data[subsection])
+    end
+end
+
+function _write_subsection(io::IO, section::String, subsection::String, params::Vector{Tuple{String,ConfigParameter}})
+    if !isempty(subsection)
+        println(io, "\n# $subsection Settings")
+        println(io, "[$section.$subsection]")
+    end
+
+    sorted_params = sort(params, by = first)
+    for (path, parameter_spec) in sorted_params
+        param_name = String(last(split(path, ".")))
+        _write_parameter_docs(io, parameter_spec)
+        _write_parameter_value(io, param_name, parameter_spec.default)
+    end
+end
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
 
 """
     _group_parameters_by_section()
@@ -539,20 +546,10 @@ function _group_parameters_by_section()
     for (path, parameter_spec) in PARAMETERS
         parts = split(path, ".")
         section = parts[1]
+        subsection = length(parts) > 2 ? join(parts[2:(end-1)], ".") : ""
 
-        # For nested paths like "ica.ica_filter.highpass.on", 
-        # we want subsection to be "ica_filter.highpass"
-        subsection = ""
-        if length(parts) > 2
-            subsection = join(parts[2:(end-1)], ".")  # Join all parts except first and last
-        end
-
-        if !haskey(sections, section)
-            sections[section] = Dict{String,Vector{Tuple{String,ConfigParameter}}}()
-        end
-        if !haskey(sections[section], subsection)
-            sections[section][subsection] = Tuple{String,ConfigParameter}[]
-        end
+        get!(sections, section, Dict{String,Vector{Tuple{String,ConfigParameter}}}())
+        get!(sections[section], subsection, Tuple{String,ConfigParameter}[])
         push!(sections[section][subsection], (path, parameter_spec))
     end
 
@@ -569,59 +566,34 @@ function _write_parameter_docs(io::IO, parameter_spec::ConfigParameter)
     println(io, "# Type: $(typeof(parameter_spec).parameters[1])")
 
     if !isnothing(parameter_spec.min) || !isnothing(parameter_spec.max)
-        range_str = "# Range: "
-        if !isnothing(parameter_spec.min)
-            range_str *= "$(parameter_spec.min) ≤ "
-        end
-        range_str *= "value"
-        if !isnothing(parameter_spec.max)
-            range_str *= " ≤ $(parameter_spec.max)"
-        end
-        println(io, range_str)
+        min_str = isnothing(parameter_spec.min) ? "" : "$(parameter_spec.min) ≤ "
+        max_str = isnothing(parameter_spec.max) ? "" : " ≤ $(parameter_spec.max)"
+        println(io, "# Range: $(min_str)value$(max_str)")
     end
 
     if !isnothing(parameter_spec.allowed)
         println(io, "# Allowed values: $(join(parameter_spec.allowed, ", "))")
     end
 
-    # Print default value if it exists
-    if !isnothing(parameter_spec.default)
-        println(io, "# Default: $(parameter_spec.default)")
-    end
-
-    # Mark required fields
+    # Print default value or mark as required
     if isnothing(parameter_spec.default)
         println(io, "# [REQUIRED]")
+    else
+        println(io, "# Default: $(parameter_spec.default)")
     end
 end
 
 """
-    _write_parameter_value(io::IO, param_name::Union{String,SubString{String}}, value)
+    _write_parameter_value(io::IO, param_name::String, value)
 
 Write a parameter value to the given IO stream in the appropriate TOML format.
 """
-function _write_parameter_value(io::IO, param_name::Union{String,SubString{String}}, value)
-    if isa(value, String)
-        # Double any backslashes in the string for TOML
-        escaped_value = replace(value, "\\" => "\\\\")
-        println(io, "$(String(param_name)) = \"$escaped_value\"")
-    elseif isa(value, Vector)
-        if isempty(value)
-            println(io, "$(String(param_name)) = []")
-        else
-            println(io, "$(String(param_name)) = [")
-            for item in value
-                if isa(item, String)
-                    # Double any backslashes in the string for TOML
-                    escaped_item = replace(item, "\\" => "\\\\")
-                    println(io, "    \"$escaped_item\",")
-                else
-                    println(io, "    $item,")
-                end
-            end
-            println(io, "]")
-        end
+function _write_parameter_value(io::IO, param_name::String, value)
+    if value isa String
+        println(io, "$param_name = \"$(replace(value, "\\" => "\\\\"))\"")
+    elseif value isa Vector
+        println(io, "$param_name = $(isempty(value) ? "[]" : "[$(join(value, ", "))]")")
     else
-        println(io, "$(String(param_name)) = $value")
+        println(io, "$param_name = $value")
     end
 end

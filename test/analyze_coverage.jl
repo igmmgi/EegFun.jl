@@ -39,9 +39,7 @@ println("\nCoverage by file:")
 
 # Process source files
 if !isempty(src_files)
-    coverage = Coverage.CoverageTools.process_file.(
-        [joinpath(src_dir, file) for file in src_files]
-    )
+    coverage = Coverage.CoverageTools.process_file.([joinpath(src_dir, file) for file in src_files])
     for file in coverage
         covered, total = get_summary(file)
         if total > 0

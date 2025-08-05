@@ -41,7 +41,12 @@ eegfun.plot_channel_spectrum(dat)
 #eegfun.is_extreme_value!(dat, 100);
 
 
-eegfun.plot_channel_spectrum(dat; y_scale = :log10, sample_selection = x -> x.time .< 1000, channel_selection = eegfun.channels(:Fp1))
+eegfun.plot_channel_spectrum(
+    dat;
+    y_scale = :log10,
+    sample_selection = x -> x.time .< 1000,
+    channel_selection = eegfun.channels(:Fp1),
+)
 
 
 eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :vEOG, :hEOG]))
@@ -54,7 +59,7 @@ eegfun.plot_databrowser(dat)
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = []
 for (idx, epoch) in enumerate(epoch_cfg)
-     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
 eegfun.plot_databrowser(epochs[1])
 
@@ -80,10 +85,21 @@ eegfun.plot_ica_topoplot(ica_result, use_global_scale = true)
 
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15))
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15); use_global_scale = true)
-eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1,3]))
-eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1,3]);  use_global_scale = true)
-eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1, 3, 5]); use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
-eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3), use_global_scale = true, colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1, 3]))
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components([1, 3]); use_global_scale = true)
+eegfun.plot_ica_topoplot(
+    ica_result,
+    component_selection = eegfun.components([1, 3, 5]);
+    use_global_scale = true,
+    colorbar_kwargs = Dict(:colorbar_plot_numbers => [2]),
+)
+eegfun.plot_ica_topoplot(
+    ica_result,
+    component_selection = eegfun.components([1, 3, 5, 7, 9]);
+    dims = (2, 3),
+    use_global_scale = true,
+    colorbar_kwargs = Dict(:colorbar_plot_numbers => [5]),
+)
 
 eegfun.plot_ica_component_activation(dat, ica_result)
 
@@ -121,8 +137,8 @@ df2 = eegfun.channel_summary(epochs[1])
 eegfun.plot_channel_summary(df1, :range)
 eegfun.plot_channel_summary(df1, :min)
 
-eegfun.plot_channel_summary(df2, :range, average_over=:epoch)
-eegfun.plot_channel_summary(df2, :min, average_over=:epoch)
+eegfun.plot_channel_summary(df2, :range, average_over = :epoch)
+eegfun.plot_channel_summary(df2, :min, average_over = :epoch)
 
 
 
@@ -137,8 +153,18 @@ eegfun.filter_data!(dat, "lp", 20)
 eegfun.rereference!(dat, :avg)
 
 # how to create channel differences (e.g. EOG calculations)
-eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(
+    dat,
+    channel_selection1 = eegfun.channels([:Fp1, :Fp2]),
+    channel_selection2 = eegfun.channels([:IO1, :IO2]),
+    channel_out = :vEOG,
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(
+    dat,
+    channel_selection1 = eegfun.channels([:F9]),
+    channel_selection2 = eegfun.channels([:F10]),
+    channel_out = :hEOG,
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 
 # how to detect EOG onsets (a new Bool column is added to the data frame: :is_vEOG, :is_hEOG)
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
@@ -161,7 +187,7 @@ eegfun.get_layout_neighbours_xyz!(layout, 40);
 # how to plot layout without/with neighbours
 eegfun.plot_layout_2d(layout)
 eegfun.plot_layout_2d(layout, neighbours = true)
-eegfun.plot_layout_3d(layout, neighbours= true)
+eegfun.plot_layout_3d(layout, neighbours = true)
 
 eegfun.channel_labels(layout)
 eegfun.positions_polar(layout)
@@ -214,12 +240,26 @@ dat_subset = eegfun.subset(dat, sample_selection = x -> x.sample .<= 10_000) # f
 dat_subset = eegfun.subset(dat, sample_selection = x -> x.time .<= 10) # first 10 seconds
 
 # or subset data and plot
-eegfun.plot_databrowser_subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> x.time .< 20)
+eegfun.plot_databrowser_subset(
+    dat,
+    channel_selection = eegfun.channels([:Fp1, :Fp2]),
+    sample_selection = x -> x.time .< 20,
+)
 
 # how to calculate channel differences
-eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:Fp1, :Fp2]), channels_in2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(
+    dat,
+    channels_in1 = eegfun.channels([:Fp1, :Fp2]),
+    channels_in2 = eegfun.channels([:IO1, :IO2]),
+    channel_out = :vEOG,
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 
-eegfun.channel_difference!(dat, channels_in1 = eegfun.channels([:F9]), channels_in2 = eegfun.channels([:F10]), channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(
+    dat,
+    channels_in1 = eegfun.channels([:F9]),
+    channels_in2 = eegfun.channels([:F10]),
+    channel_out = :hEOG,
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 
 # how to detect EOG onsets
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
@@ -227,15 +267,15 @@ eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 dat_subset = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 
-eegfun.plot_databrowser_subset(dat, channel_selection = eegfun.channels([:Fp1,:vEOG, :hEOG]))
+eegfun.plot_databrowser_subset(dat, channel_selection = eegfun.channels([:Fp1, :vEOG, :hEOG]))
 
 
 eegfun.channels(dat)     # original channels in the layout
 eegfun.all_channels(dat) # all channels in the data
 
 # basic channel summary statistics
-eegfun.channel_summary(dat) 
-eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2])) 
+eegfun.channel_summary(dat)
+eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> x.sample .< 2000)
 eegfun.channel_summary(dat, channel_selection = x -> endswith.(string.(x), "z")) # all midline channels 
 eegfun.channel_summary(dat, channel_selection = x -> .!(endswith.(string.(x), "z"))) # all non-midline channels 
@@ -247,14 +287,24 @@ eegfun.is_extreme_value!(dat, 100; include_extra = true);
 eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1, :Fp2]));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
-eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")), sample_selection = x -> x.sample .> 1000);
+eegfun.is_extreme_value!(
+    dat,
+    100;
+    channel_selection = x -> .!(endswith.(string.(x), "z")),
+    sample_selection = x -> x.sample .> 1000,
+);
 
 # retrun count of extreme values at specific electrodes at different thresholds
 eegfun.n_extreme_value(dat, 100)
 eegfun.n_extreme_value(dat, 100, include_extra = true)
 eegfun.n_extreme_value(dat, 100, channel_selection = eegfun.channels([:Fp1, :Fp2])) # count extreme values at Fp1 at 100 uV threshold
 eegfun.n_extreme_value(dat, 100, channel_selection = x -> endswith.(string.(x), "z"))
-eegfun.n_extreme_value(dat, 100, channel_selection = x -> .!(endswith.(string.(x), "z")), sample_selection = x -> x.sample .< 10)
+eegfun.n_extreme_value(
+    dat,
+    100,
+    channel_selection = x -> .!(endswith.(string.(x), "z")),
+    sample_selection = x -> x.sample .< 10,
+)
 
 
 
@@ -283,8 +333,20 @@ eegfun.plot_layout_2d(layout, neighbours)
 fig, ax = eegfun.plot_layout_2d(layout)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 10)
 eegfun.add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1], [:PO8, :PO4, :P2]], border_size = 5)
-eegfun.add_topo_rois!(ax, layout, [[:Fp1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
-eegfun.add_topo_rois!(ax, layout, [[:CPz, :C2, :FCz,  :C1]], border_size = 15, roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]))
+eegfun.add_topo_rois!(
+    ax,
+    layout,
+    [[:Fp1]],
+    border_size = 15,
+    roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]),
+)
+eegfun.add_topo_rois!(
+    ax,
+    layout,
+    [[:CPz, :C2, :FCz, :C1]],
+    border_size = 15,
+    roi_kwargs = Dict(:fill => [true], :fillcolor => [:red], :fillalpha => [0.2]),
+)
 
 # save a basic figure
 # NB. for vector graphics, use CairoMakie
@@ -351,8 +413,8 @@ eegfun.mark_epoch_windows!(dat, [epoch1], [-2.0, 2.0]) # epoch window within ext
 eegfun.plot_databrowser(dat);
 eegfun.plot_databrowser(dat, [dat.layout.label; :vEOG; :hEOG])
 
-   
-    
+
+
 
 
 
@@ -390,15 +452,29 @@ eegfun.plot_ica_topoplot(ica_result, dat.layout)
 eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
 eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15))
 eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15); use_global_scale = true)
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]))
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1,3]);  use_global_scale = true)
+eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3]))
+eegfun.plot_ica_topoplot(
+    ica_result,
+    dat.layout,
+    component_selection = eegfun.components([1, 3]);
+    use_global_scale = true,
+)
 
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5]);
-                  use_global_scale = true,
-                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 2]))
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components([1, 3, 5, 7, 9]); dims = (2, 3),
-                  use_global_scale = true,
-                  colorbar_kwargs = Dict(:colorbar_plot_numbers => [ 5]))
+eegfun.plot_ica_topoplot(
+    ica_result,
+    dat.layout,
+    component_selection = eegfun.components([1, 3, 5]);
+    use_global_scale = true,
+    colorbar_kwargs = Dict(:colorbar_plot_numbers => [2]),
+)
+eegfun.plot_ica_topoplot(
+    ica_result,
+    dat.layout,
+    component_selection = eegfun.components([1, 3, 5, 7, 9]);
+    dims = (2, 3),
+    use_global_scale = true,
+    colorbar_kwargs = Dict(:colorbar_plot_numbers => [5]),
+)
 
 
 eegfun.plot_ica_component_activation(dat, ica_result)
@@ -418,7 +494,7 @@ eegfun.plot_databrowser(dat, ica_result)
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = []
 for (idx, epoch) in enumerate(epoch_cfg)
-     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
 
 plot_databrowser(epochs[1])
@@ -447,14 +523,14 @@ plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => false, :add_t
 
 plot_erp(erps[1], erps[3], [:PO7, :PO8])
 
-plot_erp([erps[1], erps[2],erps[3]], [:PO7, :PO8], kwargs = Dict(:average_channels => true, :add_topoplot => true))
+plot_erp([erps[1], erps[2], erps[3]], [:PO7, :PO8], kwargs = Dict(:average_channels => true, :add_topoplot => true))
 
 
 # bad_chans, opt_params = find_bad_channels(epochs[1], AutoRejectParams())
 # 
 # # Visualize results for a specific epoch
 # fig = plot_interpolation_comparison(epochs[1], bad_chans, 11)  # Show epoch 1
- 
+
 # epochs_cleaned = remove_bad_epochs(epochs)
 # 
 # # Epoch Data Browser
@@ -585,7 +661,7 @@ layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 dat = eegfun.create_eeg_dataframe(dat, layout);
 # preprocessing steps
 eegfun.rereference!(dat, :avg)
-eegfun.filter_data!(dat, "hp", "fir", 1, order=1)
+eegfun.filter_data!(dat, "hp", "fir", 1, order = 1)
 eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
@@ -623,26 +699,28 @@ eegfun.plot_databrowser(dat, ica_result)
 # dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 
-eog_comps, eog_comps_metrics_df = eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+eog_comps, eog_comps_metrics_df =
+    eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
 
-ecg_comps, ecg_comps_metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+ecg_comps, ecg_comps_metrics_df =
+    eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
 
 line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
 channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
 
 
 # Method 1: Combine existing results
-artifacts = eegfun.combine_artifact_components(
-    eog_comps,
-    ecg_comps,
-    line_noise_comps,
-    channel_noise_comps
-)
+artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
 
 all_comps = eegfun.get_all_ica_components(artifacts)
 
-dat_ica_removed, ica_result_updated = eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components(all_comps))
-dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(dat_ica_removed, ica_result_updated, component_selection = eegfun.components(all_comps))
+dat_ica_removed, ica_result_updated =
+    eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components(all_comps))
+dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(
+    dat_ica_removed,
+    ica_result_updated,
+    component_selection = eegfun.components(all_comps),
+)
 dat.data ≈ dat_ica_reconstructed.data
 
 
@@ -653,4 +731,3 @@ fig, ax = eegfun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
 fig, ax = eegfun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
 fig, ax = eegfun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
 fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
-

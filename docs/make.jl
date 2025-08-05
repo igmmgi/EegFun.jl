@@ -8,11 +8,11 @@ using eegfun
 makedocs(
     sitename = "eegfun",
     format = Documenter.HTML(
-        size_threshold = nothing  # Disable size threshold
+        size_threshold = nothing,  # Disable size threshold
     ),
     modules = [eegfun],
     checkdocs = :none,  # Disable strict documentation checking
-    warnonly = [:cross_references]  # Only warn about cross-references, don't fail
+    warnonly = [:cross_references],  # Only warn about cross-references, don't fail
 )
 
 # Documenter can also automatically deploy documentation to gh-pages.

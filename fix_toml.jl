@@ -11,4 +11,4 @@ content = replace(content, "# Type: Function" => "# Type: String")
 # Write back
 write("src/config/default.toml", content)
 
-println("Fixed TOML file!") 
+println("Fixed TOML file!")
