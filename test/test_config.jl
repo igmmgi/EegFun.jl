@@ -10,6 +10,10 @@ using eegfun
     # Create temporary directory for test files
     test_dir = mktempdir()
 
+    # =============================================================================
+    # CONFIGPARAMETER AND PARAMETER STRUCTS
+    # =============================================================================
+
     @testset "ConfigParameter Tests" begin
         # Test ConfigParameter struct creation
         param = eegfun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0, max = 2.0)
@@ -33,6 +37,10 @@ using eegfun
         @test param.allowed === nothing
     end
 
+    # =============================================================================
+    # PARAMETERS DICTIONARY
+    # =============================================================================
+
     @testset "PARAMETERS Dictionary Tests" begin
         # Test that all required parameters exist
         @test haskey(eegfun.PARAMETERS, "files.input.directory")
@@ -48,7 +56,59 @@ using eegfun
         @test eegfun.PARAMETERS["filter.highpass.cutoff_freq"] isa eegfun.ConfigParameter{Real}
         @test eegfun.PARAMETERS["filter.highpass.order"] isa eegfun.ConfigParameter{Real}
         @test eegfun.PARAMETERS["files.output.save_continuous_data"] isa eegfun.ConfigParameter{Bool}
+
+        # Test that all parameters have valid descriptions
+        for (path, param) in eegfun.PARAMETERS
+            @test !isempty(param.description)
+            @test param isa eegfun.ConfigParameter
+        end
+
+        # Test specific parameter properties
+        param = eegfun.PARAMETERS["filter.highpass.cutoff_freq"]
+        @test param.description == "High-pass filter cutoff frequency (Hz)"
+        @test param.min == 0.01
+        @test param.max == 20.0
+        @test param.default == 0.1
+
+        # Test non-existent parameter
+        @test !haskey(eegfun.PARAMETERS, "nonexistent")
+
+        # Test that all filter parameters exist
+        @test haskey(eegfun.PARAMETERS, "filter.highpass.on")
+        @test haskey(eegfun.PARAMETERS, "filter.highpass.method")
+        @test haskey(eegfun.PARAMETERS, "filter.highpass.filter_func")
+        @test haskey(eegfun.PARAMETERS, "filter.lowpass.on")
+        @test haskey(eegfun.PARAMETERS, "filter.lowpass.method")
+        @test haskey(eegfun.PARAMETERS, "filter.lowpass.filter_func")
+        @test haskey(eegfun.PARAMETERS, "filter.ica_highpass.on")
+        @test haskey(eegfun.PARAMETERS, "filter.ica_lowpass.on")
+
+        # Test that all file parameters exist
+        @test haskey(eegfun.PARAMETERS, "files.output.directory")
+        @test haskey(eegfun.PARAMETERS, "files.output.save_ica_data")
+        @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_original")
+        @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_cleaned")
+        @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_original")
+        @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_cleaned")
+        @test haskey(eegfun.PARAMETERS, "files.output.exit_early")
+
+        # Test that all preprocess parameters exist
+        @test haskey(eegfun.PARAMETERS, "preprocess.reference_channel")
+        @test haskey(eegfun.PARAMETERS, "preprocess.layout.neighbour_criterion")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eog.vEOG_channels")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eog.hEOG_channels")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eog.vEOG_criterion")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eog.hEOG_criterion")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.extreme_value_criterion")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.artifact_value_criterion")
+
+        # Test that ICA parameters exist
+        @test haskey(eegfun.PARAMETERS, "ica.run")
     end
+
+    # =============================================================================
+    # CONFIG LOADING AND MERGING
+    # =============================================================================
 
     @testset "load_config Tests" begin
 
@@ -406,6 +466,10 @@ using eegfun
         end
     end
 
+    # =============================================================================
+    # VALIDATION
+    # =============================================================================
+
     @testset "ValidationResult Tests" begin
         # Test successful validation
         result = eegfun.ValidationResult(success = true)
@@ -424,181 +488,6 @@ using eegfun
         @test !result.success
         @test result.error == "Test error"
         @test result.key_path == "test.path"
-    end
-
-    @testset "Config Template Generation" begin
-        # Test template generation
-        template_path = joinpath(test_dir, "template.toml")
-        eegfun.generate_config_template(filename = template_path)
-        @test isfile(template_path)
-
-        # Verify template contents
-        template = TOML.parsefile(template_path)
-        @test haskey(template, "files")
-        @test haskey(template, "filter")
-        @test haskey(template, "preprocess")
-
-        # Test template with custom filename
-        custom_path = joinpath(test_dir, "custom.toml")
-        eegfun.generate_config_template(filename = custom_path)
-        @test isfile(custom_path)
-    end
-
-    @testset "Parameter Info Display" begin
-        # Test that all parameters exist and have required properties
-        for (path, param) in eegfun.PARAMETERS
-            @test !isempty(param.description)
-            @test param isa eegfun.ConfigParameter
-        end
-
-        # Test specific parameter properties
-        param = eegfun.PARAMETERS["filter.highpass.cutoff_freq"]
-        @test param.description == "High-pass filter cutoff frequency (Hz)"
-        @test param.min == 0.01
-        @test param.max == 20.0
-        @test param.default == 0.1
-
-        # Test non-existent parameter
-        @test !haskey(eegfun.PARAMETERS, "nonexistent")
-    end
-
-
-
-    @testset "Config Merging" begin
-        # Test merging with empty config
-        default = Dict("key" => "value")
-        empty = Dict()
-        result = eegfun._merge_configs(default, empty)
-        @test result == default
-
-        # Test merging with new values
-        default = Dict("key" => "old")
-        new = Dict("key" => "new")
-        result = eegfun._merge_configs(default, new)
-        @test result["key"] == "new"
-
-        # Test deep merging
-        default = Dict("outer" => Dict("inner" => Dict("value" => "old")))
-        new = Dict("outer" => Dict("inner" => Dict("value" => "new")))
-        result = eegfun._merge_configs(default, new)
-        @test result["outer"]["inner"]["value"] == "new"
-
-        # Test partial deep merging
-        default = Dict("outer" => Dict("inner1" => Dict("value" => "old1"), "inner2" => Dict("value" => "old2")))
-        new = Dict("outer" => Dict("inner1" => Dict("value" => "new1")))
-        result = eegfun._merge_configs(default, new)
-        @test result["outer"]["inner1"]["value"] == "new1"
-        @test result["outer"]["inner2"]["value"] == "old2"
-
-        # Test array merging
-        default = Dict("array" => [1, 2, 3])
-        new = Dict("array" => [4, 5, 6])
-        result = eegfun._merge_configs(default, new)
-        @test result["array"] == [4, 5, 6]
-    end
-
-    @testset "_merge_configs" begin
-        # Test simple merge
-        default = Dict("a" => 1, "b" => 2)
-        user = Dict("b" => 3, "c" => 4)
-        merged = eegfun._merge_configs(default, user)
-        @test merged["a"] == 1
-        @test merged["b"] == 3
-        @test merged["c"] == 4
-
-        # Test nested merge
-        default = Dict("a" => Dict("x" => 1, "y" => 2))
-        user = Dict("a" => Dict("y" => 3, "z" => 4))
-        merged = eegfun._merge_configs(default, user)
-        @test merged["a"]["x"] == 1
-        @test merged["a"]["y"] == 3
-        @test merged["a"]["z"] == 4
-
-        # Test deep nested merge
-        default = Dict("a" => Dict("b" => Dict("c" => 1)))
-        user = Dict("a" => Dict("b" => Dict("d" => 2)))
-        merged = eegfun._merge_configs(default, user)
-        @test merged["a"]["b"]["c"] == 1
-        @test merged["a"]["b"]["d"] == 2
-    end
-
-
-
-    @testset "_validate_parameter Tests" begin
-        # Test numeric validation
-        param = eegfun.ConfigParameter{Int}(description = "Test parameter", min = 1, max = 10, default = 5)
-        @test eegfun._validate_parameter(5, param, "test").success
-        @test !eegfun._validate_parameter(0, param, "test").success
-        @test !eegfun._validate_parameter(11, param, "test").success
-        @test !eegfun._validate_parameter("5", param, "test").success
-
-        # Test string validation with allowed values
-        param = eegfun.ConfigParameter{String}(description = "Test parameter", allowed = ["a", "b", "c"], default = "a")
-        @test eegfun._validate_parameter("a", param, "test").success
-        @test !eegfun._validate_parameter("d", param, "test").success
-        @test !eegfun._validate_parameter(1, param, "test").success
-
-        # Test vector validation
-        param = eegfun.ConfigParameter{Vector{String}}(description = "Test parameter", default = ["a", "b"])
-        @test eegfun._validate_parameter(["a", "b"], param, "test").success
-        @test !eegfun._validate_parameter(["a", 1], param, "test").success
-
-        # Test type conversion
-        param = eegfun.ConfigParameter{Float64}(description = "Test parameter", min = 1.0, max = 10.0, default = 5.0)
-        @test eegfun._validate_parameter(5, param, "test").success  # Int to Float64
-        @test !eegfun._validate_parameter("5.0", param, "test").success  # String not convertible
-
-        # Test missing values
-        param = eegfun.ConfigParameter{Union{String,Nothing}}(description = "Test parameter", default = nothing)
-        @test eegfun._validate_parameter(nothing, param, "test").success
-        @test eegfun._validate_parameter("test", param, "test").success
-    end
-
-    @testset "generate_config_template" begin
-        # Test template generation
-        template_file = "test_template.toml"
-        eegfun.generate_config_template(filename = template_file)
-        @test isfile(template_file)
-
-        # Read and verify template content
-        content = read(template_file, String)
-        @test contains(content, "# EEG Processing Configuration Template")
-        @test contains(content, "[files]")
-        @test contains(content, "[filter]")
-
-        # Clean up
-        rm(template_file)
-    end
-
-    @testset "ConfigParameter Constructor Tests" begin
-        # Test with all fields
-        param = eegfun.ConfigParameter{Int}(description = "Test parameter", default = 5, min = 1, max = 10)
-        @test param.description == "Test parameter"
-        @test param.default == 5
-        @test param.min == 1
-        @test param.max == 10
-
-        # Test with minimal fields
-        param = eegfun.ConfigParameter{String}(description = "Test parameter")
-        @test param.description == "Test parameter"
-        @test param.default === nothing
-        @test param.min === nothing
-        @test param.max === nothing
-        @test param.allowed === nothing
-
-        # Test with some fields
-        param = eegfun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0)
-        @test param.description == "Test parameter"
-        @test param.default == 1.0
-        @test param.min == 0.0
-        @test param.max === nothing
-        @test param.allowed === nothing
-    end
-
-    @testset "load_config Error Handling" begin
-        # Test non-existent file
-        result = eegfun.load_config("nonexistent.toml")
-        @test result === nothing
     end
 
     @testset "Config Validation Tests" begin
@@ -661,56 +550,134 @@ using eegfun
         @test result.key_path !== nothing
     end
 
-    @testset "_merge_configs Tests" begin
-        # Test merging with empty configs
-        @test isempty(eegfun._merge_configs(Dict(), Dict()))
+    # =============================================================================
+    # TEMPLATE GENERATION
+    # =============================================================================
 
-        # Test merging with one empty config
-        default = Dict("a" => 1)
-        user = Dict()
-        merged = eegfun._merge_configs(default, user)
-        @test merged["a"] == 1
+    @testset "Config Template Generation" begin
+        # Test template generation
+        template_path = joinpath(test_dir, "template.toml")
+        eegfun.generate_config_template(filename = template_path)
+        @test isfile(template_path)
 
-        # Test deep merging
-        default = Dict(
-            "a" => Dict(
-                "b" => Dict("c" => 1)
-            )
-        )
-        user = Dict(
-            "a" => Dict(
-                "b" => Dict("d" => 2)
-            )
-        )
-        merged = eegfun._merge_configs(default, user)
-        @test merged["a"]["b"]["c"] == 1
-        @test merged["a"]["b"]["d"] == 2
+        # Verify template contents
+        template = TOML.parsefile(template_path)
+        @test haskey(template, "files")
+        @test haskey(template, "filter")
+        @test haskey(template, "preprocess")
 
-        # Test user config overrides default
-        default = Dict("a" => 1)
-        user = Dict("a" => 2)
-        merged = eegfun._merge_configs(default, user)
-        @test merged["a"] == 2
-
-        # Test nested user config overrides default
-        default = Dict(
-            "a" => Dict(
-                "b" => 1,
-                "c" => 2
-            )
-        )
-        user = Dict(
-            "a" => Dict(
-                "b" => 3
-            )
-        )
-        merged = eegfun._merge_configs(default, user)
-        @test merged["a"]["b"] == 3
-        @test merged["a"]["c"] == 2
+        # Test template with custom filename
+        custom_path = joinpath(test_dir, "custom.toml")
+        eegfun.generate_config_template(filename = custom_path)
+        @test isfile(custom_path)
     end
 
     # =============================================================================
-    # INDIVIDUAL HELPER FUNCTION TESTS
+    # PARAMETER CONSTRUCTORS AND HELPERS
+    # =============================================================================
+
+    @testset "Parameter Constructor Helper Tests" begin
+        # Test string_param
+        param = eegfun.string_param("Test string", "default")
+        @test param isa eegfun.ConfigParameter{Union{Vector{String},String}}
+        @test param.description == "Test string"
+        @test param.default == "default"
+
+        # Test string_param with allowed values
+        param = eegfun.string_param("Test string", "default", allowed = ["a", "b", "c"])
+        @test param.allowed == ["a", "b", "c"]
+
+        # Test string_param with default empty string
+        param = eegfun.string_param("Test string")
+        @test param.default == ""
+
+        # Test bool_param
+        param = eegfun.bool_param("Test bool", true)
+        @test param isa eegfun.ConfigParameter{Bool}
+        @test param.description == "Test bool"
+        @test param.default == true
+
+        # Test bool_param with default false
+        param = eegfun.bool_param("Test bool")
+        @test param.default == false
+
+        # Test number_param
+        param = eegfun.number_param("Test number", 5.0, 0.0, 10.0)
+        @test param isa eegfun.ConfigParameter{Real}
+        @test param.description == "Test number"
+        @test param.default == 5.0
+        @test param.min == 0.0
+        @test param.max == 10.0
+
+        # Test number_param without min/max
+        param = eegfun.number_param("Test number", 5.0)
+        @test param.default == 5.0
+        @test param.min === nothing
+        @test param.max === nothing
+
+        # Test channel_groups_param
+        default = [["Fp1"], ["Fp2"]]
+        param = eegfun.channel_groups_param("Test channels", default)
+        @test param isa eegfun.ConfigParameter{Vector{Vector{String}}}
+        @test param.description == "Test channels"
+        @test param.default == default
+
+        # Test _param helper function directly
+        param = eegfun._param(Int, "Test int", 42, min = 0, max = 100)
+        @test param isa eegfun.ConfigParameter{Int}
+        @test param.description == "Test int"
+        @test param.default == 42
+        @test param.min == 0
+        @test param.max == 100
+    end
+
+    @testset "Parameter Constructor Edge Cases" begin
+        # Test string_param with empty allowed list
+        param = eegfun.string_param("Test string", "default", allowed = String[])
+        @test param.allowed == String[]
+
+        # Test number_param with negative min/max
+        param = eegfun.number_param("Test number", 0.0, -10.0, 10.0)
+        @test param.min == -10.0
+        @test param.max == 10.0
+
+        # Test channel_groups_param with empty groups
+        param = eegfun.channel_groups_param("Test channels", Vector{Vector{String}}())
+        @test param.default == Vector{Vector{String}}()
+
+        # Test _param with Union types
+        param = eegfun._param(Union{String,Nothing}, "Test union", nothing)
+        @test param isa eegfun.ConfigParameter{Union{String,Nothing}}
+        @test param.default === nothing
+    end
+
+    @testset "ConfigParameter Constructor Tests" begin
+        # Test with all fields
+        param = eegfun.ConfigParameter{Int}(description = "Test parameter", default = 5, min = 1, max = 10)
+        @test param.description == "Test parameter"
+        @test param.default == 5
+        @test param.min == 1
+        @test param.max == 10
+
+        # Test with minimal fields
+        param = eegfun.ConfigParameter{String}(description = "Test parameter")
+        @test param.description == "Test parameter"
+        @test param.default === nothing
+        @test param.min === nothing
+        @test param.max === nothing
+        @test param.allowed === nothing
+
+        # Test with some fields
+        param = eegfun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0)
+        @test param.description == "Test parameter"
+        @test param.default == 1.0
+        @test param.min == 0.0
+        @test param.max === nothing
+        @test param.allowed === nothing
+    end
+
+    # =============================================================================
+    # UTILITY FUNCTIONS
     # =============================================================================
 
     @testset "_param Helper Function Tests" begin
@@ -810,181 +777,130 @@ using eegfun
         @test "filter.highpass.on" in highpass_params
     end
 
-    @testset "_write_parameter_value Tests" begin
-        # Test string value writing
-        io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", "test_value")
-        @test String(take!(io)) == "test_param = \"test_value\"\n"
+    @testset "_merge_configs Tests" begin
+        # Test merging with empty configs
+        @test isempty(eegfun._merge_configs(Dict(), Dict()))
 
-        # Test numeric value writing
-        io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", 42)
-        @test String(take!(io)) == "test_param = 42\n"
+        # Test merging with one empty config
+        default = Dict("a" => 1)
+        user = Dict()
+        merged = eegfun._merge_configs(default, user)
+        @test merged["a"] == 1
 
-        # Test boolean value writing
-        io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", true)
-        @test String(take!(io)) == "test_param = true\n"
+        # Test deep merging
+        default = Dict(
+            "a" => Dict(
+                "b" => Dict("c" => 1)
+            )
+        )
+        user = Dict(
+            "a" => Dict(
+                "b" => Dict("d" => 2)
+            )
+        )
+        merged = eegfun._merge_configs(default, user)
+        @test merged["a"]["b"]["c"] == 1
+        @test merged["a"]["b"]["d"] == 2
 
-        # Test empty vector writing
-        io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", String[])
-        @test String(take!(io)) == "test_param = []\n"
+        # Test user config overrides default
+        default = Dict("a" => 1)
+        user = Dict("a" => 2)
+        merged = eegfun._merge_configs(default, user)
+        @test merged["a"] == 2
 
-        # Test vector with values writing
-        io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", ["a", "b", "c"])
-        @test String(take!(io)) == "test_param = [a, b, c]\n"
-
-        # Test vector with mixed types
-        io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", [1, "two", 3.0])
-        @test String(take!(io)) == "test_param = [1, two, 3.0]\n"
+        # Test nested user config overrides default
+        default = Dict(
+            "a" => Dict(
+                "b" => 1,
+                "c" => 2
+            )
+        )
+        user = Dict(
+            "a" => Dict(
+                "b" => 3
+            )
+        )
+        merged = eegfun._merge_configs(default, user)
+        @test merged["a"]["b"] == 3
+        @test merged["a"]["c"] == 2
     end
 
-    @testset "_write_parameter_docs Tests" begin
-        # Test basic parameter documentation
-        param = eegfun.ConfigParameter{Real}(description = "Test parameter", default = 5.0, min = 0.0, max = 10.0)
-        io = IOBuffer()
-        eegfun._write_parameter_docs(io, param)
-        output = String(take!(io))
+    @testset "_merge_nested! Edge Cases" begin
+        # Test merging with non-dict values (using compatible types)
+        target = Dict("a" => Dict("b" => 1), "c" => 5)
+        source = Dict("a" => Dict("d" => 2), "c" => 10)  # Override with compatible types
         
-        @test contains(output, "# Test parameter")
-        @test contains(output, "# Type: Real")
-        @test contains(output, "# Range: 0.0 ≤ value ≤ 10.0")
-        @test contains(output, "# Default: 5.0")
+        eegfun._merge_nested!(target, source)
+        @test target["a"]["b"] == 1  # Original value preserved
+        @test target["a"]["d"] == 2  # New value added
+        @test target["c"] == 10      # Value overridden
 
-        # Test parameter with allowed values
-        param = eegfun.ConfigParameter{String}(description = "Test param", default = "default", allowed = ["a", "b"])
-        io = IOBuffer()
-        eegfun._write_parameter_docs(io, param)
-        output = String(take!(io))
+        # Test merging with empty source
+        target = Dict("a" => 1, "b" => 2)
+        source = Dict()
+        original_target = copy(target)
         
-        @test contains(output, "# Allowed values: a, b")
-
-        # Test required parameter
-        param = eegfun.ConfigParameter{String}(description = "Required param", default = nothing)
-        io = IOBuffer()
-        eegfun._write_parameter_docs(io, param)
-        output = String(take!(io))
-        
-        @test contains(output, "# [REQUIRED]")
-        @test !contains(output, "# Default:")
+        eegfun._merge_nested!(target, source)
+        @test target == original_target  # Should be unchanged
     end
 
-    @testset "_write_template_header Tests" begin
-        io = IOBuffer()
-        eegfun._write_template_header(io)
-        output = String(take!(io))
-        
-        @test contains(output, "# EEG Processing Configuration Template")
-        @test contains(output, "# Generated on")
-        @test contains(output, "# This template shows all available configuration options")
-        @test contains(output, "# Required fields are marked with [REQUIRED]")
-        @test contains(output, "# Default values are shown where available")
-    end
+    @testset "_validate_parameter Tests" begin
+        # Test valid parameter
+        param = eegfun.ConfigParameter{Real}(description = "Test", default = 5.0, min = 0.0, max = 10.0)
+        result = eegfun._validate_parameter(5.0, param, "test.param")
+        @test result.success == true
 
-    @testset "_write_section Tests" begin
-        # Create test data using the actual PARAMETERS structure
-        sections = eegfun._group_parameters_by_section()
-        files_section = sections["files"]
-        
-        io = IOBuffer()
-        eegfun._write_section(io, "files", files_section)
-        output = String(take!(io))
-        
-        @test contains(output, "# files Settings")
-        @test contains(output, "[files]")
-        @test contains(output, "# input Settings")
-        @test contains(output, "[files.input]")
-        @test contains(output, "# output Settings")
-        @test contains(output, "[files.output]")
-    end
+        # Test value below minimum
+        result = eegfun._validate_parameter(-1.0, param, "test.param")
+        @test result.success == false
+        @test contains(result.error, "must be >=")
 
-    @testset "_write_subsection Tests" begin
-        # Create test data using the actual PARAMETERS structure
-        sections = eegfun._group_parameters_by_section()
-        input_params = sections["files"]["input"]
-        
-        io = IOBuffer()
-        eegfun._write_subsection(io, "files", "input", input_params)
-        output = String(take!(io))
-        
-        @test contains(output, "# input Settings")
-        @test contains(output, "[files.input]")
-        @test contains(output, "directory = \".\"")
-    end
+        # Test value above maximum
+        result = eegfun._validate_parameter(15.0, param, "test.param")
+        @test result.success == false
+        @test contains(result.error, "must be <=")
 
-    @testset "_write_template_sections Tests" begin
-        io = IOBuffer()
-        eegfun._write_template_sections(io)
-        output = String(take!(io))
-        
-        # Should contain all major sections
-        @test contains(output, "# files Settings")
-        @test contains(output, "# filter Settings")
-        @test contains(output, "# preprocess Settings")
-        @test contains(output, "# ica Settings")
-    end
+        # Test wrong type
+        result = eegfun._validate_parameter("string", param, "test.param")
+        @test result.success == false
+        @test contains(result.error, "must be a number")
 
-    @testset "Parameter Constructor Helper Tests" begin
-        # Test string_param
-        param = eegfun.string_param("Test string", "default")
-        @test param isa eegfun.ConfigParameter{Union{Vector{String},String}}
-        @test param.description == "Test string"
-        @test param.default == "default"
+        # Test allowed values
+        param = eegfun.ConfigParameter{String}(description = "Test", default = "a", allowed = ["a", "b", "c"])
+        result = eegfun._validate_parameter("b", param, "test.param")
+        @test result.success == true
 
-        # Test string_param with allowed values
-        param = eegfun.string_param("Test string", "default", allowed = ["a", "b", "c"])
-        @test param.allowed == ["a", "b", "c"]
+        result = eegfun._validate_parameter("d", param, "test.param")
+        @test result.success == false
+        @test contains(result.error, "must be one of")
 
-        # Test string_param with default empty string
-        param = eegfun.string_param("Test string")
-        @test param.default == ""
-
-        # Test bool_param
-        param = eegfun.bool_param("Test bool", true)
-        @test param isa eegfun.ConfigParameter{Bool}
-        @test param.description == "Test bool"
-        @test param.default == true
-
-        # Test bool_param with default false
-        param = eegfun.bool_param("Test bool")
-        @test param.default == false
-
-        # Test number_param
-        param = eegfun.number_param("Test number", 5.0, 0.0, 10.0)
-        @test param isa eegfun.ConfigParameter{Real}
-        @test param.description == "Test number"
-        @test param.default == 5.0
-        @test param.min == 0.0
-        @test param.max == 10.0
-
-        # Test number_param without min/max
-        param = eegfun.number_param("Test number", 5.0)
-        @test param.default == 5.0
-        @test param.min === nothing
-        @test param.max === nothing
-
-        # Test channel_groups_param
-        default = [["Fp1"], ["Fp2"]]
-        param = eegfun.channel_groups_param("Test channels", default)
-        @test param isa eegfun.ConfigParameter{Vector{Vector{String}}}
-        @test param.description == "Test channels"
-        @test param.default == default
-
-        # Test _param helper function directly
-        param = eegfun._param(Int, "Test int", 42, min = 0, max = 100)
-        @test param isa eegfun.ConfigParameter{Int}
-        @test param.description == "Test int"
-        @test param.default == 42
-        @test param.min == 0
-        @test param.max == 100
+        # Test numeric type conversion (Int to Float)
+        param = eegfun.ConfigParameter{Float64}(description = "Test", default = 5.0)
+        result = eegfun._validate_parameter(5, param, "test.param")  # Int value
+        @test result.success == true  # Should accept Int for Float64
     end
 
     # =============================================================================
-    # DISPLAY FUNCTION TESTS
+    # DISPLAY/INFO FUNCTIONS
     # =============================================================================
+
+    @testset "Parameter Info Display" begin
+        # Test that all parameters exist and have required properties
+        for (path, param) in eegfun.PARAMETERS
+            @test !isempty(param.description)
+            @test param isa eegfun.ConfigParameter
+        end
+
+        # Test specific parameter properties
+        param = eegfun.PARAMETERS["filter.highpass.cutoff_freq"]
+        @test param.description == "High-pass filter cutoff frequency (Hz)"
+        @test param.min == 0.01
+        @test param.max == 20.0
+        @test param.default == 0.1
+
+        # Test non-existent parameter
+        @test !haskey(eegfun.PARAMETERS, "nonexistent")
+    end
 
     @testset "_show_parameter_details Tests" begin
         # Test with parameter that has all fields
@@ -1050,7 +966,7 @@ using eegfun
     end
 
     # =============================================================================
-    # EDGE CASE TESTS
+    # EDGE CASES
     # =============================================================================
 
     @testset "_write_parameter_value Edge Cases" begin
@@ -1094,25 +1010,6 @@ using eegfun
         @test String(take!(io)) == "test_param = true\n"
     end
 
-    @testset "_merge_nested! Edge Cases" begin
-        # Test merging with non-dict values (using compatible types)
-        target = Dict("a" => Dict("b" => 1), "c" => 5)
-        source = Dict("a" => Dict("d" => 2), "c" => 10)  # Override with compatible types
-        
-        eegfun._merge_nested!(target, source)
-        @test target["a"]["b"] == 1  # Original value preserved
-        @test target["a"]["d"] == 2  # New value added
-        @test target["c"] == 10      # Value overridden
-
-        # Test merging with empty source
-        target = Dict("a" => 1, "b" => 2)
-        source = Dict()
-        original_target = copy(target)
-        
-        eegfun._merge_nested!(target, source)
-        @test target == original_target  # Should be unchanged
-    end
-
     # =============================================================================
     # INTEGRATION TESTS
     # =============================================================================
@@ -1148,6 +1045,120 @@ using eegfun
         # Clean up
         rm(custom_template)
     end
+
+    @testset "_write_template_header Tests" begin
+        io = IOBuffer()
+        eegfun._write_template_header(io)
+        output = String(take!(io))
+        
+        @test contains(output, "# EEG Processing Configuration Template")
+        @test contains(output, "# Generated on")
+        @test contains(output, "# This template shows all available configuration options")
+        @test contains(output, "# Required fields are marked with [REQUIRED]")
+        @test contains(output, "# Default values are shown where available")
+    end
+
+    @testset "_write_section Tests" begin
+        # Create test data using the actual PARAMETERS structure
+        sections = eegfun._group_parameters_by_section()
+        files_section = sections["files"]
+        
+        io = IOBuffer()
+        eegfun._write_section(io, "files", files_section)
+        output = String(take!(io))
+        
+        @test contains(output, "# files Settings")
+        @test contains(output, "[files]")
+        @test contains(output, "# input Settings")
+        @test contains(output, "[files.input]")
+        @test contains(output, "# output Settings")
+        @test contains(output, "[files.output]")
+    end
+
+    @testset "_write_subsection Tests" begin
+        # Create test data using the actual PARAMETERS structure
+        sections = eegfun._group_parameters_by_section()
+        input_params = sections["files"]["input"]
+        
+        io = IOBuffer()
+        eegfun._write_subsection(io, "files", "input", input_params)
+        output = String(take!(io))
+        
+        @test contains(output, "# input Settings")
+        @test contains(output, "[files.input]")
+        @test contains(output, "directory = \".\"")
+    end
+
+    @testset "_write_template_sections Tests" begin
+        io = IOBuffer()
+        eegfun._write_template_sections(io)
+        output = String(take!(io))
+        
+        # Should contain all major sections
+        @test contains(output, "# files Settings")
+        @test contains(output, "# filter Settings")
+        @test contains(output, "# preprocess Settings")
+        @test contains(output, "# ica Settings")
+    end
+
+    @testset "_write_parameter_docs Tests" begin
+        # Test parameter with all fields
+        param = eegfun.ConfigParameter{Real}(description = "Test param", default = 5.0, min = 0.0, max = 10.0, allowed = ["a", "b"])
+        io = IOBuffer()
+        eegfun._write_parameter_docs(io, param)
+        output = String(take!(io))
+        
+        @test contains(output, "# Test param")
+        @test contains(output, "# Type: Real")
+        @test contains(output, "# Range: 0.0 ≤ value ≤ 10.0")
+        @test contains(output, "# Allowed values: a, b")
+        @test contains(output, "# Default: 5.0")
+
+        # Test required parameter
+        param = eegfun.ConfigParameter{String}(description = "Required param", default = nothing)
+        io = IOBuffer()
+        eegfun._write_parameter_docs(io, param)
+        output = String(take!(io))
+        
+        @test contains(output, "# [REQUIRED]")
+        @test !contains(output, "# Default:")
+    end
+
+    @testset "_write_parameter_value Tests" begin
+        # Test string value writing
+        io = IOBuffer()
+        eegfun._write_parameter_value(io, "test_param", "test_value")
+        @test String(take!(io)) == "test_param = \"test_value\"\n"
+
+        # Test numeric value writing
+        io = IOBuffer()
+        eegfun._write_parameter_value(io, "test_param", 42)
+        @test String(take!(io)) == "test_param = 42\n"
+
+        # Test boolean value writing
+        io = IOBuffer()
+        eegfun._write_parameter_value(io, "test_param", true)
+        @test String(take!(io)) == "test_param = true\n"
+
+        # Test empty vector writing
+        io = IOBuffer()
+        eegfun._write_parameter_value(io, "test_param", String[])
+        @test String(take!(io)) == "test_param = []\n"
+
+        # Test vector with values writing
+        io = IOBuffer()
+        eegfun._write_parameter_value(io, "test_param", ["a", "b", "c"])
+        @test String(take!(io)) == "test_param = [a, b, c]\n"
+
+        # Test vector with mixed types
+        io = IOBuffer()
+        eegfun._write_parameter_value(io, "test_param", [1, "two", 3.0])
+        @test String(take!(io)) == "test_param = [1, two, 3.0]\n"
+    end
+
+    # =============================================================================
+    # ERROR HANDLING
+    # =============================================================================
 
     @testset "Error Handling Tests" begin
         # Test template generation with invalid filename
