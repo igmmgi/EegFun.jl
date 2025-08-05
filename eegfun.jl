@@ -11,6 +11,11 @@ using GLMakie
 # using CairoMakie
 using DataFrames
 using BenchmarkTools
+
+
+eegfun.preprocess_eeg_data("pipeline.toml")
+
+
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
