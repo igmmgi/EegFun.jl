@@ -9,22 +9,22 @@ using eegfun
         # Test short vector
         v = [1, 2, 3]
         @test eegfun.print_vector(v) == "1, 2, 3"
-        
+
         # Test long vector
         v = collect(1:20)
         result = eegfun.print_vector(v)
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "16, 17, 18, 19, 20")
-        
+
         # Test UnitRange
         v = 1:20
         result = eegfun.print_vector(v)
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "16, 17, 18, 19, 20")
-        
+
         # Test custom max_length and n_ends
         v = collect(1:20)
-        result = eegfun.print_vector(v, max_length=15, n_ends=3)
+        result = eegfun.print_vector(v, max_length = 15, n_ends = 3)
         @test startswith(result, "1, 2, 3, ...")
         @test endswith(result, "18, 19, 20")
     end
@@ -42,14 +42,8 @@ using eegfun
     # Test config printing
     @testset "Config Printing" begin
         # Test basic config
-        config = Dict(
-            "test" => Dict(
-                "value" => 1,
-                "array" => [1, 2, 3],
-                "nested" => Dict("key" => "value")
-            )
-        )
-        
+        config = Dict("test" => Dict("value" => 1, "array" => [1, 2, 3], "nested" => Dict("key" => "value")))
+
         # Test printing to string
         io = IOBuffer()
         eegfun.print_config(config, io)
@@ -63,12 +57,12 @@ using eegfun
         @test contains(output, "generated_at")
         @test contains(output, "eegfun_version")
         @test contains(output, "git_commit")
-        
+
         # Test printing to file
         test_file = "test_config.toml"
         eegfun.print_config(config, test_file)
         @test isfile(test_file)
-        
+
         # Verify file contents
         file_content = read(test_file, String)
         @test contains(file_content, "test")
@@ -77,23 +71,20 @@ using eegfun
         @test contains(file_content, "nested")
         @test contains(file_content, "key = \"value\"")
         @test contains(file_content, "metadata")
-        
+
         # Clean up
         rm(test_file)
-        
+
         # Test with empty config
-        empty_config = Dict{String, Any}()
+        empty_config = Dict{String,Any}()
         io = IOBuffer()
         eegfun.print_config(empty_config, io)
         output = String(take!(io))
         @test contains(output, "metadata")
         @test !contains(output, "test")
-        
+
         # Test with config containing metadata
-        config_with_meta = Dict(
-            "metadata" => Dict("old" => "value"),
-            "test" => Dict("value" => 1)
-        )
+        config_with_meta = Dict("metadata" => Dict("old" => "value"), "test" => Dict("value" => 1))
         io = IOBuffer()
         eegfun.print_config(config_with_meta, io)
         output = String(take!(io))
@@ -102,4 +93,4 @@ using eegfun
         @test contains(output, "test")
         @test contains(output, "value = 1")
     end
-end 
+end
