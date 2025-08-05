@@ -70,7 +70,6 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # Preprocessing settings
     "preprocess.epoch_start" => ConfigParameter{Real}(description = "Epoch start (seconds).", default = -1),
-    # Preprocessing settings
     "preprocess.epoch_end" => ConfigParameter{Real}(description = "Epoch end (seconds).", default = 1),
     "preprocess.reference_channel" =>
         ConfigParameter{String}(description = "Channels(s) to use as reference", default = "avg"),
@@ -108,31 +107,41 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # Filtering settings
     "filter.highpass.on" => ConfigParameter{Bool}(description = "Apply highpass filter true/false", default = true),
-    "filter.highpass.type" => ConfigParameter{String}(
-        description = "Type of highpass filter",
+    "filter.highpass.method" => ConfigParameter{String}(
+        description = "Type of filter",
         default = "fir",
         allowed_values = ["fir", "iir"],
     ),
-    "filter.highpass.cutoff" => ConfigParameter{Real}(
+    "filter.highpass.filter_func" => ConfigParameter{Function}(
+        description = "Filter function",
+        default = filtfilt,
+        allowed_values = [filt, filtfilt],
+    ),
+    "filter.highpass.cutoff_freq" => ConfigParameter{Real}(
         description = "High-pass filter cutoff frequency (Hz)",
         default = 0.1,
         min = 0.01,
         max = 20.0,
     ),
-    "filter.highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 8),
+    "filter.highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 4),
 
     # Lowpass filtering settings
     "filter.lowpass.on" => ConfigParameter{Bool}(description = "Apply lowpass filter true/false", default = true),
-    "filter.lowpass.type" => ConfigParameter{String}(
-        description = "Type of lowpass filter",
+    "filter.lowpass.method" => ConfigParameter{String}(
+        description = "Type of filter",
         default = "fir",
         allowed_values = ["fir", "iir"],
     ),
-    "filter.lowpass.cutoff" => ConfigParameter{Real}(
+    "filter.lowpass.filter_func" => ConfigParameter{Function}(
+        description = "Filter function",
+        default = filtfilt,
+        allowed_values = [filt, filtfilt],
+    ),
+    "filter.lowpass.cutoff_freq" => ConfigParameter{Real}(
         description = "Low-pass filter cutoff frequency (Hz)",
-        default = 40,
+        default = 30,
         min = 5,
-        max = 200,
+        max = 500,
     ),
     "filter.lowpass.order" => ConfigParameter{Int}(description = "Filter order", default = 3, min = 1, max = 8),
 
@@ -141,31 +150,45 @@ const PARAMETERS = Dict{String,ConfigParameter}(
         description = "Run Independent Component Analysis (ICA) true/false.",
         default = false,
     ),
-    "ica.ica_filter.highpass.on" =>
-        ConfigParameter{Bool}(description = "Apply highpass filter to ICA data true/false", default = true),
-    "ica.ica_filter.highpass.type" => ConfigParameter{String}(
-        description = "Type of highpass filter",
+
+    "filter.ica_highpass.on" => ConfigParameter{Bool}(description = "Apply highpass filter ICA data true/false", default = true),
+    "filter.ica_highpass.method" => ConfigParameter{String}(
+        description = "Type of filter",
         default = "fir",
         allowed_values = ["fir", "iir"],
     ),
-    "ica.ica_filter.highpass.cutoff" => ConfigParameter{Real}(
-        description = "ICA high-pass filter cutoff frequency (Hz)",
+    "filter.ica_highpass.filter_func" => ConfigParameter{Function}(
+        description = "Filter function",
+        default = filtfilt,
+        allowed_values = [filt, filtfilt],
+    ),
+    "filter.ica_highpass.cutoff_freq" => ConfigParameter{Real}(
+        description = "High-pass filter cutoff frequency (Hz)",
         default = 1,
         min = 1,
         max = 20.0,
     ),
-    "ica.ica_filter.highpass.order" =>
-        ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 8),
-    "ica.ica_filter.lowpass.on" =>
-        ConfigParameter{Bool}(description = "Apply lowpass filter to ICA data true/false", default = true),
-    "ica.ica_filter.lowpass.type" => ConfigParameter{String}(
-        description = "Type of lowpass filter",
+    "filter.ica_highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 4),
+
+    "filter.ica_lowpass.on" => ConfigParameter{Bool}(description = "Apply lowpass filter ICA data true/false", default = true),
+    "filter.ica_lowpass.method" => ConfigParameter{String}(
+        description = "Type of filter",
         default = "fir",
         allowed_values = ["fir", "iir"],
     ),
-    "ica.ica_filter.lowpass.cutoff" =>
-        ConfigParameter{Real}(description = "ICA low-pass filter cutoff frequency (Hz)", default = 30),
-    "ica.ica_filter.lowpass.order" => ConfigParameter{Int}(description = "Filter order", default = 2, min = 1),
+    "filter.ica_lowpass.filter_func" => ConfigParameter{Function}(
+        description = "Filter function",
+        default = filtfilt,
+        allowed_values = [filt, filtfilt],
+    ),
+    "filter.ica_lowpass.cutoff_freq" => ConfigParameter{Real}(
+        description = "Low-pass filter cutoff frequency (Hz)",
+        default = 30,
+        min = 5,
+        max = 500,
+    ),
+    "filter.ica_highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 3, min = 1, max = 4),
+   
 )
 
 """
@@ -349,7 +372,6 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
     if !isnothing(parameter_spec.min) && value < parameter_spec.min
         return ValidationResult(success = false, error = "$parameter_name ($value) must be >= $(parameter_spec.min)", path = parameter_name)
     end
-    
     if !isnothing(parameter_spec.max) && value > parameter_spec.max
         return ValidationResult(success = false, error = "$parameter_name ($value) must be <= $(parameter_spec.max)", path = parameter_name)
     end
