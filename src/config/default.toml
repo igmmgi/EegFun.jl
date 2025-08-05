@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-07-16 11:34:48
+# Generated on 2025-08-05 14:52:53
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -13,17 +13,17 @@
 [files.input]
 
 # Directory containing raw data files.
-# Type: String
+# Type: Union{String, Vector{String}}
 # Default: .
 directory = "."
 
 # TOML file that defines the condition epochs.
-# Type: Union{Nothing, String}
+# Type: Union{String, Vector{String}}
 # Default: 
 epoch_condition_file = ""
 
 # Electrode layout file name ("*.csv")
-# Type: String
+# Type: Union{String, Vector{String}}
 # Default: biosemi72.csv
 layout_file = "biosemi72.csv"
 
@@ -36,7 +36,7 @@ raw_data_files = "\\.bdf"
 [files.output]
 
 # Directory for processed output files
-# Type: String
+# Type: Union{String, Vector{String}}
 # Default: ./preprocessed_files
 directory = "./preprocessed_files"
 
@@ -85,7 +85,19 @@ save_ica_data = true
 # Type: Real
 # Range: 0.01 ≤ value ≤ 20.0
 # Default: 0.1
-cutoff = 0.1
+cutoff_freq = 0.1
+
+# Filter function
+# Type: String
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+filter_func = "filtfilt"
+
+# Type of filter
+# Type: String
+# Allowed values: fir, iir
+# Default: fir
+method = "fir"
 
 # Apply highpass filter true/false
 # Type: Bool
@@ -93,25 +105,89 @@ cutoff = 0.1
 on = true
 
 # Filter order
-# Type: Int64
-# Range: 1 ≤ value ≤ 8
+# Type: Real
+# Range: 1 ≤ value ≤ 4
 # Default: 1
 order = 1
 
-# Type of highpass filter
+# ica_highpass Settings
+[filter.ica_highpass]
+
+# High-pass filter cutoff frequency (Hz)
+# Type: Real
+# Range: 1 ≤ value ≤ 20.0
+# Default: 1
+cutoff_freq = 1
+
+# Filter function
+# Type: String
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+filter_func = "filtfilt"
+
+# Type of filter
 # Type: String
 # Allowed values: fir, iir
 # Default: fir
-type = "fir"
+method = "fir"
+
+# Apply highpass filter ICA data true/false
+# Type: Bool
+# Default: true
+on = true
+
+# Filter order
+# Type: Real
+# Range: 1 ≤ value ≤ 4
+# Default: 3
+order = 3
+
+# ica_lowpass Settings
+[filter.ica_lowpass]
+
+# Low-pass filter cutoff frequency (Hz)
+# Type: Real
+# Range: 5 ≤ value ≤ 500
+# Default: 30
+cutoff_freq = 30
+
+# Filter function
+# Type: String
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+filter_func = "filtfilt"
+
+# Type of filter
+# Type: String
+# Allowed values: fir, iir
+# Default: fir
+method = "fir"
+
+# Apply lowpass filter ICA data true/false
+# Type: Bool
+# Default: true
+on = true
 
 # lowpass Settings
 [filter.lowpass]
 
 # Low-pass filter cutoff frequency (Hz)
 # Type: Real
-# Range: 5 ≤ value ≤ 200
-# Default: 40
-cutoff = 40
+# Range: 5 ≤ value ≤ 500
+# Default: 30
+cutoff_freq = 30
+
+# Filter function
+# Type: String
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+filter_func = "filtfilt"
+
+# Type of filter
+# Type: String
+# Allowed values: fir, iir
+# Default: fir
+method = "fir"
 
 # Apply lowpass filter true/false
 # Type: Bool
@@ -119,16 +195,10 @@ cutoff = 40
 on = true
 
 # Filter order
-# Type: Int64
+# Type: Real
 # Range: 1 ≤ value ≤ 8
 # Default: 3
 order = 3
-
-# Type of lowpass filter
-# Type: String
-# Allowed values: fir, iir
-# Default: fir
-type = "fir"
 
 # ica Settings
 [ica]
@@ -137,57 +207,6 @@ type = "fir"
 # Type: Bool
 # Default: false
 run = false
-
-# ica_filter.highpass Settings
-[ica.ica_filter.highpass]
-
-# ICA high-pass filter cutoff frequency (Hz)
-# Type: Real
-# Range: 1 ≤ value ≤ 20.0
-# Default: 1
-cutoff = 1
-
-# Apply highpass filter to ICA data true/false
-# Type: Bool
-# Default: true
-on = true
-
-# Filter order
-# Type: Int64
-# Range: 1 ≤ value ≤ 8
-# Default: 1
-order = 1
-
-# Type of highpass filter
-# Type: String
-# Allowed values: fir, iir
-# Default: fir
-type = "fir"
-
-# ica_filter.lowpass Settings
-[ica.ica_filter.lowpass]
-
-# ICA low-pass filter cutoff frequency (Hz)
-# Type: Real
-# Default: 30
-cutoff = 30
-
-# Apply lowpass filter to ICA data true/false
-# Type: Bool
-# Default: true
-on = true
-
-# Filter order
-# Type: Int64
-# Range: 1 ≤ value
-# Default: 2
-order = 2
-
-# Type of lowpass filter
-# Type: String
-# Allowed values: fir, iir
-# Default: fir
-type = "fir"
 
 # preprocess Settings
 [preprocess]
@@ -203,7 +222,7 @@ epoch_end = 1
 epoch_start = -1
 
 # Channels(s) to use as reference
-# Type: String
+# Type: Union{String, Vector{String}}
 # Default: avg
 reference_channel = "avg"
 

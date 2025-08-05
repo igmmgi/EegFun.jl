@@ -195,18 +195,14 @@ Interpolate EEG data using scattered interpolation
 - `points::Matrix{<:AbstractFloat}`: 2×N matrix of electrode coordinates
 - `grid_scale::Int`: Size of the output grid
 """
-function _data_interpolation_topo_multiquadratic(
-    dat::Vector{<:AbstractFloat},
-    layout::Layout,
-    grid_scale::Int,
-)
+function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int)
     # Check input data
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
     end
 
     points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
-    
+
     # Create grid more efficiently - avoid collect() and Iterators.product
     x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
     y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)

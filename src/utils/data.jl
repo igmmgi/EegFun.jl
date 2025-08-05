@@ -20,7 +20,7 @@ Get columns by group type for EegData objects using layout-based identification.
 function get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}
     labels = all_labels(dat)
     channel_labels = dat.layout.data.label
-    
+
     if group == :channels
         return intersect(channel_labels, labels)
     elseif group == :metadata
@@ -117,7 +117,8 @@ Get EEG channel data columns from the EEG data.
 - `DataFrame`: DataFrame containing EEG channel columns
 """
 channel_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :channels)
-channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbol} = channel_labels(dat)[channel_numbers...]
+channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbol} =
+    channel_labels(dat)[channel_numbers...]
 channel_labels(dat::EegData, channel_numbers)::Vector{Symbol} = channel_labels(dat)[channel_numbers]
 channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_labels(dat)[[channel_numbers]]
 
@@ -273,7 +274,8 @@ Get the duration of the EEG data in seconds.
 """
 duration(dat::SingleDataFrameEeg) = isempty(dat.data.time) ? 0.0 : last(dat.data.time) - first(dat.data.time)
 duration(dat::MultiDataFrameEeg) = isempty(dat.data[1].time) ? 0.0 : last(dat.data[1].time) - first(dat.data[1].time)
-duration(dat::MultiDataFrameEeg, epoch::Int) = isempty(dat.data[epoch].time) ? 0.0 : last(dat.data[epoch].time) - first(dat.data[epoch].time)
+duration(dat::MultiDataFrameEeg, epoch::Int) =
+    isempty(dat.data[epoch].time) ? 0.0 : last(dat.data[epoch].time) - first(dat.data[epoch].time)
 
 
 """

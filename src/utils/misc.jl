@@ -60,7 +60,7 @@ Apply function f to consecutive pairs of elements in vector A.
 - `Vector`: Results of applying f to consecutive pairs
 """
 function consecutive(f::Function, A::AbstractVector; step::Int = 1)
-    step < 1               && @minimal_error "Step must be positive"
+    step < 1 && @minimal_error "Step must be positive"
     (length(A) < step + 1) && @minimal_error "Vector too short for given step size"
     return [f(A[i+step], A[i]) for i = 1:(length(A)-step)]
 end
@@ -75,7 +75,7 @@ Split vector into groups based on consecutive numbers.
 """
 function splitgroups(v::AbstractVector{<:Integer})
 
-    isempty(v) && return Int64[], Int64[] 
+    isempty(v) && return Int64[], Int64[]
 
     start, start_idx, end_idx = 1, Int64[], Int64[]
     for stop in [findall(diff(v) .> 1); lastindex(v)]
@@ -435,10 +435,10 @@ function parse_string_to_ints(text::String)
     if occursin('.', text)
         throw(ArgumentError("Decimal points not allowed in int selection: '$text'"))
     end
-    
+
     # Split by comma or semicolon and filter empty parts
     parts = filter(!isempty, strip.(split(text, r"[,;]")))
-    
+
     # Filter non-numeric parts (except :) and warn
     numeric_parts = []
     for part in parts
@@ -448,7 +448,7 @@ function parse_string_to_ints(text::String)
             @minimal_warning "Skipping non-numeric component: '$part'"
         end
     end
-    
+
     for part in numeric_parts
         if occursin(':', part) # Handle ranges like "1:5"
             range_parts = strip.(split(part, ':'))

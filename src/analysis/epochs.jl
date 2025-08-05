@@ -63,7 +63,9 @@ function parse_epoch_conditions(config::Dict)
 
         # Validation
         if reference_index < 1 || reference_index > length(trigger_sequences[1])
-            @minimal_error("reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'")
+            @minimal_error(
+                "reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'"
+            )
         end
 
         # Only validate timing constraints if they're specified
