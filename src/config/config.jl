@@ -31,163 +31,72 @@ function ConfigParameter{T}(;
 end
 
 
+# Helper functions for parameter definitions
+string_param(desc, default = "") = ConfigParameter{String}(description = desc, default = default)
+bool_param(desc, default = false) = ConfigParameter{Bool}(description = desc, default = default)
+number_param(desc, default, min = nothing, max = nothing) = ConfigParameter{Real}(description = desc, default = default, min = min, max = max)
+function_param(desc, default, allowed_values) = ConfigParameter{Function}(description = desc, default = default, allowed_values = allowed_values)
+channel_groups_param(desc, default) = ConfigParameter{Vector{Vector{String}}}(description = desc, default = default)
+
 # Store parameter definitions as a constant
 const PARAMETERS = Dict{String,ConfigParameter}(
 
     # File paths and settings
-    "files.input.directory" =>
-        ConfigParameter{String}(description = "Directory containing raw data files.", default = "."),
-    "files.input.raw_data_files" => ConfigParameter{Union{Vector{String},String}}(
-        description = "Pattern (regex or explicit list) for raw data files to process.",
-        default = "\\.bdf",
-    ),
-    "files.input.layout_file" =>
-        ConfigParameter{String}(description = "Electrode layout file name (\"*.csv\")", default = "biosemi72.csv"),
-    "files.input.epoch_condition_file" => ConfigParameter{Union{Nothing,String}}(
-        description = "TOML file that defines the condition epochs.",
-        default = "",
-    ),
-    "files.output.directory" => ConfigParameter{String}(
-        description = "Directory for processed output files",
-        default = "./preprocessed_files",
-    ),
+    "files.input.directory" => string_param("Directory containing raw data files.", "."),
+    "files.input.raw_data_files" => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
+    "files.input.layout_file" => string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
+    "files.input.epoch_condition_file" => string_param("TOML file that defines the condition epochs."),
+    "files.output.directory" => string_param("Directory for processed output files", "./preprocessed_files"),
 
     # What data should we save?
-    "files.output.save_continuous_data" =>
-        ConfigParameter{Bool}(description = "Save continuous data?", default = false),
-    "files.output.save_ica_data" => ConfigParameter{Bool}(description = "Save ICA results?", default = true),
-    "files.output.save_epoch_data_original" =>
-        ConfigParameter{Bool}(description = "Save epoched data?", default = true),
-    "files.output.save_epoch_data_cleaned" =>
-        ConfigParameter{Bool}(description = "Save epoched data after cleaning?", default = true),
-    "files.output.save_erp_data_original" => ConfigParameter{Bool}(description = "Save ERP data", default = true),
-    "files.output.save_erp_data_cleaned" =>
-        ConfigParameter{Bool}(description = "Save ERP data after cleaning?", default = true),
-    "files.output.exit_early" => ConfigParameter{Bool}(
-        description = "Exit early from preprocessing pipeline (i.e., quick epoching only)",
-        default = false,
-    ),
+    "files.output.save_continuous_data" => bool_param("Save continuous data?", false),
+    "files.output.save_ica_data" => bool_param("Save ICA results?", true),
+    "files.output.save_epoch_data_original" => bool_param("Save epoched data?", true),
+    "files.output.save_epoch_data_cleaned" => bool_param("Save epoched data after cleaning?", true),
+    "files.output.save_erp_data_original" => bool_param("Save ERP data", true),
+    "files.output.save_erp_data_cleaned" => bool_param("Save ERP data after cleaning?", true),
+    "files.output.exit_early" => bool_param("Exit early from preprocessing pipeline (i.e., quick epoching only)", false),
 
     # Preprocessing settings
-    "preprocess.epoch_start" => ConfigParameter{Real}(description = "Epoch start (seconds).", default = -1),
-    "preprocess.epoch_end" => ConfigParameter{Real}(description = "Epoch end (seconds).", default = 1),
-    "preprocess.reference_channel" =>
-        ConfigParameter{String}(description = "Channels(s) to use as reference", default = "avg"),
-    "preprocess.layout.neighbour_criterion" => ConfigParameter{Real}(
-        description = "Distance criterion (in mm) for channel neighbour definition.",
-        default = 40,
-        min = 0,
-    ),
-    "preprocess.eog.vEOG_channels" => ConfigParameter{Vector{Vector{String}}}(
-        description = "Channels used in the calculation of vertical eye movements (vEOG).",
-        default = [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]],
-    ),
-    "preprocess.eog.hEOG_channels" => ConfigParameter{Vector{Vector{String}}}(
-        description = "Channels used in the calculation of horizontal eye movements (hEOG).",
-        default = [["F9"], ["F10"], ["hEOG"]],
-    ),
-    "preprocess.eog.vEOG_criterion" => ConfigParameter{Real}(
-        description = "Distance criterion for vertical EOG channel definition.",
-        default = 50,
-        min = 0,
-    ),
-    "preprocess.eog.hEOG_criterion" => ConfigParameter{Real}(
-        description = "Distance criterion for horizontal EOG channel definition.",
-        default = 30,
-        min = 0,
-    ),
-    "preprocess.eeg.extreme_value_criterion" => ConfigParameter{Real}(
-        description = "Value (mV) for defining data section as an extreme value.",
-        default = 500,
-    ),
-    "preprocess.eeg.artifact_value_criterion" => ConfigParameter{Real}(
-        description = "Value (mV) for defining data section as an artifact value.",
-        default = 100,
-    ),
+    "preprocess.epoch_start" => number_param("Epoch start (seconds).", -1),
+    "preprocess.epoch_end" => number_param("Epoch end (seconds).", 1),
+    "preprocess.reference_channel" => string_param("Channels(s) to use as reference", "avg"),
+    "preprocess.layout.neighbour_criterion" => number_param("Distance criterion (in mm) for channel neighbour definition.", 40, 0),
+    "preprocess.eog.vEOG_channels" => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]),
+    "preprocess.eog.hEOG_channels" => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
+    "preprocess.eog.vEOG_criterion" => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
+    "preprocess.eog.hEOG_criterion" => number_param("Distance criterion for horizontal EOG channel definition.", 30, 0),
+    "preprocess.eeg.extreme_value_criterion" => number_param("Value (mV) for defining data section as an extreme value.", 500),
+    "preprocess.eeg.artifact_value_criterion" => number_param("Value (mV) for defining data section as an artifact value.", 100),
 
     # Filtering settings
-    "filter.highpass.on" => ConfigParameter{Bool}(description = "Apply highpass filter true/false", default = true),
-    "filter.highpass.method" => ConfigParameter{String}(
-        description = "Type of filter",
-        default = "fir",
-        allowed_values = ["fir", "iir"],
-    ),
-    "filter.highpass.filter_func" => ConfigParameter{Function}(
-        description = "Filter function",
-        default = filtfilt,
-        allowed_values = [filt, filtfilt],
-    ),
-    "filter.highpass.cutoff_freq" => ConfigParameter{Real}(
-        description = "High-pass filter cutoff frequency (Hz)",
-        default = 0.1,
-        min = 0.01,
-        max = 20.0,
-    ),
-    "filter.highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 4),
+    "filter.highpass.on" => bool_param("Apply highpass filter true/false", true),
+    "filter.highpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
+    "filter.highpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
+    "filter.highpass.cutoff_freq" => number_param("High-pass filter cutoff frequency (Hz)", 0.1, 0.01, 20.0),
+    "filter.highpass.order" => number_param("Filter order", 1, 1, 4),
 
     # Lowpass filtering settings
-    "filter.lowpass.on" => ConfigParameter{Bool}(description = "Apply lowpass filter true/false", default = true),
-    "filter.lowpass.method" => ConfigParameter{String}(
-        description = "Type of filter",
-        default = "fir",
-        allowed_values = ["fir", "iir"],
-    ),
-    "filter.lowpass.filter_func" => ConfigParameter{Function}(
-        description = "Filter function",
-        default = filtfilt,
-        allowed_values = [filt, filtfilt],
-    ),
-    "filter.lowpass.cutoff_freq" => ConfigParameter{Real}(
-        description = "Low-pass filter cutoff frequency (Hz)",
-        default = 30,
-        min = 5,
-        max = 500,
-    ),
-    "filter.lowpass.order" => ConfigParameter{Int}(description = "Filter order", default = 3, min = 1, max = 8),
+    "filter.lowpass.on" => bool_param("Apply lowpass filter true/false", true),
+    "filter.lowpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
+    "filter.lowpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
+    "filter.lowpass.cutoff_freq" => number_param("Low-pass filter cutoff frequency (Hz)", 30, 5, 500),
+    "filter.lowpass.order" => number_param("Filter order", 3, 1, 8),
 
     # ICA settings
-    "ica.run" => ConfigParameter{Bool}(
-        description = "Run Independent Component Analysis (ICA) true/false.",
-        default = false,
-    ),
+    "ica.run" => bool_param("Run Independent Component Analysis (ICA) true/false."),
 
-    "filter.ica_highpass.on" => ConfigParameter{Bool}(description = "Apply highpass filter ICA data true/false", default = true),
-    "filter.ica_highpass.method" => ConfigParameter{String}(
-        description = "Type of filter",
-        default = "fir",
-        allowed_values = ["fir", "iir"],
-    ),
-    "filter.ica_highpass.filter_func" => ConfigParameter{Function}(
-        description = "Filter function",
-        default = filtfilt,
-        allowed_values = [filt, filtfilt],
-    ),
-    "filter.ica_highpass.cutoff_freq" => ConfigParameter{Real}(
-        description = "High-pass filter cutoff frequency (Hz)",
-        default = 1,
-        min = 1,
-        max = 20.0,
-    ),
-    "filter.ica_highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 1, min = 1, max = 4),
+    "filter.ica_highpass.on" => bool_param("Apply highpass filter ICA data true/false", true),
+    "filter.ica_highpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
+    "filter.ica_highpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
+    "filter.ica_highpass.cutoff_freq" => number_param("High-pass filter cutoff frequency (Hz)", 1, 1, 20.0),
+    "filter.ica_highpass.order" => number_param("Filter order", 1, 1, 4),
 
-    "filter.ica_lowpass.on" => ConfigParameter{Bool}(description = "Apply lowpass filter ICA data true/false", default = true),
-    "filter.ica_lowpass.method" => ConfigParameter{String}(
-        description = "Type of filter",
-        default = "fir",
-        allowed_values = ["fir", "iir"],
-    ),
-    "filter.ica_lowpass.filter_func" => ConfigParameter{Function}(
-        description = "Filter function",
-        default = filtfilt,
-        allowed_values = [filt, filtfilt],
-    ),
-    "filter.ica_lowpass.cutoff_freq" => ConfigParameter{Real}(
-        description = "Low-pass filter cutoff frequency (Hz)",
-        default = 30,
-        min = 5,
-        max = 500,
-    ),
-    "filter.ica_highpass.order" => ConfigParameter{Int}(description = "Filter order", default = 3, min = 1, max = 4),
+    "filter.ica_lowpass.on" => bool_param("Apply lowpass filter ICA data true/false", true),
+    "filter.ica_lowpass.method" => ConfigParameter{String}(description = "Type of filter", default = "fir", allowed_values = ["fir", "iir"]),
+    "filter.ica_lowpass.filter_func" => function_param("Filter function", filtfilt, [filt, filtfilt]),
+    "filter.ica_lowpass.cutoff_freq" => number_param("Low-pass filter cutoff frequency (Hz)", 30, 5, 500),
+    "filter.ica_highpass.order" => number_param("Filter order", 3, 1, 4),
    
 )
 
