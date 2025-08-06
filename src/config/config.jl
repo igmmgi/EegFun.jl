@@ -50,23 +50,25 @@ channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, defau
 # Helper function to create filter parameter specifications
 function _filter_param_spec(
     prefix,
-    description,
-    default_cutoff,
-    min_cutoff,
-    max_cutoff,
-    default_order,
+    apply,
+    freq,
+    min_freq,
+    max_freq,
+    order,
     min_order,
     max_order,
 )
+    # fmt: off
     Dict(
-        "$prefix.on" => bool_param("Apply $description true/false", true),
-        "$prefix.method" => string_param("Type of filter", "fir", allowed = ["fir", "iir"]),
-        "$prefix.filter_func" => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
-        "$prefix.cutoff_freq" =>
-            number_param("$description cutoff frequency (Hz)", default_cutoff, min_cutoff, max_cutoff),
-        "$prefix.order" => number_param("Filter order", default_order, min_order, max_order),
+        "$prefix.apply"  => bool_param("Apply: true/false", apply),
+        "$prefix.method" => string_param("Filter type", "fir", allowed = ["fir", "iir"]),
+        "$prefix.func"   => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
+        "$prefix.freq"   => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
+        "$prefix.order"  => number_param("Filter order", order, min_order, max_order),
     )
+    # fmt: on
 end
+
 
 # =============================================================================
 # PARAMETER DEFINITIONS
@@ -104,13 +106,13 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.eeg.artifact_value_criterion" => number_param("Value (mV) for defining data section as an artifact value.", 100),
 
     # ICA settings
-    "ica.run" => bool_param("Run Independent Component Analysis (ICA) true/false."),
+    "ica.apply" => bool_param("Independent Component Analysis (ICA) true/false."),
 
     # Filtering settings - using helper function
-    _filter_param_spec("filter.highpass", "High-pass filter", 0.1, 0.01, 20.0, 1, 1, 4)...,
-    _filter_param_spec("filter.lowpass", "Low-pass filter", 30.0, 5.0, 500.0, 3, 1, 8)...,
-    _filter_param_spec("filter.ica_highpass", "High-pass filter ICA data", 1.0, 1.0, 20.0, 1, 1, 4)...,
-    _filter_param_spec("filter.ica_lowpass", "Low-pass filter ICA data", 30.0, 5.0, 500.0, 3, 1, 4)...,
+    _filter_param_spec("filter.highpass",     true,   0.1, 0.01,  20.0, 1, 1, 4)...,
+    _filter_param_spec("filter.lowpass",      false, 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("filter.ica_highpass", true,   1.0, 1.00,  20.0, 1, 1, 4)...,
+    _filter_param_spec("filter.ica_lowpass",  false, 30.0, 5.00, 500.0, 3, 1, 4)...,
 
 )
 # fmt: on

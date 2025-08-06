@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-08-05 14:52:53
+# Generated on 2025-08-06 10:57:17
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -81,28 +81,28 @@ save_ica_data = true
 # highpass Settings
 [filter.highpass]
 
-# High-pass filter cutoff frequency (Hz)
+# Apply: true/false
+# Type: Bool
+# Default: true
+apply = true
+
+# Cutoff frequency (Hz)
 # Type: Real
 # Range: 0.01 ≤ value ≤ 20.0
 # Default: 0.1
-cutoff_freq = 0.1
+freq = 0.1
 
 # Filter function
-# Type: String
+# Type: Union{String, Vector{String}}
 # Allowed values: filt, filtfilt
 # Default: filtfilt
-filter_func = "filtfilt"
+func = "filtfilt"
 
-# Type of filter
-# Type: String
+# Filter type
+# Type: Union{String, Vector{String}}
 # Allowed values: fir, iir
 # Default: fir
 method = "fir"
-
-# Apply highpass filter true/false
-# Type: Bool
-# Default: true
-on = true
 
 # Filter order
 # Type: Real
@@ -113,28 +113,60 @@ order = 1
 # ica_highpass Settings
 [filter.ica_highpass]
 
-# High-pass filter cutoff frequency (Hz)
+# Apply: true/false
+# Type: Bool
+# Default: true
+apply = true
+
+# Cutoff frequency (Hz)
 # Type: Real
-# Range: 1 ≤ value ≤ 20.0
-# Default: 1
-cutoff_freq = 1
+# Range: 1.0 ≤ value ≤ 20.0
+# Default: 1.0
+freq = 1.0
 
 # Filter function
-# Type: String
+# Type: Union{String, Vector{String}}
 # Allowed values: filt, filtfilt
 # Default: filtfilt
-filter_func = "filtfilt"
+func = "filtfilt"
 
-# Type of filter
-# Type: String
+# Filter type
+# Type: Union{String, Vector{String}}
 # Allowed values: fir, iir
 # Default: fir
 method = "fir"
 
-# Apply highpass filter ICA data true/false
+# Filter order
+# Type: Real
+# Range: 1 ≤ value ≤ 4
+# Default: 1
+order = 1
+
+# ica_lowpass Settings
+[filter.ica_lowpass]
+
+# Apply: true/false
 # Type: Bool
-# Default: true
-on = true
+# Default: false
+apply = false
+
+# Cutoff frequency (Hz)
+# Type: Real
+# Range: 5.0 ≤ value ≤ 500.0
+# Default: 30.0
+freq = 30.0
+
+# Filter function
+# Type: Union{String, Vector{String}}
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+func = "filtfilt"
+
+# Filter type
+# Type: Union{String, Vector{String}}
+# Allowed values: fir, iir
+# Default: fir
+method = "fir"
 
 # Filter order
 # Type: Real
@@ -142,57 +174,31 @@ on = true
 # Default: 3
 order = 3
 
-# ica_lowpass Settings
-[filter.ica_lowpass]
-
-# Low-pass filter cutoff frequency (Hz)
-# Type: Real
-# Range: 5 ≤ value ≤ 500
-# Default: 30
-cutoff_freq = 30
-
-# Filter function
-# Type: String
-# Allowed values: filt, filtfilt
-# Default: filtfilt
-filter_func = "filtfilt"
-
-# Type of filter
-# Type: String
-# Allowed values: fir, iir
-# Default: fir
-method = "fir"
-
-# Apply lowpass filter ICA data true/false
-# Type: Bool
-# Default: true
-on = true
-
 # lowpass Settings
 [filter.lowpass]
 
-# Low-pass filter cutoff frequency (Hz)
+# Apply: true/false
+# Type: Bool
+# Default: false
+apply = false
+
+# Cutoff frequency (Hz)
 # Type: Real
-# Range: 5 ≤ value ≤ 500
-# Default: 30
-cutoff_freq = 30
+# Range: 5.0 ≤ value ≤ 500.0
+# Default: 30.0
+freq = 30.0
 
 # Filter function
-# Type: String
+# Type: Union{String, Vector{String}}
 # Allowed values: filt, filtfilt
 # Default: filtfilt
-filter_func = "filtfilt"
+func = "filtfilt"
 
-# Type of filter
-# Type: String
+# Filter type
+# Type: Union{String, Vector{String}}
 # Allowed values: fir, iir
 # Default: fir
 method = "fir"
-
-# Apply lowpass filter true/false
-# Type: Bool
-# Default: true
-on = true
 
 # Filter order
 # Type: Real
@@ -203,10 +209,10 @@ order = 3
 # ica Settings
 [ica]
 
-# Run Independent Component Analysis (ICA) true/false.
+# Independent Component Analysis (ICA) true/false.
 # Type: Bool
 # Default: false
-run = false
+apply = false
 
 # preprocess Settings
 [preprocess]
@@ -245,11 +251,7 @@ extreme_value_criterion = 500
 # Channels used in the calculation of horizontal eye movements (hEOG).
 # Type: Vector{Vector{String}}
 # Default: [["F9"], ["F10"], ["hEOG"]]
-hEOG_channels = [
-    ["F9"],
-    ["F10"],
-    ["hEOG"],
-]
+hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
 
 # Distance criterion for horizontal EOG channel definition.
 # Type: Real
@@ -260,11 +262,7 @@ hEOG_criterion = 30
 # Channels used in the calculation of vertical eye movements (vEOG).
 # Type: Vector{Vector{String}}
 # Default: [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]
-vEOG_channels = [
-    ["Fp1", "IO1"],
-    ["Fp2", "IO2"],
-    ["vEOG"],
-]
+vEOG_channels = [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]
 
 # Distance criterion for vertical EOG channel definition.
 # Type: Real
