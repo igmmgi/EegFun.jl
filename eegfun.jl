@@ -12,8 +12,7 @@ using GLMakie
 using DataFrames
 using BenchmarkTools
 
-
-eegfun.preprocess_eeg_data("pipeline.toml")
+# eegfun.preprocess_eeg_data("pipeline.toml")
 
 
 # load data
@@ -30,8 +29,30 @@ eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 # eegfun.plot_databrowser(dat)
 # eegfun.plot_channel_spectrum(dat)
+# eegfun.plot_channel_spectrum(dat)
+epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epochs = []
+for (idx, epoch) in enumerate(epoch_cfg)
+    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+end
+# eegfun.plot_databrowser(epochs[1])
 
-eegfun.plot_channel_spectrum(dat)
+
+
+
+
+
+
+
+
+
+eegfun.baseline!(epochs[1])
+
+a = eegfun.convert(epochs[1],1)
+eegfun.plot_topography(a,sample_selection = x -> x.time .== 0)
+b = eegfun.convert(epochs[1], 2)
+eegfun.plot_topography(b)
+
 
 
 #eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
@@ -40,28 +61,6 @@ eegfun.plot_channel_spectrum(dat)
 #eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 #eegfun.is_extreme_value!(dat, 100);
 
-
-eegfun.plot_channel_spectrum(
-    dat;
-    y_scale = :log10,
-    sample_selection = x -> x.time .< 1000,
-    channel_selection = eegfun.channels(:Fp1),
-)
-
-
-eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :vEOG, :hEOG]))
-
-
-
-eegfun.plot_databrowser(dat)
-
-
-epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = []
-for (idx, epoch) in enumerate(epoch_cfg)
-    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
-end
-eegfun.plot_databrowser(epochs[1])
 
 
 

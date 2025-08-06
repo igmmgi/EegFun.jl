@@ -53,10 +53,10 @@ function baseline!(
     channel_selection::Function = channels(),
 )
     # Validate baseline interval
-    baseline_interval = validate_baseline_interval(dat.time, baseline_interval)
+    baseline_interval = validate_baseline_interval(dat, baseline_interval)
 
     # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_warning "No channels selected for baseline correction"
         return
@@ -81,8 +81,8 @@ Apply baseline correction in-place to EEG data using the entire time range.
 - Uses the entire time range for baseline calculation
 """
 function baseline!(dat::EegData; channel_selection::Function = channels())
-    baseline_interval = IntervalIdx(1, nrow(dat.data))
-    baseline!(dat, baseline_interval; channel_selection)
+    baseline_interval = IntervalIdx(1, n_samples(dat))
+    baseline!(dat, baseline_interval; channel_selection = channel_selection)
 end
 
 # generates all non-mutating versions

@@ -402,9 +402,15 @@ function get_selected_components(ica_result::InfoIca, component_selection::Funct
 end
 
 # Helper to select samples based on a predicate
-function get_selected_samples(dat, sample_selection::Function)
+function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data))
 end
+# Helper to select samples based on a predicate
+function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
+    return findall(sample_selection(dat.data[1])) # assume all data have the same samples
+end
+
+
 
 # Helper to select samples from a DataFrame
 function get_selected_samples(dat::DataFrame, sample_selection::Function)
