@@ -1,3 +1,18 @@
+# === EEG DATA UTILITIES ===
+#
+# This file provides utilities for accessing and manipulating EEG data structures.
+# It includes functions for column identification, data access, convenience functions,
+# data viewing, mathematical utilities, and subsetting operations.
+#
+# Organization:
+# - Column Identification: Functions to identify metadata, channel, and extra columns
+# - Data Access: Functions to extract different types of data (all_data, meta_data, etc.)
+# - Convenience Functions: Basic information and size functions
+# - Data Viewing: head, tail, viewer functions
+# - Mathematical Utilities: datarange, colmeans, data_limits
+# - Subsetting: Functions to subset EEG data objects
+#
+
 # === COLUMN IDENTIFICATION SYSTEM ===
 """
     get_cols_by_group(dat::EegData, group::Symbol) -> Vector{Symbol}
@@ -18,27 +33,26 @@ Get columns by group type for EegData objects using layout-based identification.
 
 """
 function get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}
+
+    if !(group in [:channels, :metadata, :extra])
+        @minimal_error "Unknown group type: $group"
+    end
+
     labels = all_labels(dat)
-    channel_labels = dat.layout.data.label
+    layout_channels = dat.layout.data.label
 
     if group == :channels
-        return intersect(channel_labels, labels)
+        return intersect(layout_channels, labels)
     elseif group == :metadata
-        if isempty(channel_labels)
-            return Symbol[]
-        end
-        first_channel_idx = findfirst(col -> col == channel_labels[1], labels)
+        isempty(layout_channels) && return Symbol[]
+        first_channel_idx = findfirst(col -> col == layout_channels[1], labels)
         isnothing(first_channel_idx) && @minimal_error "First channel label not found in data"
         return labels[1:(first_channel_idx-1)]
     elseif group == :extra
-        if isempty(channel_labels)
-            return Symbol[]
-        end
-        last_channel_idx = findlast(col -> col == channel_labels[end], labels)
+        isempty(layout_channels) && return Symbol[]
+        last_channel_idx = findlast(col -> col == layout_channels[end], labels)
         isnothing(last_channel_idx) && @minimal_error "Last channel label not found in data"
         return labels[(last_channel_idx+1):end]
-    else
-        @minimal_error "Unknown group type: $group"
     end
 end
 
@@ -98,11 +112,22 @@ Get meta data columns from the EEG data.
 - `eeg_data::EegData`: The EEG data object
 
 # Returns
-- `DataFrame`: DataFrame containing EEG channel columns
+- `DataFrame`: DataFrame containing metadata columns
 """
-meta_data(dat::SingleDataFrameEeg)::DataFrame = dat.data[:, get_cols_by_group(dat, :metadata)]
-meta_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = dat.data[epoch][:, get_cols_by_group(dat, :metadata)]
-meta_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)[:, get_cols_by_group(dat, :metadata)]
+function meta_data(dat::SingleDataFrameEeg)::DataFrame
+    meta_cols = get_cols_by_group(dat, :metadata)
+    return isempty(meta_cols) ? DataFrame() : dat.data[:, meta_cols]
+end
+
+function meta_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame
+    meta_cols = get_cols_by_group(dat, :metadata)
+    return isempty(meta_cols) ? DataFrame() : dat.data[epoch][:, meta_cols]
+end
+
+function meta_data(dat::MultiDataFrameEeg)::DataFrame
+    meta_cols = get_cols_by_group(dat, :metadata)
+    return isempty(meta_cols) ? DataFrame() : to_data_frame(dat)[:, meta_cols]
+end
 
 
 """
@@ -134,9 +159,20 @@ Get EEG channel data columns from the EEG data.
 # Returns
 - `DataFrame`: DataFrame containing EEG channel columns
 """
-channel_data(dat::SingleDataFrameEeg)::DataFrame = dat.data[:, get_cols_by_group(dat, :channels)]
-channel_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = dat.data[epoch][:, get_cols_by_group(dat, :channels)]
-channel_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)[:, get_cols_by_group(dat, :channels)]
+function channel_data(dat::SingleDataFrameEeg)::DataFrame
+    channel_cols = get_cols_by_group(dat, :channels)
+    return isempty(channel_cols) ? DataFrame() : dat.data[:, channel_cols]
+end
+
+function channel_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame
+    channel_cols = get_cols_by_group(dat, :channels)
+    return isempty(channel_cols) ? DataFrame() : dat.data[epoch][:, channel_cols]
+end
+
+function channel_data(dat::MultiDataFrameEeg)::DataFrame
+    channel_cols = get_cols_by_group(dat, :channels)
+    return isempty(channel_cols) ? DataFrame() : to_data_frame(dat)[:, channel_cols]
+end
 
 """
 
@@ -165,9 +201,20 @@ Get extra/derived columns (EOG, flags, etc.) from the EEG data.
 # Returns
 - `DataFrame`: DataFrame containing extra/derived columns
 """
-extra_data(dat::SingleDataFrameEeg)::DataFrame = dat.data[:, get_cols_by_group(dat, :extra)]
-extra_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = dat.data[epoch][:, get_cols_by_group(dat, :extra)]
-extra_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat)[:, get_cols_by_group(dat, :extra)]
+function extra_data(dat::SingleDataFrameEeg)::DataFrame
+    extra_cols = get_cols_by_group(dat, :extra)
+    return isempty(extra_cols) ? DataFrame() : dat.data[:, extra_cols]
+end
+
+function extra_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame
+    extra_cols = get_cols_by_group(dat, :extra)
+    return isempty(extra_cols) ? DataFrame() : dat.data[epoch][:, extra_cols]
+end
+
+function extra_data(dat::MultiDataFrameEeg)::DataFrame
+    extra_cols = get_cols_by_group(dat, :extra)
+    return isempty(extra_cols) ? DataFrame() : to_data_frame(dat)[:, extra_cols]
+end
 
 
 
@@ -188,7 +235,7 @@ sample_rate(dat::EegData)::Int = dat.sample_rate
 sample_rate(dat::DataFrame)::Int = Int(1 / mean(diff(dat.time)))
 
 """
-    reference(dat::EegData) -> String
+    reference(dat::EegData) -> Symbol
 
 Get the reference information from the EEG data.
 
@@ -196,7 +243,7 @@ Get the reference information from the EEG data.
 - `dat::EegData`: The EEG data object
 
 # Returns
-- `String`: Reference information
+- `Symbol`: Reference information
 """
 reference(dat::EegData)::Symbol = dat.analysis_info.reference
 reference(dat::AnalysisInfo)::Symbol = dat.reference
@@ -243,7 +290,6 @@ Get the number of channels in the EEG data.
 - `Int`: Number of channels
 """
 n_channels(dat::EegData)::Int = length(channel_labels(dat))
-n_channels(dat::DataFrame)::Int = length(channel_labels(dat))
 n_layout(layout::Layout)::Int = nrow(layout.data)
 
 """
@@ -307,6 +353,15 @@ Find common channels between two EEG data objects.
 common_channels(dat1::EegData, dat2::EegData)::Vector{Symbol} = intersect(channel_labels(dat1), channel_labels(dat2))
 
 # === DATA VIEWING FUNCTIONS ===
+
+"""
+    viewer(dat)
+
+Display data using VS Code viewer if available, otherwise use standard display.
+
+# Arguments
+- `dat`: Any data object to display
+"""
 function viewer(dat)
     if ENV["TERM_PROGRAM"] == "vscode"
         try
@@ -319,35 +374,72 @@ function viewer(dat)
     end
 end
 
+"""
+    viewer(dat::EegData)
+
+Display EEG data by extracting all data and using the appropriate viewer.
+
+# Arguments
+- `dat::EegData`: The EEG data object to display
+"""
 function viewer(dat::EegData)
-    viewer(data(dat))
+    viewer(all_data(dat))
 end
 
 function head(dat::EegData; n = nothing)
-    isnothing(n) && (n=5)
-    result = all_data(dat)[1:n, :]
+    isnothing(n) && (n = 5)
+    data = all_data(dat)
+    nrows = nrow(data)
+    n = min(n, nrows)  # Don't exceed available rows
+    result = n > 0 ? data[1:n, :] : DataFrame()
     viewer(result)
     return result
 end
 
 function tail(dat::EegData; n = nothing)
-    isnothing(n) && (n=5)
-    result = all_data(dat)[(end-n+1):end, :]
+    isnothing(n) && (n = 5)
+    data = all_data(dat)
+    nrows = nrow(data)
+    n = min(n, nrows)  # Don't exceed available rows
+    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
     viewer(result)
     return result
 end
 
+"""
+    to_data_frame(dat::EpochData) -> DataFrame
+
+Convert EpochData to a single DataFrame by concatenating all epochs.
+
+# Arguments
+- `dat::EpochData`: The epoch data to convert
+
+# Returns
+- `DataFrame`: Single DataFrame with all epochs concatenated vertically
+"""
 function to_data_frame(dat::EpochData)
     isempty(dat.data) && return DataFrame()
     return vcat(dat.data...)
 end
 
+"""
+    to_data_frame(dat::Vector{EpochData}) -> DataFrame
+
+Convert a vector of EpochData objects to a single DataFrame.
+
+# Arguments
+- `dat::Vector{EpochData}`: Vector of epoch data objects to convert
+
+# Returns
+- `DataFrame`: Single DataFrame with all epochs from all objects concatenated
+"""
 function to_data_frame(dat::Vector{EpochData})
     isempty(dat) && return DataFrame()
     isempty(dat[1].data) && return DataFrame()
     return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
 end
 
+# === MATHEMATICAL UTILITIES ===
 
 """
     datarange(x::AbstractVector) -> Float64
@@ -409,32 +501,60 @@ end
 
 
 
-"""
-    subset_dataframe(dat::SingleDataFrameEeg; 
-           channel_selection::Function = channels(), 
-           sample_selection::Function = samples())
+# === DATAFRAME SUBSETTING UTILITIES ===
 
-Create a subset of SingleDataFrameEeg (ContinuousData or ErpData) by applying channel and sample predicates.
+"""
+    subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> DataFrame
+
+Create a subset of a DataFrame by selecting specific channels and samples.
 
 # Arguments
-- `dat`: SingleDataFrameEeg object to subset (ContinuousData or ErpData)
-- `channel_selection`: Function that returns channel labels to include (default: all channels)
-- `sample_selection`: Function that returns sample mask to include (default: all samples)
+- `df::DataFrame`: The DataFrame to subset
+- `selected_channels::Vector{Symbol}`: Column names to include
+- `selected_samples::Vector{Int}`: Row indices to include
 
 # Returns
-- New SingleDataFrameEeg object with filtered channels and samples
+- `DataFrame`: Subset DataFrame with selected channels and samples
 """
 function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::DataFrame
     return df[selected_samples, selected_channels]
 end
 
+"""
+    subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int}) -> Vector{DataFrame}
+
+Create subsets of multiple DataFrames by selecting specific epochs, channels, and samples.
+
+# Arguments
+- `dataframes::Vector{DataFrame}`: Vector of DataFrames to subset
+- `selected_epochs::Vector{Int}`: Indices of epochs (DataFrames) to include
+- `selected_channels::Vector{Symbol}`: Column names to include in each DataFrame
+- `selected_samples::Vector{Int}`: Row indices to include in each DataFrame
+
+# Returns
+- `Vector{DataFrame}`: Vector of subset DataFrames
+"""
 function subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Vector{DataFrame}
     return subset_dataframe.(dataframes[selected_epochs], Ref(selected_channels), Ref(selected_samples))
 end
 
 
-# === COMMON SUBSET HELPERS ===
+# === INTERNAL SUBSET HELPERS ===
 
+"""
+    _subset_common(dat, channel_selection, sample_selection, include_extra)
+
+Internal helper for common subsetting operations on EEG data.
+
+# Arguments
+- `dat`: EEG data object
+- `channel_selection::Function`: Channel selection predicate
+- `sample_selection::Function`: Sample selection predicate
+- `include_extra::Bool`: Whether to include extra columns
+
+# Returns
+- `Tuple`: (selected_channels, selected_samples, layout_subset)
+"""
 function _subset_common(dat, channel_selection, sample_selection, include_extra)
     @debug "Subsetting $(typeof(dat)): selecting channels and samples"
     # Get subset selected channels, samples, and layout
@@ -445,6 +565,21 @@ function _subset_common(dat, channel_selection, sample_selection, include_extra)
     return selected_channels, selected_samples, layout_subset
 end
 
+"""
+    _subset_common(dat::EpochData, epoch_selection, channel_selection, sample_selection, include_extra)
+
+Internal helper for subsetting EpochData with epoch selection.
+
+# Arguments
+- `dat::EpochData`: Epoch data object
+- `epoch_selection::Function`: Epoch selection predicate
+- `channel_selection::Function`: Channel selection predicate
+- `sample_selection::Function`: Sample selection predicate
+- `include_extra::Bool`: Whether to include extra columns
+
+# Returns
+- `Tuple`: (selected_epochs, selected_channels, selected_samples, layout_subset)
+"""
 function _subset_common(dat::EpochData, epoch_selection, channel_selection, sample_selection, include_extra)
     @debug "Subsetting $(typeof(dat)): selecting epochs, channels and samples"
     # Get subset selected epochs, channels, samples, and layout
@@ -453,14 +588,29 @@ function _subset_common(dat::EpochData, epoch_selection, channel_selection, samp
     return selected_epochs, selected_channels, selected_samples, layout_subset
 end
 
+"""
+    _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info) -> ContinuousData
+
+Internal helper to create ContinuousData from subset DataFrame.
+"""
 function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info)
     return ContinuousData(data_subset, layout, sample_rate, analysis_info)
 end
 
+"""
+    _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info) -> EpochData
+
+Internal helper to create EpochData from subset DataFrames.
+"""
 function _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info)
     return EpochData(data_subset, layout, sample_rate, analysis_info)
 end
 
+"""
+    _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int) -> ErpData
+
+Internal helper to create ErpData from subset DataFrame.
+"""
 function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int)
     return ErpData(data_subset, layout, sample_rate, analysis_info, n_epochs)
 end
@@ -488,5 +638,5 @@ function subset(
 )::EpochData
     selected_epochs, selected_channels, selected_samples, layout_subset = _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
-    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, length(dat.data))
+    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
 end

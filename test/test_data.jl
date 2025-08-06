@@ -4,20 +4,383 @@ using eegfun
 
 @testset "Data Utilities" begin
 
+    # === TEST DATA SETUP ===
+    function create_test_continuous_data()
+        # Create test data with metadata, channels, and extra columns
+        df = DataFrame(
+            time = (0:9) ./ 1000,          # metadata
+            triggers = [0, 1, 0, 0, 1, 0, 0, 0, 1, 0],  # metadata
+            Fp1 = 1:10,                    # channel
+            Fp2 = 11:20,                   # channel
+            F3 = 21:30,                    # channel
+            F4 = 31:40,                    # channel
+            vEOG = 101:110,                # extra
+            hEOG = 111:120                 # extra
+        )
+        layout = eegfun.Layout(
+            DataFrame(label = [:Fp1, :Fp2, :F3, :F4], 
+                     inc = [30, 30, 45, 45], 
+                     azi = [0, 90, 180, 270]), 
+            nothing, nothing
+        )
+        analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
+        return eegfun.ContinuousData(df, layout, 1000, analysis_info)
+    end
+
+    function create_test_epoch_data()
+        # Create test epoch data
+        epoch1 = DataFrame(
+            time = [0.1, 0.2, 0.3],
+            triggers = [1, 0, 0],
+            Fp1 = [1, 2, 3],
+            Fp2 = [4, 5, 6],
+            vEOG = [7, 8, 9]
+        )
+        epoch2 = DataFrame(
+            time = [0.1, 0.2, 0.3], 
+            triggers = [1, 0, 0],
+            Fp1 = [10, 20, 30],
+            Fp2 = [40, 50, 60],
+            vEOG = [70, 80, 90]
+        )
+        layout = eegfun.Layout(
+            DataFrame(label = [:Fp1, :Fp2], 
+                     inc = [30, 30], 
+                     azi = [0, 90]), 
+            nothing, nothing
+        )
+        analysis_info = eegfun.AnalysisInfo()
+        return eegfun.EpochData([epoch1, epoch2], layout, 1000, analysis_info)
+    end
+
+    function create_test_erp_data()
+        # Create test ERP data
+        df = DataFrame(
+            time = [-0.1, 0.0, 0.1, 0.2],
+            Fp1 = [1.0, 2.0, 3.0, 4.0],
+            Fp2 = [5.0, 6.0, 7.0, 8.0]
+        )
+        layout = eegfun.Layout(
+            DataFrame(label = [:Fp1, :Fp2], 
+                     inc = [30, 30], 
+                     azi = [0, 90]), 
+            nothing, nothing
+        )
+        analysis_info = eegfun.AnalysisInfo()
+        return eegfun.ErpData(df, layout, 1000, analysis_info, 50)  # 50 epochs averaged
+    end
+
+    # === COLUMN IDENTIFICATION TESTS ===
+    @testset "get_cols_by_group" begin
+        dat = create_test_continuous_data()
+
+        # Test channels group
+        channels = eegfun.get_cols_by_group(dat, :channels)
+        @test channels == [:Fp1, :Fp2, :F3, :F4]
+
+        # Test metadata group  
+        metadata = eegfun.get_cols_by_group(dat, :metadata)
+        @test metadata == [:time, :triggers]
+
+        # Test extra group
+        extra = eegfun.get_cols_by_group(dat, :extra)
+        @test extra == [:vEOG, :hEOG]
+
+        # Test with EpochData
+        epoch_dat = create_test_epoch_data()
+        channels = eegfun.get_cols_by_group(epoch_dat, :channels)
+        @test channels == [:Fp1, :Fp2]
+        metadata = eegfun.get_cols_by_group(epoch_dat, :metadata)
+        @test metadata == [:time, :triggers]
+        extra = eegfun.get_cols_by_group(epoch_dat, :extra)
+        @test extra == [:vEOG]
+
+        # Test with ErpData 
+        erp_dat = create_test_erp_data()
+        channels = eegfun.get_cols_by_group(erp_dat, :channels)
+        @test channels == [:Fp1, :Fp2]
+        metadata = eegfun.get_cols_by_group(erp_dat, :metadata)
+        @test metadata == [:time]
+        extra = eegfun.get_cols_by_group(erp_dat, :extra)
+        @test extra == Symbol[]
+
+        # Test edge cases
+        empty_layout = eegfun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
+        empty_dat = eegfun.ContinuousData(DataFrame(time = Float64[]), empty_layout, 1000, eegfun.AnalysisInfo())
+        @test eegfun.get_cols_by_group(empty_dat, :channels) == Symbol[]
+        @test eegfun.get_cols_by_group(empty_dat, :metadata) == Symbol[]
+        @test eegfun.get_cols_by_group(empty_dat, :extra) == Symbol[]
+    end
+
+    # === DATA ACCESS FUNCTION TESTS ===
+    @testset "Data Access Functions" begin
+        
+        @testset "all_data and all_labels" begin
+            # Test ContinuousData
+            cont_dat = create_test_continuous_data()
+            all_data_result = eegfun.all_data(cont_dat)
+            @test all_data_result isa DataFrame
+            @test size(all_data_result) == (10, 8)
+            @test propertynames(all_data_result) == [:time, :triggers, :Fp1, :Fp2, :F3, :F4, :vEOG, :hEOG]
+
+            all_labels_result = eegfun.all_labels(cont_dat)
+            @test all_labels_result == [:time, :triggers, :Fp1, :Fp2, :F3, :F4, :vEOG, :hEOG]
+
+            # Test EpochData
+            epoch_dat = create_test_epoch_data()
+            all_data_result = eegfun.all_data(epoch_dat)
+            @test all_data_result isa DataFrame
+            @test size(all_data_result) == (6, 5)  # 2 epochs * 3 rows each
+
+            all_labels_result = eegfun.all_labels(epoch_dat)
+            @test all_labels_result == [:time, :triggers, :Fp1, :Fp2, :vEOG]
+
+            # Test all_labels with specific epoch
+            epoch_labels = eegfun.all_labels(epoch_dat, 1)
+            @test epoch_labels == [:time, :triggers, :Fp1, :Fp2, :vEOG]
+
+            # Test ErpData
+            erp_dat = create_test_erp_data()
+            all_data_result = eegfun.all_data(erp_dat)
+            @test all_data_result isa DataFrame
+            @test size(all_data_result) == (4, 3)
+        end
+
+        @testset "meta_labels and meta_data" begin
+            cont_dat = create_test_continuous_data()
+            
+            # Test meta_labels
+            meta_labels = eegfun.meta_labels(cont_dat)
+            @test meta_labels == [:time, :triggers]
+
+            # Test meta_data for ContinuousData
+            meta_data = eegfun.meta_data(cont_dat)
+            @test meta_data isa DataFrame
+            @test propertynames(meta_data) == [:time, :triggers]
+            @test size(meta_data) == (10, 2)
+
+            # Test meta_data for EpochData
+            epoch_dat = create_test_epoch_data()
+            meta_data = eegfun.meta_data(epoch_dat)
+            @test meta_data isa DataFrame
+            @test propertynames(meta_data) == [:time, :triggers]
+            @test size(meta_data) == (6, 2)  # 2 epochs * 3 rows each
+
+            # Test meta_data for specific epoch
+            meta_data_epoch = eegfun.meta_data(epoch_dat, 1)
+            @test meta_data_epoch isa DataFrame
+            @test size(meta_data_epoch) == (3, 2)
+        end
+
+        @testset "channel_labels and channel_data" begin
+            cont_dat = create_test_continuous_data()
+            
+            # Test channel_labels
+            chan_labels = eegfun.channel_labels(cont_dat)
+            @test chan_labels == [:Fp1, :Fp2, :F3, :F4]
+
+            # Test channel_labels with indices
+            chan_labels_subset = eegfun.channel_labels(cont_dat, [1, 3])
+            @test chan_labels_subset == [:Fp1, :F3]
+
+            chan_labels_single = eegfun.channel_labels(cont_dat, 2)
+            @test chan_labels_single == [:Fp2]
+
+            chan_labels_range = eegfun.channel_labels(cont_dat, [1:2])
+            @test chan_labels_range == [:Fp1, :Fp2]
+
+            # Test channel_data for ContinuousData
+            chan_data = eegfun.channel_data(cont_dat)
+            @test chan_data isa DataFrame
+            @test propertynames(chan_data) == [:Fp1, :Fp2, :F3, :F4]
+            @test size(chan_data) == (10, 4)
+
+            # Test channel_data for EpochData
+            epoch_dat = create_test_epoch_data()
+            chan_data = eegfun.channel_data(epoch_dat)
+            @test chan_data isa DataFrame
+            @test propertynames(chan_data) == [:Fp1, :Fp2]
+            @test size(chan_data) == (6, 2)
+
+            # Test channel_data for specific epoch
+            chan_data_epoch = eegfun.channel_data(epoch_dat, 1)
+            @test chan_data_epoch isa DataFrame
+            @test size(chan_data_epoch) == (3, 2)
+        end
+
+        @testset "extra_labels and extra_data" begin
+            cont_dat = create_test_continuous_data()
+            
+            # Test extra_labels
+            extra_labels = eegfun.extra_labels(cont_dat)
+            @test extra_labels == [:vEOG, :hEOG]
+
+            # Test extra_data for ContinuousData
+            extra_data = eegfun.extra_data(cont_dat)
+            @test extra_data isa DataFrame
+            @test propertynames(extra_data) == [:vEOG, :hEOG]
+            @test size(extra_data) == (10, 2)
+
+            # Test extra_data for EpochData
+            epoch_dat = create_test_epoch_data()
+            extra_data = eegfun.extra_data(epoch_dat)
+            @test extra_data isa DataFrame
+            @test propertynames(extra_data) == [:vEOG]
+            @test size(extra_data) == (6, 1)
+
+            # Test extra_data for specific epoch
+            extra_data_epoch = eegfun.extra_data(epoch_dat, 1)
+            @test extra_data_epoch isa DataFrame
+            @test size(extra_data_epoch) == (3, 1)
+
+            # Test ErpData with no extra columns
+            erp_dat = create_test_erp_data()
+            extra_labels = eegfun.extra_labels(erp_dat)
+            @test extra_labels == Symbol[]
+            extra_data = eegfun.extra_data(erp_dat)
+            @test size(extra_data) == (4, 0)
+        end
+    end
+
+    # === CONVENIENCE FUNCTION TESTS ===
+    @testset "Convenience Functions" begin
+        
+        @testset "Basic Information Functions" begin
+            cont_dat = create_test_continuous_data()
+            epoch_dat = create_test_epoch_data()
+            erp_dat = create_test_erp_data()
+
+            # Test sample_rate
+            @test eegfun.sample_rate(cont_dat) == 1000
+            @test eegfun.sample_rate(epoch_dat) == 1000
+            @test eegfun.sample_rate(erp_dat) == 1000
+
+            # Test sample_rate from DataFrame
+            df_with_time = DataFrame(time = [0.0, 0.001, 0.002, 0.003])
+            @test eegfun.sample_rate(df_with_time) == 1000
+
+            # Test reference
+            @test eegfun.reference(cont_dat) == :avg
+            @test eegfun.reference(cont_dat.analysis_info) == :avg
+            @test eegfun.reference(epoch_dat) == :none  # default
+            @test eegfun.reference(erp_dat) == :none
+
+            # Test filter_info
+            filter_info = eegfun.filter_info(cont_dat.analysis_info)
+            @test filter_info == [0.1, 30.0]
+            filter_info_default = eegfun.filter_info(epoch_dat.analysis_info)
+            @test filter_info_default == [0.0, 0.0]  # default values
+        end
+
+        @testset "Size Functions" begin
+            cont_dat = create_test_continuous_data()
+            epoch_dat = create_test_epoch_data()
+            erp_dat = create_test_erp_data()
+
+            # Test n_samples
+            @test eegfun.n_samples(cont_dat) == 10
+            @test eegfun.n_samples(epoch_dat) == 3  # samples per epoch
+            @test eegfun.n_samples(epoch_dat, 1) == 3
+            @test eegfun.n_samples(epoch_dat, 2) == 3
+            @test eegfun.n_samples(erp_dat) == 4
+
+            # Test n_samples from DataFrame
+            @test eegfun.n_samples(cont_dat.data) == 10
+
+            # Test n_channels
+            @test eegfun.n_channels(cont_dat) == 4
+            @test eegfun.n_channels(epoch_dat) == 2
+            @test eegfun.n_channels(erp_dat) == 2
+
+            # Test n_epochs
+            @test eegfun.n_epochs(cont_dat) == 1
+            @test eegfun.n_epochs(epoch_dat) == 2
+            @test eegfun.n_epochs(erp_dat) == 50  # as set in create_test_erp_data
+
+            # Test n_layout
+            @test eegfun.n_layout(cont_dat.layout) == 4
+            @test eegfun.n_layout(epoch_dat.layout) == 2
+        end
+
+        @testset "Duration Functions" begin
+            cont_dat = create_test_continuous_data()
+            epoch_dat = create_test_epoch_data()
+
+            # Test duration for ContinuousData
+            duration_cont = eegfun.duration(cont_dat)
+            @test duration_cont ≈ 0.009  # (9 - 0) / 1000
+
+            # Test duration for EpochData
+            duration_epoch = eegfun.duration(epoch_dat)
+            @test duration_epoch ≈ 0.2  # 0.3 - 0.1
+
+            # Test duration for specific epoch
+            duration_epoch1 = eegfun.duration(epoch_dat, 1)
+            @test duration_epoch1 ≈ 0.2
+            duration_epoch2 = eegfun.duration(epoch_dat, 2)
+            @test duration_epoch2 ≈ 0.2
+
+            # Test empty data duration
+            empty_df = DataFrame(time = Float64[])
+            empty_layout = eegfun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
+            empty_dat = eegfun.ContinuousData(empty_df, empty_layout, 1000, eegfun.AnalysisInfo())
+            @test eegfun.duration(empty_dat) == 0.0
+        end
+    end
+
+    # === UTILITY FUNCTION TESTS ===
+    @testset "Utility Functions" begin
+        
+        @testset "Channel Utilities" begin
+            cont_dat = create_test_continuous_data()
+            epoch_dat = create_test_epoch_data()
+
+            # Test has_channels
+            @test eegfun.has_channels(cont_dat, [:Fp1, :Fp2])
+            @test eegfun.has_channels(cont_dat, [:Fp1])
+            @test !eegfun.has_channels(cont_dat, [:C3, :C4])  # not present
+            @test !eegfun.has_channels(cont_dat, [:Fp1, :C3])  # partial match
+
+            @test eegfun.has_channels(epoch_dat, [:Fp1, :Fp2])
+            @test !eegfun.has_channels(epoch_dat, [:F3, :F4])
+
+            # Test common_channels
+            common = eegfun.common_channels(cont_dat, epoch_dat)
+            @test common == [:Fp1, :Fp2]
+
+            # Test with same data
+            common_same = eegfun.common_channels(cont_dat, cont_dat)
+            @test common_same == [:Fp1, :Fp2, :F3, :F4]
+
+            # Test with no common channels
+            erp_dat = create_test_erp_data()
+            common_subset = eegfun.common_channels(cont_dat, erp_dat)
+            @test common_subset == [:Fp1, :Fp2]
+        end
+    end
+
     # Test head and tail
     @testset "head and tail" begin
-
-        df = DataFrame(time = (0:9) ./ 1000, a = 1:10, b = 11:20)
-        layout = eegfun.Layout(DataFrame(label = [:a, :b]), nothing, nothing)
-        eeg = eegfun.ContinuousData(df, layout, 1000, eegfun.AnalysisInfo())
+        eeg = create_test_continuous_data()
 
         # Test head
-        @test eegfun.head(eeg) isa DataFrame  # Default n=5
-        @test eegfun.head(eeg, n = 3) isa DataFrame
+        head_result = eegfun.head(eeg)  # Default n=5
+        @test head_result isa DataFrame
+        @test size(head_result) == (5, 8)
+        @test propertynames(head_result) == [:time, :triggers, :Fp1, :Fp2, :F3, :F4, :vEOG, :hEOG]
+
+        head_result_3 = eegfun.head(eeg, n = 3)
+        @test head_result_3 isa DataFrame
+        @test size(head_result_3) == (3, 8)
 
         # Test tail
-        @test eegfun.tail(eeg) isa DataFrame  # Default n=5
-        @test eegfun.tail(eeg, n = 3) isa DataFrame
+        tail_result = eegfun.tail(eeg)  # Default n=5
+        @test tail_result isa DataFrame
+        @test size(tail_result) == (5, 8)
+
+        tail_result_3 = eegfun.tail(eeg, n = 3)
+        @test tail_result_3 isa DataFrame
+        @test size(tail_result_3) == (3, 8)
     end
 
     # Test datarange
@@ -62,28 +425,202 @@ using eegfun
 
     # Test to_data_frame
     @testset "to_data_frame" begin
-        # Create test epoch data
-        epoch1 = DataFrame(time = [1.0, 2.0], value = [3.0, 4.0])
-        epoch2 = DataFrame(time = [5.0, 6.0], value = [7.0, 8.0])
-        layout = eegfun.Layout(DataFrame(label = [:time, :value]), nothing, nothing)
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 1000, eegfun.AnalysisInfo())
+        # Use our improved test data
+        epoch_data = create_test_epoch_data()
 
         # Test single EpochData
         result = eegfun.to_data_frame(epoch_data)
-        @test size(result) == (4, 2)
-        @test result.time == [1.0, 2.0, 5.0, 6.0]
-        @test result.value == [3.0, 4.0, 7.0, 8.0]
+        @test size(result) == (6, 5)  # 2 epochs * 3 rows each
+        @test result.time == [0.1, 0.2, 0.3, 0.1, 0.2, 0.3]
+        @test result.Fp1 == [1, 2, 3, 10, 20, 30]
 
         # Test Vector of EpochData
         epoch_data_vec = [epoch_data, epoch_data]
         result = eegfun.to_data_frame(epoch_data_vec)
-        @test size(result) == (8, 2)
-        @test result.time == [1.0, 2.0, 5.0, 6.0, 1.0, 2.0, 5.0, 6.0]
-        @test result.value == [3.0, 4.0, 7.0, 8.0, 3.0, 4.0, 7.0, 8.0]
+        @test size(result) == (12, 5)  # 2 * (2 epochs * 3 rows each)
 
         # Test empty EpochData
-        empty_epoch = eegfun.EpochData(DataFrame[], layout, 1000, eegfun.AnalysisInfo())
+        empty_layout = eegfun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
+        empty_epoch = eegfun.EpochData(DataFrame[], empty_layout, 1000, eegfun.AnalysisInfo())
         @test size(eegfun.to_data_frame(empty_epoch)) == (0, 0)
         @test size(eegfun.to_data_frame([empty_epoch])) == (0, 0)
+    end
+
+    # === SUBSET FUNCTION TESTS ===
+    @testset "Subset Functions" begin
+        
+        @testset "subset_dataframe and subset_dataframes" begin
+            # Test basic DataFrame subsetting
+            df = DataFrame(
+                time = [1, 2, 3, 4],
+                Fp1 = [10, 20, 30, 40],
+                Fp2 = [100, 200, 300, 400]
+            )
+            
+            result = eegfun.subset_dataframe(df, [:time, :Fp1], [1, 3])
+            @test size(result) == (2, 2)
+            @test result.time == [1, 3]
+            @test result.Fp1 == [10, 30]
+            
+            # Test subset_dataframes with Vector{DataFrame}
+            df1 = DataFrame(time = [1, 2], Fp1 = [10, 20])
+            df2 = DataFrame(time = [3, 4], Fp1 = [30, 40])
+            df3 = DataFrame(time = [5, 6], Fp1 = [50, 60])
+            
+            dataframes = [df1, df2, df3]
+            result = eegfun.subset_dataframes(dataframes, [1, 3], [:time], [1])
+            @test length(result) == 2
+            @test result[1].time == [1]
+            @test result[2].time == [5]
+        end
+
+        @testset "subset for ContinuousData" begin
+            dat = create_test_continuous_data()
+            
+            # Test basic subset - all data
+            subset_all = eegfun.subset(dat)
+            @test eegfun.n_samples(subset_all) == 10
+            @test eegfun.n_channels(subset_all) == 4
+            @test typeof(subset_all) == typeof(dat)
+            
+            # Test channel selection
+            subset_chans = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+            @test eegfun.n_channels(subset_chans) == 2
+            @test eegfun.channel_labels(subset_chans) == [:Fp1, :Fp2]
+            
+            # Test sample selection
+            subset_samples = eegfun.subset(dat, sample_selection = eegfun.samples(x -> x.triggers .== 1))
+            @test eegfun.n_samples(subset_samples) == 3  # 3 trigger events
+            
+            # Test combined selection
+            subset_combined = eegfun.subset(dat, 
+                channel_selection = eegfun.channels([:Fp1]), 
+                sample_selection = eegfun.samples(x -> x.triggers .== 1))
+            @test eegfun.n_channels(subset_combined) == 1
+            @test eegfun.n_samples(subset_combined) == 3
+            
+            # Test include_extra
+            subset_extra = eegfun.subset(dat, 
+                channel_selection = eegfun.channels([:vEOG]), 
+                include_extra = true)
+            @test :vEOG in eegfun.all_labels(subset_extra)
+        end
+
+        @testset "subset for EpochData" begin
+            dat = create_test_epoch_data()
+            
+            # Test basic subset - all data
+            subset_all = eegfun.subset(dat)
+            @test eegfun.n_epochs(subset_all) == 2
+            @test eegfun.n_channels(subset_all) == 2
+            @test typeof(subset_all) == typeof(dat)
+            
+            # Test epoch selection
+            subset_epoch = eegfun.subset(dat, epoch_selection = eegfun.epochs([1]))
+            @test eegfun.n_epochs(subset_epoch) == 1
+            @test length(subset_epoch.data) == 1
+            
+            # Test channel selection
+            subset_chans = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1]))
+            @test eegfun.n_channels(subset_chans) == 1
+            @test eegfun.channel_labels(subset_chans) == [:Fp1]
+            
+            # Test sample selection
+            subset_samples = eegfun.subset(dat, sample_selection = eegfun.samples(x -> x.triggers .== 1))
+            @test eegfun.n_samples(subset_samples, 1) == 1  # Only first sample has trigger
+            
+            # Test combined selection
+            subset_combined = eegfun.subset(dat, 
+                epoch_selection = eegfun.epochs([2]),
+                channel_selection = eegfun.channels([:Fp2]),
+                sample_selection = eegfun.samples(x -> x.triggers .== 0))
+            @test eegfun.n_epochs(subset_combined) == 1
+            @test eegfun.n_channels(subset_combined) == 1
+            @test eegfun.n_samples(subset_combined, 1) == 2  # 2 non-trigger samples
+            
+            # Test include_extra
+            subset_extra = eegfun.subset(dat, 
+                channel_selection = eegfun.channels([:vEOG]), 
+                include_extra = true)
+            @test :vEOG in eegfun.all_labels(subset_extra)
+        end
+
+        @testset "subset for ErpData" begin
+            dat = create_test_erp_data()
+            
+            # Test basic subset - all data
+            subset_all = eegfun.subset(dat)
+            @test eegfun.n_samples(subset_all) == 4
+            @test eegfun.n_channels(subset_all) == 2
+            @test eegfun.n_epochs(subset_all) == 50  # Preserved n_epochs
+            @test typeof(subset_all) == typeof(dat)
+            
+            # Test channel selection
+            subset_chans = eegfun.subset(dat, channel_selection = eegfun.channels([:Fp1]))
+            @test eegfun.n_channels(subset_chans) == 1
+            @test eegfun.channel_labels(subset_chans) == [:Fp1]
+            @test eegfun.n_epochs(subset_chans) == 50
+            
+            # Test sample selection - select positive time points
+            subset_samples = eegfun.subset(dat, sample_selection = eegfun.samples(x -> x.time .>= 0.0))
+            @test eegfun.n_samples(subset_samples) == 3  # times: 0.0, 0.1, 0.2
+            @test eegfun.n_epochs(subset_samples) == 50
+            
+            # Test combined selection
+            subset_combined = eegfun.subset(dat, 
+                channel_selection = eegfun.channels([:Fp2]),
+                sample_selection = eegfun.samples(x -> x.time .>= 0.0))
+            @test eegfun.n_channels(subset_combined) == 1
+            @test eegfun.n_samples(subset_combined) == 3
+            @test eegfun.n_epochs(subset_combined) == 50
+        end
+
+        @testset "Helper Functions" begin
+            # Note: _subset_common and _create_subset are internal functions
+            # but we can test them indirectly through the main subset functions
+            
+            # Test that subsetting preserves data structure integrity
+            cont_dat = create_test_continuous_data()
+            subset_result = eegfun.subset(cont_dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+            
+            # Verify metadata is preserved
+            @test subset_result.sample_rate == cont_dat.sample_rate
+            @test subset_result.analysis_info.reference == cont_dat.analysis_info.reference
+            @test subset_result.analysis_info.hp_filter == cont_dat.analysis_info.hp_filter
+            @test subset_result.analysis_info.lp_filter == cont_dat.analysis_info.lp_filter
+            
+            # Verify layout is properly subset
+            @test length(eegfun.channel_labels(subset_result.layout)) == 2
+            @test eegfun.channel_labels(subset_result.layout) == [:Fp1, :Fp2]
+            
+            # Test with EpochData
+            epoch_dat = create_test_epoch_data()
+            subset_result = eegfun.subset(epoch_dat, epoch_selection = eegfun.epochs([1]))
+            
+            # Verify epochs are properly selected
+            @test length(subset_result.data) == 1
+            @test subset_result.data[1].time == epoch_dat.data[1].time
+            @test subset_result.data[1].Fp1 == epoch_dat.data[1].Fp1
+        end
+
+        @testset "Edge Cases" begin
+            # Test empty selection
+            dat = create_test_continuous_data()
+            
+            # Empty channel selection should result in no channel data, but metadata preserved
+            subset_empty_channels = eegfun.subset(dat, channel_selection = eegfun.channels(Symbol[]))
+            @test eegfun.n_channels(subset_empty_channels) == 0
+            @test :time in eegfun.all_labels(subset_empty_channels)  # metadata preserved
+            
+            # Empty sample selection
+            subset_empty_samples = eegfun.subset(dat, sample_selection = x -> falses(nrow(x)))
+            @test eegfun.n_samples(subset_empty_samples) == 0
+            
+            # Test with EpochData empty selection
+            epoch_dat = create_test_epoch_data()
+            subset_empty_epochs = eegfun.subset(epoch_dat, epoch_selection = eegfun.epochs(Int[]))
+            @test eegfun.n_epochs(subset_empty_epochs) == 0
+            @test length(subset_empty_epochs.data) == 0
+        end
     end
 end
