@@ -29,7 +29,7 @@ using TOML
 using PrettyTables
 
 # Julia standard library
-using Base.Threads
+# using Base.Threads
 
 # Core types
 include("types/types.jl")

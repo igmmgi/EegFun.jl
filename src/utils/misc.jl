@@ -120,6 +120,14 @@ function validate_baseline_interval(
     return baseline_interval
 end
 
+function validate_baseline_interval(dat::MultiDataFrameEeg, baseline_interval::Union{IntervalIdx,IntervalTime})::IntervalIdx
+    return validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
+end
+
+function validate_baseline_interval(dat::SingleDataFrameEeg, baseline_interval::Union{IntervalIdx,IntervalTime})::IntervalIdx
+    return validate_baseline_interval(dat.data.time, baseline_interval)
+end
+
 
 
 """

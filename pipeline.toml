@@ -11,8 +11,11 @@ epoch_condition_file = "epochs.toml"
 [preprocess.eeg]
 artifact_value_criterion = 100
 
+[filter]
+highpass.freq = 0.5
+
 [ica]
-run = true
+apply = false
 
 [files.output]
 directory = "../output_data"

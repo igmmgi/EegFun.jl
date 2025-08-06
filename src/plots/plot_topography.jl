@@ -14,7 +14,6 @@ function _plot_topography!(
     colorbar_kwargs = Dict(),
     method = :multiquadratic,  # :multiquadratic or :spherical_spline
 )
-
     # ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
@@ -27,7 +26,7 @@ function _plot_topography!(
     point_kwargs = merge(point_default_kwargs, point_kwargs)
 
     label_default_kwargs =
-        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :color => :black, :xoffset => 0, :yoffset => 0)
+        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
     label_kwargs = merge(label_default_kwargs, label_kwargs)
 
     topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 200)
@@ -83,28 +82,6 @@ function _plot_topography!(
 end
 
 
-"""
-    plot_topography!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
-
-Add a topographic plot to existing figure/axis from epoched EEG data.
-
-# Arguments
-- `fig`: Figure object
-- `ax`: Axis object
-- `dat`: EpochData object
-- `kwargs...`: Additional keyword arguments
-"""
-function plot_topography!(fig, ax, dat::EpochData, epoch::Int; kwargs...)
-    plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
-end
-
-function plot_topography(dat::EpochData, epoch::Int; kwargs...)
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, dat.data[epoch], dat.layout; kwargs...)
-    return fig, ax
-end
-
 
 
 """
@@ -146,6 +123,38 @@ function plot_topography(
     end
     return fig, ax
 end
+
+
+
+function plot_topography!(
+    fig,
+    ax,
+    dat::EpochData,
+    epoch::Int;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    kwargs...,
+)
+    plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
+end
+
+function plot_topography(
+    dat::EpochData,
+    epoch::Int;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    display_plot = true,
+    kwargs...,
+)
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
+    if display_plot
+        display_figure(fig)
+    end
+    return fig, ax
+end
+
 
 
 """

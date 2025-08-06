@@ -90,15 +90,15 @@ function preprocess_eeg_data(config::String)
         failed_files = String[]
 
         # Process files in parallel
-        @threads for file in raw_data_files
+        for data_file in raw_data_files
             try
-                @info "Processing $file"
+                @info "Processing $data_file"
 
                 # Set up per-file logging (temporarily replaces global logger)
-                setup_logging(joinpath(output_directory, "$(basename_without_ext(file)).log"))
+                setup_logging(joinpath(output_directory, "$(basename_without_ext(data_file)).log"))
 
                 # read raw data file and create our Julia DataFrame
-                dat = create_eeg_dataframe(read_bdf(file), layout)
+                dat = create_eeg_dataframe(read_bdf(data_file), layout)
 
                 # rereference the data
                 rereference!(dat, Symbol(cfg["preprocess"]["reference_channel"]))
@@ -106,7 +106,7 @@ function preprocess_eeg_data(config::String)
                 # Save the results
                 if cfg["files"]["output"]["save_continuous_data"]
                     @info "Saving continuous data"
-                    jldsave(make_output_filename(output_directory, file, "_continuous"); dat = dat)
+                    jldsave(make_output_filename(output_directory, data_file, "_continuous"); dat = dat)
                 end
 
                 # initial high-pass filter to remove DC offset/slow drifts
@@ -258,6 +258,8 @@ function preprocess_eeg_data(config::String)
                         jldsave(make_output_filename(output_directory, file, "_ica"); ica_result = ica_result)
                     end
 
+                else
+                    dat_cleaned = dat
                 end
 
                 # epoch data
@@ -272,9 +274,6 @@ function preprocess_eeg_data(config::String)
                 ]
 
                 # detect standard artifact values
-                println(
-                    "cfg[preprocess][eeg][artifact_value_criterion]: $(cfg["preprocess"]["eeg"]["artifact_value_criterion"])",
-                )
                 is_extreme_value!(
                     dat_cleaned,
                     cfg["preprocess"]["eeg"]["artifact_value_criterion"],
@@ -304,7 +303,7 @@ function preprocess_eeg_data(config::String)
 
                 # Log epoch counts
                 df = DataFrame(
-                    file = basename(file),
+                    file = basename(data_file),
                     condition = 1:length(epochs_original),
                     n_epochs_total = n_epochs.(epochs_original),
                     n_epochs_cleaned = n_epochs.(epochs_cleaned),
@@ -315,36 +314,36 @@ function preprocess_eeg_data(config::String)
                 # save epochs
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
-                    jldsave(make_output_filename(output_directory, file, "_epochs_original"); epochs = epochs_original)
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_original"); epochs = epochs_original)
                 end
 
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
                     @info "Saving epoch data (cleaned)"
-                    jldsave(make_output_filename(output_directory, file, "_epochs_cleaned"); epochs = epochs_cleaned)
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_cleaned"); epochs = epochs_cleaned)
                 end
 
                 # save erp data
                 if cfg["files"]["output"]["save_erp_data_original"]
                     erps_original = [average_epochs(epoch) for epoch in epochs_original]
                     @info "Saving erp data (original)"
-                    jldsave(make_output_filename(output_directory, file, "_erps_original"); erps = erps_original)
+                    jldsave(make_output_filename(output_directory, data_file, "_erps_original"); erps = erps_original)
                 end
 
                 if cfg["files"]["output"]["save_erp_data_cleaned"]
                     erps_cleaned = [average_epochs(epoch) for epoch in epochs_cleaned]
                     @info "Saving erp data (cleaned)"
-                    jldsave(make_output_filename(output_directory, file, "_erps_cleaned"); erps = erps_cleaned)
+                    jldsave(make_output_filename(output_directory, data_file, "_erps_cleaned"); erps = erps_cleaned)
                 end
 
                 df.percentage = (df.n_epochs_cleaned ./ df.n_epochs_total) .* 100
                 @info "Epoch counts per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
 
-                @info "Successfully processed $file"
+                @info "Successfully processed $data_file"
                 processed_files += 1
 
             catch e # Log error to both console and global log
-                @error "Error processing $file" exception=(e, catch_backtrace())
-                push!(failed_files, file)
+                @error "Error processing $data_file" exception=(e, catch_backtrace())
+                push!(failed_files, data_file)
             finally # Close per-file logging (restores global logger)
                 close_logging()
             end
