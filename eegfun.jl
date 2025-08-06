@@ -37,8 +37,13 @@ for (idx, epoch) in enumerate(epoch_cfg)
 end
 # eegfun.plot_databrowser(epochs[1])
 
+# average epochs
+erps = []
+for (idx, epoch) in enumerate(epochs)
+    push!(erps, eegfun.average_epochs(epochs[idx]))
+end
 
-
+eegfun.plot_topography(erps[1])
 
 
 
