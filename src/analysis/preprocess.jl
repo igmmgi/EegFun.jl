@@ -22,7 +22,6 @@ function preprocess_eeg_data(config::String)
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
 
     try
-        @info "hewhehehhwhwhahahahahahahahahah"
         @info "EEG Preprocessing started at $(now()) ..."
         @info "Configuration file: $config"
 
@@ -31,15 +30,12 @@ function preprocess_eeg_data(config::String)
             error_msg = "Config file does not exist: $config"
             @minimal_error error_msg
         end
-        @info "?????"
         cfg = load_config(config)
-        @info "xxxxxx"
 
         # try and merge user config above with default config
         default_config = load_config(joinpath(@__DIR__, "..", "..", "src", "config", "default.toml"))
         cfg = _merge_configs(default_config, cfg)
         @info "Configuration loaded and merged successfully ..."
-        @info "heheheheh"
 
         # check if all requested raw data files exist
         @info "Checking if raw data file(s) exist ..."
@@ -87,7 +83,7 @@ function preprocess_eeg_data(config::String)
         polar_to_cartesian_xyz!(layout)
 
         get_layout_neighbours_xy!(layout, cfg["preprocess"]["layout"]["neighbour_criterion"])
-        print_neighbours_dict(layout, joinpath(output_directory, "neighbours_xy.toml"))
+        print_layout_neighbours(layout, joinpath(output_directory, "neighbours_xy.toml"))
 
         # Track processing results
         processed_files = 0
@@ -114,40 +110,40 @@ function preprocess_eeg_data(config::String)
                 end
 
                 # initial high-pass filter to remove DC offset/slow drifts
-                if cfg["filter"]["highpass"]["on"]
+                if cfg["filter"]["highpass"]["apply"]
                     filter_data!(
                         dat,
                         "hp",
-                        cfg["filter"]["highpass"]["cutoff"];
+                        cfg["filter"]["highpass"]["freq"];
                         order = cfg["filter"]["highpass"]["order"],
                         filter_method = cfg["filter"]["highpass"]["method"],
-                        filter_func = cfg["filter"]["highpass"]["filter_func"],
+                        filter_func = cfg["filter"]["highpass"]["func"],
                     )
                 end
 
                 # initial low-pass filter 
-                if cfg["filter"]["lowpass"]["on"]
+                if cfg["filter"]["lowpass"]["apply"]
                     filter_data!(
                         dat,
                         "lp",
-                        cfg["filter"]["lowpass"]["cutoff"];
+                        cfg["filter"]["lowpass"]["freq"];
                         order = cfg["filter"]["lowpass"]["order"],
                         filter_method = cfg["filter"]["lowpass"]["method"],
-                        filter_func = cfg["filter"]["lowpass"]["filter_func"],
+                        filter_func = cfg["filter"]["lowpass"]["func"],
                     )
                 end
 
                 # caculate vEOG and hEOG channels
-                diff_channel!(
+                channel_difference!(
                     dat,
-                    channel_selection1 = Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][1]),
-                    channel_selection2 = Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][2]),
+                    channel_selection1 = channels(Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][1])),
+                    channel_selection2 = channels(Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][2])),
                     channel_out        = Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][3][1]),
                 )
-                diff_channel!(
+                channel_difference!(
                     dat,
-                    channel_selection1 = Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][1]),
-                    channel_selection2 = Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][2]),
+                    channel_selection1 = channels(Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][1])),
+                    channel_selection2 = channels(Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][2])),
                     channel_out        = Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][3][1]),
                 )
 
@@ -176,32 +172,32 @@ function preprocess_eeg_data(config::String)
 
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
                 # more extreme high-pass filter run ica on clean sections of "continuous" data
-                if cfg["ica"]["run"]
+                if cfg["ica"]["apply"]
 
                     dat_ica = copy(dat)
                     dat_cleaned = copy(dat)
 
-                    if cfg["ica"]["ica_filter"]["highpass"]["on"]
+                    if cfg["filter"]["ica_highpass"]["apply"]
                         # apply high-pass filter to data
                         filter_data!(
                             dat_ica,
                             "hp",
-                            cfg["ica"]["ica_filter"]["highpass"]["cutoff"];
-                            order = cfg["ica"]["ica_filter"]["highpass"]["order"],
-                            filter_method = cfg["ica"]["ica_filter"]["highpass"]["method"],
-                            filter_func = cfg["ica"]["ica_filter"]["highpass"]["filter_func"],
+                            cfg["filter"]["ica_highpass"]["freq"];
+                            order = cfg["filter"]["ica_highpass"]["order"],
+                            filter_method = cfg["filter"]["ica_highpass"]["method"],
+                            filter_func = cfg["filter"]["ica_highpass"]["func"],
                         )
                     end
 
-                    if cfg["ica"]["ica_filter"]["lowpass"]["on"]
+                    if cfg["filter"]["ica_lowpass"]["apply"]
                         # apply low-pass filter to data
                         filter_data!(
                             dat_ica,
                             "lp",
-                            cfg["ica"]["ica_filter"]["lowpass"]["cutoff"];
-                            order = cfg["ica"]["ica_filter"]["lowpass"]["order"],
-                            filter_method = cfg["ica"]["ica_filter"]["lowpass"]["method"],
-                            filter_func = cfg["ica"]["ica_filter"]["highpass"]["filter_func"],
+                            cfg["filter"]["ica_lowpass"]["freq"];
+                            order = cfg["filter"]["ica_lowpass"]["order"],
+                            filter_method = cfg["filter"]["ica_lowpass"]["method"],
+                            filter_func = cfg["filter"]["ica_lowpass"]["func"],
                         )
                     end
 
