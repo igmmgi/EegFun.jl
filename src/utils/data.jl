@@ -428,45 +428,57 @@ function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, sele
     return df[selected_samples, selected_channels]
 end
 
+function subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Vector{DataFrame}
+    return subset_dataframe.(dataframes[selected_epochs], Ref(selected_channels), Ref(selected_samples))
+end
+
+
+# === COMMON SUBSET HELPERS ===
+
+function _subset_common(dat, channel_selection, sample_selection, include_extra)
+    @debug "Subsetting $(typeof(dat)): selecting channels and samples"
+    # Get subset selected channels, samples, and layout
+    selected_channels = get_selected_channels(dat, channel_selection, include_extra = include_extra)
+    selected_samples = get_selected_samples(dat, sample_selection)
+    layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
+    
+    return selected_channels, selected_samples, layout_subset
+end
+
+function _subset_common(dat::EpochData, epoch_selection, channel_selection, sample_selection, include_extra)
+    @debug "Subsetting $(typeof(dat)): selecting epochs, channels and samples"
+    # Get subset selected epochs, channels, samples, and layout
+    selected_epochs = get_selected_epochs(dat, epoch_selection)
+    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
+    return selected_epochs, selected_channels, selected_samples, layout_subset
+end
+
+function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info)
+    return ContinuousData(data_subset, layout, sample_rate, analysis_info)
+end
+
+function _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info)
+    return EpochData(data_subset, layout, sample_rate, analysis_info)
+end
+
+function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int)
+    return ErpData(data_subset, layout, sample_rate, analysis_info, n_epochs)
+end
+
+# === SUBSET IMPLEMENTATIONS ===
 
 function subset(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    epoch_selection::Function = epochs(),
     include_extra::Bool = false,
-)
-
-    @info "subset: Subsetting $(typeof(dat)) ..."
-    # Get selected channels/samples 
-    selected_channels = get_selected_channels(dat, channel_selection, include_extra = include_extra)
-    selected_samples = get_selected_samples(dat, sample_selection)
-
-    # Filter data by samples and channels and match layout
+)::SingleDataFrameEeg
+    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
-    layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
-
-    # Create new SingleDataFrameEeg object
-    return typeof(dat)(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
-
+    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
 end
 
-"""
-    subset(dat::EpochData; 
-           channel_selection::Function = channels(), 
-           sample_selection::Function = samples(),
-           epoch_selection::Function = epochs())
-
-Create a subset of EpochData by applying channel, sample, and epoch predicates.
-
-# Arguments
-- `dat`: EpochData object to subset
-- `channel_selection`: Function that returns channel labels to include (default: all channels)
-- `sample_selection`: Function that returns sample mask to include (default: all samples)
-- `epoch_selection`: Function that returns epoch mask to include (default: all epochs)
-
-# Returns
-- New EpochData object with filtered channels, samples, and epochs
-"""
 function subset(
     dat::EpochData;
     channel_selection::Function = channels(),
@@ -474,19 +486,7 @@ function subset(
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::EpochData
-
-    @info "subset: Subsetting $(typeof(dat)) ..."
-
-    # Get selected channels, samples, and epochs
-    selected_channels = get_selected_channels(dat, channel_selection, include_extra = include_extra)
-    selected_samples = get_selected_samples(dat, sample_selection)
-    selected_epochs = get_selected_epochs(dat, epoch_selection)
-
-    # Filter epochs first, then apply channel/sample filtering and match layout
-    epochs_subset = subset_dataframe.(dat.data[selected_epochs], Ref(selected_channels), Ref(selected_samples))
-    layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
-
-    # Create new EpochData object
-    return EpochData(epochs_subset, layout_subset, dat.sample_rate, dat.analysis_info)
-
+    selected_epochs, selected_channels, selected_samples, layout_subset = _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
+    dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
+    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, length(dat.data))
 end
