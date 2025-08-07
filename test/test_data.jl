@@ -110,6 +110,10 @@ using eegfun
         @test eegfun.get_cols_by_group(empty_dat, :channels) == Symbol[]
         @test eegfun.get_cols_by_group(empty_dat, :metadata) == Symbol[]
         @test eegfun.get_cols_by_group(empty_dat, :extra) == Symbol[]
+        
+        # Test invalid group (should return nothing and log error)
+        result = eegfun.get_cols_by_group(dat, :invalid_group)
+        @test result === nothing
     end
 
     # === DATA ACCESS FUNCTION TESTS ===
@@ -144,6 +148,10 @@ using eegfun
             all_data_result = eegfun.all_data(erp_dat)
             @test all_data_result isa DataFrame
             @test size(all_data_result) == (4, 3)
+            
+            # Test all_labels with DataFrame
+            df = DataFrame(a = [1, 2], b = [3, 4])
+            @test eegfun.all_labels(df) == [:a, :b]
         end
 
         @testset "meta_labels and meta_data" begin
@@ -188,6 +196,10 @@ using eegfun
 
             chan_labels_range = eegfun.channel_labels(cont_dat, [1:2])
             @test chan_labels_range == [:Fp1, :Fp2]
+            
+            # Test with invalid indices (should error)
+            @test_throws BoundsError eegfun.channel_labels(cont_dat, [10])  # channel 10 doesn't exist
+            @test_throws BoundsError eegfun.channel_labels(cont_dat, [1:10])  # range includes non-existent channels
 
             # Test channel_data for ContinuousData
             chan_data = eegfun.channel_data(cont_dat)
@@ -325,6 +337,12 @@ using eegfun
             empty_layout = eegfun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
             empty_dat = eegfun.ContinuousData(empty_df, empty_layout, 1000, eegfun.AnalysisInfo())
             @test eegfun.duration(empty_dat) == 0.0
+            
+            # Test data without time column
+            no_time_df = DataFrame(Fp1 = [1, 2, 3], Fp2 = [4, 5, 6])
+            no_time_layout = eegfun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing)
+            no_time_dat = eegfun.ContinuousData(no_time_df, no_time_layout, 1000, eegfun.AnalysisInfo())
+            @test eegfun.duration(no_time_dat) == 0.0
         end
     end
 
@@ -359,8 +377,16 @@ using eegfun
         end
     end
 
-    # Test head and tail
-    @testset "head and tail" begin
+    # Test viewer, head and tail
+    @testset "viewer, head and tail" begin
+        eeg = create_test_continuous_data()
+        
+        # Test viewer (basic functionality - should not error)
+        @test nothing === eegfun.viewer(eeg)  # viewer returns nothing
+        
+        # Test viewer with DataFrame
+        df = DataFrame(a = [1, 2], b = [3, 4])
+        @test nothing === eegfun.viewer(df)
         eeg = create_test_continuous_data()
 
         # Test head
@@ -381,6 +407,18 @@ using eegfun
         tail_result_3 = eegfun.tail(eeg, n = 3)
         @test tail_result_3 isa DataFrame
         @test size(tail_result_3) == (3, 8)
+        
+        # Test with very small data
+        small_df = DataFrame(time = [1.0], Fp1 = [10.0])
+        small_layout = eegfun.Layout(DataFrame(label = [:Fp1]), nothing, nothing)
+        small_dat = eegfun.ContinuousData(small_df, small_layout, 1000, eegfun.AnalysisInfo())
+        
+        # Request more rows than available
+        head_small = eegfun.head(small_dat, n = 10)
+        @test size(head_small) == (1, 2)  # Should return all available rows
+        
+        tail_small = eegfun.tail(small_dat, n = 10)
+        @test size(tail_small) == (1, 2)  # Should return all available rows
     end
 
     # Test datarange
@@ -403,6 +441,15 @@ using eegfun
         @test eegfun.colmeans(mat) ≈ [1.5, 3.5, 5.5]  # Each row's mean across both columns
         @test eegfun.colmeans(mat, [1]) ≈ [1.0, 3.0, 5.0]  # Each row's mean of first column
         @test eegfun.colmeans(mat, [2]) ≈ [2.0, 4.0, 6.0]  # Each row's mean of second column
+        
+        # Test with empty data
+        empty_df = DataFrame(a = Float64[], b = Float64[])
+        empty_result = eegfun.colmeans(empty_df, [:a])
+        @test isempty(empty_result) || all(isnan, empty_result)  # Should return empty or NaN for empty DataFrame
+        
+        empty_mat = Matrix{Float64}(undef, 0, 2)
+        empty_mat_result = eegfun.colmeans(empty_mat)
+        @test isempty(empty_mat_result) || all(isnan, empty_mat_result)  # Should return empty or NaN for empty Matrix
     end
 
     # Test data_limits
@@ -412,15 +459,26 @@ using eegfun
         # Test data_limits_x
         @test eegfun.data_limits_x(df) == (1.0, 3.0)
         @test eegfun.data_limits_x(df, col = :value) == (4.0, 6.0)
+        
+        # Test with non-existent column (should error)
+        @test_throws ArgumentError eegfun.data_limits_x(df, col = :nonexistent)
 
         # Test data_limits_y
         @test eegfun.data_limits_y(df, :value) == [4.0, 6.0]
         @test eegfun.data_limits_y(df, :time) == [1.0, 3.0]  # Single column
+        
+        # Test data_limits_y with multiple columns
+        @test eegfun.data_limits_y(df, [:time, :value]) == [1.0, 6.0]  # min across all columns, max across all columns
+        
+        # Test with non-existent column (should error)
+        @test_throws ArgumentError eegfun.data_limits_y(df, :nonexistent)
+        @test_throws ArgumentError eegfun.data_limits_y(df, [:time, :nonexistent])
 
         # Test empty data
         empty_df = DataFrame(time = Float64[], value = Float64[])
         @test eegfun.data_limits_x(empty_df) === nothing
         @test eegfun.data_limits_y(empty_df, :value) === nothing
+        @test eegfun.data_limits_y(empty_df, [:time, :value]) === nothing
     end
 
     # Test to_data_frame
@@ -461,6 +519,11 @@ using eegfun
             @test size(result) == (2, 2)
             @test result.time == [1, 3]
             @test result.Fp1 == [10, 30]
+            
+            # Test with empty DataFrame
+            empty_df = DataFrame(time = Float64[], Fp1 = Float64[])
+            empty_result = eegfun.subset_dataframe(empty_df, [:time, :Fp1], Int[])
+            @test size(empty_result) == (0, 2)
             
             # Test subset_dataframes with Vector{DataFrame}
             df1 = DataFrame(time = [1, 2], Fp1 = [10, 20])
@@ -621,6 +684,11 @@ using eegfun
             subset_empty_epochs = eegfun.subset(epoch_dat, epoch_selection = eegfun.epochs(Int[]))
             @test eegfun.n_epochs(subset_empty_epochs) == 0
             @test length(subset_empty_epochs.data) == 0
+            
+            # Test with invalid epoch indices (should return empty EpochData)
+            invalid_epoch_result = eegfun.subset(epoch_dat, epoch_selection = eegfun.epochs([10]))  # epoch 10 doesn't exist
+            @test eegfun.n_epochs(invalid_epoch_result) == 0
+            @test length(invalid_epoch_result.data) == 0
         end
     end
 end
