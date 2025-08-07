@@ -32,7 +32,7 @@ Get columns by group type for EegData objects using layout-based identification.
 - `:extra`: Derived columns (all columns after last layout label)
 
 """
-function get_cols_by_group(dat::EegData, group::Symbol)::Vector{Symbol}
+function get_cols_by_group(dat::EegData, group::Symbol)
 
     if !(group in [:channels, :metadata, :extra])
         @minimal_error "Unknown group type: $group"
@@ -112,7 +112,7 @@ Get metadata column names from the EEG data.
 # Returns
 - `Vector{Symbol}`: Vector of metadata column names
 """
-meta_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :metadata)
+meta_labels(dat::EegData) = get_cols_by_group(dat, :metadata)
 
 
 """
@@ -126,17 +126,17 @@ Get meta data columns from the EEG data.
 # Returns
 - `DataFrame`: DataFrame containing metadata columns
 """
-function meta_data(dat::SingleDataFrameEeg)::DataFrame
+function meta_data(dat::SingleDataFrameEeg)
     meta_cols = get_cols_by_group(dat, :metadata)
     return isempty(meta_cols) ? DataFrame() : dat.data[:, meta_cols]
 end
 
-function meta_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame
+function meta_data(dat::MultiDataFrameEeg, epoch::Int)
     meta_cols = get_cols_by_group(dat, :metadata)
     return isempty(meta_cols) ? DataFrame() : dat.data[epoch][:, meta_cols]
 end
 
-function meta_data(dat::MultiDataFrameEeg)::DataFrame
+function meta_data(dat::MultiDataFrameEeg)
     meta_cols = get_cols_by_group(dat, :metadata)
     return isempty(meta_cols) ? DataFrame() : to_data_frame(dat)[:, meta_cols]
 end
@@ -342,10 +342,12 @@ Get the duration of the EEG data in seconds.
 # Returns
 - `Float64`: Duration in seconds
 """
-duration(dat::SingleDataFrameEeg)::Float64 = isempty(dat.data.time) ? 0.0 : last(dat.data.time) - first(dat.data.time)
-duration(dat::MultiDataFrameEeg)::Float64 = isempty(dat.data[1].time) ? 0.0 : last(dat.data[1].time) - first(dat.data[1].time)
+duration(dat::SingleDataFrameEeg)::Float64 = 
+    hasproperty(dat.data, :time) && !isempty(dat.data.time) ? last(dat.data.time) - first(dat.data.time) : 0.0
+duration(dat::MultiDataFrameEeg)::Float64 = 
+    hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) : 0.0
 duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
-    isempty(dat.data[epoch].time) ? 0.0 : last(dat.data[epoch].time) - first(dat.data[epoch].time)
+    hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ? last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
 
 
 """
@@ -387,7 +389,7 @@ Display data using VS Code viewer if available, otherwise use standard display.
 - `dat`: Any data object to display
 """
 function viewer(dat)
-    if ENV["TERM_PROGRAM"] == "vscode"
+    if get(ENV, "TERM_PROGRAM", "") == "vscode"
         try
             Main.vscodedisplay(dat)
         catch
@@ -542,8 +544,9 @@ Get the value range across multiple specified columns.
 """
 function data_limits_y(dat::DataFrame, cols::Vector{Symbol})
     isempty(dat) && return nothing
-    all_vals = vcat([dat[!, col] for col in cols]...)
-    return [minimum(all_vals), maximum(all_vals)]
+    min_val = minimum(minimum(dat[!, col]) for col in cols)
+    max_val = maximum(maximum(dat[!, col]) for col in cols)
+    return [min_val, max_val]
 end
 
 
