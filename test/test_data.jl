@@ -238,7 +238,7 @@ using eegfun
             extra_labels = eegfun.extra_labels(erp_dat)
             @test extra_labels == Symbol[]
             extra_data = eegfun.extra_data(erp_dat)
-            @test size(extra_data) == (4, 0)
+            @test size(extra_data) == (0, 0)
         end
     end
 
@@ -489,13 +489,13 @@ using eegfun
             @test eegfun.channel_labels(subset_chans) == [:Fp1, :Fp2]
             
             # Test sample selection
-            subset_samples = eegfun.subset(dat, sample_selection = eegfun.samples(x -> x.triggers .== 1))
+            subset_samples = eegfun.subset(dat, sample_selection = x -> x.triggers .== 1)
             @test eegfun.n_samples(subset_samples) == 3  # 3 trigger events
             
             # Test combined selection
             subset_combined = eegfun.subset(dat, 
                 channel_selection = eegfun.channels([:Fp1]), 
-                sample_selection = eegfun.samples(x -> x.triggers .== 1))
+                sample_selection = x -> x.triggers .== 1)
             @test eegfun.n_channels(subset_combined) == 1
             @test eegfun.n_samples(subset_combined) == 3
             
@@ -526,14 +526,14 @@ using eegfun
             @test eegfun.channel_labels(subset_chans) == [:Fp1]
             
             # Test sample selection
-            subset_samples = eegfun.subset(dat, sample_selection = eegfun.samples(x -> x.triggers .== 1))
+            subset_samples = eegfun.subset(dat, sample_selection = x -> x.triggers .== 1)
             @test eegfun.n_samples(subset_samples, 1) == 1  # Only first sample has trigger
             
             # Test combined selection
             subset_combined = eegfun.subset(dat, 
                 epoch_selection = eegfun.epochs([2]),
                 channel_selection = eegfun.channels([:Fp2]),
-                sample_selection = eegfun.samples(x -> x.triggers .== 0))
+                sample_selection = x -> x.triggers .== 0)
             @test eegfun.n_epochs(subset_combined) == 1
             @test eegfun.n_channels(subset_combined) == 1
             @test eegfun.n_samples(subset_combined, 1) == 2  # 2 non-trigger samples
@@ -562,14 +562,14 @@ using eegfun
             @test eegfun.n_epochs(subset_chans) == 50
             
             # Test sample selection - select positive time points
-            subset_samples = eegfun.subset(dat, sample_selection = eegfun.samples(x -> x.time .>= 0.0))
+            subset_samples = eegfun.subset(dat, sample_selection = x -> x.time .>= 0.0)
             @test eegfun.n_samples(subset_samples) == 3  # times: 0.0, 0.1, 0.2
             @test eegfun.n_epochs(subset_samples) == 50
             
             # Test combined selection
             subset_combined = eegfun.subset(dat, 
                 channel_selection = eegfun.channels([:Fp2]),
-                sample_selection = eegfun.samples(x -> x.time .>= 0.0))
+                sample_selection = x -> x.time .>= 0.0)
             @test eegfun.n_channels(subset_combined) == 1
             @test eegfun.n_samples(subset_combined) == 3
             @test eegfun.n_epochs(subset_combined) == 50

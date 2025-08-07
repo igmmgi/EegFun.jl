@@ -86,6 +86,18 @@ Get all column names from the complete DataFrame.
 all_labels(dat::SingleDataFrameEeg)::Vector{Symbol} = propertynames(dat.data)
 all_labels(dat::MultiDataFrameEeg)::Vector{Symbol} = propertynames(dat.data[1])
 all_labels(dat::MultiDataFrameEeg, epoch::Int)::Vector{Symbol} = propertynames(dat.data[epoch])
+
+"""
+    all_labels(dat::DataFrame) -> Vector{Symbol}
+
+Get all column names from a DataFrame.
+
+# Arguments
+- `dat::DataFrame`: The DataFrame
+
+# Returns
+- `Vector{Symbol}`: All column names
+"""
 all_labels(dat::DataFrame)::Vector{Symbol} = propertynames(dat)
 
 
@@ -290,6 +302,18 @@ Get the number of channels in the EEG data.
 - `Int`: Number of channels
 """
 n_channels(dat::EegData)::Int = length(channel_labels(dat))
+
+"""
+    n_layout(layout::Layout) -> Int
+
+Get the number of channels in the layout.
+
+# Arguments
+- `layout::Layout`: The layout object
+
+# Returns
+- `Int`: Number of channels in the layout
+"""
 n_layout(layout::Layout)::Int = nrow(layout.data)
 
 """
@@ -318,9 +342,9 @@ Get the duration of the EEG data in seconds.
 # Returns
 - `Float64`: Duration in seconds
 """
-duration(dat::SingleDataFrameEeg) = isempty(dat.data.time) ? 0.0 : last(dat.data.time) - first(dat.data.time)
-duration(dat::MultiDataFrameEeg) = isempty(dat.data[1].time) ? 0.0 : last(dat.data[1].time) - first(dat.data[1].time)
-duration(dat::MultiDataFrameEeg, epoch::Int) =
+duration(dat::SingleDataFrameEeg)::Float64 = isempty(dat.data.time) ? 0.0 : last(dat.data.time) - first(dat.data.time)
+duration(dat::MultiDataFrameEeg)::Float64 = isempty(dat.data[1].time) ? 0.0 : last(dat.data[1].time) - first(dat.data[1].time)
+duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
     isempty(dat.data[epoch].time) ? 0.0 : last(dat.data[epoch].time) - first(dat.data[epoch].time)
 
 
@@ -490,13 +514,36 @@ end
 
 Get the value range for specified columns.
 
+# Arguments
+- `dat::DataFrame`: The DataFrame containing the data
+- `col::Symbol`: The column to get limits for
+
 # Returns
-- `Vector{Float64}`: [minimum, maximum] across specified columns
+- `Vector{Float64}`: [minimum, maximum] across specified column
 - `Nothing`: If the DataFrame is empty
 """
 function data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
     return [minimum(dat[!, col]), maximum(dat[!, col])]
+end
+
+"""
+    data_limits_y(dat::DataFrame, cols::Vector{Symbol}) -> Union{Vector{Float64}, Nothing}
+
+Get the value range across multiple specified columns.
+
+# Arguments
+- `dat::DataFrame`: The DataFrame containing the data
+- `cols::Vector{Symbol}`: The columns to get limits for
+
+# Returns
+- `Vector{Float64}`: [minimum, maximum] across all specified columns
+- `Nothing`: If the DataFrame is empty
+"""
+function data_limits_y(dat::DataFrame, cols::Vector{Symbol})
+    isempty(dat) && return nothing
+    all_vals = vcat([dat[!, col] for col in cols]...)
+    return [minimum(all_vals), maximum(all_vals)]
 end
 
 
@@ -598,15 +645,6 @@ function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analys
 end
 
 """
-    _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info) -> EpochData
-
-Internal helper to create EpochData from subset DataFrames.
-"""
-function _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info)
-    return EpochData(data_subset, layout, sample_rate, analysis_info)
-end
-
-"""
     _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int) -> ErpData
 
 Internal helper to create ErpData from subset DataFrame.
@@ -615,18 +653,37 @@ function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analys
     return ErpData(data_subset, layout, sample_rate, analysis_info, n_epochs)
 end
 
+"""
+    _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info) -> EpochData
+
+Internal helper to create EpochData from subset DataFrames.
+"""
+function _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info)
+    return EpochData(data_subset, layout, sample_rate, analysis_info)
+end
+
 # === SUBSET IMPLEMENTATIONS ===
 
 function subset(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::SingleDataFrameEeg
     selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
+end
+
+function subset(
+    dat::ErpData;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    include_extra::Bool = false,
+)::ErpData
+    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
+    dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
+    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.n_epochs)
 end
 
 function subset(
