@@ -198,7 +198,7 @@ Get extra/derived columns (EOG, flags, etc.) from the EEG data.
 # Returns
 - `DataFrame`: DataFrame containing extra/derived columns
 """
-extra_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :extra)
+extra_labels(dat::EegData) = get_cols_by_group(dat, :extra)
 
 
 
