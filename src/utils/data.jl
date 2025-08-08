@@ -331,6 +331,12 @@ n_epochs(dat::SingleDataFrameEeg)::Int = 1
 n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
+
+condition_number(dat::EpochData)::Int = dat.data[1].condition[1]
+condition_name(dat::EpochData)::String = dat.data[1].condition_name[1]
+file_name(dat::EpochData)::String = dat.data[1].file[1]
+
+
 """
     duration(dat::EegData) -> Float64
 
@@ -586,6 +592,81 @@ Create subsets of multiple DataFrames by selecting specific epochs, channels, an
 """
 function subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Vector{DataFrame}
     return subset_dataframe.(dataframes[selected_epochs], Ref(selected_channels), Ref(selected_samples))
+end
+
+
+"""
+    epochs_table(epochs::Vector{EpochData}; io::Union{IO, Nothing} = stdout)
+
+Display a pretty table showing epoch information and return the DataFrame.
+"""
+function epochs_table(epochs::Vector{EpochData}; io::Union{IO, Nothing} = stdout)::DataFrame
+    isempty(epochs) && throw(ArgumentError("epochs vector cannot be empty"))
+    
+    df = _build_base_epochs_df(epochs)
+    df.n_epochs = [n_epochs(epoch) for epoch in epochs]
+    
+    _print_epochs_table(df, io, ["Condition", "Condition Name", "N Epochs"], [:r, :l, :r])
+    return df
+end
+
+"""
+    epochs_table(epochs_original, epochs_cleaned; io::Union{IO, Nothing} = stdout)
+
+Display comparison table between original and cleaned epochs and return DataFrame.
+"""
+function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; io::Union{IO, Nothing} = stdout)::DataFrame
+    length(epochs_original) != length(epochs_cleaned) && 
+        throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
+    
+    df = _build_base_epochs_df(epochs_original)
+    df.n_epochs_original = [n_epochs(epoch) for epoch in epochs_original]
+    df.n_epochs_cleaned = [n_epochs(epoch) for epoch in epochs_cleaned]
+    df.percentage = round.((df.n_epochs_cleaned ./ df.n_epochs_original) .* 100; digits=1)
+    
+    _print_epochs_table(df, io, [:l, :r, :l, :r, :r, :r])
+    return df
+end
+
+# Helper functions to reduce repetition
+function _build_base_epochs_df(epochs::Vector{EpochData})::DataFrame
+    return DataFrame(
+        file = [filename(epoch) for epoch in epochs],
+        condition = [condition_number(epoch) for epoch in epochs],
+        condition_name = [condition_name(epoch) for epoch in epochs]
+    )
+end
+
+function _print_epochs_table(df::DataFrame, io::Union{IO, Nothing}, alignments::Vector{Symbol})
+    if io !== nothing
+        pretty_table(io, df; alignment = alignments, crop = :none, show_subheader = false)
+    end
+end
+
+"""
+    log_epochs_table(message::String, epochs...; kwargs...)
+
+Log an epochs table with message and return the DataFrame.
+Combines logging and table creation in one clean call.
+"""
+function log_epochs_table(message::String, epochs...; kwargs...)
+    io_buffer = IOBuffer()
+    df = epochs_table(epochs...; io = io_buffer, kwargs...)
+    @info "$message\n$(String(take!(io_buffer)))"
+    return df
+end
+
+"""
+    log_pretty_table(message::String, df::DataFrame; kwargs...)
+
+Log a pretty table with message. For general DataFrame logging.
+Sets show_row_number=false and show_subheader=false by default for cleaner logs.
+"""
+function log_pretty_table(message::String, df::DataFrame; kwargs...)
+    io_buffer = IOBuffer()
+    pretty_table(io_buffer, df; show_row_number=false, show_subheader=false, kwargs...)
+    @info "$message\n$(String(take!(io_buffer)))"
+    return nothing
 end
 
 

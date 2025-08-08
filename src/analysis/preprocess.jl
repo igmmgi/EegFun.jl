@@ -301,16 +301,10 @@ function preprocess_eeg_data(config::String)
                     ),
                 );
 
-                # Log epoch counts
-                df = DataFrame(
-                    file = basename(data_file),
-                    condition = 1:length(epochs_original),
-                    n_epochs_total = n_epochs.(epochs_original),
-                    n_epochs_cleaned = n_epochs.(epochs_cleaned),
-                )
-                push!(all_epoch_counts, df)  # Store the DataFrame
-                @info "Epoch counts (original) per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
-
+                # Log epoch counts and store for summary
+                df = log_epochs_table("Epoch counts per condition:", epochs_original, epochs_cleaned)
+                push!(all_epoch_counts, df)
+                
                 # save epochs
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
@@ -335,9 +329,6 @@ function preprocess_eeg_data(config::String)
                     jldsave(make_output_filename(output_directory, data_file, "_erps_cleaned"); erps = erps_cleaned)
                 end
 
-                df.percentage = (df.n_epochs_cleaned ./ df.n_epochs_total) .* 100
-                @info "Epoch counts per condition:\n$(pretty_table(String, df, show_row_number=false, show_subheader=false))"
-
                 @info "Successfully processed $data_file"
                 processed_files += 1
 
@@ -358,7 +349,7 @@ function preprocess_eeg_data(config::String)
         # Print combined epoch counts
         if !isempty(all_epoch_counts)
             combined_counts = vcat(all_epoch_counts...)
-            @info "Combined epoch counts across all files:\n$(pretty_table(String, combined_counts, show_row_number=false, show_subheader=false))"
+            log_pretty_table("Combined epoch counts across all files:", combined_counts)
             jldsave(joinpath(output_directory, "epoch_summary.jld2"); df = combined_counts)
         end
 
