@@ -91,7 +91,7 @@ function _plot_power_spectrum!(
         y_scale_obs[] = checked ? :log10 : :linear
     end
 
-    # Apply scale settings
+    # Apply initial scale settings
     if x_scale == :log10
         xlims!(ax, (0.1, max_freq))
         ax.xscale = log10
@@ -121,6 +121,25 @@ function _plot_power_spectrum!(
 
         # Plot this channel's spectrum
         lines!(ax, freqs, psd, label = string(ch))
+    end
+
+    # Apply initial y-axis scale settings (after data is calculated)
+    if y_scale == :log10
+        # Calculate valid limits first
+        positive_powers = filter(x -> x > 0, vcat(power_data...))
+        if isempty(positive_powers)
+            log_min, log_max = 0.001, 1.0
+        else
+            log_min = max(0.001, minimum(positive_powers))
+            log_max = max(log_min * 10, max_power)
+        end
+        # Set valid limits BEFORE changing scale to avoid validation errors
+        ylims!(ax, (log_min, log_max))
+        ax.yscale = log10
+    else
+        # For linear scale, ensure axis is in linear mode first
+        ax.yscale = identity
+        ylims!(ax, (0.0, max(0.1, max_power)))
     end
 
     # Add frequency band indicators below the x-axis if requested
@@ -170,11 +189,23 @@ function _plot_power_spectrum!(
     # Function to update y-axis scale
     function update_y_scale(scale)
         if scale == :log10
-            ylims!(ax, (0.1, max_power))
+            # Calculate valid limits first
+            positive_powers = filter(x -> x > 0, vcat(power_data...))
+            if isempty(positive_powers)
+                # Fallback: no positive values, use safe defaults
+                log_min = 0.001
+                log_max = 1.0
+            else
+                log_min = max(0.001, minimum(positive_powers))
+                log_max = max(log_min * 10, max_power)  # Ensure reasonable range
+            end
+            # Set valid limits BEFORE changing scale to avoid validation errors
+            ylims!(ax, (log_min, log_max))
             ax.yscale = log10
         else
-            ylims!(ax, (0.1, max_power))
+            # For linear scale, change scale FIRST to avoid log validation of linear limits
             ax.yscale = identity
+            ylims!(ax, (0.0, max(0.1, max_power)))
         end
     end
 

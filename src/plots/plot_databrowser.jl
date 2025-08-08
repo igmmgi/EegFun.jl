@@ -959,9 +959,12 @@ end
 ########################
 function add_marker!(markers, ax, data, col; label = nothing, trial = nothing, visible = false)
     if isnothing(trial)
-        marker_data = data[findall(x -> x != 0, data[!, col]), [:time, col]]
+        # More efficient: filter directly without findall
+        mask = data[!, col] .!= 0
+        marker_data = data[mask, [:time, col]]
     else
-        marker_data = data[trial][findall(x -> x != 0, data[trial][!, col]), [:time, col]]
+        mask = data[trial][!, col] .!= 0
+        marker_data = data[trial][mask, [:time, col]]
     end
     # if no markers, return
     if nrow(marker_data) == 0
@@ -994,16 +997,27 @@ end
 function update_channel_offsets!(state)
     nchannels = count(state.channels.visible)
     if nchannels > 1 && !state.view.butterfly[]
-        state.view.offset[state.channels.visible] .=
-            LinRange((state.view.yrange[][end] * 0.9), state.view.yrange[][1] * 0.9, nchannels + 2)[2:(end-1)]
+        # More efficient: direct calculation without LinRange slicing
+        y_max = state.view.yrange[][end] * 0.9
+        y_min = state.view.yrange[][1] * 0.9
+        step = (y_min - y_max) / (nchannels - 1)
+        visible_indices = findall(state.channels.visible)
+        for (i, idx) in enumerate(visible_indices)
+            state.view.offset[idx] = y_max + (i - 1) * step
+        end
     else
-        state.view.offset[state.channels.visible] .= zeros(nchannels)
+        state.view.offset[state.channels.visible] .= 0.0
     end
 end
 
 function clear_axes!(ax, datas)
-    [delete!(ax, value) for data in datas for (key, value) in data]
-    [empty!(data) for data in datas]
+    # More efficient: avoid nested comprehensions that create temporary arrays
+    for data in datas
+        for (key, value) in data
+            delete!(ax, value)
+        end
+        empty!(data)
+    end
 end
 
 # Generic set_axes! function that handles both types
@@ -1078,16 +1092,16 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
         if visible
             is_selected = state.channels.selected[idx]
 
-            # Line properties
-            line_color =
-                is_selected ? :black :
-                @lift(abs.(get_data($(state.data.current), $(state.view.xrange), $col)) .>= $(state.view.crit_val))
-            line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
-            line_width = is_selected ? 4 : 2
-
-            # Channel data
+            # Channel data (compute once)
             channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), $col))
             channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
+
+            # Line properties (reuse channel_data_obs for efficiency)
+            line_color =
+                is_selected ? :black :
+                @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
+            line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
+            line_width = is_selected ? 4 : 2
 
             # Update or create line
             update_or_create_line!(
@@ -1181,7 +1195,12 @@ function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
     clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
 
     if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
-        current_offset = state.view.offset[end] + mean(diff(state.view.offset))
+        # More efficient: avoid computing mean of diff for every draw
+        current_offset = if length(state.view.offset) > 1
+            state.view.offset[end] + (state.view.offset[end] - state.view.offset[end-1])
+        else
+            state.view.offset[end] + 100.0  # Default spacing
+        end
         channel = state.extra_channel.channel
 
         # Get data access functions based on type
