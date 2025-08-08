@@ -45,10 +45,11 @@ mutable struct ViewState
     offset::Vector{Float64}
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
+    amplitude_scale::Observable{Float64}
     function ViewState(n_channels::Int, n_samples::Int = 5000)
         # TODO: could this be done better?
         offset = n_channels > 1 ? LinRange(1500 * 0.9, -1500 * 0.9, n_channels + 2)[2:(end-1)] : zeros(n_channels)
-        new(Observable(1:n_samples), Observable(-1500:1500), offset, Observable(0.0), Observable(false))
+        new(Observable(1:n_samples), Observable(-1500:1500), offset, Observable(0.0), Observable(false), Observable(1.0))
     end
 end
 
@@ -607,14 +608,28 @@ function step_epoch_forward(ax, state::EpochedDataBrowserState)
 end
 
 function yless!(ax, state)
-    (state.view.yrange.val[1] + 100 >= 0 || state.view.yrange.val[end] - 100 <= 0) && return
-    state.view.yrange[] = (state.view.yrange.val[1]+100):(state.view.yrange.val[end]-100)
-    ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
+    if state.view.butterfly[]
+        # In butterfly mode: compress the y-range (zoom in)
+        (state.view.yrange.val[1] + 100 >= 0 || state.view.yrange.val[end] - 100 <= 0) && return
+        state.view.yrange[] = (state.view.yrange.val[1]+100):(state.view.yrange.val[end]-100)
+        ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
+    else
+        # In non-butterfly mode: increase amplitude scale (zoom in on waveforms)
+        state.view.amplitude_scale[] = state.view.amplitude_scale[] * 1.2
+        # No need to redraw - the reactive observables will update automatically
+    end
 end
 
 function ymore!(ax, state)
-    state.view.yrange[] = (state.view.yrange.val[1]-100):(state.view.yrange.val[end]+100)
-    ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
+    if state.view.butterfly[]
+        # In butterfly mode: expand the y-range (zoom out)
+        state.view.yrange[] = (state.view.yrange.val[1]-100):(state.view.yrange.val[end]+100)
+        ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
+    else
+        # In non-butterfly mode: decrease amplitude scale (zoom out on waveforms)
+        state.view.amplitude_scale[] = state.view.amplitude_scale[] * 0.8
+        # No need to redraw - the reactive observables will update automatically
+    end
 end
 
 function is_mouse_in_axis(ax, pos)
@@ -1063,7 +1078,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Channel data
             channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), $col))
-            channel_data_with_offset = @lift($(channel_data_obs) .+ state.view.offset[idx])
+            channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
 
             # Update or create line
             update_or_create_line!(
@@ -1178,7 +1193,7 @@ function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
             state.extra_channel.data_lines[channel] = lines!(
                 ax,
                 @lift(get_time($(state.data.current), :)),
-                @lift(get_data($(state.data.current), :, $channel) .+ $current_offset),
+                @lift(get_data($(state.data.current), :, $channel) .* $(state.view.amplitude_scale) .+ $current_offset),
                 color = :black,
                 linewidth = 2,
             )
