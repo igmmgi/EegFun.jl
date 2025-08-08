@@ -12,8 +12,7 @@ using GLMakie
 using DataFrames
 using BenchmarkTools
 
-eegfun.preprocess_eeg_data("pipeline.toml")
-
+# eegfun.preprocess_eeg_data("pipeline.toml")
 
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
@@ -28,8 +27,6 @@ dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 # eegfun.plot_databrowser(dat)
-
-
 # eegfun.plot_channel_spectrum(dat)
 # eegfun.plot_channel_spectrum(dat)
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
@@ -37,23 +34,25 @@ epochs = eegfun.EpochData[]
 for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
-
-eegfun.plot_databrowser(epochs[1])
-
+# eegfun.plot_databrowser(epochs[1])
 # average epochs
 erps = []
 for (idx, epoch) in enumerate(epochs)
     push!(erps, eegfun.average_epochs(epochs[idx]))
 end
 
-eegfun.plot_topography(erps[1])
-
-eegfun.plot_databrowser(erps[1])
-
-eegfun.epochs_table(epochs)
+@btime d = eegfun.average_channels(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
+d = eegfun.average_channels(epochs[1])
 
 
+# eegfun.plot_topography(erps[1])
+# eegfun.plot_databrowser(erps[1])
 eegfun.plot_epochs(epochs[1])
+eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true, :average_channels => true))
+
+
+eegfun.ylimits(epochs[1])
+eegfun.ylimits(erps[1])
 
 
 # ERP Plot

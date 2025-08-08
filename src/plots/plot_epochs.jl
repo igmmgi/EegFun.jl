@@ -34,27 +34,44 @@ function plot_epochs(
         :title => nothing,
         :xlabel => "Time (S)",
         :ylabel => "mV",
-        :linewidth => [1, 3],
-        :color => [:grey, :black],
+        :linewidth => [1, 2],
+        :color => [:grey, :red],
         :yreversed => false,
-        :layout => nothing,
+        # layout can be: false (default auto grid), true (use data's layout semantics), or [rows, cols]
+        :layout => false,
+        :layout_plot_width => 0.12,
+        :layout_plot_height => 0.12,
+        :layout_margin => 0.02,
+        :layout_show_scale => true,
+        :layout_scale_position => [0.95, 0.05],
+        :layout_scale_width => 0.14,
+        :layout_scale_height => 0.14,
         :legend => true,
         :legend_label => "",
         :dims => nothing,
         :hidedecorations => false,
         :theme_fontsize => 24,
+        :plot_individual_trials => false,  # draw individual trial traces
+        :plot_avg_trials => true,                # draw ERP average overlay
     )
     kwargs = merge(default_kwargs, kwargs)
 
     fig = Figure()
     axes = Axis[]  # Keep track of all axes created
 
+    # Precompute ERP once when average overlay requested
+    erp_dat = nothing
+    if kwargs[:plot_avg_trials]
+        erp_dat = average_epochs(dat_subset)
+    end
+
     if kwargs[:average_channels]
 
         # Single plot averaging across channels
         ax = Axis(fig[1, 1])
         push!(axes, ax)
-        _plot_epochs!(ax, dat_subset, all_plot_channels, kwargs)
+        kwargs[:plot_individual_trials] && _plot_epochs!(ax, dat_subset, all_plot_channels, kwargs)
+        kwargs[:plot_avg_trials] && _plot_epochs_from_erp!(ax, erp_dat, all_plot_channels, kwargs)
 
         # Set axis properties
         if length(all_plot_channels) == 1
@@ -67,46 +84,57 @@ function plot_epochs(
 
         # Separate subplot for each channel
         n_channels = length(all_plot_channels)
-        if isnothing(kwargs[:layout])
-            rows, cols = best_rect(n_channels)
+        # Handle layout kwarg: Bool or Vector{Int}
+        layout_kw = kwargs[:layout]
+        if layout_kw === true
+            _plot_epochs_layout!(fig, axes, dat_subset, erp_dat, all_plot_channels, kwargs)
         else
-            # Validate custom layout
-            layout = kwargs[:layout]
-            (length(layout) != 2 || any(x -> x <= 0, layout)) && 
-                throw(ArgumentError("layout must be a 2-element vector of positive integers [rows, cols]"))
-            rows, cols = layout
-            (rows * cols < n_channels) && 
-                throw(ArgumentError("layout grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
-        end
-
-        # Calculate global y-range if ylim is not provided
-        ylim = kwargs[:ylim]
-        if isnothing(ylim)
-            ylim = _calculate_global_yrange(dat_subset, all_plot_channels)
-        end
-
-        for (idx, channel) in enumerate(all_plot_channels)
-            row = fld(idx-1, cols) + 1
-            col = mod(idx-1, cols) + 1
-            ax = Axis(fig[row, col])
-            push!(axes, ax)
-            _plot_epochs!(ax, dat_subset, [channel], kwargs)
-
-            # Set axis properties with ylim
-            axis_kwargs = merge(kwargs, Dict(:ylim => ylim))
-
-            # Only add x and y labels to outer left column and bottom row
-            if col != 1
-                axis_kwargs = merge(axis_kwargs, Dict(:ylabel => ""))
-                ax.yticklabelsvisible = false
-            end
-            if row != rows
-                axis_kwargs = merge(axis_kwargs, Dict(:xlabel => ""))
-                ax.xticklabelsvisible = false
+            if layout_kw === false || isnothing(layout_kw)
+                rows, cols = best_rect(n_channels)
+            else
+                # Validate custom grid dims
+                (length(layout_kw) != 2 || any(x -> x <= 0, layout_kw)) && 
+                    throw(ArgumentError("layout must be either a Bool or a 2-element vector [rows, cols] with positive integers"))
+                rows, cols = layout_kw
+                (rows * cols < n_channels) && 
+                    throw(ArgumentError("layout grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
             end
 
-            _set_axis_properties!(ax, axis_kwargs, "$channel")
+            # Calculate y-range if not provided (using shared yrange helper)
+            ylim = kwargs[:ylim]
+            if isnothing(ylim)
+                if erp_dat !== nothing && kwargs[:plot_avg]
+                    yr = ylimits(erp_dat; channel_selection = channels(all_plot_channels))
+                else
+                    yr = ylimits(dat_subset; channel_selection = channels(all_plot_channels))
+                end
+                ylim = (yr[1], yr[2])
+            end
 
+            for (idx, channel) in enumerate(all_plot_channels)
+                row = fld(idx-1, cols) + 1
+                col = mod(idx-1, cols) + 1
+                ax = Axis(fig[row, col])
+                push!(axes, ax)
+                kwargs[:plot_individual_trials] && _plot_epochs!(ax, dat_subset, [channel], kwargs)
+                kwargs[:plot_avg] && _plot_epochs_from_erp!(ax, erp_dat, [channel], kwargs)
+
+                # Set axis properties with ylim
+                axis_kwargs = merge(kwargs, Dict(:ylim => ylim))
+
+                # Only add x and y labels to outer left column and bottom row
+                if col != 1
+                    axis_kwargs = merge(axis_kwargs, Dict(:ylabel => ""))
+                    ax.yticklabelsvisible = false
+                end
+                if row != rows
+                    axis_kwargs = merge(axis_kwargs, Dict(:xlabel => ""))
+                    ax.xticklabelsvisible = false
+                end
+
+                _set_axis_properties!(ax, axis_kwargs, "$channel")
+
+            end
         end
     end
 
@@ -123,35 +151,133 @@ end
 
 function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
     # Pre-allocate arrays for better performance
-    n_timepoints = nrow(dat.data[1])
-    n_trials = length(dat.data)
-    avg_data = zeros(Float64, n_timepoints)
-    
-    # Cache time vector and colors for efficiency
+    trial_buffer = zeros(Float64, n_samples(dat))
+
+    # Cache time vector and styles
     time_vec = dat.data[1][!, :time]
     trial_color = kwargs[:color][1]
-    avg_color = kwargs[:color][2]
     trial_linewidth = kwargs[:linewidth][1]
-    avg_linewidth = kwargs[:linewidth][2]
 
-    # Process all trials efficiently
-    for trial_idx in eachindex(dat.data)
-        trial_data = colmeans(dat.data[trial_idx], channels)
-        
-        # Accumulate for average (more efficient than repeated allocation)
-        avg_data .+= trial_data
-        
-        # Plot individual trial
-        lines!(ax, time_vec, trial_data, color = trial_color, linewidth = trial_linewidth)
+    # Local helper to compute row-wise mean across selected channels without allocations
+    @inline function _mean_over_channels!(dest::Vector{Float64}, df::DataFrame, cols::Vector{Symbol})
+        resize!(dest, nrow(df))
+        fill!(dest, 0.0)
+        @inbounds for ch in cols
+            dest .+= df[!, ch]
+        end
+        dest ./= length(cols)
+        return dest
     end
 
-    # Calculate and plot average
-    avg_data ./= n_trials
-    lines!(ax, time_vec, avg_data, color = avg_color, linewidth = avg_linewidth)
-    
+    # Plot only trials (no average here)
+    for trial_df in dat.data
+        _mean_over_channels!(trial_buffer, trial_df, channels)
+        lines!(ax, time_vec, copy(trial_buffer), color = trial_color, linewidth = trial_linewidth)
+    end
+
     return nothing
 end
 
+
+function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, kwargs)::Nothing
+    time_vec = erp_dat.data[!, :time]
+    avg_color = kwargs[:color][2]
+    avg_linewidth = kwargs[:linewidth][2]
+
+    if length(channels) == 1
+        ch = channels[1]
+        lines!(ax, time_vec, erp_dat.data[!, ch], color = avg_color, linewidth = avg_linewidth)
+    else
+        vals = reduce(+, eachcol(erp_dat.data[!, channels])) ./ length(channels)
+        lines!(ax, time_vec, vals, color = avg_color, linewidth = avg_linewidth)
+    end
+    return nothing
+end
+
+function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, erp_dat, all_plot_channels::Vector{Symbol}, kwargs::Dict)
+    # Ensure 2D coordinates exist
+    if !all(in.([:x2, :y2], Ref(propertynames(dat.layout.data))))
+        polar_to_cartesian_xy!(dat.layout)
+    end
+
+    # Determine global y-lims for consistency across small axes
+    ylim = kwargs[:ylim]
+    if isnothing(ylim)
+        if erp_dat !== nothing
+            yr = ylimits(erp_dat; channel_selection = channels(all_plot_channels))
+            ylim = (yr[1], yr[2])
+        else
+            yr = ylimits(dat; channel_selection = channels(all_plot_channels))
+            ylim = (yr[1], yr[2])
+        end
+    end
+
+    # Normalize positions to [0,1]
+    x2 = dat.layout.data.x2
+    y2 = dat.layout.data.y2
+    minx, maxx = extrema(x2)
+    miny, maxy = extrema(y2)
+    xrange = maxx - minx
+    yrange = maxy - miny
+    xrange = xrange == 0 ? 1.0 : xrange
+    yrange = yrange == 0 ? 1.0 : yrange
+
+    plot_w = get(kwargs, :layout_plot_width, 0.12)
+    plot_h = get(kwargs, :layout_plot_height, 0.12)
+    margin = get(kwargs, :layout_margin, 0.02)
+
+    # Map channel -> position
+    pos_map = Dict{Symbol,Tuple{Float64,Float64}}()
+    for (lab, x, y) in zip(dat.layout.data.label, x2, y2)
+        nx = (x - minx) / xrange
+        ny = (y - miny) / yrange
+        pos_map[Symbol(lab)] = (nx, ny)
+    end
+
+    # Create axes at positions
+    for ch in all_plot_channels
+        pos = get(pos_map, ch, (0.5, 0.5))
+        ax = Axis(
+            fig[1, 1],
+            width = Relative(plot_w),
+            height = Relative(plot_h),
+            halign = clamp(pos[1], margin, 1 - margin),
+            valign = clamp(pos[2], margin, 1 - margin),
+        )
+        push!(axes, ax)
+        if erp_dat === nothing
+            _plot_epochs!(ax, dat, [ch], kwargs)
+        else
+            _plot_epochs_from_erp!(ax, erp_dat, [ch], kwargs)
+        end
+        # Suppress axis labels on all but the final axis; set only limits and title for now
+        axis_kwargs = merge(kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
+        _set_axis_properties!(ax, axis_kwargs, string(ch))
+        ax.xticklabelsvisible = false
+        ax.yticklabelsvisible = false
+    end
+
+    # Optional extra scale axis in bottom-right
+    if get(kwargs, :layout_show_scale, true)
+        sp = get(kwargs, :layout_scale_position, [0.95, 0.05])
+        sw = get(kwargs, :layout_scale_width, 0.14)
+        sh = get(kwargs, :layout_scale_height, 0.14)
+        scale_ax = Axis(
+            fig[1, 1],
+            width = Relative(sw),
+            height = Relative(sh),
+            halign = sp[1],
+            valign = sp[2],
+        )
+        push!(axes, scale_ax)
+        # No data in this axis; just show labels and limits
+        tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
+        axis_kwargs = merge(kwargs, Dict(:ylim => ylim, :xlim => (tmin, tmax)))
+        _set_axis_properties!(scale_ax, axis_kwargs, "")
+        scale_ax.xticklabelsvisible = true
+        scale_ax.yticklabelsvisible = true
+    end
+end
 
 function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::Nothing
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
@@ -162,45 +288,3 @@ function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::N
     ax.yreversed = kwargs[:yreversed]
     return nothing
 end
-
-
-
-
-"""
-    _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol})
-
-Calculate the global y-range across all specified channels.
-
-# Arguments
-- `dat::EpochData`: The epoched EEG data.
-- `channels::Vector{Symbol}`: List of channels to include.
-- `buffer::Float64`: Buffer to add to the range (default: 0.1)
-
-# Returns
-- `Tuple{Float64, Float64}`: The minimum and maximum values across all channels.
-"""
-function _calculate_global_yrange(dat::EpochData, channels::Vector{Symbol}; buffer::Float64 = 0.1)::Tuple{Float64, Float64}
-    min_val, max_val = Inf, -Inf
-    
-    for channel in channels
-        for trial in eachindex(dat.data)
-            trial_data = dat.data[trial][!, channel]
-            min_val = min(min_val, minimum(trial_data))
-            max_val = max(max_val, maximum(trial_data))
-        end
-    end
-
-    # Handle edge case where all values are the same
-    if min_val == max_val
-        buffer_val = max(abs(min_val) * 0.1, 1.0)  # 10% of value or minimum 1.0
-        return (min_val - buffer_val, max_val + buffer_val)
-    end
-
-    # Add a proportional buffer to the range
-    buffer_val = buffer * (max_val - min_val)
-    return (min_val - buffer_val, max_val + buffer_val)
-end
-
-
-
-

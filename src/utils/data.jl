@@ -532,7 +532,7 @@ Get the value range for specified columns.
 """
 function data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
-    return [minimum(dat[!, col]), maximum(dat[!, col])]
+    return extrema(dat[!, col])
 end
 
 """
@@ -550,9 +550,13 @@ Get the value range across multiple specified columns.
 """
 function data_limits_y(dat::DataFrame, cols::Vector{Symbol})
     isempty(dat) && return nothing
-    min_val = minimum(minimum(dat[!, col]) for col in cols)
-    max_val = maximum(maximum(dat[!, col]) for col in cols)
-    return [min_val, max_val]
+    global_min, global_max = Inf, -Inf
+    @inbounds for col in cols
+        mn, mx = extrema(dat[!, col])
+        global_min = min(global_min, mn)
+        global_max = max(global_max, mx)
+    end
+    return [global_min, global_max]
 end
 
 
@@ -574,6 +578,202 @@ Create a subset of a DataFrame by selecting specific channels and samples.
 """
 function subset_dataframe(df::DataFrame, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::DataFrame
     return df[selected_samples, selected_channels]
+end
+
+
+# === DEFAULT Y-RANGE HELPERS ===
+"""
+    yrange(dat::ErpData; channel_selection::Function = channels(), sample_selection::Function = samples(), include_extra::Bool = false, buffer::Float64 = 0.1)
+
+Compute a padded y-range for ERP data using channel selection predicate.
+Returns (min, max) padded by `buffer` proportion.
+"""
+function ylimits(
+    dat::ErpData;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    include_extra::Bool = false,
+)::Tuple{Float64,Float64}
+    dat_sub = subset(
+        dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = include_extra,
+    )
+    chs = channel_labels(dat_sub)
+    lims = data_limits_y(dat_sub.data, chs)
+    return (lims[1], lims[2])
+end
+
+"""
+    yrange(dat::EpochData; channel_selection::Function = channels(), sample_selection::Function = samples(), include_extra::Bool = false, buffer::Float64 = 0.1, average_only::Bool = false)
+
+Compute a padded y-range for epoch data using channel selection predicate.
+If `average_only=true`, uses the averaged waveform across epochs.
+"""
+function ylimits(
+    dat::EpochData;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    include_extra::Bool = false,
+ )::Tuple{Float64,Float64}
+
+    # Apply predicates via subset first
+    dat_sub = subset(
+        dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = include_extra,
+    )
+    # Determine which value columns to use
+    chs = channel_labels(dat_sub)
+    # Compute limits per epoch and combine
+    limits = map(df -> data_limits_y(df, chs), dat_sub.data)
+    limits = filter(!isnothing, limits)
+    isempty(limits) && return (0.0, 1.0)
+    min_val = minimum(lim[1] for lim in limits)
+    max_val = maximum(lim[2] for lim in limits)
+    return (min_val, max_val)
+end
+
+
+# === CHANNEL AVERAGING ===
+"""
+    average_channels(dat::ContinuousData; channel_selection::Function = channels(), include_extra::Bool = false, output_label::Union{Symbol,Nothing} = nothing) -> ContinuousData
+
+Return a copy of `dat` that contains ONLY metadata columns and a single averaged channel. By default the
+output label is the concatenation of contributing channel labels (e.g., :Fp1_Fp2). If the contributing
+channels are ALL layout channels, the label is :avg. Pass `output_label` to override.
+Coordinates in the layout are set to the centroid of the contributing electrodes (single row layout).
+"""
+function average_channels(
+    dat::ContinuousData;
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+    output_label::Symbol = :avg,
+)::ContinuousData
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    isempty(selected_channels) && return copy(dat)
+
+    # Determine label
+    if output_label === nothing
+        all_ch = channel_labels(dat)
+        is_all = length(selected_channels) == length(all_ch) && all(in(all_ch), selected_channels)
+        output_label = is_all ? :avg : Symbol(join(string.(selected_channels), "_"))
+    end
+
+    avg_vec = colmeans(dat.data, selected_channels)
+    # Keep only metadata + averaged channel
+    meta_cols = meta_labels(dat)
+    new_df = isempty(meta_cols) ? DataFrame() : dat.data[:, meta_cols]
+    new_df[!, output_label] = avg_vec
+    new_layout = _layout_only_average_channel(dat.layout, selected_channels, output_label)
+    return ContinuousData(new_df, new_layout, dat.sample_rate, dat.analysis_info)
+end
+
+"""
+    average_channels(dat::ErpData; channel_selection::Function = channels(), include_extra::Bool = false, output_label::Union{Symbol,Nothing} = nothing) -> ErpData
+
+Return a copy of `dat` that contains ONLY metadata columns and a single averaged channel. By default the
+output label is the concatenation of contributing channel labels (e.g., :Fp1_Fp2). If the contributing
+channels are ALL layout channels, the label is :avg. Pass `output_label` to override.
+Layout contains a single averaged coordinate row.
+"""
+function average_channels(
+    dat::SingleDataFrameEeg;
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+)::ErpData
+
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    isempty(selected_channels) && @minimal_error("Channel selection problem!")
+
+    # Determine label
+    all_ch = channel_labels(dat)
+    is_all = length(selected_channels) == length(all_ch) && all(in(all_ch), selected_channels)
+    output_label = is_all ? :all : Symbol(join(string.(selected_channels), "_"))
+
+    new_df = subset(dat, channel_selection=channels(meta_labels(dat)))
+    new_df[!, output_label] = colmeans(dat.data, selected_channels)
+    new_layout = _layout_only_average_channel(dat.layout, selected_channels, output_label)
+    return ErpData(new_df, new_layout, dat.sample_rate, dat.analysis_info, dat.n_epochs)
+end
+
+"""
+    average_channels(dat::EpochData; channel_selection::Function = channels(), include_extra::Bool = false, output_label::Union{Symbol,Nothing} = nothing) -> EpochData
+
+Return a copy of `dat` where each epoch DataFrame contains ONLY metadata columns and a single averaged channel.
+By default the output label is the concatenation of contributing channel labels; if ALL channels are combined the
+label is :avg. Pass `output_label` to override. Layout contains a single averaged coordinate row.
+"""
+function average_channels(
+    dat::EpochData;
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+)::EpochData
+
+    # Determine selection once on first epoch
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    isempty(selected_channels) && @minimal_error("Channel selection problem!")
+
+    # Determine label
+    all_ch = channel_labels(dat)
+    is_all = length(selected_channels) == length(all_ch) && all(in(all_ch), selected_channels)
+    output_label = is_all ? :all : Symbol(join(string.(selected_channels), "_"))
+
+    meta_cols = meta_labels(dat)
+    new_epochs = Vector{DataFrame}(undef, length(dat.data))
+    for (i, df) in pairs(dat.data)
+        new_df = subset(df, channel_selection=channels(meta_labels(dat)))
+        new_df[!, output_label] = colmeans(df.data, selected_channels)
+        new_epochs[i] = new_df
+    end
+    new_layout = _layout_only_average_channel(dat.layout, selected_channels, output_label)
+    return EpochData(new_epochs, new_layout, dat.sample_rate, dat.analysis_info)
+end
+
+# Internal: create a layout copy with an averaged channel row appended/updated
+function _layout_only_average_channel(layout::Layout, channels::Vector{Symbol}, output_label::Symbol)::Layout
+    # Build single-row layout with averaged coordinates
+    df = layout.data
+    labels = df[!, :label]
+    sel_idx = findall(in(channels), labels)
+    if isempty(sel_idx)
+        return Layout(DataFrame(), nothing, nothing)
+    end
+    # Template single-row copy to preserve schema
+    new_df = copy(df[sel_idx[1]:sel_idx[1], :], copycols = true)
+    # Set label
+    new_df[1, :label] = output_label
+    # If all layout channels selected and Cz exists, snap to Cz
+    if length(sel_idx) == nrow(df)
+        cz_idx = findfirst(==(Symbol(:Cz)), labels)
+        if !isnothing(cz_idx)
+            for nm in names(df)
+                if nm == :label
+                    continue
+                elseif nm in [:x2, :y2, :x3, :y3, :z3, :inc, :azi]
+                    new_df[1, nm] = df[cz_idx, nm]
+                end
+            end
+            return Layout(new_df, nothing, nothing)
+        end
+    end
+    # Average coordinates
+    if :x2 in names(df) && :y2 in names(df)
+        new_df[1, :x2] = mean(df[sel_idx, :x2])
+        new_df[1, :y2] = mean(df[sel_idx, :y2])
+    end
+    if (:x3 in names(df)) && (:y3 in names(df)) && (:z3 in names(df))
+        new_df[1, :x3] = mean(df[sel_idx, :x3])
+        new_df[1, :y3] = mean(df[sel_idx, :y3])
+        new_df[1, :z3] = mean(df[sel_idx, :z3])
+    end
+    if (:inc in names(df)) && (:azi in names(df))
+        new_df[1, :inc] = mean(df[sel_idx, :inc])
+        new_df[1, :azi] = mean(df[sel_idx, :azi])
+    end
+    return Layout(new_df, nothing, nothing)
 end
 
 """
