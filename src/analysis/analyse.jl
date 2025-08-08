@@ -294,11 +294,11 @@ A DataFrame with columns: `time`, `sample`, `triggers` (cleaned), and channel da
 The trigger data is automatically cleaned to detect only onset events, converting sustained trigger 
 signals into single onset events. For example: [0, 1, 1, 0, 0, 2, 2, 2, 0, 0] becomes [0, 1, 0, 0, 0, 2, 0, 0, 0, 0].
 """
-function create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
+function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame"
     df = hcat(
-        DataFrame(time = data.time, sample = 1:length(data.time), triggers = _clean_triggers(data.triggers.raw)),
-        DataFrame(Float64.(data.data), Symbol.(data.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
+        DataFrame(file = filename(dat), time = dat.time, sample = 1:length(dat.time), triggers = _clean_triggers(dat.triggers.raw)),
+        DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
     )
     return df
 end

@@ -12,7 +12,7 @@ using GLMakie
 using DataFrames
 using BenchmarkTools
 
-# eegfun.preprocess_eeg_data("pipeline.toml")
+eegfun.preprocess_eeg_data("pipeline.toml")
 
 
 # load data
@@ -33,10 +33,11 @@ eegfun.rereference!(dat, :avg)
 # eegfun.plot_channel_spectrum(dat)
 # eegfun.plot_channel_spectrum(dat)
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = []
+epochs = eegfun.EpochData[]
 for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
+
 eegfun.plot_databrowser(epochs[1])
 
 # average epochs
@@ -48,6 +49,9 @@ end
 eegfun.plot_topography(erps[1])
 
 eegfun.plot_databrowser(erps[1])
+
+eegfun.epochs_table(epochs)
+
 
 eegfun.plot_epochs(epochs[1])
 
