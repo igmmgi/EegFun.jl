@@ -45,18 +45,21 @@ end
 
 eegfun.plot_topography(erps[1])
 
+eegfun.plot_databrowser(erps[1])
+
+
+# ERP Plot
+eegfun.plot_erp(erps[1])
+eegfun.plot_erp(erps[1], :Fp1)
+eegfun.plot_erp(erps[1], [:Fp1, :Fp2])
+eegfun.plot_erp(erps[2], [:Fp1, :Fp2, :Cz])
+eegfun.plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => true))
 
 
 
 
 
 
-eegfun.baseline!(epochs[1])
-
-a = eegfun.convert(epochs[1],1)
-eegfun.plot_topography(a,sample_selection = x -> x.time .== 0)
-b = eegfun.convert(epochs[1], 2)
-eegfun.plot_topography(b)
 
 
 
