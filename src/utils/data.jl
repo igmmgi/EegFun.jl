@@ -682,7 +682,6 @@ Layout contains a single averaged coordinate row.
 function average_channels(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
-    include_extra::Bool = false,
 )::ErpData
 
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
@@ -707,9 +706,8 @@ By default the output label is the concatenation of contributing channel labels;
 label is :avg. Pass `output_label` to override. Layout contains a single averaged coordinate row.
 """
 function average_channels(
-    dat::EpochData;
+    dat::MultiDataFrameEeg;
     channel_selection::Function = channels(),
-    include_extra::Bool = false,
 )::EpochData
 
     # Determine selection once on first epoch
