@@ -152,11 +152,13 @@ end
 
 # Helper function to get initial window size based on data type
 get_initial_window_size(dat::ContinuousData) = min(5000, nrow(dat.data))  # Show reasonable window, not entire dataset
+get_initial_window_size(dat::ErpData) = min(5000, nrow(dat.data))  # Show reasonable window, not entire dataset
 get_initial_window_size(dat::EpochData) = nrow(dat.data[1])  # Show entire epoch
 
 # Type mapping
 data_state_type(::Type{ContinuousData}) = ContinuousDataState
 data_state_type(::Type{EpochData}) = EpochedDataState
+data_state_type(::Type{ErpData}) = ContinuousDataState
 
 # Helper functions for common data access/resetting/updating
 get_current_data(state::ContinuousDataState) = state.current[].data
@@ -229,15 +231,23 @@ end
 function create_toggles(fig, ax, state)
     configs = [
         ToggleConfig("Butterfly Plot", (active) -> butterfly_plot!(ax, state)),
-        ToggleConfig("Trigger", (active) -> plot_vertical_lines!(ax, state.markers[1], active)),
     ]
 
-    # Add EOG toggles if available
-    if has_column(state.data, "is_vEOG")
-        push!(configs, ToggleConfig("vEOG", (active) -> plot_vertical_lines!(ax, state.markers[2], active)))
+    # Add trigger toggle if triggers are available
+    marker_idx = 1
+    if has_column(state.data, "triggers") && length(state.markers) >= marker_idx
+        push!(configs, ToggleConfig("Trigger", (active) -> plot_vertical_lines!(ax, state.markers[marker_idx], active)))
+        marker_idx += 1
     end
-    if has_column(state.data, "is_hEOG")
-        push!(configs, ToggleConfig("hEOG", (active) -> plot_vertical_lines!(ax, state.markers[3], active)))
+
+    # Add EOG toggles if available
+    if has_column(state.data, "is_vEOG") && length(state.markers) >= marker_idx
+        push!(configs, ToggleConfig("vEOG", (active) -> plot_vertical_lines!(ax, state.markers[marker_idx], active)))
+        marker_idx += 1
+    end
+    if has_column(state.data, "is_hEOG") && length(state.markers) >= marker_idx
+        push!(configs, ToggleConfig("hEOG", (active) -> plot_vertical_lines!(ax, state.markers[marker_idx], active)))
+        marker_idx += 1
     end
 
     # Add filter toggles if available
@@ -1187,6 +1197,7 @@ end
 # Helper functions for getting type-specific information
 get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
+get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
 function plot_databrowser(dat::EegData, ica = nothing)
 
