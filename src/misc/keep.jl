@@ -127,6 +127,19 @@
 #     return tf_trials, times[tois_idx], frequencies
 # end
 
+# set_aog_theme!()
+# fig = Figure()
+# all_data = eegfun.all_data(epochs[1])
+# mydata = stack(all_data, [:Fp1, :Fp2], variable_name = :channel, value_name = :value)
+# plt =
+#     data(mydata) *
+#     mapping(:time => "Time [ms]", :value => "Amplitude [μV]", color = :channel => nonnumeric) *
+#     visual(Lines) *
+#     mapping(layout = :epoch => nonnumeric) 
+# # plt = paginate(plt, layout = 4)
+# # draw(plt, 2)
+# draw(plt)
+
 
 # Sample data
 x = 0:0.1:10

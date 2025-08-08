@@ -163,12 +163,13 @@ end
     find_idx_range(time::AbstractVector, limits::AbstractVector) -> UnitRange{Int}
 
 Find index range corresponding to time interval.
+Assumes time vector is sorted in ascending order.
 
 # Returns
 - `UnitRange{Int}`: Range of indices
 """
 find_idx_range(time::AbstractVector, start_time::Real, end_time::Real) =
-    findmin(abs.(time .- start_time))[2]:findmin(abs.(time .- end_time))[2]
+    searchsortedfirst(time, start_time):searchsortedlast(time, end_time)
 find_idx_range(time::AbstractVector, limits::AbstractVector) = find_idx_range(time, limits[1], limits[end])
 
 
@@ -177,25 +178,65 @@ find_idx_range(time::AbstractVector, limits::AbstractVector) = find_idx_range(ti
     find_idx_start_end(time::AbstractVector, limits::AbstractVector) -> Tuple{Int,Int}
 
 Find start and end indices corresponding to time interval.
+Assumes time vector is sorted in ascending order.
 
 # Returns
 - `Tuple{Int,Int}`: Start and end indices
 """
 find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
-    findmin(abs.(time .- start_time))[2], findmin(abs.(time .- end_time))[2]
+    searchsortedfirst(time, start_time), searchsortedlast(time, end_time)
 find_idx_start_end(time::AbstractVector, limits::AbstractVector) =
-    findmin(abs.(time .- limits[1]))[2], findmin(abs.(time .- limits[end]))[2]
+    searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
 
 
 
-function detrend(x, y)
+"""
+    detrend(x::AbstractVector, y::AbstractVector) -> Vector{Float64}
+
+Remove linear trend from data using least squares regression.
+
+# Arguments
+- `x::AbstractVector`: Independent variable (e.g., time points)
+- `y::AbstractVector`: Dependent variable to detrend
+
+# Returns
+- `Vector{Float64}`: Detrended data with linear trend removed
+
+# Example
+```julia
+x = 1:10
+y = 2 .* x .+ randn(10)  # Linear trend with noise
+y_detrended = detrend(x, y)
+```
+"""
+function detrend(x::AbstractVector, y::AbstractVector)::Vector{Float64}
+    length(x) == length(y) || @minimal_error "x and y must have the same length"
+    length(x) < 2 && @minimal_error "Need at least 2 points for detrending"
+    
     X = hcat(ones(length(x)), x)  # Design matrix (with intercept)
     β = X \ y  # Solve for coefficients (m, b)
     return y - (X * β)
 end
 
 
-function extract_int(s::String)
+"""
+    extract_int(s::String) -> Union{Int, Nothing}
+
+Extract the first integer found in a string.
+
+# Arguments
+- `s::String`: Input string
+
+# Returns
+- `Union{Int, Nothing}`: First integer found, or `nothing` if no digits
+
+# Example
+```julia
+extract_int("channel_123_data")  # Returns: 123
+extract_int("no_numbers_here")   # Returns: nothing
+```
+"""
+function extract_int(s::String)::Union{Int, Nothing}
     digits_only = filter(isdigit, s)
     return isempty(digits_only) ? nothing : parse(Int, digits_only)
 end
@@ -276,92 +317,21 @@ macro add_nonmutating(func)
 end
 
 """
-    best_rect(n)
+    best_rect(n::Integer) -> Vector{Int}
 
-Find the best rectangle for a given number n.
+Find the best rectangle dimensions for a given number n.
 
 # Arguments
-- `n`: Number 
+- `n::Integer`: Number of items to arrange
 
 # Returns
-- `Vector{Int}`: Dimensions of the best rectangle
+- `Vector{Int}`: Dimensions [rows, cols] of the best rectangle
 """
-function best_rect(n)
+function best_rect(n::Integer)::Vector{Int}
+    n > 0 || @minimal_error "n must be positive"
     dim1 = ceil(Int, sqrt(n))
-    dim2 = ceil(Int, n ./ dim1)
+    dim2 = ceil(Int, n / dim1)
     return [dim1, dim2]
-end
-
-"""
-    orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float64})
-
-Helper function to find orientation of point triplet (p1, p2, p3).
-Returns:
- 0 --> p1, p2 and p3 are collinear (on same line)
- 1 --> Clockwise 
- 2 --> Counterclockwise 
-"""
-function orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float64})
-    val = (p2[2] - p1[2]) * (p3[1] - p2[1]) - (p2[1] - p1[1]) * (p3[2] - p2[2])
-    if val ≈ 0
-        return 0
-    end
-    return val > 0 ? 1 : 2
-end
-
-"""
-    create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
-
-Create a convex hull around a set of 2D points with a specified border size.
-Uses Graham's Scan algorithm for convex hull computation.
-
-# Arguments
-- `xpos`: Array of x-coordinates
-- `ypos`: Array of y-coordinates
-- `border_size`: Size of the border around points
-
-# Returns
-- A Vector of 2D points forming the convex hull
-"""
-function create_convex_hull(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
-    # Generate points around each electrode with the border
-    circle_points = 0:(2π/361):2π
-    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
-    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
-
-    # Convert to array of points
-    points = [[xs[i], ys[i]] for i in eachindex(xs)]
-    n = length(points)
-
-    # Find the bottommost point (and leftmost if tied)
-    ymin = minimum(p -> p[2], points)
-    p0 = points[findfirst(p -> p[2] == ymin, points)]
-
-    # Sort points by polar angle with respect to p0
-    sort!(points, by = p -> begin
-        if p == p0
-            return -Inf
-        end
-        return atan(p[2] - p0[2], p[1] - p0[1])
-    end)
-
-    # Initialize stack for Graham's scan
-    stack = Vector{Vector{Float64}}()
-    push!(stack, points[1])
-    push!(stack, points[2])
-
-    # Process remaining points
-    for i = 3:n
-        while length(stack) > 1 && orientation(stack[end-1], stack[end], points[i]) != 2
-            pop!(stack)
-        end
-        push!(stack, points[i])
-    end
-
-    # Close the hull by connecting back to the first point
-    push!(stack, stack[1])
-
-    return stack
 end
 
 
@@ -483,15 +453,4 @@ function parse_string_to_ints(text::String, max_count::Int)
     return all_components[1:min(length(all_components), max_count)]
 end
 
-# set_aog_theme!()
-# fig = Figure()
-# all_data = eegfun.all_data(epochs[1])
-# mydata = stack(all_data, [:Fp1, :Fp2], variable_name = :channel, value_name = :value)
-# plt =
-#     data(mydata) *
-#     mapping(:time => "Time [ms]", :value => "Amplitude [μV]", color = :channel => nonnumeric) *
-#     visual(Lines) *
-#     mapping(layout = :epoch => nonnumeric) 
-# # plt = paginate(plt, layout = 4)
-# # draw(plt, 2)
-# draw(plt)
+

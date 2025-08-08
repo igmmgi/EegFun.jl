@@ -20,9 +20,6 @@ println("=" ^ 40)
     include("test_types.jl")   
     include("test_data.jl")    
     include("test_print.jl")
-    # include("test_io.jl")
-    # include("test_processing.jl")
-    # include("test_visualization.jl")
 end
 
 println("\nAll tests completed!")
