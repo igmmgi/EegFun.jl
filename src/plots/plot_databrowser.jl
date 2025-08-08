@@ -192,8 +192,8 @@ function setup_ui_base(fig, ax, state, dat, ica = nothing)
     handle_keyboard_events!(fig, ax, state)
 
     # Create toggles/markers/menus
-    toggles = create_toggles(fig, ax, state)
     state.markers = init_markers(ax, state)
+    toggles = create_toggles(fig, ax, state)
     labels_menu = create_labels_menu(fig, ax, state)
     reference_menu = create_reference_menu(fig, state, dat)
 
@@ -234,21 +234,31 @@ function create_toggles(fig, ax, state)
         ToggleConfig("Butterfly Plot", (active) -> butterfly_plot!(ax, state)),
     ]
 
-    # Add trigger toggle if triggers are available
-    marker_idx = 1
-    if has_column(state.data, "triggers") && length(state.markers) >= marker_idx
-        push!(configs, ToggleConfig("Trigger", (active) -> plot_vertical_lines!(ax, state.markers[marker_idx], active)))
-        marker_idx += 1
+    # Add toggles for available markers
+    # Find markers by name instead of relying on index positions
+    
+    # Trigger toggle
+    if has_column(state.data, "triggers")
+        trigger_marker = findfirst(m -> m.name == :triggers, state.markers)
+        if !isnothing(trigger_marker)
+            push!(configs, ToggleConfig("Trigger", (active) -> plot_vertical_lines!(ax, state.markers[trigger_marker], active)))
+        end
     end
 
-    # Add EOG toggles if available
-    if has_column(state.data, "is_vEOG") && length(state.markers) >= marker_idx
-        push!(configs, ToggleConfig("vEOG", (active) -> plot_vertical_lines!(ax, state.markers[marker_idx], active)))
-        marker_idx += 1
+    # vEOG toggle
+    if has_column(state.data, "is_vEOG")
+        veog_marker = findfirst(m -> m.name == :is_vEOG, state.markers)
+        if !isnothing(veog_marker)
+            push!(configs, ToggleConfig("vEOG", (active) -> plot_vertical_lines!(ax, state.markers[veog_marker], active)))
+        end
     end
-    if has_column(state.data, "is_hEOG") && length(state.markers) >= marker_idx
-        push!(configs, ToggleConfig("hEOG", (active) -> plot_vertical_lines!(ax, state.markers[marker_idx], active)))
-        marker_idx += 1
+    
+    # hEOG toggle
+    if has_column(state.data, "is_hEOG")
+        heog_marker = findfirst(m -> m.name == :is_hEOG, state.markers)
+        if !isnothing(heog_marker)
+            push!(configs, ToggleConfig("hEOG", (active) -> plot_vertical_lines!(ax, state.markers[heog_marker], active)))
+        end
     end
 
     # Add filter toggles if available
@@ -853,13 +863,12 @@ function subset_selected_data(state::EpochedDataBrowserState)
     selected_channels = state.channels.labels[state.channels.visible]
     current_epoch = state.data.current_epoch[]
 
-    # Create a sample_selection function that works with epoch array
-    # Use the current epoch to get the time-based boolean mask
+    # Create a sample_selection function that works with epoch DataFrame
+    # Note: 'epochs' parameter is actually a single epoch DataFrame, not an array
     sample_selection =
         epochs -> begin
-            # Use the current epoch to get the time-based boolean mask
-            current_epoch_data = epochs[current_epoch]
-            time_mask = (current_epoch_data.time .>= x_min) .& (current_epoch_data.time .<= x_max)
+            # epochs is the current epoch DataFrame, use it directly
+            time_mask = (epochs.time .>= x_min) .& (epochs.time .<= x_max)
             return time_mask  # Return boolean vector, not indices
         end
 

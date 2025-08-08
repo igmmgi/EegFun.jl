@@ -37,7 +37,7 @@ epochs = []
 for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
-# eegfun.plot_databrowser(epochs[1])
+eegfun.plot_databrowser(epochs[1])
 
 # average epochs
 erps = []
