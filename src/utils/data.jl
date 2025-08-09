@@ -532,7 +532,8 @@ Get the value range for specified columns.
 """
 function data_limits_y(dat::DataFrame, col::Symbol)
     isempty(dat) && return nothing
-    return extrema(dat[!, col])
+    mn, mx = extrema(dat[!, col])
+    return [mn, mx]
 end
 
 """
