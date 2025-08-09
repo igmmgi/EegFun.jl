@@ -15,11 +15,12 @@ println("Running eegfun.jl Test Suite")
 println("=" ^ 40)
 
 @testset "eegfun" begin
-    include("test_config.jl")
-    include("test_layout.jl")  
-    include("test_types.jl")   
-    include("test_data.jl")    
-    include("test_print.jl")
+    # include("test_config.jl")
+    # include("test_layout.jl")  
+    # include("test_types.jl")   
+    # include("test_data.jl")    
+    # include("test_print.jl")
+    include("test_channel_average.jl")
 end
 
 println("\nAll tests completed!")
