@@ -100,7 +100,7 @@ function rereference!(
     # Verify reference channels exist in the data
     missing_channels = [ch for ch in reference_channels if ch ∉ channel_labels(dat)]
     if !isempty(missing_channels)
-        @minimal_error "Missing reference channels in data: $(missing_channels)"
+        @minimal_error_throw "Missing reference channels in data: $(missing_channels)"
     end
 
     # Calculate reference signal and apply rereferencing
