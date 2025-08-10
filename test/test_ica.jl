@@ -65,9 +65,7 @@ using eegfun
         ica_res4 = eegfun.run_ica(dat; sample_selection = eegfun.samples(:keepmask))
         @test ica_res4 isa eegfun.InfoIca
 
-        # Filter flags
-        @test eegfun.run_ica(dat; hp_filter = false) isa eegfun.InfoIca
-        @test eegfun.run_ica(dat; lp_filter = true) isa eegfun.InfoIca
+        # Preprocessing should be external; run_ica has no filter flags
 
         # Include extra channels (vEOG, hEOG) in ICA
         nch = eegfun.n_channels(dat)
