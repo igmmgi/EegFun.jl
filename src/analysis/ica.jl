@@ -1,128 +1,37 @@
 """
     run_ica(dat::ContinuousData;
             n_components::Union{Nothing,Int} = nothing,
-            channels::Function = channels(dat),
-            samples::Function = samples(),
-            hp_filter::Bool = true,
-            lp_filter::Bool = false,
-            hp_freq::Float64 = 1.0,
-            lp_freq::Float64 = 30.0,
+            sample_selection::Function = samples(),
+            channel_selection::Function = channels(),
+            include_extra::Bool = false,
             params::IcaPrms = IcaPrms())
 
-Runs Independent Component Analysis (ICA) on EEG data.
+Runs Independent Component Analysis (ICA) on EEG data. Preprocessing (e.g., filtering) should be applied prior to calling this function.
 
 # Arguments
 - `dat::ContinuousData`: The EEG data object.
 - `n_components::Union{Nothing,Int}`: Number of ICA components (default: number of channels - 1).
-- `channels::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `samples::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
-- `hp_filter::Bool`: Whether to apply high-pass filter (default: true).
-- `lp_filter::Bool`: Whether to apply low-pass filter (default: false).
-- `hp_freq::Float64`: High-pass filter cutoff frequency in Hz (default: 1.0).
-- `lp_freq::Float64`: Low-pass filter cutoff frequency in Hz (default: 30.0).
-- `params::IcaPrms`: ICA parameters (default: IcaPrms()).
+- `sample_selection::Function`: Sample selector (default: include all samples).
+- `channel_selection::Function`: Channel selector (default: layout channels).
+- `include_extra::Bool`: Whether to allow channels outside the layout (e.g., EOG) in selection.
+- `params::IcaPrms`: ICA parameters.
 
 # Returns
-An ICA result object containing unmixing matrix, mixing matrix, and component information.
-
-# Important Note on Channel Selection
-By default, `channels()` uses only the layout channels (from `dat.layout.label`), which is appropriate for ICA.
-To include additional channels (like EOG, reference, etc.), explicitly specify them in the channels parameter.
+`InfoIca` with unmixing, mixing, sphere, variance, and metadata.
 
 # Examples
-
-## Basic Usage
 ```julia
-# ICA on layout channels only (default behavior)
+# Basic ICA on layout channels
 ica_result = run_ica(dat)
 
-# ICA excluding extreme values
-ica_result = run_ica(dat, samples = samples_not(:is_extreme_value_100))
-```
+# Excluding extreme samples
+ica_result = run_ica(dat, sample_selection = samples_not(:is_extreme_value_100))
 
-## Channel Filtering
-```julia
-# ICA on specific layout channels only
-ica_result = run_ica(dat, channels = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]))
+# Restrict to specific channels
+ica_result = run_ica(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
 
-# ICA excluding reference channels from layout
-ica_result = run_ica(dat, channels = channels_not([:M1, :M2]))
-
-# ICA on frontal channels only (first 10 channels)
-ica_result = run_ica(dat, channels = channels(1:10))
-
-# ICA on channels starting with "F" (frontal)
-ica_result = run_ica(dat, channels = x -> startswith.(string.(x), "F"))
-
-# ICA on layout channels only, excluding specific ones
-ica_result = run_ica(dat, channels = x -> x .∈ Ref(dat.layout.label) .&& .!(x .∈ Ref([:M1, :M2])))
-```
-
-## Sample Filtering
-```julia
-# Exclude extreme values
-ica_result = run_ica(dat, samples = samples_not(:is_extreme_value_100))
-
-# Exclude multiple types of bad samples
-ica_result = run_ica(dat, samples = samples_or_not([:is_extreme_value_100, :is_vEOG, :is_hEOG]))
-
-# Only use samples within epoch windows
-ica_result = run_ica(dat, samples = samples(:epoch_window))
-
-# Use samples that are both in epoch window AND not extreme
-ica_result = run_ica(dat, samples = samples_and([:epoch_window, samples_not(:is_extreme_value_100)]))
-```
-
-## Combined Filtering
-```julia
-# Exclude reference channels and extreme values
-ica_result = run_ica(dat, 
-    channel_selection = channels_not([:M1, :M2]),
-    sample_selection = samples_not(:is_extreme_value_100)
-)
-
-# Only frontal channels, exclude bad samples
-ica_result = run_ica(dat, 
-    channel_selection = channels(1:10),
-    sample_selection = samples_or_not([:is_extreme_value_100, :is_vEOG])
-)
-
-# Complex filtering: frontal channels, good samples, within epochs
-ica_result = run_ica(dat, 
-    channel_selection = channels([:Fp1, :Fp2, :F3, :F4, :F5, :F6, :F7, :F8]),
-    sample_selection = samples_and([
-        :epoch_window, 
-        samples_not(:is_extreme_value_100),
-        samples_not(:is_vEOG),
-        samples_not(:is_hEOG)
-    ])
-)
-```
-
-## Filtering Options
-```julia
-# ICA without high-pass filter
-ica_result = run_ica(dat, hp_filter = false)
-
-# ICA with custom filter settings
-ica_result = run_ica(dat, 
-    hp_filter = true, 
-    hp_freq = 2.0,
-    lp_filter = true,
-    lp_freq = 40.0
-)
-
-# ICA with custom number of components
-ica_result = run_ica(dat, n_components = 10)
-```
-
-## Additional Channels (not in layout)
-```julia
-# ICA including derived channels like EOG (use with caution)
-ica_result = run_ica(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
-
-# Mix layout channels and additional channels
-ica_result = run_ica(dat, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
+# Include EOG channels explicitly (use with caution)
+ica_result = run_ica(dat, include_extra = true, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 """
 function run_ica(
@@ -131,24 +40,10 @@ function run_ica(
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
-    hp_filter::Bool = true,
-    lp_filter::Bool = false,
-    hp_freq::Float64 = 1.0,
-    lp_freq::Float64 = 30.0,
     params::IcaPrms = IcaPrms(),
 )
     # Create a copy of the data to avoid modifying the original
     dat_ica = copy(dat)
-
-    # Apply filters if requested
-    if hp_filter
-        @info "Applying high-pass filter"
-        dat_ica = filter_data(dat_ica, "hp", hp_freq)
-    end
-    if lp_filter
-        @info "Applying low-pass filter"
-        dat_ica = filter_data(dat_ica, "lp", lp_freq)
-    end
 
     selected_channels =
         get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
