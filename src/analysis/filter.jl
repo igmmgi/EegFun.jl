@@ -174,7 +174,7 @@ function _apply_filter!(
     filter::FilterInfo;
     filter_func::String = "filtfilt",
 )::Nothing
-    _apply_filter!.(dat, Ref(channels), Ref(filter), Ref(filter_func))
+    _apply_filter!.(dat, Ref(channels), Ref(filter); filter_func = filter_func)
     return nothing
 end
 
