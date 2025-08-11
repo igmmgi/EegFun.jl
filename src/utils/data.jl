@@ -659,79 +659,6 @@ function subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vecto
 end
 
 
-"""
-    epochs_table(epochs::Vector{EpochData}; io::Union{IO, Nothing} = stdout)
-
-Display a pretty table showing epoch information and return the DataFrame.
-"""
-function epochs_table(epochs::Vector{EpochData}; io::Union{IO, Nothing} = stdout)::DataFrame
-    isempty(epochs) && throw(ArgumentError("epochs vector cannot be empty"))
-    
-    df = _build_base_epochs_df(epochs)
-    df.n_epochs = [n_epochs(epoch) for epoch in epochs]
-    
-    _print_epochs_table(df, io, ["Condition", "Condition Name", "N Epochs"], [:r, :l, :r])
-    return df
-end
-
-"""
-    epochs_table(epochs_original, epochs_cleaned; io::Union{IO, Nothing} = stdout)
-
-Display comparison table between original and cleaned epochs and return DataFrame.
-"""
-function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; io::Union{IO, Nothing} = stdout)::DataFrame
-    length(epochs_original) != length(epochs_cleaned) && 
-        throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
-    
-    df = _build_base_epochs_df(epochs_original)
-    df.n_epochs_original = [n_epochs(epoch) for epoch in epochs_original]
-    df.n_epochs_cleaned = [n_epochs(epoch) for epoch in epochs_cleaned]
-    df.percentage = round.((df.n_epochs_cleaned ./ df.n_epochs_original) .* 100; digits=1)
-    
-    _print_epochs_table(df, io, [:l, :r, :l, :r, :r, :r])
-    return df
-end
-
-# Helper functions to reduce repetition
-function _build_base_epochs_df(epochs::Vector{EpochData})::DataFrame
-    return DataFrame(
-        file = [filename(epoch) for epoch in epochs],
-        condition = [condition_number(epoch) for epoch in epochs],
-        condition_name = [condition_name(epoch) for epoch in epochs]
-    )
-end
-
-function _print_epochs_table(df::DataFrame, io::Union{IO, Nothing}, alignments::Vector{Symbol})
-    if io !== nothing
-        pretty_table(io, df; alignment = alignments, crop = :none, show_subheader = false)
-    end
-end
-
-"""
-    log_epochs_table(message::String, epochs...; kwargs...)
-
-Log an epochs table with message and return the DataFrame.
-Combines logging and table creation in one clean call.
-"""
-function log_epochs_table(message::String, epochs...; kwargs...)
-    io_buffer = IOBuffer()
-    df = epochs_table(epochs...; io = io_buffer, kwargs...)
-    @info "$message\n$(String(take!(io_buffer)))"
-    return df
-end
-
-"""
-    log_pretty_table(message::String, df::DataFrame; kwargs...)
-
-Log a pretty table with message. For general DataFrame logging.
-Sets show_row_number=false and show_subheader=false by default for cleaner logs.
-"""
-function log_pretty_table(message::String, df::DataFrame; kwargs...)
-    io_buffer = IOBuffer()
-    pretty_table(io_buffer, df; show_row_number=false, show_subheader=false, kwargs...)
-    @info "$message\n$(String(take!(io_buffer)))"
-    return nothing
-end
 
 
 # === INTERNAL SUBSET HELPERS ===
@@ -845,3 +772,122 @@ function subset(
     dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
 end
+
+
+
+"""
+    log_pretty_table(message::String, df::DataFrame; kwargs...)
+
+Log a pretty table with message. For general DataFrame logging.
+Sets show_row_number=false and show_subheader=false by default for cleaner logs.
+"""
+function log_pretty_table(message::String, df::DataFrame; kwargs...)
+    io_buffer = IOBuffer()
+    pretty_table(io_buffer, df; show_row_number=false, show_subheader=false, kwargs...)
+    @info "$message\n$(String(take!(io_buffer)))"
+    return nothing
+end
+
+
+# Helper function predicates for easier channel filtering
+channels() = x -> fill(true, length(x))  # Default: select all channels given
+channels(channel_names::Vector{Symbol}) = x -> x .∈ Ref(channel_names)
+channels(channel_name::Symbol) = x -> x .== channel_name
+channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
+channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
+channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
+channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
+
+# Helper function predicates for easier component filtering
+components() = x -> fill(true, length(x))  # Default: select all components given
+components(component_numbers::Union{Vector{Int},UnitRange}) = x -> [i in component_numbers for i = 1:length(x)]
+components(component_number::Int) = x -> x .== component_number
+components_not(component_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in component_numbers for i = 1:length(x)])
+components_not(component_number::Int) = x -> .!(x .== component_number)
+
+# Helper function predicates for easier sample filtering
+samples() = x -> fill(true, nrow(x))
+samples(column::Symbol) = x -> x[!, column]
+samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
+samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
+samples_not(column::Symbol) = x -> .!(x[!, column])
+samples_or_not(columns::Vector{Symbol}) = x -> .!(any(x[!, col] for col in columns))
+samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in columns))
+
+# Helper function predicates for easier epoch filtering
+epochs() = x -> fill(true, length(x))  # Default: select all epochs given
+epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i in x]
+epochs(epoch_number::Int) = x -> x .== epoch_number
+epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
+epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
+
+# Helper to select channels/columns based on a predicate (+ which to include)
+function get_selected_channels(dat, channel_selection::Function; include_meta::Bool = true, include_extra::Bool = true)
+
+    # Columns/channels in dataframe to include
+    metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
+    selectable_cols = include_extra ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
+
+    # Apply channel selection to non-metadata columns
+    selected_cols = selectable_cols[channel_selection(selectable_cols)]
+
+    # Return metadata + selected channels
+    return vcat(metadata_cols, selected_cols)
+end
+
+
+# Helper to select components based on a predicate
+function get_selected_components(ica_result::InfoIca, component_selection::Function)
+    # Get all component indices (1 to n_components)
+    all_components = 1:length(ica_result.ica_label)
+    return all_components[component_selection(all_components)]
+end
+
+# Helper to select samples based on a predicate
+function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
+    return findall(sample_selection(dat.data))
+end
+# Helper to select samples based on a predicate
+function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
+    return findall(sample_selection(dat.data[1])) # assume all data have the same samples
+end
+
+
+
+# Helper to select samples from a DataFrame
+function get_selected_samples(dat::DataFrame, sample_selection::Function)
+    return findall(sample_selection(dat))
+end
+
+
+
+
+"""
+    convert(dat::MultiDataFrameEeg, epoch_idx::Int) -> SingleDataFrameEeg
+
+Convert a single epoch from MultiDataFrameEeg to SingleDataFrameEeg.
+
+# Arguments
+- `dat::MultiDataFrameEeg`: The multi-DataFrame EEG data
+- `epoch_idx::Int`: Index of the epoch to convert (1-based)
+
+# Returns
+- `SingleDataFrameEeg`: Single DataFrame containing only the specified epoch
+
+# Examples
+```julia
+# Convert epoch 3 to single DataFrame
+single_dat = convert(dat, 3)
+
+# Now you can use single DataFrame functions
+summary = channel_summary(single_dat)
+```
+"""
+function convert(dat::MultiDataFrameEeg, epoch_idx::Int)::SingleDataFrameEeg
+    # Validate epoch index
+    if epoch_idx < 1 || epoch_idx > length(dat.data)
+        @minimal_error "Epoch index $epoch_idx out of range (1:$(length(dat.data)))"
+    end
+    return ContinuousData(dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info)
+end
+
