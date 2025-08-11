@@ -61,11 +61,11 @@ using Statistics
         @test conds[1].reference_index == 2
         @test conds[2].timing_pairs == [(1, 3)]
 
-        # Missing trigger_sequences → nothing
+        # Missing trigger_sequences → throws
         bad_cfg1 = Dict("epochs" => Dict("conditions" => [Dict("name" => "bad1")]))
-        @test eegfun.parse_epoch_conditions(bad_cfg1) === nothing
+        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg1)
 
-        # after and before both set → nothing
+        # after and before both set → throws
         bad_cfg2 = Dict(
             "epochs" => Dict(
                 "conditions" => [
@@ -78,9 +78,9 @@ using Statistics
                 ],
             ),
         )
-        @test eegfun.parse_epoch_conditions(bad_cfg2) === nothing
+        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg2)
 
-        # reference_index out of bounds → nothing
+        # reference_index out of bounds → throws
         bad_cfg3 = Dict(
             "epochs" => Dict(
                 "conditions" => [
@@ -92,9 +92,9 @@ using Statistics
                 ],
             ),
         )
-        @test eegfun.parse_epoch_conditions(bad_cfg3) === nothing
+        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg3)
 
-        # timing_pairs provided but min/max missing → nothing
+        # timing_pairs provided but min/max missing → throws
         bad_cfg4 = Dict(
             "epochs" => Dict(
                 "conditions" => [
@@ -106,7 +106,7 @@ using Statistics
                 ],
             ),
         )
-        @test eegfun.parse_epoch_conditions(bad_cfg4) === nothing
+        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg4)
 
         # min_interval ≥ max_interval → throws
         bad_cfg5 = Dict(
@@ -123,6 +123,28 @@ using Statistics
             ),
         )
         @test_throws ErrorException eegfun.parse_epoch_conditions(bad_cfg5)
+        
+        # Additional edge cases
+        # Empty conditions array
+        empty_cfg = Dict("epochs" => Dict("conditions" => []))
+        @test eegfun.parse_epoch_conditions(empty_cfg) == []
+        
+        # Missing epochs key
+        no_epochs_cfg = Dict()
+        @test eegfun.parse_epoch_conditions(no_epochs_cfg) == []
+        
+        # Invalid trigger sequence format
+        invalid_seq_cfg = Dict(
+            "epochs" => Dict(
+                "conditions" => [
+                    Dict(
+                        "name" => "invalid",
+                        "trigger_sequences" => ["invalid_string"],
+                    ),
+                ],
+            ),
+        )
+        @test_throws Exception eegfun.parse_epoch_conditions(invalid_seq_cfg)
     end
 
     @testset "search helpers" begin
@@ -439,6 +461,74 @@ using Statistics
         dat3 = create_continuous_with_triggers(n = 10000)  # Longer data
         eegfun.mark_epoch_windows!(dat3, [1], [-0.05, 0.05])  # 100ms window
         @test any(dat3.data.epoch_window)
+    end
+
+    @testset "additional edge cases and stress tests" begin
+        # Test very large epochs (performance)
+        dat_large = create_continuous_with_triggers(n = 50000)  # 50s at 1kHz
+        ec = eegfun.EpochCondition(name = "large", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        large_epochs = eegfun.extract_epochs(dat_large, 1, ec, -0.1, 0.1)
+        @test eegfun.n_epochs(large_epochs) >= 1
+        
+        # Test averaging with single epoch
+        single_epoch = eegfun.EpochData([large_epochs.data[1]], large_epochs.layout, large_epochs.sample_rate, large_epochs.analysis_info)
+        erp_single = eegfun.average_epochs(single_epoch)
+        @test erp_single isa eegfun.ErpData
+        @test maximum(erp_single.data.n_epochs) == 1
+        
+        # Test epoch extraction with very short windows
+        dat_short = create_continuous_with_triggers()
+        short_epochs = eegfun.extract_epochs(dat_short, 1, ec, -0.001, 0.001)  # 2ms window
+        @test eegfun.n_epochs(short_epochs) >= 1
+        @test all(epoch -> nrow(epoch) >= 1, short_epochs.data)  # At least one sample per epoch
+        
+        # Test with unsorted time vector (should fail validation)
+        dat_unsorted = create_continuous_with_triggers()
+        dat_unsorted.data.time = reverse(dat_unsorted.data.time)
+        @test_throws AssertionError eegfun.mark_epoch_windows!(dat_unsorted, [1], [-0.01, 0.01])
+        
+        # Test remove_bad_epochs with non-boolean columns (should work but warn)
+        dat_nonbool = create_continuous_with_triggers()
+        eps_nonbool = eegfun.extract_epochs(dat_nonbool, 1, ec, -0.01, 0.02)
+        # Add boolean columns (since any() requires boolean context)
+        n_samples_1 = nrow(eps_nonbool.data[1])
+        n_samples_2 = nrow(eps_nonbool.data[2])
+        eps_nonbool.data[1][!, :bool_bad] = vcat([true], falses(n_samples_1 - 1))  # Boolean, one bad sample
+        eps_nonbool.data[2][!, :bool_bad] = falses(n_samples_2)  # All good samples
+        cleaned_nonbool = eegfun.remove_bad_epochs(eps_nonbool, :bool_bad)
+        @test eegfun.n_epochs(cleaned_nonbool) == 1  # One epoch should be removed
+        
+        # Test overlapping epoch windows
+        dat_overlap = create_continuous_with_triggers()
+        eegfun.mark_epoch_windows!(dat_overlap, [1], [-0.01, 0.01], channel_out = :window1)
+        eegfun.mark_epoch_windows!(dat_overlap, [2], [-0.01, 0.01], channel_out = :window2)
+        @test :window1 in propertynames(dat_overlap.data)
+        @test :window2 in propertynames(dat_overlap.data)
+        
+        # Test get_selected_epochs with edge cases
+        dat_edge = create_continuous_with_triggers()
+        eps_edge = eegfun.extract_epochs(dat_edge, 1, ec, -0.01, 0.02)
+        
+        # Function that tries to access beyond the input range (should error)
+        bad_selector = x -> x[end+1] > 0  # Tries to access beyond range
+        @test_throws BoundsError eegfun.get_selected_epochs(eps_edge, bad_selector)
+        
+        # Test extract_epochs with reference_index at sequence boundary
+        ec_boundary = eegfun.EpochCondition(name = "boundary", trigger_sequences = [[1, 2, 3]], reference_index = 3)  # Last element
+        boundary_epochs = eegfun.extract_epochs(dat_edge, 1, ec_boundary, -0.01, 0.01)
+        @test eegfun.n_epochs(boundary_epochs) >= 1
+        
+        # Test timing constraints with very tight windows
+        ec_tight = eegfun.EpochCondition(
+            name = "tight",
+            trigger_sequences = [[1, 2, 3]], 
+            reference_index = 2,
+            timing_pairs = [(1, 3)],
+            min_interval = 0.0019,  # Very tight: exactly 2ms at 1kHz
+            max_interval = 0.0021
+        )
+        tight_epochs = eegfun.extract_epochs(dat_edge, 1, ec_tight, -0.01, 0.01)
+        @test eegfun.n_epochs(tight_epochs) >= 1
     end
 
 end
