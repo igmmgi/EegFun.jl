@@ -266,6 +266,181 @@ using Statistics
         @test_throws Any eegfun.remove_bad_epochs(empty_ep, :is_bad)
     end
 
+    @testset "mark_epoch_windows! (simple triggers)" begin
+        dat = create_continuous_with_triggers()
+        
+        # Basic functionality - mark windows around trigger 1
+        eegfun.mark_epoch_windows!(dat, [1], [-0.005, 0.005])
+        @test :epoch_window in propertynames(dat.data)
+        @test any(dat.data.epoch_window)  # Should mark some samples
+        
+        # Test that windows are marked around trigger 1 occurrences
+        trigger_1_indices = findall(dat.data.triggers .== 1)
+        @test !isempty(trigger_1_indices)
+        
+        # Check that some samples near each trigger are marked
+        for idx in trigger_1_indices
+            # Look for marked samples in a small neighborhood 
+            neighborhood = max(1, idx-5):min(length(dat.data.epoch_window), idx+5)
+            @test any(dat.data.epoch_window[neighborhood])
+        end
+        
+        # Custom column name
+        dat2 = create_continuous_with_triggers()
+        eegfun.mark_epoch_windows!(dat2, [1], [-0.005, 0.005], channel_out = :custom_window)
+        @test :custom_window in propertynames(dat2.data)
+        @test any(dat2.data.custom_window)
+        
+        # Multiple triggers
+        dat3 = create_continuous_with_triggers()
+        eegfun.mark_epoch_windows!(dat3, [1, 2], [-0.005, 0.005])
+        @test any(dat3.data.epoch_window)
+        
+        # Non-existent trigger should give warning but not error
+        dat4 = create_continuous_with_triggers()
+        eegfun.mark_epoch_windows!(dat4, [999], [-0.005, 0.005])
+        @test !any(dat4.data.epoch_window)  # Should be all false
+        
+        # Test input validation
+        dat5 = create_continuous_with_triggers()
+        @test_throws AssertionError eegfun.mark_epoch_windows!(dat5, [1], [-0.005])  # Wrong window length
+        @test_throws AssertionError eegfun.mark_epoch_windows!(dat5, [1], [0.005, -0.005])  # Wrong order
+    end
+
+    @testset "mark_epoch_windows! (epoch conditions)" begin
+        dat = create_continuous_with_triggers()
+        
+        # Create epoch condition for sequence [1,2,3]
+        ec = eegfun.EpochCondition(
+            name = "test_condition",
+            trigger_sequences = [[1, 2, 3]], 
+            reference_index = 2
+        )
+        
+        # Basic functionality
+        eegfun.mark_epoch_windows!(dat, [ec], [-0.005, 0.005])
+        @test :epoch_window in propertynames(dat.data)
+        @test any(dat.data.epoch_window)
+        
+        # Wildcard condition
+        dat2 = create_continuous_with_triggers()
+        ec_wild = eegfun.EpochCondition(
+            name = "wildcard",
+            trigger_sequences = [[1, :any, 3]], 
+            reference_index = 2
+        )
+        eegfun.mark_epoch_windows!(dat2, [ec_wild], [-0.005, 0.005])
+        @test any(dat2.data.epoch_window)
+        
+        # Multiple conditions
+        dat3 = create_continuous_with_triggers()
+        ec1 = eegfun.EpochCondition(name = "c1", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        ec2 = eegfun.EpochCondition(name = "c2", trigger_sequences = [[1, :any, 3]], reference_index = 1)
+        eegfun.mark_epoch_windows!(dat3, [ec1, ec2], [-0.005, 0.005])
+        @test any(dat3.data.epoch_window)
+        
+        # Condition with constraints
+        dat4 = create_continuous_with_triggers()
+        ec_constrained = eegfun.EpochCondition(
+            name = "constrained",
+            trigger_sequences = [[1, 2, 3]], 
+            reference_index = 2,
+            after = 9
+        )
+        eegfun.mark_epoch_windows!(dat4, [ec_constrained], [-0.005, 0.005])
+        @test any(dat4.data.epoch_window)  # Should find constrained sequences
+        
+        # Non-matching condition
+        dat5 = create_continuous_with_triggers()
+        ec_nomatch = eegfun.EpochCondition(
+            name = "nomatch",
+            trigger_sequences = [[7, 7, 7]], 
+            reference_index = 1
+        )
+        eegfun.mark_epoch_windows!(dat5, [ec_nomatch], [-0.005, 0.005])
+        @test !any(dat5.data.epoch_window)  # Should be all false
+    end
+
+    @testset "get_selected_epochs" begin
+        dat = create_continuous_with_triggers()
+        win = (-0.01, 0.02)
+        ec = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        eps = eegfun.extract_epochs(dat, 1, ec, win[1], win[2])
+        
+        # Test with simple function that selects all epochs
+        all_selector = x -> trues(length(x))
+        selected_all = eegfun.get_selected_epochs(eps, all_selector)
+        @test selected_all == [1, 2]  # Should have 2 epochs
+        
+        # Test with function that selects first epoch only
+        first_only = x -> [true, false]
+        selected_first = eegfun.get_selected_epochs(eps, first_only)
+        @test selected_first == [1]
+        
+        # Test with function that selects no epochs
+        none_selector = x -> falses(length(x))
+        selected_none = eegfun.get_selected_epochs(eps, none_selector)
+        @test isempty(selected_none)
+        
+        # Test with function that selects specific epochs by index
+        specific_selector = x -> [i in [1] for i in x]
+        selected_specific = eegfun.get_selected_epochs(eps, specific_selector)
+        @test selected_specific == [1]
+        
+        # Test with realistic selector (odd epochs)
+        odd_selector = x -> isodd.(x)
+        selected_odd = eegfun.get_selected_epochs(eps, odd_selector)
+        @test selected_odd == [1]  # Only epoch 1 is odd
+    end
+
+    @testset "_validate_epoch_window_params" begin
+        dat = create_continuous_with_triggers()
+        
+        # Valid parameters should not throw
+        @test eegfun._validate_epoch_window_params(dat, [-0.1, 0.1]) === nothing
+        
+        # Invalid time window length
+        @test_throws AssertionError eegfun._validate_epoch_window_params(dat, [-0.1])
+        @test_throws AssertionError eegfun._validate_epoch_window_params(dat, [-0.1, 0.0, 0.1])
+        
+        # Invalid time window order
+        @test_throws AssertionError eegfun._validate_epoch_window_params(dat, [0.1, -0.1])
+        
+        # Missing required columns
+        df_no_triggers = DataFrame(time = [0.0, 0.1], A = [1.0, 2.0])
+        layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+        dat_no_triggers = eegfun.ContinuousData(df_no_triggers, layout, 1000, eegfun.AnalysisInfo())
+        @test_throws AssertionError eegfun._validate_epoch_window_params(dat_no_triggers, [-0.1, 0.1])
+        
+        df_no_time = DataFrame(triggers = [0, 1], A = [1.0, 2.0])
+        dat_no_time = eegfun.ContinuousData(df_no_time, layout, 1000, eegfun.AnalysisInfo())
+        @test_throws AssertionError eegfun._validate_epoch_window_params(dat_no_time, [-0.1, 0.1])
+    end
+
+    @testset "edge cases and robustness" begin
+        # Empty EpochData for get_selected_epochs
+        layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+        empty_epochs = eegfun.EpochData(DataFrame[], layout, 1000, eegfun.AnalysisInfo())
+        empty_selector = x -> trues(length(x))
+        selected_empty = eegfun.get_selected_epochs(empty_epochs, empty_selector)
+        @test isempty(selected_empty)
+        
+        # Very short time windows for mark_epoch_windows!
+        dat = create_continuous_with_triggers()
+        eegfun.mark_epoch_windows!(dat, [1], [-0.001, 0.001])  # 2ms window
+        @test any(dat.data.epoch_window)
+        
+        # Zero-width window
+        dat2 = create_continuous_with_triggers()
+        eegfun.mark_epoch_windows!(dat2, [1], [0.0, 0.0])
+        @test any(dat2.data.epoch_window)  # Should still mark the exact sample
+        
+        # Large time windows (should not cause issues if within data bounds)
+        dat3 = create_continuous_with_triggers(n = 10000)  # Longer data
+        eegfun.mark_epoch_windows!(dat3, [1], [-0.05, 0.05])  # 100ms window
+        @test any(dat3.data.epoch_window)
+    end
+
 end
 
 

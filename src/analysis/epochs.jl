@@ -119,6 +119,9 @@ function _validate_epoch_window_params(dat::ContinuousData, time_window::Vector{
     @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
     @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
     @assert hasproperty(dat.data, :time) "Data must have a time column"
+    @assert !isempty(dat.data.time) "Time column cannot be empty"
+    @assert !isempty(dat.data.triggers) "Triggers column cannot be empty"
+    @assert issorted(dat.data.time) "Time column must be sorted in ascending order"
 end
 
 """
@@ -151,6 +154,51 @@ end
 
 
 
+
+"""
+    _mark_windows_at_indices!(dat::ContinuousData, reference_indices::Vector{Int}, time_window::Vector{<:Real}, channel_out::Symbol)
+
+Internal helper function to mark time windows around specific reference indices.
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+- `reference_indices`: Vector of sample indices to mark windows around
+- `time_window`: Time window in seconds as a vector of two numbers
+- `channel_out`: Symbol for the output column name
+
+# Returns
+- Number of windows marked
+"""
+function _mark_windows_at_indices!(
+    dat::ContinuousData,
+    reference_indices::Vector{Int}, 
+    time_window::Vector{<:Real}, 
+    channel_out::Symbol
+)::Int
+    n_marked = 0
+    
+    for idx in reference_indices
+        # Bounds check
+        if idx < 1 || idx > length(dat.data.time)
+            @minimal_warning "Reference index $idx is out of bounds, skipping"
+            continue
+        end
+        
+        reference_time = dat.data.time[idx]
+        
+        # Calculate window bounds
+        window_start = reference_time + time_window[1]
+        window_end = reference_time + time_window[2]
+        
+        # Mark samples within the window (vectorized for efficiency)
+        in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
+        dat.data[in_window, channel_out] .= true
+        
+        n_marked += sum(in_window)
+    end
+    
+    return n_marked
+end
 
 """
     mark_epoch_windows!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; 
@@ -219,39 +267,28 @@ function mark_epoch_windows!(
     time_window::Vector{<:Real};
     channel_out::Symbol = :epoch_window,
 )
-
     # Input validation
     _validate_epoch_window_params(dat, time_window)
 
     # Initialize result vector with false 
     dat.data[!, channel_out] .= false
 
-    # For each trigger of interest
+    # Collect all relevant trigger indices
+    all_reference_indices = Int[]
+    
     for trigger in triggers_of_interest
-
-        # Find all samples where this trigger occurs
         trigger_indices = findall(dat.data.triggers .== trigger)
         if isempty(trigger_indices)
             @minimal_warning "Trigger $trigger not found in data"
             continue
         end
-
-        # For each trigger occurrence
-        for idx in trigger_indices
-            trigger_time = dat.data.time[idx]
-
-            # Find all samples within the time window
-            window_start = trigger_time + time_window[1]
-            window_end = trigger_time + time_window[2]
-
-            # Mark samples within the window
-            in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
-            dat.data[in_window, channel_out] .= true
-
-        end
-
+        append!(all_reference_indices, trigger_indices)
     end
 
+    # Mark windows around all collected indices
+    n_marked = _mark_windows_at_indices!(dat, all_reference_indices, time_window, channel_out)
+    
+    return dat
 end
 
 
@@ -292,16 +329,17 @@ function mark_epoch_windows!(
     time_window::Vector{<:Real};
     channel_out::Symbol = :epoch_window,
 )
-
     # Input validation
     _validate_epoch_window_params(dat, time_window)
 
     # Initialize result vector with false
     dat.data[!, channel_out] .= false
 
+    # Collect all reference indices from all conditions
+    all_reference_indices = Int[]
+
     # For each epoch condition
     for condition in epoch_conditions
-
         # Find all occurrences of the trigger sequences (unified approach)
         sequence_indices = search_sequences(dat.data.triggers, condition.trigger_sequences)
         if isempty(sequence_indices)
@@ -311,7 +349,6 @@ function mark_epoch_windows!(
 
         # Apply after/before filtering if specified
         if condition.after !== nothing || condition.before !== nothing
-
             sequence_indices = filter(sequence_indices) do seq_start_idx
                 # Check after constraint
                 if condition.after !== nothing
@@ -323,7 +360,7 @@ function mark_epoch_windows!(
 
                 # Check before constraint  
                 if condition.before !== nothing
-                    sequence_end = seq_start_idx + length(condition.trigger_sequence) - 1
+                    sequence_end = seq_start_idx + length(condition.trigger_sequences[1]) - 1
                     found_before = any(dat.data.triggers[(sequence_end+1):end] .== condition.before)
                     if !found_before
                         return false
@@ -374,28 +411,21 @@ function mark_epoch_windows!(
             end
         end
 
-        # For each valid sequence occurrence, find the reference point (t=0 position)
+        # Convert sequence start indices to reference indices and collect them
         for seq_start_idx in sequence_indices
-
-            # Calculate the reference index (t=0 position) within the sequence
             reference_idx = seq_start_idx + (condition.reference_index - 1)
-            if reference_idx > length(dat.data.triggers)
+            if reference_idx <= length(dat.data.triggers)
+                push!(all_reference_indices, reference_idx)
+            else
                 @minimal_warning "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
-                continue
             end
-
-            reference_time = dat.data.time[reference_idx]
-
-            # Find all samples within the time window
-            window_start = reference_time + time_window[1]
-            window_end = reference_time + time_window[2]
-
-            # Mark samples within the window
-            in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
-            dat.data[in_window, channel_out] .= true
-
         end
     end
+
+    # Mark windows around all collected reference indices
+    n_marked = _mark_windows_at_indices!(dat, all_reference_indices, time_window, channel_out)
+    
+    return dat
 end
 
 
@@ -562,9 +592,15 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     pre_idx = zero_idx .- n_pre .+ 1
     post_idx = zero_idx .+ n_post .- 1
 
-    # extract and create array of dataframes
-    epochs = []
+    # Extract and create array of dataframes with bounds checking
+    epochs = DataFrame[]
+    
     for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
+        # Bounds checking to prevent out-of-bounds errors
+        if pre < 1 || post > nrow(dat.data)
+            throw(BoundsError(dat.data, "Epoch $epoch extends beyond data bounds (pre=$pre, post=$post, data_length=$(nrow(dat.data)))"))
+        end
+        
         epoch_df = DataFrame(dat.data[pre:post, :])
         epoch_df.time = epoch_df.time .- dat.data.time[zero]
         insertcols!(epoch_df, 4, :condition => condition)
@@ -572,7 +608,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         insertcols!(epoch_df, 6, :epoch => epoch)
         push!(epochs, epoch_df)
     end
-
+    
     return EpochData(epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
@@ -595,13 +631,17 @@ Average epochs to create an ERP. This function:
 - `ErpData`: The averaged ERP data with epoch counts
 """
 function average_epochs(dat::EpochData)
+    # Input validation
+    isempty(dat.data) && @minimal_error_throw("Cannot average empty EpochData")
+    
     # Get all columns from the first epoch
-    all_columns = propertynames(first(dat.data))
+    first_epoch = first(dat.data)
+    all_columns = propertynames(first_epoch)
     numeric_columns = Symbol[]
 
     # Find all numeric columns (excluding Bool)
     for col in all_columns
-        col_type = eltype(first(dat.data)[!, col])
+        col_type = eltype(first_epoch[!, col])
         if col_type <: Number && col_type != Bool
             push!(numeric_columns, col)
         end
@@ -615,22 +655,34 @@ function average_epochs(dat::EpochData)
     eeg_channels = setdiff(numeric_columns, metadata_columns)
     
     # Ensure we have some channels to average
-    isempty(eeg_channels) && @minimal_error "No EEG channels found to average"
+    isempty(eeg_channels) && @minimal_error_throw("No EEG channels found to average")
 
-    # Concatenate all epochs
-    all_epochs = reduce(vcat, dat.data)
+    # Concatenate all epochs with error handling
+    try
+        all_epochs = reduce(vcat, dat.data)
+        
+        # Verify we have the required grouping columns
+        required_cols = [:time, :condition, :condition_name]
+        for col in required_cols
+            if !hasproperty(all_epochs, col)
+                @minimal_error_throw("Missing required column '$col' for epoch averaging")
+            end
+        end
 
-    # Group by time and condition, then average EEG channels and count epochs
-    erp = combine(
-        groupby(all_epochs, [:time, :condition, :condition_name]),
-        :epoch => length => :n_epochs,      # Count how many epochs contributed
-        eeg_channels .=> mean .=> eeg_channels,  # Average the EEG channels
-    )
+        # Group by time and condition, then average EEG channels and count epochs
+        erp = combine(
+            groupby(all_epochs, required_cols),
+            :epoch => length => :n_epochs,      # Count how many epochs contributed
+            eeg_channels .=> mean .=> eeg_channels,  # Average the EEG channels
+        )
 
-    # Get the maximum number of epochs at any time point
-    n_epochs = maximum(erp.n_epochs)
+        # Get the maximum number of epochs at any time point
+        n_epochs = maximum(erp.n_epochs)
 
-    return ErpData(erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
+        return ErpData(erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
+    catch e
+        @minimal_error_throw("Failed to average epochs: $(e)")
+    end
 end
 
 """
@@ -647,15 +699,30 @@ Remove epochs that contain any true values in the specified boolean columns.
 
 """
 function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
+    # Input validation
+    isempty(dat.data) && @minimal_error_throw("Cannot remove bad epochs from empty EpochData")
+    isempty(bad_columns) && return dat  # No columns to check
+    
     # Validate that all bad_columns exist in the data
+    first_epoch = first(dat.data)
     for col in bad_columns
-        if !hasproperty(first(dat.data), col)
-            error("Column '$col' not found in epoch data")
+        if !hasproperty(first_epoch, col)
+            @minimal_error_throw("Column '$col' not found in epoch data")
+        end
+        
+        # Check if column is boolean
+        col_type = eltype(first_epoch[!, col])
+        if col_type != Bool
+            @minimal_warning "Column '$col' is not Boolean type ($(col_type)). Non-zero values will be treated as 'true'"
         end
     end
 
-    # Filter epochs: keep only epochs where ALL bad columns are false for ALL samples
+    # Pre-allocate for better performance
+    n_epochs = length(dat.data)
     good_epochs = DataFrame[]
+    sizehint!(good_epochs, n_epochs)  # Performance hint
+    
+    n_removed = 0
 
     for epoch_df in dat.data
         # Check if any sample in this epoch has any true value in any bad column
@@ -671,7 +738,14 @@ function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
         # If no bad samples found, keep this epoch
         if !has_bad_samples
             push!(good_epochs, epoch_df)
+        else
+            n_removed += 1
         end
+    end
+
+    # Log removal statistics
+    if n_removed > 0
+        @minimal_warning "Removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
     end
 
     # Return new EpochData with only good epochs
