@@ -375,6 +375,74 @@ using eegfun
             common_subset = eegfun.common_channels(cont_dat, erp_dat)
             @test common_subset == [:Fp1, :Fp2]
         end
+
+        @testset "EpochData Convenience Functions" begin
+            # Create epoch data with condition info
+            epoch1 = DataFrame(
+                time = [0.1, 0.2, 0.3],
+                triggers = [1, 0, 0],
+                condition = [1, 1, 1],
+                condition_name = ["test_condition", "test_condition", "test_condition"],
+                file = ["test_file.bdf", "test_file.bdf", "test_file.bdf"],
+                Fp1 = [1, 2, 3],
+                Fp2 = [4, 5, 6]
+            )
+            epoch2 = DataFrame(
+                time = [0.1, 0.2, 0.3], 
+                triggers = [1, 0, 0],
+                condition = [1, 1, 1],
+                condition_name = ["test_condition", "test_condition", "test_condition"],
+                file = ["test_file.bdf", "test_file.bdf", "test_file.bdf"],
+                Fp1 = [10, 20, 30],
+                Fp2 = [40, 50, 60]
+            )
+            layout = eegfun.Layout(
+                DataFrame(label = [:Fp1, :Fp2], inc = [30, 30], azi = [0, 90]), 
+                nothing, nothing
+            )
+            analysis_info = eegfun.AnalysisInfo()
+            epoch_dat = eegfun.EpochData([epoch1, epoch2], layout, 1000, analysis_info)
+
+            # Test condition_number
+            @test eegfun.condition_number(epoch_dat) == 1
+
+            # Test condition_name
+            @test eegfun.condition_name(epoch_dat) == "test_condition"
+
+            # Test file_name
+            @test eegfun.file_name(epoch_dat) == "test_file.bdf"
+        end
+
+        @testset "Selection Function Helpers" begin
+            # Test component selection functions
+            @test eegfun.components()(1:5) == [true, true, true, true, true]
+            @test eegfun.components([1, 3])(1:5) == [true, false, true, false, false]
+            @test eegfun.components(2)(1:5) == [false, true, false, false, false]
+            @test eegfun.components_not([1, 3])(1:5) == [false, true, false, true, true]
+            @test eegfun.components_not(2)(1:5) == [true, false, true, true, true]
+
+            # Test get_selected_components (requires mock ICA result)
+            # We'll skip this as it requires ICA infrastructure
+        end
+
+        @testset "Convert Function" begin
+            epoch_dat = create_test_epoch_data()
+            
+            # Test valid conversion
+            converted = eegfun.convert(epoch_dat, 1)
+            @test converted isa eegfun.ContinuousData
+            @test eegfun.n_samples(converted) == 3
+            @test eegfun.n_channels(converted) == 2
+            @test converted.data.Fp1 == [1, 2, 3]
+            
+            # Test second epoch
+            converted2 = eegfun.convert(epoch_dat, 2)
+            @test converted2.data.Fp1 == [10, 20, 30]
+            
+            # Test invalid epoch index
+            @test_throws Exception eegfun.convert(epoch_dat, 0)
+            @test_throws Exception eegfun.convert(epoch_dat, 3)  # only 2 epochs
+        end
     end
 
     # Test viewer, head and tail
@@ -502,6 +570,54 @@ using eegfun
         empty_epoch = eegfun.EpochData(DataFrame[], empty_layout, 1000, eegfun.AnalysisInfo())
         @test size(eegfun.to_data_frame(empty_epoch)) == (0, 0)
         @test size(eegfun.to_data_frame([empty_epoch])) == (0, 0)
+    end
+
+    # Test ylimits functions
+    @testset "ylimits Functions" begin
+        
+        @testset "ylimits for ErpData" begin
+            erp_dat = create_test_erp_data()
+            
+            # Test basic ylimits
+            limits = eegfun.ylimits(erp_dat)
+            @test limits isa Tuple{Float64, Float64}
+            @test limits[1] < limits[2]  # min < max
+            @test limits[1] == 1.0  # minimum value in data
+            @test limits[2] == 8.0  # maximum value in data
+            
+            # Test with channel selection
+            limits_fp1 = eegfun.ylimits(erp_dat, channel_selection = eegfun.channels([:Fp1]))
+            @test limits_fp1 == (1.0, 4.0)  # Fp1 data range
+            
+            # Test with sample selection
+            limits_positive = eegfun.ylimits(erp_dat, sample_selection = x -> x.time .>= 0.0)
+            @test limits_positive[1] >= 2.0  # Should exclude negative time samples
+        end
+        
+        @testset "ylimits for EpochData" begin
+            epoch_dat = create_test_epoch_data()
+            
+            # Test basic ylimits
+            limits = eegfun.ylimits(epoch_dat)
+            @test limits isa Tuple{Float64, Float64}
+            @test limits[1] < limits[2]
+            @test limits[1] == 1.0  # minimum value across all epochs
+            @test limits[2] == 60.0  # maximum value across all epochs (Fp2 in epoch 2)
+            
+            # Test with channel selection
+            limits_fp2 = eegfun.ylimits(epoch_dat, channel_selection = eegfun.channels([:Fp2]))
+            @test limits_fp2[1] >= 4.0  # Fp2 has higher values
+            
+            # Test with sample selection
+            limits_triggers = eegfun.ylimits(epoch_dat, sample_selection = x -> x.triggers .== 1)
+            @test limits_triggers isa Tuple{Float64, Float64}
+        end
+    end
+
+    # Test log_pretty_table (only function remaining in data.jl)
+    @testset "log_pretty_table" begin
+        df = DataFrame(a = [1, 2], b = [3, 4])
+        @test eegfun.log_pretty_table("Test message", df) === nothing
     end
 
     # === SUBSET FUNCTION TESTS ===

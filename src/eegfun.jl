@@ -22,6 +22,7 @@ using Logging
 using LoggingExtras
 using OrderedCollections
 using Printf
+using Statistics
 using StatsBase
 using Random
 using Dates
@@ -52,8 +53,9 @@ include("config/config.jl")
 include("analysis/analyse.jl")
 include("analysis/autoreject.jl")
 include("analysis/baseline.jl")
-include("analysis/channel_difference.jl")
 include("analysis/channel_average.jl")
+include("analysis/channel_difference.jl")
+include("analysis/channel_summary.jl")
 include("analysis/epochs.jl")
 include("analysis/filter.jl")
 include("analysis/ica.jl")
