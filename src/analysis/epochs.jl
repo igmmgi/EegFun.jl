@@ -15,7 +15,7 @@ function parse_epoch_conditions(config::Dict)
         # Parse trigger sequences (unified approach)
         trigger_sequences_raw = get(condition_config, "trigger_sequences", nothing)
         if trigger_sequences_raw === nothing
-            @minimal_error("trigger_sequences must be specified for condition '$name'")
+            @minimal_error_throw("trigger_sequences must be specified for condition '$name'")
         end
 
         # Parse the unified format
@@ -29,7 +29,7 @@ function parse_epoch_conditions(config::Dict)
                 # Range - convert to single-element sequence
                 push!(trigger_sequences, [sequence])
             else
-                @minimal_error("Invalid trigger sequence format: $sequence")
+                @minimal_error_throw("Invalid trigger sequence format: $sequence")
             end
         end
 
@@ -51,7 +51,7 @@ function parse_epoch_conditions(config::Dict)
 
             # Validate that both min and max intervals are specified if timing_pairs is specified
             if min_interval === nothing || max_interval === nothing
-                @minimal_error(
+                @minimal_error_throw(
                     "Both min_interval and max_interval must be specified when timing_pairs is specified for condition '$name'",
                 )
             end
@@ -63,7 +63,7 @@ function parse_epoch_conditions(config::Dict)
 
         # Validation
         if reference_index < 1 || reference_index > length(trigger_sequences[1])
-            @minimal_error(
+            @minimal_error_throw(
                 "reference_index must be between 1 and $(length(trigger_sequences[1])) for condition '$name'"
             )
         end
@@ -80,19 +80,19 @@ function parse_epoch_conditions(config::Dict)
                    start_idx > length(trigger_sequences[1]) ||
                    end_idx < 1 ||
                    end_idx > length(trigger_sequences[1])
-                    @minimal_error(
+                    @minimal_error_throw(
                         "timing_pairs contains invalid indices for sequence of length $(length(trigger_sequences[1])) in condition '$name'",
                     )
                 end
                 if start_idx >= end_idx
-                    @minimal_error("timing_pairs must have start_idx < end_idx for condition '$name'")
+                    @minimal_error_throw("timing_pairs must have start_idx < end_idx for condition '$name'")
                 end
             end
         end
 
         # Validate after/before constraints
         if after !== nothing && before !== nothing
-            @minimal_error("Cannot specify both 'after' and 'before' constraints for condition '$name'")
+            @minimal_error_throw("Cannot specify both 'after' and 'before' constraints for condition '$name'")
         end
 
         push!(
