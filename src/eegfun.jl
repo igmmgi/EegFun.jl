@@ -60,6 +60,7 @@ include("analysis/ica.jl")
 include("analysis/preprocess.jl")
 include("analysis/rereference.jl")
 include("analysis/tf.jl")
+include("analysis/triggers.jl")
 
 # Plotting functions
 include("plots/constants.jl")

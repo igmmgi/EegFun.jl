@@ -27,6 +27,7 @@ println("=" ^ 40)
     include("test_ica.jl")
     include("test_rereference.jl")
     include("test_types.jl")   
+    include("test_triggers.jl")   
 end
 
 println("\nAll tests completed!")
