@@ -113,6 +113,294 @@ function parse_epoch_conditions(config::Dict)
     return conditions
 end
 
+# Helper function to validate epoch window parameters
+function _validate_epoch_window_params(dat::ContinuousData, time_window::Vector{<:Real})
+    @assert length(time_window) == 2 "Time window must have exactly 2 elements"
+    @assert time_window[1] <= time_window[2] "Time window start must be less than or equal to end"
+    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
+    @assert hasproperty(dat.data, :time) "Data must have a time column"
+end
+
+"""
+    get_selected_epochs(dat::EpochData, epoch_selection::Function) -> Vector{Int}
+
+Get the indices of epochs that match the epoch selection predicate.
+
+# Arguments
+- `dat::EpochData`: The EpochData object containing the epochs
+- `epoch_selection::Function`: Function that returns boolean vector for epoch filtering
+
+# Returns
+- `Vector{Int}`: Indices of selected epochs
+
+# Examples
+```julia
+# Get all epochs
+selected = get_selected_epochs(dat, epochs())
+
+# Get specific epochs
+selected = get_selected_epochs(dat, epochs(1:10))
+
+# Get epochs matching a condition
+selected = get_selected_epochs(dat, epochs([1, 3, 5]))
+```
+"""
+function get_selected_epochs(dat::EpochData, epoch_selection::Function)
+    return findall(epoch_selection(1:length(dat.data)))
+end
+
+
+
+
+"""
+    mark_epoch_windows!(dat::ContinuousData, triggers_of_interest::Vector{Int}, time_window::Vector{<:Real}; 
+                         channel_out::Symbol = :epoch_window)
+
+Mark samples that are within a specified time window of triggers of interest.
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+- `triggers_of_interest`: Vector of trigger values to mark windows around
+- `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
+- `channel_out`: Symbol for the output column name (default: :epoch_window)
+
+# Returns
+- The modified ContinuousData object with a new column indicating samples within trigger windows
+
+# Examples
+
+## Basic Usage
+```julia
+# Mark windows around trigger 1 (1 second before to 2 seconds after)
+mark_epoch_windows!(dat, [1], [-1.0, 2.0])
+
+# Mark windows around multiple (1, 3, and 5) triggers
+mark_epoch_windows!(dat, [1, 3, 5], [-1.0, 2.0])
+
+# Custom column name
+mark_epoch_windows!(dat, [1, 3], [-0.5, 0.5], channel_out = :near_trigger)
+```
+
+## Different Time Windows
+```julia
+# Pre-stimulus baseline window
+mark_epoch_windows!(dat, [1], [-0.2, 0.0], channel_out = :baseline_window)
+
+# Post-stimulus response window
+mark_epoch_windows!(dat, [1], [0.0, 0.8], channel_out = :response_window)
+
+# Asymmetric window (more time after trigger)
+mark_epoch_windows!(dat, [1], [-0.1, 1.0], channel_out = :asymmetric_window)
+
+# Very short window for fast responses
+mark_epoch_windows!(dat, [1], [-0.05, 0.3], channel_out = :fast_response)
+```
+
+## Multiple Conditions
+```julia
+# Different conditions with different windows
+mark_epoch_windows!(dat, [1], [-0.2, 0.8], channel_out = :condition_1)
+mark_epoch_windows!(dat, [2], [-0.2, 1.0], channel_out = :condition_2)
+mark_epoch_windows!(dat, [3], [-0.2, 1.2], channel_out = :condition_3)
+```
+
+## Using with Sample Filtering
+```julia
+# Mark epoch windows
+mark_epoch_windows!(dat, [1, 3], [-1.0, 2.0])
+
+# Use in analysis (only samples within epochs)
+# summary = channel_summary(dat, samples = samples(:epoch_window))
+```
+"""
+function mark_epoch_windows!(
+    dat::ContinuousData,
+    triggers_of_interest::Vector{Int},
+    time_window::Vector{<:Real};
+    channel_out::Symbol = :epoch_window,
+)
+
+    # Input validation
+    _validate_epoch_window_params(dat, time_window)
+
+    # Initialize result vector with false 
+    dat.data[!, channel_out] .= false
+
+    # For each trigger of interest
+    for trigger in triggers_of_interest
+
+        # Find all samples where this trigger occurs
+        trigger_indices = findall(dat.data.triggers .== trigger)
+        if isempty(trigger_indices)
+            @minimal_warning "Trigger $trigger not found in data"
+            continue
+        end
+
+        # For each trigger occurrence
+        for idx in trigger_indices
+            trigger_time = dat.data.time[idx]
+
+            # Find all samples within the time window
+            window_start = trigger_time + time_window[1]
+            window_end = trigger_time + time_window[2]
+
+            # Mark samples within the window
+            in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
+            dat.data[in_window, channel_out] .= true
+
+        end
+
+    end
+
+end
+
+
+
+
+"""
+    mark_epoch_windows!(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, time_window::Vector{<:Real}; 
+                         channel_out::Symbol = :epoch_window)
+
+Mark samples that are within a specified time window of trigger sequences defined by epoch conditions.
+
+# Arguments
+- `dat`: ContinuousData object containing the EEG data
+- `epoch_conditions`: Vector of EpochCondition objects defining trigger sequences and reference points
+- `time_window`: Time window in seconds as a vector of two numbers ([-1, 2] for window from -1 to 2 seconds)
+- `channel_out`: Symbol for the output column name (default: :epoch_window)
+
+# Returns
+- The modified ContinuousData object with a new column indicating samples within trigger sequence windows
+
+# Examples
+```julia
+# Define epoch conditions with wildcards and ranges
+condition1 = EpochCondition(name="condition_1", trigger_sequence=[1, :any, 3], reference_index=2)
+condition2 = EpochCondition(name="condition_2", trigger_ranges=[1:5, 10:15], reference_index=1)
+conditions = [condition1, condition2]
+
+# Mark windows around trigger sequences
+mark_epoch_windows!(dat, conditions, [-1.0, 2.0])
+
+# Custom column name
+mark_epoch_windows!(dat, conditions, [-0.5, 0.5], channel_out = :near_sequences)
+```
+"""
+function mark_epoch_windows!(
+    dat::ContinuousData,
+    epoch_conditions::Vector{EpochCondition},
+    time_window::Vector{<:Real};
+    channel_out::Symbol = :epoch_window,
+)
+
+    # Input validation
+    _validate_epoch_window_params(dat, time_window)
+
+    # Initialize result vector with false
+    dat.data[!, channel_out] .= false
+
+    # For each epoch condition
+    for condition in epoch_conditions
+
+        # Find all occurrences of the trigger sequences (unified approach)
+        sequence_indices = search_sequences(dat.data.triggers, condition.trigger_sequences)
+        if isempty(sequence_indices)
+            @minimal_warning "No triggers found for condition '$(condition.name)'"
+            continue
+        end
+
+        # Apply after/before filtering if specified
+        if condition.after !== nothing || condition.before !== nothing
+
+            sequence_indices = filter(sequence_indices) do seq_start_idx
+                # Check after constraint
+                if condition.after !== nothing
+                    found_after = any(dat.data.triggers[1:(seq_start_idx-1)] .== condition.after)
+                    if !found_after
+                        return false
+                    end
+                end
+
+                # Check before constraint  
+                if condition.before !== nothing
+                    sequence_end = seq_start_idx + length(condition.trigger_sequence) - 1
+                    found_before = any(dat.data.triggers[(sequence_end+1):end] .== condition.before)
+                    if !found_before
+                        return false
+                    end
+                end
+
+                return true
+            end
+            if isempty(sequence_indices)
+                after_msg = condition.after !== nothing ? " after trigger $(condition.after)" : ""
+                before_msg = condition.before !== nothing ? " before trigger $(condition.before)" : ""
+                @minimal_warning "No trigger sequences found that meet position constraints$(after_msg)$(before_msg) for condition '$(condition.name)'"
+                continue
+            end
+        end
+
+        # Apply timing constraints if specified
+        if condition.timing_pairs !== nothing &&
+           condition.min_interval !== nothing &&
+           condition.max_interval !== nothing
+
+            sequence_indices = filter(sequence_indices) do seq_start_idx
+                for (start_idx, end_idx) in condition.timing_pairs
+                    # Calculate actual indices in the trigger array
+                    actual_start_idx = seq_start_idx + (start_idx - 1)
+                    actual_end_idx = seq_start_idx + (end_idx - 1)
+
+                    # Check bounds
+                    if actual_start_idx < 1 || actual_end_idx > length(dat.data.triggers)
+                        return false
+                    end
+
+                    # Calculate time interval between the two triggers
+                    start_time_val = dat.data.time[actual_start_idx]
+                    end_time_val = dat.data.time[actual_end_idx]
+                    interval = end_time_val - start_time_val
+
+                    # Check if interval meets constraints
+                    if interval < condition.min_interval || interval > condition.max_interval
+                        return false
+                    end
+                end
+                return true
+            end
+            if isempty(sequence_indices)
+                @minimal_warning "No trigger sequences found that meet timing constraints for condition '$(condition.name)'"
+                continue
+            end
+        end
+
+        # For each valid sequence occurrence, find the reference point (t=0 position)
+        for seq_start_idx in sequence_indices
+
+            # Calculate the reference index (t=0 position) within the sequence
+            reference_idx = seq_start_idx + (condition.reference_index - 1)
+            if reference_idx > length(dat.data.triggers)
+                @minimal_warning "Reference index $(condition.reference_index) for condition '$(condition.name)' is out of bounds"
+                continue
+            end
+
+            reference_time = dat.data.time[reference_idx]
+
+            # Find all samples within the time window
+            window_start = reference_time + time_window[1]
+            window_end = reference_time + time_window[2]
+
+            # Mark samples within the window
+            in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
+            dat.data[in_window, channel_out] .= true
+
+        end
+    end
+end
+
+
+
+
 
 """
     search_sequences(array, sequences)
