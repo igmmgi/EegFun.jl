@@ -798,6 +798,120 @@ function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
     return nothing
 end
 
+# === LAYOUT VALIDATION AND MANIPULATION ===
+"""
+    rename!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+
+Rename channels in a Layout object using a dictionary mapping old names to new names.
+Modifies the layout in place.
+
+# Arguments
+- `layout::Layout`: The layout object to modify
+- `rename_dict::Dict{Symbol, Symbol}`: Dictionary mapping old channel names to new names
+
+# Returns
+- `nothing` (modifies the layout in place)
+
+# Examples
+```julia
+# Rename Fp1 to Fpz and Fp2 to Fpz
+rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fpz)
+rename!(layout, rename_dict)
+
+# Rename a single channel
+rename!(layout, Dict(:Cz => :Cz_new))
+```
+
+# Notes
+- Only channels that exist in the layout will be renamed
+- If multiple channels would be renamed to the same name, an error is thrown to prevent duplicates
+- Clears any cached neighbour information since channel names have changed
+"""
+function rename_channel!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+    # Check if any channels in the rename_dict exist in the layout
+    existing_channels = Set(layout.data.label)
+    channels_to_rename = keys(rename_dict)
+    channels_found = intersect(existing_channels, channels_to_rename)
+    
+    if isempty(channels_found)
+        @info "rename!: No channels found to rename"
+        return nothing
+    end
+    
+    # Check for potential duplicate names before applying any renames
+    final_names = Symbol[]
+    for (old_name, new_name) in rename_dict
+        if old_name ∈ existing_channels
+            push!(final_names, new_name)
+        end
+    end
+    
+    # Check for duplicates in final names
+    if length(final_names) != length(unique(final_names))
+        duplicate_names = filter(x -> count(==(x), final_names) > 1, unique(final_names))
+        @minimal_error_throw "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
+    end
+    
+    # Apply the renaming with proper swap handling
+    # First, collect all the final rename mappings to avoid interference
+    final_renames = Dict{Int, Symbol}()  # row_index => final_name
+    
+    for (old_name, new_name) in rename_dict
+        if old_name ∈ existing_channels
+            # Find the row index for this channel
+            row_idx = findfirst(==(old_name), layout.data.label)
+            if !isnothing(row_idx)
+                final_renames[row_idx] = new_name
+            end
+        end
+    end
+    
+    # Now apply all renames simultaneously
+    for (row_idx, final_name) in final_renames
+        layout.data[row_idx, :label] = final_name
+    end
+    
+    # Clear any cached neighbour information since channel names have changed
+    if has_neighbours(layout)
+        @info "rename!: Clearing neighbours since channel names have changed"
+        clear_neighbours!(layout)
+    end
+    
+    @info "rename!: Renamed $(length(channels_found)) channels"
+    return nothing
+end
+
+"""
+    rename(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+
+Create a renamed copy of a Layout object using a dictionary mapping old names to new names.
+
+# Arguments
+- `layout::Layout`: The layout object to rename
+- `rename_dict::Dict{Symbol, Symbol}`: Dictionary mapping old channel names to new names
+
+# Returns
+- `Layout`: A new layout object with renamed channels
+
+# Examples
+```julia
+# Rename Fp1 to Fpz and Fp2 to Fpz
+rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fpz)
+new_layout = rename(layout, rename_dict)
+```
+
+# Notes
+- Only channels that exist in the layout will be renamed
+- If multiple channels would be renamed to the same name, an error is thrown to prevent duplicates
+- The original layout is not modified
+"""
+function rename_channel(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+    # Create a copy of the layout and apply renaming
+    renamed_layout = Layout(copy(layout.data), nothing, nothing)
+    rename_channel!(renamed_layout, rename_dict)
+    return renamed_layout
+end
+
 # === LAYOUT SUBSETTING ===
 """
     get_selected_channels(layout::Layout, channel_selection::Function) -> Vector{Symbol}

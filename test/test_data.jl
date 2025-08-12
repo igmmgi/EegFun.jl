@@ -806,5 +806,51 @@ using eegfun
             @test eegfun.n_epochs(invalid_epoch_result) == 0
             @test length(invalid_epoch_result.data) == 0
         end
+
+    # Test rename_channel functionality with EEG data types
+    @testset "rename_channel with EEG data" begin
+        # Test basic renaming with ContinuousData
+        dat_cont = create_test_continuous_data()
+        dat_rename = copy(dat_cont)
+        eegfun.rename_channel!(dat_rename, Dict(:Fp1 => :Fp1_new))
+        @test :Fp1_new ∈ propertynames(dat_rename.data)
+        @test :Fp1 ∉ propertynames(dat_rename.data)
+        @test :Fp1_new in dat_rename.layout.data.label
+        
+        # Test swap behavior with ContinuousData
+        dat_swap = copy(dat_cont)
+        eegfun.rename_channel!(dat_swap, Dict(:Fp1 => :Fp2, :Fp2 => :Fp1))
+        @test :Fp1 in dat_swap.layout.data.label
+        @test :Fp2 in dat_swap.layout.data.label
+        @test :Fp1 in propertynames(dat_swap.data)
+        @test :Fp2 in propertynames(dat_swap.data)
+        
+        # Test that duplicate names are prevented
+        @test_throws Any eegfun.rename_channel!(copy(dat_cont), Dict(:Fp1 => :X, :Fp2 => :X))
+        
+        # Test non-mutating version with ContinuousData
+        dat_copy = copy(dat_cont)
+        new_dat = eegfun.rename_channel(dat_copy, Dict(:Fp1 => :Fp1_new))
+        @test :Fp1_new ∈ propertynames(new_dat.data)
+        @test :Fp1 ∉ propertynames(new_dat.data)
+        @test :Fp1 ∈ propertynames(dat_copy.data)  # Original unchanged
+        @test :Fp1_new ∉ propertynames(dat_copy.data)  # Original unchanged
+        
+        # Test with EpochData
+        dat_epoch = create_test_epoch_data()
+        eegfun.rename_channel!(dat_epoch, Dict(:Fp1 => :Fp1_new))
+        @test :Fp1_new ∈ propertynames(dat_epoch.data[1])
+        @test :Fp1_new ∈ propertynames(dat_epoch.data[2])
+        @test :Fp1 ∉ propertynames(dat_epoch.data[1])
+        @test :Fp1 ∉ propertynames(dat_epoch.data[2])
+        
+        # Test with ErpData
+        dat_erp = create_test_erp_data()
+        eegfun.rename_channel!(dat_erp, Dict(:Fp1 => :Fp1_new))
+        @test :Fp1_new ∈ propertynames(dat_erp.data)
+        @test :Fp1 ∉ propertynames(dat_erp.data)
+    end
+
+
     end
 end

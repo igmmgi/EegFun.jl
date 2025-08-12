@@ -17,6 +17,10 @@ using BenchmarkTools
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+
+layout_new = eegfun.rename_channel(layout, Dict(:Fp1 => :BABABBABABA, :Fp2 => :AHAHAHAH))
+
+
 # define neighbours 2D/3D defined by distance (mm)
 eegfun.polar_to_cartesian_xy!(layout);
 eegfun.get_layout_neighbours_xy!(layout, 40);
