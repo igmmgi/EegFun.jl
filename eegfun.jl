@@ -26,7 +26,7 @@ eegfun.get_layout_neighbours_xyz!(layout, 40);
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
-eegfun.plot_databrowser(dat)
+# eegfun.plot_databrowser(dat)
 
 # eegfun.plot_channel_spectrum(dat)
 # eegfun.plot_channel_spectrum(dat)
@@ -42,7 +42,7 @@ for (idx, epoch) in enumerate(epochs)
     push!(erps, eegfun.average_epochs(epochs[idx]))
 end
 
-@btime d = eegfun.average_channels(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
+d = eegfun.channel_average(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
 d = eegfun.average_channels(epochs[1])
 
 
