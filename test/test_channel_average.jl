@@ -112,6 +112,8 @@ using eegfun
     original_cols = propertynames(dat_empty.data)
     eegfun.channel_average!(dat_empty, channel_selections = [])
     @test propertynames(dat_empty.data) == original_cols  # No new columns added
+
+  
 end
 
 
