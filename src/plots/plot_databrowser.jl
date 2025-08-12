@@ -299,7 +299,7 @@ function create_menu(fig, options, default, label; kwargs...)
 end
 
 function create_labels_menu(fig, ax, state)
-    options = vcat(["All", "Left", "Right", "Central"], state.channels.labels)
+    options = vcat(["All", "Left", "Right", "Central", "BioSemi16", "BioSemi32", "BioSemi64"], state.channels.labels)
     menu = create_menu(fig, options, "All", "Labels")
 
     on(menu[1].selection) do s
@@ -311,6 +311,15 @@ function create_labels_menu(fig, ax, state)
             state.channels.visible .= occursin.(r"\d*[24680]$", String.(state.channels.labels))
         elseif s == "Central"
             state.channels.visible .= occursin.(r"z$", String.(state.channels.labels))
+        elseif s == "BioSemi16"
+            tmp_layout = read_layout("./data/layouts/biosemi16.csv")
+            state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
+        elseif s == "BioSemi32"
+            tmp_layout = read_layout("./data/layouts/biosemi32.csv")
+            state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
+        elseif s == "BioSemi64"
+            tmp_layout = read_layout("./data/layouts/biosemi64.csv")
+            state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         else
             state.channels.visible .= (state.channels.labels .== Symbol(s))
         end
