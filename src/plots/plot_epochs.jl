@@ -175,7 +175,7 @@ function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
     trial_color = kwargs[:color][1]
     trial_linewidth = kwargs[:linewidth][1]
 
-    # Precompute concatenated buffers with NaN separators: total length = m*n + (m-1)
+    # Concatenate all trials with NaN separators into single buffers
     trials = dat.data
     m = length(trials)
     n = length(time_vec)
@@ -184,18 +184,15 @@ function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
     time_cat = Vector{Float64}(undef, total_len)
     y_cat = Vector{Float64}(undef, total_len)
 
-    # Fill buffers
     pos = 1
     @inbounds for t in 1:m
         df = trials[t]
         y = df[!, ch]
-        # copy one trial
         @inbounds @simd for i in 1:n
             time_cat[pos] = time_vec[i]
             y_cat[pos] = y[i]
             pos += 1
         end
-        # separator (except after last)
         if t != m
             time_cat[pos] = NaN
             y_cat[pos] = NaN
