@@ -12,6 +12,7 @@ using GLMakie
 using DataFrames
 using BenchmarkTools
 
+
 # eegfun.preprocess_eeg_data("pipeline.toml")
 
 # load data
@@ -37,7 +38,7 @@ for (idx, epoch) in enumerate(epoch_cfg)
 end
 # eegfun.plot_databrowser(epochs[1])
 # average epochs
-erps = []
+erps = eegfun.ErpData[]
 for (idx, epoch) in enumerate(epochs)
     push!(erps, eegfun.average_epochs(epochs[idx]))
 end
@@ -46,31 +47,31 @@ end
 # eegfun.plot_topography(erps[1])
 # eegfun.plot_databrowser(erps[1])
 eegfun.plot_epochs(epochs[1])
-@time eegfun.plot_epochs(epochs[1], epoch_selection = eegfun.epochs(1:2))
-
-@time eegfun.plot_epochs(epochs[1], kwargs = Dict(:sample_stride => 100))
-
-
+eegfun.plot_epochs(epochs[1], epoch_selection = eegfun.epochs(1:2))
+eegfun.plot_epochs(epochs[1], kwargs = Dict(:sample_stride => 100))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
 
 
-eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true, :average_channels => true))
-
-
-eegfun.ylimits(epochs[1])
-eegfun.ylimits(erps[1])
-
+# ERP Plot
+fig, ax = eegfun.plot_erp(erps[1])
+display(fig)
 
 # ERP Plot
-eegfun.plot_erp(erps[1])
+fig, ax = eegfun.plot_erp(erps[1]; channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> -1 .< x.time .< 1.5)
+display(fig)
+
+# ERP Plot
+@time fig, ax = eegfun.plot_erp(erps; channel_selection = eegfun.channels([:Fp1, :P08]), sample_selection = x -> -1 .< x.time .< 1.5); display(fig);
+@time fig, ax = eegfun.plot_erp(erps); display(fig);
 
 
 
-eegfun.plot_erp(erps[1], :Fp1)
-eegfun.plot_erp(erps[1], [:Fp1, :Fp2])
-eegfun.plot_erp(erps[2], [:Fp1, :Fp2, :Cz])
-eegfun.plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => true))
+
+
+
+
+
 
 
 
