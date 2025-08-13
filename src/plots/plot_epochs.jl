@@ -1,4 +1,5 @@
 # TODO: this still feels a bit too slow!
+# TODO: proper origin ax
 
 function plot_epochs(
     dat::EpochData;
@@ -36,7 +37,7 @@ function plot_epochs(
         :title => nothing,
         :xlabel => "Time (S)",
         :ylabel => "mV",
-        :linewidth => [0.5, 2],
+        :linewidth => [1, 2],
         :color => [:grey, :red],
         :yreversed => false,
         # layout can be: false (default auto grid), true (use data's layout semantics), or [rows, cols]
@@ -54,6 +55,7 @@ function plot_epochs(
         :hidedecorations => false,
         :theme_fontsize => 24,
         :plot_avg_trials => true,                # draw ERP average overlay
+        :axes_through_origin => true,
     )
     kwargs = merge(default_kwargs, kwargs)
 
@@ -81,6 +83,12 @@ function plot_epochs(
         if kwargs[:plot_avg_trials]
             erp_dat = average_epochs(dat_avg)
             _plot_epochs_from_erp!(ax, erp_dat, [:avg], kwargs)
+        end
+
+        # Draw axes through origin if requested
+        if get(kwargs, :axes_through_origin, false)
+            hlines!(ax, [0.0], color = :black, linewidth = 1)
+            vlines!(ax, [0.0], color = :black, linewidth = 1)
         end
 
         # Set axis properties
@@ -131,6 +139,12 @@ function plot_epochs(
                 push!(axes, ax)
                 _plot_epochs!(ax, dat_subset, [channel], kwargs)
                 erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], kwargs)
+
+                # Draw axes through origin if requested
+                if get(kwargs, :axes_through_origin, false)
+                    hlines!(ax, [0.0], color = :black, linewidth = 1)
+                    vlines!(ax, [0.0], color = :black, linewidth = 1)
+                end
 
                 # Set axis properties with ylim
                 axis_kwargs = merge(kwargs, Dict(:ylim => ylim))
@@ -269,6 +283,12 @@ function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, e
         push!(axes, ax)
         _plot_epochs!(ax, dat, [ch], kwargs)
         erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [ch], kwargs)
+
+        # Draw axes through origin if requested
+        if get(kwargs, :axes_through_origin, false)
+            hlines!(ax, [0.0], color = :black, linewidth = 1)
+            vlines!(ax, [0.0], color = :black, linewidth = 1)
+        end
 
         # Suppress axis labels on all but the final axis; set only limits and title for now
         axis_kwargs = merge(kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
