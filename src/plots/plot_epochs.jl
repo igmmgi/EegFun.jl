@@ -167,6 +167,7 @@ end
 
 function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
     # This function expects exactly one channel; callers pass [:avg] or [channel]
+    println("plot_epochs! $(channels)")
     @assert length(channels) == 1 "_plot_epochs! expects a single channel"
     ch = channels[1]
 
@@ -188,7 +189,7 @@ function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
     @inbounds for t in 1:m
         df = trials[t]
         y = df[!, ch]
-        @inbounds @simd for i in 1:n
+        for i in 1:n
             time_cat[pos] = time_vec[i]
             y_cat[pos] = y[i]
             pos += 1
@@ -202,6 +203,7 @@ function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
 
     lines!(ax, time_cat, y_cat, color = trial_color, linewidth = trial_linewidth)
 
+    println("plot_epochs end!")
     return nothing
 end
 
