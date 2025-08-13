@@ -58,19 +58,28 @@ function plot_epochs(
     fig = Figure()
     axes = Axis[]  # Keep track of all axes created
 
-    # Precompute ERP once when average overlay requested
-    erp_dat = nothing
-    if kwargs[:plot_avg_trials]
-        erp_dat = average_epochs(dat_subset)
-    end
-
+    # Early branch: average across channels path
     if kwargs[:average_channels]
 
         # Single plot averaging across channels
         ax = Axis(fig[1, 1])
         push!(axes, ax)
-        _plot_epochs!(ax, dat_subset, all_plot_channels, kwargs)
-        kwargs[:plot_avg_trials] && _plot_epochs_from_erp!(ax, erp_dat, all_plot_channels, kwargs)
+
+        # Precompute averaged channel once via channel_average!
+        dat_avg = copy(dat_subset)
+        channel_average!(
+            dat_avg;
+            channel_selections = [channels(all_plot_channels)],
+            output_labels = [:avg],
+            reduce = false,
+        )
+        _plot_epochs!(ax, dat_avg, [:avg], kwargs)
+
+        # Optional ERP overlay (compute only when needed) from averaged data
+        if kwargs[:plot_avg_trials]
+            erp_dat = average_epochs(dat_avg)
+            _plot_epochs_from_erp!(ax, erp_dat, [:avg], kwargs)
+        end
 
         # Set axis properties
         if length(all_plot_channels) == 1
@@ -86,6 +95,8 @@ function plot_epochs(
         # Handle layout kwarg: Bool or Vector{Int}
         layout_kw = kwargs[:layout]
         if layout_kw === true
+            # Optional ERP overlay data
+            erp_dat = kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
             _plot_epochs_layout!(fig, axes, dat_subset, erp_dat, all_plot_channels, kwargs)
         else
             if layout_kw === false || isnothing(layout_kw)
@@ -101,6 +112,9 @@ function plot_epochs(
                 end
             end
 
+            # Optional ERP overlay data
+            erp_dat = kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
+
             # Calculate y-range if not provided (using shared yrange helper)
             ylim = kwargs[:ylim]
             if isnothing(ylim)
@@ -114,7 +128,7 @@ function plot_epochs(
                 ax = Axis(fig[row, col])
                 push!(axes, ax)
                 _plot_epochs!(ax, dat_subset, [channel], kwargs)
-                kwargs[:plot_avg_trials] && _plot_epochs_from_erp!(ax, erp_dat, [channel], kwargs)
+                erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], kwargs)
 
                 # Set axis properties with ylim
                 axis_kwargs = merge(kwargs, Dict(:ylim => ylim))
@@ -152,69 +166,58 @@ function plot_epochs(
 end
 
 function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
-    # Pre-allocate arrays for better performance
-    trial_buffer = zeros(Float64, n_samples(dat))
+    # This function expects exactly one channel; callers pass [:avg] or [channel]
+    @assert length(channels) == 1 "_plot_epochs! expects a single channel"
+    ch = channels[1]
 
     # Cache time vector and styles
     time_vec = dat.data[1][!, :time]
     trial_color = kwargs[:color][1]
     trial_linewidth = kwargs[:linewidth][1]
 
-    # Local helper to compute row-wise mean across selected channels without allocations
-    @inline function _mean_over_channels!(dest::Vector{Float64}, df::DataFrame, cols::Vector{Symbol})
-        n = length(dest)
-        # Assume consistent sample length across trials; only resize if mismatched
-        if n != nrow(df)
-            resize!(dest, nrow(df))
-            n = length(dest)
-        end
-        fill!(dest, 0.0)
-        @inbounds for j in 1:length(cols)
-            col = df[!, cols[j]]
-            @inbounds @simd for i in 1:n
-                dest[i] += col[i]
-            end
-        end
-        invm = 1.0 / length(cols)
+    # Precompute concatenated buffers with NaN separators: total length = m*n + (m-1)
+    trials = dat.data
+    m = length(trials)
+    n = length(time_vec)
+    total_len = m * n + (m - 1)
+
+    time_cat = Vector{Float64}(undef, total_len)
+    y_cat = Vector{Float64}(undef, total_len)
+
+    # Fill buffers
+    pos = 1
+    @inbounds for t in 1:m
+        df = trials[t]
+        y = df[!, ch]
+        # copy one trial
         @inbounds @simd for i in 1:n
-            dest[i] *= invm
+            time_cat[pos] = time_vec[i]
+            y_cat[pos] = y[i]
+            pos += 1
         end
-        return dest
+        # separator (except after last)
+        if t != m
+            time_cat[pos] = NaN
+            y_cat[pos] = NaN
+            pos += 1
+        end
     end
 
-    # Plot only trials (no average here)
-    for trial_df in dat.data
-        _mean_over_channels!(trial_buffer, trial_df, channels)
-        lines!(ax, time_vec, copy(trial_buffer), color = trial_color, linewidth = trial_linewidth)
-    end
+    lines!(ax, time_cat, y_cat, color = trial_color, linewidth = trial_linewidth)
 
     return nothing
 end
 
 
 function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, kwargs)::Nothing
+    @assert length(channels) == 1 "_plot_epochs_from_erp! expects a single channel"
+    ch = channels[1]
+
     time_vec = erp_dat.data[!, :time]
     avg_color = kwargs[:color][2]
     avg_linewidth = kwargs[:linewidth][2]
 
-    if length(channels) == 1
-        ch = channels[1]
-        lines!(ax, time_vec, erp_dat.data[!, ch], color = avg_color, linewidth = avg_linewidth)
-    else
-        vals = similar(time_vec, Float64)
-        fill!(vals, 0.0)
-        @inbounds for ch in channels
-            col = erp_dat.data[!, ch]
-            @inbounds @simd for i in eachindex(vals)
-                vals[i] += col[i]
-            end
-        end
-        invm = 1.0 / length(channels)
-        @inbounds @simd for i in eachindex(vals)
-            vals[i] *= invm
-        end
-        lines!(ax, time_vec, vals, color = avg_color, linewidth = avg_linewidth)
-    end
+    lines!(ax, time_vec, erp_dat.data[!, ch], color = avg_color, linewidth = avg_linewidth)
     return nothing
 end
 
@@ -305,3 +308,4 @@ function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::N
     ax.yreversed = kwargs[:yreversed]
     return nothing
 end
+
