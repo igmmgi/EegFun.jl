@@ -17,10 +17,6 @@ using BenchmarkTools
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
-
-layout_new = eegfun.rename_channel(layout, Dict(:Fp1 => :BABABBABABA, :Fp2 => :AHAHAHAH))
-
-
 # define neighbours 2D/3D defined by distance (mm)
 eegfun.polar_to_cartesian_xy!(layout);
 eegfun.get_layout_neighbours_xy!(layout, 40);
@@ -46,13 +42,16 @@ for (idx, epoch) in enumerate(epochs)
     push!(erps, eegfun.average_epochs(epochs[idx]))
 end
 
-d = eegfun.channel_average(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
-d = eegfun.average_channels(epochs[1])
-
 
 # eegfun.plot_topography(erps[1])
 # eegfun.plot_databrowser(erps[1])
-eegfun.plot_epochs(epochs[1])
+@time eegfun.plot_epochs(epochs[1])
+
+
+eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
+eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
+
+
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true, :average_channels => true))
 
 

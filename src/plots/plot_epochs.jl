@@ -51,7 +51,6 @@ function plot_epochs(
         :dims => nothing,
         :hidedecorations => false,
         :theme_fontsize => 24,
-        :plot_individual_trials => false,  # draw individual trial traces
         :plot_avg_trials => true,                # draw ERP average overlay
     )
     kwargs = merge(default_kwargs, kwargs)
@@ -70,7 +69,7 @@ function plot_epochs(
         # Single plot averaging across channels
         ax = Axis(fig[1, 1])
         push!(axes, ax)
-        kwargs[:plot_individual_trials] && _plot_epochs!(ax, dat_subset, all_plot_channels, kwargs)
+        _plot_epochs!(ax, dat_subset, all_plot_channels, kwargs)
         kwargs[:plot_avg_trials] && _plot_epochs_from_erp!(ax, erp_dat, all_plot_channels, kwargs)
 
         # Set axis properties
@@ -93,21 +92,19 @@ function plot_epochs(
                 rows, cols = best_rect(n_channels)
             else
                 # Validate custom grid dims
-                (length(layout_kw) != 2 || any(x -> x <= 0, layout_kw)) && 
+                if length(layout_kw) != 2 || any(x -> x <= 0, layout_kw)
                     throw(ArgumentError("layout must be either a Bool or a 2-element vector [rows, cols] with positive integers"))
+                end
                 rows, cols = layout_kw
-                (rows * cols < n_channels) && 
+                if rows * cols < n_channels
                     throw(ArgumentError("layout grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
+                end
             end
 
             # Calculate y-range if not provided (using shared yrange helper)
             ylim = kwargs[:ylim]
             if isnothing(ylim)
-                if erp_dat !== nothing && kwargs[:plot_avg]
-                    yr = ylimits(erp_dat; channel_selection = channels(all_plot_channels))
-                else
-                    yr = ylimits(dat_subset; channel_selection = channels(all_plot_channels))
-                end
+                yr = ylimits(dat_subset; channel_selection = channels(all_plot_channels))
                 ylim = (yr[1], yr[2])
             end
 
@@ -116,8 +113,8 @@ function plot_epochs(
                 col = mod(idx-1, cols) + 1
                 ax = Axis(fig[row, col])
                 push!(axes, ax)
-                kwargs[:plot_individual_trials] && _plot_epochs!(ax, dat_subset, [channel], kwargs)
-                kwargs[:plot_avg] && _plot_epochs_from_erp!(ax, erp_dat, [channel], kwargs)
+                _plot_epochs!(ax, dat_subset, [channel], kwargs)
+                kwargs[:plot_avg_trials] && _plot_epochs_from_erp!(ax, erp_dat, [channel], kwargs)
 
                 # Set axis properties with ylim
                 axis_kwargs = merge(kwargs, Dict(:ylim => ylim))
@@ -136,6 +133,11 @@ function plot_epochs(
 
             end
         end
+    end
+
+    # Link axes (both x and y) when multiple axes are present
+    if length(axes) > 1
+        Makie.linkaxes!(axes...)
     end
 
     # Theme adjustments
@@ -160,12 +162,23 @@ function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
 
     # Local helper to compute row-wise mean across selected channels without allocations
     @inline function _mean_over_channels!(dest::Vector{Float64}, df::DataFrame, cols::Vector{Symbol})
-        resize!(dest, nrow(df))
-        fill!(dest, 0.0)
-        @inbounds for ch in cols
-            dest .+= df[!, ch]
+        n = length(dest)
+        # Assume consistent sample length across trials; only resize if mismatched
+        if n != nrow(df)
+            resize!(dest, nrow(df))
+            n = length(dest)
         end
-        dest ./= length(cols)
+        fill!(dest, 0.0)
+        @inbounds for j in 1:length(cols)
+            col = df[!, cols[j]]
+            @inbounds @simd for i in 1:n
+                dest[i] += col[i]
+            end
+        end
+        invm = 1.0 / length(cols)
+        @inbounds @simd for i in 1:n
+            dest[i] *= invm
+        end
         return dest
     end
 
@@ -188,7 +201,18 @@ function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, 
         ch = channels[1]
         lines!(ax, time_vec, erp_dat.data[!, ch], color = avg_color, linewidth = avg_linewidth)
     else
-        vals = reduce(+, eachcol(erp_dat.data[!, channels])) ./ length(channels)
+        vals = similar(time_vec, Float64)
+        fill!(vals, 0.0)
+        @inbounds for ch in channels
+            col = erp_dat.data[!, ch]
+            @inbounds @simd for i in eachindex(vals)
+                vals[i] += col[i]
+            end
+        end
+        invm = 1.0 / length(channels)
+        @inbounds @simd for i in eachindex(vals)
+            vals[i] *= invm
+        end
         lines!(ax, time_vec, vals, color = avg_color, linewidth = avg_linewidth)
     end
     return nothing
@@ -203,13 +227,8 @@ function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, e
     # Determine global y-lims for consistency across small axes
     ylim = kwargs[:ylim]
     if isnothing(ylim)
-        if erp_dat !== nothing
-            yr = ylimits(erp_dat; channel_selection = channels(all_plot_channels))
-            ylim = (yr[1], yr[2])
-        else
-            yr = ylimits(dat; channel_selection = channels(all_plot_channels))
-            ylim = (yr[1], yr[2])
-        end
+        yr = ylimits(dat; channel_selection = channels(all_plot_channels))
+        ylim = (yr[1], yr[2])
     end
 
     # Normalize positions to [0,1]
@@ -245,11 +264,9 @@ function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, e
             valign = clamp(pos[2], margin, 1 - margin),
         )
         push!(axes, ax)
-        if erp_dat === nothing
-            _plot_epochs!(ax, dat, [ch], kwargs)
-        else
-            _plot_epochs_from_erp!(ax, erp_dat, [ch], kwargs)
-        end
+        _plot_epochs!(ax, dat, [ch], kwargs)
+        erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [ch], kwargs)
+
         # Suppress axis labels on all but the final axis; set only limits and title for now
         axis_kwargs = merge(kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
         _set_axis_properties!(ax, axis_kwargs, string(ch))
