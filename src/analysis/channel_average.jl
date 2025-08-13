@@ -112,7 +112,7 @@ function channel_average!(
         if lbl ∈ all_labels(dat)
             @minimal_warning "Overwriting existing channel '$(lbl)'"
         end
-        @info "channel_average!: $(join(string.(grp), ", ")) -> $(lbl)"
+        @info "channel_average!: $(print_vector(grp)) → :$(lbl)"
         _add_avg!(dat.data, grp, lbl)
     end
 
