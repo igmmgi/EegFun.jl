@@ -45,7 +45,10 @@ end
 
 # eegfun.plot_topography(erps[1])
 # eegfun.plot_databrowser(erps[1])
-@time eegfun.plot_epochs(epochs[1])
+eegfun.plot_epochs(epochs[1])
+@time eegfun.plot_epochs(epochs[1], epoch_selection = eegfun.epochs(1:2))
+
+@time eegfun.plot_epochs(epochs[1], kwargs = Dict(:sample_stride => 100))
 
 
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
