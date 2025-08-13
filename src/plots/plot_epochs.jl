@@ -1,3 +1,5 @@
+# TODO: this still feels a bit too slow!
+
 function plot_epochs(
     dat::EpochData;
     channel_selection::Function = channels(),
@@ -34,7 +36,7 @@ function plot_epochs(
         :title => nothing,
         :xlabel => "Time (S)",
         :ylabel => "mV",
-        :linewidth => [1, 2],
+        :linewidth => [0.5, 2],
         :color => [:grey, :red],
         :yreversed => false,
         # layout can be: false (default auto grid), true (use data's layout semantics), or [rows, cols]
@@ -203,7 +205,6 @@ function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
 
     lines!(ax, time_cat, y_cat, color = trial_color, linewidth = trial_linewidth)
 
-    println("plot_epochs end!")
     return nothing
 end
 
