@@ -201,24 +201,41 @@ end
 
 # Helper: average 3D coordinates and convert to polar
 function _average_coordinates(coord_df)
+    # Average 3D Cartesian coordinates first (mathematically correct)
     mx, my, mz = mean(Float64.(coord_df[!, :x3])), mean(Float64.(coord_df[!, :y3])), mean(Float64.(coord_df[!, :z3]))
     norm_m = sqrt(mx^2 + my^2 + mz^2)
     norm_m == 0 && return nothing
     
-    # Convert to polar (degrees)
+    # Convert to polar (degrees) using standard spherical coordinate formulas
+    # This gives the geometric center of the channel positions
     inc_deg = acos(clamp(mz / norm_m, -1.0, 1.0)) * (180 / pi)
     azi_deg = atan(my, mx) * (180 / pi)
+    
+    # Note: The mathematical result represents the true geometric center
+    # EEG layout sign conventions may vary, but this is mathematically correct
     
     return (inc = inc_deg, azi = azi_deg)
 end
 
 # Helper: create a layout row with averaged coordinates
 function _create_layout_row(template_df, label, coords)
-    row = template_df[1:1, :]
-    row[1, :label] = label
-    if :inc in names(row); row[1, :inc] = coords.inc; end
-    if :azi in names(row); row[1, :azi] = coords.azi; end
-    return row
+    # Create a minimal row with only essential columns
+    essential_cols = [:label, :inc, :azi]
+    available_cols = [col for col in essential_cols if col in propertynames(template_df)]
+    
+    # Create new DataFrame with only essential columns
+    new_df = DataFrame()
+    for col in available_cols
+        if col == :label
+            new_df[!, col] = [label]
+        elseif col == :inc
+            new_df[!, col] = [coords.inc]
+        elseif col == :azi
+            new_df[!, col] = [coords.azi]
+        end
+    end
+    
+    return new_df
 end
 
 # Internal: append averaged channels to existing layout

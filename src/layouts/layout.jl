@@ -882,7 +882,7 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
 end
 
 """
-    rename(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+    rename_channel(layout::Layout, rename_dict::Dict{Symbol, Symbol})
 
 Create a renamed copy of a Layout object using a dictionary mapping old names to new names.
 

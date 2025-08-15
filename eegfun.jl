@@ -25,6 +25,21 @@ eegfun.polar_to_cartesian_xyz!(layout);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
+
+
+dat_new = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:O1, :O2])])
+eegfun.viewer(dat_new.data)
+dat_new.layout.data
+
+dat_new = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:O1, :O2])], reduce = true)
+eegfun.viewer(dat_new.data)
+dat_new.layout.data
+
+
+
+
+
+
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 # eegfun.plot_databrowser(dat)
