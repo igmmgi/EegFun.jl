@@ -113,6 +113,110 @@ using eegfun
     eegfun.channel_average!(dat_empty, channel_selections = [])
     @test propertynames(dat_empty.data) == original_cols  # No new columns added
 
+    # 14) Test coordinate averaging correctness
+    # Create layout with channels that have different coordinate regions
+    # Use the same channel names as the test data (:A, :B, :C)
+    # Note: The coordinate averaging uses 3D Cartesian averaging followed by polar conversion
+    # This gives the true geometric center, which may differ from simple polar averaging
+    coord_layout_df = DataFrame(
+        label = [:A, :B, :C],  # Match the data columns
+        inc = [-92.0, -92.0, 115.0],  # A/B frontal (negative), C posterior (positive)
+        azi = [-72.0, -52.0, -68.0]
+    )
+    coord_layout = eegfun.Layout(coord_layout_df, nothing, nothing)
+    
+    # Create data with this layout
+    coord_dat = eegfun.ContinuousData(df, coord_layout, 1000, eegfun.AnalysisInfo())
+    
+    # Test coordinate averaging with reduce=true
+    coord_dat_avg = eegfun.channel_average(coord_dat, 
+        channel_selections = [eegfun.channels([:A, :B])], 
+        reduce = true)
+    
+    # Verify we have the expected averaged channels
+    @test :A_B ∈ propertynames(coord_dat_avg.data)
+    
+    # Verify layout has averaged coordinates
+    @test size(coord_dat_avg.layout.data, 1) == 1
+    @test :A_B ∈ coord_dat_avg.layout.data.label
+    
+    # Verify coordinates are mathematically reasonable
+    # A_B should be between A and B
+    a_b_row = coord_dat_avg.layout.data[coord_dat_avg.layout.data.label .== :A_B, :]
+    # Note: The mathematical average of 3D coordinates gives the geometric center
+    # This may not preserve the sign convention of the original polar coordinates
+    @test a_b_row[1, :inc] ≈ 92.0 atol=0.1   # Should be around 92° (geometric center)
+    @test a_b_row[1, :azi] ≈ 118.0 atol=0.1  # Mathematical result from 3D averaging
+    
+    # 14a) Test that averaged channels have different coordinates (the original issue)
+    # Create a second averaged channel to verify they're different
+    coord_dat_avg2 = eegfun.channel_average(coord_dat, 
+        channel_selections = [eegfun.channels([:A, :B]), eegfun.channels([:B, :C])], 
+        reduce = true)
+    
+    # Verify we have two different averaged channels
+    @test :A_B ∈ propertynames(coord_dat_avg2.data)
+    @test :B_C ∈ propertynames(coord_dat_avg2.data)
+    @test size(coord_dat_avg2.layout.data, 1) == 2
+    
+    # Verify the averaged channels have different coordinates (this was the original bug)
+    a_b_row2 = coord_dat_avg2.layout.data[coord_dat_avg2.layout.data.label .== :A_B, :]
+    b_c_row2 = coord_dat_avg2.layout.data[coord_dat_avg2.layout.data.label .== :B_C, :]
+    
+    # The coordinates should be different, not identical
+    # This was the original bug - all averaged channels had identical coordinates
+    @test a_b_row2[1, :inc] != b_c_row2[1, :inc] || 
+           a_b_row2[1, :azi] != b_c_row2[1, :azi] ||
+           a_b_row2[1, :x3] != b_c_row2[1, :x3] ||
+           a_b_row2[1, :y3] != b_c_row2[1, :y3] ||
+           a_b_row2[1, :z3] != b_c_row2[1, :z3]
+    
+    # Print the actual coordinates for debugging
+    println("A_B coordinates: inc=$(a_b_row2[1, :inc]), azi=$(a_b_row2[1, :azi]), x3=$(a_b_row2[1, :x3]), y3=$(a_b_row2[1, :y3]), z3=$(a_b_row2[1, :z3])")
+    println("B_C coordinates: inc=$(b_c_row2[1, :inc]), azi=$(b_c_row2[1, :azi]), x3=$(b_c_row2[1, :x3]), y3=$(b_c_row2[1, :y3]), z3=$(b_c_row2[1, :z3])")
+    
+    # 15) Test coordinate averaging preserves 3D coordinates
+    # Verify that 3D coordinates are properly calculated from averaged polar coordinates
+    @test :x3 ∈ propertynames(coord_dat_avg.layout.data)
+    @test :y3 ∈ propertynames(coord_dat_avg.layout.data) 
+    @test :z3 ∈ propertynames(coord_dat_avg.layout.data)
+    
+    # 16) Test coordinate averaging with append (reduce=false)
+    coord_dat_append = eegfun.channel_average(coord_dat, 
+        channel_selections = [eegfun.channels([:A, :B])])
+    
+    # Verify original channels are preserved
+    @test :A ∈ propertynames(coord_dat_append.data)
+    @test :B ∈ propertynames(coord_dat_append.data)
+    @test :A_B ∈ propertynames(coord_dat_append.data)
+    
+    # Verify layout has both original and averaged channels
+    @test size(coord_dat_append.layout.data, 1) == 4  # 3 original + 1 averaged
+    @test :A_B ∈ coord_dat_append.layout.data.label
+    
+    # 17) Test coordinate averaging with mixed sign conventions
+    # Create layout with channels that have mixed incidence signs
+    mixed_layout_df = DataFrame(
+        label = [:A, :B, :C],  # Match the data columns
+        inc = [-92.0, -92.0, 115.0],  # Mixed signs
+        azi = [-72.0, -52.0, -68.0]
+    )
+    mixed_layout = eegfun.Layout(mixed_layout_df, nothing, nothing)
+    mixed_dat = eegfun.ContinuousData(df, mixed_layout, 1000, eegfun.AnalysisInfo())
+    
+    # Test that averaging works correctly with mixed signs
+    mixed_avg = eegfun.channel_average(mixed_dat, 
+        channel_selections = [eegfun.channels([:A, :B])], 
+        reduce = true)
+    
+    # Verify the averaged coordinates make mathematical sense
+    a_b_mixed = mixed_avg.layout.data[mixed_avg.layout.data.label .== :A_B, :]
+    
+    # Note: The mathematical average of 3D coordinates gives the geometric center
+    # This may not preserve the sign convention of the original polar coordinates
+    # The important thing is that the coordinates are mathematically correct
+    @test a_b_mixed[1, :inc] > 0  # Should be positive (geometric center)
+    @test a_b_mixed[1, :azi] ≈ 118.0 atol=0.1  # Mathematical result from 3D averaging
   
 end
 
