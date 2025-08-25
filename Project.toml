@@ -4,7 +4,6 @@ authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>"]
 version = "0.1.0"
 
 [deps]
-AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 BioSemiBDF = "d1c37e40-cd17-11e8-241b-47481c954d91"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -35,10 +34,10 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
 [compat]
-AlgebraOfGraphics = "0.11.3"
 BenchmarkTools = "1.6.0"
 BioSemiBDF = "0.5.0"
 CairoMakie = "0.15.2"
+DataFrames = "1.7.0"
 Distributions = "0.25.120"
 Documenter = "1.14.1"
 DocumenterTools = "0.1.20"

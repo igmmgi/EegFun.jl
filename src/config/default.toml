@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-08-06 11:03:08
+# Generated on 2025-08-25 12:05:26
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -261,8 +261,8 @@ hEOG_criterion = 30
 
 # Channels used in the calculation of vertical eye movements (vEOG).
 # Type: Vector{Vector{String}}
-# Default: [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]
-vEOG_channels = [["Fp1", "IO1"], ["Fp2", "IO2"], ["vEOG"]]
+# Default: [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
+vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
 
 # Distance criterion for vertical EOG channel definition.
 # Type: Real
