@@ -210,11 +210,10 @@ function preprocess_eeg_data(config::String)
                         ),
                     )
 
-
                     # automatically identify components that are likely to be artifacts
                     eog_comps, eog_comps_metrics_df = identify_eog_components(
                         ica_result,
-                        dat,
+                        dat_ica,
                         sample_selection = samples_not(
                             Symbol(
                                 "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
@@ -223,7 +222,7 @@ function preprocess_eeg_data(config::String)
                     )
                     ecg_comps, ecg_comps_metrics_df = identify_ecg_components(
                         ica_result,
-                        dat,
+                        dat_ica,
                         sample_selection = samples_not(
                             Symbol(
                                 "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
@@ -232,19 +231,20 @@ function preprocess_eeg_data(config::String)
                     )
                     line_noise_comps, line_noise_comps_metrics_df = identify_line_noise_components(
                         ica_result,
-                        dat,
+                        dat_ica,
                         sample_selection = samples_not(
                             Symbol(
                                 "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
                             ),
                         ),
                     )
-                    channel_noise_comps, channel_noise_comps_metrics_df =
-                        identify_spatial_kurtosis_components(ica_result, dat)
+                    channel_noise_comps, channel_noise_comps_metrics_df = identify_spatial_kurtosis_components(ica_result, dat_ica)
 
                     # Combine above component artifact results into a single structure
-                    component_artifacts =
-                        combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+                    component_artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+                    println(component_artifacts)
+                    # plot_ica_topoplot(ica_result)
+                    plot_ica_component_activation(dat, ica_result)
 
                     remove_ica_components!(
                         dat_cleaned,
@@ -255,7 +255,7 @@ function preprocess_eeg_data(config::String)
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
                         @info "Saving ica data"
-                        jldsave(make_output_filename(output_directory, file, "_ica"); ica_result = ica_result)
+                        jldsave(make_output_filename(output_directory, data_file, "_ica"); ica_result = ica_result)
                     end
 
                 else

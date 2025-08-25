@@ -63,6 +63,12 @@ function plot_ica_topoplot(
     display_plot = true,
 )
 
+
+    # ensure coordinates are 2d and 3d
+    _ensure_coordinates_2d!(ica.layout)
+    _ensure_coordinates_3d!(ica.layout)
+
+
     # default kwargs and merged kwargs
     head_default_kwargs = Dict(:color => :black, :linewidth => 2)
     head_kwargs = merge(head_default_kwargs, head_kwargs)
@@ -418,7 +424,8 @@ function plot_ica_component_activation(
     add_channel_menu!(fig, state)
     setup_keyboard_interactions!(fig, state)
 
-    colsize!(fig.layout, (1, 2), (Relative(0.15), Relative(0.85)))
+    colsize!(fig.layout, 1, Relative(0.15))
+    colsize!(fig.layout, 2, Relative(0.85))
     rowgap!(fig.layout, state.n_visible_components, 30)
 
     display(fig)

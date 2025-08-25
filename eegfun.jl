@@ -12,8 +12,34 @@ using GLMakie
 using DataFrames
 using BenchmarkTools
 
+dat = eegfun.read_bdf("../Flank_C_3.bdf");
+layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.filter_data!(dat, "hp", 1)
+eegfun.rereference!(dat, :avg)
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+eegfun.is_extreme_value!(dat, 100);
+dat_ica = eegfun.copy(dat)
+dat_cleaned = eegfun.copy(dat)
+eegfun.filter_data!(dat_ica, "hp", 1)
+ica_result = eegfun.run_ica(dat_ica; sample_selection = eegfun.samples_not(:is_extreme_value))
 
-# eegfun.preprocess_eeg_data("pipeline.toml")
+# automatically identify components that are likely to be artifacts
+eog_comps, eog_comps_metrics_df = eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value)) 
+ecg_comps, ecg_comps_metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components( ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
+# Combine above component artifact results into a single structure
+component_artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+eegfun.plot_ica_topoplot(ica_result)
+eegfun.plot_ica_component_activation(dat, ica_result)
+
+
+
+eegfun.preprocess_eeg_data("pipeline.toml")
 
 # load data
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
