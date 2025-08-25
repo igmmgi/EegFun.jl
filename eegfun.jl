@@ -25,7 +25,7 @@ eegfun.is_extreme_value!(dat, 100);
 dat_ica = eegfun.copy(dat)
 dat_cleaned = eegfun.copy(dat)
 eegfun.filter_data!(dat_ica, "hp", 1)
-ica_result = eegfun.run_ica(dat_ica; sample_selection = eegfun.samples_not(:is_extreme_value))
+@time ica_result = eegfun.run_ica(dat_ica; sample_selection = eegfun.samples_not(:is_extreme_value))
 
 # automatically identify components that are likely to be artifacts
 eog_comps, eog_comps_metrics_df = eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value)) 
@@ -34,10 +34,9 @@ line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_compo
 channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
 # Combine above component artifact results into a single structure
 component_artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+
 eegfun.plot_ica_topoplot(ica_result)
 eegfun.plot_ica_component_activation(dat, ica_result)
-
-
 
 eegfun.preprocess_eeg_data("pipeline.toml")
 
