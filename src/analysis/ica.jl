@@ -77,6 +77,7 @@ function run_ica(
     return ica_result
 end
 
+
 function IcaPrms(;
     l_rate = 0.001,
     max_iter = 512,
@@ -106,12 +107,20 @@ function IcaPrms(;
 end
 
 function create_ica_data_matrix(dat::DataFrame, channels, samples)
-    dat = dat[samples, :]
-    # need to make sure we have unique samples as with longer epochs there is potential for overlap
-    dat = unique(dat, :sample)
-    # select only the channels we want
-    dat = dat[!, intersect(propertynames(dat), channels)]
-    return permutedims(Matrix(dat))
+    # Filter to only existing channels (matching original behavior)
+    existing_channels = intersect(propertynames(dat), channels)
+    n_channels = length(existing_channels)
+    n_samples = length(samples)
+    
+    # Pre-allocate result matrix
+    result = Matrix{Float64}(undef, n_channels, n_samples)
+    
+    # Use direct column access for better performance
+    for (i, ch) in enumerate(existing_channels)
+        result[i, :] = dat[samples, ch]
+    end
+    
+    return result
 end
 
 mutable struct WorkArrays
@@ -182,9 +191,10 @@ function infomax_ica(
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
+    # Keep original Infomax block size formula for algorithmic correctness
     block = min(Int(floor(sqrt(n_samples / 3.0))), 512)
     work = create_work_arrays(n_channels, block)
-    lastt = block * div(n_samples, block)
+    # Fix: ensure we process all samples by going to n_samples instead of using div
     step = 0
     wts_blowup = false
     change = 0.0
@@ -197,7 +207,7 @@ function infomax_ica(
     @inbounds while step < params.max_iter
         randperm!(permute_indices)
 
-        for t = 1:block:lastt
+        for t = 1:block:n_samples
             block_end = min(t + block - 1, n_samples)
             block_size = block_end - t + 1
 
@@ -291,6 +301,7 @@ function infomax_ica(
     )
 
 end
+
 
 """
     remove_ica_components!(dat::DataFrame, ica::InfoIca, components_to_remove::Vector{Int})

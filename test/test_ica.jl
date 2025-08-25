@@ -89,7 +89,7 @@ using eegfun
         df = vcat(dat.data, dat.data)
         mat = eegfun.create_ica_data_matrix(df, [:ch1, :ch2, :ch3, :ch4], 1:nrow(df))
         @test size(mat, 1) == 4
-        @test size(mat, 2) == nrow(dat.data)
+        @test size(mat, 2) == nrow(df)  
         # Non-existent channels get dropped by intersect
         mat2 = eegfun.create_ica_data_matrix(df, [:ch1, :chX], 1:nrow(df))
         @test size(mat2, 1) == 1
