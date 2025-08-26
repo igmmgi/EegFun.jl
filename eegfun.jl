@@ -423,7 +423,7 @@ neighbours = eegfun.get_electrode_neighbours_xyz(layout, 40);
 fig, ax = eegfun.plot_layout_3d(layout)
 fig, ax = eegfun.plot_layout_3d(layout, neighbours)
 
-# read data giving BioSemiBDF type
+# read data giving BiosemiDataFormat type
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 
 # plot events

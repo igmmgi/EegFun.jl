@@ -43,11 +43,11 @@ function _trigger_time_count(time, triggers)
 end
 
 """
-    _extract_trigger_data(dat::BioSemiBDF.BioSemiData)
+    _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData)
 
 Extract trigger information from BioSemi data.
 """
-function _extract_trigger_data(dat::BioSemiBDF.BioSemiData)
+function _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData)
     raw_triggers = dat.triggers.raw
     cleaned_triggers = _clean_triggers(raw_triggers)
     trigger_positions = findall(x -> x != 0, cleaned_triggers)
@@ -167,7 +167,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; dis
 end
 
 """
-    plot_trigger_overview(dat::BioSemiBDF.BioSemiData)
+    plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData)
 
 Plot trigger events from BioSemi BDF data.
 
@@ -178,7 +178,7 @@ Plot trigger events from BioSemi BDF data.
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
 """
-function plot_trigger_overview(dat::BioSemiBDF.BioSemiData; display_plot = true)
+function plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData; display_plot = true)
     @info "Plotting trigger (raw) overview for BioSemi data"
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
     return plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = display_plot)
@@ -439,12 +439,12 @@ function plot_trigger_timing!(
 end
 
 """
-    plot_trigger_timing(dat::BioSemiBDF.BioSemiData; kwargs...)
+    plot_trigger_timing(dat::BiosemiDataFormat.BiosemiData; kwargs...)
 
 Plot trigger timing with interactive x-axis sliders for scrolling and window size.
 
 # Arguments
-- `dat::BioSemiBDF.BioSemiData`: The BioSemiData object containing the triggers
+- `dat::BiosemiDataFormat.BiosemiData`: The BioSemiData object containing the triggers
 
 # Returns
 - `fig::Figure`: The Makie figure object
@@ -455,7 +455,7 @@ Plot trigger timing with interactive x-axis sliders for scrolling and window siz
 fig, ax = plot_trigger_timing(dat)
 ```
 """
-function plot_trigger_timing(dat::BioSemiBDF.BioSemiData; kwargs...)
+function plot_trigger_timing(dat::BiosemiDataFormat.BiosemiData; kwargs...)
     trigger_codes, trigger_times = _extract_trigger_data(dat)
     return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
 end

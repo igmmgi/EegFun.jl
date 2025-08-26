@@ -212,7 +212,7 @@ end
 
 
 """
-    trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
+    trigger_count(dat::BiosemiDataFormat.BiosemiData; print_table::Bool = true)::DataFrame
 
 Count trigger occurrences in BioSemi data comparing raw vs cleaned counts.
 
@@ -221,7 +221,7 @@ comparing raw trigger counts with cleaned counts (onset-only). This comparison
 helps verify trigger cleaning operations and identify sustained vs onset triggers.
 
 # Arguments
-- `dat::BioSemiBDF.BioSemiData`: The BioSemiData object containing EEG data.
+- `dat::BiosemiDataFormat.BiosemiData`: The BioSemiData object containing EEG data.
 - `print_table::Bool`: Whether to print the trigger count table (default: true).
 
 # Returns
@@ -236,7 +236,7 @@ trigger_counts = trigger_count(dat)
 trigger_counts = trigger_count(dat, print_table = false)
 ```
 """
-function trigger_count(dat::BioSemiBDF.BioSemiData; print_table::Bool = true)::DataFrame
+function trigger_count(dat::BiosemiDataFormat.BiosemiData; print_table::Bool = true)::DataFrame
     # Get cleaned trigger data (onset detection only)
     cleaned_triggers = _clean_triggers(dat.triggers.raw)
     return _trigger_count_impl(

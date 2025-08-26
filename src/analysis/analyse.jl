@@ -3,21 +3,21 @@
 
 
 """
-    create_eeg_dataframe(data::BioSemiBDF.BioSemiData)::DataFrame
+    create_eeg_dataframe(data::BiosemiDataFormat.BiosemiData)::DataFrame
 
-Creates a DataFrame containing EEG data from a BioSemiBDF object.
+Creates a DataFrame containing EEG data from a BiosemiDataFormat type.
 
 # Arguments
-- `data::BioSemiBDF.BioSemiData`: The BioSemi data structure containing time, triggers, and channel data.
+- `data::BiosemiDataFormat.BiosemiData`: The BioSemi data structure containing time, triggers, and channel data.
 
 # Returns
-A DataFrame with columns: `time`, `sample`, `triggers` (cleaned), and channel data from the BioSemiBDF.
+A DataFrame with columns: `time`, `sample`, `triggers` (cleaned), and channel data from BiosemiDataFormat.
 
 # Note
 The trigger data is automatically cleaned to detect only onset events, converting sustained trigger 
 signals into single onset events. For example: [0, 1, 1, 0, 0, 2, 2, 2, 0, 0] becomes [0, 1, 0, 0, 0, 2, 0, 0, 0, 0].
 """
-function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData)::DataFrame
+function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame"
     df = hcat(
         DataFrame(file = filename(dat), time = dat.time, sample = 1:length(dat.time), triggers = _clean_triggers(dat.triggers.raw)),
@@ -28,19 +28,19 @@ end
 
 
 """
-    create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::DataFrame)::ContinuousData
+    create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::DataFrame)::ContinuousData
 
-Creates a ContinuousData object from a BioSemiBDF data structure and a layout DataFrame.
+Creates a ContinuousData object from a BiosemiDataFormat data structure and a layout DataFrame.
 
 # Arguments
-- `dat::BioSemiBDF.BioSemiData`: The BioSemi data structure containing EEG data.
+- `dat::BiosemiDataFormat.BiosemiData`: The BiosemiDataFormat data structure containing EEG data.
 - `layout::DataFrame`: The DataFrame containing layout information.
 
 # Returns
 A ContinuousData object containing the EEG data and layout information.
 
 """
-function create_eeg_dataframe(dat::BioSemiBDF.BioSemiData, layout::Layout)::ContinuousData
+function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
     return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 

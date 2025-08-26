@@ -3,7 +3,7 @@ __precompile__(true)
 module eegfun
 
 # Core dependencies
-using BioSemiBDF
+using BiosemiDataFormat
 using CSV
 using DataFrames
 using JLD2
