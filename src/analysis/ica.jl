@@ -213,8 +213,8 @@ function infomax_ica(
             # Forward pass: compute weighted inputs
             mul!(work.u, work.weights, work.data_block)
 
-            @. work.y = 1 / (1 + exp(-work.u))        # Sigmoid activation
-            @. work.y_temp = 1 - 2 * work.y            # Sigmoid derivative
+            @. work.y = 1 / (1 + exp(-work.u)) # Sigmoid activation
+            @. work.y_temp = 1 - 2 * work.y    # Sigmoid derivative
             
             mul!(work.wu_term, work.y_temp, transpose(work.u))
             
@@ -239,6 +239,7 @@ function infomax_ica(
             change = dot(work.delta, work.delta)
         end
 
+        # Check for any error conditions that require restart
         if wts_blowup || isnan(change) || isinf(change)
             step = 0
             change = NaN
@@ -249,21 +250,21 @@ function infomax_ica(
             continue
         end
 
+        # Always update tracking variables
+        work.olddelta .= work.delta
+        work.oldweights .= work.weights
+        oldchange = change
+
+        # Only compute angles after we have enough history (step > 2)
         if step > 2
             angledelta = acos(clamp(dot(work.delta, work.olddelta) / sqrt(change * oldchange), -1, 1))
             if params.degconst * angledelta > params.anneal_deg
                 params.l_rate *= params.anneal_step
-                work.olddelta .= work.delta
-                oldchange = change
             end
-        elseif step == 1
-            work.olddelta .= work.delta
-            oldchange = change
         end
 
-        work.oldweights .= work.weights
-
-        if step > 2 && change < params.w_change
+        # stopping/adapting learning rate?
+        if step > 2 && change < params.w_change 
             break
         elseif change > params.blowup
             params.l_rate *= params.blowup_fac
@@ -275,7 +276,6 @@ function infomax_ica(
 
     # Final calculations
     work.weights = work.weights * sphere * pca_components'
-
     mixing = pinv(work.weights)
 
     # calculate total variance explained and order
@@ -283,6 +283,7 @@ function infomax_ica(
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
 
+    # this is the ICA result object that is used in the rest of the package
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
@@ -376,7 +377,7 @@ cleaned_data, ica_updated = remove_ica_components(dat.data, ica_result, [1, 3, 5
 """
 function remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
-    ica_out = copy(ica)  # Use our custom copy method
+    ica_out = copy(ica)  # Use custom copy method
     remove_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
@@ -401,7 +402,7 @@ cleaned_dat, ica_updated = remove_ica_components(dat, ica_result, [1, 3, 5])
 """
 function remove_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
-    ica_out = copy(ica)  # Use our custom copy method
+    ica_out = copy(ica)  # Use custom copy method
     remove_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
