@@ -396,7 +396,7 @@ function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
     show(io, MIME"text/plain"(), neighbours_dict)
 end
 
-filename(dat::BioSemiBDF.BioSemiData)::String = basename_without_ext(dat.filename)
+filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.filename)
 filename(dat::SingleDataFrameEeg)::String = dat.data.file[1]
 filename(dat::MultiDataFrameEeg)::String = dat.data[1].file[1]
 
