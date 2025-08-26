@@ -25,6 +25,7 @@ eegfun.is_extreme_value!(dat, 100);
 dat_ica = eegfun.copy(dat)
 dat_cleaned = eegfun.copy(dat)
 eegfun.filter_data!(dat_ica, "hp", 1)
+
 @time ica_result = eegfun.run_ica(dat_ica; sample_selection = eegfun.samples_not(:is_extreme_value))
 
 # automatically identify components that are likely to be artifacts

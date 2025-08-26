@@ -72,7 +72,7 @@ function run_ica(
 
     # Create data matrix and run ICA
     dat_for_ica = create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
-    ica_result = infomax_ica(dat_for_ica, ica_layout, n_components = n_components, params = params)
+    ica_result = infomax_ica(dat_for_ica, ica_layout, n_components, params = params)
 
     return ica_result
 end
@@ -115,9 +115,8 @@ function create_ica_data_matrix(dat::DataFrame, channels, samples)
     # Pre-allocate result matrix
     result = Matrix{Float64}(undef, n_channels, n_samples)
     
-    # Use direct column access for better performance
     for (i, ch) in enumerate(existing_channels)
-        result[i, :] = dat[samples, ch]
+        result[i,:] = dat[samples, ch]
     end
     
     return result
@@ -135,8 +134,8 @@ mutable struct WorkArrays
     y_temp::Matrix{Float64}
     bi_weights::Matrix{Float64}
     wu_term::Matrix{Float64}
-    delta::Matrix{Float64}
-    olddelta::Matrix{Float64}
+    delta::Vector{Float64}
+    olddelta::Vector{Float64}
 end
 
 function create_work_arrays(n_components::Int, block_size::Int)
@@ -153,15 +152,15 @@ function create_work_arrays(n_components::Int, block_size::Int)
         zeros(n_components, block_size),  # y_temp
         zeros(n_components, n_components),  # bi_weights
         zeros(n_components, n_components),  # wu_term
-        zeros(1, n_components^2),  # delta
-        zeros(1, n_components^2),   # olddelta
+        zeros(n_components^2),  # delta
+        zeros(n_components^2),   # olddelta
     )
 end
 
 function infomax_ica(
     dat_ica::Matrix{Float64},
-    layout::Layout;
-    n_components::Union{Nothing,Int} = nothing,
+    layout::Layout,
+    n_components::Int;
     params::IcaPrms = IcaPrms(),
 )
 
@@ -173,16 +172,10 @@ function infomax_ica(
     scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
     dat_ica ./= scale
 
-    # PCA reduction
-    if !isnothing(n_components)
-        F = svd(dat_ica)
-        # Ensure we're using the correct dimensions for PCA components
-        pca_components = F.U[1:size(dat_ica, 1), 1:n_components]  # Explicitly specify both dimensions
-        dat_ica = pca_components' * dat_ica
-    else
-        n_components = size(dat_ica, 1)
-        pca_components = nothing
-    end
+    # PCA reduction ensuring correct dimensions
+    F = svd(dat_ica)
+    pca_components = F.U[1:size(dat_ica, 1), 1:n_components]  # Explicitly specify both dimensions
+    dat_ica = pca_components' * dat_ica
 
     # sphering 
     sphere = inv(sqrt(cov(dat_ica, dims = 2)))
@@ -191,10 +184,9 @@ function infomax_ica(
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
-    # Keep original Infomax block size formula for algorithmic correctness
     block = min(Int(floor(sqrt(n_samples / 3.0))), 512)
     work = create_work_arrays(n_channels, block)
-    # Fix: ensure we process all samples by going to n_samples instead of using div
+
     step = 0
     wts_blowup = false
     change = 0.0
@@ -204,25 +196,32 @@ function infomax_ica(
     # pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
 
-    @inbounds while step < params.max_iter
+    while step < params.max_iter
+
         randperm!(permute_indices)
 
-        for t = 1:block:n_samples
-            block_end = min(t + block - 1, n_samples)
-            block_size = block_end - t + 1
+        for t in 1:block:n_samples
+            block_size = min(block, n_samples - t + 1)
+            perm_view = view(permute_indices, t:(t + block_size - 1))
+            
+            @inbounds for i in 1:n_channels
+                @simd for j in 1:block_size
+                    work.data_block[i, j] = dat_ica[i, perm_view[j]]
+                end
+            end
 
-            # extract data block
-            copyto!(view(work.data_block, :, 1:block_size), view(dat_ica, :, view(permute_indices, t:block_end)))
-
-            # forward pass
+            # Forward pass: compute weighted inputs
             mul!(work.u, work.weights, work.data_block)
-            @. work.y = 1 / (1 + exp(-work.u))
-            @. work.y_temp = 1 - 2 * work.y
 
-            # update weights 
+            @. work.y = 1 / (1 + exp(-work.u))        # Sigmoid activation
+            @. work.y_temp = 1 - 2 * work.y            # Sigmoid derivative
+            
             mul!(work.wu_term, work.y_temp, transpose(work.u))
+            
             work.bi_weights .= work.BI .+ work.wu_term
             mul!(work.weights_temp, work.bi_weights, work.weights)
+            
+            # Weight update - keep it simple
             @. work.weights += params.l_rate * work.weights_temp
 
             # boom?
@@ -236,7 +235,7 @@ function infomax_ica(
         if !wts_blowup
             work.oldweights .-= work.weights
             step += 1
-            work.delta .= reshape(work.oldweights, 1, :)
+            work.delta .= vec(work.oldweights)
             change = dot(work.delta, work.delta)
         end
 
@@ -275,11 +274,7 @@ function infomax_ica(
     end
 
     # Final calculations
-    if !isnothing(pca_components)
-        work.weights = work.weights * sphere * pca_components'
-    else
-        work.weights = work.weights * sphere
-    end
+    work.weights = work.weights * sphere * pca_components'
 
     mixing = pinv(work.weights)
 
@@ -1115,3 +1110,4 @@ function Base.show(io::IO, artifacts::ArtifactComponents)
     println(io, "Channel Noise: $(artifacts.channel_noise)")
     println(io, "All: $all_comps")
 end
+
