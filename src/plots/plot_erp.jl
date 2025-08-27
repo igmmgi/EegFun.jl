@@ -69,106 +69,9 @@ function plot_erp(dat::ErpData;
                  sample_selection::Function = samples(),
                  kwargs...)
     
-    # Subset data first (consistent with plot_epochs)
-    dat_subset = subset(
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        include_extra = true,
-    )
-
-    # Channels present after subsetting
-    selected_channels = channel_labels(dat_subset)
-    extra_channels = extra_labels(dat_subset)
-    all_plot_channels = vcat(selected_channels, extra_channels)
-
-    isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
-
-    # Create figure
-    fig = Figure()
-    
-    # Determine layout type and create PlotLayout object
-    plot_layout = _create_erp_layout(layout, all_plot_channels, dat_subset.layout)
-    
-    # For grid and topo layouts, disable legend by default (channel info is in titles/topo plot)
-    if plot_layout.type == :grid || plot_layout.type == :topo
-        layout_kwargs = Dict{Symbol, Any}(kwargs)
-        layout_kwargs[:legend] = false
-        # Ensure limits are passed through for proper scaling
-        if !haskey(layout_kwargs, :xlim) && haskey(kwargs, :xlim)
-            layout_kwargs[:xlim] = kwargs[:xlim]
-        end
-        if !haskey(layout_kwargs, :ylim) && haskey(kwargs, :ylim)
-            layout_kwargs[:ylim] = kwargs[:ylim]
-        end
-        axes = apply_layout!(fig, plot_layout, _plot_single_erp!, dat_subset; layout_kwargs...)
-    else
-        axes = apply_layout!(fig, plot_layout, _plot_single_erp!, dat_subset; kwargs...)
-    end
-    
-    # Apply common axis properties (but preserve grid-specific axis cleanup)
-    for ax in axes
-        apply_axis_properties!(ax; kwargs...)
-    end
-    
-    # For grid layouts, ensure axis labels are properly cleaned up
-    if plot_layout.type == :grid
-        for (idx, ax) in enumerate(axes)
-            row = fld(idx-1, plot_layout.cols) + 1
-            col = mod(idx-1, plot_layout.cols) + 1
-            
-            # Re-apply grid axis properties to ensure they're not overridden
-            set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
-        end
-    end
-    
-    # Link axes for consistent navigation
-    if length(axes) > 1
-        linkaxes!(axes...)
-    end
-    
-    # For topo layouts, remove axis labels and ticks (but preserve scale plot)
-    if plot_layout.type == :topo
-        for ax in axes
-            # Skip the scale plot (it should keep its labels and ticks)
-            if ax.title == "Scale"
-                continue
-            end
-            # Remove axis labels and ticks for topographic plots
-            ax.xlabel = ""
-            ax.ylabel = ""
-            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
-            # Hide all axis spines for clean topographic appearance
-            hidespines!(ax)
-        end
-    end
-    
-    # Apply theme if specified
-    if haskey(kwargs, :theme_fontsize)
-        fontsize_theme = Theme(
-            fontsize = kwargs[:theme_fontsize],
-            Axis = (
-                xgridvisible = false,
-                ygridvisible = false,
-                xminorgridvisible = false,
-                yminorgridvisible = false
-            )
-        )
-        update_theme!(fontsize_theme)
-    else
-        # Apply default theme without grid lines
-        no_grid_theme = Theme(
-            Axis = (
-                xgridvisible = false,
-                ygridvisible = false,
-                xminorgridvisible = false,
-                yminorgridvisible = false
-            )
-        )
-        update_theme!(no_grid_theme)
-    end
-    
-    return fig, axes
+    # Simply wrap the single dataset in a vector and call the multiple dataset version
+    return plot_erp([dat]; layout=layout, channel_selection=channel_selection, 
+                    sample_selection=sample_selection, kwargs...)
 end
 
 """
@@ -404,6 +307,9 @@ function _create_erp_layout(layout_spec, channels, eeg_layout)
     end
 end
 
+
+
+
 """
     _plot_multiple_datasets!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
 
@@ -509,94 +415,4 @@ function _plot_multiple_datasets!(ax::Axis, datasets::Vector{ErpData}, channels:
     return ax
 end
 
-"""
-    _plot_single_erp!(ax::Axis, dat::ErpData, channels::Vector{Symbol}; kwargs...)
 
-Internal function to plot a single ERP on an axis.
-"""
-function _plot_single_erp!(ax::Axis, dat::ErpData, channels::Vector{Symbol}; kwargs...)
-    
-    # Defaults
-    default_kwargs = Dict(
-        :xlim => nothing,
-        :ylim => nothing,
-        :xlabel => "Time (S)",
-        :ylabel => "mV",
-        :linewidth => 2,
-        :color => :black,
-        :linestyle => :solid,
-        :colormap => :jet,
-        :average_channels => false,
-        :legend => true,  # Enable legend for single plot with multiple channels
-        :legend_label => "",
-    )
-    kwargs = merge(default_kwargs, kwargs)
-    
-    # Check if we should average channels
-    if kwargs[:average_channels]
-        # Compute mean across all channels
-        lines!(
-            ax,
-            dat.data[!, :time],
-            colmeans(dat.data, channels),
-            color = kwargs[:color],
-            linewidth = kwargs[:linewidth],
-            linestyle = kwargs[:linestyle],
-            label = kwargs[:legend_label] == "" ? "Average" : kwargs[:legend_label],
-        )
-    else
-        # Plot each channel
-        if length(channels) == 1
-            # Single channel - use default black color
-            lines!(
-                ax,
-                dat.data[!, :time],
-                dat.data[!, channels[1]],
-                color = kwargs[:color],  # Use default black
-                linewidth = kwargs[:linewidth],
-                linestyle = kwargs[:linestyle],
-                label = kwargs[:legend_label] == "" ? string(channels[1]) : string(kwargs[:legend_label], " ", channels[1]),
-            )
-        else
-            # Multiple channels - use different colors
-            colors = Makie.cgrad(kwargs[:colormap], length(channels), categorical = true)
-            for (idx, channel) in enumerate(channels)
-                lines!(
-                    ax,
-                    dat.data[!, :time],
-                    dat.data[!, channel],
-                    color = colors[idx],
-                    linewidth = kwargs[:linewidth],
-                    linestyle = kwargs[:linestyle],
-                    label = kwargs[:legend_label] == "" ? string(channel) : string(kwargs[:legend_label], " ", channel),
-                )
-            end
-        end
-    end
-    
-    # Add zero lines
-    vlines!(ax, [0], color = :black, linewidth = 0.5)
-    hlines!(ax, [0], color = :black, linewidth = 0.5)
-    
-    # Set title to show all channels
-    ax.title = length(channels) == 1 ? string(channels[1]) : "$(print_vector(channels))"
-    
-    # Set axis labels
-    ax.xlabel = kwargs[:xlabel]
-    ax.ylabel = kwargs[:ylabel]
-    
-    # Apply limits if provided
-    if !isnothing(kwargs[:xlim])
-        xlims!(ax, kwargs[:xlim])
-    end
-    if !isnothing(kwargs[:ylim])
-        ylims!(ax, kwargs[:ylim])
-    end
-    
-    # Show legend if requested
-    if kwargs[:legend]
-        axislegend(ax, framevisible = false, position = :lt)
-    end
-    
-    return ax
-end
