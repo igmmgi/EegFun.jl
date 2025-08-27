@@ -12,6 +12,8 @@ struct PlotLayout
     metadata::Dict{Symbol, Any}  # Additional layout-specific parameters
 end
 
+
+
 """
     create_single_layout(channels::Vector{Symbol})
 
@@ -108,12 +110,37 @@ function create_topo_layout(layout::Layout, channels::Vector{Symbol};
 end
 
 """
+    _normalize_coordinates(positions::Vector{Tuple{Float64, Float64}}, margin::Float64)
+
+Normalize coordinates to [0,1] range and handle edge cases.
+Returns normalized coordinates and ranges for layout positioning.
+"""
+function _normalize_coordinates(positions::Vector{Tuple{Float64, Float64}}, margin::Float64)
+    if isempty(positions)
+        return Float64[], Float64[], Float64[], Float64[], 1.0, 1.0
+    end
+    
+    x_coords = [pos[1] for pos in positions]
+    y_coords = [pos[2] for pos in positions]
+    minx, maxx = extrema(x_coords)
+    miny, maxy = extrema(y_coords)
+    
+    # Handle case where all coordinates are the same
+    xrange = maxx - minx == 0 ? 1.0 : maxx - minx
+    yrange = maxy - miny == 0 ? 1.0 : maxy - miny
+    
+    return x_coords, y_coords, minx, maxx, miny, maxy, xrange, yrange
+end
+
+"""
     create_layout(layout_spec, channels, eeg_layout)
 
 Create a PlotLayout object based on the layout specification.
 This is a generic function that can be used by any plot type.
 """
-function create_layout(layout_spec, channels, eeg_layout)
+function create_layout(layout_spec::Union{Symbol, PlotLayout, Vector{Int}}, 
+                       channels::Vector{Symbol}, 
+                       eeg_layout::Union{Layout, Nothing})
     if layout_spec === :single
         return create_single_layout(channels)
     elseif layout_spec === :grid
@@ -219,18 +246,8 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
         plot_height = get(plot_layout.metadata, :plot_height, 0.10)
         margin = get(plot_layout.metadata, :margin, 0.02)
         
-        # Normalize positions to [0,1] range for figure grid
-        x_coords = [pos[1] for pos in plot_layout.positions]
-        y_coords = [pos[2] for pos in plot_layout.positions]
-        
-        minx, maxx = extrema(x_coords)
-        miny, maxy = extrema(y_coords)
-        xrange = maxx - minx
-        yrange = maxy - miny
-        
-        # Handle case where all coordinates are the same
-        xrange = xrange == 0 ? 1.0 : xrange
-        yrange = yrange == 0 ? 1.0 : yrange
+        # Use the new coordinate normalization helper
+        x_coords, y_coords, minx, maxx, miny, maxy, xrange, yrange = _normalize_coordinates(plot_layout.positions, margin)
         
         # For topographic layout, use the same approach as plot_epochs
         # Create individual axes positioned using halign/valign with Relative sizing
@@ -301,31 +318,7 @@ function _set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::
     end
 end
 
-"""
-    _set_topo_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol; kwargs...)
 
-Set properties for axes in a topographic layout.
-"""
-function _set_topo_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol; 
-                                  kwargs...)
-    
-    ax.title = string(channel)
-    
-    # Hide decorations for cleaner look
-    ax.xlabel = ""
-    ax.ylabel = ""
-    ax.xticklabelsvisible = false
-    ax.yticklabelsvisible = false
-    
-    # Apply limits if provided
-    if haskey(kwargs, :ylim)
-        ylims!(ax, kwargs[:ylim])
-    end
-    
-    if haskey(kwargs, :xlim)
-        xlims!(ax, kwargs[:xlim])
-    end
-end
 
 """
     _add_scale_axis!(fig::Figure, plot_layout::PlotLayout; 
