@@ -1,6 +1,4 @@
-# #################################################################
 # plot_erp: Unified ERP plotting with layout system support
-
 """
     plot_erp(dat::ErpData; 
              layout::Union{Symbol, PlotLayout, Vector{Int}, Bool} = :single,
@@ -64,7 +62,7 @@ plot_erp(dat, layout = layout)
 ```
 """
 function plot_erp(dat::ErpData; 
-                 layout::Union{Symbol, PlotLayout, Vector{Int}, Bool} = :single,
+                 layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
                  channel_selection::Function = channels(),
                  sample_selection::Function = samples(),
                  kwargs...)
@@ -207,7 +205,7 @@ end
 Plot multiple ERP datasets on the same axis (e.g., conditions).
 """
 function plot_erp(datasets::Vector{ErpData}; 
-                 layout::Union{Symbol, PlotLayout, Vector{Int}, Bool} = :single,
+                 layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
                  channel_selection::Function = channels(), 
                  sample_selection::Function = samples(), 
                  kwargs...)
@@ -288,10 +286,9 @@ end
 Create a PlotLayout object based on the layout specification.
 """
 function _create_erp_layout(layout_spec, channels, eeg_layout)
-    if layout_spec === :single || layout_spec === false
-        # For single layout, show all channels on one plot (not just first channel)
+    if layout_spec === :single
         return create_single_layout(channels)
-    elseif layout_spec === :grid || layout_spec === true
+    elseif layout_spec === :grid
         return create_grid_layout(channels)
     elseif layout_spec === :topo
         return create_topo_layout(eeg_layout, channels)
@@ -306,8 +303,6 @@ function _create_erp_layout(layout_spec, channels, eeg_layout)
         throw(ArgumentError("Invalid layout specification: $layout_spec"))
     end
 end
-
-
 
 
 """
