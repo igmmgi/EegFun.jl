@@ -13,12 +13,12 @@ struct PlotLayout
 end
 
 """
-    create_single_layout(channel::Symbol)
+    create_single_layout(channels::Vector{Symbol})
 
-Create a single plot layout for one channel.
+Create a single plot layout for multiple channels (all shown on one plot).
 """
-function create_single_layout(channel::Symbol)
-    return PlotLayout(:single, 1, 1, [(0.0, 0.0)], [channel], Dict{Symbol, Any}())
+function create_single_layout(channels::Vector{Symbol})
+    return PlotLayout(:single, 1, 1, [(0.0, 0.0)], channels, Dict{Symbol, Any}())
 end
 
 """
@@ -60,17 +60,44 @@ function create_topo_layout(layout::Layout, channels::Vector{Symbol};
                            plot_height::Float64 = 0.12, 
                            margin::Float64 = 0.02)
     
-    # Get channel positions from layout
+    # Ensure 2D coordinates exist
+    if !all(in.([:x2, :y2], Ref(propertynames(layout.data))))
+        @warn "Layout does not have 2D coordinates. Converting polar to Cartesian."
+        polar_to_cartesian_xy!(layout)
+    end
+    
+    # Get channel positions from layout data
     positions = []
     for channel in channels
-        if haskey(layout.positions, channel)
-            push!(positions, layout.positions[channel])
+        idx = findfirst(==(channel), layout.data.label)
+        if idx !== nothing
+            x = layout.data.x2[idx]
+            y = layout.data.y2[idx]
+            push!(positions, (x, y))
         else
             @warn "Channel $channel not found in layout, using default position"
             push!(positions, (0.0, 0.0))
         end
     end
     
+    # Add scale plot position (bottom right area)
+    # Calculate the range of existing positions to place scale appropriately
+    if !isempty(positions)
+        x_coords = [pos[1] for pos in positions]
+        y_coords = [pos[2] for pos in positions]
+        minx, maxx = extrema(x_coords)
+        miny, maxy = extrema(y_coords)
+        
+        # Place scale plot in bottom right area
+        scale_x = maxx + (maxx - minx) * 0.1  # Slightly to the right
+        scale_y = miny - (maxy - miny) * 0.1  # Slightly below
+        scale_position = (scale_x, scale_y)
+    else
+        # Fallback if no positions
+        scale_position = (0.8, -0.8)
+    end
+    
+    # Store metadata for topographic layout
     metadata = Dict{Symbol, Any}(
         :plot_width => plot_width,
         :plot_height => plot_height,
@@ -160,6 +187,9 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
             ax = Axis(fig[row, col])
             push!(axes, ax)
             
+            # Set grid-specific axis properties (clean labels)
+            set_grid_axis_properties!(ax, plot_layout, channel, row, col, plot_layout.rows, plot_layout.cols; kwargs...)
+            
             # Call plot function for this channel
             plot_function(ax, data, [channel], args...; kwargs...)
         end
@@ -170,18 +200,45 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
         plot_height = get(plot_layout.metadata, :plot_height, 0.12)
         margin = get(plot_layout.metadata, :margin, 0.02)
         
+        # Normalize positions to [0,1] range for figure grid
+        x_coords = [pos[1] for pos in plot_layout.positions]
+        y_coords = [pos[2] for pos in plot_layout.positions]
+        
+        minx, maxx = extrema(x_coords)
+        miny, maxy = extrema(y_coords)
+        xrange = maxx - minx
+        yrange = maxy - miny
+        
+        # Handle case where all coordinates are the same
+        xrange = xrange == 0 ? 1.0 : xrange
+        yrange = yrange == 0 ? 1.0 : yrange
+        
+        # For topographic layout, use the same approach as plot_epochs
+        # Create individual axes positioned using halign/valign with Relative sizing
         for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
-            # Convert position to grid coordinates
-            grid_x = pos[1] * (1.0 - plot_width) + plot_width/2
-            grid_y = pos[2] * (1.0 - plot_height) + plot_height/2
+            # Normalize position to [0,1]
+            norm_x = (pos[1] - minx) / xrange
+            norm_y = (pos[2] - miny) / yrange
             
-            # Create axis at the specified position
-            ax = Axis(fig[grid_x, grid_y], width = plot_width, height = plot_height)
+            # Clamp positions to margin bounds
+            halign = clamp(norm_x, margin, 1 - margin)
+            valign = clamp(norm_y, margin, 1 - margin)
+            
+            # Create axis with relative positioning
+            ax = Axis(
+                fig[1, 1],
+                width = Relative(plot_width),
+                height = Relative(plot_height),
+                halign = halign,
+                valign = valign
+            )
             push!(axes, ax)
             
             # Call plot function for this channel
             plot_function(ax, data, [channel], args...; kwargs...)
         end
+        
+
         
     elseif plot_layout.type == :custom
         # Custom layout with specific positions
