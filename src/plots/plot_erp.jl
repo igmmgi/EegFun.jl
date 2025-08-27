@@ -225,7 +225,7 @@ function plot_erp(datasets::Vector{ErpData};
     
     # Create figure and apply layout system
     fig = Figure()
-    plot_layout = _create_erp_layout(layout, all_plot_channels, dat_subset.layout)
+    plot_layout = _create_layout(layout, all_plot_channels, dat_subset.layout)
     
     # For grid and topo layouts, disable legend by default (channel info is in titles/topo plot)
     if plot_layout.type == :grid || plot_layout.type == :topo
@@ -280,29 +280,7 @@ end
 
 # ===== INTERNAL HELPER FUNCTIONS =====
 
-"""
-    _create_erp_layout(layout_spec, channels, eeg_layout)
 
-Create a PlotLayout object based on the layout specification.
-"""
-function _create_erp_layout(layout_spec, channels, eeg_layout)
-    if layout_spec === :single
-        return create_single_layout(channels)
-    elseif layout_spec === :grid
-        return create_grid_layout(channels)
-    elseif layout_spec === :topo
-        return create_topo_layout(eeg_layout, channels)
-    elseif layout_spec isa Vector{Int}
-        if length(layout_spec) != 2
-            throw(ArgumentError("layout must be a 2-element vector [rows, cols]"))
-        end
-        return create_grid_layout(channels, rows = layout_spec[1], cols = layout_spec[2])
-    elseif layout_spec isa PlotLayout
-        return layout_spec
-    else
-        throw(ArgumentError("Invalid layout specification: $layout_spec"))
-    end
-end
 
 
 """

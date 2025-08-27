@@ -108,6 +108,31 @@ function create_topo_layout(layout::Layout, channels::Vector{Symbol};
 end
 
 """
+    _create_layout(layout_spec, channels, eeg_layout)
+
+Create a PlotLayout object based on the layout specification.
+This is a generic function that can be used by any plot type.
+"""
+function _create_layout(layout_spec, channels, eeg_layout)
+    if layout_spec === :single
+        return create_single_layout(channels)
+    elseif layout_spec === :grid
+        return create_grid_layout(channels)
+    elseif layout_spec === :topo
+        return create_topo_layout(eeg_layout, channels)
+    elseif layout_spec isa Vector{Int}
+        if length(layout_spec) != 2
+            throw(ArgumentError("layout must be a 2-element vector [rows, cols]"))
+        end
+        return create_grid_layout(channels, rows = layout_spec[1], cols = layout_spec[2])
+    elseif layout_spec isa PlotLayout
+        return layout_spec
+    else
+        throw(ArgumentError("Invalid layout specification: $layout_spec"))
+    end
+end
+
+"""
     create_custom_layout(positions::Vector{Tuple{Float64, Float64}}, 
                         channels::Vector{Symbol})
 
