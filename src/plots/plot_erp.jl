@@ -233,12 +233,12 @@ function plot_erp(datasets::Vector{ErpData};
     if plot_layout.type == :grid || plot_layout.type == :topo
         layout_kwargs = Dict{Symbol, Any}(kwargs)
         layout_kwargs[:legend] = false
-        axes = apply_layout!(fig, plot_layout, _plot_multiple_datasets!, datasets; 
+        axes = apply_layout!(fig, plot_layout, _plot_erp!, datasets; 
                             channel_selection = channel_selection, 
                             sample_selection = sample_selection, 
                             layout_kwargs...)
     else
-        axes = apply_layout!(fig, plot_layout, _plot_multiple_datasets!, datasets; 
+        axes = apply_layout!(fig, plot_layout, _plot_erp!, datasets; 
                             channel_selection = channel_selection, 
                             sample_selection = sample_selection, 
                             kwargs...)
@@ -311,11 +311,12 @@ end
 
 
 """
-    _plot_multiple_datasets!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
+    _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
 
-Internal function to plot multiple ERP datasets on a single axis.
+Internal function to plot ERP data on an axis.
+Handles both single and multiple datasets.
 """
-function _plot_multiple_datasets!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; 
+function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; 
                                  channel_selection::Function = channels(), 
                                  sample_selection::Function = samples(), 
                                  kwargs...)
