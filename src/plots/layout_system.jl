@@ -4,11 +4,11 @@
 A struct that defines how to arrange plots in a figure.
 """
 struct PlotLayout
-    type::Symbol           # :single, :grid, :topo, :custom
-    rows::Int             # Number of rows
-    cols::Int             # Number of columns
+    type::Symbol  # :single, :grid, :topo, :custom
+    rows::Int     
+    cols::Int     
     positions::Vector{Tuple{Float64, Float64}}  # Custom positions for :custom type
-    channels::Vector{Symbol}  # Channels to plot
+    channels::Vector{Symbol}     # Channels to plot
     metadata::Dict{Symbol, Any}  # Additional layout-specific parameters
 end
 
@@ -29,9 +29,7 @@ If rows or cols is 0, it will be calculated automatically.
 """
 function create_grid_layout(channels::Vector{Symbol}; rows::Int = 0, cols::Int = 0)
     n_channels = length(channels)
-    
     if rows == 0 && cols == 0
-        # Auto-calculate best rectangular layout
         rows, cols = best_rect(n_channels)
     elseif rows == 0
         rows = ceil(Int, n_channels / cols)
@@ -39,7 +37,6 @@ function create_grid_layout(channels::Vector{Symbol}; rows::Int = 0, cols::Int =
         cols = ceil(Int, n_channels / rows)
     end
     
-    # Validate that the grid can accommodate all channels
     if rows * cols < n_channels
         throw(ArgumentError("Grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
     end
@@ -49,22 +46,24 @@ end
 
 """
     create_topo_layout(layout::Layout, channels::Vector{Symbol}; 
-                       plot_width::Float64 = 0.12, 
-                       plot_height::Float64 = 0.12, 
-                       margin::Float64 = 0.02)
+                       plot_width::Float64 = 0.10, 
+                       plot_height::Float64 = 0.10, 
+                       margin::Float64 = 0.02,
+                       scale_offset_factor::Float64 = 0.1,
+                       fallback_scale_x::Float64 = 0.8,
+                       fallback_scale_y::Float64 = -0.8)
 
 Create a topographic layout based on channel positions.
 """
 function create_topo_layout(layout::Layout, channels::Vector{Symbol}; 
-                           plot_width::Float64 = 0.12, 
-                           plot_height::Float64 = 0.12, 
-                           margin::Float64 = 0.02)
-    
-    # Ensure 2D coordinates exist
-    if !all(in.([:x2, :y2], Ref(propertynames(layout.data))))
-        @warn "Layout does not have 2D coordinates. Converting polar to Cartesian."
-        polar_to_cartesian_xy!(layout)
-    end
+                           plot_width::Float64 = 0.10, 
+                           plot_height::Float64 = 0.10, 
+                           margin::Float64 = 0.02,
+                           scale_offset_factor::Float64 = 0.1,
+                           fallback_scale_x::Float64 = 0.8,
+                           fallback_scale_y::Float64 = -0.8)
+   
+    _ensure_coordinates_2d!(layout)
     
     # Get channel positions from layout data
     positions = []
@@ -75,13 +74,12 @@ function create_topo_layout(layout::Layout, channels::Vector{Symbol};
             y = layout.data.y2[idx]
             push!(positions, (x, y))
         else
-            @warn "Channel $channel not found in layout, using default position"
+            @minimal_warning "Channel $channel not found in layout, using default position"
             push!(positions, (0.0, 0.0))
         end
     end
     
-    # Add scale plot position (bottom right area)
-    # Calculate the range of existing positions to place scale appropriately
+    # Add scale plot position (bottom right area) using existing positions
     if !isempty(positions)
         x_coords = [pos[1] for pos in positions]
         y_coords = [pos[2] for pos in positions]
@@ -89,31 +87,33 @@ function create_topo_layout(layout::Layout, channels::Vector{Symbol};
         miny, maxy = extrema(y_coords)
         
         # Place scale plot in bottom right area
-        scale_x = maxx + (maxx - minx) * 0.1  # Slightly to the right
-        scale_y = miny - (maxy - miny) * 0.1  # Slightly below
+        scale_x = maxx + (maxx - minx) * scale_offset_factor  # Slightly to the right
+        scale_y = miny - (maxy - miny) * scale_offset_factor  # Slightly below
         scale_position = (scale_x, scale_y)
     else
-        # Fallback if no positions
-        scale_position = (0.8, -0.8)
+        scale_position = (fallback_scale_x, fallback_scale_y)
     end
     
     # Store metadata for topographic layout
     metadata = Dict{Symbol, Any}(
         :plot_width => plot_width,
         :plot_height => plot_height,
-        :margin => margin
+        :margin => margin,
+        :scale_offset_factor => scale_offset_factor,
+        :fallback_scale_x => fallback_scale_x,
+        :fallback_scale_y => fallback_scale_y
     )
     
     return PlotLayout(:topo, 0, 0, positions, channels, metadata)
 end
 
 """
-    _create_layout(layout_spec, channels, eeg_layout)
+    create_layout(layout_spec, channels, eeg_layout)
 
 Create a PlotLayout object based on the layout specification.
 This is a generic function that can be used by any plot type.
 """
-function _create_layout(layout_spec, channels, eeg_layout)
+function create_layout(layout_spec, channels, eeg_layout)
     if layout_spec === :single
         return create_single_layout(channels)
     elseif layout_spec === :grid
@@ -138,12 +138,10 @@ end
 
 Create a custom layout with specific positions for each channel.
 """
-function create_custom_layout(positions::Vector{Tuple{Float64, Float64}}, 
-                            channels::Vector{Symbol})
+function create_custom_layout(positions::Vector{Tuple{Float64, Float64}}, channels::Vector{Symbol})
     if length(positions) != length(channels)
         throw(ArgumentError("Number of positions ($(length(positions))) must match number of channels ($(length(channels)))"))
     end
-    
     return PlotLayout(:custom, 0, 0, positions, channels, Dict{Symbol, Any}())
 end
 
@@ -190,13 +188,11 @@ end
 Apply a plot layout to a figure and call the plot function for each channel.
 Returns the created axes.
 """
-function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Function, 
-                      data, args...; kwargs...)
+function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Function, data, args...; kwargs...)
     
     axes = Axis[]
     
     if plot_layout.type == :single
-        # Single plot
         ax = Axis(fig[1, 1])
         push!(axes, ax)
         
@@ -204,7 +200,6 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
         plot_function(ax, data, plot_layout.channels, args...; kwargs...)
         
     elseif plot_layout.type == :grid
-        # Grid layout
         for (idx, channel) in enumerate(plot_layout.channels)
             row = fld(idx-1, plot_layout.cols) + 1
             col = mod(idx-1, plot_layout.cols) + 1
@@ -213,16 +208,15 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
             push!(axes, ax)
             
             # Set grid-specific axis properties (clean labels)
-            set_grid_axis_properties!(ax, plot_layout, channel, row, col, plot_layout.rows, plot_layout.cols; kwargs...)
+            _set_grid_axis_properties!(ax, plot_layout, channel, row, col, plot_layout.rows, plot_layout.cols; kwargs...)
             
             # Call plot function for this channel
             plot_function(ax, data, [channel], args...; kwargs...)
         end
         
     elseif plot_layout.type == :topo
-        # Topographic layout
-        plot_width = get(plot_layout.metadata, :plot_width, 0.12)
-        plot_height = get(plot_layout.metadata, :plot_height, 0.12)
+        plot_width = get(plot_layout.metadata, :plot_width, 0.10)
+        plot_height = get(plot_layout.metadata, :plot_height, 0.10)
         margin = get(plot_layout.metadata, :margin, 0.02)
         
         # Normalize positions to [0,1] range for figure grid
@@ -258,20 +252,13 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
                 valign = valign
             )
             push!(axes, ax)
-            
-            # Call plot function for this channel
             plot_function(ax, data, [channel], args...; kwargs...)
         end
         
-
-        
     elseif plot_layout.type == :custom
-        # Custom layout with specific positions
         for (channel, pos) in zip(plot_layout.channels, plot_layout.positions)
             ax = Axis(fig[pos[1], pos[2]])
             push!(axes, ax)
-            
-            # Call plot function for this channel
             plot_function(ax, data, [channel], args...; kwargs...)
         end
     end
@@ -280,17 +267,16 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
 end
 
 """
-    set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol, 
+    _set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol, 
                               row::Int, col::Int, total_rows::Int, total_cols::Int; 
                               kwargs...)
 
 Set properties for axes in a grid layout.
 """
-function set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol, 
+function _set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol, 
                                   row::Int, col::Int, total_rows::Int, total_cols::Int; 
                                   kwargs...)
     
-    # Set title
     ax.title = string(channel)
     
     # Only show y-axis labels on the leftmost column
@@ -316,15 +302,13 @@ function set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::S
 end
 
 """
-    set_topo_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol; 
-                              kwargs...)
+    _set_topo_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol; kwargs...)
 
 Set properties for axes in a topographic layout.
 """
-function set_topo_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol; 
+function _set_topo_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol; 
                                   kwargs...)
     
-    # Set title
     ax.title = string(channel)
     
     # Hide decorations for cleaner look
@@ -344,19 +328,23 @@ function set_topo_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::S
 end
 
 """
-    add_scale_axis!(fig::Figure, plot_layout::PlotLayout; 
-                    position::Tuple{Float64, Float64} = (0.95, 0.05),
-                    width::Float64 = 0.14, height::Float64 = 0.14)
+    _add_scale_axis!(fig::Figure, plot_layout::PlotLayout; 
+                    scale_axis_x::Float64 = 0.95,
+                    scale_axis_y::Float64 = 0.05,
+                    scale_axis_width::Float64 = 0.10,
+                    scale_axis_height::Float64 = 0.10)
 
 Add a scale axis to show the scale of the plots.
 """
-function add_scale_axis!(fig::Figure, plot_layout::PlotLayout; 
-                         position::Tuple{Float64, Float64} = (0.95, 0.05),
-                         width::Float64 = 0.14, height::Float64 = 0.14)
+function _add_scale_axis!(fig::Figure, plot_layout::PlotLayout; 
+                         scale_axis_x::Float64 = 0.95,
+                         scale_axis_y::Float64 = 0.05,
+                         scale_axis_width::Float64 = 0.10,
+                         scale_axis_height::Float64 = 0.10)
     
     # Create scale axis
-    scale_ax = Axis(fig[position[1], position[2]], 
-                    width = width, height = height)
+    scale_ax = Axis(fig[scale_axis_x, scale_axis_y], 
+                    width = scale_axis_width, height = scale_axis_height)
     
     # Hide decorations
     scale_ax.xlabel = ""
@@ -371,11 +359,11 @@ function add_scale_axis!(fig::Figure, plot_layout::PlotLayout;
 end
 
 """
-    apply_axis_properties!(ax::Axis; kwargs...)
+    _apply_axis_properties!(ax::Axis; kwargs...)
 
 Apply common axis properties from keyword arguments.
 """
-function apply_axis_properties!(ax::Axis; kwargs...)
+function _apply_axis_properties!(ax::Axis; kwargs...)
     
     # Apply limits
     if haskey(kwargs, :xlim) && !isnothing(kwargs[:xlim])
@@ -396,8 +384,7 @@ function apply_axis_properties!(ax::Axis; kwargs...)
         try
             ax.fontsize = kwargs[:theme_fontsize]
         catch
-            # Fallback: try to set via theme if direct assignment fails
-            @warn "Could not set fontsize directly on axis, skipping fontsize setting"
+            @minimal_warning "Could not set fontsize directly on axis, skipping fontsize setting"
         end
     end
 end
