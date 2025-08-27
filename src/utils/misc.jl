@@ -316,24 +316,6 @@ macro add_nonmutating(func)
 
 end
 
-"""
-    best_rect(n::Integer) -> Vector{Int}
-
-Find the best rectangle dimensions for a given number n.
-
-# Arguments
-- `n::Integer`: Number of items to arrange
-
-# Returns
-- `Vector{Int}`: Dimensions [rows, cols] of the best rectangle
-"""
-function best_rect(n::Integer)::Vector{Int}
-    n > 0 || @minimal_error "n must be positive"
-    dim1 = ceil(Int, sqrt(n))
-    dim2 = ceil(Int, n / dim1)
-    return [dim1, dim2]
-end
-
 
 # Custom copy functions for main types to avoid deepcopy
 """
