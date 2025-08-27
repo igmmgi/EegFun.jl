@@ -57,7 +57,7 @@ plot_erp(dat, layout = [3, 4])
 plot_erp(dat, layout = :topo)
 
 # Custom layout object
-layout = create_grid_layout(channels(dat), rows = 2, cols = 3)
+        layout = create_grid_layout(channels(dat), rows = 2, cols = 3)
 plot_erp(dat, layout = layout)
 ```
 """
@@ -225,7 +225,7 @@ function plot_erp(datasets::Vector{ErpData};
     
     # Create figure and apply layout system
     fig = Figure()
-    plot_layout = _create_layout(layout, all_plot_channels, dat_subset.layout)
+    plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
     
     # For grid and topo layouts, disable legend by default (channel info is in titles/topo plot)
     if plot_layout.type == :grid || plot_layout.type == :topo
@@ -244,7 +244,7 @@ function plot_erp(datasets::Vector{ErpData};
     
     # Apply common axis properties (but preserve grid-specific axis cleanup)
     for ax in axes
-        apply_axis_properties!(ax; kwargs...)
+        _apply_axis_properties!(ax; kwargs...)
     end
     
     # For grid layouts, ensure axis labels are properly cleaned up
@@ -254,7 +254,7 @@ function plot_erp(datasets::Vector{ErpData};
             col = mod(idx-1, plot_layout.cols) + 1
             
             # Re-apply grid axis properties to ensure they're not overridden
-            set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
+            _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
         end
     end
     
