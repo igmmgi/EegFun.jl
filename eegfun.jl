@@ -25,23 +25,28 @@ eegfun.is_extreme_value!(dat, 100);
 dat_ica = eegfun.copy(dat)
 dat_cleaned = eegfun.copy(dat)
 eegfun.filter_data!(dat_ica, "hp", 1)
-
-@time ica_result = eegfun.run_ica(dat_ica; sample_selection = eegfun.samples_not(:is_extreme_value))
-
+# @time ica_result = eegfun.run_ica(dat_ica; sample_selection = eegfun.samples_not(:is_extreme_value))
 # automatically identify components that are likely to be artifacts
-eog_comps, eog_comps_metrics_df = eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value)) 
-ecg_comps, ecg_comps_metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
-line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components( ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
-channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
-# Combine above component artifact results into a single structure
-component_artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
-
-eegfun.plot_ica_topoplot(ica_result)
-eegfun.plot_ica_component_activation(dat, ica_result)
-
-eegfun.preprocess_eeg_data("pipeline.toml")
+# eog_comps, eog_comps_metrics_df = eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value)) 
+# ecg_comps, ecg_comps_metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+# line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components( ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+# channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
+# # Combine above component artifact results into a single structure
+# component_artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+# 
+# eegfun.plot_ica_topoplot(ica_result)
+# eegfun.plot_ica_component_activation(dat, ica_result)
+# 
+# eegfun.preprocess_eeg_data("pipeline.toml")
 
 # load data
+# package
+using eegfun
+using GLMakie
+# using CairoMakie
+using DataFrames
+using BenchmarkTools
+
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # define neighbours 2D/3D defined by distance (mm)
@@ -51,25 +56,9 @@ eegfun.polar_to_cartesian_xyz!(layout);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
-
-
-dat_new = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:O1, :O2])])
-eegfun.viewer(dat_new.data)
-dat_new.layout.data
-
-dat_new = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:O1, :O2])], reduce = true)
-eegfun.viewer(dat_new.data)
-dat_new.layout.data
-
-
-
-
-
-
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 # eegfun.plot_databrowser(dat)
-
 # eegfun.plot_channel_spectrum(dat)
 # eegfun.plot_channel_spectrum(dat)
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
@@ -84,7 +73,6 @@ for (idx, epoch) in enumerate(epochs)
     push!(erps, eegfun.average_epochs(epochs[idx]))
 end
 
-
 # eegfun.plot_topography(erps[1])
 # eegfun.plot_databrowser(erps[1])
 eegfun.plot_epochs(epochs[1])
@@ -92,8 +80,6 @@ eegfun.plot_epochs(epochs[1], epoch_selection = eegfun.epochs(1:2))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:sample_stride => 100))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
-
-
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps[1])
 display(fig)
@@ -104,9 +90,19 @@ display(fig)
 
 # ERP Plot
 @time fig, ax = eegfun.plot_erp(erps; channel_selection = eegfun.channels([:Fp1, :P08]), sample_selection = x -> -1 .< x.time .< 1.5); display(fig);
-@time fig, ax = eegfun.plot_erp(erps); display(fig);
 
+fig, ax = eegfun.plot_erp(erps); display(fig);
 
+# These work exactly as before
+eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]), layout_type = :topo, layout_kwargs = Dict(:plot_width => 0.15))
+
+# But now you can easily control layout
+eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]); 
+            layout_type = :topo, layout_kwargs = Dict(:plot_width => 0.15))
+
+# And the system automatically chooses the best option
+plot_epochs(epochs, channel_selection = channels([:Fp1]))  # Single plot
+plot_epochs(epochs, channel_selection = channels([:Fp1, :Fp2, :Cz]))  # Grid
 
 
 
