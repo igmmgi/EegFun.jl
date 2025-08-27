@@ -76,7 +76,7 @@ include("plots/plot_correlation_heatmap.jl")
 include("plots/plot_databrowser.jl")
 include("plots/plot_epochs.jl")
 include("plots/plot_erp.jl")
-include("plots/plot_erp_grid.jl")
+# Removed: plot_erp_grid.jl - functionality now in plot_erp with layout system
 include("plots/plot_erp_image.jl")
 include("plots/plot_grid_topo.jl")
 include("plots/plot_ica.jl")

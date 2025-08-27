@@ -80,9 +80,65 @@ eegfun.plot_epochs(epochs[1], epoch_selection = eegfun.epochs(1:2))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:sample_stride => 100))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
+
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps[1])
 display(fig)
+
+fig, ax = eegfun.plot_erp(erps)
+display(fig)
+
+fig, ax = eegfun.plot_erp(erps[1], layout = :grid)
+display(fig)
+
+fig, ax = eegfun.plot_erp(erps, layout = :grid)
+display(fig)
+
+fig, ax = eegfun.plot_erp(erps[1], layout = :topo)
+display(fig)
+
+fig, ax = eegfun.plot_erp(erps, layout = :topo)
+display(fig)
+
+
+
+
+
+
+0fig, ax = eegfun.plot_erp([erps[1], copy(erps[1])], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :grid)
+display(fig)
+
+
+
+
+
+# ERP Plot
+fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
+display(fig)
+fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :grid)
+display(fig)
+fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :O1]), layout = :topo)
+display(fig)
+
+
+
+
+
+
+
+
+# ERP Plot
+fig, ax = eegfun.plot_erp(erps)
+display(fig)
+
+fig, ax = eegfun.plot_erp(erps[1]; layout = :grid)
+display(fig)
+
+fig, ax = eegfun.plot_erp(erps[1]; layout = :topo)
+display(fig)
+
+
+
 
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps[1]; channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> -1 .< x.time .< 1.5)
