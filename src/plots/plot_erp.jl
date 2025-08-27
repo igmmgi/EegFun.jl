@@ -1,7 +1,29 @@
 # plot_erp: Unified ERP plotting with layout system support
+
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
+
+const DEFAULT_ERP_KWARGS = Dict(
+    :xlim => nothing,
+    :ylim => nothing,
+    :xlabel => "Time (S)",
+    :ylabel => "mV",
+    :linewidth => 2,
+    :color => :black,
+    :linestyle => :solid,
+    :colormap => :jet,
+    :yreversed => false,
+    :average_channels => false,
+    :legend => true,
+    :legend_label => "",
+)
+
+# =============================================================================
+
 """
     plot_erp(dat::ErpData; 
-             layout::Union{Symbol, PlotLayout, Vector{Int}, Bool} = :single,
+             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
              kwargs...)
@@ -16,8 +38,7 @@ Create ERP plots with flexible layout options.
   - `:topo`: Topographic layout based on channel positions
   - `PlotLayout`: Custom layout object
   - `Vector{Int}`: Custom grid dimensions [rows, cols]
-  - `true`: Auto-calculated grid (alias for :grid)
-  - `false`: Single plot (alias for :single)
+  
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering
 - `kwargs`: Additional keyword arguments
@@ -38,8 +59,8 @@ Create ERP plots with flexible layout options.
 - `legend_label`: Legend label prefix (default: "")
 - `hidedecorations`: Whether to hide axis decorations in grid/topo layouts (default: false)
 - `theme_fontsize`: Font size for theme (default: 24)
-- `plot_width`: Plot width for topo layout (default: 0.12)
-- `plot_height`: Plot height for topo layout (default: 0.12)
+- `plot_width`: Plot width for topo layout (default: 0.10)
+- `plot_height`: Plot height for topo layout (default: 0.10)
 - `margin`: Margin between plots for topo layout (default: 0.02)
 
 # Examples
@@ -57,7 +78,7 @@ plot_erp(dat, layout = [3, 4])
 plot_erp(dat, layout = :topo)
 
 # Custom layout object
-        layout = create_grid_layout(channels(dat), rows = 2, cols = 3)
+layout = create_grid_layout(channels(dat), rows = 2, cols = 3)
 plot_erp(dat, layout = layout)
 ```
 """
@@ -100,22 +121,9 @@ function plot_erp!(fig::Figure, ax::Axis, dat::ErpData;
 
     isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
 
-    # Defaults
-    default_kwargs = Dict(
-        :xlim => nothing,
-        :ylim => nothing,
-        :title => nothing,
-        :xlabel => "Time (S)",
-        :ylabel => "mV",
-        :linewidth => 2,
-        :color => :black,
-        :linestyle => :solid,
-        :colormap => :jet,
-        :yreversed => false,
-        :average_channels => false,
-        :legend => true,
-        :legend_label => "",
-    )
+    # Use defaults with title override
+    default_kwargs = copy(DEFAULT_ERP_KWARGS)
+    default_kwargs[:title] = nothing
     kwargs = merge(default_kwargs, kwargs)
 
     # Plot
@@ -162,7 +170,7 @@ end
 
 """
     plot_erp(dat_orig::ErpData, dat_cleaned::ErpData; 
-             layout::Union{Symbol, PlotLayout, Vector{Int}, Bool} = :single,
+             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
              channel_selection::Function = channels(), 
              sample_selection::Function = samples(), 
              kwargs...)
@@ -170,7 +178,7 @@ end
 Plot two ERP datasets on linked axes for comparison.
 """
 function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData; 
-                 layout::Union{Symbol, PlotLayout, Vector{Int}, Bool} = :single,
+                 layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
                  channel_selection::Function = channels(), 
                  sample_selection::Function = samples(), 
                  kwargs...)
@@ -197,7 +205,7 @@ end
 
 """
     plot_erp(datasets::Vector{ErpData}; 
-             layout::Union{Symbol, PlotLayout, Vector{Int}, Bool} = :single,
+             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
              channel_selection::Function = channels(), 
              sample_selection::Function = samples(), 
              kwargs...)
@@ -294,21 +302,8 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
                                  sample_selection::Function = samples(), 
                                  kwargs...)
     
-    # Defaults
-    default_kwargs = Dict(
-        :xlim => nothing,
-        :ylim => nothing,
-        :xlabel => "Time (S)",
-        :ylabel => "mV",
-        :linewidth => 2,
-        :color => :black,
-        :linestyle => :solid,
-        :colormap => :jet,
-        :average_channels => false,
-        :legend => true,
-        :legend_label => "",
-    )
-    kwargs = merge(default_kwargs, kwargs)
+    # Use defaults
+    kwargs = merge(DEFAULT_ERP_KWARGS, kwargs)
     
     # Styling for multiple datasets and channels
     linestyles = [:solid, :dot, :dash, :dashdot, :dashdotdot]
