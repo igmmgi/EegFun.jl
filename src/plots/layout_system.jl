@@ -250,11 +250,14 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
             
             ax = Axis(fig[row, col], xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false)
             push!(axes, ax)
-            
-            # Set grid-specific axis properties (clean labels)
-            _set_grid_axis_properties!(ax, plot_layout, channel, row, col, plot_layout.rows, plot_layout.cols; kwargs...)
-            
             push!(channel_assignments, (idx, channel))
+        end
+        
+        # For grid layouts, ensure axis labels are properly cleaned up
+        for (idx, ax) in enumerate(axes)
+            row = fld(idx-1, plot_layout.cols) + 1
+            col = mod(idx-1, plot_layout.cols) + 1
+            _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
         end
         
     elseif plot_layout.type == :topo
@@ -287,6 +290,15 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
             )
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
+        end
+        
+        # For topo layouts, remove axis labels and ticks, and add scale plot
+        for ax in axes
+            ax.xlabel = ""
+            ax.ylabel = ""
+            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
+            hidespines!(ax)
+            # Preserve the title for topographic layouts
         end
         
     elseif plot_layout.type == :custom

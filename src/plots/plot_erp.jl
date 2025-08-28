@@ -161,29 +161,9 @@ function plot_erp(datasets::Vector{ErpData};
         end
     end
     
-    # Apply common axis properties (but preserve grid-specific axis cleanup)
+    # Apply common axis properties (grid lines, font size, etc.)
     for ax in axes
         _apply_axis_properties!(ax; plot_kwargs...)
-    end
-    
-    # For grid layouts, ensure axis labels are properly cleaned up
-    if plot_layout.type == :grid
-        for (idx, ax) in enumerate(axes)
-            row = fld(idx-1, plot_layout.cols) + 1
-            col = mod(idx-1, plot_layout.cols) + 1
-            _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
-        end
-    end
-    
-    # For topo layouts, remove axis labels and ticks, and add scale plot
-    if plot_layout.type == :topo
-        for ax in axes
-            ax.xlabel = ""
-            ax.ylabel = ""
-            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
-            hidespines!(ax)
-            # Preserve the title for topographic layouts
-        end
     end
     
     # Link axes for consistent navigation
