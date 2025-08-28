@@ -23,6 +23,7 @@ const DEFAULT_ERP_KWARGS = Dict(
     :ygrid => false,
     :xminorgrid => false,
     :yminorgrid => false,
+    :add_xy_origin => true,
 )
 
 # =============================================================================
@@ -118,7 +119,7 @@ function plot_erp(datasets::Vector{ErpData};
     
     # data subsetting
     dat_subset = subset(
-        datasets[1];
+        datasets;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         include_extra = true,
@@ -133,8 +134,9 @@ function plot_erp(datasets::Vector{ErpData};
     extra_channels = extra_labels(dat_subset)
     all_plot_channels = vcat(selected_channels, extra_channels)
 
-    # set default plot title
-    if plot_kwargs[:show_title] && plot_kwargs[:title] == ""
+    # set default plot title only for single layouts
+    # For grid/topo layouts, we want individual channel names, not a global title
+    if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
         plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
         if plot_kwargs[:average_channels]
             plot_kwargs[:title] = "Avg: $(print_vector(original_channels))"
@@ -143,16 +145,14 @@ function plot_erp(datasets::Vector{ErpData};
     
     # Create figure and apply layout system
     fig = Figure()
-    plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
-    axes, channel_assignments = apply_layout!(fig, plot_layout; plot_kwargs...)
+    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
+    axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
     
     # Now do the actual plotting for each axis
-    for (ax, (idx, channel)) in zip(axes, channel_assignments)
-        if plot_layout.type == :single
-            _plot_erp!(ax, [dat_subset], all_plot_channels; plot_kwargs...)
-        else
-            _plot_erp!(ax, datasets, [channel]; legend=false, plot_kwargs...)
-        end
+    for (ax, channel) in zip(axes, channels)
+        println("plot_erp: plotting channel: $channel, plot_layout.type: $(plot_layout.type)")
+        channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
+        _plot_erp!(ax, dat_subset, channels_to_plot; plot_kwargs...)
     end
     
     # Apply our axis stuff
@@ -215,8 +215,10 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     end
     
     # Add zero lines with tick marks
-    vlines!(ax, [0], color = :black, linewidth = 0.5)
-    hlines!(ax, [0], color = :black, linewidth = 0.5)
+    if kwargs[:add_xy_origin]
+        vlines!(ax, [0], color = :black, linewidth = 0.5)
+        hlines!(ax, [0], color = :black, linewidth = 0.5)
+    end
     
     # Show legend if requested and there are multiple channels or datasets
     if kwargs[:legend] && (length(channels) > 1 || length(datasets) > 1)
