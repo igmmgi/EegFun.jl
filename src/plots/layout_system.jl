@@ -238,22 +238,25 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     channel_assignments = Tuple{Int, Symbol}[]  # (axis_index, channel) pairs
     
     if plot_layout.type == :single
-        ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false)
+
+        ax = Axis(fig[1, 1], xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid])
         push!(axes, ax)
         push!(channel_assignments, (1, plot_layout.channels[1]))
         
     elseif plot_layout.type == :grid
+
         @info "apply_layout! grid: plot_layout.rows=$(plot_layout.rows), plot_layout.cols=$(plot_layout.cols), channels=$(length(plot_layout.channels))"
         for (idx, channel) in enumerate(plot_layout.channels)
             row = fld(idx-1, plot_layout.cols) + 1
             col = mod(idx-1, plot_layout.cols) + 1
             
-            ax = Axis(fig[row, col], xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false)
+            ax = Axis(fig[row, col], xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid])
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
         end
       
     elseif plot_layout.type == :topo
+
         plot_width = get(plot_layout.metadata, :plot_width, 0.10)
         plot_height = get(plot_layout.metadata, :plot_height, 0.10)
         margin = get(plot_layout.metadata, :margin, 0.02)
@@ -279,16 +282,15 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
                 height = Relative(plot_height),
                 halign = halign,
                 valign = valign,
-                xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false
+                xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid]
             )
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
         end
      
-        
     elseif plot_layout.type == :custom
         for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
-            ax = Axis(fig[pos[1], pos[2]], xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false)
+            ax = Axis(fig[pos[1], pos[2]], xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid])
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
         end
@@ -321,17 +323,58 @@ function _set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::
         ax.xlabel = ""
         ax.xticklabelsvisible = false
     end
-    
-    # Apply other properties
-    if haskey(kwargs, :ylim) && !isnothing(kwargs[:ylim])
-        ylims!(ax, kwargs[:ylim])
-    end
-    
-    if haskey(kwargs, :xlim) && !isnothing(kwargs[:xlim])
-        xlims!(ax, kwargs[:xlim])
+
+end
+
+
+
+"""
+    _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLayout; kwargs...)
+
+Apply layout-specific axis properties to all axes after plotting.
+This ensures layout properties override any auto-set properties from Makie.
+"""
+function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLayout; kwargs...)
+    if plot_layout.type == :grid
+        for (idx, ax) in enumerate(axes)
+            row = fld(idx-1, plot_layout.cols) + 1
+            col = mod(idx-1, plot_layout.cols) + 1
+            _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
+        end
+    elseif plot_layout.type == :topo
+        # For topo layouts, remove axis labels and ticks, and add scale plot
+        for (idx, ax) in enumerate(axes)
+            # Set the title to show the channel name
+            ax.title = string(plot_layout.channels[idx])
+            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
+            hidespines!(ax)
+        end
     end
 end
 
+"""
+    _apply_axis_properties!(ax::Axis; kwargs...)
+
+Apply common axis properties from keyword arguments.
+"""
+function _apply_axis_properties!(ax::Axis; kwargs...)
+
+    ax.title = kwargs[:title]
+    ax.xlabel = kwargs[:xlabel]
+    ax.ylabel = kwargs[:ylabel]
+
+    # Axis limits and y +ve/ve inversions
+    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
+    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
+    ax.yreversed = kwargs[:yreversed]
+    
+    # Apply grid settings (these are always present in DEFAULT_ERP_KWARGS)
+    # ax.xgridvisible = kwargs[:xgrid]
+    # ax.ygridvisible = kwargs[:ygrid]
+    # ax.xminorgridvisible = kwargs[:xminorgrid]
+    # ax.yminorgridvisible = kwargs[:yminorgrid]
+
+end
 
 
 """
@@ -363,52 +406,4 @@ function _add_scale_axis!(fig::Figure, plot_layout::PlotLayout;
     scale_ax.title = "Scale"
     
     return scale_ax
-end
-
-"""
-    _apply_axis_properties!(ax::Axis; kwargs...)
-
-Apply common axis properties from keyword arguments.
-"""
-function _apply_axis_properties!(ax::Axis; kwargs...)
-    
-    # Apply limits
-    if haskey(kwargs, :xlim) && !isnothing(kwargs[:xlim])
-        xlims!(ax, kwargs[:xlim])
-    end
-    
-    if haskey(kwargs, :ylim) && !isnothing(kwargs[:ylim])
-        ylims!(ax, kwargs[:ylim])
-    end
-    
-    # Apply other properties
-    if haskey(kwargs, :yreversed) && kwargs[:yreversed]
-        ax.yreversed = true
-    end
-    
-    # Apply grid settings
-    if haskey(kwargs, :xgrid)
-        ax.xgridvisible = kwargs[:xgrid]
-    end
-    
-    if haskey(kwargs, :ygrid)
-        ax.ygridvisible = kwargs[:ygrid]
-    end
-    
-    if haskey(kwargs, :xminorgrid)
-        ax.xminorgridvisible = kwargs[:xminorgrid]
-    end
-    
-    if haskey(kwargs, :yminorgrid)
-        ax.yminorgridvisible = kwargs[:yminorgrid]
-    end
-    
-    # Apply fontsize directly to the axis (avoiding Makie theming issues)
-    if haskey(kwargs, :theme_fontsize)
-        try
-            ax.fontsize = kwargs[:theme_fontsize]
-        catch
-            @minimal_warning "Could not set fontsize directly on axis, skipping fontsize setting"
-        end
-    end
 end
