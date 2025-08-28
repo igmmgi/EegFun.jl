@@ -139,9 +139,8 @@ end
 Create a PlotLayout object based on the layout specification.
 This is a generic function that can be used by any plot type.
 """
-function create_layout(layout_spec::Union{Symbol, PlotLayout, Vector{Int}}, 
-                       channels::Vector{Symbol}, 
-                       eeg_layout::Union{Layout, Nothing})
+function create_layout(layout_spec::Union{Symbol, PlotLayout, Vector{Int}}, channels::Vector{Symbol}, eeg_layout::Union{Layout, Nothing})
+
     if layout_spec === :single
         return create_single_layout(channels)
     elseif layout_spec === :grid
@@ -177,8 +176,7 @@ function create_layout(layout_spec::Union{Symbol, PlotLayout, Vector{Int}},
 end
 
 """
-    create_custom_layout(positions::Vector{Tuple{Float64, Float64}}, 
-                        channels::Vector{Symbol})
+    create_custom_layout(positions::Vector{Tuple{Float64, Float64}}, channels::Vector{Symbol})
 
 Create a custom layout with specific positions for each channel.
 """
@@ -212,7 +210,7 @@ function best_rect(n::Int)
         end
     end
     
-    println("best_rect($n): factors = $factors")
+    @info "best_rect($n): factors = $factors"
     
     if isempty(factors)
         # n is prime or has no good factors, find closest rectangular arrangement
@@ -220,12 +218,12 @@ function best_rect(n::Int)
         rows = ceil(Int, sqrt(n))
         cols = ceil(Int, n / rows)
         
-        println("best_rect($n): no factors, using sqrt approach: rows=$rows, cols=$cols")
+        @info "best_rect($n): no factors, using sqrt approach: rows=$rows, cols=$cols"
         
         # Ensure we have enough space for all items
         if rows * cols < n
             cols = ceil(Int, n / rows)
-            println("best_rect($n): adjusted cols to $cols")
+            @inffo "best_rect($n): adjusted cols to $cols"
         end
         
         return (rows, cols)
@@ -237,14 +235,14 @@ function best_rect(n::Int)
         # Only one factor and it's 1×n, use sqrt approach instead
         rows = ceil(Int, sqrt(n))
         cols = ceil(Int, n / rows)
-        println("best_rect($n): only factor is 1×n, using sqrt approach: rows=$rows, cols=$cols")
+        @info "best_rect($n): only factor is 1×n, using sqrt approach: rows=$rows, cols=$cols"
         return (rows, cols)
     else
         # Use the factor pair with the smallest difference
         result = argmin(factors) do (r, c)
             abs(r - c)
         end
-        println("best_rect($n): using factors, returning $result")
+        @info "best_rect($n): using factors, returning $result"
         return result
     end
 end
