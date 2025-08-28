@@ -124,46 +124,25 @@ function plot_erp!(fig::Figure, ax::Axis, dat::ErpData;
     # Use defaults with title override
     default_kwargs = copy(DEFAULT_ERP_KWARGS)
     default_kwargs[:title] = nothing
-    kwargs = merge(default_kwargs, kwargs)
+    plot_kwargs = merge(default_kwargs, kwargs)
 
-    # Plot
-    if kwargs[:average_channels]
-        # Compute mean across selected channels once
-        lines!(
-            ax,
-            dat_subset.data[!, :time],
-            colmeans(dat_subset.data, all_plot_channels),
-            color = kwargs[:color],
-            linewidth = kwargs[:linewidth],
-            linestyle = kwargs[:linestyle],
-            label = kwargs[:legend_label],
-        )
+    # Handle averaging if requested
+    if plot_kwargs[:average_channels]
+        # Use the channel_average function to create averaged data
+        # The non-mutating version creates a copy and adds the :avg column
+        dat_averaged = channel_average(dat_subset, channel_selections = [channels(all_plot_channels)])
+        
+        # Now pass the averaged data to _plot_erp! for consistent plotting
+        # The averaged data has a single channel called :avg
+        _plot_erp!(ax, [dat_averaged], [:avg]; plot_kwargs...)
     else
-        colors = Makie.cgrad(kwargs[:colormap], length(all_plot_channels), categorical = true)
-        for (idx, channel) in enumerate(all_plot_channels)
-            lines!(
-                ax,
-                dat_subset.data[!, :time],
-                dat_subset.data[!, channel],
-                color = colors[idx],
-                linewidth = kwargs[:linewidth],
-                linestyle = kwargs[:linestyle],
-                label = string(kwargs[:legend_label], " ", channel),
-            )
-        end
+        # Use the internal plotting function for consistency
+        # Create a single-element vector to match _plot_erp! signature
+        _plot_erp!(ax, [dat_subset], all_plot_channels; plot_kwargs...)
     end
-
-    # Axis properties
-    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
-    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
-    ax.title = isnothing(kwargs[:title]) ? "$(print_vector(all_plot_channels))" : kwargs[:title]
-    ax.xlabel = kwargs[:xlabel]
-    ax.ylabel = kwargs[:ylabel]
-    ax.yreversed = kwargs[:yreversed]
-
-    if kwargs[:legend]
-        axislegend(ax, framevisible = false, position = :lt)
-    end
+    
+    # Apply additional properties specific to plot_erp!
+    ax.yreversed = plot_kwargs[:yreversed]
 
     return fig, ax
 end
@@ -234,20 +213,30 @@ function plot_erp(datasets::Vector{ErpData};
     # Create figure and apply layout system
     fig = Figure()
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
+
+    # Use defaults with title override
+    default_kwargs = copy(DEFAULT_ERP_KWARGS)
+    default_kwargs[:title] = nothing
+    plot_kwargs = merge(default_kwargs, kwargs)
+
+    # Apply layout to create axes and get channel assignments
+    axes, channel_assignments = apply_layout!(fig, plot_layout; kwargs...)
     
-    # For grid and topo layouts, disable legend by default (channel info is in titles/topo plot)
-    if plot_layout.type == :grid || plot_layout.type == :topo
-        layout_kwargs = Dict{Symbol, Any}(kwargs)
-        layout_kwargs[:legend] = false
-        axes = apply_layout!(fig, plot_layout, _plot_erp!, datasets; 
-                            channel_selection = channel_selection, 
-                            sample_selection = sample_selection, 
-                            layout_kwargs...)
-    else
-        axes = apply_layout!(fig, plot_layout, _plot_erp!, datasets; 
-                            channel_selection = channel_selection, 
-                            sample_selection = sample_selection, 
-                            kwargs...)
+    # Now do the actual plotting for each axis
+    for (ax, (idx, channel)) in zip(axes, channel_assignments)
+        # For grid and topo layouts, disable legend by default
+        if plot_layout.type == :grid || plot_layout.type == :topo
+            layout_kwargs = Dict{Symbol, Any}(kwargs)
+            layout_kwargs[:legend] = false
+            _plot_erp!(ax, datasets, [channel]; layout_kwargs...)
+        else
+            # For single layout, plot all channels on this axis
+            if plot_layout.type == :single
+                _plot_erp!(ax, datasets, all_plot_channels; kwargs...)
+            else
+                _plot_erp!(ax, datasets, [channel]; kwargs...)
+            end
+        end
     end
     
     # Apply common axis properties (but preserve grid-specific axis cleanup)
@@ -296,15 +285,14 @@ end
 
 Internal function to plot ERP data on an axis.
 Handles both single and multiple datasets.
+Note: datasets should already be subset based on channel_selection and sample_selection.
 """
-function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; 
-                                 channel_selection::Function = channels(), 
-                                 sample_selection::Function = samples(), 
-                                 kwargs...)
+function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
     
     # Use defaults
     kwargs = merge(DEFAULT_ERP_KWARGS, kwargs)
     
+    # Handle individual channel plotting
     # Styling for multiple datasets and channels
     linestyles = [:solid, :dot, :dash, :dashdot, :dashdotdot]
     dataset_colors = Makie.cgrad(kwargs[:colormap], length(datasets), categorical = true)
@@ -312,14 +300,6 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     
     # Plot each dataset for ALL channels in this subplot
     for (idx, dat) in enumerate(datasets)
-        # Subset data for this dataset
-        dat_subset = subset(
-            dat;
-            channel_selection = channel_selection,
-            sample_selection = sample_selection,
-            include_extra = true,
-        )
-        
         # Set styling for this condition
         if length(datasets) > 1
             linestyle = linestyles[(idx-1)%length(linestyles)+1]
@@ -347,8 +327,8 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
             
             lines!(
                 ax,
-                dat_subset.data[!, :time],
-                dat_subset.data[!, channel],
+                dat.data[!, :time],
+                dat.data[!, channel],
                 color = color,
                 linewidth = kwargs[:linewidth],
                 linestyle = linestyle,
@@ -357,12 +337,12 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
         end
     end
     
+    # Set title to show all channels
+    ax.title = length(channels) == 1 ? string(channels[1]) : "$(print_vector(channels))"
+    
     # Add zero lines
     vlines!(ax, [0], color = :black, linewidth = 0.5)
     hlines!(ax, [0], color = :black, linewidth = 0.5)
-    
-    # Set title to show all channels
-    ax.title = length(channels) == 1 ? string(channels[1]) : "$(print_vector(channels))"
     
     # Set axis labels
     ax.xlabel = kwargs[:xlabel]
@@ -372,6 +352,7 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     if !isnothing(kwargs[:xlim])
         xlims!(ax, kwargs[:xlim])
     end
+    
     if !isnothing(kwargs[:ylim])
         ylims!(ax, kwargs[:ylim])
     end

@@ -209,22 +209,21 @@ function best_rect(n::Int)
 end
 
 """
-    apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Function, 
-                 data, args...; kwargs...)
+    apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
 
-Apply a plot layout to a figure and call the plot function for each channel.
-Returns the created axes.
+Apply a plot layout to a figure, creating and positioning axes.
+Returns the created axes and their associated channels.
+The actual plotting should be done separately by the calling function.
 """
-function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Function, data, args...; kwargs...)
+function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     
     axes = Axis[]
+    channel_assignments = Tuple{Int, Symbol}[]  # (axis_index, channel) pairs
     
     if plot_layout.type == :single
         ax = Axis(fig[1, 1])
         push!(axes, ax)
-        
-        # Call plot function for the single channel
-        plot_function(ax, data, plot_layout.channels, args...; kwargs...)
+        push!(channel_assignments, (1, plot_layout.channels[1]))
         
     elseif plot_layout.type == :grid
         for (idx, channel) in enumerate(plot_layout.channels)
@@ -237,8 +236,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
             # Set grid-specific axis properties (clean labels)
             _set_grid_axis_properties!(ax, plot_layout, channel, row, col, plot_layout.rows, plot_layout.cols; kwargs...)
             
-            # Call plot function for this channel
-            plot_function(ax, data, [channel], args...; kwargs...)
+            push!(channel_assignments, (idx, channel))
         end
         
     elseif plot_layout.type == :topo
@@ -269,18 +267,18 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout, plot_function::Func
                 valign = valign
             )
             push!(axes, ax)
-            plot_function(ax, data, [channel], args...; kwargs...)
+            push!(channel_assignments, (idx, channel))
         end
         
     elseif plot_layout.type == :custom
-        for (channel, pos) in zip(plot_layout.channels, plot_layout.positions)
+        for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
             ax = Axis(fig[pos[1], pos[2]])
             push!(axes, ax)
-            plot_function(ax, data, [channel], args...; kwargs...)
+            push!(channel_assignments, (idx, channel))
         end
     end
     
-    return axes
+    return axes, channel_assignments
 end
 
 """
