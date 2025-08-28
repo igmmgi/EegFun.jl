@@ -19,6 +19,10 @@ const DEFAULT_ERP_KWARGS = Dict(
     :average_channels => false,
     :legend => true,
     :legend_label => "",
+    :xgrid => false,
+    :ygrid => false,
+    :xminorgrid => false,
+    :yminorgrid => false,
 )
 
 # =============================================================================
@@ -142,7 +146,7 @@ function plot_erp(datasets::Vector{ErpData};
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
 
     # Apply layout to create axes and get channel assignments
-    axes, channel_assignments = apply_layout!(fig, plot_layout; kwargs...)
+    axes, channel_assignments = apply_layout!(fig, plot_layout; plot_kwargs...)
     
     # Now do the actual plotting for each axis
     for (ax, (idx, channel)) in zip(axes, channel_assignments)
@@ -161,41 +165,17 @@ function plot_erp(datasets::Vector{ErpData};
         end
     end
     
-    # Apply common axis properties (grid lines, font size, etc.)
-    for ax in axes
-        _apply_axis_properties!(ax; plot_kwargs...)
-    end
-    
-    # Apply layout-specific axis properties AFTER plotting to override Makie's auto-inference
-    if plot_layout.type == :grid
-        for (idx, ax) in enumerate(axes)
-            row = fld(idx-1, plot_layout.cols) + 1
-            col = mod(idx-1, plot_layout.cols) + 1
-            _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; plot_kwargs...)
-        end
-    elseif plot_layout.type == :topo
-        # For topo layouts, remove axis labels and ticks, and add scale plot
-        for (idx, ax) in enumerate(axes)
-            # Set the title to show the channel name
-            ax.title = string(plot_layout.channels[idx])
-            
-            ax.xlabel = ""
-            ax.ylabel = ""
-            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
-            hidespines!(ax)
-        end
-    end
+    # Apply our axis stuff
+    _apply_axis_properties!.(axes; plot_kwargs...)
+    _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...) # slightly different for grid and topo layouts
     
     # Link axes for consistent navigation
-    if length(axes) > 1
-        linkaxes!(axes...)
-    end
+    length(axes) > 1 && linkaxes!(axes...)
     
     return fig, axes
 end
 
 
-# ===== INTERNAL PLOTTING FUNCTIONS =====
 """
     _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
 
@@ -205,7 +185,7 @@ Note: datasets should already be subset based on channel_selection and sample_se
 """
 function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
     
-    # Use defaults
+    # Use defaults + overrides
     kwargs = merge(DEFAULT_ERP_KWARGS, kwargs)
     
     # Handle individual channel plotting
@@ -253,25 +233,9 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
         end
     end
     
-    # Set title to show all channels
-    ax.title = kwargs[:title]
-    
     # Add zero lines with tick marks
     vlines!(ax, [0], color = :black, linewidth = 0.5)
     hlines!(ax, [0], color = :black, linewidth = 0.5)
-    
-    # Set axis labels
-    ax.xlabel = kwargs[:xlabel]
-    ax.ylabel = kwargs[:ylabel]
-    
-    # Apply limits if provided
-    if !isnothing(kwargs[:xlim])
-        xlims!(ax, kwargs[:xlim])
-    end
-    
-    if !isnothing(kwargs[:ylim])
-        ylims!(ax, kwargs[:ylim])
-    end
     
     # Show legend if requested and there are multiple channels or datasets
     if kwargs[:legend] && (length(channels) > 1 || length(datasets) > 1)
