@@ -166,6 +166,26 @@ function plot_erp(datasets::Vector{ErpData};
         _apply_axis_properties!(ax; plot_kwargs...)
     end
     
+    # Apply layout-specific axis properties AFTER plotting to override Makie's auto-inference
+    if plot_layout.type == :grid
+        for (idx, ax) in enumerate(axes)
+            row = fld(idx-1, plot_layout.cols) + 1
+            col = mod(idx-1, plot_layout.cols) + 1
+            _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; plot_kwargs...)
+        end
+    elseif plot_layout.type == :topo
+        # For topo layouts, remove axis labels and ticks, and add scale plot
+        for (idx, ax) in enumerate(axes)
+            # Set the title to show the channel name
+            ax.title = string(plot_layout.channels[idx])
+            
+            ax.xlabel = ""
+            ax.ylabel = ""
+            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
+            hidespines!(ax)
+        end
+    end
+    
     # Link axes for consistent navigation
     if length(axes) > 1
         linkaxes!(axes...)
