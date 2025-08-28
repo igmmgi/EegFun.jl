@@ -133,6 +133,22 @@ end
 
 @add_nonmutating channel_average!
 
+# Handle collections of EEG data by broadcasting
+function channel_average(
+    dat::Vector{<:EegData};
+    channel_selections::AbstractVector = [channels()],
+    output_labels = nothing,
+    include_extra::Bool = false,
+    reduce::Bool = false,
+)
+    return channel_average.(dat; 
+        channel_selections=channel_selections, 
+        output_labels=output_labels, 
+        include_extra=include_extra, 
+        reduce=reduce
+    )
+end
+
 
 # Internal: create a reduced DataFrame(s) with only meta + averaged columns
 function _build_reduced_df(dat::SingleDataFrameEeg, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})

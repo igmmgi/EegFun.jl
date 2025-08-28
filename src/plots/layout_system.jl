@@ -212,16 +212,40 @@ function best_rect(n::Int)
         end
     end
     
+    println("best_rect($n): factors = $factors")
+    
     if isempty(factors)
-        # n is prime, find closest rectangular arrangement
+        # n is prime or has no good factors, find closest rectangular arrangement
+        # Try to make it as square as possible
         rows = ceil(Int, sqrt(n))
         cols = ceil(Int, n / rows)
+        
+        println("best_rect($n): no factors, using sqrt approach: rows=$rows, cols=$cols")
+        
+        # Ensure we have enough space for all items
+        if rows * cols < n
+            cols = ceil(Int, n / rows)
+            println("best_rect($n): adjusted cols to $cols")
+        end
+        
         return (rows, cols)
     end
     
-    # Return the factor pair with the smallest difference
-    return argmin(factors) do (r, c)
-        abs(r - c)
+    # Return the factor pair with the smallest difference, but prefer more square-like arrangements
+    # Avoid 1×n arrangements unless they're the only option
+    if length(factors) == 1 && factors[1][1] == 1
+        # Only one factor and it's 1×n, use sqrt approach instead
+        rows = ceil(Int, sqrt(n))
+        cols = ceil(Int, n / rows)
+        println("best_rect($n): only factor is 1×n, using sqrt approach: rows=$rows, cols=$cols")
+        return (rows, cols)
+    else
+        # Use the factor pair with the smallest difference
+        result = argmin(factors) do (r, c)
+            abs(r - c)
+        end
+        println("best_rect($n): using factors, returning $result")
+        return result
     end
 end
 
@@ -235,13 +259,13 @@ The actual plotting should be done separately by the calling function.
 function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     
     axes = Axis[]
-    channel_assignments = Tuple{Int, Symbol}[]  # (axis_index, channel) pairs
+    channels = Symbol[]
     
     if plot_layout.type == :single
 
         ax = Axis(fig[1, 1], xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid])
         push!(axes, ax)
-        push!(channel_assignments, (1, plot_layout.channels[1]))
+        push!(channels, plot_layout.channels[1])
         
     elseif plot_layout.type == :grid
 
@@ -252,7 +276,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
             
             ax = Axis(fig[row, col], xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid])
             push!(axes, ax)
-            push!(channel_assignments, (idx, channel))
+            push!(channels, channel)
         end
       
     elseif plot_layout.type == :topo
@@ -285,18 +309,18 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
                 xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid]
             )
             push!(axes, ax)
-            push!(channel_assignments, (idx, channel))
+            push!(channels, channel)
         end
      
     elseif plot_layout.type == :custom
         for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
             ax = Axis(fig[pos[1], pos[2]], xgridvisible=kwargs[:xgrid], ygridvisible=kwargs[:ygrid], xminorgridvisible=kwargs[:xminorgrid], yminorgridvisible=kwargs[:yminorgrid])
             push!(axes, ax)
-            push!(channel_assignments, (idx, channel))
+            push!(channels, channel)
         end
     end
     
-    return axes, channel_assignments
+    return axes, channels
 end
 
 """
@@ -309,8 +333,16 @@ Set properties for axes in a grid layout.
 function _set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::Symbol, 
                                   row::Int, col::Int, total_rows::Int, total_cols::Int; 
                                   kwargs...)
-    
-    ax.title = string(channel)
+
+    # Use channel name unless user explicitly specified a title
+    # For grid layouts, this means each subplot shows its channel name
+    # unless a global title is specified
+    # Note: DEFAULT_ERP_KWARGS sets title="", so we need to check if user actually specified something
+    if haskey(kwargs, :title) && kwargs[:title] != ""
+        ax.title = kwargs[:title]
+    else
+        ax.title = string(channel)
+    end
     
     # Only show y-axis labels on the leftmost column
     if col != 1

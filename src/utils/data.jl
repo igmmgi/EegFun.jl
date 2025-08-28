@@ -159,6 +159,10 @@ channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbo
 channel_labels(dat::EegData, channel_numbers)::Vector{Symbol} = channel_labels(dat)[channel_numbers]
 channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_labels(dat)[[channel_numbers]]
 
+# Handle collections of EEG data
+# TODO: is it possible that all do not have the same channel labels?
+channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = channel_labels(first(dat))
+
 
 """
     channel_data(eeg_data::EegData) -> DataFrame
@@ -199,6 +203,10 @@ Get extra/derived columns (EOG, flags, etc.) from the EEG data.
 - `DataFrame`: DataFrame containing extra/derived columns
 """
 extra_labels(dat::EegData) = get_cols_by_group(dat, :extra)
+
+# Handle collections of EEG data
+# TODO: is it possible that all do not have the same channel labels?
+extra_labels(dat::Vector{<:EegData})::Vector{Symbol} = extra_labels(first(dat))
 
 
 

@@ -67,7 +67,7 @@ for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
 # eegfun.plot_databrowser(epochs[1])
-# average epochs
+# average epochps
 erps = eegfun.ErpData[]
 for (idx, epoch) in enumerate(epochs)
     push!(erps, eegfun.average_epochs(epochs[idx]))
@@ -89,7 +89,7 @@ set_theme!(theme_light())
 update_theme!(fontsize=50)
 
 # ERP Plot
-fig, ax = eegfun.plot_erp(erps, average_channels = true)
+fig, ax = eegfun.plot_erp(erps, average_channels = true, title = "Custom Title")
 display(fig)
 
 
@@ -109,21 +109,22 @@ display(fig)
 fig, ax = eegfun.plot_erp(erps[1], layout = :grid)
 display(fig)
 
-fig, ax = eegfun.plot_erp(erps, layout = :grid)
+fig, ax = eegfun.plot_erp(erps, layout = :grid, title = "Custom Title")
 display(fig)
 
 fig, ax = eegfun.plot_erp(erps[1], layout = :topo)
 display(fig)
 
-fig, ax = eegfun.plot_erp(erps, layout = :topo)
+fig, ax = eegfun.plot_erp(erps, layout = :topo, channel_selection = eegfun.channels([:Fp1, :Fp2, :PO8]))
+display(fig)
+
+fig, ax = eegfun.plot_erp(erps, layout = :grid, channel_selection = x -> startswith.(string.(x), "F"))
 display(fig)
 
 
 
 
-
-
-0fig, ax = eegfun.plot_erp([erps[1], copy(erps[1])], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :grid)
+fig, ax = eegfun.plot_erp([erps[1], copy(erps[1])], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :grid)
 display(fig)
 
 
