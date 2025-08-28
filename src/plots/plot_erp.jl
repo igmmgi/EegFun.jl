@@ -9,7 +9,7 @@ const DEFAULT_ERP_KWARGS = Dict(
     :ylim => nothing,
     :xlabel => "Time (S)",
     :ylabel => "mV",
-    :linewidth => 2,
+    :linewidth => 1,
     :color => :black,
     :linestyle => :solid,
     :colormap => :jet,
@@ -87,8 +87,6 @@ function plot_erp(dat::ErpData;
                  channel_selection::Function = channels(),
                  sample_selection::Function = samples(),
                  kwargs...)
-    
-    # Simply wrap the single dataset in a vector and call the multiple dataset version
     return plot_erp([dat]; layout=layout, channel_selection=channel_selection, 
                     sample_selection=sample_selection, kwargs...)
 end
@@ -108,8 +106,6 @@ function plot_erp(datasets::Vector{ErpData};
                  sample_selection::Function = samples(), 
                  kwargs...)
     
-    # For multiple datasets, we need to handle layout properly
-    # First, get the channels from the first dataset to determine layout
     dat_subset = subset(
         datasets[1];
         channel_selection = channel_selection,
