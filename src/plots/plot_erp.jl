@@ -144,24 +144,14 @@ function plot_erp(datasets::Vector{ErpData};
     # Create figure and apply layout system
     fig = Figure()
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
-
-    # Apply layout to create axes and get channel assignments
     axes, channel_assignments = apply_layout!(fig, plot_layout; plot_kwargs...)
     
     # Now do the actual plotting for each axis
     for (ax, (idx, channel)) in zip(axes, channel_assignments)
-        # For grid and topo layouts, disable legend by default
-        if plot_layout.type == :grid || plot_layout.type == :topo
-            layout_kwargs = Dict{Symbol, Any}(kwargs)
-            layout_kwargs[:legend] = false
-            _plot_erp!(ax, datasets, [channel]; layout_kwargs...)
+        if plot_layout.type == :single
+            _plot_erp!(ax, [dat_subset], all_plot_channels; plot_kwargs...)
         else
-            # For single layout, plot all channels on this axis
-            if plot_layout.type == :single
-                _plot_erp!(ax, [dat_subset], all_plot_channels; plot_kwargs...)
-            else
-                _plot_erp!(ax, [dat_subset], [channel]; plot_kwargs...)
-            end
+            _plot_erp!(ax, datasets, [channel]; legend=false, plot_kwargs...)
         end
     end
     
@@ -198,7 +188,7 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     for (idx, dat) in enumerate(datasets)
         # Set styling for this condition
         if length(datasets) > 1
-            linestyle = linestyles[(idx-1)%length(linestyles)+1]
+            linestyle = linestyles[(idx-1)%length(linestyles)+1] # wrap probably not great but better than crash
             dataset_color = dataset_colors[idx]
         else
             linestyle = kwargs[:linestyle]
@@ -207,19 +197,10 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
         
         # Plot ALL channels for this dataset
         for (ch_idx, channel) in enumerate(channels)
-            # Create unique label for this condition + channel
-            if length(datasets) > 1
-                label = string("Cond: ", idx, " ", channel)
-            else
-                label = string(channel)
-            end
-            
-            # Use different color for each channel within each condition
-            if length(channels) > 1
-                color = channel_colors[ch_idx]
-            else
-                color = dataset_color
-            end
+
+            # labels/ colours
+            label = length(datasets) > 1 ?  string("Cond: ", idx, " ", channel) : string(channel)
+            color = length(channels) > 1 ? channel_colors[ch_idx] : dataset_color
             
             lines!(
                 ax,
@@ -244,5 +225,3 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     
     return ax
 end
-
-
