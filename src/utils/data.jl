@@ -773,6 +773,25 @@ function subset(
     return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
 end
 
+function subset(
+    datasets::Vector{ErpData};
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    include_extra::Bool = false,
+)::Vector{ErpData}
+    return subset.(datasets; channel_selection=channel_selection, sample_selection=sample_selection, include_extra=include_extra)
+end
+
+function subset(
+    datasets::Vector{EpochData};
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    epoch_selection::Function = epochs(),
+    include_extra::Bool = false,
+)::Vector{EpochData}
+    return subset.(datasets; channel_selection=channel_selection, sample_selection=sample_selection, epoch_selection=epoch_selection, include_extra=include_extra)
+end
+
 
 
 """

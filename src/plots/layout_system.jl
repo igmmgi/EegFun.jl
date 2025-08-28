@@ -43,6 +43,7 @@ function create_grid_layout(channels::Vector{Symbol}; rows::Int = 0, cols::Int =
         throw(ArgumentError("Grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
     end
     
+    println("create_grid_layout: creating $(rows)×$(cols) grid for $(n_channels) channels")
     return PlotLayout(:grid, rows, cols, [], channels, Dict{Symbol, Any}())
 end
 
@@ -151,7 +152,23 @@ function create_layout(layout_spec::Union{Symbol, PlotLayout, Vector{Int}},
         if length(layout_spec) != 2
             throw(ArgumentError("layout must be a 2-element vector [rows, cols]"))
         end
-        return create_grid_layout(channels, rows = layout_spec[1], cols = layout_spec[2])
+        # Allow 0 or -1 to indicate automatic calculation
+        rows = layout_spec[1] <= 0 ? 0 : layout_spec[1]
+        cols = layout_spec[2] <= 0 ? 0 : layout_spec[2]
+        
+        # If both dimensions are specified but grid size doesn't fit, warn and use best_rect
+        if rows > 0 && cols > 0
+            n_channels = length(channels)
+            if rows * cols > n_channels
+                @minimal_warning "Grid size [$(rows), $(cols)] is too large for $(n_channels) channels. Using optimal grid dimensions instead."
+                return create_grid_layout(channels)  # Use best_rect
+            elseif rows * cols < n_channels
+                @minimal_warning "Grid size [$(rows), $(cols)] is too small for $(n_channels) channels. Using optimal grid dimensions instead."
+                return create_grid_layout(channels)  # Use best_rect
+            end
+        end
+        
+        return create_grid_layout(channels, rows = rows, cols = cols)
     elseif layout_spec isa PlotLayout
         return layout_spec
     else
@@ -221,16 +238,17 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     channel_assignments = Tuple{Int, Symbol}[]  # (axis_index, channel) pairs
     
     if plot_layout.type == :single
-        ax = Axis(fig[1, 1])
+        ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false)
         push!(axes, ax)
         push!(channel_assignments, (1, plot_layout.channels[1]))
         
     elseif plot_layout.type == :grid
+        @info "apply_layout! grid: plot_layout.rows=$(plot_layout.rows), plot_layout.cols=$(plot_layout.cols), channels=$(length(plot_layout.channels))"
         for (idx, channel) in enumerate(plot_layout.channels)
             row = fld(idx-1, plot_layout.cols) + 1
             col = mod(idx-1, plot_layout.cols) + 1
             
-            ax = Axis(fig[row, col])
+            ax = Axis(fig[row, col], xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false)
             push!(axes, ax)
             
             # Set grid-specific axis properties (clean labels)
@@ -264,7 +282,8 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
                 width = Relative(plot_width),
                 height = Relative(plot_height),
                 halign = halign,
-                valign = valign
+                valign = valign,
+                xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false
             )
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
@@ -272,7 +291,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
         
     elseif plot_layout.type == :custom
         for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
-            ax = Axis(fig[pos[1], pos[2]])
+            ax = Axis(fig[pos[1], pos[2]], xgridvisible=false, ygridvisible=false, xminorgridvisible=false, yminorgridvisible=false)
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
         end
@@ -368,6 +387,23 @@ function _apply_axis_properties!(ax::Axis; kwargs...)
     # Apply other properties
     if haskey(kwargs, :yreversed) && kwargs[:yreversed]
         ax.yreversed = true
+    end
+    
+    # Apply grid settings
+    if haskey(kwargs, :xgrid)
+        ax.xgridvisible = kwargs[:xgrid]
+    end
+    
+    if haskey(kwargs, :ygrid)
+        ax.ygridvisible = kwargs[:ygrid]
+    end
+    
+    if haskey(kwargs, :xminorgrid)
+        ax.xminorgridvisible = kwargs[:xminorgrid]
+    end
+    
+    if haskey(kwargs, :yminorgrid)
+        ax.yminorgridvisible = kwargs[:yminorgrid]
     end
     
     # Apply fontsize directly to the axis (avoiding Makie theming issues)
