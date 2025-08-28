@@ -252,14 +252,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
         end
-        
-        # For grid layouts, ensure axis labels are properly cleaned up
-        for (idx, ax) in enumerate(axes)
-            row = fld(idx-1, plot_layout.cols) + 1
-            col = mod(idx-1, plot_layout.cols) + 1
-            _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
-        end
-        
+      
     elseif plot_layout.type == :topo
         plot_width = get(plot_layout.metadata, :plot_width, 0.10)
         plot_height = get(plot_layout.metadata, :plot_height, 0.10)
@@ -291,15 +284,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
             push!(axes, ax)
             push!(channel_assignments, (idx, channel))
         end
-        
-        # For topo layouts, remove axis labels and ticks, and add scale plot
-        for ax in axes
-            ax.xlabel = ""
-            ax.ylabel = ""
-            hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
-            hidespines!(ax)
-            # Preserve the title for topographic layouts
-        end
+     
         
     elseif plot_layout.type == :custom
         for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
@@ -338,11 +323,11 @@ function _set_grid_axis_properties!(ax::Axis, plot_layout::PlotLayout, channel::
     end
     
     # Apply other properties
-    if haskey(kwargs, :ylim)
+    if haskey(kwargs, :ylim) && !isnothing(kwargs[:ylim])
         ylims!(ax, kwargs[:ylim])
     end
     
-    if haskey(kwargs, :xlim)
+    if haskey(kwargs, :xlim) && !isnothing(kwargs[:xlim])
         xlims!(ax, kwargs[:xlim])
     end
 end
