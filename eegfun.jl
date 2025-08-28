@@ -82,8 +82,18 @@ eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
 eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
 
 # ERP Plot
-fig, ax = eegfun.plot_erp(erps)
+fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Fp1]))
 display(fig)
+
+# ERP Plot
+fig, ax = eegfun.plot_erp(erps, average_channels = true)
+display(fig)
+
+
+# ERP Plot
+fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = true)
+display(fig)
+
 
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps[1], layout = [2, 2])

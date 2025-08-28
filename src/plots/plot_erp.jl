@@ -9,6 +9,8 @@ const DEFAULT_ERP_KWARGS = Dict(
     :ylim => nothing,
     :xlabel => "Time (S)",
     :ylabel => "mV",
+    :title => "",
+    :show_title => true,
     :linewidth => 1,
     :color => :black,
     :linestyle => :solid,
@@ -105,26 +107,39 @@ function plot_erp(datasets::Vector{ErpData};
                  channel_selection::Function = channels(), 
                  sample_selection::Function = samples(), 
                  kwargs...)
+
+    # Merge user kwargs and default kwargs
+    default_kwargs = copy(DEFAULT_ERP_KWARGS)
+    plot_kwargs = merge(default_kwargs, kwargs)
     
+    # data subsetting
     dat_subset = subset(
         datasets[1];
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         include_extra = true,
     )
+
+    if plot_kwargs[:average_channels]
+        original_channels = channel_labels(dat_subset) # keep for better default plot title
+        dat_subset = channel_average(dat_subset, reduce = true)
+    end
     
     selected_channels = channel_labels(dat_subset)
     extra_channels = extra_labels(dat_subset)
     all_plot_channels = vcat(selected_channels, extra_channels)
+
+    # set default plot title
+    if plot_kwargs[:show_title] && plot_kwargs[:title] == ""
+        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+        if plot_kwargs[:average_channels]
+            plot_kwargs[:title] = "Avg: $(print_vector(original_channels))"
+        end
+    end
     
     # Create figure and apply layout system
     fig = Figure()
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
-
-    # Use defaults with title override
-    default_kwargs = copy(DEFAULT_ERP_KWARGS)
-    default_kwargs[:title] = nothing
-    plot_kwargs = merge(default_kwargs, kwargs)
 
     # Apply layout to create axes and get channel assignments
     axes, channel_assignments = apply_layout!(fig, plot_layout; kwargs...)
@@ -139,16 +154,16 @@ function plot_erp(datasets::Vector{ErpData};
         else
             # For single layout, plot all channels on this axis
             if plot_layout.type == :single
-                _plot_erp!(ax, datasets, all_plot_channels; kwargs...)
+                _plot_erp!(ax, [dat_subset], all_plot_channels; plot_kwargs...)
             else
-                _plot_erp!(ax, datasets, [channel]; kwargs...)
+                _plot_erp!(ax, [dat_subset], [channel]; plot_kwargs...)
             end
         end
     end
     
     # Apply common axis properties (but preserve grid-specific axis cleanup)
     for ax in axes
-        _apply_axis_properties!(ax; kwargs...)
+        _apply_axis_properties!(ax; plot_kwargs...)
     end
     
     # For grid layouts, ensure axis labels are properly cleaned up
@@ -156,8 +171,6 @@ function plot_erp(datasets::Vector{ErpData};
         for (idx, ax) in enumerate(axes)
             row = fld(idx-1, plot_layout.cols) + 1
             col = mod(idx-1, plot_layout.cols) + 1
-            
-            # Re-apply grid axis properties to ensure they're not overridden
             _set_grid_axis_properties!(ax, plot_layout, plot_layout.channels[idx], row, col, plot_layout.rows, plot_layout.cols; kwargs...)
         end
     end
@@ -165,12 +178,11 @@ function plot_erp(datasets::Vector{ErpData};
     # For topo layouts, remove axis labels and ticks, and add scale plot
     if plot_layout.type == :topo
         for ax in axes
-            # Remove axis labels and ticks for topographic plots
             ax.xlabel = ""
             ax.ylabel = ""
             hidedecorations!(ax, grid = false, ticks = true, ticklabels = true)
-            # Hide all axis spines for clean topographic appearance
             hidespines!(ax)
+            # Preserve the title for topographic layouts
         end
     end
     
@@ -242,9 +254,9 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     end
     
     # Set title to show all channels
-    ax.title = length(channels) == 1 ? string(channels[1]) : "$(print_vector(channels))"
+    ax.title = kwargs[:title]
     
-    # Add zero lines
+    # Add zero lines with tick marks
     vlines!(ax, [0], color = :black, linewidth = 0.5)
     hlines!(ax, [0], color = :black, linewidth = 0.5)
     
@@ -261,8 +273,8 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
         ylims!(ax, kwargs[:ylim])
     end
     
-    # Show legend if requested
-    if kwargs[:legend]
+    # Show legend if requested and there are multiple channels or datasets
+    if kwargs[:legend] && (length(channels) > 1 || length(datasets) > 1)
         axislegend(ax, framevisible = false, position = :lt)
     end
     
