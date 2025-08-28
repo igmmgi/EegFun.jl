@@ -94,95 +94,6 @@ function plot_erp(dat::ErpData;
 end
 
 """
-    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; 
-              channel_selection::Function = channels(),
-              sample_selection::Function = samples(),
-              kwargs...)
-
-Plot ERP data on existing figure/axis (for backward compatibility).
-"""
-function plot_erp!(fig::Figure, ax::Axis, dat::ErpData; 
-                  channel_selection::Function = channels(),
-                  sample_selection::Function = samples(),
-                  kwargs...)
-    
-    # Subset data first
-    dat_subset = subset(
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        include_extra = true,
-    )
-
-    # Channels present after subsetting
-    selected_channels = channel_labels(dat_subset)
-    extra_channels = extra_labels(dat_subset)
-    all_plot_channels = vcat(selected_channels, extra_channels)
-
-    isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
-
-    # Use defaults with title override
-    default_kwargs = copy(DEFAULT_ERP_KWARGS)
-    default_kwargs[:title] = nothing
-    plot_kwargs = merge(default_kwargs, kwargs)
-
-    # Handle averaging if requested
-    if plot_kwargs[:average_channels]
-        # Use the channel_average function to create averaged data
-        # The non-mutating version creates a copy and adds the :avg column
-        dat_averaged = channel_average(dat_subset, channel_selections = [channels(all_plot_channels)])
-        
-        # Now pass the averaged data to _plot_erp! for consistent plotting
-        # The averaged data has a single channel called :avg
-        _plot_erp!(ax, [dat_averaged], [:avg]; plot_kwargs...)
-    else
-        # Use the internal plotting function for consistency
-        # Create a single-element vector to match _plot_erp! signature
-        _plot_erp!(ax, [dat_subset], all_plot_channels; plot_kwargs...)
-    end
-    
-    # Apply additional properties specific to plot_erp!
-    ax.yreversed = plot_kwargs[:yreversed]
-
-    return fig, ax
-end
-
-"""
-    plot_erp(dat_orig::ErpData, dat_cleaned::ErpData; 
-             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
-             channel_selection::Function = channels(), 
-             sample_selection::Function = samples(), 
-             kwargs...)
-
-Plot two ERP datasets on linked axes for comparison.
-"""
-function plot_erp(dat_orig::ErpData, dat_cleaned::ErpData; 
-                 layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
-                 channel_selection::Function = channels(), 
-                 sample_selection::Function = samples(), 
-                 kwargs...)
-    
-    # Create figure with two rows
-    fig = Figure()
-    
-    # Plot original data
-    ax1 = Axis(fig[1, 1])
-    ax1.xlabelvisible = false
-    ax1.xticklabelsvisible = false
-    plot_erp!(fig, ax1, dat_orig; channel_selection = channel_selection, sample_selection = sample_selection, kwargs = kwargs)
-
-    # Plot cleaned data
-    ax2 = Axis(fig[2, 1])
-    plot_erp!(fig, ax2, dat_cleaned; channel_selection = channel_selection, sample_selection = sample_selection, kwargs = kwargs)
-    ax2.title = ""
-
-    # Link axes for consistent navigation
-    linkaxes!(ax1, ax2)
-    
-    return fig, ax1, ax2
-end
-
-"""
     plot_erp(datasets::Vector{ErpData}; 
              layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
              channel_selection::Function = channels(), 
@@ -275,11 +186,8 @@ function plot_erp(datasets::Vector{ErpData};
     return fig, axes
 end
 
-# ===== INTERNAL HELPER FUNCTIONS =====
 
-
-
-
+# ===== INTERNAL PLOTTING FUNCTIONS =====
 """
     _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
 

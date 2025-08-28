@@ -86,7 +86,7 @@ fig, ax = eegfun.plot_erp(erps)
 display(fig)
 
 # ERP Plot
-fig, ax = eegfun.plot_erp([erps[1], copy(erps[1])], layout = [10, 10])
+fig, ax = eegfun.plot_erp(erps[1], layout = [2, 2])
 display(fig)
 
 
