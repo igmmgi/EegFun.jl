@@ -46,11 +46,15 @@ mutable struct ErpSelectionState
     active::Observable{Bool}
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
-    rectangle::Makie.Poly
-    function ErpSelectionState(ax)
-        initial_points = [Point2f(0.0, 0.0)]
-        poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
+    rectangles::Vector{Makie.Poly}  # Store rectangles for all axes
+    function ErpSelectionState(axes::Vector{Axis})
+        rectangles = Makie.Poly[]
+        for ax in axes
+            initial_points = [Point2f(0.0, 0.0)]
+            poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
+            push!(rectangles, poly_element)
+        end
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles)
     end
 end
 
@@ -210,12 +214,18 @@ function plot_erp(datasets::Vector{ErpData};
         _setup_erp_interactivity!(fig, axes)
         
         # Disable default interactions that conflict with our custom selection
-        deregister_interaction!(first(axes), :rectanglezoom)
+        # Need to disable on ALL axes for grid layouts to work properly
+        for ax in axes
+            deregister_interaction!(ax, :rectanglezoom)
+        end
         
-        # Set up selection system for the first axis (will work with linked axes)
+        # Set up selection system for all axes (will work with linked axes)
         # Pass the ORIGINAL datasets (not dat_subset) so we can subset by time for topo plots
-        selection_state = ErpSelectionState(first(axes))
-        _setup_erp_selection!(fig, first(axes), selection_state, datasets)
+        selection_state = ErpSelectionState(axes)
+        
+        # Set up selection system that works for all layouts
+        # Use figure-level events to avoid conflicts with multiple axis handlers
+        _setup_erp_selection_unified!(fig, axes, selection_state, datasets)
     end
     
     return fig, axes
@@ -232,6 +242,79 @@ function _setup_erp_interactivity!(fig::Figure, axes::Vector{Axis})
         if event.action in (Keyboard.press, Keyboard.repeat) && haskey(ERP_KEYBOARD_ACTIONS, event.key)
             action = ERP_KEYBOARD_ACTIONS[event.key]
             _handle_erp_navigation!(axes, action)
+        end
+    end
+end
+
+"""
+    _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data)
+
+Set up unified mouse selection and context menu for ERP plots that works across all layouts.
+Uses figure-level events to avoid conflicts with multiple axis handlers.
+"""
+function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data)
+    # Track if Shift is currently pressed
+    shift_pressed = Ref(false)
+
+    # Use figure-level keyboard events for Shift tracking
+    on(events(fig).keyboardbutton) do key_event
+        if key_event.key == Keyboard.left_shift
+            shift_pressed[] = key_event.action == Keyboard.press
+        end
+    end
+
+    # Use figure-level mouse events to avoid conflicts
+    on(events(fig).mousebutton) do event
+        # Find which axis the mouse is over
+        mouse_pos = events(fig).mouseposition[]
+        active_ax = nothing
+        
+        for ax in axes
+            if _is_mouse_in_axis(ax, mouse_pos)
+                active_ax = ax
+                break
+            end
+        end
+        
+        if isnothing(active_ax)
+            return
+        end
+
+        mouse_x = mouseposition(active_ax)[1]
+
+        if event.button == Mouse.left
+            if event.action == Mouse.press
+                if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
+                    _clear_erp_selection!(selection_state)
+                elseif shift_pressed[]
+                    _start_erp_selection!(active_ax, selection_state, mouse_x)
+                end
+            elseif event.action == Mouse.release && selection_state.active[]
+                _finish_erp_selection!(active_ax, selection_state, mouse_x)
+            end
+        elseif event.button == Mouse.right && event.action == Mouse.press
+            _handle_erp_right_click!(selection_state, mouse_x, data)
+        end
+    end
+
+    # Update selection rectangle while dragging using figure-level mouse position
+    on(events(fig).mouseposition) do _
+        if selection_state.active[]
+            # Find which axis the mouse is over for proper coordinate conversion
+            mouse_pos = events(fig).mouseposition[]
+            active_ax = nothing
+            
+            for ax in axes
+                if _is_mouse_in_axis(ax, mouse_pos)
+                    active_ax = ax
+                    break
+                end
+            end
+            
+            if !isnothing(active_ax)
+                world_pos = mouseposition(active_ax)[1]
+                _update_erp_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
+            end
         end
     end
 end
@@ -365,26 +448,37 @@ function _finish_erp_selection!(ax, selection_state, mouse_x)
     selection_state.visible[] = true
     selection_state.bounds[] = (selection_state.bounds[][1], mouse_x)
     _update_erp_selection!(ax, selection_state, selection_state.bounds[][1], mouse_x)
-    selection_state.rectangle.visible[] = true
+    # Make all rectangles visible
+    for rect in selection_state.rectangles
+        rect.visible[] = true
+    end
 end
 
 function _update_erp_selection!(ax, selection_state, x1, x2)
-    ylims = ax.yaxis.attributes.limits[]
-    selection_state.rectangle[1] = Point2f[
-        Point2f(Float64(x1), Float64(ylims[1])),
-        Point2f(Float64(x2), Float64(ylims[1])),
-        Point2f(Float64(x2), Float64(ylims[2])),
-        Point2f(Float64(x1), Float64(ylims[2])),
-    ]
-    selection_state.rectangle.visible[] = true
+    # Update all rectangles across all axes
+    for (i, rect) in enumerate(selection_state.rectangles)
+        # Get the y-limits for the corresponding axis
+        if i <= length(selection_state.rectangles)
+            # Use fixed y-range for consistency across all subplots
+            rect[1] = Point2f[
+                Point2f(Float64(x1), Float64(-1000)),  # Use fixed y-range for consistency
+                Point2f(Float64(x2), Float64(-1000)),
+                Point2f(Float64(x2), Float64(1000)),
+                Point2f(Float64(x1), Float64(1000)),
+            ]
+            rect.visible[] = true
+        end
+    end
 end
 
 function _clear_erp_selection!(selection_state)
-    # Set to a single point instead of empty vector to avoid CairoMakie issues
-    selection_state.rectangle[1] = [Point2f(0.0, 0.0)]
+    # Clear all rectangles
+    for rect in selection_state.rectangles
+        rect[1] = [Point2f(0.0, 0.0)]
+        rect.visible[] = false
+    end
     selection_state.bounds[] = (0.0, 0.0)
     selection_state.visible[] = false
-    selection_state.rectangle.visible[] = false
 end
 
 function _handle_erp_right_click!(selection_state, mouse_x, data)
