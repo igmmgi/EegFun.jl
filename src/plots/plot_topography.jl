@@ -141,7 +141,7 @@ function plot_topography(
     
     # Set up interactivity if enabled
     if interactive
-        _setup_topo_interactivity!(fig, ax)
+        _setup_topo_interactivity!(fig, ax, dat)
     end
     
     if display_plot
@@ -199,7 +199,7 @@ function plot_topography(
     
     # Set up interactivity if enabled
     if interactive
-        _setup_topo_interactivity!(fig, ax)
+        _setup_topo_interactivity!(fig, ax, dat)
     end
     
     if display_plot
@@ -492,7 +492,9 @@ end
 
 Set up keyboard interactivity for topographic plots.
 """
-function _setup_topo_interactivity!(fig::Figure, ax::Axis)
+function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing)
+    # Turn off default Makie interactions that might interfere
+    deregister_interaction!(ax, :rectanglezoom)
     
     # Handle keyboard events at the figure level
     on(events(fig).keyboardbutton) do event
@@ -506,6 +508,8 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis)
         end
     end
     
+    # Set up simple region selection
+    _setup_topo_selection!(fig, ax, original_data)
 end
 
 """
@@ -578,3 +582,296 @@ function _topo_scale_down!(ax::Axis)
         end
     end
 end
+
+# =============================================================================
+# SIMPLE APPROACH - NO COMPLEX SELECTION NEEDED
+# =============================================================================
+
+# For topographic plots, just use plot_erp() with your electrode selection
+# Example: plot_erp(erps[1], channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
+
+# =============================================================================
+# SIMPLE REGION SELECTION FOR TOPO PLOTS
+# =============================================================================
+
+"""
+    TopoSelectionState
+
+Simple state for spatial region selection in topographic plots.
+"""
+mutable struct TopoSelectionState
+    active::Observable{Bool}
+    bounds::Observable{Tuple{Float64,Float64,Float64,Float64}}  # x_min, y_min, x_max, y_max
+    visible::Observable{Bool}
+    rectangle::Makie.Poly
+    function TopoSelectionState(ax::Axis)
+        initial_points = [Point2f(0.0, 0.0)]
+        # Create rectangle directly in the axis for better visibility
+        poly_element = poly!(
+            ax,  # Use axis instead of scene for better coordinate handling
+            initial_points, 
+            color = (:red, 0.8),    # Bright red with high opacity
+            strokecolor = :yellow,   # Bright yellow border
+            strokewidth = 5,         # Very thick border
+            visible = false,
+            overdraw = true          # Ensure it's drawn on top
+        )
+        new(Observable(false), Observable((0.0, 0.0, 0.0, 0.0)), Observable(false), poly_element)
+    end
+end
+
+"""
+    _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
+
+Set up simple region selection for topographic plots.
+"""
+function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
+    selection_state = TopoSelectionState(ax)
+    
+    # Track Shift key state
+    shift_pressed = Observable(false)
+    
+    # Handle keyboard events to track Shift key
+    on(events(fig).keyboardbutton) do event
+        if event.key == Keyboard.left_shift
+            if event.action == Keyboard.press
+                shift_pressed[] = true
+            elseif event.action == Keyboard.release
+                shift_pressed[] = false
+            end
+        end
+    end
+    
+    # Handle mouse events at the figure level
+    on(events(fig).mousebutton) do event
+        if event.button == Mouse.left
+            if event.action == Mouse.press
+                # Check if Shift is held down
+                if shift_pressed[]
+                    _start_topo_selection!(ax, selection_state, event)
+                end
+            elseif event.action == Mouse.release
+                if selection_state.active[]
+                    _finish_topo_selection!(ax, selection_state, event, original_data)
+                end
+            end
+        end
+    end
+    
+    # Handle mouse movement for selection dragging
+    on(events(fig).mouseposition) do pos
+        if selection_state.active[]
+            _update_topo_selection!(ax, selection_state, pos)
+        end
+    end
+end
+
+"""
+    _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event)
+
+Start spatial region selection in topographic plot.
+"""
+function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event)
+    selection_state.active[] = true
+    selection_state.visible[] = true
+    
+    # Get mouse position in screen coordinates and convert to axis coordinates
+    screen_pos = events(ax.scene).mouseposition[]
+    mouse_pos = mouseposition(ax)
+    mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
+    
+    # Debug: Print the coordinate information
+    println("Mouse position (screen): ($(screen_pos[1]), $(screen_pos[2]))")
+    println("Mouse position (axis): ($mouse_x, $mouse_y)")
+    println("Axis limits: x=$(ax.limits[][1]), y=$(ax.limits[][2])")
+    
+    # Store axis coordinates for spatial selection
+    selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
+    _update_topo_selection!(ax, selection_state, mouse_pos)
+end
+
+"""
+    _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event)
+
+Finish spatial region selection in topographic plot.
+"""
+function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event, original_data=nothing)
+    selection_state.active[] = false
+    
+    # Get final mouse position in screen coordinates and convert to axis coordinates
+    screen_pos = events(ax.scene).mouseposition[]
+    mouse_pos = mouseposition(ax)
+    mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
+    
+    # Get start position
+    start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
+    
+    # Debug: Print the coordinate information
+    println("Final mouse position (screen): ($(screen_pos[1]), $(screen_pos[2]))")
+    println("Final mouse position (axis coords): ($mouse_x, $mouse_y)")
+    println("Start position: ($start_x, $start_y)")
+    
+    # Update bounds with final position (x_min, y_min, x_max, y_max) in axis coords
+    x_min, x_max = minmax(start_x, mouse_x)
+    y_min, y_max = minmax(start_y, mouse_y)
+    selection_state.bounds[] = (x_min, y_min, x_max, y_max)
+    
+    _update_topo_selection!(ax, selection_state, mouse_pos)
+    
+    # Find electrodes within the selected spatial region using the new method
+    selected_electrodes = _find_electrodes_in_region_v2(ax, x_min, y_min, x_max, y_max, original_data)
+    
+    println("Selected axis region: x($x_min to $x_max), y($y_min to $y_max)")
+    println("Electrodes in region: $selected_electrodes")
+    println("Use: plot_erp(erps[1], channel_selection = channels($selected_electrodes))")
+end
+
+"""
+    _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, pos)
+
+Update the visual selection rectangle for spatial selection.
+"""
+function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, pos)
+    if selection_state.active[]
+        # pos might be screen coordinates, convert to axis coordinates
+        # Use mouseposition(ax) to get consistent axis coordinates
+        axis_pos = mouseposition(ax)
+        mouse_x, mouse_y = axis_pos[1], axis_pos[2]
+        start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
+        
+        # Update bounds with the axis coordinates
+        selection_state.bounds[] = (start_x, start_y, mouse_x, mouse_y)
+        println("Updated bounds with axis coordinates: ($start_x, $start_y) to ($mouse_x, $mouse_y)")
+        
+        # Update rectangle to show spatial selection in axis coordinates
+        # Ensure we're using the axis coordinates from the bounds
+        bounds = selection_state.bounds[]
+        start_x, start_y = bounds[1], bounds[2]
+        end_x, end_y = bounds[3], bounds[4]
+        
+        # Debug: Print the actual bounds being used
+        println("Using bounds for rectangle: start=($start_x, $start_y), end=($end_x, $end_y)")
+        
+        # Create rectangle using the stored bounds (which should be axis coordinates)
+        rect_points = Point2f[
+            Point2f(Float64(start_x), Float64(start_y)),
+            Point2f(Float64(end_x), Float64(start_y)),
+            Point2f(Float64(end_x), Float64(end_y)),
+            Point2f(Float64(start_x), Float64(end_y)),
+        ]
+        
+        println("Final rectangle points (axis coords): $rect_points")
+        
+        # Update the polygon points directly
+        selection_state.rectangle[1] = rect_points
+        selection_state.rectangle.visible[] = true
+        
+        # Force a redraw
+        notify(selection_state.rectangle.visible)
+        
+        println("Rectangle should now be visible with points: $rect_points")
+        println("Rectangle visible state: $(selection_state.rectangle.visible[])")
+        
+
+    end
+end
+
+"""
+    _get_safe_ylims(ax::Axis)
+
+Safely get y-limits from an axis with fallback values.
+"""
+function _get_safe_ylims(ax::Axis)
+    # Try to get y-limits from the axis
+    if hasproperty(ax, :limits) && !isnothing(ax.limits[])
+        limits = ax.limits[]
+        if length(limits) >= 2 && !isnothing(limits[2])
+            return limits[2]
+        end
+    end
+    
+    # Try alternative approaches
+    if hasproperty(ax, :ylims) && !isnothing(ax.ylims[])
+        return ax.ylims[]
+    end
+    
+    # Fallback to default range
+    return (-1.0, 1.0)
+end
+
+"""
+    _create_position_channel_map(ax::Axis, original_data=nothing)
+
+Create a mapping from electrode coordinates to electrode labels for the topographic plot.
+This uses the actual layout data from the original plot data.
+"""
+function _create_position_channel_map(ax::Axis, original_data=nothing)
+    # Try to get the layout data from the original data that was passed to plot_topography
+    if !isnothing(original_data) && hasproperty(original_data, :layout)
+        layout = original_data.layout
+        
+        # Ensure we have 2D coordinates
+        if !hasproperty(layout.data, :x2) || !hasproperty(layout.data, :y2)
+            @warn "Layout missing x2/y2 coordinates, cannot create electrode mapping"
+            return Dict()
+        end
+        
+        # Create mapping from electrode coordinates to labels
+        position_channel_map = Dict()
+        for (i, label) in enumerate(layout.data.label)
+            x = layout.data.x2[i]
+            y = layout.data.y2[i]
+            position_channel_map[(x, y)] = Symbol(label)
+        end
+        
+        println("Created electrode mapping with $(length(position_channel_map)) electrodes")
+        return position_channel_map
+    else
+        # Fallback: try to find layout data in the axis scene
+        for plot in ax.scene.plots
+            if plot isa Makie.Contourf
+                # Try to extract layout from plot attributes
+                if hasproperty(plot, :attributes)
+                    println("Found Contourf plot, but need to access layout data")
+                end
+            end
+        end
+        
+        @warn "Could not find layout data for electrode mapping"
+        return Dict()
+    end
+end
+
+"""
+    _find_electrodes_in_region_v2(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
+
+Find electrodes within the selected spatial region using actual electrode coordinates.
+This approach uses the real layout data from the topographic plot.
+"""
+function _find_electrodes_in_region_v2(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
+    # Get the position-channel mapping using the original data
+    position_channel_map = _create_position_channel_map(ax, original_data)
+    
+    if isempty(position_channel_map)
+        @warn "No electrode mapping available, returning placeholder"
+        return [:Fp1, :Fp2, :F3, :F4]  # Fallback
+    end
+    
+    # The selection coordinates should be in the same coordinate system as the electrode positions
+    # (which are typically in the range of the head radius, e.g., -50 to 50 mm)
+    
+    # Find electrodes within the selected region
+    selected_electrodes = Symbol[]
+    
+    for ((x, y), channel) in position_channel_map
+        # Check if this electrode is inside the selection rectangle
+        if x_min <= x <= x_max && y_min <= y <= y_max
+            push!(selected_electrodes, channel)
+        end
+    end
+    
+    println("Found $(length(selected_electrodes)) electrodes in region: $selected_electrodes")
+    return selected_electrodes
+end
+
+# Removed duplicate functions and old context menu functions
