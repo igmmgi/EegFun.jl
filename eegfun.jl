@@ -79,6 +79,9 @@ end
 # eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
 # eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
 
+
+eegfun.plot_topography(erps[1], sample_selection = x -> x.time .>= 0.4)
+
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Fp1]), xgrid = true, ygrid = true, xminorgrid = true, yminorgrid = true)
 display(fig)

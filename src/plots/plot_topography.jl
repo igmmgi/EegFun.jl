@@ -33,7 +33,7 @@ function _plot_topography!(
     topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
     gridscale = pop!(topo_kwargs, :gridscale)
 
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30)
+    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30, :label => "μV")
     colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
     plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
 
@@ -47,6 +47,13 @@ function _plot_topography!(
 
     if isnothing(ylim)
         ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
+    end
+
+    # Set default title showing time range if data has time column
+    if hasproperty(dat, :time) && !isempty(dat.time)
+        time_min, time_max = extrema(dat.time)
+        time_title = @sprintf("%.3f to %.3f s", time_min, time_max)
+        ax.title = time_title
     end
 
     # Clear the axis 
@@ -105,6 +112,13 @@ function plot_topography!(
 )
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
+    
+    # Set default title showing time range if data has time column
+    if hasproperty(dat_subset.data, :time) && !isempty(dat_subset.data.time)
+        time_min, time_max = extrema(dat_subset.data.time)
+        time_title = @sprintf("%.3f to %.3f s", time_min, time_max)
+        ax.title = time_title
+    end
 end
 
 function plot_topography(
