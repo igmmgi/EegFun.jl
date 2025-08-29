@@ -605,6 +605,7 @@ mutable struct TopoSelectionState
     visible::Observable{Bool}
     rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
     bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}  # Store all selection bounds
+    temp_rectangle::Union{Makie.Poly, Nothing}  # Temporary rectangle for dragging
     
     function TopoSelectionState(ax::Axis)
         # Initialize with empty lists for multiple selections
@@ -613,7 +614,8 @@ mutable struct TopoSelectionState
             Observable((0.0, 0.0, 0.0, 0.0)), 
             Observable(false), 
             Makie.Poly[],  # Empty vector for rectangles
-            Observable{Tuple{Float64,Float64,Float64,Float64}}[]  # Empty vector for bounds
+            Observable{Tuple{Float64,Float64,Float64,Float64}}[],  # Empty vector for bounds
+            nothing  # No temporary rectangle initially
         )
     end
 end
@@ -688,6 +690,19 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
     
     # Store axis coordinates for spatial selection
     selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
+    
+    # Create a temporary rectangle for dragging
+    initial_points = [Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y)]
+    selection_state.temp_rectangle = poly!(
+        ax,
+        initial_points,
+        color = (:blue, 0.3),    # Blue with transparency
+        strokecolor = :black,     # Black border
+        strokewidth = 1,          # Thin border
+        visible = true,
+        overdraw = true           # Ensure it's drawn on top
+    )
+    
     _update_topo_selection!(ax, selection_state, mouse_pos)
 end
 
@@ -723,7 +738,39 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     push!(current_bounds, final_bounds)
     selection_state.bounds_list[] = current_bounds
     
-    _update_topo_selection!(ax, selection_state, mouse_pos)
+    # Create the permanent rectangle for this selection
+    bounds = selection_state.bounds[]
+    start_x, start_y = bounds[1], bounds[2]
+    end_x, end_y = bounds[3], bounds[4]
+    
+    rect_points = Point2f[
+        Point2f(Float64(start_x), Float64(start_y)),
+        Point2f(Float64(end_x), Float64(start_y)),
+        Point2f(Float64(end_x), Float64(end_y)),
+        Point2f(Float64(start_x), Float64(end_y)),
+    ]
+    
+    # Create permanent rectangle
+    permanent_rectangle = poly!(
+        ax,
+        rect_points,
+        color = (:blue, 0.3),    # Blue with transparency
+        strokecolor = :black,     # Black border
+        strokewidth = 1,          # Thin border
+        visible = true,
+        overdraw = true           # Ensure it's drawn on top
+    )
+    
+    # Store the permanent rectangle
+    push!(selection_state.rectangles, permanent_rectangle)
+    
+    # Remove the temporary rectangle
+    if !isnothing(selection_state.temp_rectangle)
+        delete!(selection_state.temp_rectangle.parent, selection_state.temp_rectangle)
+        selection_state.temp_rectangle = nothing
+    end
+    
+    println("Created permanent selection rectangle #$(length(selection_state.rectangles))")
     
     # Find electrodes within ALL selected spatial regions
     all_selected_electrodes = Symbol[]
@@ -759,40 +806,25 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         selection_state.bounds[] = (start_x, start_y, mouse_x, mouse_y)
         println("Updated bounds with axis coordinates: ($start_x, $start_y) to ($mouse_x, $mouse_y)")
         
-        # Update rectangle to show spatial selection in axis coordinates
-        # Ensure we're using the axis coordinates from the bounds
-        bounds = selection_state.bounds[]
-        start_x, start_y = bounds[1], bounds[2]
-        end_x, end_y = bounds[3], bounds[4]
-        
-        # Debug: Print the actual bounds being used
-        println("Using bounds for rectangle: start=($start_x, $start_y), end=($end_x, $end_y)")
-        
-        # Create rectangle using the stored bounds (which should be axis coordinates)
-        rect_points = Point2f[
-            Point2f(Float64(start_x), Float64(start_y)),
-            Point2f(Float64(end_x), Float64(start_y)),
-            Point2f(Float64(end_x), Float64(end_y)),
-            Point2f(Float64(start_x), Float64(end_y)),
-        ]
-        
-        println("Final rectangle points (axis coords): $rect_points")
-        
-        # Create a new rectangle for this selection
-        new_rectangle = poly!(
-            ax,
-            rect_points,
-            color = (:red, 0.8),    # Bright red with high opacity
-            strokecolor = :yellow,   # Bright yellow border
-            strokewidth = 5,         # Very thick border
-            visible = true,
-            overdraw = true          # Ensure it's drawn on top
-        )
-        
-        # Store the new rectangle
-        push!(selection_state.rectangles, new_rectangle)
-        
-        println("Created new selection rectangle #$(length(selection_state.rectangles))")
+        # Update the temporary rectangle during dragging
+        if !isnothing(selection_state.temp_rectangle)
+            bounds = selection_state.bounds[]
+            start_x, start_y = bounds[1], bounds[2]
+            end_x, end_y = bounds[3], bounds[4]
+            
+            # Update rectangle points for the temporary rectangle
+            rect_points = Point2f[
+                Point2f(Float64(start_x), Float64(start_y)),
+                Point2f(Float64(end_x), Float64(start_y)),
+                Point2f(Float64(end_x), Float64(end_y)),
+                Point2f(Float64(start_x), Float64(end_y)),
+            ]
+            
+            # Update the temporary rectangle
+            selection_state.temp_rectangle[1] = rect_points
+            
+            println("Updated temporary rectangle: start=($start_x, $start_y), end=($end_x, $end_y)")
+        end
         
 
     end
@@ -807,6 +839,12 @@ function _clear_all_topo_selections!(selection_state::TopoSelectionState)
     # Remove all rectangles from the scene
     for rect in selection_state.rectangles
         delete!(rect.parent, rect)
+    end
+    
+    # Remove temporary rectangle if it exists
+    if !isnothing(selection_state.temp_rectangle)
+        delete!(selection_state.temp_rectangle.parent, selection_state.temp_rectangle)
+        selection_state.temp_rectangle = nothing
     end
     
     # Clear the lists
