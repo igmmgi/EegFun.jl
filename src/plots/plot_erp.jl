@@ -47,6 +47,7 @@ mutable struct ErpSelectionState
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
     rectangles::Vector{Makie.Poly}  # Store rectangles for all axes
+    channel_rectangles::Vector{Makie.Poly}  # Store channel selection rectangles
     function ErpSelectionState(axes::Vector{Axis})
         rectangles = Makie.Poly[]
         for ax in axes
@@ -54,7 +55,7 @@ mutable struct ErpSelectionState
             poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
             push!(rectangles, poly_element)
         end
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles)
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles, Makie.Poly[])
     end
 end
 
@@ -225,7 +226,7 @@ function plot_erp(datasets::Vector{ErpData};
         
         # Set up selection system that works for all layouts
         # Use figure-level events to avoid conflicts with multiple axis handlers
-        _setup_erp_selection_unified!(fig, axes, selection_state, datasets)
+        _setup_erp_selection_unified!(fig, axes, selection_state, datasets, plot_layout)
     end
     
     return fig, axes
@@ -247,19 +248,22 @@ function _setup_erp_interactivity!(fig::Figure, axes::Vector{Axis})
 end
 
 """
-    _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data)
+    _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data, plot_layout::PlotLayout)
 
 Set up unified mouse selection and context menu for ERP plots that works across all layouts.
 Uses figure-level events to avoid conflicts with multiple axis handlers.
 """
-function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data)
-    # Track if Shift is currently pressed
+function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data, plot_layout::PlotLayout)
+    # Track if Shift and Ctrl are currently pressed
     shift_pressed = Ref(false)
+    ctrl_pressed = Ref(false)
 
-    # Use figure-level keyboard events for Shift tracking
+    # Use figure-level keyboard events for Shift and Ctrl tracking
     on(events(fig).keyboardbutton) do key_event
         if key_event.key == Keyboard.left_shift
             shift_pressed[] = key_event.action == Keyboard.press
+        elseif key_event.key == Keyboard.left_control
+            ctrl_pressed[] = key_event.action == Keyboard.press
         end
     end
 
@@ -300,7 +304,7 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
     # Update selection rectangle while dragging using figure-level mouse position
     on(events(fig).mouseposition) do _
         if selection_state.active[]
-            # Find which axis the mouse is over for proper coordinate conversion
+            # Update time selection rectangle
             mouse_pos = events(fig).mouseposition[]
             active_ax = nothing
             
@@ -316,6 +320,11 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
                 _update_erp_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
             end
         end
+    end
+    
+    # Add separate figure-level event handlers for channel selection in topo layouts
+    if _is_topo_layout(plot_layout)
+                    _setup_topo_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
     end
 end
 
@@ -583,3 +592,349 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     
     return ax
 end
+
+# =============================================================================
+# CHANNEL SELECTION FOR TOPO LAYOUTS
+# =============================================================================
+
+"""
+    _is_topo_layout(plot_layout::PlotLayout)::Bool
+
+Check if the current layout is a topographic layout.
+"""
+_is_topo_layout(plot_layout::PlotLayout) = plot_layout.type == :topo
+
+"""
+    _create_position_channel_map(plot_layout::PlotLayout, original_data)
+
+Create a mapping from normalized coordinates to channel labels for topo layouts.
+"""
+function _create_position_channel_map(plot_layout::PlotLayout, original_data)
+    if !_is_topo_layout(plot_layout)
+        return Dict()
+    end
+    
+    # Create position-to-channel mapping by normalizing the raw layout coordinates
+    position_channel_map = Dict{Tuple{Float64, Float64}, Symbol}()
+    
+    # Get the raw coordinate ranges to normalize to [0,1]
+    x_coords = [pos[1] for pos in plot_layout.positions]
+    y_coords = [pos[2] for pos in plot_layout.positions]
+    
+    minx, maxx = extrema(x_coords)
+    miny, maxy = extrema(y_coords)
+    
+    xrange = maxx - minx == 0 ? 1.0 : maxx - minx
+    yrange = maxy - miny == 0 ? 1.0 : maxy - miny
+    
+    for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
+        # Normalize the raw coordinates to [0,1] range
+        x_raw, y_raw = pos
+        x_norm = (x_raw - minx) / xrange
+        y_norm = (y_raw - miny) / yrange
+        
+        position_channel_map[(x_norm, y_norm)] = channel
+    end
+    
+    return position_channel_map
+end
+
+"""
+    _get_axes_rectangles(plot_layout::PlotLayout, fig::Figure)
+
+Get the axis rectangles and associated channels for each ERP subplot.
+"""
+function _get_axes_rectangles(axes::Vector{Axis}, channels::Vector{Symbol}, fig::Figure)
+    axes_rects = Vector{Tuple{Tuple{Float64, Float64, Float64, Float64}, Vector{Symbol}}}()
+    
+    # Get the actual screen bounds from each axis - this is the proper way!
+    for (ax, channel) in zip(axes, channels)
+        # Get the actual viewport area of the axis (new API)
+        viewport = ax.scene.viewport[]
+        
+        # Convert to normalized coordinates relative to figure
+        fig_size = size(fig.scene)
+        x1 = viewport.origin[1] / fig_size[1]
+        y1 = viewport.origin[2] / fig_size[2]
+        x2 = (viewport.origin[1] + viewport.widths[1]) / fig_size[1]
+        y2 = (viewport.origin[2] + viewport.widths[2]) / fig_size[2]
+        
+        axis_rect = (x1, y1, x2, y2)
+        
+        # Only print debug info for IO1
+        if channel == :IO1
+            println("IO1 axis rect: $axis_rect")
+        end
+        
+        push!(axes_rects, (axis_rect, [channel]))
+    end
+    
+    return axes_rects
+end
+
+"""
+    _draw_channel_rectangles!(fig::Figure, axes_rects)
+
+Draw small rectangles at each channel's axis position for visualization.
+"""
+function _draw_channel_rectangles!(fig::Figure, axes_rects)
+    for (axis_rect, channels) in axes_rects
+        x1, y1, x2, y2 = axis_rect
+        
+        # Draw a small rectangle for each channel using poly!
+        color = channels[1] == :IO1 ? (:red, 0.7) : (:green, 0.3)
+        
+        # Create rectangle points for poly!
+        rect_points = [
+            Point2f(x1, y1),
+            Point2f(x2, y1),
+            Point2f(x2, y2),
+            Point2f(x1, y2)
+        ]
+        
+        poly!(
+            fig.scene,
+            rect_points,
+            color = color,
+            strokecolor = :black,
+            strokewidth = 1,
+            overdraw = true,
+            space = :relative
+        )
+    end
+end
+
+"""
+    _rectangles_overlap(rect1, rect2)
+
+Check if two rectangles overlap.
+"""
+function _rectangles_overlap(rect1::Tuple{Float64, Float64, Float64, Float64}, 
+                           rect2::Tuple{Float64, Float64, Float64, Float64})
+    x1_1, y1_1, x2_1, y2_1 = rect1
+    x1_2, y1_2, x2_2, y2_2 = rect2
+    
+    # Check for overlap
+    return !(x2_1 < x1_2 || x2_2 < x1_1 || y2_1 < y1_2 || y2_2 < y1_1)
+end
+
+"""
+    _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
+
+Set up separate figure-level event handlers for channel selection in topo layouts.
+"""
+function _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
+    # Track Ctrl key state for channel selection
+    ctrl_pressed = Ref(false)
+    channel_selection_active = Ref(false)  # Separate state for channel selection
+    
+    # Handle Ctrl key events
+    on(events(fig).keyboardbutton) do event
+        if event.key == Keyboard.left_control
+            ctrl_pressed[] = event.action == Keyboard.press
+            if event.action == Keyboard.release
+                channel_selection_active[] = false
+            end
+        end
+    end
+    
+    # Handle mouse events for channel selection
+    on(events(fig).mousebutton) do event
+        if event.button == Mouse.left && ctrl_pressed[]
+            @info "Ctrl + left mouse: $(event.action == Mouse.press ? "press" : "release"), ctrl_pressed: $(ctrl_pressed[])"
+            if event.action == Mouse.press
+                _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
+            elseif event.action == Mouse.release && channel_selection_active[]
+                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
+            end
+        end
+    end
+    
+    # Handle mouse movement for updating channel selection rectangle
+    on(events(fig).mouseposition) do _
+        if channel_selection_active[]
+            @info "Updating channel selection rectangle, channel_selection_active: $(channel_selection_active[])"
+            _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
+        end
+    end
+    
+    # Debug: Print when Ctrl is pressed/released
+    on(events(fig).keyboardbutton) do event
+        if event.key == Keyboard.left_control
+            @info "Ctrl key: $(event.action == Keyboard.press ? "pressed" : "released")"
+        end
+    end
+end
+
+"""
+    _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
+
+Start channel selection for topo layouts by drawing a rectangle across the entire figure.
+"""
+function _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
+    if !_is_topo_layout(plot_layout)
+        return
+    end
+    
+    # Get the starting position in screen coordinates
+    selection_start = events(fig).mouseposition[]
+    
+    # Store the selection start position and activate channel selection
+    selection_state.bounds[] = (selection_start[1], selection_start[2])  # Store screen coordinates
+    channel_selection_active[] = true
+    
+    @info "Channel selection started - drag to select multiple channels, channel_selection_active set to: $(channel_selection_active[])"
+    
+    # Clear any existing selection rectangles
+    if !isempty(selection_state.channel_rectangles)
+        for rect in selection_state.channel_rectangles
+            delete!(fig.scene, rect)
+        end
+        empty!(selection_state.channel_rectangles)
+    end
+end
+
+"""
+    _update_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
+
+Update the channel selection rectangle during dragging.
+"""
+function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
+    if !_is_topo_layout(plot_layout)
+        @info "Not a topo layout, returning"
+        return
+    end
+    
+    # Get current mouse position
+    current_pos = events(fig).mouseposition[]
+    @info "Current mouse position: $current_pos"
+    
+    # Get the stored start position
+    start_screen = selection_state.bounds[]
+    @info "Start screen position: $start_screen"
+    
+    # Clear previous rectangle
+    if !isempty(selection_state.channel_rectangles)
+        @info "Clearing previous rectangle"
+        for rect in selection_state.channel_rectangles
+            delete!(fig.scene, rect)
+        end
+        empty!(selection_state.channel_rectangles)
+    end
+    
+    # Convert screen coordinates to normalized coordinates
+    fig_size = size(fig.scene)
+    @info "Figure size: $fig_size"
+    start_norm = (start_screen[1] / fig_size[1], start_screen[2] / fig_size[2])
+    end_norm = (current_pos[1] / fig_size[1], current_pos[2] / fig_size[2])
+    @info "Normalized coordinates: start=$start_norm, end=$end_norm"
+    
+    # Create the selection rectangle bounds
+    x1, x2 = minmax(start_norm[1], end_norm[1])
+    y1, y2 = minmax(start_norm[2], end_norm[2])
+    @info "RECTANGLE DEBUG: x1=$x1, x2=$x2, y1=$y1, y2=$y2"
+    
+    # Draw the selection rectangle
+    rect_points = [
+        Point2f(x1, y1),
+        Point2f(x2, y1),
+        Point2f(x2, y2),
+        Point2f(x1, y2)
+    ]
+    
+    @info "Drawing rectangle with points: $rect_points"
+    rect = poly!(
+        fig.scene,
+        rect_points,
+        color = (:blue, 0.3),
+        strokecolor = :red,
+        strokewidth = 2,
+        overdraw = true,
+        space = :relative
+    )
+    
+    # Store the rectangle for later removal
+    push!(selection_state.channel_rectangles, rect)
+    @info "Rectangle drawn and stored, total rectangles: $(length(selection_state.channel_rectangles))"
+end
+
+"""
+    _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
+
+Finish channel selection for topo layouts and identify selected channels.
+"""
+function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active, axes::Vector{Axis})
+    if !_is_topo_layout(plot_layout) || !channel_selection_active[]
+        return
+    end
+    
+    # Get the ending position in screen coordinates
+    selection_end = events(fig).mouseposition[]
+    
+    # Get the stored start position
+    start_screen = selection_state.bounds[]
+    
+    # Convert screen coordinates to normalized coordinates
+    fig_size = size(fig.scene)
+    start_norm = (start_screen[1] / fig_size[1], start_screen[2] / fig_size[2])
+    end_norm = (selection_end[1] / fig_size[1], selection_end[2] / fig_size[2])
+    
+    # Create the selection rectangle bounds
+    x1, x2 = minmax(start_norm[1], end_norm[1])
+    y1, y2 = minmax(start_norm[2], end_norm[2])
+    
+    # Ensure the rectangle bounds are within [0,1] range to match channel coordinates
+    x1 = max(0.0, min(1.0, x1))
+    x2 = max(0.0, min(1.0, x2))
+    y1 = max(0.0, min(1.0, y1))
+    y2 = max(0.0, min(1.0, y2))
+    
+    # Simple approach: just use the rectangle as drawn
+    # The coordinate systems should already be aligned
+    @info "Rectangle bounds: x1=$x1, x2=$x2, y1=$y1, y2=$y2"
+    
+    # Get the axis rectangles for each ERP subplot using actual axis bounds
+    axes_rects = _get_axes_rectangles(axes, plot_layout.channels, fig)
+    
+    # Draw rectangles at each channel's axis position for visualization
+    _draw_channel_rectangles!(fig, axes_rects)
+    
+    # Find channels from axes that overlap with the selection rectangle
+    selected_channels = Symbol[]
+    
+    for (axis_rect, channels) in axes_rects
+        if _rectangles_overlap((x1, y1, x2, y2), axis_rect)
+            # This axis overlaps with selection, add all its channels
+            append!(selected_channels, channels)
+            @info "Axis overlaps - selected channels: $channels"
+        end
+        
+        # Debug: Check IO1 specifically
+        if channels[1] == :IO1
+            x1_1, y1_1, x2_1, y2_1 = (x1, y1, x2, y2)
+            x1_2, y1_2, x2_2, y2_2 = axis_rect
+            @info "IO1 overlap check: selection=($x1_1, $y1_1, $x2_1, $y2_1), IO1=($x1_2, $y1_2, $x2_2, $y2_2)"
+            @info "Overlap result: $(_rectangles_overlap((x1, y1, x2, y2), axis_rect))"
+        end
+    end
+    
+    if !isempty(selected_channels)
+        @info "Selected channels: $selected_channels"
+    else
+        @info "No channels selected"
+    end
+    
+    # Clean up the selection rectangle
+    if !isempty(selection_state.channel_rectangles)
+        for rect in selection_state.channel_rectangles
+            delete!(fig.scene, rect)
+        end
+        empty!(selection_state.channel_rectangles)
+    end
+    
+    channel_selection_active[] = false
+end
+
+# =============================================================================
+# MAIN PLOT FUNCTION
+# =============================================================================
