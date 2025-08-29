@@ -754,13 +754,8 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         append!(all_selected_electrodes, region_electrodes)
     end
     
-    # Remove duplicates
     unique_electrodes = unique(all_selected_electrodes)
-    
-    @info "Selected region: x($x_min to $x_max), y($y_min to $y_max)"
-    @info "Total selections: $(length(selection_state.bounds_list[]))"
-    @info "Electrodes found: $unique_electrodes"
-    @info "Use: plot_erp(erps[1], channel_selection = channels($unique_electrodes))"
+    @info "N selections: $(length(selection_state.bounds_list[])); Electrodes found: $unique_electrodes"
 end
 
 """
