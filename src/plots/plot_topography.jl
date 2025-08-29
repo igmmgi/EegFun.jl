@@ -603,20 +603,18 @@ mutable struct TopoSelectionState
     active::Observable{Bool}
     bounds::Observable{Tuple{Float64,Float64,Float64,Float64}}  # x_min, y_min, x_max, y_max
     visible::Observable{Bool}
-    rectangle::Makie.Poly
+    rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
+    bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}  # Store all selection bounds
+    
     function TopoSelectionState(ax::Axis)
-        initial_points = [Point2f(0.0, 0.0)]
-        # Create rectangle directly in the axis for better visibility
-        poly_element = poly!(
-            ax,  # Use axis instead of scene for better coordinate handling
-            initial_points, 
-            color = (:red, 0.8),    # Bright red with high opacity
-            strokecolor = :yellow,   # Bright yellow border
-            strokewidth = 5,         # Very thick border
-            visible = false,
-            overdraw = true          # Ensure it's drawn on top
+        # Initialize with empty lists for multiple selections
+        new(
+            Observable(false), 
+            Observable((0.0, 0.0, 0.0, 0.0)), 
+            Observable(false), 
+            Makie.Poly[],  # Empty vector for rectangles
+            Observable{Tuple{Float64,Float64,Float64,Float64}}[]  # Empty vector for bounds
         )
-        new(Observable(false), Observable((0.0, 0.0, 0.0, 0.0)), Observable(false), poly_element)
     end
 end
 
@@ -655,6 +653,9 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
                     _finish_topo_selection!(ax, selection_state, event, original_data)
                 end
             end
+        elseif event.button == Mouse.right && event.action == Mouse.press
+            # Right-click to clear all selections
+            _clear_all_topo_selections!(selection_state)
         end
     end
     
@@ -714,16 +715,31 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     # Update bounds with final position (x_min, y_min, x_max, y_max) in axis coords
     x_min, x_max = minmax(start_x, mouse_x)
     y_min, y_max = minmax(start_y, mouse_y)
-    selection_state.bounds[] = (x_min, y_min, x_max, y_max)
+    final_bounds = (x_min, y_min, x_max, y_max)
+    selection_state.bounds[] = final_bounds
+    
+    # Store this selection in the bounds list
+    current_bounds = selection_state.bounds_list[]
+    push!(current_bounds, final_bounds)
+    selection_state.bounds_list[] = current_bounds
     
     _update_topo_selection!(ax, selection_state, mouse_pos)
     
-    # Find electrodes within the selected spatial region using the new method
-    selected_electrodes = _find_electrodes_in_region_v2(ax, x_min, y_min, x_max, y_max, original_data)
+    # Find electrodes within ALL selected spatial regions
+    all_selected_electrodes = Symbol[]
+    for bounds in selection_state.bounds_list[]
+        x_min, y_min, x_max, y_max = bounds
+        region_electrodes = _find_electrodes_in_region_v2(ax, x_min, y_min, x_max, y_max, original_data)
+        append!(all_selected_electrodes, region_electrodes)
+    end
+    
+    # Remove duplicates
+    unique_electrodes = unique(all_selected_electrodes)
     
     println("Selected axis region: x($x_min to $x_max), y($y_min to $y_max)")
-    println("Electrodes in region: $selected_electrodes")
-    println("Use: plot_erp(erps[1], channel_selection = channels($selected_electrodes))")
+    println("Total selections: $(length(selection_state.bounds_list[]))")
+    println("All electrodes in regions: $unique_electrodes")
+    println("Use: plot_erp(erps[1], channel_selection = channels($unique_electrodes))")
 end
 
 """
@@ -762,18 +778,46 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         
         println("Final rectangle points (axis coords): $rect_points")
         
-        # Update the polygon points directly
-        selection_state.rectangle[1] = rect_points
-        selection_state.rectangle.visible[] = true
+        # Create a new rectangle for this selection
+        new_rectangle = poly!(
+            ax,
+            rect_points,
+            color = (:red, 0.8),    # Bright red with high opacity
+            strokecolor = :yellow,   # Bright yellow border
+            strokewidth = 5,         # Very thick border
+            visible = true,
+            overdraw = true          # Ensure it's drawn on top
+        )
         
-        # Force a redraw
-        notify(selection_state.rectangle.visible)
+        # Store the new rectangle
+        push!(selection_state.rectangles, new_rectangle)
         
-        println("Rectangle should now be visible with points: $rect_points")
-        println("Rectangle visible state: $(selection_state.rectangle.visible[])")
+        println("Created new selection rectangle #$(length(selection_state.rectangles))")
         
 
     end
+end
+
+"""
+    _clear_all_topo_selections!(selection_state::TopoSelectionState)
+
+Clear all topographic selections and remove all rectangles.
+"""
+function _clear_all_topo_selections!(selection_state::TopoSelectionState)
+    # Remove all rectangles from the scene
+    for rect in selection_state.rectangles
+        delete!(rect.parent, rect)
+    end
+    
+    # Clear the lists
+    empty!(selection_state.rectangles)
+    selection_state.bounds_list[] = Tuple{Float64,Float64,Float64,Float64}[]
+    
+    # Reset state
+    selection_state.active[] = false
+    selection_state.visible[] = false
+    
+    println("Cleared all topographic selections")
 end
 
 """
