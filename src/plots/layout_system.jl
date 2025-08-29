@@ -223,7 +223,7 @@ function best_rect(n::Int)
         # Ensure we have enough space for all items
         if rows * cols < n
             cols = ceil(Int, n / rows)
-            @inffo "best_rect($n): adjusted cols to $cols"
+            @info "best_rect($n): adjusted cols to $cols"
         end
         
         return (rows, cols)
