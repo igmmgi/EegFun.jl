@@ -38,6 +38,22 @@ const ERP_KEYBOARD_ACTIONS = Dict(
     Keyboard.right => :right
 )
 
+# =============================================================================
+# SELECTION STATE
+# =============================================================================
+
+mutable struct ErpSelectionState
+    active::Observable{Bool}
+    bounds::Observable{Tuple{Float64,Float64}}
+    visible::Observable{Bool}
+    rectangle::Makie.Poly
+    function ErpSelectionState(ax)
+        initial_points = [Point2f(0.0, 0.0)]
+        poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
+    end
+end
+
 """
     plot_erp(dat::ErpData; 
              layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
@@ -109,6 +125,12 @@ When `interactive = true` (default):
 - **Down Arrow**: Zoom out on Y-axis (expand Y limits)
 - **Left Arrow**: Zoom in on X-axis (compress time range)
 - **Right Arrow**: Zoom out on X-axis (expand time range)
+
+# Mouse Selection
+- **Shift + Left Click + Drag**: Select a time region (blue rectangle)
+- **Right Click on Selection**: Open context menu with plot options
+  - Topoplot (multiquadratic)
+  - Topoplot (spherical_spline)
 """
 function plot_erp(dat::ErpData; 
                  layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
@@ -186,6 +208,14 @@ function plot_erp(datasets::Vector{ErpData};
     # Add keyboard interactivity if enabled
     if plot_kwargs[:interactive]
         _setup_erp_interactivity!(fig, axes)
+        
+        # Disable default interactions that conflict with our custom selection
+        deregister_interaction!(first(axes), :rectanglezoom)
+        
+        # Set up selection system for the first axis (will work with linked axes)
+        # Pass the ORIGINAL datasets (not dat_subset) so we can subset by time for topo plots
+        selection_state = ErpSelectionState(first(axes))
+        _setup_erp_selection!(fig, first(axes), selection_state, datasets)
     end
     
     return fig, axes
@@ -202,6 +232,54 @@ function _setup_erp_interactivity!(fig::Figure, axes::Vector{Axis})
         if event.action in (Keyboard.press, Keyboard.repeat) && haskey(ERP_KEYBOARD_ACTIONS, event.key)
             action = ERP_KEYBOARD_ACTIONS[event.key]
             _handle_erp_navigation!(axes, action)
+        end
+    end
+end
+
+"""
+    _setup_erp_selection!(fig::Figure, ax::Axis, selection_state::ErpSelectionState, data)
+
+Set up mouse selection and context menu for ERP plots.
+"""
+function _setup_erp_selection!(fig::Figure, ax::Axis, selection_state::ErpSelectionState, data)
+    # Track if Shift is currently pressed
+    shift_pressed = Ref(false)
+
+    on(events(ax).keyboardbutton) do key_event
+        if key_event.key == Keyboard.left_shift
+            shift_pressed[] = key_event.action == Keyboard.press
+        end
+    end
+
+    # Handle mouse events
+    on(events(ax).mousebutton) do event
+        pos = events(ax).mouseposition[]
+        if !_is_mouse_in_axis(ax, pos)
+            return
+        end
+
+        mouse_x = mouseposition(ax)[1]
+
+        if event.button == Mouse.left
+            if event.action == Mouse.press
+                if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
+                    _clear_erp_selection!(selection_state)
+                elseif shift_pressed[]
+                    _start_erp_selection!(ax, selection_state, mouse_x)
+                end
+            elseif event.action == Mouse.release && selection_state.active[]
+                _finish_erp_selection!(ax, selection_state, mouse_x)
+            end
+        elseif event.button == Mouse.right && event.action == Mouse.press
+            _handle_erp_right_click!(selection_state, mouse_x, data)
+        end
+    end
+
+    # Update selection rectangle while dragging
+    on(events(ax).mouseposition) do _
+        if selection_state.active[]
+            world_pos = mouseposition(ax)[1]
+            _update_erp_selection!(ax, selection_state, selection_state.bounds[][1], world_pos)
         end
     end
 end
@@ -259,6 +337,94 @@ Zoom out on X-axis by expanding the limits (zoom out from time range).
 """
 function xless!(ax::Axis)
     xlims!(ax, ax.xaxis.attributes.limits[] .* 1.1)
+end
+
+# =============================================================================
+# SELECTION HELPER FUNCTIONS
+# =============================================================================
+
+function _is_mouse_in_axis(ax, pos)
+    bbox = ax.layoutobservables.computedbbox[]
+    return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) &&
+           bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
+end
+
+function _is_within_selection(selection_state, mouse_x)
+    bounds = selection_state.bounds[]
+    return mouse_x >= min(bounds[1], bounds[2]) && mouse_x <= max(bounds[1], bounds[2])
+end
+
+function _start_erp_selection!(ax, selection_state, mouse_x)
+    selection_state.active[] = true
+    selection_state.bounds[] = (mouse_x, mouse_x)
+    _update_erp_selection!(ax, selection_state, mouse_x, mouse_x)
+end
+
+function _finish_erp_selection!(ax, selection_state, mouse_x)
+    selection_state.active[] = false
+    selection_state.visible[] = true
+    selection_state.bounds[] = (selection_state.bounds[][1], mouse_x)
+    _update_erp_selection!(ax, selection_state, selection_state.bounds[][1], mouse_x)
+    selection_state.rectangle.visible[] = true
+end
+
+function _update_erp_selection!(ax, selection_state, x1, x2)
+    ylims = ax.yaxis.attributes.limits[]
+    selection_state.rectangle[1] = Point2f[
+        Point2f(Float64(x1), Float64(ylims[1])),
+        Point2f(Float64(x2), Float64(ylims[1])),
+        Point2f(Float64(x2), Float64(ylims[2])),
+        Point2f(Float64(x1), Float64(ylims[2])),
+    ]
+    selection_state.rectangle.visible[] = true
+end
+
+function _clear_erp_selection!(selection_state)
+    # Set to a single point instead of empty vector to avoid CairoMakie issues
+    selection_state.rectangle[1] = [Point2f(0.0, 0.0)]
+    selection_state.bounds[] = (0.0, 0.0)
+    selection_state.visible[] = false
+    selection_state.rectangle.visible[] = false
+end
+
+function _handle_erp_right_click!(selection_state, mouse_x, data)
+    if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
+        _show_erp_context_menu!(selection_state, data)
+    end
+end
+
+function _show_erp_context_menu!(selection_state, data)
+    # Create the menu figure
+    menu_fig = Figure()
+    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)"]
+
+    menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
+
+    for btn in menu_buttons
+        on(btn.clicks) do n
+            original_data, x_min, x_max = _subset_erp_selected_data(selection_state, data)
+            
+            # Create time-based sample selection for the topo plot
+            time_sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max)
+            
+            if btn.label[] == "Topoplot (multiquadratic)"
+                plot_topography(original_data, sample_selection = time_sample_selection, method = :multiquadratic)
+            elseif btn.label[] == "Topoplot (spherical_spline)"
+                plot_topography(original_data, sample_selection = time_sample_selection, method = :spherical_spline)
+            end
+        end
+    end
+
+    new_screen = getfield(Main, :GLMakie).Screen()
+    display(new_screen, menu_fig)
+end
+
+function _subset_erp_selected_data(selection_state, data)
+    x_min, x_max = minmax(selection_state.bounds[]...)
+    
+    # Return the original data and time bounds instead of subsetting
+    # This preserves all electrodes for topo plots
+    return (data, x_min, x_max)
 end
 
 
