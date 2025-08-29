@@ -71,6 +71,7 @@ function _plot_topography!(
         data,
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
         extendlow = :auto,
+        extendhigh = :auto,
         topo_kwargs...,
     )
 
@@ -492,24 +493,19 @@ end
 Set up keyboard interactivity for topographic plots.
 """
 function _setup_topo_interactivity!(fig::Figure, ax::Axis)
-    println("Setting up topographic plot interactivity...")
     
     # Handle keyboard events at the figure level
     on(events(fig).keyboardbutton) do event
-        println("Key pressed: $(event.key), action: $(event.action)")
         
         if event.action == Keyboard.press
             if event.key == Keyboard.up
-                println("Up arrow pressed - zooming in")
                 _topo_scale_up!(ax)
             elseif event.key == Keyboard.down
-                println("Down arrow pressed - zooming out")
                 _topo_scale_down!(ax)
             end
         end
     end
     
-    println("Topographic plot interactivity set up complete!")
 end
 
 """
@@ -518,17 +514,14 @@ end
 Increase the scale of the topographic plot (zoom in on color range).
 """
 function _topo_scale_up!(ax::Axis)
-    println("_topo_scale_up! called")
     
     # Find the Contourf plot in the axis
     for plot in ax.scene.plots
         if plot isa Makie.Contourf
-            println("Found Contourf plot")
             
             # Get current levels
             current_levels = plot.levels[]
             if !isnothing(current_levels)
-                println("Current levels: $current_levels")
                 
                 # For zoom in: compress the range around 0 for better contrast
                 level_min, level_max = extrema(current_levels)
@@ -544,10 +537,8 @@ function _topo_scale_up!(ax::Axis)
                 new_levels = range(new_min, new_max, length = length(current_levels))
                 plot.levels[] = new_levels
                 
-                println("Zoom in: Compressed levels from ($level_min, $level_max) to ($new_min, $new_max)")
                 break
             else
-                println("Warning: plot.levels is nothing!")
             end
         end
     end
@@ -559,17 +550,14 @@ end
 Decrease the scale of the topographic plot (zoom out from color range).
 """
 function _topo_scale_down!(ax::Axis)
-    println("_topo_scale_down! called")
     
     # Find the Contourf plot in the axis
     for plot in ax.scene.plots
         if plot isa Makie.Contourf
-            println("Found Contourf plot")
             
             # Get current levels
             current_levels = plot.levels[]
             if !isnothing(current_levels)
-                println("Current levels: $current_levels")
                 
                 # For zoom out: expand the range around 0 for less contrast
                 level_min, level_max = extrema(current_levels)
@@ -585,10 +573,7 @@ function _topo_scale_down!(ax::Axis)
                 new_levels = range(new_min, new_max, length = length(current_levels))
                 plot.levels[] = new_levels
                 
-                println("Zoom out: Expanded levels from ($level_min, $level_max) to ($new_min, $new_max)")
                 break
-            else
-                println("Warning: plot.levels is nothing!")
             end
         end
     end
