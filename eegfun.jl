@@ -81,6 +81,7 @@ end
 
 
 eegfun.plot_topography(erps[1], sample_selection = x -> x.time .>= 0.4)
+eegfun.plot_topography(erps[1], sample_selection = x -> x.time .>= 0.4, ylim = (-1, 1))
 
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Fp1]), xgrid = true, ygrid = true, xminorgrid = true, yminorgrid = true)
