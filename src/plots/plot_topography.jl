@@ -94,8 +94,6 @@ function _plot_topography!(
 end
 
 
-
-
 """
     plot_topography!(fig, ax, dat::SingleDataFrameEeg; kwargs...)
 
@@ -131,7 +129,7 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
-    interactive = true,  # Enable/disable keyboard interactivity
+    interactive = true,  
     kwargs...,
 )
     fig = Figure()
@@ -139,7 +137,6 @@ function plot_topography(
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
     
-    # Set up interactivity if enabled
     if interactive
         _setup_topo_interactivity!(fig, ax, dat)
     end
@@ -166,7 +163,6 @@ function plot_topography(
     display_plot = true,
     kwargs...,
 )
-    # Broadcast the plotting function across all datasets
     return plot_topography.(dat; channel_selection = channel_selection, sample_selection = sample_selection, display_plot = display_plot, kwargs...)
 end
 
@@ -190,14 +186,13 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
-    interactive = true,  # Enable/disable keyboard interactivity
+    interactive = true,  
     kwargs...,
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
     
-    # Set up interactivity if enabled
     if interactive
         _setup_topo_interactivity!(fig, ax, dat)
     end
@@ -225,6 +220,7 @@ the circle to NaN.
 - `DimensionMismatch`: If matrix is not square
 """
 function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
+
     if grid_scale <= 0
         throw(ArgumentError("grid_scale must be positive"))
     end
@@ -258,14 +254,12 @@ Interpolate EEG data using scattered interpolation
 - `grid_scale::Int`: Size of the output grid
 """
 function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int)
-    # Check input data
+
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
     end
 
-    points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
-
-    # Create grid more efficiently - avoid collect() and Iterators.product
+    points  = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
     x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
     y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
 
@@ -280,7 +274,6 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
         end
     end
 
-    # Perform scattered interpolation (essential for proper EEG topography)
     try
         itp = ScatteredInterpolation.interpolate(Multiquadratic(), points, dat)
         result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
@@ -291,8 +284,6 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
     end
 
 end
-
-
 
 
 """
@@ -493,12 +484,11 @@ end
 Set up keyboard interactivity for topographic plots.
 """
 function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing)
-    # Turn off default Makie interactions that might interfere
+
     deregister_interaction!(ax, :rectanglezoom)
     
     # Handle keyboard events at the figure level
     on(events(fig).keyboardbutton) do event
-        
         if event.action == Keyboard.press
             if event.key == Keyboard.up
                 _topo_scale_up!(ax)
@@ -508,7 +498,6 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothi
         end
     end
     
-    # Set up simple region selection
     _setup_topo_selection!(fig, ax, original_data)
 end
 
@@ -648,9 +637,13 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
                     _finish_topo_selection!(ax, selection_state, event, original_data)
                 end
             end
-        elseif event.button == Mouse.right && event.action == Mouse.press
-            # Right-click to clear all selections
+        end
+        if event.button == Mouse.left && event.action == Mouse.press && !shift_pressed[]
             _clear_all_topo_selections!(selection_state)
+        end
+        if event.button == Mouse.right
+            # TODO: implement right click functionality
+            @info "TODO! :-)"
         end
     end
     
@@ -676,8 +669,6 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
     mouse_pos = mouseposition(ax)
     mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
     
-    # Get coordinate information for debugging if needed
-    
     # Store axis coordinates for spatial selection
     selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
     
@@ -687,10 +678,10 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
         ax,
         initial_points,
         color = (:blue, 0.3),    # Blue with transparency
-        strokecolor = :black,     # Black border
-        strokewidth = 1,          # Thin border
+        strokecolor = :black,    # Black border
+        strokewidth = 1,         # Thin border
         visible = true,
-        overdraw = true           # Ensure it's drawn on top
+        overdraw = true          # Ensure it's drawn on top
     )
     
     _update_topo_selection!(ax, selection_state, mouse_pos)
@@ -711,8 +702,6 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     
     # Get start position
     start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
-    
-    # Get coordinate information for debugging if needed
     
     # Update bounds with final position (x_min, y_min, x_max, y_max) in axis coords
     x_min, x_max = minmax(start_x, mouse_x)
@@ -761,17 +750,17 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     all_selected_electrodes = Symbol[]
     for bounds in selection_state.bounds_list[]
         x_min, y_min, x_max, y_max = bounds
-        region_electrodes = _find_electrodes_in_region_v2(ax, x_min, y_min, x_max, y_max, original_data)
+        region_electrodes = _find_electrodes_in_region(ax, x_min, y_min, x_max, y_max, original_data)
         append!(all_selected_electrodes, region_electrodes)
     end
     
     # Remove duplicates
     unique_electrodes = unique(all_selected_electrodes)
     
-    println("Selected region: x($x_min to $x_max), y($y_min to $y_max)")
-    println("Total selections: $(length(selection_state.bounds_list[]))")
-    println("Electrodes found: $unique_electrodes")
-    println("Use: plot_erp(erps[1], channel_selection = channels($unique_electrodes))")
+    @info "Selected region: x($x_min to $x_max), y($y_min to $y_max)"
+    @info "Total selections: $(length(selection_state.bounds_list[]))"
+    @info "Electrodes found: $unique_electrodes"
+    @info "Use: plot_erp(erps[1], channel_selection = channels($unique_electrodes))"
 end
 
 """
@@ -840,28 +829,6 @@ function _clear_all_topo_selections!(selection_state::TopoSelectionState)
 
 end
 
-"""
-    _get_safe_ylims(ax::Axis)
-
-Safely get y-limits from an axis with fallback values.
-"""
-function _get_safe_ylims(ax::Axis)
-    # Try to get y-limits from the axis
-    if hasproperty(ax, :limits) && !isnothing(ax.limits[])
-        limits = ax.limits[]
-        if length(limits) >= 2 && !isnothing(limits[2])
-            return limits[2]
-        end
-    end
-    
-    # Try alternative approaches
-    if hasproperty(ax, :ylims) && !isnothing(ax.ylims[])
-        return ax.ylims[]
-    end
-    
-    # Fallback to default range
-    return (-1.0, 1.0)
-end
 
 """
     _create_position_channel_map(ax::Axis, original_data=nothing)
@@ -870,63 +837,36 @@ Create a mapping from electrode coordinates to electrode labels for the topograp
 This uses the actual layout data from the original plot data.
 """
 function _create_position_channel_map(ax::Axis, original_data=nothing)
-    # Try to get the layout data from the original data that was passed to plot_topography
-    if !isnothing(original_data) && hasproperty(original_data, :layout)
-        layout = original_data.layout
-        
-        # Ensure we have 2D coordinates
-        if !hasproperty(layout.data, :x2) || !hasproperty(layout.data, :y2)
-            @warn "Layout missing x2/y2 coordinates, cannot create electrode mapping"
-            return Dict()
-        end
-        
-        # Create mapping from electrode coordinates to labels
-        position_channel_map = Dict()
-        for (i, label) in enumerate(layout.data.label)
-            x = layout.data.x2[i]
-            y = layout.data.y2[i]
-            position_channel_map[(x, y)] = Symbol(label)
-        end
-        
-        # Created electrode mapping successfully
-        return position_channel_map
-    else
-        # Fallback: try to find layout data in the axis scene
-        for plot in ax.scene.plots
-            if plot isa Makie.Contourf
-                # Try to extract layout from plot attributes
-                if hasproperty(plot, :attributes)
-                    # Found Contourf plot, but need to access layout data
-                end
-            end
-        end
-        
-        @warn "Could not find layout data for electrode mapping"
-        return Dict()
+
+    layout = original_data.layout
+    _ensure_coordinates_2d!(layout)
+    
+    # Create mapping from electrode coordinates to labels
+    position_channel_map = Dict()
+    for (i, label) in enumerate(layout.data.label)
+        x = layout.data.x2[i]
+        y = layout.data.y2[i]
+        position_channel_map[(x, y)] = Symbol(label)
     end
+    return position_channel_map
 end
 
 """
-    _find_electrodes_in_region_v2(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
+    _find_electrodes_in_region(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
 
 Find electrodes within the selected spatial region using actual electrode coordinates.
 This approach uses the real layout data from the topographic plot.
 """
-function _find_electrodes_in_region_v2(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
-    # Get the position-channel mapping using the original data
+function _find_electrodes_in_region(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
     position_channel_map = _create_position_channel_map(ax, original_data)
     
     if isempty(position_channel_map)
-        @warn "No electrode mapping available, returning placeholder"
-        return [:Fp1, :Fp2, :F3, :F4]  # Fallback
+        @minimal_warning "No electrode mapping available, returning placeholder"
+        return nothing
     end
-    
-    # The selection coordinates should be in the same coordinate system as the electrode positions
-    # (which are typically in the range of the head radius, e.g., -50 to 50 mm)
     
     # Find electrodes within the selected region
     selected_electrodes = Symbol[]
-    
     for ((x, y), channel) in position_channel_map
         # Check if this electrode is inside the selection rectangle
         if x_min <= x <= x_max && y_min <= y <= y_max
@@ -934,8 +874,5 @@ function _find_electrodes_in_region_v2(ax::Axis, x_min::Float64, y_min::Float64,
         end
     end
     
-    # Found electrodes in region
     return selected_electrodes
 end
-
-
