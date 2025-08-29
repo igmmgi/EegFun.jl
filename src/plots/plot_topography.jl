@@ -124,6 +124,26 @@ function plot_topography(
     return fig, ax
 end
 
+"""
+    plot_topography(dat::Vector{ErpData}; kwargs...)
+
+Create topographic plots from a vector of ERP datasets by broadcasting across conditions.
+
+# Arguments
+- `dat`: Vector of ErpData objects (e.g., different conditions)
+- `kwargs...`: Additional keyword arguments passed to plot_topography
+"""
+function plot_topography(
+    dat::Vector{ErpData};
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    display_plot = true,
+    kwargs...,
+)
+    # Broadcast the plotting function across all datasets
+    return plot_topography.(dat; channel_selection = channel_selection, sample_selection = sample_selection, display_plot = display_plot, kwargs...)
+end
+
 
 
 function plot_topography!(
