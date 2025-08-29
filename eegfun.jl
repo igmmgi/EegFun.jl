@@ -46,7 +46,6 @@ using GLMakie
 # using CairoMakie
 using DataFrames
 using BenchmarkTools
-
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # define neighbours 2D/3D defined by distance (mm)
@@ -72,18 +71,19 @@ erps = eegfun.ErpData[]
 for (idx, epoch) in enumerate(epochs)
     push!(erps, eegfun.average_epochs(epochs[idx]))
 end
-
 # eegfun.plot_topography(erps[1])
 # eegfun.plot_databrowser(erps[1])
-eegfun.plot_epochs(epochs[1])
-eegfun.plot_epochs(epochs[1], epoch_selection = eegfun.epochs(1:2))
-eegfun.plot_epochs(epochs[1], kwargs = Dict(:sample_stride => 100))
-eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
-eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
+# eegfun.plot_epochs(epochs[1])
+# eegfun.plot_epochs(epochs[1], epoch_selection = eegfun.epochs(1:2))
+# eegfun.plot_epochs(epochs[1], kwargs = Dict(:sample_stride => 100))
+# eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
+# eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
 
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Fp1]), xgrid = true, ygrid = true, xminorgrid = true, yminorgrid = true)
 display(fig)
+
+
 
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Fp1]), xgrid = true, ygrid = true, xminorgrid = true, yminorgrid = true, yreversed = true)
@@ -140,8 +140,11 @@ display(fig)
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
 display(fig)
+
+
 fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :grid)
 display(fig)
+
 fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :O1]), layout = :topo)
 display(fig)
 
