@@ -584,14 +584,7 @@ function _topo_scale_down!(ax::Axis)
 end
 
 # =============================================================================
-# SIMPLE APPROACH - NO COMPLEX SELECTION NEEDED
-# =============================================================================
-
-# For topographic plots, just use plot_erp() with your electrode selection
-# Example: plot_erp(erps[1], channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
-
-# =============================================================================
-# SIMPLE REGION SELECTION FOR TOPO PLOTS
+# REGION SELECTION FOR TOPO PLOTS
 # =============================================================================
 
 """
@@ -683,10 +676,7 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
     mouse_pos = mouseposition(ax)
     mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
     
-    # Debug: Print the coordinate information
-    println("Mouse position (screen): ($(screen_pos[1]), $(screen_pos[2]))")
-    println("Mouse position (axis): ($mouse_x, $mouse_y)")
-    println("Axis limits: x=$(ax.limits[][1]), y=$(ax.limits[][2])")
+    # Get coordinate information for debugging if needed
     
     # Store axis coordinates for spatial selection
     selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
@@ -722,10 +712,7 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     # Get start position
     start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
     
-    # Debug: Print the coordinate information
-    println("Final mouse position (screen): ($(screen_pos[1]), $(screen_pos[2]))")
-    println("Final mouse position (axis coords): ($mouse_x, $mouse_y)")
-    println("Start position: ($start_x, $start_y)")
+    # Get coordinate information for debugging if needed
     
     # Update bounds with final position (x_min, y_min, x_max, y_max) in axis coords
     x_min, x_max = minmax(start_x, mouse_x)
@@ -770,8 +757,6 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         selection_state.temp_rectangle = nothing
     end
     
-    println("Created permanent selection rectangle #$(length(selection_state.rectangles))")
-    
     # Find electrodes within ALL selected spatial regions
     all_selected_electrodes = Symbol[]
     for bounds in selection_state.bounds_list[]
@@ -783,9 +768,9 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     # Remove duplicates
     unique_electrodes = unique(all_selected_electrodes)
     
-    println("Selected axis region: x($x_min to $x_max), y($y_min to $y_max)")
+    println("Selected region: x($x_min to $x_max), y($y_min to $y_max)")
     println("Total selections: $(length(selection_state.bounds_list[]))")
-    println("All electrodes in regions: $unique_electrodes")
+    println("Electrodes found: $unique_electrodes")
     println("Use: plot_erp(erps[1], channel_selection = channels($unique_electrodes))")
 end
 
@@ -804,7 +789,6 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         
         # Update bounds with the axis coordinates
         selection_state.bounds[] = (start_x, start_y, mouse_x, mouse_y)
-        println("Updated bounds with axis coordinates: ($start_x, $start_y) to ($mouse_x, $mouse_y)")
         
         # Update the temporary rectangle during dragging
         if !isnothing(selection_state.temp_rectangle)
@@ -822,8 +806,6 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
             
             # Update the temporary rectangle
             selection_state.temp_rectangle[1] = rect_points
-            
-            println("Updated temporary rectangle: start=($start_x, $start_y), end=($end_x, $end_y)")
         end
         
 
@@ -855,7 +837,7 @@ function _clear_all_topo_selections!(selection_state::TopoSelectionState)
     selection_state.active[] = false
     selection_state.visible[] = false
     
-    println("Cleared all topographic selections")
+
 end
 
 """
@@ -906,7 +888,7 @@ function _create_position_channel_map(ax::Axis, original_data=nothing)
             position_channel_map[(x, y)] = Symbol(label)
         end
         
-        println("Created electrode mapping with $(length(position_channel_map)) electrodes")
+        # Created electrode mapping successfully
         return position_channel_map
     else
         # Fallback: try to find layout data in the axis scene
@@ -914,7 +896,7 @@ function _create_position_channel_map(ax::Axis, original_data=nothing)
             if plot isa Makie.Contourf
                 # Try to extract layout from plot attributes
                 if hasproperty(plot, :attributes)
-                    println("Found Contourf plot, but need to access layout data")
+                    # Found Contourf plot, but need to access layout data
                 end
             end
         end
@@ -952,8 +934,8 @@ function _find_electrodes_in_region_v2(ax::Axis, x_min::Float64, y_min::Float64,
         end
     end
     
-    println("Found $(length(selected_electrodes)) electrodes in region: $selected_electrodes")
+    # Found electrodes in region
     return selected_electrodes
 end
 
-# Removed duplicate functions and old context menu functions
+
