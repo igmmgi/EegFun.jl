@@ -24,9 +24,19 @@ const DEFAULT_ERP_KWARGS = Dict(
     :xminorgrid => false,
     :yminorgrid => false,
     :add_xy_origin => true,
+    :interactive => true,  # New: enable/disable keyboard interactivity
 )
 
 # =============================================================================
+# INTERACTIVITY CONSTANTS
+# =============================================================================
+
+const ERP_KEYBOARD_ACTIONS = Dict(
+    Keyboard.up => :up,
+    Keyboard.down => :down,
+    Keyboard.left => :left,
+    Keyboard.right => :right
+)
 
 """
     plot_erp(dat::ErpData; 
@@ -69,6 +79,7 @@ Create ERP plots with flexible layout options.
 - `plot_width`: Plot width for topo layout (default: 0.10)
 - `plot_height`: Plot height for topo layout (default: 0.10)
 - `margin`: Margin between plots for topo layout (default: 0.02)
+- `interactive`: Whether to enable keyboard interactivity (default: true)
 
 # Examples
 ```julia
@@ -87,7 +98,17 @@ plot_erp(dat, layout = :topo)
 # Custom layout object
 layout = create_grid_layout(channels(dat), rows = 2, cols = 3)
 plot_erp(dat, layout = layout)
+
+# Disable interactivity
+plot_erp(dat, interactive = false)
 ```
+
+# Interactive Controls
+When `interactive = true` (default):
+- **Up Arrow**: Zoom in on Y-axis (compress Y limits)
+- **Down Arrow**: Zoom out on Y-axis (expand Y limits)
+- **Left Arrow**: Zoom in on X-axis (compress time range)
+- **Right Arrow**: Zoom out on X-axis (expand time range)
 """
 function plot_erp(dat::ErpData; 
                  layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
@@ -150,7 +171,7 @@ function plot_erp(datasets::Vector{ErpData};
     
     # Now do the actual plotting for each axis
     for (ax, channel) in zip(axes, channels)
-        println("plot_erp: plotting channel: $channel, plot_layout.type: $(plot_layout.type)")
+        @info "plot_erp: plotting channel: $channel, plot_layout.type: $(plot_layout.type)"
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         _plot_erp!(ax, dat_subset, channels_to_plot; plot_kwargs...)
     end
@@ -162,7 +183,82 @@ function plot_erp(datasets::Vector{ErpData};
     # Link axes for consistent navigation
     length(axes) > 1 && linkaxes!(axes...)
     
+    # Add keyboard interactivity if enabled
+    if plot_kwargs[:interactive]
+        _setup_erp_interactivity!(fig, axes)
+    end
+    
     return fig, axes
+end
+
+"""
+    _setup_erp_interactivity!(fig::Figure, axes::Vector{Axis})
+
+Set up keyboard interactivity for ERP plots.
+"""
+function _setup_erp_interactivity!(fig::Figure, axes::Vector{Axis})
+    # Handle keyboard events
+    on(events(fig).keyboardbutton) do event
+        if event.action in (Keyboard.press, Keyboard.repeat) && haskey(ERP_KEYBOARD_ACTIONS, event.key)
+            action = ERP_KEYBOARD_ACTIONS[event.key]
+            _handle_erp_navigation!(axes, action)
+        end
+    end
+end
+
+"""
+    _handle_erp_navigation!(axes::Vector{Axis}, action::Symbol)
+
+Handle navigation actions for ERP plots.
+"""
+function _handle_erp_navigation!(axes::Vector{Axis}, action::Symbol)
+    # Only zoom the first axis - the linkaxes! will handle synchronizing all others
+    ax = first(axes)
+    if action == :up
+        ymore!(ax)
+    elseif action == :down
+        yless!(ax)
+    elseif action == :left
+        xless!(ax)
+    elseif action == :right
+        xmore!(ax)
+    end
+end
+
+"""
+    _erp_zoom_in_y!(ax::Axis)
+
+Zoom in on Y-axis by compressing the limits (zoom in on waveforms).
+"""
+function ymore!(ax::Axis)
+    ylims!(ax, ax.yaxis.attributes.limits[] .* 0.9)
+end
+
+"""
+    _erp_zoom_out_y!(ax::Axis)
+
+Zoom out on Y-axis by expanding the limits (zoom out from waveforms).
+"""
+function yless!(ax::Axis)
+    ylims!(ax, ax.yaxis.attributes.limits[] .* 1.1)
+end
+
+"""
+    xmore!(ax::Axis)
+
+Zoom in on X-axis by compressing the limits (zoom in on time range).
+"""
+function xmore!(ax::Axis)
+    xlims!(ax, ax.xaxis.attributes.limits[] .* 0.9)
+end
+
+"""
+    xless!(ax::Axis)
+
+Zoom out on X-axis by expanding the limits (zoom out from time range).
+"""
+function xless!(ax::Axis)
+    xlims!(ax, ax.xaxis.attributes.limits[] .* 1.1)
 end
 
 
