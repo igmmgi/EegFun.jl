@@ -70,6 +70,7 @@ function _plot_topography!(
         range(-contour_range, contour_range, length = gridscale),
         data,
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
+        extendlow = :auto,
         topo_kwargs...,
     )
 
@@ -129,12 +130,19 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
+    interactive = true,  # Enable/disable keyboard interactivity
     kwargs...,
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
+    
+    # Set up interactivity if enabled
+    if interactive
+        _setup_topo_interactivity!(fig, ax)
+    end
+    
     if display_plot
         display_figure(fig)
     end
@@ -181,11 +189,18 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
+    interactive = true,  # Enable/disable keyboard interactivity
     kwargs...,
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
+    
+    # Set up interactivity if enabled
+    if interactive
+        _setup_topo_interactivity!(fig, ax)
+    end
+    
     if display_plot
         display_figure(fig)
     end
@@ -465,4 +480,116 @@ function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int = 15)
 
     # Use Legendre polynomial evaluation for the entire matrix
     return _legendre_val.(cosang, Ref([0.0; factors]))
+end
+
+# =============================================================================
+# INTERACTIVITY FUNCTIONS
+# =============================================================================
+
+"""
+    _setup_topo_interactivity!(fig::Figure, ax::Axis)
+
+Set up keyboard interactivity for topographic plots.
+"""
+function _setup_topo_interactivity!(fig::Figure, ax::Axis)
+    println("Setting up topographic plot interactivity...")
+    
+    # Handle keyboard events at the figure level
+    on(events(fig).keyboardbutton) do event
+        println("Key pressed: $(event.key), action: $(event.action)")
+        
+        if event.action == Keyboard.press
+            if event.key == Keyboard.up
+                println("Up arrow pressed - zooming in")
+                _topo_scale_up!(ax)
+            elseif event.key == Keyboard.down
+                println("Down arrow pressed - zooming out")
+                _topo_scale_down!(ax)
+            end
+        end
+    end
+    
+    println("Topographic plot interactivity set up complete!")
+end
+
+"""
+    _topo_scale_up!(ax::Axis)
+
+Increase the scale of the topographic plot (zoom in on color range).
+"""
+function _topo_scale_up!(ax::Axis)
+    println("_topo_scale_up! called")
+    
+    # Find the Contourf plot in the axis
+    for plot in ax.scene.plots
+        if plot isa Makie.Contourf
+            println("Found Contourf plot")
+            
+            # Get current levels
+            current_levels = plot.levels[]
+            if !isnothing(current_levels)
+                println("Current levels: $current_levels")
+                
+                # For zoom in: compress the range around 0 for better contrast
+                level_min, level_max = extrema(current_levels)
+                center = (level_min + level_max) / 2
+                range_size = level_max - level_min
+                
+                # Compress the range by 20% but keep it centered
+                new_range = range_size * 0.8
+                new_min = center - new_range / 2
+                new_max = center + new_range / 2
+                
+                # Create new levels with the same density but compressed range
+                new_levels = range(new_min, new_max, length = length(current_levels))
+                plot.levels[] = new_levels
+                
+                println("Zoom in: Compressed levels from ($level_min, $level_max) to ($new_min, $new_max)")
+                break
+            else
+                println("Warning: plot.levels is nothing!")
+            end
+        end
+    end
+end
+
+"""
+    _topo_scale_down!(ax::Axis)
+
+Decrease the scale of the topographic plot (zoom out from color range).
+"""
+function _topo_scale_down!(ax::Axis)
+    println("_topo_scale_down! called")
+    
+    # Find the Contourf plot in the axis
+    for plot in ax.scene.plots
+        if plot isa Makie.Contourf
+            println("Found Contourf plot")
+            
+            # Get current levels
+            current_levels = plot.levels[]
+            if !isnothing(current_levels)
+                println("Current levels: $current_levels")
+                
+                # For zoom out: expand the range around 0 for less contrast
+                level_min, level_max = extrema(current_levels)
+                center = (level_min + level_max) / 2
+                range_size = level_max - level_min
+                
+                # Expand the range by 25% but keep it centered
+                new_range = range_size * 1.25
+                new_min = center - new_range / 2
+                new_max = center + new_range / 2
+                
+                # Create new levels with the same density but expanded range
+                new_levels = range(new_min, new_max, length = length(current_levels))
+                plot.levels[] = new_levels
+                
+                println("Zoom out: Expanded levels from ($level_min, $level_max) to ($new_min, $new_max)")
+                break
+            else
+                println("Warning: plot.levels is nothing!")
+            end
+        end
+    end
 end

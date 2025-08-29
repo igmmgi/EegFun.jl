@@ -81,6 +81,7 @@ end
 
 
 eegfun.plot_topography(erps[1], sample_selection = x -> x.time .>= 0.4)
+
 eegfun.plot_topography(erps[1], sample_selection = x -> x.time .>= 0.4, ylim = (-1, 1))
 
 # ERP Plot
