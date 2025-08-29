@@ -46,7 +46,10 @@ function _plot_topography!(
     end
 
     if isnothing(ylim)
-        ylim = minimum(data[.!isnan.(data)]), maximum(data[.!isnan.(data)])
+        # Make ylim symmetric around 0 for balanced topographic visualization
+        data_min, data_max = extrema(data[.!isnan.(data)])
+        max_abs = max(abs(data_min), abs(data_max))
+        ylim = (-max_abs, max_abs)
     end
 
     # Set default title showing time range if data has time column
