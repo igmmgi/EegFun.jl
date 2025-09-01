@@ -48,6 +48,7 @@ mutable struct ErpSelectionState
     visible::Observable{Bool}
     rectangles::Vector{Makie.Poly}  # Store rectangles for all axes
     channel_rectangles::Vector{Makie.Poly}  # Store channel selection rectangles
+    selection_rectangle::Union{Makie.Poly, Nothing}  # Store the current selection rectangle
     function ErpSelectionState(axes::Vector{Axis})
         rectangles = Makie.Poly[]
         for ax in axes
@@ -55,7 +56,7 @@ mutable struct ErpSelectionState
             poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
             push!(rectangles, poly_element)
         end
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles, Makie.Poly[])
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles, Makie.Poly[], nothing)
     end
 end
 
@@ -323,8 +324,9 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
     end
     
     # Add separate figure-level event handlers for channel selection in topo layouts
+    # This provides Ctrl+Click+Drag for channel selection, Left Click to clear, Right Click for info
     if _is_topo_layout(plot_layout)
-                    _setup_topo_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
+        _setup_topo_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
     end
 end
 
@@ -679,6 +681,7 @@ Draw small rectangles at each overlapping channel's axis position for visualizat
 Only called for channels that have overlap with the selection rectangle.
 """
 function _draw_channel_rectangles!(fig::Figure, axes_rects)
+    rectangles = []
     for (axis_rect, channels) in axes_rects
         x1, y1, x2, y2 = axis_rect
         
@@ -690,7 +693,7 @@ function _draw_channel_rectangles!(fig::Figure, axes_rects)
             Point2f(x1, y2)
         ]
         
-        poly!(
+        rect = poly!(
             fig.scene,
             rect_points,
             color = (:blue, 0.2),
@@ -699,7 +702,11 @@ function _draw_channel_rectangles!(fig::Figure, axes_rects)
             overdraw = true,
             space = :relative
         )
+        
+        push!(rectangles, rect)
     end
+    
+    return rectangles
 end
 
 """
@@ -717,33 +724,66 @@ function _rectangles_overlap(rect1::Tuple{Float64, Float64, Float64, Float64},
 end
 
 """
-    _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
+    _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
 
 Set up separate figure-level event handlers for channel selection in topo layouts.
+
+# Mouse Controls:
+- **Ctrl + Left Click + Drag**: Select channels (draw selection rectangle)
+- **Left Click (without Ctrl)**: Clear all channel selections
+- **Right Click**: Print info TODO (for future functionality)
 """
 function _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
     # Track Ctrl key state for channel selection
-    ctrl_pressed = Ref(false)
+    # ctrl_pressed = Ref(false)
+    
+    # # Handle Ctrl key events
+    # on(events(fig).keyboardbutton) do event
+    #     if event.key == Keyboard.left_control
+    #         ctrl_pressed[] = event.action == Keyboard.press
+    #         if event.action == Keyboard.release
+    #             channel_selection_active[] = false
+    #         end
+    #     end
+    # end
+   
     channel_selection_active = Ref(false)  # Separate state for channel selection
-    
-    # Handle Ctrl key events
-    on(events(fig).keyboardbutton) do event
-        if event.key == Keyboard.left_control
-            ctrl_pressed[] = event.action == Keyboard.press
-            if event.action == Keyboard.release
-                channel_selection_active[] = false
-            end
+   shift_pressed = Ref(false)
+    ctrl_pressed = Ref(false)
+
+    # Use figure-level keyboard events for Shift and Ctrl tracking
+    on(events(fig).keyboardbutton) do key_event
+        if key_event.key == Keyboard.left_shift
+            shift_pressed[] = key_event.action == Keyboard.press
+        elseif key_event.key == Keyboard.left_control
+            ctrl_pressed[] = key_event.action == Keyboard.press
         end
-    end
-    
+        if key_event.action == Keyboard.release
+            channel_selection_active[] = false
+        end
+    end   
+
+
     # Handle mouse events for channel selection
     on(events(fig).mousebutton) do event
+        # Ctrl + Left Click + Drag: Select channels (existing functionality)
         if event.button == Mouse.left && ctrl_pressed[]
             if event.action == Mouse.press
                 _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
             elseif event.action == Mouse.release && channel_selection_active[]
                 _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
             end
+        end
+        
+        # Left Click (without Ctrl): Clear all channel selections
+        if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
+            _clear_all_erp_channel_selections!(fig, selection_state)
+        end
+        
+        # Right Click: Print info TODO (for future functionality)
+        if event.button == Mouse.right && event.action == Mouse.press
+            @info "TODO: implement right click functionality for ERP topo"
+            println("TODO: implement right click functionality for ERP topo")
         end
     end
     
@@ -772,10 +812,10 @@ function _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelec
     selection_state.bounds[] = (selection_start[1], selection_start[2])  # Store screen coordinates
     channel_selection_active[] = true
     
-    # Clear any existing selection rectangles
+    # Clear any existing channel highlight rectangles
     if !isempty(selection_state.channel_rectangles)
         for rect in selection_state.channel_rectangles
-            delete!(fig.scene, rect)
+            delete!(rect.parent, rect)
         end
         empty!(selection_state.channel_rectangles)
     end
@@ -797,14 +837,6 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     # Get the stored start position
     start_screen = selection_state.bounds[]
     
-    # Clear previous rectangle
-    if !isempty(selection_state.channel_rectangles)
-        for rect in selection_state.channel_rectangles
-            delete!(fig.scene, rect)
-        end
-        empty!(selection_state.channel_rectangles)
-    end
-    
     # Convert screen coordinates to normalized coordinates
     fig_size = size(fig.scene)
     start_norm = (start_screen[1] / fig_size[1], start_screen[2] / fig_size[2])
@@ -814,26 +846,38 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     x1, x2 = minmax(start_norm[1], end_norm[1])
     y1, y2 = minmax(start_norm[2], end_norm[2])
     
-    # Draw the selection rectangle
-    rect_points = [
-        Point2f(x1, y1),
-        Point2f(x2, y1),
-        Point2f(x2, y2),
-        Point2f(x1, y2)
-    ]
-    
-    rect = poly!(
-        fig.scene,
-        rect_points,
-        color = (:blue, 0.3),
-        strokecolor = :red,
-        strokewidth = 2,
-        overdraw = true,
-        space = :relative
-    )
-    
-    # Store the rectangle for later removal
-    push!(selection_state.channel_rectangles, rect)
+    # Create or update the selection rectangle
+    if isnothing(selection_state.selection_rectangle)
+        # First time: create the rectangle
+        rect_points = [
+            Point2f(x1, y1),
+            Point2f(x2, y1),
+            Point2f(x2, y2),
+            Point2f(x1, y2)
+        ]
+        
+        rect = poly!(
+            fig.scene,
+            rect_points,
+            color = (:blue, 0.3),
+            strokecolor = :red,
+            strokewidth = 2,
+            overdraw = true,
+            space = :relative
+        )
+        
+        selection_state.selection_rectangle = rect
+    else
+        # Update existing rectangle points instead of recreating
+        rect_points = [
+            Point2f(x1, y1),
+            Point2f(x2, y1),
+            Point2f(x2, y2),
+            Point2f(x1, y2)
+        ]
+        
+        selection_state.selection_rectangle[1] = rect_points
+    end
 end
 
 """
@@ -889,7 +933,9 @@ function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     # Only draw rectangles for channels that have overlap with the selection
     # This provides visual feedback showing exactly which channels are selected
     if !isempty(overlapping_axes_rects)
-        _draw_channel_rectangles!(fig, overlapping_axes_rects)
+        new_rectangles = _draw_channel_rectangles!(fig, overlapping_axes_rects)
+        # Store the new rectangles for later deletion
+        append!(selection_state.channel_rectangles, new_rectangles)
     end
     
     if !isempty(selected_channels)
@@ -900,15 +946,43 @@ function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSele
         println("No channels selected")
     end
     
-    # Clean up the selection rectangle
+    # Clean up the selection rectangle (but keep the channel rectangles)
+    # The selection rectangle is stored separately and will be cleaned up elsewhere
+    
+    channel_selection_active[] = false
+end
+
+# =============================================================================
+# CHANNEL SELECTION CLEARING
+# =============================================================================
+
+"""
+    _clear_all_erp_channel_selections!(fig::Figure, selection_state::ErpSelectionState)
+
+Clear all ERP channel selections and remove all channel rectangles.
+Similar to _clear_all_topo_selections! but for ERP topo layouts.
+"""
+function _clear_all_erp_channel_selections!(fig::Figure, selection_state::ErpSelectionState)
+    # Remove all channel selection rectangles from the scene
     if !isempty(selection_state.channel_rectangles)
         for rect in selection_state.channel_rectangles
-            delete!(fig.scene, rect)
+            # Delete the rectangle from its parent (same approach as plot_topography)
+            delete!(rect.parent, rect)
         end
         empty!(selection_state.channel_rectangles)
     end
     
-    channel_selection_active[] = false
+    # Also remove the selection rectangle if it exists
+    if !isnothing(selection_state.selection_rectangle)
+        delete!(selection_state.selection_rectangle.parent, selection_state.selection_rectangle)
+        selection_state.selection_rectangle = nothing
+    end
+    
+    # Reset selection state
+    selection_state.active[] = false
+    selection_state.visible[] = false
+    
+    println("Cleared all ERP channel selections")
 end
 
 # =============================================================================
