@@ -675,14 +675,12 @@ end
 """
     _draw_channel_rectangles!(fig::Figure, axes_rects)
 
-Draw small rectangles at each channel's axis position for visualization.
+Draw small rectangles at each overlapping channel's axis position for visualization.
+Only called for channels that have overlap with the selection rectangle.
 """
 function _draw_channel_rectangles!(fig::Figure, axes_rects)
     for (axis_rect, channels) in axes_rects
         x1, y1, x2, y2 = axis_rect
-        
-        # Draw a small rectangle for each channel using poly!
-        color = channels[1] == :IO1 ? (:red, 0.7) : (:green, 0.3)
         
         # Create rectangle points for poly!
         rect_points = [
@@ -695,9 +693,9 @@ function _draw_channel_rectangles!(fig::Figure, axes_rects)
         poly!(
             fig.scene,
             rect_points,
-            color = color,
-            strokecolor = :black,
-            strokewidth = 1,
+            color = (:blue, 0.2),
+            strokecolor = :darkblue,
+            strokewidth = 2,
             overdraw = true,
             space = :relative
         )
@@ -741,7 +739,6 @@ function _setup_topo_channel_selection_events!(fig::Figure, selection_state::Erp
     # Handle mouse events for channel selection
     on(events(fig).mousebutton) do event
         if event.button == Mouse.left && ctrl_pressed[]
-            @info "Ctrl + left mouse: $(event.action == Mouse.press ? "press" : "release"), ctrl_pressed: $(ctrl_pressed[])"
             if event.action == Mouse.press
                 _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
             elseif event.action == Mouse.release && channel_selection_active[]
@@ -753,15 +750,7 @@ function _setup_topo_channel_selection_events!(fig::Figure, selection_state::Erp
     # Handle mouse movement for updating channel selection rectangle
     on(events(fig).mouseposition) do _
         if channel_selection_active[]
-            @info "Updating channel selection rectangle, channel_selection_active: $(channel_selection_active[])"
             _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
-        end
-    end
-    
-    # Debug: Print when Ctrl is pressed/released
-    on(events(fig).keyboardbutton) do event
-        if event.key == Keyboard.left_control
-            @info "Ctrl key: $(event.action == Keyboard.press ? "pressed" : "released")"
         end
     end
 end
@@ -783,8 +772,6 @@ function _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelec
     selection_state.bounds[] = (selection_start[1], selection_start[2])  # Store screen coordinates
     channel_selection_active[] = true
     
-    @info "Channel selection started - drag to select multiple channels, channel_selection_active set to: $(channel_selection_active[])"
-    
     # Clear any existing selection rectangles
     if !isempty(selection_state.channel_rectangles)
         for rect in selection_state.channel_rectangles
@@ -801,21 +788,17 @@ Update the channel selection rectangle during dragging.
 """
 function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
     if !_is_topo_layout(plot_layout)
-        @info "Not a topo layout, returning"
         return
     end
     
     # Get current mouse position
     current_pos = events(fig).mouseposition[]
-    @info "Current mouse position: $current_pos"
     
     # Get the stored start position
     start_screen = selection_state.bounds[]
-    @info "Start screen position: $start_screen"
     
     # Clear previous rectangle
     if !isempty(selection_state.channel_rectangles)
-        @info "Clearing previous rectangle"
         for rect in selection_state.channel_rectangles
             delete!(fig.scene, rect)
         end
@@ -824,15 +807,12 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     
     # Convert screen coordinates to normalized coordinates
     fig_size = size(fig.scene)
-    @info "Figure size: $fig_size"
     start_norm = (start_screen[1] / fig_size[1], start_screen[2] / fig_size[2])
     end_norm = (current_pos[1] / fig_size[1], current_pos[2] / fig_size[2])
-    @info "Normalized coordinates: start=$start_norm, end=$end_norm"
     
     # Create the selection rectangle bounds
     x1, x2 = minmax(start_norm[1], end_norm[1])
     y1, y2 = minmax(start_norm[2], end_norm[2])
-    @info "RECTANGLE DEBUG: x1=$x1, x2=$x2, y1=$y1, y2=$y2"
     
     # Draw the selection rectangle
     rect_points = [
@@ -842,7 +822,6 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
         Point2f(x1, y2)
     ]
     
-    @info "Drawing rectangle with points: $rect_points"
     rect = poly!(
         fig.scene,
         rect_points,
@@ -855,13 +834,13 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     
     # Store the rectangle for later removal
     push!(selection_state.channel_rectangles, rect)
-    @info "Rectangle drawn and stored, total rectangles: $(length(selection_state.channel_rectangles))"
 end
 
 """
     _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
 
 Finish channel selection for topo layouts and identify selected channels.
+Only highlights channels that have overlap with the selection rectangle.
 """
 function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active, axes::Vector{Axis})
     if !_is_topo_layout(plot_layout) || !channel_selection_active[]
@@ -891,37 +870,34 @@ function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     
     # Simple approach: just use the rectangle as drawn
     # The coordinate systems should already be aligned
-    @info "Rectangle bounds: x1=$x1, x2=$x2, y1=$y1, y2=$y2"
     
     # Get the axis rectangles for each ERP subplot using actual axis bounds
     axes_rects = _get_axes_rectangles(axes, plot_layout.channels, fig)
     
-    # Draw rectangles at each channel's axis position for visualization
-    _draw_channel_rectangles!(fig, axes_rects)
-    
     # Find channels from axes that overlap with the selection rectangle
     selected_channels = Symbol[]
+    overlapping_axes_rects = []
     
     for (axis_rect, channels) in axes_rects
         if _rectangles_overlap((x1, y1, x2, y2), axis_rect)
             # This axis overlaps with selection, add all its channels
             append!(selected_channels, channels)
-            @info "Axis overlaps - selected channels: $channels"
+            push!(overlapping_axes_rects, (axis_rect, channels))
         end
-        
-        # Debug: Check IO1 specifically
-        if channels[1] == :IO1
-            x1_1, y1_1, x2_1, y2_1 = (x1, y1, x2, y2)
-            x1_2, y1_2, x2_2, y2_2 = axis_rect
-            @info "IO1 overlap check: selection=($x1_1, $y1_1, $x2_1, $y2_1), IO1=($x1_2, $y1_2, $x2_2, $y2_2)"
-            @info "Overlap result: $(_rectangles_overlap((x1, y1, x2, y2), axis_rect))"
-        end
+    end
+    
+    # Only draw rectangles for channels that have overlap with the selection
+    # This provides visual feedback showing exactly which channels are selected
+    if !isempty(overlapping_axes_rects)
+        _draw_channel_rectangles!(fig, overlapping_axes_rects)
     end
     
     if !isempty(selected_channels)
         @info "Selected channels: $selected_channels"
+        println("Selected channels: $selected_channels")
     else
         @info "No channels selected"
+        println("No channels selected")
     end
     
     # Clean up the selection rectangle
