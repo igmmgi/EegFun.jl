@@ -48,7 +48,9 @@ mutable struct ErpSelectionState
     visible::Observable{Bool}
     rectangles::Vector{Makie.Poly}  # Store rectangles for all axes
     channel_rectangles::Vector{Makie.Poly}  # Store channel selection rectangles
-    selection_rectangle::Union{Makie.Poly, Nothing}  # Store the current selection rectangle
+    selection_rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
+    selection_bounds::Vector{Tuple{Float64,Float64,Float64,Float64}}  # Store bounds for each selection
+    current_selection_idx::Union{Int, Nothing}  # Index of currently active selection
     function ErpSelectionState(axes::Vector{Axis})
         rectangles = Makie.Poly[]
         for ax in axes
@@ -56,7 +58,7 @@ mutable struct ErpSelectionState
             poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
             push!(rectangles, poly_element)
         end
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles, Makie.Poly[], nothing)
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles, Makie.Poly[], Makie.Poly[], Tuple{Float64,Float64,Float64,Float64}[], nothing)
     end
 end
 
@@ -324,7 +326,7 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
     end
     
     # Add separate figure-level event handlers for channel selection in topo layouts
-    # This provides Ctrl+Click+Drag for channel selection, Left Click to clear, Right Click for info
+    # This provides Ctrl+Click+Drag for multiple channel selections, Left Click to clear all, Right Click for info
     if _is_topo_layout(plot_layout)
         _setup_topo_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
     end
@@ -730,7 +732,8 @@ Set up separate figure-level event handlers for channel selection in topo layout
 
 # Mouse Controls:
 - **Ctrl + Left Click + Drag**: Select channels (draw selection rectangle)
-- **Left Click (without Ctrl)**: Clear all channel selections
+- **Multiple selections**: Each Ctrl+Click+Drag creates a new selection area
+- **Left Click (without Ctrl)**: Clear all channel selections and selection areas
 - **Right Click**: Print info TODO (for future functionality)
 """
 function _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
@@ -812,13 +815,8 @@ function _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelec
     selection_state.bounds[] = (selection_start[1], selection_start[2])  # Store screen coordinates
     channel_selection_active[] = true
     
-    # Clear any existing channel highlight rectangles
-    if !isempty(selection_state.channel_rectangles)
-        for rect in selection_state.channel_rectangles
-            delete!(rect.parent, rect)
-        end
-        empty!(selection_state.channel_rectangles)
-    end
+    # Start a new selection (don't clear previous ones)
+    selection_state.current_selection_idx = length(selection_state.selection_rectangles) + 1
 end
 
 """
@@ -846,9 +844,10 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     x1, x2 = minmax(start_norm[1], end_norm[1])
     y1, y2 = minmax(start_norm[2], end_norm[2])
     
-    # Create or update the selection rectangle
-    if isnothing(selection_state.selection_rectangle)
-        # First time: create the rectangle
+    # Create or update the current selection rectangle
+    current_idx = selection_state.current_selection_idx
+    if isnothing(current_idx) || current_idx > length(selection_state.selection_rectangles)
+        # Need to create a new selection rectangle
         rect_points = [
             Point2f(x1, y1),
             Point2f(x2, y1),
@@ -866,9 +865,12 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
             space = :relative
         )
         
-        selection_state.selection_rectangle = rect
+        push!(selection_state.selection_rectangles, rect)
+        # Store the bounds for this selection
+        push!(selection_state.selection_bounds, (x1, y1, x2, y2))
     else
-        # Update existing rectangle points instead of recreating
+        # Update existing selection rectangle
+        rect = selection_state.selection_rectangles[current_idx]
         rect_points = [
             Point2f(x1, y1),
             Point2f(x2, y1),
@@ -876,7 +878,9 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSele
             Point2f(x1, y2)
         ]
         
-        selection_state.selection_rectangle[1] = rect_points
+        rect[1] = rect_points
+        # Update the stored bounds
+        selection_state.selection_bounds[current_idx] = (x1, y1, x2, y2)
     end
 end
 
@@ -918,36 +922,63 @@ function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSele
     # Get the axis rectangles for each ERP subplot using actual axis bounds
     axes_rects = _get_axes_rectangles(axes, plot_layout.channels, fig)
     
-    # Find channels from axes that overlap with the selection rectangle
-    selected_channels = Symbol[]
-    overlapping_axes_rects = []
+    # Process ALL selection rectangles to get cumulative channel selection
+    all_selected_channels = Symbol[]
+    all_overlapping_axes_rects = []
     
-    for (axis_rect, channels) in axes_rects
-        if _rectangles_overlap((x1, y1, x2, y2), axis_rect)
-            # This axis overlaps with selection, add all its channels
-            append!(selected_channels, channels)
-            push!(overlapping_axes_rects, (axis_rect, channels))
+    # First, add the current selection to our list of all selections
+    current_selection_bounds = (x1, y1, x2, y2)
+    
+    # Process all existing selections using stored bounds
+    for (selection_idx, selection_bounds) in enumerate(selection_state.selection_bounds)
+        # Find channels that overlap with this selection
+        for (axis_rect, channels) in axes_rects
+            if _rectangles_overlap(selection_bounds, axis_rect)
+                # This axis overlaps with selection, add all its channels
+                append!(all_selected_channels, channels)
+                push!(all_overlapping_axes_rects, (axis_rect, channels))
+            end
         end
     end
     
-    # Only draw rectangles for channels that have overlap with the selection
-    # This provides visual feedback showing exactly which channels are selected
-    if !isempty(overlapping_axes_rects)
-        new_rectangles = _draw_channel_rectangles!(fig, overlapping_axes_rects)
+    # Also process the current selection bounds
+    for (axis_rect, channels) in axes_rects
+        if _rectangles_overlap(current_selection_bounds, axis_rect)
+            # This axis overlaps with current selection, add all its channels
+            append!(all_selected_channels, channels)
+            push!(all_overlapping_axes_rects, (axis_rect, channels))
+        end
+    end
+    
+    # Remove duplicates to get unique channels across all selections
+    unique_channels = unique(all_selected_channels)
+    
+    # Clear previous channel highlight rectangles and draw new ones for all selections
+    if !isempty(selection_state.channel_rectangles)
+        for rect in selection_state.channel_rectangles
+            delete!(rect.parent, rect)
+        end
+        empty!(selection_state.channel_rectangles)
+    end
+    
+    # Draw rectangles for all channels that have overlap with ANY selection
+    if !isempty(all_overlapping_axes_rects)
+        new_rectangles = _draw_channel_rectangles!(fig, all_overlapping_axes_rects)
         # Store the new rectangles for later deletion
         append!(selection_state.channel_rectangles, new_rectangles)
     end
     
-    if !isempty(selected_channels)
-        @info "Selected channels: $selected_channels"
-        println("Selected channels: $selected_channels")
+    if !isempty(unique_channels)
+        @info "Total selected channels across all regions: $unique_channels"
+        println("Total selected channels across all regions: $unique_channels")
+        println("Number of selection areas: $(length(selection_state.selection_rectangles))")
     else
         @info "No channels selected"
         println("No channels selected")
     end
     
-    # Clean up the selection rectangle (but keep the channel rectangles)
-    # The selection rectangle is stored separately and will be cleaned up elsewhere
+    # Keep the current selection rectangle (it's now part of selection_rectangles)
+    # Don't clear it - it will be part of the multiple selections
     
     channel_selection_active[] = false
 end
@@ -972,17 +1003,23 @@ function _clear_all_erp_channel_selections!(fig::Figure, selection_state::ErpSel
         empty!(selection_state.channel_rectangles)
     end
     
-    # Also remove the selection rectangle if it exists
-    if !isnothing(selection_state.selection_rectangle)
-        delete!(selection_state.selection_rectangle.parent, selection_state.selection_rectangle)
-        selection_state.selection_rectangle = nothing
+    # Remove all selection rectangles
+    if !isempty(selection_state.selection_rectangles)
+        for rect in selection_state.selection_rectangles
+            delete!(rect.parent, rect)
+        end
+        empty!(selection_state.selection_rectangles)
     end
+    
+    # Clear selection bounds
+    empty!(selection_state.selection_bounds)
     
     # Reset selection state
     selection_state.active[] = false
     selection_state.visible[] = false
+    selection_state.current_selection_idx = nothing
     
-    println("Cleared all ERP channel selections")
+    println("Cleared all ERP channel selections (removed $(length(selection_state.selection_rectangles)) selections)")
 end
 
 # =============================================================================
