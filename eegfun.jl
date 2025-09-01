@@ -81,6 +81,7 @@ end
 
 eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.plot_epochs(epochs[1], layout = :grid)
+
 eegfun.plot_epochs(epochs[1], layout = :topo)
 
 
