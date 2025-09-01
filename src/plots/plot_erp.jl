@@ -325,10 +325,12 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
         end
     end
     
-    # Add separate figure-level event handlers for channel selection in topo layouts
+    # Add separate figure-level event handlers for channel selection in topo and grid layouts
     # This provides Ctrl+Click+Drag for multiple channel selections, Left Click to clear all, Right Click for info
     if _is_topo_layout(plot_layout)
         _setup_topo_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
+    elseif _is_grid_layout(plot_layout)
+        _setup_grid_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
     end
 end
 
@@ -609,6 +611,13 @@ Check if the current layout is a topographic layout.
 _is_topo_layout(plot_layout::PlotLayout) = plot_layout.type == :topo
 
 """
+    _is_grid_layout(plot_layout::PlotLayout)::Bool
+
+Check if the current layout is a grid layout.
+"""
+_is_grid_layout(plot_layout::PlotLayout) = plot_layout.type == :grid
+
+"""
     _create_position_channel_map(plot_layout::PlotLayout, original_data)
 
 Create a mapping from normalized coordinates to channel labels for topo layouts.
@@ -799,12 +808,67 @@ function _setup_topo_channel_selection_events!(fig::Figure, selection_state::Erp
 end
 
 """
+    _setup_grid_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
+
+Set up separate figure-level event handlers for channel selection in grid layouts.
+This provides the same functionality as topo layouts but for grid arrangements.
+"""
+function _setup_grid_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
+    # Track Ctrl key state for channel selection
+    ctrl_pressed = Ref(false)
+    channel_selection_active = Ref(false)  # Separate state for channel selection
+    shift_pressed = Ref(false)
+    
+    # Use figure-level keyboard events for Shift and Ctrl tracking
+    on(events(fig).keyboardbutton) do key_event
+        if key_event.key == Keyboard.left_shift
+            shift_pressed[] = key_event.action == Keyboard.press
+        elseif key_event.key == Keyboard.left_control
+            ctrl_pressed[] = key_event.action == Keyboard.press
+        end
+        if key_event.action == Keyboard.release
+            channel_selection_active[] = false
+        end
+    end   
+
+    # Handle mouse events for channel selection
+    on(events(fig).mousebutton) do event
+        # Ctrl + Left Click + Drag: Select channels (existing functionality)
+        if event.button == Mouse.left && ctrl_pressed[]
+            if event.action == Mouse.press
+                _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
+            elseif event.action == Mouse.release && channel_selection_active[]
+                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
+            end
+        end
+        
+        # Left Click (without Ctrl): Clear all channel selections
+        if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
+            _clear_all_erp_channel_selections!(fig, selection_state)
+        end
+        
+        # Right Click: Print info TODO (for future functionality)
+        if event.button == Mouse.right && event.action == Mouse.press
+            @info "TODO: implement right click functionality for ERP grid"
+            println("TODO: implement right click functionality for ERP grid")
+        end
+    end
+    
+    # Handle mouse movement for updating channel selection rectangle
+    on(events(fig).mouseposition) do _
+        if channel_selection_active[]
+            _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
+        end
+    end
+end
+
+"""
     _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
 
-Start channel selection for topo layouts by drawing a rectangle across the entire figure.
+Start channel selection for topo and grid layouts by drawing a rectangle across the entire figure.
 """
 function _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
-    if !_is_topo_layout(plot_layout)
+    if !_is_topo_layout(plot_layout) && !_is_grid_layout(plot_layout)
         return
     end
     
@@ -822,10 +886,10 @@ end
 """
     _update_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
 
-Update the channel selection rectangle during dragging.
+Update the channel selection rectangle during dragging for topo and grid layouts.
 """
 function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
-    if !_is_topo_layout(plot_layout)
+    if !_is_topo_layout(plot_layout) && !_is_grid_layout(plot_layout)
         return
     end
     
@@ -887,11 +951,11 @@ end
 """
     _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
 
-Finish channel selection for topo layouts and identify selected channels.
+Finish channel selection for topo and grid layouts and identify selected channels.
 Only highlights channels that have overlap with the selection rectangle.
 """
 function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active, axes::Vector{Axis})
-    if !_is_topo_layout(plot_layout) || !channel_selection_active[]
+    if (!_is_topo_layout(plot_layout) && !_is_grid_layout(plot_layout)) || !channel_selection_active[]
         return
     end
     
