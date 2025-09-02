@@ -148,8 +148,15 @@ function plot_erp_image(dat::EpochData;
         
         # Set axis properties (only for single layout or outer edges of grid)
         if plot_layout.type == :single
-            ax.xlabel = plot_kwargs[:xlabel]
+            # Don't show x-axis labels on heatmap if ERP trace will be shown below
+            ax.xlabel = plot_kwargs[:plot_erp] ? "" : plot_kwargs[:xlabel]
             ax.ylabel = plot_kwargs[:ylabel]
+            # Hide x-axis tick labels on heatmap if ERP trace will be shown below
+            if plot_kwargs[:plot_erp]
+                ax.xticklabelsvisible = false
+            end
+            # Set title showing channels (same as plot_erp)
+            ax.title = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
         elseif plot_layout.type == :grid
             # For grid layout, only set labels on outer edges
             # The _set_grid_axis_properties! function already handles this correctly
@@ -237,8 +244,18 @@ function plot_erp_image(dat::EpochData;
         vlines!(ax_erp, [0], color = :gray, linewidth = 0.5)
         hlines!(ax_erp, [0], color = :gray, linewidth = 0.5)
         
-        # Set limits if provided
-        !isnothing(plot_kwargs[:xlim]) && xlims!(ax_erp, plot_kwargs[:xlim])
+        # Set limits if provided, otherwise use the same limits as the heatmap
+        if !isnothing(plot_kwargs[:xlim])
+            xlims!(ax_erp, plot_kwargs[:xlim])
+        else
+            # Use the same x-limits as the heatmap axis
+            heatmap_xlims = axes[1].xaxis.attributes.limits[]
+            xlims!(ax_erp, heatmap_xlims)
+        end
+        
+        # Resize rows: 2/3 for heatmap, 1/3 for ERP trace
+        rowsize!(fig.layout, 1, Relative(2/3))
+        rowsize!(fig.layout, 2, Relative(1/3))
     end
 
     # Display plot if requested
