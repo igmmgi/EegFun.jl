@@ -94,7 +94,7 @@ eegfun.plot_erp_image(epochs[1], channel_selection = eegfun.channels([:Fp1]), pl
 
 # TODO: x limit consistency between erp image and erp waveform
 eegfun.plot_erp_image(epochs[1], layout = :single) 
-eegfun.plot_erp_image(epochs[1], channel_selection = eegfun.channels([:Fp1]), layout = :single) 
+eegfun.plot_erp_image(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :single) 
 # TODO: no electrode labels in title
 eegfun.plot_erp_image(epochs[1], layout = :topo) 
 eegfun.plot_erp_image(epochs[1], layout = :grid) 
