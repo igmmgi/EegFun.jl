@@ -8,6 +8,7 @@ const DEFAULT_TRIGGER_KWARGS = Dict(
     :max_window_size => 100.0,
     :label_fontsize => 20,
     :display_plot => true,
+    :ignore_triggers => Int[],  # Vector of trigger codes to ignore
 )
 
 ########################################################
@@ -15,20 +16,43 @@ const DEFAULT_TRIGGER_KWARGS = Dict(
 ########################################################
 
 """
-    _trigger_time_count(time, triggers)
+    _filter_triggers(trigger_times, trigger_values, ignore_triggers)
+
+Filter out specified trigger codes from trigger data.
+Note: This function assumes ignore_triggers is not empty.
+
+# Arguments
+- `trigger_times`: Vector of trigger times
+- `trigger_values`: Vector of trigger values
+- `ignore_triggers`: Vector of trigger codes to ignore (assumed non-empty)
+
+# Returns
+- `filtered_times`: Filtered trigger times
+- `filtered_values`: Filtered trigger values
+"""
+function _filter_triggers(trigger_times, trigger_values, ignore_triggers)
+    # Create mask to keep triggers not in ignore list
+    keep_mask = .!in.(trigger_values, Ref(ignore_triggers))
+    
+    return trigger_times[keep_mask], trigger_values[keep_mask]
+end
+
+"""
+    _trigger_time_count(time, triggers, ignore_triggers=Int[])
 
 Internal function to process trigger data and count occurrences.
 
 # Arguments
 - `time`: Vector of time points
 - `triggers`: Vector of trigger values
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
 
 # Returns
 - `trigger_times`: Vector of times when triggers occurred
 - `trigger_values`: Vector of trigger values at those times
 - `trigger_count`: OrderedDict mapping trigger values to their counts
 """
-function _trigger_time_count(time, triggers)
+function _trigger_time_count(time, triggers, ignore_triggers=Int[])
     # Since triggers are already cleaned (only onset values), just find non-zero values
     trigger_indices = findall(triggers .!= 0)
 
@@ -38,6 +62,15 @@ function _trigger_time_count(time, triggers)
 
     trigger_values = triggers[trigger_indices]
     trigger_times = time[trigger_indices]
+    
+    # Filter out ignored triggers if any are specified
+    if !isempty(ignore_triggers)
+        trigger_times, trigger_values = _filter_triggers(trigger_times, trigger_values, ignore_triggers)
+        if isempty(trigger_values)
+            return Float64[], Int[], OrderedDict{Int,Int}()
+        end
+    end
+    
     trigger_count = OrderedDict(i => 0 for i in sort!(collect(Set(trigger_values))))
     for val in trigger_values
         trigger_count[val] += 1
@@ -82,25 +115,49 @@ function _add_trigger_text!(ax::Axis, x::Float64, y::Float64, text_str::String, 
 end
 
 """
-    _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData)
+    _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData, ignore_triggers=Int[])
 
 Extract trigger information from BioSemi data.
+
+# Arguments
+- `dat`: BioSemiData object
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
+
+# Returns
+- `trigger_codes`: Vector of trigger codes
+- `trigger_times`: Vector of trigger times
 """
-function _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData)
+function _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData, ignore_triggers=Int[])
     raw_triggers = dat.triggers.raw
     cleaned_triggers = _clean_triggers(raw_triggers)
     trigger_positions = findall(x -> x != 0, cleaned_triggers)
     trigger_codes = Int16.(cleaned_triggers[trigger_positions])
     trigger_times = dat.time[trigger_positions]
+    
+    # Filter out ignored triggers if any are specified
+    if !isempty(ignore_triggers)
+        keep_mask = .!in.(trigger_codes, Ref(ignore_triggers))
+        trigger_codes = trigger_codes[keep_mask]
+        trigger_times = trigger_times[keep_mask]
+    end
+    
     return trigger_codes, trigger_times
 end
 
 """
-    _extract_trigger_data(dat::ContinuousData)
+    _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
 
 Extract trigger information from ContinuousData.
+
+# Arguments
+- `dat`: ContinuousData object
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
+
+# Returns
+- `trigger_codes`: Vector of trigger codes
+- `trigger_times`: Vector of trigger times
 """
-function _extract_trigger_data(dat::ContinuousData)
+function _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
     trigger_col = :triggers
     if !hasproperty(dat.data, trigger_col)
         @minimal_error("No triggers column found in data. Expected column name: $trigger_col")
@@ -109,6 +166,14 @@ function _extract_trigger_data(dat::ContinuousData)
     trigger_positions = findall(x -> x != 0, dat.data[!, trigger_col])
     trigger_codes = Int16.(dat.data[trigger_positions, trigger_col])
     trigger_times = dat.data[trigger_positions, :time]
+    
+    # Filter out ignored triggers if any are specified
+    if !isempty(ignore_triggers)
+        keep_mask = .!in.(trigger_codes, Ref(ignore_triggers))
+        trigger_codes = trigger_codes[keep_mask]
+        trigger_times = trigger_times[keep_mask]
+    end
+    
     return trigger_codes, trigger_times
 end
 
@@ -196,38 +261,64 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
 end
 
 """
-    plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData)
+    plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData; kwargs...)
 
 Plot trigger events from BioSemi BDF data.
 
 # Arguments
 - `dat`: BioSemiData object containing the EEG data
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
+- Other plotting parameters (window_size, display_plot, etc.)
 
 # Returns
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
+
+# Example
+```julia
+# Plot all triggers
+fig, ax = plot_trigger_overview(dat)
+
+# Ignore specific trigger codes
+fig, ax = plot_trigger_overview(dat; ignore_triggers=[1, 255])
+```
 """
 function plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData; kwargs...)
-    @minimal_info "Plotting trigger (raw) overview for BioSemi data"
-    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw)
+    @info "Plotting trigger (raw) overview for BioSemi data"
+    # Merge user kwargs with defaults
+    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw, plot_kwargs[:ignore_triggers])
     return plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
 end
 
 """
-    plot_trigger_overview(dat::ContinuousData)
+    plot_trigger_overview(dat::ContinuousData; kwargs...)
 
 Plot trigger events from ContinuousData object.
 
 # Arguments
 - `dat`: ContinuousData object containing the EEG data
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
+- Other plotting parameters (window_size, display_plot, etc.)
 
 # Returns
 - `fig`: The Makie Figure object
 - `ax`: The Axis object containing the plot
+
+# Example
+```julia
+# Plot all triggers
+fig, ax = plot_trigger_overview(dat)
+
+# Ignore specific trigger codes
+fig, ax = plot_trigger_overview(dat; ignore_triggers=[1, 255])
+```
 """
 function plot_trigger_overview(dat::ContinuousData; kwargs...)
-    @minimal_info "Plotting trigger (cleaned) overview for ContinuousData"
-    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers)
+    @info "Plotting trigger (cleaned) overview for ContinuousData"
+    # Merge user kwargs with defaults
+    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers, plot_kwargs[:ignore_triggers])
     return plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
 end
 
@@ -407,6 +498,8 @@ Plot trigger timing with interactive x-axis sliders for scrolling and window siz
 
 # Arguments
 - `dat::BiosemiDataFormat.BiosemiData`: The BioSemiData object containing the triggers
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
+- Other plotting parameters (window_size, display_plot, etc.)
 
 # Returns
 - `fig::Figure`: The Makie figure object
@@ -414,11 +507,17 @@ Plot trigger timing with interactive x-axis sliders for scrolling and window siz
 
 # Example
 ```julia
+# Plot all triggers
 fig, ax = plot_trigger_timing(dat)
+
+# Ignore specific trigger codes
+fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 ```
 """
 function plot_trigger_timing(dat::BiosemiDataFormat.BiosemiData; kwargs...)
-    trigger_codes, trigger_times = _extract_trigger_data(dat)
+    # Merge user kwargs with defaults
+    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
 end
 
@@ -429,7 +528,8 @@ Plot trigger timing with interactive x-axis sliders for scrolling and window siz
 
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing the triggers
-- `kwargs...`: Additional keyword arguments for customization
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
+- Other plotting parameters (window_size, display_plot, etc.)
 
 # Returns
 - `fig::Figure`: The Makie figure object
@@ -437,10 +537,16 @@ Plot trigger timing with interactive x-axis sliders for scrolling and window siz
 
 # Example
 ```julia
+# Plot all triggers
 fig, ax = plot_trigger_timing(dat)
+
+# Ignore specific trigger codes
+fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 ```
 """
 function plot_trigger_timing(dat::ContinuousData; kwargs...)
-    trigger_codes, trigger_times = _extract_trigger_data(dat)
+    # Merge user kwargs with defaults
+    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
 end
