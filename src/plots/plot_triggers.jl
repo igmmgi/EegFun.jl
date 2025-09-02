@@ -31,9 +31,7 @@ Note: This function assumes ignore_triggers is not empty.
 - `filtered_values`: Filtered trigger values
 """
 function _filter_triggers(trigger_times, trigger_values, ignore_triggers)
-    # Create mask to keep triggers not in ignore list
     keep_mask = .!in.(trigger_values, Ref(ignore_triggers))
-    
     return trigger_times[keep_mask], trigger_values[keep_mask]
 end
 
@@ -53,9 +51,9 @@ Internal function to process trigger data and count occurrences.
 - `trigger_count`: OrderedDict mapping trigger values to their counts
 """
 function _trigger_time_count(time, triggers, ignore_triggers=Int[])
+
     # Since triggers are already cleaned (only onset values), just find non-zero values
     trigger_indices = findall(triggers .!= 0)
-
     if isempty(trigger_indices)
         return Float64[], Int[], OrderedDict{Int,Int}()
     end
@@ -128,8 +126,7 @@ Extract trigger information from BioSemi data.
 - `trigger_times`: Vector of trigger times
 """
 function _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData, ignore_triggers=Int[])
-    raw_triggers = dat.triggers.raw
-    cleaned_triggers = _clean_triggers(raw_triggers)
+    cleaned_triggers = _clean_triggers(dat.triggers.raw)
     trigger_positions = findall(x -> x != 0, cleaned_triggers)
     trigger_codes = Int16.(cleaned_triggers[trigger_positions])
     trigger_times = dat.time[trigger_positions]
@@ -515,7 +512,6 @@ fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 ```
 """
 function plot_trigger_timing(dat::BiosemiDataFormat.BiosemiData; kwargs...)
-    # Merge user kwargs with defaults
     plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
     trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
@@ -545,7 +541,6 @@ fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 ```
 """
 function plot_trigger_timing(dat::ContinuousData; kwargs...)
-    # Merge user kwargs with defaults
     plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
     trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
