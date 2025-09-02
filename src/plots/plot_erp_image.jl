@@ -247,10 +247,8 @@ function plot_erp_image(dat::EpochData;
         rowsize!(fig.layout, 2, Relative(1/3))
     end
     
-    # Link axes for consistent navigation (after all axes are created)
     if length(axes) > 1
         linkaxes!(axes...)
-        println("DEBUG: Linked $(length(axes)) axes for navigation")
     end
 
     # Display plot if requested
@@ -298,8 +296,6 @@ function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, act
         end
     elseif action in (:x_less, :x_more) # Adjust time axis
         func = action == :x_less ? xmore! : xless!
-        # Only apply to first axis - linking will handle the rest
-        println("DEBUG: Applying $(action) to first of $(length(axes)) axes")
         func(first(axes))
     end
 end
