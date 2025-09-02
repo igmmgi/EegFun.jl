@@ -103,7 +103,7 @@ function plot_erp_image(dat::EpochData;
     
     # Validate we have channels to plot
     if isempty(all_plot_channels)
-        error("No channels available for plotting after filtering")
+        @minimal_error("No channels available for plotting after filtering")
     end
     
     # Create figure and apply layout system
@@ -111,11 +111,8 @@ function plot_erp_image(dat::EpochData;
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
     axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
     
-    # Link axes for consistent navigation
-    length(axes) > 1 && linkaxes!(axes...)
-    
     # Disable default interactions that conflict with our custom selection
-    if get(plot_kwargs, :interactive, true)
+    if plot_kwargs[:interactive]
         for ax in axes
             deregister_interaction!(ax, :rectanglezoom)
         end
@@ -161,29 +158,11 @@ function plot_erp_image(dat::EpochData;
             # Set title showing channels (same as plot_erp)
             ax.title = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
         elseif plot_layout.type == :grid
-            # For grid layout, only set labels on outer edges
-            # The _set_grid_axis_properties! function already handles this correctly
-            # We just need to set the actual label text for the outer edges
+            # Use the existing grid axis properties function
             row = fld(findfirst(==(channel), channels) - 1, plot_layout.cols) + 1
             col = mod(findfirst(==(channel), channels) - 1, plot_layout.cols) + 1
-            
-            if col == 1  # Leftmost column
-                ax.ylabel = plot_kwargs[:ylabel]
-            end
-            if row == plot_layout.rows  # Bottom row
-                ax.xlabel = plot_kwargs[:xlabel]
-            end
-            
-            # Ensure tick labels are hidden for inner plots (in case they got reset)
-            if col != 1
-                ax.yticklabelsvisible = false
-            end
-            if row != plot_layout.rows
-                ax.xticklabelsvisible = false
-            end
-            
-            # Set channel name as title
-            ax.title = string(channel)
+            _set_grid_axis_properties!(ax, plot_layout, channel, row, col, plot_layout.rows, plot_layout.cols; 
+                                     xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel])
         elseif plot_layout.type == :topo
             # Set channel name as title for topo layout
             ax.title = string(channel)
@@ -191,9 +170,18 @@ function plot_erp_image(dat::EpochData;
         
         ax.yreversed = plot_kwargs[:yreversed]
         
-        # Set limits if provided
-        !isnothing(plot_kwargs[:xlim]) && xlims!(ax, plot_kwargs[:xlim])
-        !isnothing(plot_kwargs[:ylim]) && ylims!(ax, plot_kwargs[:ylim])
+        # Set limits if provided, otherwise use data limits
+        if !isnothing(plot_kwargs[:xlim])
+            xlims!(ax, plot_kwargs[:xlim])
+        else
+            xlims!(ax, extrema(dat_subset.data[1].time))
+        end
+        
+        if !isnothing(plot_kwargs[:ylim])
+            ylims!(ax, plot_kwargs[:ylim])
+        else
+            ylims!(ax, (0.5, length(dat_subset.data) + 0.5))
+        end
         
         # Add colorbar if requested (only for single layout)
         if plot_kwargs[:plot_colorbar] && plot_layout.type == :single
@@ -258,6 +246,12 @@ function plot_erp_image(dat::EpochData;
         rowsize!(fig.layout, 1, Relative(2/3))
         rowsize!(fig.layout, 2, Relative(1/3))
     end
+    
+    # Link axes for consistent navigation (after all axes are created)
+    if length(axes) > 1
+        linkaxes!(axes...)
+        println("DEBUG: Linked $(length(axes)) axes for navigation")
+    end
 
     # Display plot if requested
     if plot_kwargs[:display_plot]
@@ -304,8 +298,8 @@ function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, act
         end
     elseif action in (:x_less, :x_more) # Adjust time axis
         func = action == :x_less ? xmore! : xless!
-        for ax in axes
-            func(ax)
-        end
+        # Only apply to first axis - linking will handle the rest
+        println("DEBUG: Applying $(action) to first of $(length(axes)) axes")
+        func(first(axes))
     end
 end
