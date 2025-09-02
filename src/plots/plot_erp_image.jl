@@ -16,6 +16,7 @@ const DEFAULT_ERP_IMAGE_KWARGS = Dict(
     :plot_erp => true,
     :plot_colorbar => true,
     :colorbar_width => 30,
+    :colorbar_label => "μV",
     :xgrid => false,
     :ygrid => false,
     :xminorgrid => false,
@@ -196,23 +197,18 @@ function plot_erp_image(dat::EpochData;
         
         # Add colorbar if requested (only for single layout)
         if plot_kwargs[:plot_colorbar] && plot_layout.type == :single
-            Colorbar(fig[1, 2], hm, width = plot_kwargs[:colorbar_width], label = "μV")
+            Colorbar(fig[1, 2], hm, width = plot_kwargs[:colorbar_width], label = plot_kwargs[:colorbar_label])
         end
     end
     
     # Set up interactivity AFTER heatmaps to ensure rectangles are drawn on top
-    if get(plot_kwargs, :interactive, true)
+    if plot_kwargs[:interactive]
         # Set up custom interactivity for ERP images (left/right keys only)
         _setup_erp_image_interactivity!(fig, axes, heatmaps)
         
         # Set up selection system (rectangles created AFTER heatmaps)
         selection_state = SharedSelectionState(axes)
         _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout)
-        
-        # Add debug output to see if time selection is working
-        println("DEBUG: Set up time selection for plot_erp_image with $(length(axes)) axes")
-        println("DEBUG: plot_layout.type = $(plot_layout.type)")
-        println("DEBUG: dat_subset type = $(typeof(dat_subset))")
         
         # Set up channel selection events for topo and grid layouts
         if plot_layout.type == :topo
@@ -229,6 +225,9 @@ function plot_erp_image(dat::EpochData;
         
         # Create ERP axis in our main figure
         ax_erp = Axis(fig[2, 1])
+        
+        # Add ERP axis to the axes list so it gets keyboard navigation
+        push!(axes, ax_erp)
         
         # For single layout, show averaged ERP trace across all selected channels
         avg_data = colmeans(erp_data.data, all_plot_channels)
@@ -274,7 +273,6 @@ end
 Set up custom interactivity for ERP images with color scale adjustment for up/down keys.
 """
 function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector)
-    # Set up keyboard tracking
     _setup_keyboard_tracking(fig)
     
     # Define keyboard actions for ERP images
@@ -285,7 +283,6 @@ function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatma
         Keyboard.right => :x_more
     )
     
-    # Handle keyboard events
     on(events(fig).keyboardbutton) do event
         if event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
             action = keyboard_actions[event.key]
@@ -300,27 +297,15 @@ end
 Handle navigation actions for ERP images.
 """
 function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol)
-    if action == :color_more
-        # Zoom in on color scale (compress range)
+    if action in (:color_more, :color_less) # Adjust color scale
+        factor = action == :color_more ? 0.8 : 1.25
         for hm in heatmaps
-            current_range = hm.colorrange[]
-            new_range = current_range .* 0.8
-            hm.colorrange[] = new_range
+            hm.colorrange[] = hm.colorrange[] .* factor
         end
-    elseif action == :color_less
-        # Zoom out on color scale (expand range)
-        for hm in heatmaps
-            current_range = hm.colorrange[]
-            new_range = current_range .* 1.25
-            hm.colorrange[] = new_range
+    elseif action in (:x_less, :x_more) # Adjust time axis
+        func = action == :x_less ? xmore! : xless!
+        for ax in axes
+            func(ax)
         end
-    elseif action == :x_less
-        # Zoom in on time axis
-        ax = first(axes)
-        xmore!(ax)
-    elseif action == :x_more
-        # Zoom out on time axis
-        ax = first(axes)
-        xless!(ax)
     end
 end
