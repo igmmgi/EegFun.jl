@@ -30,7 +30,7 @@ mutable struct SharedSelectionState
     
     function SharedSelectionState(axes::Vector{Axis})
         # Create time selection rectangles for each axis
-        rectangles = [poly!(ax, [Point2f(0.0, 0.0)], color = (:blue, 0.3), visible = false) for ax in axes]
+        rectangles = [poly!(ax, [Point2f(0.0, 0.0)], color = (:blue, 0.3), strokecolor = :darkblue, strokewidth = 1, visible = false, overdraw = true, space = :data) for ax in axes]
         
         new(
             Observable(false), 
@@ -188,14 +188,19 @@ function _update_shared_selection!(ax::Axis, selection_state::SharedSelectionSta
     for (i, rect) in enumerate(selection_state.rectangles)
         # Get the y-limits for the corresponding axis
         if i <= length(selection_state.rectangles)
-            # Use fixed y-range for consistency across all subplots
+            # Get the actual y-limits of the axis for proper rectangle positioning
+            y_lims = ax.yaxis.attributes.limits[]
+            y_min = y_lims[1]
+            y_max = y_lims[2]
+            
             rect[1] = Point2f[
-                Point2f(Float64(x1), Float64(-1000)),  # Use fixed y-range for consistency
-                Point2f(Float64(x2), Float64(-1000)),
-                Point2f(Float64(x2), Float64(1000)),
-                Point2f(Float64(x1), Float64(1000)),
+                Point2f(Float64(x1), Float64(y_min)),
+                Point2f(Float64(x2), Float64(y_min)),
+                Point2f(Float64(x2), Float64(y_max)),
+                Point2f(Float64(x1), Float64(y_max)),
             ]
             rect.visible[] = true
+            println("DEBUG: Created rectangle with x1=$x1, x2=$x2, y_min=$y_min, y_max=$y_max, visible=$(rect.visible[])")
         end
     end
 end
@@ -438,11 +443,14 @@ function _handle_mouse_button_events(fig::Figure, axes::Vector{Axis}, selection_
         if event.button == Mouse.left
             if event.action == Mouse.press
                 if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
+                    println("DEBUG: Clearing shared selection")
                     _clear_shared_selection!(selection_state)
                 elseif shift_pressed[]
+                    println("DEBUG: Starting shared selection at mouse_x = $mouse_x")
                     _start_shared_selection!(active_ax, selection_state, mouse_x)
                 end
             elseif event.action == Mouse.release && selection_state.active[]
+                println("DEBUG: Finishing shared selection at mouse_x = $mouse_x")
                 _finish_shared_selection!(active_ax, selection_state, mouse_x)
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
