@@ -1,5 +1,7 @@
 # plot_erp: Unified ERP plotting with layout system support
 
+# Shared interactivity functions are now included in src/eegfun.jl
+
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
@@ -28,39 +30,11 @@ const DEFAULT_ERP_KWARGS = Dict(
 )
 
 # =============================================================================
-# INTERACTIVITY CONSTANTS
+# ERP-SPECIFIC SELECTION STATE
 # =============================================================================
 
-const ERP_KEYBOARD_ACTIONS = Dict(
-    Keyboard.up => :up,
-    Keyboard.down => :down,
-    Keyboard.left => :left,
-    Keyboard.right => :right
-)
-
-# =============================================================================
-# SELECTION STATE
-# =============================================================================
-
-mutable struct ErpSelectionState
-    active::Observable{Bool}
-    bounds::Observable{Tuple{Float64,Float64}}
-    visible::Observable{Bool}
-    rectangles::Vector{Makie.Poly}  # Store rectangles for all axes
-    channel_rectangles::Vector{Makie.Poly}  # Store channel selection rectangles
-    selection_rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
-    selection_bounds::Vector{Tuple{Float64,Float64,Float64,Float64}}  # Store bounds for each selection
-    current_selection_idx::Union{Int, Nothing}  # Index of currently active selection
-    function ErpSelectionState(axes::Vector{Axis})
-        rectangles = Makie.Poly[]
-        for ax in axes
-            initial_points = [Point2f(0.0, 0.0)]
-            poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
-            push!(rectangles, poly_element)
-        end
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles, Makie.Poly[], Makie.Poly[], Tuple{Float64,Float64,Float64,Float64}[], nothing)
-    end
-end
+# Use the shared selection state
+const ErpSelectionState = SharedSelectionState
 
 """
     plot_erp(dat::ErpData; 
@@ -215,7 +189,7 @@ function plot_erp(datasets::Vector{ErpData};
     
     # Add keyboard interactivity if enabled
     if plot_kwargs[:interactive]
-        _setup_erp_interactivity!(fig, axes)
+        _setup_shared_interactivity!(fig, axes)
         
         # Disable default interactions that conflict with our custom selection
         # Need to disable on ALL axes for grid layouts to work properly
@@ -233,21 +207,6 @@ function plot_erp(datasets::Vector{ErpData};
     end
     
     return fig, axes
-end
-
-"""
-    _setup_erp_interactivity!(fig::Figure, axes::Vector{Axis})
-
-Set up keyboard interactivity for ERP plots.
-"""
-function _setup_erp_interactivity!(fig::Figure, axes::Vector{Axis})
-    # Handle keyboard events
-    on(events(fig).keyboardbutton) do event
-        if event.action in (Keyboard.press, Keyboard.repeat) && haskey(ERP_KEYBOARD_ACTIONS, event.key)
-            action = ERP_KEYBOARD_ACTIONS[event.key]
-            _handle_erp_navigation!(axes, action)
-        end
-    end
 end
 
 """
@@ -292,12 +251,12 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
         if event.button == Mouse.left
             if event.action == Mouse.press
                 if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
-                    _clear_erp_selection!(selection_state)
+                    _clear_shared_selection!(selection_state)
                 elseif shift_pressed[]
-                    _start_erp_selection!(active_ax, selection_state, mouse_x)
+                    _start_shared_selection!(active_ax, selection_state, mouse_x)
                 end
             elseif event.action == Mouse.release && selection_state.active[]
-                _finish_erp_selection!(active_ax, selection_state, mouse_x)
+                _finish_shared_selection!(active_ax, selection_state, mouse_x)
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
             _handle_erp_right_click!(selection_state, mouse_x, data)
@@ -320,7 +279,7 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
             
             if !isnothing(active_ax)
                 world_pos = mouseposition(active_ax)[1]
-                _update_erp_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
+                _update_shared_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
             end
         end
     end
@@ -332,168 +291,6 @@ function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selectio
     elseif _is_grid_layout(plot_layout)
         _setup_grid_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
     end
-end
-
-"""
-    _setup_erp_selection!(fig::Figure, ax::Axis, selection_state::ErpSelectionState, data)
-
-Set up mouse selection and context menu for ERP plots.
-"""
-function _setup_erp_selection!(fig::Figure, ax::Axis, selection_state::ErpSelectionState, data)
-    # Track if Shift is currently pressed
-    shift_pressed = Ref(false)
-
-    on(events(ax).keyboardbutton) do key_event
-        if key_event.key == Keyboard.left_shift
-            shift_pressed[] = key_event.action == Keyboard.press
-        end
-    end
-
-    # Handle mouse events
-    on(events(ax).mousebutton) do event
-        pos = events(ax).mouseposition[]
-        if !_is_mouse_in_axis(ax, pos)
-            return
-        end
-
-        mouse_x = mouseposition(ax)[1]
-
-        if event.button == Mouse.left
-            if event.action == Mouse.press
-                if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
-                    _clear_erp_selection!(selection_state)
-                elseif shift_pressed[]
-                    _start_erp_selection!(ax, selection_state, mouse_x)
-                end
-            elseif event.action == Mouse.release && selection_state.active[]
-                _finish_erp_selection!(ax, selection_state, mouse_x)
-            end
-        elseif event.button == Mouse.right && event.action == Mouse.press
-            _handle_erp_right_click!(selection_state, mouse_x, data)
-        end
-    end
-
-    # Update selection rectangle while dragging
-    on(events(ax).mouseposition) do _
-        if selection_state.active[]
-            world_pos = mouseposition(ax)[1]
-            _update_erp_selection!(ax, selection_state, selection_state.bounds[][1], world_pos)
-        end
-    end
-end
-
-"""
-    _handle_erp_navigation!(axes::Vector{Axis}, action::Symbol)
-
-Handle navigation actions for ERP plots.
-"""
-function _handle_erp_navigation!(axes::Vector{Axis}, action::Symbol)
-    # Only zoom the first axis - the linkaxes! will handle synchronizing all others
-    ax = first(axes)
-    if action == :up
-        ymore!(ax)
-    elseif action == :down
-        yless!(ax)
-    elseif action == :left
-        xless!(ax)
-    elseif action == :right
-        xmore!(ax)
-    end
-end
-
-"""
-    _erp_zoom_in_y!(ax::Axis)
-
-Zoom in on Y-axis by compressing the limits (zoom in on waveforms).
-"""
-function ymore!(ax::Axis)
-    ylims!(ax, ax.yaxis.attributes.limits[] .* 0.9)
-end
-
-"""
-    _erp_zoom_out_y!(ax::Axis)
-
-Zoom out on Y-axis by expanding the limits (zoom out from waveforms).
-"""
-function yless!(ax::Axis)
-    ylims!(ax, ax.yaxis.attributes.limits[] .* 1.1)
-end
-
-"""
-    xmore!(ax::Axis)
-
-Zoom in on X-axis by compressing the limits (zoom in on time range).
-"""
-function xmore!(ax::Axis)
-    xlims!(ax, ax.xaxis.attributes.limits[] .* 0.9)
-end
-
-"""
-    xless!(ax::Axis)
-
-Zoom out on X-axis by expanding the limits (zoom out from time range).
-"""
-function xless!(ax::Axis)
-    xlims!(ax, ax.xaxis.attributes.limits[] .* 1.1)
-end
-
-# =============================================================================
-# SELECTION HELPER FUNCTIONS
-# =============================================================================
-
-function _is_mouse_in_axis(ax, pos)
-    bbox = ax.layoutobservables.computedbbox[]
-    return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) &&
-           bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
-end
-
-function _is_within_selection(selection_state, mouse_x)
-    bounds = selection_state.bounds[]
-    return mouse_x >= min(bounds[1], bounds[2]) && mouse_x <= max(bounds[1], bounds[2])
-end
-
-function _start_erp_selection!(ax, selection_state, mouse_x)
-    selection_state.active[] = true
-    selection_state.bounds[] = (mouse_x, mouse_x)
-    _update_erp_selection!(ax, selection_state, mouse_x, mouse_x)
-end
-
-function _finish_erp_selection!(ax, selection_state, mouse_x)
-    selection_state.active[] = false
-    selection_state.visible[] = true
-    selection_state.bounds[] = (selection_state.bounds[][1], mouse_x)
-    _update_erp_selection!(ax, selection_state, selection_state.bounds[][1], mouse_x)
-    # Make all rectangles visible
-    for rect in selection_state.rectangles
-        rect.visible[] = true
-    end
-end
-
-function _update_erp_selection!(ax, selection_state, x1, x2)
-    # Update all rectangles across all axes
-    for (i, rect) in enumerate(selection_state.rectangles)
-        # Get the y-limits for the corresponding axis
-        if i <= length(selection_state.rectangles)
-            # Use fixed y-range for consistency across all subplots
-            rect[1] = Point2f[
-                Point2f(Float64(x1), Float64(-1000)),  # Use fixed y-range for consistency
-                Point2f(Float64(x2), Float64(-1000)),
-                Point2f(Float64(x2), Float64(1000)),
-                Point2f(Float64(x1), Float64(1000)),
-            ]
-            rect.visible[] = true
-        end
-    end
-end
-
-function _clear_erp_selection!(selection_state)
-    # Clear all rectangles
-    for rect in selection_state.rectangles
-        rect[1] = [Point2f(0.0, 0.0)]
-        rect.visible[] = false
-    end
-    selection_state.bounds[] = (0.0, 0.0)
-    selection_state.visible[] = false
 end
 
 function _handle_erp_right_click!(selection_state, mouse_x, data)
@@ -535,7 +332,6 @@ function _subset_erp_selected_data(selection_state, data)
     # This preserves all electrodes for topo plots
     return (data, x_min, x_max)
 end
-
 
 """
     _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
@@ -599,141 +395,6 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     return ax
 end
 
-# =============================================================================
-# CHANNEL SELECTION FOR TOPO LAYOUTS
-# =============================================================================
-
-"""
-    _is_topo_layout(plot_layout::PlotLayout)::Bool
-
-Check if the current layout is a topographic layout.
-"""
-_is_topo_layout(plot_layout::PlotLayout) = plot_layout.type == :topo
-
-"""
-    _is_grid_layout(plot_layout::PlotLayout)::Bool
-
-Check if the current layout is a grid layout.
-"""
-_is_grid_layout(plot_layout::PlotLayout) = plot_layout.type == :grid
-
-"""
-    _create_position_channel_map(plot_layout::PlotLayout, original_data)
-
-Create a mapping from normalized coordinates to channel labels for topo layouts.
-"""
-function _create_position_channel_map(plot_layout::PlotLayout, original_data)
-    if !_is_topo_layout(plot_layout)
-        return Dict()
-    end
-    
-    # Create position-to-channel mapping by normalizing the raw layout coordinates
-    position_channel_map = Dict{Tuple{Float64, Float64}, Symbol}()
-    
-    # Get the raw coordinate ranges to normalize to [0,1]
-    x_coords = [pos[1] for pos in plot_layout.positions]
-    y_coords = [pos[2] for pos in plot_layout.positions]
-    
-    minx, maxx = extrema(x_coords)
-    miny, maxy = extrema(y_coords)
-    
-    xrange = maxx - minx == 0 ? 1.0 : maxx - minx
-    yrange = maxy - miny == 0 ? 1.0 : maxy - miny
-    
-    for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
-        # Normalize the raw coordinates to [0,1] range
-        x_raw, y_raw = pos
-        x_norm = (x_raw - minx) / xrange
-        y_norm = (y_raw - miny) / yrange
-        
-        position_channel_map[(x_norm, y_norm)] = channel
-    end
-    
-    return position_channel_map
-end
-
-"""
-    _get_axes_rectangles(plot_layout::PlotLayout, fig::Figure)
-
-Get the axis rectangles and associated channels for each ERP subplot.
-"""
-function _get_axes_rectangles(axes::Vector{Axis}, channels::Vector{Symbol}, fig::Figure)
-    axes_rects = Vector{Tuple{Tuple{Float64, Float64, Float64, Float64}, Vector{Symbol}}}()
-    
-    # Get the actual screen bounds from each axis - this is the proper way!
-    for (ax, channel) in zip(axes, channels)
-        # Get the actual viewport area of the axis (new API)
-        viewport = ax.scene.viewport[]
-        
-        # Convert to normalized coordinates relative to figure
-        fig_size = size(fig.scene)
-        x1 = viewport.origin[1] / fig_size[1]
-        y1 = viewport.origin[2] / fig_size[2]
-        x2 = (viewport.origin[1] + viewport.widths[1]) / fig_size[1]
-        y2 = (viewport.origin[2] + viewport.widths[2]) / fig_size[2]
-        
-        axis_rect = (x1, y1, x2, y2)
-        
-        # Only print debug info for IO1
-        if channel == :IO1
-            println("IO1 axis rect: $axis_rect")
-        end
-        
-        push!(axes_rects, (axis_rect, [channel]))
-    end
-    
-    return axes_rects
-end
-
-"""
-    _draw_channel_rectangles!(fig::Figure, axes_rects)
-
-Draw small rectangles at each overlapping channel's axis position for visualization.
-Only called for channels that have overlap with the selection rectangle.
-"""
-function _draw_channel_rectangles!(fig::Figure, axes_rects)
-    rectangles = []
-    for (axis_rect, channels) in axes_rects
-        x1, y1, x2, y2 = axis_rect
-        
-        # Create rectangle points for poly!
-        rect_points = [
-            Point2f(x1, y1),
-            Point2f(x2, y1),
-            Point2f(x2, y2),
-            Point2f(x1, y2)
-        ]
-        
-        rect = poly!(
-            fig.scene,
-            rect_points,
-            color = (:blue, 0.2),
-            strokecolor = :darkblue,
-            strokewidth = 2,
-            overdraw = true,
-            space = :relative
-        )
-        
-        push!(rectangles, rect)
-    end
-    
-    return rectangles
-end
-
-"""
-    _rectangles_overlap(rect1, rect2)
-
-Check if two rectangles overlap.
-"""
-function _rectangles_overlap(rect1::Tuple{Float64, Float64, Float64, Float64}, 
-                           rect2::Tuple{Float64, Float64, Float64, Float64})
-    x1_1, y1_1, x2_1, y2_1 = rect1
-    x1_2, y1_2, x2_2, y2_2 = rect2
-    
-    # Check for overlap
-    return !(x2_1 < x1_2 || x2_2 < x1_1 || y2_1 < y1_2 || y2_2 < y1_1)
-end
-
 """
     _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
 
@@ -746,21 +407,8 @@ Set up separate figure-level event handlers for channel selection in topo layout
 - **Right Click**: Print info TODO (for future functionality)
 """
 function _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
-    # Track Ctrl key state for channel selection
-    # ctrl_pressed = Ref(false)
-    
-    # # Handle Ctrl key events
-    # on(events(fig).keyboardbutton) do event
-    #     if event.key == Keyboard.left_control
-    #         ctrl_pressed[] = event.action == Keyboard.press
-    #         if event.action == Keyboard.release
-    #             channel_selection_active[] = false
-    #         end
-    #     end
-    # end
-   
     channel_selection_active = Ref(false)  # Separate state for channel selection
-   shift_pressed = Ref(false)
+    shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
 
     # Use figure-level keyboard events for Shift and Ctrl tracking
@@ -775,7 +423,6 @@ function _setup_topo_channel_selection_events!(fig::Figure, selection_state::Erp
         end
     end   
 
-
     # Handle mouse events for channel selection
     on(events(fig).mousebutton) do event
         # Ctrl + Left Click + Drag: Select channels (existing functionality)
@@ -789,7 +436,7 @@ function _setup_topo_channel_selection_events!(fig::Figure, selection_state::Erp
         
         # Left Click (without Ctrl): Clear all channel selections
         if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
-            _clear_all_erp_channel_selections!(fig, selection_state)
+            _clear_all_shared_channel_selections!(fig, selection_state)
         end
         
         # Right Click: Print info TODO (for future functionality)
@@ -844,7 +491,7 @@ function _setup_grid_channel_selection_events!(fig::Figure, selection_state::Erp
         
         # Left Click (without Ctrl): Clear all channel selections
         if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
-            _clear_all_erp_channel_selections!(fig, selection_state)
+            _clear_all_shared_channel_selections!(fig, selection_state)
         end
         
         # Right Click: Print info TODO (for future functionality)
@@ -861,231 +508,3 @@ function _setup_grid_channel_selection_events!(fig::Figure, selection_state::Erp
         end
     end
 end
-
-"""
-    _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
-
-Start channel selection for topo and grid layouts by drawing a rectangle across the entire figure.
-"""
-function _start_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
-    if !_is_topo_layout(plot_layout) && !_is_grid_layout(plot_layout)
-        return
-    end
-    
-    # Get the starting position in screen coordinates
-    selection_start = events(fig).mouseposition[]
-    
-    # Store the selection start position and activate channel selection
-    selection_state.bounds[] = (selection_start[1], selection_start[2])  # Store screen coordinates
-    channel_selection_active[] = true
-    
-    # Start a new selection (don't clear previous ones)
-    selection_state.current_selection_idx = length(selection_state.selection_rectangles) + 1
-end
-
-"""
-    _update_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
-
-Update the channel selection rectangle during dragging for topo and grid layouts.
-"""
-function _update_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data)
-    if !_is_topo_layout(plot_layout) && !_is_grid_layout(plot_layout)
-        return
-    end
-    
-    # Get current mouse position
-    current_pos = events(fig).mouseposition[]
-    
-    # Get the stored start position
-    start_screen = selection_state.bounds[]
-    
-    # Convert screen coordinates to normalized coordinates
-    fig_size = size(fig.scene)
-    start_norm = (start_screen[1] / fig_size[1], start_screen[2] / fig_size[2])
-    end_norm = (current_pos[1] / fig_size[1], current_pos[2] / fig_size[2])
-    
-    # Create the selection rectangle bounds
-    x1, x2 = minmax(start_norm[1], end_norm[1])
-    y1, y2 = minmax(start_norm[2], end_norm[2])
-    
-    # Create or update the current selection rectangle
-    current_idx = selection_state.current_selection_idx
-    if isnothing(current_idx) || current_idx > length(selection_state.selection_rectangles)
-        # Need to create a new selection rectangle
-        rect_points = [
-            Point2f(x1, y1),
-            Point2f(x2, y1),
-            Point2f(x2, y2),
-            Point2f(x1, y2)
-        ]
-        
-        rect = poly!(
-            fig.scene,
-            rect_points,
-            color = (:blue, 0.3),
-            strokecolor = :red,
-            strokewidth = 2,
-            overdraw = true,
-            space = :relative
-        )
-        
-        push!(selection_state.selection_rectangles, rect)
-        # Store the bounds for this selection
-        push!(selection_state.selection_bounds, (x1, y1, x2, y2))
-    else
-        # Update existing selection rectangle
-        rect = selection_state.selection_rectangles[current_idx]
-        rect_points = [
-            Point2f(x1, y1),
-            Point2f(x2, y1),
-            Point2f(x2, y2),
-            Point2f(x1, y2)
-        ]
-        
-        rect[1] = rect_points
-        # Update the stored bounds
-        selection_state.selection_bounds[current_idx] = (x1, y1, x2, y2)
-    end
-end
-
-"""
-    _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active)
-
-Finish channel selection for topo and grid layouts and identify selected channels.
-Only highlights channels that have overlap with the selection rectangle.
-"""
-function _finish_figure_channel_selection!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, channel_selection_active, axes::Vector{Axis})
-    if (!_is_topo_layout(plot_layout) && !_is_grid_layout(plot_layout)) || !channel_selection_active[]
-        return
-    end
-    
-    # Get the ending position in screen coordinates
-    selection_end = events(fig).mouseposition[]
-    
-    # Get the stored start position
-    start_screen = selection_state.bounds[]
-    
-    # Convert screen coordinates to normalized coordinates
-    fig_size = size(fig.scene)
-    start_norm = (start_screen[1] / fig_size[1], start_screen[2] / fig_size[2])
-    end_norm = (selection_end[1] / fig_size[1], selection_end[2] / fig_size[2])
-    
-    # Create the selection rectangle bounds
-    x1, x2 = minmax(start_norm[1], end_norm[1])
-    y1, y2 = minmax(start_norm[2], end_norm[2])
-    
-    # Ensure the rectangle bounds are within [0,1] range to match channel coordinates
-    x1 = max(0.0, min(1.0, x1))
-    x2 = max(0.0, min(1.0, x2))
-    y1 = max(0.0, min(1.0, y1))
-    y2 = max(0.0, min(1.0, y2))
-    
-    # Simple approach: just use the rectangle as drawn
-    # The coordinate systems should already be aligned
-    
-    # Get the axis rectangles for each ERP subplot using actual axis bounds
-    axes_rects = _get_axes_rectangles(axes, plot_layout.channels, fig)
-    
-    # Process ALL selection rectangles to get cumulative channel selection
-    all_selected_channels = Symbol[]
-    all_overlapping_axes_rects = []
-    
-    # First, add the current selection to our list of all selections
-    current_selection_bounds = (x1, y1, x2, y2)
-    
-    # Process all existing selections using stored bounds
-    for (selection_idx, selection_bounds) in enumerate(selection_state.selection_bounds)
-        # Find channels that overlap with this selection
-        for (axis_rect, channels) in axes_rects
-            if _rectangles_overlap(selection_bounds, axis_rect)
-                # This axis overlaps with selection, add all its channels
-                append!(all_selected_channels, channels)
-                push!(all_overlapping_axes_rects, (axis_rect, channels))
-            end
-        end
-    end
-    
-    # Also process the current selection bounds
-    for (axis_rect, channels) in axes_rects
-        if _rectangles_overlap(current_selection_bounds, axis_rect)
-            # This axis overlaps with current selection, add all its channels
-            append!(all_selected_channels, channels)
-            push!(all_overlapping_axes_rects, (axis_rect, channels))
-        end
-    end
-    
-    # Remove duplicates to get unique channels across all selections
-    unique_channels = unique(all_selected_channels)
-    
-    # Clear previous channel highlight rectangles and draw new ones for all selections
-    if !isempty(selection_state.channel_rectangles)
-        for rect in selection_state.channel_rectangles
-            delete!(rect.parent, rect)
-        end
-        empty!(selection_state.channel_rectangles)
-    end
-    
-    # Draw rectangles for all channels that have overlap with ANY selection
-    if !isempty(all_overlapping_axes_rects)
-        new_rectangles = _draw_channel_rectangles!(fig, all_overlapping_axes_rects)
-        # Store the new rectangles for later deletion
-        append!(selection_state.channel_rectangles, new_rectangles)
-    end
-    
-    if !isempty(unique_channels)
-        @info "Total selected channels across all regions: $unique_channels"
-        println("Total selected channels across all regions: $unique_channels")
-        println("Number of selection areas: $(length(selection_state.selection_rectangles))")
-    else
-        @info "No channels selected"
-        println("No channels selected")
-    end
-    
-    # Keep the current selection rectangle (it's now part of selection_rectangles)
-    # Don't clear it - it will be part of the multiple selections
-    
-    channel_selection_active[] = false
-end
-
-# =============================================================================
-# CHANNEL SELECTION CLEARING
-# =============================================================================
-
-"""
-    _clear_all_erp_channel_selections!(fig::Figure, selection_state::ErpSelectionState)
-
-Clear all ERP channel selections and remove all channel rectangles.
-Similar to _clear_all_topo_selections! but for ERP topo layouts.
-"""
-function _clear_all_erp_channel_selections!(fig::Figure, selection_state::ErpSelectionState)
-    # Remove all channel selection rectangles from the scene
-    if !isempty(selection_state.channel_rectangles)
-        for rect in selection_state.channel_rectangles
-            # Delete the rectangle from its parent (same approach as plot_topography)
-            delete!(rect.parent, rect)
-        end
-        empty!(selection_state.channel_rectangles)
-    end
-    
-    # Remove all selection rectangles
-    if !isempty(selection_state.selection_rectangles)
-        for rect in selection_state.selection_rectangles
-            delete!(rect.parent, rect)
-        end
-        empty!(selection_state.selection_rectangles)
-    end
-    
-    # Clear selection bounds
-    empty!(selection_state.selection_bounds)
-    
-    # Reset selection state
-    selection_state.active[] = false
-    selection_state.visible[] = false
-    selection_state.current_selection_idx = nothing
-    
-    println("Cleared all ERP channel selections (removed $(length(selection_state.selection_rectangles)) selections)")
-end
-
-# =============================================================================
-# MAIN PLOT FUNCTION
-# =============================================================================
