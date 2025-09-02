@@ -79,8 +79,18 @@ end
 # eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => true))
 # eegfun.plot_epochs(epochs[1], kwargs = Dict(:layout => false, :average_channels => true))
 
-# TODO: spines in topo
-# TODO: channel selection in grid/topo
+
+fig, ax = eegfun.plot_erp(erps[1])
+fig, ax = eegfun.plot_erp(erps[1], layout = :grid)
+fig, ax = eegfun.plot_erp(erps[1], layout = :topo)
+
+fig, ax = eegfun.plot_epochs(epochs[1])
+fig, ax = eegfun.plot_epochs(epochs[1], layout = :grid)
+fig, ax = eegfun.plot_epochs(epochs[1], layout = :topo)
+
+
+
+
 eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.plot_epochs(epochs[1])
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Fp1, :Fp2]))
