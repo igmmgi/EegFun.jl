@@ -78,7 +78,7 @@ include("plots/plot_epochs.jl")
 include("plots/plot_erp.jl")
 # Removed: plot_erp_grid.jl - functionality now in plot_erp with layout system
 include("plots/plot_erp_image.jl")
-include("plots/plot_grid_topo.jl")
+# Removed: plot_grid_topo.jl - functionality now in plot_erp and plot_epochs with layout system
 include("plots/plot_ica.jl")
 include("plots/plot_joint_probability.jl")
 include("plots/plot_layout.jl")
