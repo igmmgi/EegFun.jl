@@ -1,22 +1,40 @@
-# Default parameters for channel summary plots
-const DEFAULT_CHANNEL_SUMMARY_KWARGS = Dict(
-    :sort_values => false,
-    :average_over => nothing,
-    :display_plot => true,
-    :bar_color => :steelblue,
-    :error_color => :black,
-    :error_linewidth => 2,
-    :xtick_rotation => π/4,
-    :xlabel => "Electrode",
-    :bar_width => 0.8,
-    :bar_alpha => 0.7,
-    :grid_visible => true,
-    :grid_alpha => 0.3,
-    :title => "",
-    :title_fontsize => 16,
-    :label_fontsize => 14,
-    :tick_fontsize => 12,
+# Default parameters for channel summary plots with descriptions
+const DEFAULT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    :sort_values => (false, "If true, sort the bars by the values in the `col` column in descending order."),
+    :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
+    :display_plot => (true, "Whether to display the plot."),
+    :bar_color => (:steelblue, "Color of the bars."),
+    :bar_width => (0.8, "Width of bars."),
+    :bar_alpha => (0.7, "Transparency of bars."),
+    :error_color => (:black, "Color of error bars."),
+    :error_linewidth => (2, "Line width of error bars."),
+    :xlabel => ("Electrode", "Label for x-axis."),
+    :title => ("", "Plot title."),
+    :title_fontsize => (16, "Font size for title."),
+    :label_fontsize => (14, "Font size for axis labels."),
+    :tick_fontsize => (12, "Font size for tick labels."),
+    :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels."),
+    :grid_visible => (true, "Whether to show grid."),
+    :grid_alpha => (0.3, "Transparency of grid."),
 )
+
+# Helper function to extract just the defaults
+function _get_defaults(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Dict{Symbol,Any}
+    return Dict(key => value[1] for (key, value) in kwargs_dict)
+end
+
+# Helper function to generate documentation
+function generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
+    doc_lines = ["# Keyword Arguments"]
+    push!(doc_lines, "All keyword arguments below have sensible defaults defined in `DEFAULT_CHANNEL_SUMMARY_KWARGS`.")
+    push!(doc_lines, "You can override any of these defaults by passing the corresponding keyword argument.")
+    push!(doc_lines, "")
+    for (param_name, (default_val, desc)) in kwargs_dict
+        type_info = typeof(default_val)
+        push!(doc_lines, "- `$(param_name)::$(type_info)=$(default_val)`: $(desc)")
+    end
+    return join(doc_lines, "\n")
+end
 
 """
     plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; kwargs...)
@@ -34,33 +52,34 @@ Assumes the DataFrame `dat` contains at least two columns:
 - `ax::Axis`: The Makie Axis object to plot on
 - `dat::DataFrame`: DataFrame containing channel summary data.
 - `col::Symbol`: The symbol representing the column in `dat` to plot on the y-axis.
-- `kwargs...`: Keyword arguments for customization (see below for available options).
 
-# Available Keyword Arguments
-- `sort_values::Bool=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:sort_values])`: If true, sort the bars by the values in the `col` column in descending order.
-- `average_over::Union{Symbol,Nothing}=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:average_over])`: Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI.
-- `bar_color::Symbol=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:bar_color])`: Color of the bars.
-- `error_color::Symbol=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:error_color])`: Color of error bars.
-- `error_linewidth::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:error_linewidth])`: Line width of error bars.
-- `xtick_rotation::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:xtick_rotation])`: Rotation angle for x-axis tick labels.
-- `xlabel::String="$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:xlabel])"`: Label for x-axis.
-- `title::String="$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:title])"`: Plot title.
-- `title_fontsize::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:title_fontsize])`: Font size for title.
-- `label_fontsize::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:label_fontsize])`: Font size for axis labels.
-- `tick_fontsize::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:tick_fontsize])`: Font size for tick labels.
-- `bar_width::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:bar_width])`: Width of bars.
-- `bar_alpha::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:bar_alpha])`: Transparency of bars.
-- `grid_visible::Bool=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:grid_visible])`: Whether to show grid.
-- `grid_alpha::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:grid_alpha])`: Transparency of grid.
+$(generate_kwargs_doc(DEFAULT_CHANNEL_SUMMARY_KWARGS))
 
 # Returns
 - `nothing` (modifies the provided figure and axis in-place)
 
-# Example
-    # Assuming summary_df has columns :channel, :kurtosis, :variance, :epoch
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    plot_channel_summary!(fig, ax, summary_df, :kurtosis, average_over=:epoch, title="Kurtosis by Channel")
+# Examples
+```julia
+# Basic usage with defaults
+fig = Figure()
+ax = Axis(fig[1, 1])
+plot_channel_summary!(fig, ax, summary_df, :kurtosis)
+
+# Customize appearance
+plot_channel_summary!(fig, ax, summary_df, :kurtosis, 
+    bar_color = :red, 
+    title = "Custom Title",
+    sort_values = true)
+
+# With averaging and error bars
+plot_channel_summary!(fig, ax, summary_df, :kurtosis,
+    average_over = :epoch,
+    error_color = :blue,
+    error_linewidth = 3)
+```
+
+# See Also
+- `plot_channel_summary` for the non-mutating version
 """
 function plot_channel_summary!(
     fig::Figure,
@@ -70,7 +89,7 @@ function plot_channel_summary!(
     kwargs...
 )
     # Merge user kwargs with defaults
-    plot_kwargs = merge(DEFAULT_CHANNEL_SUMMARY_KWARGS, Dict(kwargs))
+    plot_kwargs = merge(_get_defaults(DEFAULT_CHANNEL_SUMMARY_KWARGS), Dict(kwargs))
 
     # Check if required columns exist
     if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
@@ -157,37 +176,34 @@ Assumes the DataFrame `dat` contains at least two columns:
 # Arguments
 - `dat::DataFrame`: DataFrame containing channel summary data.
 - `col::Symbol`: The symbol representing the column in `dat` to plot on the y-axis.
-- `kwargs...`: Keyword arguments for customization (see below for available options).
 
-# Available Keyword Arguments
-- `sort_values::Bool=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:sort_values])`: If true, sort the bars by the values in the `col` column in descending order.
-- `average_over::Union{Symbol,Nothing}=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:average_over])`: Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI.
-- `display_plot::Bool=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:display_plot])`: Whether to display the plot.
-- `bar_color::Symbol=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:bar_color])`: Color of the bars.
-- `error_color::Symbol=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:error_color])`: Color of error bars.
-- `error_linewidth::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:error_linewidth])`: Line width of error bars.
-- `xtick_rotation::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:xtick_rotation])`: Rotation angle for x-axis tick labels.
-- `xlabel::String="$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:xlabel])"`: Label for x-axis.
-- `title::String="$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:title])"`: Plot title.
-- `title_fontsize::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:title_fontsize])`: Font size for title.
-- `label_fontsize::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:label_fontsize])`: Font size for axis labels.
-- `tick_fontsize::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:tick_fontsize])`: Font size for tick labels.
-- `bar_width::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:bar_width])`: Width of bars.
-- `bar_alpha::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:bar_alpha])`: Transparency of bars.
-- `grid_visible::Bool=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:grid_visible])`: Whether to show grid.
-- `grid_alpha::Real=$(DEFAULT_CHANNEL_SUMMARY_KWARGS[:grid_alpha])`: Transparency of grid.
+$(generate_kwargs_doc(DEFAULT_CHANNEL_SUMMARY_KWARGS))
 
 # Returns
 - `Figure`: The Makie Figure object.
 - `Axis`: The Makie Axis object for the bar plot.
 
-# Example
-    # Assuming summary_df has columns :channel, :kurtosis, :variance, :epoch
-    fig_kurt, ax_kurt = plot_channel_summary(summary_df, :kurtosis, average_over=:epoch, title="Kurtosis by Channel")
-    # display(fig_kurt)
+# Examples
+```julia
+# Basic usage with defaults
+fig, ax = plot_channel_summary(summary_df, :kurtosis)
 
-    fig_var_sorted, ax_var_sorted = plot_channel_summary(summary_df, :variance, sort_values=true, average_over=:epoch, xlabel="Electrode", bar_color=:red)
-    # display(fig_var_sorted)
+# Customize appearance
+fig, ax = plot_channel_summary(summary_df, :kurtosis, 
+    bar_color = :red, 
+    title = "Custom Title",
+    sort_values = true)
+
+# With averaging and error bars
+fig, ax = plot_channel_summary(summary_df, :kurtosis,
+    average_over = :epoch,
+    error_color = :blue,
+    error_linewidth = 3)
+```
+
+# See Also
+- `DEFAULT_CHANNEL_SUMMARY_KWARGS` for the complete list of default values
+- `plot_channel_summary!` for the mutating version
 """
 function plot_channel_summary(
     dat::DataFrame,
@@ -195,7 +211,7 @@ function plot_channel_summary(
     kwargs...
 )
     # Merge user kwargs with defaults
-    plot_kwargs = merge(DEFAULT_CHANNEL_SUMMARY_KWARGS, Dict(kwargs))
+    plot_kwargs = merge(_get_defaults(DEFAULT_CHANNEL_SUMMARY_KWARGS), Dict(kwargs))
     
     # Create the figure and axis
     fig = Figure()
