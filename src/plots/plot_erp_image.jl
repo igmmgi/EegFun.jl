@@ -194,7 +194,7 @@ function plot_erp_image(dat::EpochData;
         
         # Add colorbar if requested (only for single layout)
         if plot_kwargs[:plot_colorbar] && plot_layout.type == :single
-            Colorbar(fig[1, 2], hm, width = plot_kwargs[:colorbar_width])
+            Colorbar(fig[1, 2], hm, width = plot_kwargs[:colorbar_width], label = "μV")
         end
     end
     
