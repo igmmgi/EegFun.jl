@@ -1,11 +1,6 @@
-# plot_erp: Unified ERP plotting with layout system support
-
-# Shared interactivity functions are now included in src/eegfun.jl
-
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-
 const DEFAULT_ERP_KWARGS = Dict(
     :xlim => nothing,
     :ylim => nothing,
@@ -26,15 +21,8 @@ const DEFAULT_ERP_KWARGS = Dict(
     :xminorgrid => false,
     :yminorgrid => false,
     :add_xy_origin => true,
-    :interactive => true,  # New: enable/disable keyboard interactivity
+    :interactive => true,  
 )
-
-# =============================================================================
-# ERP-SPECIFIC SELECTION STATE
-# =============================================================================
-
-# Use the shared selection state
-const ErpSelectionState = SharedSelectionState
 
 """
     plot_erp(dat::ErpData; 
@@ -199,99 +187,24 @@ function plot_erp(datasets::Vector{ErpData};
         
         # Set up selection system for all axes (will work with linked axes)
         # Pass the ORIGINAL datasets (not dat_subset) so we can subset by time for topo plots
-        selection_state = ErpSelectionState(axes)
+        selection_state = SharedSelectionState(axes)
         
         # Set up selection system that works for all layouts
         # Use figure-level events to avoid conflicts with multiple axis handlers
-        _setup_erp_selection_unified!(fig, axes, selection_state, datasets, plot_layout)
+        _setup_unified_selection!(fig, axes, selection_state, datasets, plot_layout, _handle_erp_right_click!)
+        
+        # Set up channel selection events for topo and grid layouts
+        if plot_layout.type == :topo
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, :topo)
+        elseif plot_layout.type == :grid
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, :grid)
+        end
     end
     
     return fig, axes
 end
 
-"""
-    _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data, plot_layout::PlotLayout)
-
-Set up unified mouse selection and context menu for ERP plots that works across all layouts.
-Uses figure-level events to avoid conflicts with multiple axis handlers.
-"""
-function _setup_erp_selection_unified!(fig::Figure, axes::Vector{Axis}, selection_state::ErpSelectionState, data, plot_layout::PlotLayout)
-    # Track if Shift and Ctrl are currently pressed
-    shift_pressed = Ref(false)
-    ctrl_pressed = Ref(false)
-
-    # Use figure-level keyboard events for Shift and Ctrl tracking
-    on(events(fig).keyboardbutton) do key_event
-        if key_event.key == Keyboard.left_shift
-            shift_pressed[] = key_event.action == Keyboard.press
-        elseif key_event.key == Keyboard.left_control
-            ctrl_pressed[] = key_event.action == Keyboard.press
-        end
-    end
-
-    # Use figure-level mouse events to avoid conflicts
-    on(events(fig).mousebutton) do event
-        # Find which axis the mouse is over
-        mouse_pos = events(fig).mouseposition[]
-        active_ax = nothing
-        
-        for ax in axes
-            if _is_mouse_in_axis(ax, mouse_pos)
-                active_ax = ax
-                break
-            end
-        end
-        
-        if isnothing(active_ax)
-            return
-        end
-
-        mouse_x = mouseposition(active_ax)[1]
-
-        if event.button == Mouse.left
-            if event.action == Mouse.press
-                if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
-                    _clear_shared_selection!(selection_state)
-                elseif shift_pressed[]
-                    _start_shared_selection!(active_ax, selection_state, mouse_x)
-                end
-            elseif event.action == Mouse.release && selection_state.active[]
-                _finish_shared_selection!(active_ax, selection_state, mouse_x)
-            end
-        elseif event.button == Mouse.right && event.action == Mouse.press
-            _handle_erp_right_click!(selection_state, mouse_x, data)
-        end
-    end
-
-    # Update selection rectangle while dragging using figure-level mouse position
-    on(events(fig).mouseposition) do _
-        if selection_state.active[]
-            # Update time selection rectangle
-            mouse_pos = events(fig).mouseposition[]
-            active_ax = nothing
-            
-            for ax in axes
-                if _is_mouse_in_axis(ax, mouse_pos)
-                    active_ax = ax
-                    break
-                end
-            end
-            
-            if !isnothing(active_ax)
-                world_pos = mouseposition(active_ax)[1]
-                _update_shared_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
-            end
-        end
-    end
-    
-    # Add separate figure-level event handlers for channel selection in topo and grid layouts
-    # This provides Ctrl+Click+Drag for multiple channel selections, Left Click to clear all, Right Click for info
-    if _is_topo_layout(plot_layout)
-        _setup_topo_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
-    elseif _is_grid_layout(plot_layout)
-        _setup_grid_channel_selection_events!(fig, selection_state, plot_layout, data, axes)
-    end
-end
+# Unified selection setup is now handled by _setup_unified_selection! in shared_interactivity.jl
 
 function _handle_erp_right_click!(selection_state, mouse_x, data)
     if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
@@ -395,116 +308,4 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     return ax
 end
 
-"""
-    _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
-
-Set up separate figure-level event handlers for channel selection in topo layouts.
-
-# Mouse Controls:
-- **Ctrl + Left Click + Drag**: Select channels (draw selection rectangle)
-- **Multiple selections**: Each Ctrl+Click+Drag creates a new selection area
-- **Left Click (without Ctrl)**: Clear all channel selections and selection areas
-- **Right Click**: Print info TODO (for future functionality)
-"""
-function _setup_topo_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
-    channel_selection_active = Ref(false)  # Separate state for channel selection
-    shift_pressed = Ref(false)
-    ctrl_pressed = Ref(false)
-
-    # Use figure-level keyboard events for Shift and Ctrl tracking
-    on(events(fig).keyboardbutton) do key_event
-        if key_event.key == Keyboard.left_shift
-            shift_pressed[] = key_event.action == Keyboard.press
-        elseif key_event.key == Keyboard.left_control
-            ctrl_pressed[] = key_event.action == Keyboard.press
-        end
-        if key_event.action == Keyboard.release
-            channel_selection_active[] = false
-        end
-    end   
-
-    # Handle mouse events for channel selection
-    on(events(fig).mousebutton) do event
-        # Ctrl + Left Click + Drag: Select channels (existing functionality)
-        if event.button == Mouse.left && ctrl_pressed[]
-            if event.action == Mouse.press
-                _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
-            elseif event.action == Mouse.release && channel_selection_active[]
-                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
-            end
-        end
-        
-        # Left Click (without Ctrl): Clear all channel selections
-        if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
-            _clear_all_shared_channel_selections!(fig, selection_state)
-        end
-        
-        # Right Click: Print info TODO (for future functionality)
-        if event.button == Mouse.right && event.action == Mouse.press
-            @info "TODO: implement right click functionality for ERP topo"
-            println("TODO: implement right click functionality for ERP topo")
-        end
-    end
-    
-    # Handle mouse movement for updating channel selection rectangle
-    on(events(fig).mouseposition) do _
-        if channel_selection_active[]
-            _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
-        end
-    end
-end
-
-"""
-    _setup_grid_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
-
-Set up separate figure-level event handlers for channel selection in grid layouts.
-This provides the same functionality as topo layouts but for grid arrangements.
-"""
-function _setup_grid_channel_selection_events!(fig::Figure, selection_state::ErpSelectionState, plot_layout::PlotLayout, data, axes::Vector{Axis})
-    # Track Ctrl key state for channel selection
-    ctrl_pressed = Ref(false)
-    channel_selection_active = Ref(false)  # Separate state for channel selection
-    shift_pressed = Ref(false)
-    
-    # Use figure-level keyboard events for Shift and Ctrl tracking
-    on(events(fig).keyboardbutton) do key_event
-        if key_event.key == Keyboard.left_shift
-            shift_pressed[] = key_event.action == Keyboard.press
-        elseif key_event.key == Keyboard.left_control
-            ctrl_pressed[] = key_event.action == Keyboard.press
-        end
-        if key_event.action == Keyboard.release
-            channel_selection_active[] = false
-        end
-    end   
-
-    # Handle mouse events for channel selection
-    on(events(fig).mousebutton) do event
-        # Ctrl + Left Click + Drag: Select channels (existing functionality)
-        if event.button == Mouse.left && ctrl_pressed[]
-            if event.action == Mouse.press
-                _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
-            elseif event.action == Mouse.release && channel_selection_active[]
-                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
-            end
-        end
-        
-        # Left Click (without Ctrl): Clear all channel selections
-        if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
-            _clear_all_shared_channel_selections!(fig, selection_state)
-        end
-        
-        # Right Click: Print info TODO (for future functionality)
-        if event.button == Mouse.right && event.action == Mouse.press
-            @info "TODO: implement right click functionality for ERP grid"
-            println("TODO: implement right click functionality for ERP grid")
-        end
-    end
-    
-    # Handle mouse movement for updating channel selection rectangle
-    on(events(fig).mouseposition) do _
-        if channel_selection_active[]
-            _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
-        end
-    end
-end
+# Channel selection event functions are now in shared_interactivity.jl
