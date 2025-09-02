@@ -121,6 +121,7 @@ function plot_erp_image(dat::EpochData;
     end
     
     # Plot ERP images for each channel
+    heatmaps = []
     for (ax, channel) in zip(axes, channels)
         if plot_layout.type == :single
             # For single layout: average across all selected channels
@@ -145,6 +146,7 @@ function plot_erp_image(dat::EpochData;
         hm = heatmap!(ax, dat_subset.data[1].time, 1:length(dat_subset.data), transpose(data), 
                       colormap = plot_kwargs[:colormap], 
                       colorrange = plot_kwargs[:colorrange])
+        push!(heatmaps, hm)
         
         # Set axis properties (only for single layout or outer edges of grid)
         if plot_layout.type == :single
@@ -200,8 +202,8 @@ function plot_erp_image(dat::EpochData;
     
     # Set up interactivity AFTER heatmaps to ensure rectangles are drawn on top
     if get(plot_kwargs, :interactive, true)
-        # Add keyboard interactivity
-        _setup_shared_interactivity!(fig, axes)
+        # Set up custom interactivity for ERP images (left/right keys only)
+        _setup_erp_image_interactivity!(fig, axes, heatmaps)
         
         # Set up selection system (rectangles created AFTER heatmaps)
         selection_state = SharedSelectionState(axes)
@@ -264,4 +266,61 @@ function plot_erp_image(dat::EpochData;
     end
 
     return fig, axes
+end
+
+"""
+    _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector)
+
+Set up custom interactivity for ERP images with color scale adjustment for up/down keys.
+"""
+function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector)
+    # Set up keyboard tracking
+    _setup_keyboard_tracking(fig)
+    
+    # Define keyboard actions for ERP images
+    keyboard_actions = Dict(
+        Keyboard.up => :color_more,
+        Keyboard.down => :color_less,
+        Keyboard.left => :x_less,
+        Keyboard.right => :x_more
+    )
+    
+    # Handle keyboard events
+    on(events(fig).keyboardbutton) do event
+        if event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
+            action = keyboard_actions[event.key]
+            _handle_erp_image_navigation!(axes, heatmaps, action)
+        end
+    end
+end
+
+"""
+    _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol)
+
+Handle navigation actions for ERP images.
+"""
+function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol)
+    if action == :color_more
+        # Zoom in on color scale (compress range)
+        for hm in heatmaps
+            current_range = hm.colorrange[]
+            new_range = current_range .* 0.8
+            hm.colorrange[] = new_range
+        end
+    elseif action == :color_less
+        # Zoom out on color scale (expand range)
+        for hm in heatmaps
+            current_range = hm.colorrange[]
+            new_range = current_range .* 1.25
+            hm.colorrange[] = new_range
+        end
+    elseif action == :x_less
+        # Zoom in on time axis
+        ax = first(axes)
+        xmore!(ax)
+    elseif action == :x_more
+        # Zoom out on time axis
+        ax = first(axes)
+        xless!(ax)
+    end
 end
