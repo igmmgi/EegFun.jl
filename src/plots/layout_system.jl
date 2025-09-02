@@ -397,6 +397,12 @@ function _apply_axis_properties!(ax::Axis; kwargs...)
     !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
     !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
     ax.yreversed = kwargs[:yreversed]
+    
+    # Apply grid settings
+    ax.xgridvisible = kwargs[:xgrid]
+    ax.ygridvisible = kwargs[:ygrid]
+    ax.xminorgridvisible = kwargs[:xminorgrid]
+    ax.yminorgridvisible = kwargs[:yminorgrid]
 
 end
 
