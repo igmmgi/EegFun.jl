@@ -17,6 +17,9 @@
 # Import necessary functions from plot_erp for channel selection
 # We'll define these locally to avoid import issues
 
+# Include helper functions for channel selection
+include("epochs_helpers.jl")
+
 # =============================================================================
 # KEYBOARD ACTIONS
 # =============================================================================
@@ -86,6 +89,10 @@ const DEFAULT_EPOCHS_KWARGS = Dict(
     :theme_fontsize => 24,
     :plot_avg_trials => true,                # draw ERP average overlay
     :axes_through_origin => true,
+    :xgrid => false,
+    :ygrid => false,
+    :xminorgrid => false,
+    :yminorgrid => false,
     :interactive => true,  # Enable/disable keyboard interactivity and channel selection
 )
 
@@ -196,8 +203,11 @@ function plot_epochs(
                 vlines!(ax, [0.0], color = :black, linewidth = 1)
             end
             
+            # Set title based on selected channels (like plot_erp does)
+            channel_title = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+            
             # Set axis properties
-            _set_axis_properties!(ax, plot_kwargs, "All Channels")
+            _set_axis_properties!(ax, plot_kwargs, channel_title)
         elseif typeof(layout) <: Vector{<:Integer}
             # Custom grid dimensions [rows, cols]
             if length(layout) != 2 || any(x -> x <= 0, layout)
@@ -382,6 +392,9 @@ function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, e
         _set_axis_properties!(ax, axis_kwargs, string(ch))
         ax.xticklabelsvisible = false
         ax.yticklabelsvisible = false
+        ax.xticksvisible = false
+        ax.yticksvisible = false
+        hidespines!(ax)  # Hide spines for clean topographic layout (like plot_erp)
     end
 
     # Optional extra scale axis in bottom-right
@@ -459,6 +472,13 @@ function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::N
     ax.xlabel = kwargs[:xlabel]
     ax.ylabel = kwargs[:ylabel]
     ax.yreversed = kwargs[:yreversed]
+    
+    # Apply grid settings
+    ax.xgridvisible = kwargs[:xgrid]
+    ax.ygridvisible = kwargs[:ygrid]
+    ax.xminorgridvisible = kwargs[:xminorgrid]
+    ax.yminorgridvisible = kwargs[:yminorgrid]
+    
     return nothing
 end
 
@@ -742,9 +762,52 @@ end
 Set up channel selection events for topographic layout.
 """
 function _setup_topo_channel_selection_events!(fig::Figure, selection_state::EpochsSelectionState, plot_layout, data, axes::Vector{Axis})
-    # TODO: Implement topo channel selection events
-    # This would be similar to plot_erp's topo channel selection
-    @info "Topo channel selection events not yet implemented for plot_epochs"
+    # Track Ctrl key state for channel selection
+    channel_selection_active = Ref(false)  # Separate state for channel selection
+    shift_pressed = Ref(false)
+    ctrl_pressed = Ref(false)
+
+    # Use figure-level keyboard events for Shift and Ctrl tracking
+    on(events(fig).keyboardbutton) do key_event
+        if key_event.key == Keyboard.left_shift
+            shift_pressed[] = key_event.action == Keyboard.press
+        elseif key_event.key == Keyboard.left_control
+            ctrl_pressed[] = key_event.action == Keyboard.press
+        end
+        if key_event.action == Keyboard.release
+            channel_selection_active[] = false
+        end
+    end   
+
+    # Handle mouse events for channel selection
+    on(events(fig).mousebutton) do event
+        # Ctrl + Left Click + Drag: Select channels (existing functionality)
+        if event.button == Mouse.left && ctrl_pressed[]
+            if event.action == Mouse.press
+                _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
+            elseif event.action == Mouse.release && channel_selection_active[]
+                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
+            end
+        end
+        
+        # Left Click (without Ctrl): Clear all channel selections
+        if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
+            _clear_all_epochs_channel_selections!(fig, selection_state)
+        end
+        
+        # Right Click: Print info TODO (for future functionality)
+        if event.button == Mouse.right && event.action == Mouse.press
+            @info "TODO: implement right click functionality for epochs topo"
+            println("TODO: implement right click functionality for epochs topo")
+        end
+    end
+    
+    # Handle mouse movement for updating channel selection rectangle
+    on(events(fig).mouseposition) do _
+        if channel_selection_active[]
+            _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
+        end
+    end
 end
 
 """
@@ -753,10 +816,51 @@ end
 Set up channel selection events for grid layout.
 """
 function _setup_grid_channel_selection_events!(fig::Figure, selection_state::EpochsSelectionState, plot_layout, data, axes::Vector{Axis})
-    # TODO: Implement grid channel selection events
-    # This would be similar to plot_erp's grid channel selection
-    @info "Grid channel selection events not yet implemented for plot_epochs"
+    # Track Ctrl key state for channel selection
+    ctrl_pressed = Ref(false)
+    channel_selection_active = Ref(false)  # Separate state for channel selection
+    shift_pressed = Ref(false)
+    
+    # Use figure-level keyboard events for Shift and Ctrl tracking
+    on(events(fig).keyboardbutton) do key_event
+        if key_event.key == Keyboard.left_shift
+            shift_pressed[] = key_event.action == Keyboard.press
+        elseif key_event.key == Keyboard.left_control
+            ctrl_pressed[] = key_event.action == Keyboard.press
+        end
+        if key_event.action == Keyboard.release
+            channel_selection_active[] = false
+        end
+    end
+
+    # Handle mouse events for channel selection
+    on(events(fig).mousebutton) do event
+        # Ctrl + Left Click + Drag: Select channels (existing functionality)
+        if event.button == Mouse.left && ctrl_pressed[]
+            if event.action == Mouse.press
+                _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
+            elseif event.action == Mouse.release && channel_selection_active[]
+                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
+            end
+        end
+        
+        # Left Click (without Ctrl): Clear all channel selections
+        if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
+            _clear_all_epochs_channel_selections!(fig, selection_state)
+        end
+        
+        # Right Click: Print info TODO (for future functionality)
+        if event.button == Mouse.right && event.action == Mouse.press
+            @info "TODO: implement right click functionality for epochs grid"
+            println("TODO: implement right click functionality for epochs grid")
+        end
+    end
+    
+    # Handle mouse movement for updating channel selection rectangle
+    on(events(fig).mouseposition) do _
+        if channel_selection_active[]
+            _update_figure_channel_selection!(fig, selection_state, plot_layout, data)
+        end
+    end
 end
-
-
 
