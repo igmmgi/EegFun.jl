@@ -14,51 +14,14 @@
 # - Left Click (without Ctrl/Shift): Clear selections
 # - Right Click: Print "TODO" for future functionality
 
-# Import necessary functions from plot_erp for channel selection
-# We'll define these locally to avoid import issues
-
-# Include helper functions for channel selection
-include("epochs_helpers.jl")
+# Shared interactivity functions are now included in src/eegfun.jl
 
 # =============================================================================
-# KEYBOARD ACTIONS
+# EPOCHS-SPECIFIC SELECTION STATE
 # =============================================================================
 
-const EPOCHS_KEYBOARD_ACTIONS = Dict(
-    Keyboard.up => :up,
-    Keyboard.down => :down,
-    Keyboard.left => :left,
-    Keyboard.right => :right
-)
-
-# =============================================================================
-# CHANNEL SELECTION TYPES AND FUNCTIONS
-# =============================================================================
-
-"""
-    EpochsSelectionState
-
-State management for time selection and channel selection in plot_epochs.
-"""
-mutable struct EpochsSelectionState
-    active::Observable{Bool}
-    bounds::Observable{Tuple{Float64,Float64}}
-    visible::Observable{Bool}
-    rectangles::Vector{Makie.Poly}  # Store rectangles for all axes (time selection)
-    channel_rectangles::Vector{Makie.Poly}  # Store channel selection rectangles
-    selection_rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
-    selection_bounds::Vector{Tuple{Float64,Float64,Float64,Float64}}  # Store bounds for each selection
-    current_selection_idx::Union{Int, Nothing}  # Index of currently active selection
-    function EpochsSelectionState(axes::Vector{Axis})
-        rectangles = Makie.Poly[]
-        for ax in axes
-            initial_points = [Point2f(0.0, 0.0)]
-            poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
-            push!(rectangles, poly_element)
-        end
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), rectangles, Makie.Poly[], Makie.Poly[], Tuple{Float64,Float64,Float64,Float64}[], nothing)
-    end
-end
+# Use the shared selection state
+const EpochsSelectionState = SharedSelectionState
 
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
@@ -238,7 +201,7 @@ function plot_epochs(
             # deregister_interaction!(ax, :dragpan)
         end
         
-        _setup_epochs_interactivity!(fig, axes)
+        _setup_shared_interactivity!(fig, axes)
     end
     
     # Add unified selection functionality (time + channel selection)
@@ -249,8 +212,8 @@ function plot_epochs(
         # Set up unified selection (time selection with Shift, channel selection with Ctrl)
         if layout === :topo
             # Topographic layout - use unified selection + topo channel selection
-            _setup_epochs_selection_unified!(fig, axes, selection_state, dat_subset, create_topo_layout(all_plot_channels, dat_subset.layout))
-            _setup_topo_channel_selection_events!(fig, selection_state, create_topo_layout(all_plot_channels, dat_subset.layout), dat_subset, axes)
+            _setup_epochs_selection_unified!(fig, axes, selection_state, dat_subset, create_topo_layout(dat_subset.layout, all_plot_channels))
+            _setup_topo_channel_selection_events!(fig, selection_state, create_topo_layout(dat_subset.layout, all_plot_channels), dat_subset, axes)
         elseif layout === :grid || typeof(layout) <: Vector{<:Integer}
             # Grid layout - use unified selection + grid channel selection
             if layout === :grid
@@ -482,152 +445,9 @@ function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::N
     return nothing
 end
 
-# =============================================================================
-# NAVIGATION FUNCTIONS
-# =============================================================================
+# Navigation functions are now handled by _handle_shared_navigation! in shared_interactivity.jl
 
-"""
-    _handle_epochs_navigation!(axes::Vector{Axis}, action::Symbol)
-
-Handle navigation actions for epochs plots.
-"""
-function _handle_epochs_navigation!(axes::Vector{Axis}, action::Symbol)
-    # Only zoom the first axis - the linkaxes! will handle synchronizing all others
-    ax = first(axes)
-    if action == :up
-        ymore!(ax)
-    elseif action == :down
-        yless!(ax)
-    elseif action == :left
-        xless!(ax)
-    elseif action == :right
-        xmore!(ax)
-    end
-end
-
-"""
-    ymore!(ax::Axis)
-
-Zoom in on Y-axis by compressing the limits (zoom in on waveforms).
-"""
-function ymore!(ax::Axis)
-    ylims!(ax, ax.yaxis.attributes.limits[] .* 0.9)
-end
-
-"""
-    yless!(ax::Axis)
-
-Zoom out on Y-axis by expanding the limits (zoom out from waveforms).
-"""
-function yless!(ax::Axis)
-    ylims!(ax, ax.yaxis.attributes.limits[] .* 1.1)
-end
-
-"""
-    xmore!(ax::Axis)
-
-Zoom in on X-axis by compressing the limits (zoom in on time range).
-"""
-function xmore!(ax::Axis)
-    xlims!(ax, ax.xaxis.attributes.limits[] .* 0.9)
-end
-
-"""
-    xless!(ax::Axis)
-
-Zoom out on X-axis by expanding the limits (zoom out from time range).
-"""
-function xless!(ax::Axis)
-    xlims!(ax, ax.xaxis.attributes.limits[] .* 1.1)
-end
-
-# =============================================================================
-# TIME SELECTION HELPER FUNCTIONS
-# =============================================================================
-
-"""
-    _is_mouse_in_axis(ax, pos)
-
-Check if mouse position is within the axis bounds.
-"""
-function _is_mouse_in_axis(ax, pos)
-    bbox = ax.layoutobservables.computedbbox[]
-    return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) &&
-           bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
-end
-
-"""
-    _is_within_selection(selection_state, mouse_x)
-
-Check if mouse position is within the current time selection.
-"""
-function _is_within_selection(selection_state, mouse_x)
-    bounds = selection_state.bounds[]
-    return mouse_x >= min(bounds[1], bounds[2]) && mouse_x <= max(bounds[1], bounds[2])
-end
-
-"""
-    _start_epochs_selection!(ax, selection_state, mouse_x)
-
-Start time selection at the given mouse position.
-"""
-function _start_epochs_selection!(ax, selection_state, mouse_x)
-    selection_state.active[] = true
-    selection_state.bounds[] = (mouse_x, mouse_x)
-    _update_epochs_selection!(ax, selection_state, mouse_x, mouse_x)
-end
-
-"""
-    _finish_epochs_selection!(ax, selection_state, mouse_x)
-
-Finish time selection at the given mouse position.
-"""
-function _finish_epochs_selection!(ax, selection_state, mouse_x)
-    selection_state.active[] = false
-    selection_state.visible[] = true
-    selection_state.bounds[] = (selection_state.bounds[][1], mouse_x)
-    _update_epochs_selection!(ax, selection_state, selection_state.bounds[][1], mouse_x)
-    # Make all rectangles visible
-    for rect in selection_state.rectangles
-        rect.visible[] = true
-    end
-end
-
-"""
-    _update_epochs_selection!(ax, selection_state, x1, x2)
-
-Update the time selection rectangle during dragging.
-"""
-function _update_epochs_selection!(ax, selection_state, x1, x2)
-    # Update all rectangles across all axes
-    for (i, rect) in enumerate(selection_state.rectangles)
-        if i <= length(selection_state.rectangles)
-            # Use fixed y-range for consistency across all subplots
-            rect[1] = Point2f[
-                Point2f(Float64(x1), Float64(-1000)),  # Use fixed y-range for consistency
-                Point2f(Float64(x2), Float64(-1000)),
-                Point2f(Float64(x2), Float64(1000)),
-                Point2f(Float64(x1), Float64(1000)),
-            ]
-            rect.visible[] = true
-        end
-    end
-end
-
-"""
-    _clear_epochs_selection!(selection_state)
-
-Clear the current time selection.
-"""
-function _clear_epochs_selection!(selection_state)
-    selection_state.active[] = false
-    selection_state.visible[] = false
-    selection_state.bounds[] = (0.0, 0.0)
-    # Hide all rectangles
-    for rect in selection_state.rectangles
-        rect.visible[] = false
-    end
-end
+# Time selection helper functions are now in shared_interactivity.jl
 
 # =============================================================================
 # UNIFIED SELECTION SETUP
@@ -675,12 +495,12 @@ function _setup_epochs_selection_unified!(fig::Figure, axes::Vector{Axis}, selec
         if event.button == Mouse.left
             if event.action == Mouse.press
                 if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
-                    _clear_epochs_selection!(selection_state)
+                    _clear_shared_selection!(selection_state)
                 elseif shift_pressed[]
-                    _start_epochs_selection!(active_ax, selection_state, mouse_x)
+                    _start_shared_selection!(active_ax, selection_state, mouse_x)
                 end
             elseif event.action == Mouse.release && selection_state.active[]
-                _finish_epochs_selection!(active_ax, selection_state, mouse_x)
+                _finish_shared_selection!(active_ax, selection_state, mouse_x)
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
             # TODO: Implement right click functionality for epochs
@@ -704,7 +524,7 @@ function _setup_epochs_selection_unified!(fig::Figure, axes::Vector{Axis}, selec
             
             if !isnothing(active_ax)
                 world_pos = mouseposition(active_ax)[1]
-                _update_epochs_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
+                _update_shared_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
             end
         end
     end
@@ -714,20 +534,7 @@ end
 # MAIN INTERACTIVITY SETUP
 # =============================================================================
 
-"""
-    _setup_epochs_interactivity!(fig::Figure, axes::Vector{Axis})
-
-Set up keyboard interactivity for epochs plots.
-"""
-function _setup_epochs_interactivity!(fig::Figure, axes::Vector{Axis})
-    # Handle keyboard events
-    on(events(fig).keyboardbutton) do event
-        if event.action in (Keyboard.press, Keyboard.repeat) && haskey(EPOCHS_KEYBOARD_ACTIONS, event.key)
-            action = EPOCHS_KEYBOARD_ACTIONS[event.key]
-            _handle_epochs_navigation!(axes, action)
-        end
-    end
-end
+# Keyboard interactivity is now handled by _setup_shared_interactivity!
 
 # =============================================================================
 # LAYOUT HELPER FUNCTIONS
@@ -792,7 +599,7 @@ function _setup_topo_channel_selection_events!(fig::Figure, selection_state::Epo
         
         # Left Click (without Ctrl): Clear all channel selections
         if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
-            _clear_all_epochs_channel_selections!(fig, selection_state)
+            _clear_all_shared_channel_selections!(fig, selection_state)
         end
         
         # Right Click: Print info TODO (for future functionality)
@@ -846,7 +653,7 @@ function _setup_grid_channel_selection_events!(fig::Figure, selection_state::Epo
         
         # Left Click (without Ctrl): Clear all channel selections
         if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
-            _clear_all_epochs_channel_selections!(fig, selection_state)
+            _clear_all_shared_channel_selections!(fig, selection_state)
         end
         
         # Right Click: Print info TODO (for future functionality)

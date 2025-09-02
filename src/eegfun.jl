@@ -71,6 +71,9 @@ include("plots/plot_misc.jl")
 # Layout system (must be included before other plotting functions)
 include("plots/layout_system.jl")
 
+# Shared interactivity (must be included before plot_erp and plot_epochs)
+include("plots/shared_interactivity.jl")
+
 include("plots/plot_channel_summary.jl")
 include("plots/plot_correlation_heatmap.jl")
 include("plots/plot_databrowser.jl")
