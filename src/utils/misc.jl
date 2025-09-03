@@ -436,3 +436,20 @@ function parse_string_to_ints(text::String, max_count::Int)
 end
 
 
+# Helper function to extract just the defaults
+function _get_defaults(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Dict{Symbol,Any}
+    return Dict(key => value[1] for (key, value) in kwargs_dict)
+end
+
+# Helper function to generate documentation
+function generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
+    doc_lines = ["# Keyword Arguments"]
+    push!(doc_lines, "All keyword arguments below have sensible defaults defined in `DEFAULT_CHANNEL_SUMMARY_KWARGS`.")
+    push!(doc_lines, "You can override any of these defaults by passing the corresponding keyword argument.")
+    push!(doc_lines, "")
+    for (param_name, (default_val, desc)) in kwargs_dict
+        type_info = typeof(default_val)
+        push!(doc_lines, "- `$(param_name)::$(type_info)=$(default_val)`: $(desc)")
+    end
+    return join(doc_lines, "\n")
+end
