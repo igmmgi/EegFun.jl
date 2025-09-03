@@ -1,7 +1,7 @@
 ########################################################
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-const DEFAULT_TRIGGER_KWARGS = Dict(
+const PLOT_TRIGGERS_KWARGS = Dict(
     :window_size => 10.0,
     :initial_position => -2.0,
     :min_window_size => 0.1,
