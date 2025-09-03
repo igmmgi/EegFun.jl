@@ -1,4 +1,5 @@
 # Default parameters for channel summary plots with descriptions
+# Dict is used for documentation and for defaults
 const DEFAULT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :sort_values => (false, "If true, sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
@@ -18,23 +19,6 @@ const DEFAULT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :grid_alpha => (0.3, "Transparency of grid."),
 )
 
-# Helper function to extract just the defaults
-function _get_defaults(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Dict{Symbol,Any}
-    return Dict(key => value[1] for (key, value) in kwargs_dict)
-end
-
-# Helper function to generate documentation
-function generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
-    doc_lines = ["# Keyword Arguments"]
-    push!(doc_lines, "All keyword arguments below have sensible defaults defined in `DEFAULT_CHANNEL_SUMMARY_KWARGS`.")
-    push!(doc_lines, "You can override any of these defaults by passing the corresponding keyword argument.")
-    push!(doc_lines, "")
-    for (param_name, (default_val, desc)) in kwargs_dict
-        type_info = typeof(default_val)
-        push!(doc_lines, "- `$(param_name)::$(type_info)=$(default_val)`: $(desc)")
-    end
-    return join(doc_lines, "\n")
-end
 
 """
     plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; kwargs...)
@@ -46,6 +30,8 @@ This is the mutating version that plots directly on the provided `fig` and `ax` 
 Assumes the DataFrame `dat` contains at least two columns:
 - `:channel`: Containing channel names or identifiers (will be used for x-axis labels).
 - `col`: The column specified by the `col` argument, containing the values to plot.
+
+$(SIGNATURES)
 
 # Arguments
 - `fig::Figure`: The Makie Figure object to plot on

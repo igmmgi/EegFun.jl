@@ -1,23 +1,28 @@
 using Documenter
 
-# Add the parent directory to the load path
-push!(LOAD_PATH, "..")
-
+# Add the parent directory to the load path so we can load the local package
+push!(LOAD_PATH, dirname(@__DIR__))
 using eegfun
 
+# Set up the documentation
 makedocs(
     sitename = "eegfun",
     format = Documenter.HTML(
+        prettyurls = get(ENV, "CI", nothing) == "true",
+        assets = String[],
         size_threshold = nothing,  # Disable size threshold
     ),
     modules = [eegfun],
-    checkdocs = :none,  # Disable strict documentation checking
-    warnonly = [:cross_references],  # Only warn about cross-references, don't fail
+    pages = [
+        "Home" => "index.md",
+        "API Reference" => "api.md",
+    ],
+    doctest = true,
+    checkdocs = :exports,
 )
 
-# Documenter can also automatically deploy documentation to gh-pages.
-# See "Hosting Documentation" and deploydocs() in the Documenter manual
-# for more information.
-#=deploydocs(
-    repo = "<repository url>"
-)=#
+deploydocs(;
+    repo = "github.com/igmmgi/eegfun.jl.git",
+    versions = ["stable" => "v^", "v#.#", "dev" => "master"],
+    push_preview = true,
+)

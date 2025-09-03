@@ -18,6 +18,7 @@ using Makie
 using ScatteredInterpolation
 
 # Utilities
+using DocStringExtensions
 using Logging
 using LoggingExtras
 using OrderedCollections
