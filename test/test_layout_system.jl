@@ -159,7 +159,11 @@ end
             :ylabel => "Y Label",
             :xlim => (0, 10),
             :ylim => (-5, 5),
-            :yreversed => true
+            :yreversed => true,
+            :xgrid => true,
+            :ygrid => false,
+            :xminorgrid => true,
+            :yminorgrid => false
         )
         
         eegfun._apply_axis_properties!(ax; kwargs...)
@@ -168,6 +172,10 @@ end
         @test ax.xlabel[] == "X Label"
         @test ax.ylabel[] == "Y Label"
         @test ax.yreversed[] == true
+        @test ax.xgridvisible[] == true
+        @test ax.ygridvisible[] == false
+        @test ax.xminorgridvisible[] == true
+        @test ax.yminorgridvisible[] == false
     end
     
     @testset "Grid Axis Properties" begin

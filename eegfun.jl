@@ -10,10 +10,13 @@ using eegfun
 using GLMakie
 # using CairoMakie
 using DataFrames
-using BenchmarkTools
+#using BenchmarkTools
 
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+
+eegfun.plot_layout_2d(layout; head_color = :red, head_linewidth = 3, point_plot = false, label_plot = false)
+
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)

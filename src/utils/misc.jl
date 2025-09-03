@@ -441,6 +441,80 @@ function _get_defaults(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Dict{Symbol
     return Dict(key => value[1] for (key, value) in kwargs_dict)
 end
 
+"""
+    _merge_plot_kwargs(defaults_dict, user_kwargs; validate=true)
+
+Helper function to merge user keyword arguments with defaults and optionally validate parameter names.
+
+# Arguments
+- `defaults_dict`: Dictionary with (default_value, description) tuples
+- `user_kwargs`: User-provided keyword arguments (NamedTuple or Dict)
+- `validate`: Whether to validate unknown parameters (default: true)
+
+# Returns
+- `Dict{Symbol,Any}`: Merged and validated keyword arguments
+
+# Example
+```julia
+# With validation (default):
+plot_kwargs = _merge_plot_kwargs(PLOT_KWARGS, kwargs)
+
+# Without validation (for multi-component functions):
+plot_kwargs = _merge_plot_kwargs(PLOT_KWARGS, kwargs; validate=false)
+```
+"""
+function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::NamedTuple; validate::Bool = true)::Dict{Symbol,Any}
+    
+    # Get default and user kwargs
+    defaults = _get_defaults(defaults_dict)
+    user_dict = Dict{Symbol,Any}(pairs(user_kwargs))
+    
+    # Check for unknown parameters (only if validation is enabled)
+    if validate
+        valid_keys = keys(defaults)
+        unknown_keys = setdiff(keys(user_dict), valid_keys)
+        if !isempty(unknown_keys)
+            @minimal_error "Unknown keyword arguments: $(join(unknown_keys, ", ")). Valid arguments: $(join(valid_keys, ", "))"
+        end
+    end
+    
+    # Merge defaults with user kwargs
+    merged_kwargs = merge(defaults, user_dict)
+    
+    return merged_kwargs
+end
+
+# Convenience function for the common pattern
+function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Dict; validate::Bool = true)::Dict{Symbol,Any}
+    return _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
+end
+
+# Handle empty keyword arguments (Base.Pairs)
+function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Base.Pairs; validate::Bool = true)::Dict{Symbol,Any}
+    return _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
+end
+
+
+
+"""
+    _orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float64}) -> Int
+
+Calculate the orientation of three points (p1, p2, p3).
+Returns 0 if collinear, 1 if clockwise, 2 if counterclockwise.
+
+This is a computational geometry utility function used in convex hull algorithms.
+"""
+function _orientation(p1::Vector{Float64}, p2::Vector{Float64}, p3::Vector{Float64})::Int
+    val = (p2[2] - p1[2]) * (p3[1] - p2[1]) - (p2[1] - p1[1]) * (p3[2] - p2[2])
+    if abs(val) < 1e-10
+        return 0  # collinear
+    elseif val > 0
+        return 1  # clockwise
+    else
+        return 2  # counterclockwise
+    end
+end
+
 # Helper function to generate documentation
 function generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::String
     doc_lines = ["# Keyword Arguments"]
