@@ -1,27 +1,43 @@
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-const DEFAULT_ERP_KWARGS = Dict(
-    :xlim => nothing,
-    :ylim => nothing,
-    :xlabel => "Time (S)",
-    :ylabel => "mV",
-    :title => "",
-    :show_title => true,
-    :linewidth => 1,
-    :color => :black,
-    :linestyle => :solid,
-    :colormap => :jet,
-    :yreversed => false,
-    :average_channels => false,
-    :legend => true,
-    :legend_label => "",
-    :xgrid => false,
-    :ygrid => false,
-    :xminorgrid => false,
-    :yminorgrid => false,
-    :add_xy_origin => true,
-    :interactive => true,  
+const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    
+    # Axis limits and labels
+    :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :xlabel => ("Time (S)", "Label for x-axis"),
+    :ylabel => ("mV", "Label for y-axis"),
+    
+    # Title
+    :title => ("", "Plot title"),
+    :show_title => (true, "Whether to show the title"),
+    
+    # Line styling
+    :linewidth => (1, "Line width for ERP traces"),
+    :color => (:black, "Color for ERP traces"),
+    :linestyle => (:solid, "Line style for ERP traces"),
+    :colormap => (:jet, "Colormap for multi-channel plots"),
+    
+    # Plot configuration
+    :yreversed => (false, "Whether to reverse the y-axis"),
+    :average_channels => (false, "Whether to average across channels"),
+    :interactive => (true, "Whether to enable interactive features"),
+    
+    # Legend
+    :legend => (true, "Whether to show the legend"),
+    :legend_label => ("", "Custom label for the legend"),
+    
+    # Grid
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
+    
+    # Origin lines
+    :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
 )
 
 """
@@ -127,8 +143,7 @@ function plot_erp(datasets::Vector{ErpData};
                  kwargs...)
 
     # Merge user kwargs and default kwargs
-    default_kwargs = copy(DEFAULT_ERP_KWARGS)
-    plot_kwargs = merge(default_kwargs, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
     
     # data subsetting
     dat_subset = subset(
@@ -163,8 +178,8 @@ function plot_erp(datasets::Vector{ErpData};
     
     # Now do the actual plotting for each axis
     for (ax, channel) in zip(axes, channels)
-        @info "plot_erp: plotting channel: $channel, plot_layout.type: $(plot_layout.type)"
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
+        @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
         _plot_erp!(ax, dat_subset, channels_to_plot; plot_kwargs...)
     end
     
@@ -199,6 +214,10 @@ function plot_erp(datasets::Vector{ErpData};
         elseif plot_layout.type == :grid
             _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, :grid)
         end
+    end
+    
+    if plot_kwargs[:display_plot]
+        display_figure(fig)
     end
     
     return fig, axes

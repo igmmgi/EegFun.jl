@@ -53,7 +53,7 @@ using eegfun
 using GLMakie
 # using CairoMakie
 using DataFrames
-using BenchmarkTools
+# using BenchmarkTools
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # define neighbours 2D/3D defined by distance (mm)
@@ -91,7 +91,7 @@ cs = eegfun.channel_summary(dat)
 eegfun.plot_channel_summary(cs, :range)
 
 
-fig, ax = eegfun.plot_erp(erps[1])
+fig, ax = eegfun.plot_erp(erps[1], linewidth = 2)
 fig, ax = eegfun.plot_erp(erps[1], layout = :grid)
 fig, ax = eegfun.plot_erp(erps[1], layout = :topo)
 
