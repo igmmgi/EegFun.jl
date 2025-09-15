@@ -14,7 +14,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :title => (nothing, "Plot title. If nothing, automatically determined"),
     :xlabel => ("Time (S)", "Label for x-axis"),
-    :ylabel => ("mV", "Label for y-axis"),
+    :ylabel => ("μV", "Label for y-axis"),
     
     # Line styling
     :linewidth => ([1, 2], "Line width for epoch traces and average"),
@@ -55,6 +55,57 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :interactive => (true, "Whether to enable interactive features"),
 )
 
+"""
+    plot_epochs(dat::EpochData; 
+                channel_selection::Function = channels(),
+                sample_selection::Function = samples(), 
+                epoch_selection::Function = epochs(),
+                include_extra::Bool = false,
+                layout = :single,
+                kwargs...)
+
+Plot epoch data with flexible layout options.
+
+# Arguments
+- `dat::EpochData`: Epoch data structure containing multiple trials
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: `channels()`)
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: `samples()`)
+- `epoch_selection::Function`: Function that returns boolean vector for epoch filtering (default: `epochs()`)
+- `include_extra::Bool`: Whether to include extra channels (default: `false`)
+- `layout`: Layout specification:
+  - `:single` (default): Single plot with all channels
+  - `:grid`: Auto-calculated grid layout
+  - `:topo`: Topographic layout based on channel positions
+  - `Vector{Int}`: Custom grid dimensions [rows, cols]
+
+$(generate_kwargs_doc(PLOT_EPOCHS_KWARGS))
+
+# Returns
+- `Figure`: The Makie Figure object
+- `Union{Axis, Vector{Axis}}`: Single axis for single layout, or vector of axes for grid/topo layouts
+
+# Examples
+```julia
+# Single plot with all channels
+fig, ax = plot_epochs(dat)
+
+# Grid layout
+fig, axes = plot_epochs(dat, layout = :grid)
+
+# Custom grid dimensions
+fig, axes = plot_epochs(dat, layout = [2, 3])
+
+# Don't display plot
+fig, ax = plot_epochs(dat; display_plot = false)
+
+# Custom styling
+fig, ax = plot_epochs(dat; 
+    color = [:blue, :red],
+    linewidth = [1, 3],
+    title = "Custom Epochs"
+)
+```
+"""
 function plot_epochs(
     dat::EpochData;
     channel_selection::Function = channels(),
