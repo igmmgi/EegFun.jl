@@ -1,36 +1,58 @@
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-const DEFAULT_EPOCHS_KWARGS = Dict(
-    :average_channels => false,
-    :xlim => nothing,
-    :ylim => nothing,
-    :title => nothing,
-    :xlabel => "Time (S)",
-    :ylabel => "mV",
-    :linewidth => [1, 2],
-    :color => [:grey, :red],
-    :yreversed => false,
-    :layout => :single,  # :single (default), :grid, or :topo
-    :layout_plot_width => 0.12,
-    :layout_plot_height => 0.12,
-    :layout_margin => 0.02,
-    :layout_show_scale => true,
-    :layout_scale_position => [0.95, 0.05],
-    :layout_scale_width => 0.14,
-    :layout_scale_height => 0.14,
-    :legend => true,
-    :legend_label => "",
-    :dims => nothing,
-    :hidedecorations => false,
-    :theme_fontsize => 24,
-    :plot_avg_trials => true,                # draw ERP average overlay
-    :axes_through_origin => true,
-    :xgrid => false,
-    :ygrid => false,
-    :xminorgrid => false,
-    :yminorgrid => false,
-    :interactive => true,  
+const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    
+    # Data processing
+    :average_channels => (false, "Whether to average across channels"),
+    :plot_avg_trials => (true, "Whether to draw ERP average overlay"),
+    
+    # Axis limits and labels
+    :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :title => (nothing, "Plot title. If nothing, automatically determined"),
+    :xlabel => ("Time (S)", "Label for x-axis"),
+    :ylabel => ("mV", "Label for y-axis"),
+    
+    # Line styling
+    :linewidth => ([1, 2], "Line width for epoch traces and average"),
+    :color => ([:grey, :red], "Colors for epoch traces and average"),
+    :yreversed => (false, "Whether to reverse the y-axis"),
+    
+    # Layout configuration
+    :layout => (:single, "Layout type: :single, :grid, or :topo"),
+    :layout_plot_width => (0.12, "Width of individual plots in layout"),
+    :layout_plot_height => (0.12, "Height of individual plots in layout"),
+    :layout_margin => (0.02, "Margin between plots in layout"),
+    :layout_show_scale => (true, "Whether to show scale in layout"),
+    :layout_scale_position => ([0.95, 0.05], "Position of scale in layout"),
+    :layout_scale_width => (0.14, "Width of scale in layout"),
+    :layout_scale_height => (0.14, "Height of scale in layout"),
+    :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
+    
+    # Display options
+    :hidedecorations => (false, "Whether to hide axis decorations"),
+    :theme_fontsize => (24, "Font size for theme"),
+    
+    # Legend
+    :legend => (true, "Whether to show the legend"),
+    :legend_label => ("", "Custom label for the legend"),
+    
+    # Grid
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    
+    # Origin lines
+    :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
+    
+    # Minor grid
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
+    
+    # Interactive features
+    :interactive => (true, "Whether to enable interactive features"),
 )
 
 function plot_epochs(
@@ -40,7 +62,10 @@ function plot_epochs(
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
     layout = :single,  # :single (default), :grid, :topo, or [rows, cols]
-    kwargs = Dict())::Tuple{Figure, Union{Axis, Vector{Axis}}}
+    kwargs...)::Tuple{Figure, Union{Axis, Vector{Axis}}}
+    
+    # Merge user kwargs and default kwargs
+    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
     
     # Use subset to get the data we want to plot (same pattern as other functions)
     dat_subset = subset(
@@ -205,23 +230,25 @@ function plot_epochs(
     fontsize_theme = Theme(fontsize = plot_kwargs[:theme_fontsize])
     update_theme!(fontsize_theme)
 
-    display(fig)
+    if plot_kwargs[:display_plot]
+        display_figure(fig)
+    end
     
     # Return fig and all axes (or single axis if only one)
     return fig, length(axes) == 1 ? first(axes) : axes
 
 end
 
-function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
+function _plot_epochs!(ax, dat, channels, plot_kwargs)::Nothing
     # This function expects exactly one channel; callers pass [:avg] or [channel]
-    println("plot_epochs! $(channels)")
+    @info "plot_epochs: $(print_vector(channels))"
     @assert length(channels) == 1 "_plot_epochs! expects a single channel"
     ch = channels[1]
 
     # Cache time vector and styles
     time_vec = dat.data[1][!, :time]
-    trial_color = kwargs[:color][1]
-    trial_linewidth = kwargs[:linewidth][1]
+    trial_color = plot_kwargs[:color][1]
+    trial_linewidth = plot_kwargs[:linewidth][1]
 
     # Concatenate all trials with NaN separators into single buffers
     trials = dat.data
@@ -254,13 +281,13 @@ function _plot_epochs!(ax, dat, channels, kwargs)::Nothing
 end
 
 
-function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, kwargs)::Nothing
+function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, plot_kwargs)::Nothing
     @assert length(channels) == 1 "_plot_epochs_from_erp! expects a single channel"
     ch = channels[1]
 
     time_vec = erp_dat.data[!, :time]
-    avg_color = kwargs[:color][2]
-    avg_linewidth = kwargs[:linewidth][2]
+    avg_color = plot_kwargs[:color][2]
+    avg_linewidth = plot_kwargs[:linewidth][2]
 
     lines!(ax, time_vec, erp_dat.data[!, ch], color = avg_color, linewidth = avg_linewidth)
     return nothing
@@ -273,7 +300,7 @@ function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, e
     end
 
     # Determine global y-lims for consistency across small axes
-    ylim = kwargs[:ylim]
+    ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
         yr = ylimits(dat; channel_selection = channels(all_plot_channels))
         ylim = (yr[1], yr[2])
@@ -312,11 +339,11 @@ function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, e
             valign = clamp(pos[2], margin, 1 - margin),
         )
         push!(axes, ax)
-        _plot_epochs!(ax, dat, [ch], kwargs)
-        erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [ch], kwargs)
+        _plot_epochs!(ax, dat, [ch], plot_kwargs)
+        erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [ch], plot_kwargs)
 
         # Draw axes through origin if requested
-        if get(kwargs, :axes_through_origin, false)
+        if plot_kwargs[:axes_through_origin]
             hlines!(ax, [0.0], color = :black, linewidth = 1)
             vlines!(ax, [0.0], color = :black, linewidth = 1)
         end
@@ -362,7 +389,7 @@ function _plot_epochs_grid!(fig::Figure, axes::Vector{Axis}, dat::EpochData, erp
     n_channels = length(all_plot_channels)
     
     # Calculate y-range if not provided (using shared yrange helper)
-    ylim = kwargs[:ylim]
+    ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
         yr = ylimits(dat; channel_selection = channels(all_plot_channels))
         ylim = (yr[1], yr[2])
@@ -373,11 +400,11 @@ function _plot_epochs_grid!(fig::Figure, axes::Vector{Axis}, dat::EpochData, erp
         col = mod(idx-1, cols) + 1
         ax = Axis(fig[row, col])
         push!(axes, ax)
-        _plot_epochs!(ax, dat, [channel], kwargs)
-        erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], kwargs)
+        _plot_epochs!(ax, dat, [channel], plot_kwargs)
+        erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], plot_kwargs)
 
         # Draw axes through origin if requested
-        if get(kwargs, :axes_through_origin, false)
+        if plot_kwargs[:axes_through_origin]
             hlines!(ax, [0.0], color = :black, linewidth = 1)
             vlines!(ax, [0.0], color = :black, linewidth = 1)
         end
@@ -400,18 +427,18 @@ function _plot_epochs_grid!(fig::Figure, axes::Vector{Axis}, dat::EpochData, erp
 end
 
 function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::Nothing
-    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
-    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
-    ax.title = isnothing(kwargs[:title]) ? default_title : kwargs[:title]
-    ax.xlabel = kwargs[:xlabel]
-    ax.ylabel = kwargs[:ylabel]
-    ax.yreversed = kwargs[:yreversed]
+    !isnothing(plot_kwargs[:xlim]) && xlims!(ax, plot_kwargs[:xlim])
+    !isnothing(plot_kwargs[:ylim]) && ylims!(ax, plot_kwargs[:ylim])
+    ax.title = isnothing(plot_kwargs[:title]) ? default_title : plot_kwargs[:title]
+    ax.xlabel = plot_kwargs[:xlabel]
+    ax.ylabel = plot_kwargs[:ylabel]
+    ax.yreversed = plot_kwargs[:yreversed]
     
     # Apply grid settings
-    ax.xgridvisible = kwargs[:xgrid]
-    ax.ygridvisible = kwargs[:ygrid]
-    ax.xminorgridvisible = kwargs[:xminorgrid]
-    ax.yminorgridvisible = kwargs[:yminorgrid]
+    ax.xgridvisible = plot_kwargs[:xgrid]
+    ax.ygridvisible = plot_kwargs[:ygrid]
+    ax.xminorgridvisible = plot_kwargs[:xminorgrid]
+    ax.yminorgridvisible = plot_kwargs[:yminorgrid]
     
     return nothing
 end
