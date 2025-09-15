@@ -1,41 +1,60 @@
 ##########################################
 # 2D topographic plot
 ##########################################
+
+# Default parameters for topography plots with descriptions
+const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Topography-specific parameters
+    :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
+    :gridscale => (200, "Grid resolution for interpolation"),
+    :colormap => (:jet, "Colormap for the topography"),
+    :ylim => (nothing, "Y-axis limits (nothing for auto)"),
+    
+    # Colorbar parameters
+    :plot_colorbar => (true, "Whether to display the colorbar"),
+    :colorbar_width => (30, "Width of the colorbar"),
+    :colorbar_label => ("μV", "Label for the colorbar"),
+    
+    # Head shape parameters (reusing layout kwargs)
+    :head_color => (:black, "Color of the head shape outline."),
+    :head_linewidth => (2, "Line width of the head shape outline."),
+    :head_radius => (88.0, "Radius of the head shape in mm."),
+    :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
+    :head_nose_scale => (4.0, "Scale factor for nose size."),
+    
+    # Electrode point parameters
+    :point_plot => (true, "Whether to plot electrode points."),
+    :point_marker => (:circle, "Marker style for electrode points."),
+    :point_markersize => (12, "Size of electrode point markers."),
+    :point_color => (:black, "Color of electrode points."),
+    
+    # Electrode label parameters
+    :label_plot => (true, "Whether to plot electrode labels."),
+    :label_fontsize => (20, "Font size for electrode labels."),
+    :label_color => (:black, "Color of electrode labels."),
+    :label_xoffset => (0, "X-axis offset for electrode labels."),
+    :label_yoffset => (0, "Y-axis offset for electrode labels."),
+)
+
 function _plot_topography!(
     fig::Figure,
     ax::Axis,
     dat::DataFrame,
     layout::Layout;
-    ylim = nothing,
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    topo_kwargs = Dict(),
-    colorbar_kwargs = Dict(),
-    method = :multiquadratic,  # :multiquadratic or :spherical_spline
+    kwargs...
 )
     # ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 
-    # deal with kwargs
-    head_default_kwargs = Dict(:color => :black, :linewidth => 2)
-    head_kwargs = merge(head_default_kwargs, head_kwargs)
-
-    point_default_kwargs = Dict(:plot_points => true, :marker => :circle, :markersize => 12, :color => :black)
-    point_kwargs = merge(point_default_kwargs, point_kwargs)
-
-    label_default_kwargs =
-        Dict(:plot_labels => true, :fontsize => 20, :color => :black, :xoffset => 0, :yoffset => 0)
-    label_kwargs = merge(label_default_kwargs, label_kwargs)
-
-    topo_default_kwargs = Dict(:colormap => :jet, :gridscale => 200)
-    topo_kwargs = merge(topo_default_kwargs, topo_kwargs)
-    gridscale = pop!(topo_kwargs, :gridscale)
-
-    colorbar_default_kwargs = Dict(:plot_colorbar => true, :width => 30, :label => "μV")
-    colorbar_kwargs = merge(colorbar_default_kwargs, colorbar_kwargs)
-    plot_colorbar = pop!(colorbar_kwargs, :plot_colorbar)
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    
+    # Extract specific values
+    method = plot_kwargs[:method]
+    gridscale = plot_kwargs[:gridscale]
+    ylim = plot_kwargs[:ylim]
+    plot_colorbar = plot_kwargs[:plot_colorbar]
 
     # actual data interpolation
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
@@ -72,21 +91,21 @@ function _plot_topography!(
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
         extendlow = :auto,
         extendhigh = :auto,
-        topo_kwargs...,
+        colormap = plot_kwargs[:colormap],
     )
 
     if plot_colorbar
-        Colorbar(fig[1, 2], co; colorbar_kwargs...)
+        Colorbar(fig[1, 2], co; 
+                width = plot_kwargs[:colorbar_width],
+                label = plot_kwargs[:colorbar_label])
     end
 
     # head shape
     plot_layout_2d!(
         fig,
         ax,
-        layout,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
+        layout;
+        plot_kwargs...,
     )
 
     return fig, ax
