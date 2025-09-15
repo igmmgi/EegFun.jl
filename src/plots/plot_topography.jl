@@ -63,7 +63,7 @@ function _plot_topography!(
     empty!(ax)
 
     # Use different ranges based on interpolation method
-    contour_range = method == :spherical_spline ? DEFAULT_HEAD_RADIUS * 4 : DEFAULT_HEAD_RADIUS * 2
+    contour_range = method == :spherical_spline ? 88.0 * 4 : 88.0 * 2
 
     co = contourf!(
         range(-contour_range, contour_range, length = gridscale),
@@ -260,8 +260,8 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
     end
 
     points  = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
-    x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
-    y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
+    x_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
+    y_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
 
     # Create regular grid more efficiently
     grid_points = zeros(2, grid_scale^2)
@@ -315,8 +315,8 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     electrode_radius = mean([sqrt(sum(coords[i, :] .^ 2)) for i = 1:n_channels])
 
     # Create a 2D grid for plotting
-    x_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
-    y_range = range(-DEFAULT_HEAD_RADIUS * 2, DEFAULT_HEAD_RADIUS * 2, length = grid_scale)
+    x_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
+    y_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
 
     # For spherical spline calculation, we need unit sphere coordinates
     # So we normalize for the G matrix calculation only
@@ -362,7 +362,7 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     interpolated_values = fill(NaN, length(grid_x))
 
     # Find valid grid points (within head and plotting area)
-    valid_mask = (r_2d .<= DEFAULT_HEAD_RADIUS) .& (r_2d .<= DEFAULT_HEAD_RADIUS * 2.0)
+    valid_mask = (r_2d .<= 88.0) .& (r_2d .<= 88.0 * 2.0)
     valid_indices = findall(valid_mask)
 
     if !isempty(valid_indices)
@@ -372,7 +372,7 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
         valid_r = r_2d[valid_indices]
 
         # Pre-compute stereographic projection for all valid points at once
-        r_norm = valid_r ./ DEFAULT_HEAD_RADIUS
+        r_norm = valid_r ./ 88.0
 
         # Vectorized stereographic projection
         # Fix coordinate conversion to prevent 90-degree offset
