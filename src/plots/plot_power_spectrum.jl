@@ -1,4 +1,6 @@
-# Default parameters for power spectrum plots with descriptions
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
 const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Spectral analysis parameters
     :window_size => (1024, "Size of the FFT window for spectral estimation"),

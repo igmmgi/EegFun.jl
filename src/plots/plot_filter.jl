@@ -1,4 +1,6 @@
-# Default parameters for filter response plots with descriptions
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
 const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits
     :ylimit => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),

@@ -1,8 +1,6 @@
-##########################################
-# 2D topographic plot
-##########################################
-
-# Default parameters for topography plots with descriptions
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
 const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Topography-specific parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
@@ -35,6 +33,11 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
 )
+
+
+##########################################
+# 2D topographic plot
+##########################################
 
 function _plot_topography!(
     fig::Figure,
