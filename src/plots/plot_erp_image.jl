@@ -7,7 +7,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
-    :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :ylim => (nothing, "Y-axis limits for ERP waveform as (min, max) tuple. If nothing, automatically determined"),
     :xlabel => ("Time (S)", "Label for x-axis"),
     :ylabel => ("Epoch", "Label for y-axis"),
     
@@ -23,6 +23,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     
     # ERP overlay
     :plot_erp => (true, "Whether to plot ERP average overlay"),
+    :boxcar_average => (1, "Boxcar average window size for smoothing the ERP image (1 = no smoothing)"),
     
     # Colorbar
     :plot_colorbar => (true, "Whether to show the colorbar"),
@@ -140,6 +141,11 @@ function plot_erp_image(dat::EpochData;
             end
         end
         
+        # Apply boxcar average if requested
+        if plot_kwargs[:boxcar_average] > 1
+            data = _apply_boxcar_average(data, plot_kwargs[:boxcar_average])
+        end
+        
         # Set color range if not provided
         if isnothing(plot_kwargs[:colorrange])
             plot_kwargs[:colorrange] = extrema(data)
@@ -175,19 +181,16 @@ function plot_erp_image(dat::EpochData;
         
         ax.yreversed = plot_kwargs[:yreversed]
         
-        # Set limits if provided, otherwise use data limits
+        # Set x-axis limits if provided, otherwise use data limits
         if !isnothing(plot_kwargs[:xlim])
             xlims!(ax, plot_kwargs[:xlim])
         else
             xlims!(ax, extrema(dat_subset.data[1].time))
         end
         
-        if !isnothing(plot_kwargs[:ylim])
-            ylims!(ax, plot_kwargs[:ylim])
-        else
-            ylims!(ax, (0.5, length(dat_subset.data) + 0.5))
-        end
-        
+        # Set y-axis limits for ERP image (always 1 to number of epochs)
+        ylims!(ax, (1, length(dat_subset.data)))
+
         # Add colorbar if requested (only for single layout)
         if plot_kwargs[:plot_colorbar] && plot_layout.type == :single
             Colorbar(fig[1, 2], hm, width = plot_kwargs[:colorbar_width], label = plot_kwargs[:colorbar_label])
@@ -231,6 +234,14 @@ function plot_erp_image(dat::EpochData;
         ax_erp.ylabel = "Amplitude (μV)"
         ax_erp.xgridvisible = false
         ax_erp.ygridvisible = false
+        
+        # Set y-axis limits for ERP trace
+        if !isnothing(plot_kwargs[:ylim])
+            ylims!(ax_erp, plot_kwargs[:ylim])
+        else
+            # Auto-determine y-limits based on data
+            ylims!(ax_erp, extrema(avg_data))
+        end
         ax_erp.xminorgridvisible = false
         ax_erp.yminorgridvisible = false
         
@@ -252,8 +263,10 @@ function plot_erp_image(dat::EpochData;
         rowsize!(fig.layout, 2, Relative(1/3))
     end
     
+    # Link only x-axes (time dimension) but not y-axes (epoch dimension)
+    # since each channel may have different numbers of epochs
     if length(axes) > 1
-        linkaxes!(axes...)
+        linkxaxes!(axes...)
     end
 
     # Display plot if requested
@@ -267,15 +280,32 @@ end
 """
     _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector)
 
-Set up custom interactivity for ERP images with color scale adjustment for up/down keys.
+Set up custom interactivity for ERP images with context-aware key controls based on mouse position.
 """
 function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatmaps::Vector)
     _setup_keyboard_tracking(fig)
     
+    # Track mouse position to determine active axis
+    active_axis = Ref(axes[1])  # Default to first axis (ERP image)
+    
+    # Update active axis based on mouse position
+    on(events(fig).mouseposition) do mouse_pos
+        for ax in axes
+            viewport = ax.scene.viewport[]
+            if mouse_pos[1] >= viewport.origin[1] && 
+               mouse_pos[1] <= viewport.origin[1] + viewport.widths[1] &&
+               mouse_pos[2] >= viewport.origin[2] && 
+               mouse_pos[2] <= viewport.origin[2] + viewport.widths[2]
+                active_axis[] = ax
+                break
+            end
+        end
+    end
+    
     # Define keyboard actions for ERP images
     keyboard_actions = Dict(
-        Keyboard.up => :color_more,
-        Keyboard.down => :color_less,
+        Keyboard.up => :y_more,
+        Keyboard.down => :y_less,
         Keyboard.left => :x_less,
         Keyboard.right => :x_more
     )
@@ -283,7 +313,7 @@ function _setup_erp_image_interactivity!(fig::Figure, axes::Vector{Axis}, heatma
     on(events(fig).keyboardbutton) do event
         if event.action in (Keyboard.press, Keyboard.repeat) && haskey(keyboard_actions, event.key)
             action = keyboard_actions[event.key]
-            _handle_erp_image_navigation!(axes, heatmaps, action)
+            _handle_erp_image_navigation!(axes, heatmaps, action, active_axis[])
         end
     end
 end
@@ -293,14 +323,61 @@ end
 
 Handle navigation actions for ERP images.
 """
-function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol)
-    if action in (:color_more, :color_less) # Adjust color scale
-        factor = action == :color_more ? 0.8 : 1.25
-        for hm in heatmaps
-            hm.colorrange[] = hm.colorrange[] .* factor
-        end
-    elseif action in (:x_less, :x_more) # Adjust time axis
+function _handle_erp_image_navigation!(axes::Vector{Axis}, heatmaps::Vector, action::Symbol, active_axis::Axis)
+    if action in (:x_less, :x_more) # Adjust time axis
         func = action == :x_less ? xmore! : xless!
-        func(first(axes))
+        func(active_axis)
+    elseif action in (:y_less, :y_more) # Adjust y-axis based on active plot
+        if active_axis == axes[1] # ERP image axis
+            # For ERP image, adjust color scale instead of y-axis
+            factor = action == :y_more ? 1.25 : 0.8
+            for hm in heatmaps
+                hm.colorrange[] = hm.colorrange[] .* factor
+            end
+        else # ERP waveform axis
+            # For ERP waveform, adjust y-axis limits
+            func = action == :y_less ? ymore! : yless!
+            func(active_axis)
+        end
     end
+end
+
+
+"""
+    _apply_boxcar_average(data::Matrix, window_size::Int)
+
+Apply boxcar (moving average) smoothing to the ERP image data.
+
+# Arguments
+- `data::Matrix`: The ERP image data (epochs × time points)
+- `window_size::Int`: Size of the moving average window
+
+# Returns
+- `Matrix`: Smoothed data with the same dimensions
+
+# Examples
+```julia
+# Apply 5-epoch boxcar average
+smoothed_data = _apply_boxcar_average(data, 5)
+```
+"""
+function _apply_boxcar_average(data::Matrix, window_size::Int)
+    n_epochs, n_timepoints = size(data)
+    smoothed_data = similar(data)
+    
+    # Calculate half window size for centering
+    half_window = window_size ÷ 2
+    
+    for epoch in 1:n_epochs
+        for timepoint in 1:n_timepoints
+            # Define the window boundaries
+            start_epoch = max(1, epoch - half_window)
+            end_epoch = min(n_epochs, epoch + half_window)
+            
+            # Calculate the average within the window
+            smoothed_data[epoch, timepoint] = mean(data[start_epoch:end_epoch, timepoint])
+        end
+    end
+    
+    return smoothed_data
 end
