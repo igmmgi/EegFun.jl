@@ -327,11 +327,11 @@
         @test haskey(eegfun.PLOT_LAYOUT_ROI_KWARGS, :roi_fill)
         
         # Test default values
-        @test eegfun.PLOT_LAYOUT_HEAD_KWARGS[:head_color][1] == eegfun.DEFAULT_HEAD_COLOR
-        @test eegfun.PLOT_LAYOUT_HEAD_KWARGS[:head_linewidth][1] == eegfun.DEFAULT_HEAD_LINEWIDTH
+        @test eegfun.PLOT_LAYOUT_HEAD_KWARGS[:head_color][1] == :black
+        @test eegfun.PLOT_LAYOUT_HEAD_KWARGS[:head_linewidth][1] == 2
         @test eegfun.PLOT_LAYOUT_POINT_KWARGS[:point_plot][1] == true
-        @test eegfun.PLOT_LAYOUT_POINT_KWARGS[:point_color][1] == eegfun.DEFAULT_POINT_COLOR
+        @test eegfun.PLOT_LAYOUT_POINT_KWARGS[:point_color][1] == :black
         @test eegfun.PLOT_LAYOUT_LABEL_KWARGS[:label_plot][1] == true
-        @test eegfun.PLOT_LAYOUT_LABEL_KWARGS[:label_fontsize][1] == eegfun.DEFAULT_LABEL_FONTSIZE
+        @test eegfun.PLOT_LAYOUT_LABEL_KWARGS[:label_fontsize][1] == 20
     end
 end

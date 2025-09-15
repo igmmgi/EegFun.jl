@@ -1,14 +1,26 @@
 ########################################################
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-const PLOT_TRIGGERS_KWARGS = Dict(
-    :window_size => 10.0,
-    :initial_position => -2.0,
-    :min_window_size => 0.1,
-    :max_window_size => 100.0,
-    :label_fontsize => 20,
-    :display_plot => true,
-    :ignore_triggers => Int[],  # Vector of trigger codes to ignore
+const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    :window_size => (10.0, "Size of the time window to display in seconds."),
+    :initial_position => (-2.0, "Initial position of the time window in seconds."),
+    :min_window_size => (0.1, "Minimum size of the time window in seconds."),
+    :max_window_size => (100.0, "Maximum size of the time window in seconds."),
+    :label_fontsize => (20, "Font size for labels."),
+    :display_plot => (true, "Whether to display the plot."),
+    :ignore_triggers => (Int[], "Vector of trigger codes to ignore."),
+    :marker_size => (15, "Size of markers in the trigger overview plot."),
+    :line_width_trigger => (1, "Line width for trigger vertical lines."),
+    :line_offset => (0.1, "Offset for trigger vertical lines."),
+    :timeline_width => (2, "Line width for the main timeline."),
+    :event_line_width => (1, "Line width for individual event lines."),
+    :font_size => (24, "Font size for text elements."),
+    :event_line_height => (0.05, "Height of event lines."),
+    :time_label_offset => (-0.001, "Vertical offset for time labels."),
+    :y_min_limit => (-0.1, "Minimum y-axis limit."),
+    :y_max_limit => (0.15, "Maximum y-axis limit."),
+    :window_size_step => (1.0, "Step size for window size slider."),
+    :position_step => (0.5, "Step size for position slider."),
 )
 
 ########################################################
@@ -87,9 +99,9 @@ function _plot_trigger_vertical_lines!(ax::Axis, times::Vector{Float64}, y_posit
         lines!(
             ax,
             [xpos, xpos],
-            [ypos - DEFAULT_LINE_OFFSET, ypos + DEFAULT_LINE_OFFSET],
+            [ypos - PLOT_TRIGGERS_KWARGS[:line_offset][1], ypos + PLOT_TRIGGERS_KWARGS[:line_offset][1]],
             color = :black,
-            linewidth = DEFAULT_LINE_WIDTH_TRIGGER,
+            linewidth = PLOT_TRIGGERS_KWARGS[:line_width_trigger][1],
         )
     end
 end
@@ -100,7 +112,7 @@ end
 Helper function to plot a single trigger vertical line.
 """
 function _plot_single_trigger_line!(ax::Axis, time::Float64)
-    lines!(ax, [time, time], [0, EVENT_LINE_HEIGHT], color = :black, linewidth = DEFAULT_EVENT_LINE_WIDTH)
+    lines!(ax, [time, time], [0, PLOT_TRIGGERS_KWARGS[:event_line_height][1]], color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:event_line_width][1])
 end
 
 """
@@ -109,7 +121,7 @@ end
 Helper function to add trigger text with consistent styling.
 """
 function _add_trigger_text!(ax::Axis, x::Float64, y::Float64, text_str::String, align::Tuple)
-    text!(ax, x, y, text = text_str, align = align, color = :black, fontsize = DEFAULT_FONT_SIZE)
+    text!(ax, x, y, text = text_str, align = align, color = :black, fontsize = PLOT_TRIGGERS_KWARGS[:font_size][1])
 end
 
 """
@@ -222,7 +234,7 @@ Plot trigger events as a scatter plot with vertical lines.
 """
 function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
 
     if isempty(trigger_count)
         @minimal_warning "No triggers found in the data"
@@ -243,7 +255,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     for (unique, (key, value)) in enumerate(trigger_count)
         times = trigger_data[key]
         y_pos = fill(unique, length(times))
-        scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = DEFAULT_MARKER_SIZE)
+        scatter!(ax, times, y_pos, label = "$key: $(string(value))", markersize = PLOT_TRIGGERS_KWARGS[:marker_size][1])
         _plot_trigger_vertical_lines!(ax, times, y_pos)
     end
     fig[1, 2] = Legend(fig, ax)
@@ -283,7 +295,7 @@ fig, ax = plot_trigger_overview(dat; ignore_triggers=[1, 255])
 function plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData; kwargs...)
     @info "Plotting trigger (raw) overview for BioSemi data"
     # Merge user kwargs with defaults
-    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw, plot_kwargs[:ignore_triggers])
     return plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
 end
@@ -314,7 +326,7 @@ fig, ax = plot_trigger_overview(dat; ignore_triggers=[1, 255])
 function plot_trigger_overview(dat::ContinuousData; kwargs...)
     @info "Plotting trigger (cleaned) overview for ContinuousData"
     # Merge user kwargs with defaults
-    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers, plot_kwargs[:ignore_triggers])
     return plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
 end
@@ -335,7 +347,7 @@ function _setup_axis_properties!(ax::Axis)
     ax.xlabelsize = 20
     ax.titlesize = 22
     hideydecorations!(ax, ticks = true, label = false)
-    ylims!(ax, Y_MIN_LIMIT, Y_MAX_LIMIT)
+    ylims!(ax, PLOT_TRIGGERS_KWARGS[:y_min_limit][1], PLOT_TRIGGERS_KWARGS[:y_max_limit][1])
 end
 
 """
@@ -344,14 +356,14 @@ end
 Create interactive sliders for position and window size.
 """
 function _create_interactive_sliders(fig::Figure, end_time::Float64, plot_kwargs::Dict)
-    initial_position = DEFAULT_TRIGGER_KWARGS[:initial_position] 
+    initial_position = PLOT_TRIGGERS_KWARGS[:initial_position][1] 
 
     slider_position =
-        Slider(fig[2, 1], range = initial_position:POSITION_STEP:end_time, startvalue = initial_position, snap = true)
+        Slider(fig[2, 1], range = initial_position:PLOT_TRIGGERS_KWARGS[:position_step][1]:end_time, startvalue = initial_position, snap = true)
 
     slider_size = Slider(
         fig[3, 1],
-        range = plot_kwargs[:min_window_size]:WINDOW_SIZE_STEP:plot_kwargs[:max_window_size],
+        range = plot_kwargs[:min_window_size]:PLOT_TRIGGERS_KWARGS[:window_size_step][1]:plot_kwargs[:max_window_size],
         startvalue = plot_kwargs[:window_size],
         snap = true,
     )
@@ -390,22 +402,22 @@ function _plot_trigger_events!(
 
     # Plot horizontal timeline
     timeline_start = 0.0
-    lines!(ax, [timeline_start, trigger_times[end]], [0, 0], color = :black, linewidth = DEFAULT_TIMELINE_WIDTH)
+    lines!(ax, [timeline_start, trigger_times[end]], [0, 0], color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:timeline_width][1])
 
     # Plot vertical lines for each event
     for (time, code_str, time_str) in zip(trigger_times, code_strings, time_strings)
         _plot_single_trigger_line!(ax, time)
 
         # Add trigger code at the top of the line
-        _add_trigger_text!(ax, time, EVENT_LINE_HEIGHT, code_str, (:center, :bottom))
+        _add_trigger_text!(ax, time, PLOT_TRIGGERS_KWARGS[:event_line_height][1], code_str, (:center, :bottom))
         
         # Add time value below the line
-        _add_trigger_text!(ax, time, TIME_LABEL_OFFSET, time_str, (:center, :top))
+        _add_trigger_text!(ax, time, PLOT_TRIGGERS_KWARGS[:time_label_offset][1], time_str, (:center, :top))
     end
 
     # Plot intervals as text
     for (x, interval_str) in zip(interval_positions, interval_strings)
-        text!(ax, x, 0, text = interval_str, align = (:center, :top), color = :black, fontsize = DEFAULT_FONT_SIZE)
+        text!(ax, x, 0, text = interval_str, align = (:center, :top), color = :black, fontsize = PLOT_TRIGGERS_KWARGS[:font_size][1])
     end
 end
 
@@ -416,7 +428,7 @@ Internal function to create interactive trigger timing plot.
 """
 function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_times::Vector{Float64}; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     if isempty(trigger_times)
         @minimal_warning "No triggers found in the data"
         fig = Figure()
@@ -512,7 +524,7 @@ fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 ```
 """
 function plot_trigger_timing(dat::BiosemiDataFormat.BiosemiData; kwargs...)
-    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    plot_kwargs = merge(PLOT_TRIGGERS_KWARGS, Dict(kwargs))
     trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
 end
@@ -541,7 +553,7 @@ fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 ```
 """
 function plot_trigger_timing(dat::ContinuousData; kwargs...)
-    plot_kwargs = merge(DEFAULT_TRIGGER_KWARGS, Dict(kwargs))
+    plot_kwargs = merge(PLOT_TRIGGERS_KWARGS, Dict(kwargs))
     trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
 end
