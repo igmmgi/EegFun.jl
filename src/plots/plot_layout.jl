@@ -6,21 +6,24 @@
 # Dict is used for documentation and for defaults
 # Using prefixed keys to avoid conflicts between different component types
 const PLOT_LAYOUT_HEAD_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    :head_color => (DEFAULT_HEAD_COLOR, "Color of the head shape outline."),
-    :head_linewidth => (DEFAULT_HEAD_LINEWIDTH, "Line width of the head shape outline."),
+    :head_color => (:black, "Color of the head shape outline."),
+    :head_linewidth => (2, "Line width of the head shape outline."),
+    :head_radius => (88.0, "Radius of the head shape in mm."),
+    :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
+    :head_nose_scale => (4.0, "Scale factor for nose size."),
 )
 
 const PLOT_LAYOUT_POINT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :point_plot => (true, "Whether to plot electrode points."),
-    :point_marker => (DEFAULT_POINT_MARKER, "Marker style for electrode points."),
-    :point_markersize => (DEFAULT_POINT_SIZE, "Size of electrode point markers."),
-    :point_color => (DEFAULT_POINT_COLOR, "Color of electrode points."),
+    :point_marker => (:circle, "Marker style for electrode points."),
+    :point_markersize => (12, "Size of electrode point markers."),
+    :point_color => (:black, "Color of electrode points."),
 )
 
 const PLOT_LAYOUT_LABEL_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_plot => (true, "Whether to plot electrode labels."),
-    :label_fontsize => (DEFAULT_LABEL_FONTSIZE, "Font size for electrode labels."),
-    :label_color => (DEFAULT_LABEL_COLOR, "Color of electrode labels."),
+    :label_fontsize => (20, "Font size for electrode labels."),
+    :label_color => (:black, "Color of electrode labels."),
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
     :label_zoffset => (0, "Z-axis offset for electrode labels (3D only)."),
@@ -83,12 +86,12 @@ function plot_layout_2d!(
     xoffset = label_kwargs[:label_xoffset]
     yoffset = label_kwargs[:label_yoffset]
 
-    # Head shape - Use constants
-    radius = DEFAULT_HEAD_RADIUS
+    # Head shape - Use kwargs
+    radius = head_kwargs[:head_radius]
     arc!(ax, Point2f(0), radius * 2, -π, π; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # head
-    arc!(ax, Point2f(radius * 2, 0), radius * 2 * HEAD_EAR_RATIO, -π / 2, π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear right
-    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 * HEAD_EAR_RATIO, π / 2, -π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear left
-    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * HEAD_NOSE_SCALE; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # nose
+    arc!(ax, Point2f(radius * 2, 0), radius * 2 * head_kwargs[:head_ear_ratio], -π / 2, π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear right
+    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 * head_kwargs[:head_ear_ratio], π / 2, -π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear left
+    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * head_kwargs[:head_nose_scale]; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # nose
 
     # Regular points
     if plot_points

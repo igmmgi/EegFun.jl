@@ -66,7 +66,6 @@ include("analysis/tf.jl")
 include("analysis/triggers.jl")
 
 # Plotting functions
-include("plots/constants.jl")
 include("plots/plot_misc.jl")
 
 # Layout system (must be included before other plotting functions)
