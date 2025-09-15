@@ -1,3 +1,61 @@
+# Default parameters for databrowser plots with descriptions
+const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    
+    # Figure and layout
+    :figure_size => (nothing, "Figure size as (width, height). If nothing, uses default size"),
+    :figure_padding => ((10, 10, 10, 10), "Figure padding as (left, right, bottom, top)"),
+    
+    # Axis styling
+    :xlabel => ("Time (S)", "X-axis label"),
+    :ylabel => ("Amplitude (μV)", "Y-axis label"),
+    :title_fontsize => (16, "Font size for plot title"),
+    :label_fontsize => (14, "Font size for axis labels"),
+    :tick_fontsize => (12, "Font size for tick labels"),
+    
+    # UI styling
+    :ui_fontsize => (18, "Font size for UI elements"),
+    :ui_label_fontsize => (22, "Font size for UI labels"),
+    :menu_fontsize => (18, "Font size for menu items"),
+    :menu_width => (200, "Width of dropdown menus"),
+    
+    # Line styling
+    :line_width => (1, "Line width for data lines"),
+    :line_alpha => (1.0, "Transparency for data lines"),
+    :marker_line_width => (1, "Line width for marker lines"),
+    :marker_line_color => (:grey, "Color for marker lines"),
+    
+    # Channel styling
+    :channel_line_width => (1, "Line width for channel lines"),
+    :selected_channel_color => (:black, "Color for selected channels"),
+    :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
+    :channel_offset_scale => (1500, "Scale factor for channel vertical offset"),
+    :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
+    
+    # Selection styling
+    :selection_color => ((:blue, 0.3), "Color and transparency for selection rectangle"),
+    :selection_line_width => (2, "Line width for selection rectangle"),
+    
+    # Filter parameters
+    :default_hp_freq => (0.1, "Default high-pass filter frequency in Hz"),
+    :default_lp_freq => (40.0, "Default low-pass filter frequency in Hz"),
+    :default_crit_val => (100.0, "Default extreme value threshold in μV"),
+    
+    # View parameters
+    :default_window_size => (5000, "Default window size in samples"),
+    :default_amplitude_scale => (1.0, "Default amplitude scaling factor"),
+    :default_butterfly => (false, "Default butterfly plot mode"),
+    
+    # Marker styling
+    :marker_fontsize => (22, "Font size for marker labels"),
+    :marker_text_offset => (0.98, "Vertical offset factor for marker text"),
+    
+    # Extra channel styling
+    :extra_channel_line_width => (2, "Line width for extra channel lines"),
+    :extra_channel_alpha => (0.8, "Transparency for extra channel lines"),
+)
+
 # Base type for data states
 abstract type AbstractDataState end
 
@@ -20,9 +78,11 @@ mutable struct SelectionState
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
     rectangle::Makie.Poly
-    function SelectionState(ax)
+    function SelectionState(ax, plot_kwargs)
         initial_points = [Point2f(0.0, 0.0)]
-        poly_element = poly!(ax, initial_points, color = (:blue, 0.3), visible = false)
+        poly_element = poly!(ax, initial_points, 
+                           color = plot_kwargs[:selection_color], 
+                           visible = false)
         new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
     end
 end
@@ -31,7 +91,9 @@ mutable struct FilterState
     active::Observable{NamedTuple{(:hp, :lp),Tuple{Bool,Bool}}}
     hp_freq::Observable{Float64}
     lp_freq::Observable{Float64}
-    FilterState() = new(Observable((hp = false, lp = false)), Observable(0.1), Observable(40.0))
+    FilterState(plot_kwargs) = new(Observable((hp = false, lp = false)), 
+                                  Observable(plot_kwargs[:default_hp_freq]), 
+                                  Observable(plot_kwargs[:default_lp_freq]))
 end
 
 struct ToggleConfig
@@ -46,9 +108,11 @@ mutable struct ViewState
     crit_val::Observable{Float64}
     butterfly::Observable{Bool}
     amplitude_scale::Observable{Float64}
-    function ViewState(n_channels::Int, n_samples::Int = 5000)
+    function ViewState(n_channels::Int, n_samples::Int, plot_kwargs)
         # TODO: could this be done better?
-        offset = n_channels > 1 ? LinRange(1500 * 0.9, -1500 * 0.9, n_channels + 2)[2:(end-1)] : zeros(n_channels)
+        offset_scale = plot_kwargs[:channel_offset_scale]
+        offset_margin = plot_kwargs[:channel_offset_margin]
+        offset = n_channels > 1 ? LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)] : zeros(n_channels)
         new(Observable(1:n_samples), Observable(-1500:1500), offset, Observable(0.0), Observable(false), Observable(1.0))
     end
 end
@@ -75,8 +139,8 @@ mutable struct ContinuousDataState <: AbstractDataState
     current::Observable{EegData}
     original::EegData
     filter_state::FilterState
-    function ContinuousDataState(data::EegData)
-        new(Observable(copy(data)), data, FilterState())
+    function ContinuousDataState(data::EegData, plot_kwargs)
+        new(Observable(copy(data)), data, FilterState(plot_kwargs))
     end
 end
 
@@ -85,8 +149,8 @@ mutable struct EpochedDataState <: AbstractDataState
     original::EegData
     filter_state::FilterState
     current_epoch::Observable{Int}
-    function EpochedDataState(data::EegData)
-        new(Observable(copy(data)), data, FilterState(), Observable(1))
+    function EpochedDataState(data::EegData, plot_kwargs)
+        new(Observable(copy(data)), data, FilterState(plot_kwargs), Observable(1))
     end
 end
 
@@ -139,14 +203,14 @@ const ContinuousDataBrowserState = DataBrowserState{ContinuousDataState}
 const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
 
 # Single function using multiple dispatch for the data state creation
-function create_browser_state(dat::T, channel_labels, ax, ica) where {T<:EegData}
+function create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
     state_type = data_state_type(T)
     initial_window = get_initial_window_size(dat)
     return DataBrowserState{state_type}(
-        view = ViewState(length(channel_labels), initial_window),
+        view = ViewState(length(channel_labels), initial_window, plot_kwargs),
         channels = ChannelState(channel_labels),
-        data = state_type(dat),  # This directly calls the constructor!
-        selection = SelectionState(ax),
+        data = state_type(dat, plot_kwargs),  # Pass kwargs to data state constructor
+        selection = SelectionState(ax, plot_kwargs),
         ica_original = ica,
     )
 end
@@ -180,7 +244,7 @@ end
 ############
 # UI
 ############
-function setup_ui_base(fig, ax, state, dat, ica = nothing)
+function setup_ui_base(fig, ax, state, dat, ica = nothing, plot_kwargs = nothing)
     # Controls
     deregister_interaction!(ax, :rectanglezoom)
 
@@ -212,9 +276,9 @@ function setup_ui_base(fig, ax, state, dat, ica = nothing)
 end
 
 # Unified setup_ui method using multiple dispatch for the epoch menu
-function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing)
+function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ica = nothing, plot_kwargs = nothing)
     # Get common UI elements
-    toggles, labels_menu, reference_menu, ica_menu, extra_menu = setup_ui_base(fig, ax, state, dat, ica)
+    toggles, labels_menu, reference_menu, ica_menu, extra_menu = setup_ui_base(fig, ax, state, dat, ica, plot_kwargs)
 
     # Get type-specific epoch menu (or nothing)
     epoch_menu = get_epoch_menu(fig, ax, state)
@@ -223,7 +287,11 @@ function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ic
     build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
     # Apply theme
-    update_theme!(Theme(fontsize = 18))
+    if !isnothing(plot_kwargs)
+        update_theme!(Theme(fontsize = plot_kwargs[:ui_fontsize]))
+    else
+        update_theme!(Theme(fontsize = 18))
+    end
     hideydecorations!(ax, label = true)
 
     return state
@@ -1251,7 +1319,9 @@ get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
-function plot_databrowser(dat::EegData, ica = nothing)
+function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
 
     @info "plot_databrowser: ..."
 
@@ -1261,15 +1331,21 @@ function plot_databrowser(dat::EegData, ica = nothing)
     end
 
     # Common fig/ax/state/ui setup
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel = "Time (S)", ylabel = "Amplitude (μV)", title = get_title(dat))
-    state = create_browser_state(dat, dat.layout.data.label, ax, ica)
-    setup_ui(fig, ax, state, dat, ica)
+    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    ax = Axis(fig[1, 1], 
+              xlabel = plot_kwargs[:xlabel], 
+              ylabel = plot_kwargs[:ylabel], 
+              title = get_title(dat))
+    state = create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
+    setup_ui(fig, ax, state, dat, ica, plot_kwargs)
 
     # Render and return
     draw(ax, state)
     draw_extra_channel!(ax, state)
-    display(fig)
+    
+    if plot_kwargs[:display_plot]
+        display(fig)
+    end
     return fig, ax
 end
 
@@ -1331,10 +1407,11 @@ function plot_databrowser_subset(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     ica = nothing,
+    kwargs...
 )
     # Create data subset and plot
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
-    return plot_databrowser(dat_subset, ica)
+    return plot_databrowser(dat_subset, ica; kwargs...)
 end
 
 function plot_databrowser_subset(
@@ -1343,6 +1420,7 @@ function plot_databrowser_subset(
     sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
     ica = nothing,
+    kwargs...
 )
     # Create data subset and plot
     dat_subset = subset(
@@ -1351,5 +1429,5 @@ function plot_databrowser_subset(
         sample_selection = sample_selection,
         epoch_selection = epoch_selection,
     )
-    return plot_databrowser(dat_subset, ica)
+    return plot_databrowser(dat_subset, ica; kwargs...)
 end
