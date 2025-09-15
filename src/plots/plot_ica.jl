@@ -549,7 +549,7 @@ function _plot_topo_on_axis!(
 
     # Calculate contour/coord range based on interpolation method
     contour_range_multiplier = method == :spherical_spline ? 4.0 : 2.0
-    contour_range = DEFAULT_HEAD_RADIUS * contour_range_multiplier
+    contour_range = 88.0 * contour_range_multiplier
     coord_range = range(-contour_range, contour_range, length = gridscale)
 
     co = contourf!(ax, coord_range, coord_range, data; levels = levels, kwargs...)
