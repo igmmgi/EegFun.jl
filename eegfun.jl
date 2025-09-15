@@ -9,11 +9,16 @@
 using eegfun
 using GLMakie
 # using CairoMakie
-using DataFrames
-#using BenchmarkTools
+# using BenchmarkTools
 
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+
+# test plot_channel_summary
+dat = eegfun.create_eeg_dataframe(dat, layout);
+cs = eegfun.channel_summary(dat) 
+eegfun.plot_channel_summary(cs, :max)
+
 
 eegfun.plot_layout_2d(layout; head_color = :red, head_linewidth = 3, point_plot = false, label_plot = false)
 
