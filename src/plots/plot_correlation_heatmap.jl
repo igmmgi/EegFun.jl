@@ -39,27 +39,31 @@ This is the mutating version that plots directly on the provided `fig` and `ax` 
 $(generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
 
 # Returns
-- `nothing` (modifies the provided figure and axis in-place)
+- **Mutating version**: `nothing` (modifies the provided figure and axis in-place)
+- **Non-mutating version**: `(fig::Figure, ax::Axis)` - The created figure and axis objects
 
-# Example
-    # Generate sample correlation data
-    labels = ["Ch1", "Ch2", "Ch3", "Ch4"]
-    matrix = cor(rand(100, 4))
-    corr_df = DataFrame(matrix, labels)
-    insertcols!(corr_df, 1, :row => labels) # Add row label column
+# Examples
+```julia
+# Generate sample correlation data
+labels = ["Ch1", "Ch2", "Ch3", "Ch4"]
+matrix = cor(rand(100, 4))
+corr_df = DataFrame(matrix, labels)
+insertcols!(corr_df, 1, :row => labels) # Add row label column
 
-    # Create figure and axis
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    
-    # Plot the heatmap on the existing figure/axis
-    plot_correlation_heatmap!(fig, ax, corr_df)
-    
-    # Plot with custom styling
-    plot_correlation_heatmap!(fig, ax, corr_df; 
-                             colormap = :plasma, 
-                             mask_range = (-0.3, 0.3),
-                             xtick_rotation = π/6)
+# Non-mutating version (creates new figure)
+fig, ax = plot_correlation_heatmap(corr_df)
+
+# Mutating version (plots on existing figure)
+fig = Figure()
+ax = Axis(fig[1, 1])
+plot_correlation_heatmap!(fig, ax, corr_df)
+
+# Customize appearance
+fig, ax = plot_correlation_heatmap(corr_df; 
+    mask_range = (-0.3, 0.3),
+    colormap = :plasma,
+    colorbar_label = "Custom Label")
+```
 """
 function plot_correlation_heatmap!(
     fig::Figure,
@@ -101,40 +105,7 @@ function plot_correlation_heatmap!(
     return nothing
 end
 
-"""
-    plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
-
-Plot a heatmap of a correlation matrix stored in a DataFrame.
-
-Assumes the first column of `corr_df` contains the row labels (e.g., channel names
-as Symbols or Strings) and subsequent columns represent the correlations with other
-variables (column names).
-
-# Arguments
-- `corr_df::DataFrame`: DataFrame containing the correlation matrix. First column for row labels, rest for correlation values.
-
-$(generate_kwargs_doc(PLOT_CORRELATION_HEATMAP_KWARGS))
-
-# Returns
-- `Figure`: The Makie Figure object containing the heatmap and colorbar.
-- `Axis`: The Makie Axis object for the heatmap itself.
-
-# Example
-    # Generate sample correlation data
-    labels = ["Ch1", "Ch2", "Ch3", "Ch4"]
-    matrix = cor(rand(100, 4))
-    corr_df = DataFrame(matrix, labels)
-    insertcols!(corr_df, 1, :row => labels) # Add row label column
-
-    # Plot the heatmap with default settings
-    fig, ax = plot_correlation_heatmap(corr_df)
-
-    # Plot with custom styling and masking
-    fig_masked, ax_masked = plot_correlation_heatmap(corr_df; 
-                                                   mask_range = (-0.3, 0.3),
-                                                   colormap = :plasma,
-                                                   colorbar_label = "Custom Label")
-"""
+@doc (@doc plot_correlation_heatmap!) plot_correlation_heatmap
 function plot_correlation_heatmap(
     corr_df::DataFrame;
     kwargs...

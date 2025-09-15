@@ -1,5 +1,4 @@
 # Default parameters for channel summary plots with descriptions
-# Dict is used for documentation and for defaults
 const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :sort_values => (false, "If true, sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
@@ -10,6 +9,7 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :error_color => (:black, "Color of error bars."),
     :error_linewidth => (2, "Line width of error bars."),
     :xlabel => ("Electrode", "Label for x-axis."),
+    :ylabel => ("", "Label for y-axis."),
     :title => ("", "Plot title."),
     :title_fontsize => (16, "Font size for title."),
     :label_fontsize => (14, "Font size for axis labels."),
@@ -17,6 +17,8 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels."),
     :grid_visible => (true, "Whether to show grid."),
     :grid_alpha => (0.3, "Transparency of grid."),
+    :xgridwidth => (1, "Width of x-axis grid lines."),
+    :ygridwidth => (1, "Width of y-axis grid lines."),
 )
 
 
@@ -116,7 +118,12 @@ function plot_channel_summary!(
     end
 
     # Configure the axis
-    ax.ylabel = plot_kwargs[:average_over] !== nothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
+    # Set ylabel - use custom if provided, otherwise use dynamic default
+    if plot_kwargs[:ylabel] != ""
+        ax.ylabel = plot_kwargs[:ylabel]
+    else
+        ax.ylabel = plot_kwargs[:average_over] !== nothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
+    end
     ax.xticks = (1:length(channel_names), channel_names)
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
     ax.xlabel = plot_kwargs[:xlabel]
@@ -130,8 +137,8 @@ function plot_channel_summary!(
     # Configure grid
     ax.xgridvisible = plot_kwargs[:grid_visible]
     ax.ygridvisible = plot_kwargs[:grid_visible]
-    ax.xgridwidth = 1
-    ax.ygridwidth = 1
+    ax.xgridwidth = plot_kwargs[:xgridwidth]
+    ax.ygridwidth = plot_kwargs[:ygridwidth]
     ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
     ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
 
