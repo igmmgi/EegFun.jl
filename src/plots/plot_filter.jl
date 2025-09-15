@@ -1,29 +1,91 @@
+# Default parameters for filter response plots with descriptions
+const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Axis limits
+    :ylimit => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),
+    :xlimit => (nothing, "X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined"),
+    
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    
+    # Plot styling
+    :title => ("Filter Frequency Response", "Plot title"),
+    :xlabel => ("Frequency (Hz)", "X-axis label"),
+    :ylabel => ("Magnitude (dB)", "Y-axis label"),
+    
+    # Font sizes
+    :title_fontsize => (24, "Font size for title"),
+    :label_fontsize => (22, "Font size for axis labels"),
+    :tick_fontsize => (20, "Font size for tick labels"),
+    :legend_fontsize => (32, "Font size for legend"),
+    
+    # Line styling
+    :actual_linewidth => (4, "Line width for actual response"),
+    :ideal_linewidth => (3, "Line width for ideal response"),
+    :actual_color => (:black, "Color for actual response"),
+    :ideal_color => (:green, "Color for ideal response"),
+    :ideal_linestyle => (:dash, "Line style for ideal response"),
+    
+    # Reference lines
+    :reference_lines => ([-3, -6], "Reference lines in dB to display"),
+    :reference_color => (:gray, "Color for reference lines"),
+    :reference_linestyle => (:dash, "Line style for reference lines"),
+    
+    # Transition region styling
+    :transition_alpha => (0.2, "Transparency for transition region shading"),
+    :transition_color => (:gray, "Color for transition region shading"),
+    :transition_line_color => (:gray, "Color for transition region lines"),
+    :transition_line_style => (:dash, "Line style for transition region lines"),
+    
+    # Plot parameters
+    :n_points => (2000, "Number of frequency points for response calculation"),
+    :xscale => (Makie.Symlog10(10.0), "X-axis scale type"),
+)
+
 """
-    plot_filter_response(filter, sample_rate::Real, filter_freq::Real, transition_band::Real; 
-                        ylimit::Tuple=(-100, 5), xlimit::Union{Nothing,Tuple{Real,Real}}=nothing)
+    plot_filter_response(filter, sample_rate::Real, filter_freq::Real, transition_band::Real; kwargs...)
 
 Plot the frequency response of a digital filter with ideal response overlay.
 
-Arguments:
+# Arguments
 - `filter`: A digital filter object (FIR coefficients or DSP.jl filter)
 - `sample_rate`: Sampling rate in Hz
 - `filter_freq`: Cutoff frequency in Hz
 - `transition_band`: Width of transition band in Hz
-- `ylimit`: Y-axis limits in dB as (min, max) tuple (default: (-100, 5))
-- `xlimit`: Optional X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined.
 
-Returns:
+$(generate_kwargs_doc(PLOT_FILTER_KWARGS))
+
+# Returns
 - `fig`: Makie Figure object
 - `ax`: Makie Axis object
+
+# Example
+```julia
+# Basic usage
+fig, ax = plot_filter_response(filter, 1000, 50, 10)
+
+# Custom styling
+fig, ax = plot_filter_response(filter, 1000, 50, 10;
+    title = "Custom Filter Response",
+    actual_color = :blue,
+    ideal_color = :red,
+    reference_lines = [-3, -6, -12],
+    display_plot = false)
+```
 """
 function plot_filter_response(
     filter,
     sample_rate::Real,
     filter_freq::Real,
     transition_band::Real;
-    ylimit::Tuple = (-100, 5),
-    xlimit::Union{Nothing,Tuple{Real,Real}} = nothing,
+    kwargs...
 )
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, kwargs)
+    
+    # Extract commonly used values
+    ylimit = plot_kwargs[:ylimit]
+    xlimit = plot_kwargs[:xlimit]
+    n_points = plot_kwargs[:n_points]
     # Determine x-axis limits based on filter type and cutoff
     if isnothing(xlimit)
         if filter_freq < 2
@@ -36,20 +98,19 @@ function plot_filter_response(
     fig = Figure()
     ax = Axis(
         fig[1, 1],
-        xlabel = "Frequency (Hz)",
-        ylabel = "Magnitude (dB)",
-        title = "Filter Frequency Response",
-        titlesize = 24,
-        xlabelsize = 22,
-        ylabelsize = 22,
-        xticklabelsize = 20,
-        yticklabelsize = 20,
-        xscale = Makie.Symlog10(10.0),
+        xlabel = plot_kwargs[:xlabel],
+        ylabel = plot_kwargs[:ylabel],
+        title = plot_kwargs[:title],
+        titlesize = plot_kwargs[:title_fontsize],
+        xlabelsize = plot_kwargs[:label_fontsize],
+        ylabelsize = plot_kwargs[:label_fontsize],
+        xticklabelsize = plot_kwargs[:tick_fontsize],
+        yticklabelsize = plot_kwargs[:tick_fontsize],
+        xscale = plot_kwargs[:xscale],
         limits = (xlimit, ylimit),
     )
 
     # Simple logarithmic frequency spacing
-    n_points = 2000
     freqs = exp10.(range(log10(0.01), log10(sample_rate/2), length = n_points))
     freqs = [0.0; freqs]  # Add DC point
 
@@ -123,19 +184,20 @@ function plot_filter_response(
     end
 
     for (start_f, end_f) in transition_regions
-        vspan!(ax, start_f, end_f, color = (:gray, 0.2))
-        vlines!(ax, [start_f, end_f], color = :gray, linestyle = :dash)
+        vspan!(ax, start_f, end_f, color = (plot_kwargs[:transition_color], plot_kwargs[:transition_alpha]))
+        vlines!(ax, [start_f, end_f], color = plot_kwargs[:transition_line_color], linestyle = plot_kwargs[:transition_line_style])
     end
 
     # Plot responses
-    lines!(ax, freqs, mag_db, label = "Actual", color = :black, linewidth = 4)
+    lines!(ax, freqs, mag_db, label = "Actual", color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
     ideal_mag_db = 20 * log10.(ideal_response)
-    lines!(ax, freqs, ideal_mag_db, color = :green, linestyle = :dash, label = "Ideal", linewidth = 3)
+    lines!(ax, freqs, ideal_mag_db, color = plot_kwargs[:ideal_color], linestyle = plot_kwargs[:ideal_linestyle], label = "Ideal", linewidth = plot_kwargs[:ideal_linewidth])
 
     # Add reference lines
-    hlines!(ax, [-3, -6], color = :gray, linestyle = :dash)
-    text!(ax, sample_rate/2, -3, text = "-3 dB", align = (:right, :center), fontsize = 22)
-    text!(ax, sample_rate/2, -6, text = "-6 dB", align = (:right, :center), fontsize = 22)
+    hlines!(ax, plot_kwargs[:reference_lines], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle])
+    for (i, ref_val) in enumerate(plot_kwargs[:reference_lines])
+        text!(ax, sample_rate/2, ref_val, text = "$ref_val dB", align = (:right, :center), fontsize = plot_kwargs[:label_fontsize])
+    end
 
     # X-axis ticks based on xlimits
     if xlimit[2] <= 5  # For low frequency (typically highpass) plots
@@ -149,8 +211,11 @@ function plot_filter_response(
     ax.xticks = (xticks, string.(round.(xticks, digits = 1)))
 
     legend_position = filter_type == "lp" ? :lb : :rb
-    axislegend(; position = legend_position, labelsize = 32)
-    display(fig)
+    axislegend(; position = legend_position, labelsize = plot_kwargs[:legend_fontsize])
+    
+    if plot_kwargs[:display_plot]
+        display(fig)
+    end
 
     return fig, ax
 end
