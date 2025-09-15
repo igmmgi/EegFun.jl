@@ -1,3 +1,44 @@
+# Default parameters for power spectrum plots with descriptions
+const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Spectral analysis parameters
+    :window_size => (1024, "Size of the FFT window for spectral estimation"),
+    :overlap => (0.5, "Overlap between windows for Welch's method (0.0 to 1.0)"),
+    :max_freq => (200.0, "Maximum frequency to display in Hz"),
+    :window_function => (DSP.hanning, "Window function for spectral estimation"),
+    
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    :show_legend => (true, "Whether to show the legend"),
+    :show_freq_bands => (true, "Whether to show frequency band indicators"),
+    
+    # Axis styling
+    :xlabel => ("Frequency (Hz)", "X-axis label"),
+    :ylabel => ("Power Spectral Density (μV²/Hz)", "Y-axis label"),
+    :title => ("Power Spectrum", "Plot title"),
+    
+    # Scale parameters
+    :x_scale => (:linear, "X-axis scale: :linear or :log10"),
+    :y_scale => (:linear, "Y-axis scale: :linear or :log10"),
+    
+    # Font sizes
+    :title_fontsize => (16, "Font size for title"),
+    :label_fontsize => (14, "Font size for axis labels"),
+    :tick_fontsize => (12, "Font size for tick labels"),
+    :legend_fontsize => (12, "Font size for legend"),
+    
+    # Line styling
+    :line_width => (2, "Line width for spectrum lines"),
+    :line_alpha => (0.8, "Transparency for spectrum lines"),
+    
+    # Frequency band styling
+    :freq_band_alpha => (0.3, "Transparency for frequency band indicators"),
+    :freq_band_height => (0.1, "Height of frequency band indicators"),
+    
+    # Grid styling
+    :grid_visible => (true, "Whether to show grid"),
+    :grid_alpha => (0.3, "Transparency of grid"),
+)
+
 """
     _plot_power_spectrum!(fig, ax, df, channels_to_plot, fs; kwargs...)
 
@@ -10,14 +51,7 @@ Internal function to plot power spectra on an existing axis with interactive con
 - `channels_to_plot`: Vector of channel symbols to plot
 - `fs`: Sampling frequency in Hz
 
-# Keyword Arguments
-- `window_size::Int`: Size of the FFT window (default: 1024)
-- `overlap::Real`: Overlap between windows (default: 0.5)
-- `max_freq::Real`: Maximum frequency to display (default: 200.0)
-- `x_scale::Symbol`: X-axis scale, :linear or :log10 (default: :linear)
-- `y_scale::Symbol`: Y-axis scale, :linear or :log10 (default: :linear)
-- `window_function::Function`: Window function for spectral estimation (default: DSP.hanning)
-- `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
+$(generate_kwargs_doc(PLOT_POWER_SPECTRUM_KWARGS))
 
 # Features
 - Creates interactive checkboxes for toggling between linear and log scales
@@ -25,6 +59,23 @@ Internal function to plot power spectra on an existing axis with interactive con
 - Shows frequency band indicators below the main plot when enabled
 
 This is an internal function used by the public plotting functions.
+
+# Example
+```julia
+# Basic usage with custom styling
+fig, ax = plot_channel_spectrum(dat;
+    title = "Custom Power Spectrum",
+    line_width = 3,
+    max_freq = 100.0,
+    show_freq_bands = false)
+
+# With custom colors and scales
+fig, ax = plot_channel_spectrum(dat;
+    x_scale = :log10,
+    y_scale = :log10,
+    line_alpha = 0.6,
+    grid_visible = false)
+```
 """
 function _plot_power_spectrum!(
     fig,
@@ -32,14 +83,19 @@ function _plot_power_spectrum!(
     df::DataFrame,
     channels_to_plot::Vector{Symbol},
     fs::Real;
-    window_size::Int = 1024,
-    overlap::Real = 0.5,
-    max_freq::Real = 200.0,
-    x_scale::Symbol = :linear,
-    y_scale::Symbol = :linear,
-    window_function::Function = DSP.hanning,
-    show_freq_bands::Bool = true,
+    kwargs...
 )
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
+    
+    # Extract commonly used values
+    window_size = plot_kwargs[:window_size]
+    overlap = plot_kwargs[:overlap]
+    max_freq = plot_kwargs[:max_freq]
+    x_scale = plot_kwargs[:x_scale]
+    y_scale = plot_kwargs[:y_scale]
+    window_function = plot_kwargs[:window_function]
+    show_freq_bands = plot_kwargs[:show_freq_bands]
 
     # Validate scale parameters
     valid_scales = [:linear, :log10]
@@ -62,9 +118,22 @@ function _plot_power_spectrum!(
     )
 
     # Set axis labels and title
-    ax.xlabel = "Frequency (Hz)"
-    ax.ylabel = "Power Spectral Density (μV²/Hz)"
-    ax.title = "Power Spectrum"
+    ax.xlabel = plot_kwargs[:xlabel]
+    ax.ylabel = plot_kwargs[:ylabel]
+    ax.title = plot_kwargs[:title]
+    ax.titlesize = plot_kwargs[:title_fontsize]
+    ax.xlabelsize = plot_kwargs[:label_fontsize]
+    ax.ylabelsize = plot_kwargs[:label_fontsize]
+    ax.xticklabelsize = plot_kwargs[:tick_fontsize]
+    ax.yticklabelsize = plot_kwargs[:tick_fontsize]
+    
+    # Configure grid
+    ax.xgridvisible = plot_kwargs[:grid_visible]
+    ax.ygridvisible = plot_kwargs[:grid_visible]
+    ax.xgridwidth = 1
+    ax.ygridwidth = 1
+    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
+    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
 
     # Create interactive controls in the figure
     controls_area = fig[1, 2] = GridLayout()
@@ -120,7 +189,10 @@ function _plot_power_spectrum!(
         push!(power_data, psd)
 
         # Plot this channel's spectrum
-        lines!(ax, freqs, psd, label = string(ch))
+        lines!(ax, freqs, psd, 
+               label = string(ch),
+               linewidth = plot_kwargs[:line_width],
+               alpha = plot_kwargs[:line_alpha])
     end
 
     # Apply initial y-axis scale settings (after data is calculated)
@@ -160,7 +232,10 @@ function _plot_power_spectrum!(
                 # Add colored bar and label
                 bar_x = [fmin, fmax]
                 bar_y = [0.5, 0.5]
-                lines!(band_ax, bar_x, bar_y, color = band_colors[i], linewidth = 8)
+                lines!(band_ax, bar_x, bar_y, 
+                       color = band_colors[i], 
+                       linewidth = 8,
+                       alpha = plot_kwargs[:freq_band_alpha])
                 text!(
                     band_ax,
                     (fmin + fmax) / 2,
@@ -273,10 +348,10 @@ function plot_channel_spectrum(
     dat::SingleDataFrameEeg;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    show_legend::Bool = true,
-    display_plot::Bool = true,
     kwargs...,
 )
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
     # data selection
     dat_subset = subset(dat, sample_selection = sample_selection, channel_selection = channel_selection)
@@ -288,13 +363,13 @@ function plot_channel_spectrum(
     _plot_power_spectrum!(fig, ax, dat_subset.data, dat_subset.layout.data.label, sample_rate(dat_subset); kwargs...)
 
     # Add legend if requested
-    if show_legend
+    if plot_kwargs[:show_legend]
         n_channels = length(dat_subset.layout.data.label)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
         axislegend(ax, nbanks = n_cols)
     end
 
-    if display_plot
+    if plot_kwargs[:display_plot]
         display_figure(fig)
     end
 
@@ -362,10 +437,10 @@ function plot_component_spectrum(
     dat::ContinuousData;
     sample_selection::Function = samples(),
     component_selection::Function = components(),
-    show_legend::Bool = true,
-    display_plot::Bool = true,
     kwargs...,
 )
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
     # Get selected components using the predicate
     selected_components = get_selected_components(ica_result, component_selection)
 
@@ -405,7 +480,7 @@ function plot_component_spectrum(
     _plot_power_spectrum!(fig, ax, component_df, components_to_plot, sample_rate(dat); kwargs...)
 
     # Add custom legend with component variance percentages if requested
-    if show_legend
+    if plot_kwargs[:show_legend]
         # Create component labels with variance percentages
         component_labels = []
         for comp_idx in selected_components
@@ -421,7 +496,7 @@ function plot_component_spectrum(
         axislegend(ax, nbanks = ncols)
     end
 
-    if display_plot
+    if plot_kwargs[:display_plot]
         display_figure(fig)
     end
 
