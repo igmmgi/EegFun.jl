@@ -66,22 +66,20 @@ include("analysis/tf.jl")
 include("analysis/triggers.jl")
 
 # Plotting functions
-include("plots/plot_misc.jl")
+include("plots/utils/plot_misc.jl")
 
 # Layout system (must be included before other plotting functions)
-include("plots/layout_system.jl")
+include("plots/utils/layout_system.jl")
 
 # Shared interactivity (must be included before plot_erp and plot_epochs)
-include("plots/shared_interactivity.jl")
+include("plots/utils/shared_interactivity.jl")
 
 include("plots/plot_channel_summary.jl")
 include("plots/plot_correlation_heatmap.jl")
 include("plots/plot_databrowser.jl")
 include("plots/plot_epochs.jl")
 include("plots/plot_erp.jl")
-# Removed: plot_erp_grid.jl - functionality now in plot_erp with layout system
 include("plots/plot_erp_image.jl")
-# Removed: plot_grid_topo.jl - functionality now in plot_erp and plot_epochs with layout system
 include("plots/plot_ica.jl")
 include("plots/plot_joint_probability.jl")
 include("plots/plot_layout.jl")
