@@ -200,7 +200,6 @@ function _update_shared_selection!(ax::Axis, selection_state::SharedSelectionSta
                 Point2f(Float64(x1), Float64(y_max)),
             ]
             rect.visible[] = true
-            println("DEBUG: Created rectangle with x1=$x1, x2=$x2, y_min=$y_min, y_max=$y_max, visible=$(rect.visible[])")
         end
     end
 end
@@ -443,14 +442,11 @@ function _handle_mouse_button_events(fig::Figure, axes::Vector{Axis}, selection_
         if event.button == Mouse.left
             if event.action == Mouse.press
                 if shift_pressed[] && _is_within_selection(selection_state, mouse_x)
-                    println("DEBUG: Clearing shared selection")
                     _clear_shared_selection!(selection_state)
                 elseif shift_pressed[]
-                    println("DEBUG: Starting shared selection at mouse_x = $mouse_x")
                     _start_shared_selection!(active_ax, selection_state, mouse_x)
                 end
             elseif event.action == Mouse.release && selection_state.active[]
-                println("DEBUG: Finishing shared selection at mouse_x = $mouse_x")
                 _finish_shared_selection!(active_ax, selection_state, mouse_x)
             end
         elseif event.button == Mouse.right && event.action == Mouse.press
