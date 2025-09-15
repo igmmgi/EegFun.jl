@@ -1,27 +1,42 @@
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-const DEFAULT_ERP_IMAGE_KWARGS = Dict(
-    :xlim => nothing,
-    :ylim => nothing,
-    :xlabel => "Time (S)",
-    :ylabel => "Epoch",
-    :dims => nothing,
-    :hidedecorations => false,
-    :theme_fontsize => 24,
-    :yreversed => false,
-    :colormap => :jet,
-    :colorrange => nothing,
-    :display_plot => true,
-    :plot_erp => true,
-    :plot_colorbar => true,
-    :colorbar_width => 30,
-    :colorbar_label => "μV",
-    :xgrid => false,
-    :ygrid => false,
-    :xminorgrid => false,
-    :yminorgrid => false,
-    :interactive => true
+const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    
+    # Axis limits and labels
+    :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :xlabel => ("Time (S)", "Label for x-axis"),
+    :ylabel => ("Epoch", "Label for y-axis"),
+    
+    # Layout configuration
+    :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
+    :hidedecorations => (false, "Whether to hide axis decorations"),
+    :theme_fontsize => (24, "Font size for theme"),
+    
+    # Image styling
+    :yreversed => (false, "Whether to reverse the y-axis"),
+    :colormap => (:jet, "Colormap for the image"),
+    :colorrange => (nothing, "Color range for the image. If nothing, automatically determined"),
+    
+    # ERP overlay
+    :plot_erp => (true, "Whether to plot ERP average overlay"),
+    
+    # Colorbar
+    :plot_colorbar => (true, "Whether to show the colorbar"),
+    :colorbar_width => (30, "Width of the colorbar in pixels"),
+    :colorbar_label => ("μV", "Label for the colorbar"),
+    
+    # Grid
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
+    
+    # Interactive features
+    :interactive => (true, "Whether to enable interactive features"),
 )
 
 """
@@ -44,6 +59,12 @@ Plot ERP image for specified channels and samples with flexible layout options.
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: samples() - all samples)
 
+$(generate_kwargs_doc(PLOT_ERP_IMAGE_KWARGS))
+
+# Returns
+- `Figure`: The Makie Figure object
+- `Vector{Axis}`: Vector of axes for the ERP images
+
 # Examples
 ```julia
 # Plot all channels and samples
@@ -64,22 +85,6 @@ plot_erp_image(dat,
     sample_selection = x -> x .> 0.0  # Only positive time points
 )
 ```
-
-# Keyword Arguments
-- `xlim`: X-axis limits (default: auto-calculated)
-- `ylim`: Y-axis limits (default: auto-calculated)
-- `xlabel`: X-axis label (default: "Time (S)")
-- `ylabel`: Y-axis label (default: "Epoch")
-- `dims`: Grid dimensions (rows, cols) (default: auto-calculated)
-- `hidedecorations`: Whether to hide axis decorations (default: false)
-- `theme_fontsize`: Font size for theme (default: 24)
-- `yreversed`: Whether to reverse Y-axis (default: false)
-- `colormap`: Colormap for the image (default: :RdBu)
-- `colorrange`: Color range for the image (default: auto-calculated)
-- `display_plot`: Whether to display the plot (default: true)
-- `plot_erp`: Whether to plot the ERP trace below (default: true)
-- `plot_colorbar`: Whether to plot the colorbar (default: true)
-- `colorbar_width`: Width of the colorbar (default: 30)
 """
 function plot_erp_image(dat::EpochData; 
                        layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
@@ -87,7 +92,7 @@ function plot_erp_image(dat::EpochData;
                        sample_selection::Function = samples(),
                        kwargs...)
     # Merge default kwargs with provided kwargs
-    plot_kwargs = merge(DEFAULT_ERP_IMAGE_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_IMAGE_KWARGS, kwargs)
     
     # Use subset to get the data we want to plot (same pattern as other functions)
     dat_subset = subset(
@@ -253,7 +258,7 @@ function plot_erp_image(dat::EpochData;
 
     # Display plot if requested
     if plot_kwargs[:display_plot]
-        display(fig)
+        display_figure(fig)
     end
 
     return fig, axes

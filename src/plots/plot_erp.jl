@@ -9,7 +9,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :xlabel => ("Time (S)", "Label for x-axis"),
-    :ylabel => ("mV", "Label for y-axis"),
+    :ylabel => ("μV", "Label for y-axis"),
     
     # Title
     :title => ("", "Plot title"),
@@ -62,26 +62,7 @@ Create ERP plots with flexible layout options.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering
 - `kwargs`: Additional keyword arguments
 
-# Keyword Arguments
-- `xlim`: X-axis limits (default: auto-calculated)
-- `ylim`: Y-axis limits (default: auto-calculated)
-- `title`: Plot title (default: auto-generated)
-- `xlabel`: X-axis label (default: "Time (S)")
-- `ylabel`: Y-axis label (default: "mV")
-- `linewidth`: Line width (default: 2)
-- `color`: Line color for single channel (default: :black)
-- `linestyle`: Line style (default: :solid)
-- `colormap`: Color map for multiple channels (default: :jet)
-- `yreversed`: Whether to reverse Y-axis (default: false)
-- `average_channels`: Whether to average channels (default: false)
-- `legend`: Whether to show legend (default: true)
-- `legend_label`: Legend label prefix (default: "")
-- `hidedecorations`: Whether to hide axis decorations in grid/topo layouts (default: false)
-- `theme_fontsize`: Font size for theme (default: 24)
-- `plot_width`: Plot width for topo layout (default: 0.10)
-- `plot_height`: Plot height for topo layout (default: 0.10)
-- `margin`: Margin between plots for topo layout (default: 0.02)
-- `interactive`: Whether to enable keyboard interactivity (default: true)
+$(generate_kwargs_doc(PLOT_ERP_KWARGS))
 
 # Examples
 ```julia
