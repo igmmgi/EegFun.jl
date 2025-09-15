@@ -307,5 +307,3 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     
     return ax
 end
-
-# Channel selection event functions are now in shared_interactivity.jl

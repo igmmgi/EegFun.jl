@@ -1,4 +1,6 @@
-# Default parameters for correlation heatmap plots with descriptions
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
 const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Data parameters
     :mask_range => (nothing, "Optional tuple (min_val, max_val) to mask correlations within this range"),

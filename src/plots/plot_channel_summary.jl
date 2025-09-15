@@ -1,4 +1,6 @@
-# Default parameters for channel summary plots with descriptions
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
 const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :sort_values => (false, "If true, sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),

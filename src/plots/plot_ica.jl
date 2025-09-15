@@ -1,4 +1,6 @@
-# Default parameters for ICA topoplot plots with descriptions
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
 const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Component selection
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
