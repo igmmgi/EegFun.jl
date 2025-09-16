@@ -1,6 +1,6 @@
 using Test
 using eegfun
-using Makie
+using GLMakie
 using DataFrames
 
 # Test data setup

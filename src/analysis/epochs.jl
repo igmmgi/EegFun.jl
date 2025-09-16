@@ -745,7 +745,7 @@ function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
 
     # Log removal statistics
     if n_removed > 0
-        @minimal_warning "Removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
+        @minimal_warning "Condition $(dat.data[1].condition[1]) ($(dat.data[1].condition_name[1])) removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
     end
 
     # Return new EpochData with only good epochs
@@ -834,12 +834,12 @@ end
 Log an epochs table with message and return the DataFrame.
 Combines logging and table creation in one clean call.
 """
-function log_epochs_table(message::String, epochs...; print_table::Bool = false, kwargs...)
+function log_epochs_table(epochs...; print_table::Bool = false, kwargs...)
     df = epochs_table(epochs...; print_table = print_table);
     table_output = sprint() do output_io
         io_context = IOContext(output_io, :displaysize => displaysize(stdout))
         pretty_table(io_context, df; alignment = [:l, :r, :l, :r, :r, :r], kwargs...)
     end
-    @info "$message\n$table_output"
+    @info "\n\n$table_output\n"
     return df
 end

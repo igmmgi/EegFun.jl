@@ -159,8 +159,8 @@ function correlation_matrix(
     channel_selection::Function = channels(),
     include_extra::Bool = false,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_extra = include_extra)
-    selected_samples = get_selected_samples(dat, sample_selection)
+    selected_channels = eegfun.get_selected_channels(dat, channel_selection; include_meta = false,include_extra = include_extra)
+    selected_samples = eegfun.get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
 
@@ -311,11 +311,11 @@ function is_extreme_value(
     criterion::Number;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra::Bool = false,
 )::Vector{Bool}
 
     selected_channels =
-        get_selected_channels(dat, channel_selection; include_additional_channels = include_additional_channels)
+        get_selected_channels(dat, channel_selection; include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
 
     @info "is_extreme_value: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
@@ -323,7 +323,7 @@ function is_extreme_value(
 end
 
 """
-    is_extreme_value!(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_additional_channels::Bool = false, channel_out::Symbol = :is_extreme_value)
+    is_extreme_value!(dat::ContinuousData, criterion::Number; sample_selection::Function = samples(), channel_selection::Function = channels(), include_extra::Bool = false, channel_out::Symbol = :is_extreme_value)
 
 Checks if any values in the specified channels exceed a given criterion and adds the result as a new column.
 
@@ -332,7 +332,7 @@ Checks if any values in the specified channels exceed a given criterion and adds
 - `criterion::Number`: The threshold for determining extreme values.
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: include all samples).
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: include all channels).
-- `include_additional_channels::Bool`: Whether to include additional channels (default: false).
+- `include_extra::Bool`: Whether to include additional channels (default: false).
 - `channel_out::Symbol`: Name of the output column (default: :is_extreme_value).
 
 # Returns
@@ -370,12 +370,10 @@ function is_extreme_value!(
     criterion::Number;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_meta::Bool = false,
     include_extra::Bool = false,
     channel_out::Symbol = :is_extreme_value,
 )
-    selected_channels =
-        get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
 
     @info "is_extreme_value!: Checking for extreme values in channel $(print_vector(selected_channels)) with criterion $(criterion)"
@@ -466,7 +464,7 @@ function _channel_joint_probability(
     threshold::Float64 = 5.0,
     normval::Int = 2,
 )::DataFrame
-    @info "channel_joint_probability: Computing probability for channels $(_print_vector(selected_channels))"
+    @info "channel_joint_probability: Computing probability for channels $(print_vector(selected_channels))"
 
     # Select the specified channels and filter by samples
     data = select(dat[selected_samples, :], selected_channels)
@@ -517,12 +515,11 @@ function channel_joint_probability(
     dat::ContinuousData;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
-    include_additional_channels::Bool = false,
+    include_extra::Bool = false,
     threshold::Real = 3.0,
     normval::Real = 2,
 )::DataFrame
-    selected_channels =
-        get_selected_channels(dat, channel_selection; include_additional_channels = include_additional_channels)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
 
     return _channel_joint_probability(
