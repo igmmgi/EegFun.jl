@@ -781,35 +781,40 @@ remove_bad_epochs(dat::EpochData, bad_column::Symbol) = remove_bad_epochs(dat, [
 # ============================================================================ #
 
 """
-    epochs_table(epochs::Vector{EpochData}; io::Union{IO, Nothing} = stdout)
+    epochs_table(epochs::Vector{EpochData})
 
-Display a pretty table showing epoch information and return the DataFrame.
+Display a pretty table showing epoch information to console and return the DataFrame.
 """
-function epochs_table(epochs::Vector{EpochData}; io::Union{IO, Nothing} = stdout)::DataFrame
+function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwargs...)
     isempty(epochs) && throw(ArgumentError("epochs vector cannot be empty"))
     
     df = _build_base_epochs_df(epochs)
     df.n_epochs = [n_epochs(epoch) for epoch in epochs]
-    
-    _print_epochs_table(df, io, ["Condition", "Condition Name", "N Epochs"], [:r, :l, :r])
+   
+    if print_table
+        pretty_table(stdout, df; alignment = [:l, :r, :l, :r], kwargs...)
+    end
+
     return df
 end
 
 """
-    epochs_table(epochs_original, epochs_cleaned; io::Union{IO, Nothing} = stdout)
+    epochs_table(epochs_original, epochs_cleaned)
 
-Display comparison table between original and cleaned epochs and return DataFrame.
+Display comparison table between original and cleaned epochs to console and return DataFrame.
 """
-function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; io::Union{IO, Nothing} = stdout)::DataFrame
-    length(epochs_original) != length(epochs_cleaned) && 
-        throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
+function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
+    length(epochs_original) != length(epochs_cleaned) && throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
     
     df = _build_base_epochs_df(epochs_original)
     df.n_epochs_original = [n_epochs(epoch) for epoch in epochs_original]
     df.n_epochs_cleaned = [n_epochs(epoch) for epoch in epochs_cleaned]
     df.percentage = round.((df.n_epochs_cleaned ./ df.n_epochs_original) .* 100; digits=1)
-    
-    _print_epochs_table(df, io, [:l, :r, :l, :r, :r, :r])
+   
+    if print_table
+        pretty_table(stdout, df; alignment = [:l, :r, :l, :r, :r, :r], kwargs...)
+    end
+
     return df
 end
 
@@ -822,19 +827,6 @@ function _build_base_epochs_df(epochs::Vector{EpochData})::DataFrame
     )
 end
 
-function _print_epochs_table(df::DataFrame, io::Union{IO, Nothing}, alignments::Vector{Symbol})
-    if io !== nothing
-        # Capture table output using sprint with proper display context
-        table_output = sprint() do output_io
-            io_context = IOContext(output_io, :displaysize => displaysize(stdout))
-            pretty_table(io_context, df; alignment = alignments)
-        end
-        
-        # Write to both console and provided io
-        println(table_output)
-        println(io, table_output)
-    end
-end
 
 """
     log_epochs_table(message::String, epochs...; kwargs...)
@@ -842,17 +834,12 @@ end
 Log an epochs table with message and return the DataFrame.
 Combines logging and table creation in one clean call.
 """
-function log_epochs_table(message::String, epochs...; kwargs...)
-    # Create the table first (without writing to IO)
-    df = epochs_table(epochs...; io = nothing, kwargs...)
-    
-    # Generate table output using sprint with proper display context
+function log_epochs_table(message::String, epochs...; print_table::Bool = false, kwargs...)
+    df = epochs_table(epochs...; print_table = print_table);
     table_output = sprint() do output_io
         io_context = IOContext(output_io, :displaysize => displaysize(stdout))
-        pretty_table(io_context, df; alignment = [:l, :r, :l, :r, :r, :r])
+        pretty_table(io_context, df; alignment = [:l, :r, :l, :r, :r, :r], kwargs...)
     end
-    
-    # Write to both console and log
     @info "$message\n$table_output"
     return df
 end
