@@ -355,9 +355,7 @@ function Base.show(io::IO, layout::Layout)
         PrettyTables.pretty_table(
             io,
             display_data,
-            header = names(display_data),
             alignment = :r,  # Right align all columns
-            crop = :none,
         )
     else
         # Show first 5 and last 5 rows with ellipsis
@@ -376,9 +374,7 @@ function Base.show(io::IO, layout::Layout)
         PrettyTables.pretty_table(
             io,
             combined_data,
-            header = names(display_data),
             alignment = :r,  # Right align all columns
-            crop = :none,
         )
 
         println(io, "\n[showing first 5 and last 5 of $n_electrodes electrodes]")

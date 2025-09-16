@@ -810,7 +810,8 @@ Sets show_row_number=false and show_subheader=false by default for cleaner logs.
 """
 function log_pretty_table(message::String, df::DataFrame; kwargs...)
     io_buffer = IOBuffer()
-    pretty_table(io_buffer, df; show_row_number=false, show_subheader=false, kwargs...)
+    pretty_table(io_buffer, df; kwargs...)
+    # pretty_table(df; kwargs...)
     @info "$message\n$(String(take!(io_buffer)))"
     return nothing
 end

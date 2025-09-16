@@ -824,7 +824,9 @@ end
 
 function _print_epochs_table(df::DataFrame, io::Union{IO, Nothing}, alignments::Vector{Symbol})
     if io !== nothing
-        pretty_table(io, df; alignment = alignments, crop = :none, show_subheader = false)
+        # pretty_table(io, df; alignment = alignments, crop = :none, show_subheader = false)
+        pretty_table(io, df; alignment = alignments, maximum_number_of_columns = 10)
+        # pretty_table(df; alignment = alignments, maximum_number_of_columns = 10)
     end
 end
 
@@ -835,7 +837,7 @@ Log an epochs table with message and return the DataFrame.
 Combines logging and table creation in one clean call.
 """
 function log_epochs_table(message::String, epochs...; kwargs...)
-    io_buffer = IOBuffer()
+    io_buffer = nothing #IOBuffer()
     df = epochs_table(epochs...; io = io_buffer, kwargs...)
     @info "$message\n$(String(take!(io_buffer)))"
     return df

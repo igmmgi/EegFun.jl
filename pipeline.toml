@@ -16,7 +16,7 @@ artifact_value_criterion = 100
 highpass.freq = 0.5
 
 [ica]
-apply = true
+apply = false
 
 [files.output]
 directory = "../output_data"
