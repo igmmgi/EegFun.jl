@@ -169,10 +169,15 @@ function plot_channel_summary(
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     
+    # Check if required columns exist - throw error for non-mutating version
+    if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
+        @minimal_error_throw("DataFrame must contain :channel and :$col columns.")
+    end
+    
     # Create the figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_channel_summary!(fig, ax, dat, col; kwargs...)
+    plot_channel_summary!(fig, ax, dat, col; plot_kwargs...)
 
     if plot_kwargs[:display_plot]
         display_figure(fig)

@@ -302,7 +302,7 @@ function preprocess_eeg_data(config::String)
                 );
 
                 # Log epoch counts and store for summary
-                df = log_epochs_table("Epoch counts per condition:", epochs_original, epochs_cleaned)
+                df = log_epochs_table(epochs_original, epochs_cleaned, title = "Epoch counts per condition:")
                 push!(all_epoch_counts, df)
                 
                 # save epochs
@@ -349,7 +349,7 @@ function preprocess_eeg_data(config::String)
         # Print combined epoch counts
         if !isempty(all_epoch_counts)
             combined_counts = vcat(all_epoch_counts...)
-            log_pretty_table("Combined epoch counts across all files:", combined_counts)
+            log_pretty_table(combined_counts, title = "Combined epoch counts across all files:")
             jldsave(joinpath(output_directory, "epoch_summary.jld2"); df = combined_counts)
         end
 

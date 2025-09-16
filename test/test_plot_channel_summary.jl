@@ -1,7 +1,7 @@
 using Test
 using DataFrames
 using Statistics
-using Makie
+using GLMakie
 using eegfun
 
 @testset "plot_channel_summary" begin
@@ -151,12 +151,12 @@ using eegfun
     @testset "plot_channel_summary input validation" begin
         df = create_test_summary_data()
         
-        # Test missing channel column - should log error but not throw
+        # Test missing channel column - should throw error
         df_no_channel = select(df, Not(:channel))
-        @test_throws MethodError eegfun.plot_channel_summary(df_no_channel, :std)
+        @test_throws ErrorException eegfun.plot_channel_summary(df_no_channel, :std)
         
-        # Test missing data column - should log error but not throw  
-        @test_throws MethodError eegfun.plot_channel_summary(df, :nonexistent)
+        # Test missing data column - should throw error
+        @test_throws ErrorException eegfun.plot_channel_summary(df, :nonexistent)
     end
 
     @testset "plot_channel_summary sorting functionality" begin
@@ -183,8 +183,10 @@ using eegfun
         @test fig isa Figure
         @test ax isa Axis
         
-        # Test with display_plot = true (should throw due to no Makie backend in tests)
-        @test_throws MethodError eegfun.plot_channel_summary(df, :std, display_plot = true)
+        # Test with display_plot = true (should work since GLMakie is available)
+        fig, ax = eegfun.plot_channel_summary(df, :std, display_plot = true)
+        @test fig isa Figure
+        @test ax isa Axis
     end
 
     @testset "plot_channel_summary different columns" begin

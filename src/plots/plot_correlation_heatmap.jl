@@ -8,22 +8,33 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
     
+    # Title and labels
+    :title => ("", "Plot title"),
+    :title_fontsize => (16, "Font size for the title"),
+    :show_title => (true, "Whether to show the title"),
+    
     # Heatmap styling
     :colormap => (:viridis, "Colormap for the heatmap"),
-    :colorrange => ((-1, 1), "Color range for the heatmap"),
+    :colorrange => ((-1, 1), "Color range for the heatmap and colorbar (should be -1 to 1 for correlations)"),
     :nan_color => (:transparent, "Color for NaN values"),
     
     # Axis styling
     :xlabel => ("", "Label for x-axis"),
     :ylabel => ("", "Label for y-axis"),
+    :label_fontsize => (14, "Font size for axis labels"),
     :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels"),
     :ytick_rotation => (0, "Rotation angle for y-axis tick labels"),
+    :tick_fontsize => (12, "Font size for tick labels"),
+    
+    # Grid and layout
+    :grid_visible => (false, "Whether to show grid lines"),
+    :grid_alpha => (0.3, "Transparency of grid lines"),
     
     # Colorbar parameters
     :plot_colorbar => (true, "Whether to display the colorbar"),
     :colorbar_width => (30, "Width of the colorbar"),
     :colorbar_label => ("Correlation", "Label for the colorbar"),
-    :colorbar_limits => ((-1, 1), "Limits for the colorbar"),
+    :colorbar_fontsize => (12, "Font size for colorbar label"),
 )
 
 """
@@ -85,6 +96,14 @@ function plot_correlation_heatmap!(
         min_val, max_val = plot_kwargs[:mask_range]
         corr_matrix[(corr_matrix .>= min_val) .& (corr_matrix .<= max_val)] .= NaN
     end
+    
+    # Use the specified colorrange
+    colorrange = plot_kwargs[:colorrange]
+    # Validate colorrange for correlations
+    min_val, max_val = colorrange
+    if min_val < -1 || max_val > 1
+        @minimal_warning("Color range ($min_val, $max_val) extends beyond typical correlation bounds (-1, 1)")
+    end
 
     # Extract row and column names
     row_names = String.(corr_df[!, 1]) # Use first column by index
@@ -97,11 +116,29 @@ function plot_correlation_heatmap!(
     ax.yticks = (1:length(row_names), row_names)
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
     ax.yticklabelrotation = plot_kwargs[:ytick_rotation]
+    
+    # Set font sizes
+    ax.xlabelsize = plot_kwargs[:label_fontsize]
+    ax.ylabelsize = plot_kwargs[:label_fontsize]
+    ax.xticklabelsize = plot_kwargs[:tick_fontsize]
+    ax.yticklabelsize = plot_kwargs[:tick_fontsize]
+    
+    # Set title
+    if plot_kwargs[:show_title] && !isempty(plot_kwargs[:title])
+        ax.title = plot_kwargs[:title]
+        ax.titlesize = plot_kwargs[:title_fontsize]
+    end
+    
+    # Configure grid
+    ax.xgridvisible = plot_kwargs[:grid_visible]
+    ax.ygridvisible = plot_kwargs[:grid_visible]
+    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
+    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
 
     # Create the heatmap
     heatmap!(ax, corr_matrix, 
              colormap = plot_kwargs[:colormap], 
-             colorrange = plot_kwargs[:colorrange], 
+             colorrange = colorrange, 
              nan_color = plot_kwargs[:nan_color])
 
     return nothing
@@ -124,10 +161,14 @@ function plot_correlation_heatmap(
 
     # Add a colorbar if requested
     if plot_kwargs[:plot_colorbar]
+        # Use the specified colorrange for colorbar
+        colorbar_range = plot_kwargs[:colorrange]
+        
         Colorbar(fig[1, 2], 
-                limits = plot_kwargs[:colorbar_limits], 
+                limits = colorbar_range, 
                 label = plot_kwargs[:colorbar_label],
-                width = plot_kwargs[:colorbar_width])
+                width = plot_kwargs[:colorbar_width],
+                labelsize = plot_kwargs[:colorbar_fontsize])
     end
 
     if plot_kwargs[:display_plot]

@@ -808,12 +808,12 @@ end
 Log a pretty table with message. For general DataFrame logging.
 Sets show_row_number=false and show_subheader=false by default for cleaner logs.
 """
-function log_pretty_table(message::String, df::DataFrame; kwargs...)
+function log_pretty_table(df::DataFrame; kwargs...)
     table_output = sprint() do output_io
         io_context = IOContext(output_io, :displaysize => displaysize(stdout))
         pretty_table(io_context, df; kwargs...)
     end
-    @info "$message\n$table_output"
+    @info "\n\n$table_output\n"
     return nothing
 end
 

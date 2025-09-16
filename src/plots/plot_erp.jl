@@ -256,7 +256,7 @@ Note: datasets should already be subset based on channel_selection and sample_se
 function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
     
     # Use defaults + overrides
-    kwargs = merge(DEFAULT_ERP_KWARGS, kwargs)
+    kwargs = merge(PLOT_ERP_KWARGS, kwargs)
     
     # Handle individual channel plotting
     # Styling for multiple datasets and channels
