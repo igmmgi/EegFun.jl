@@ -501,10 +501,15 @@ eegfun.n_extreme_value(
     sample_selection = x -> x.sample .< 10,
 )
 
-
-
+# package
+using eegfun
+using GLMakie
+# using CairoMakie
+# using BenchmarkTools
 # while preprocessing routine
 eegfun.preprocess_eeg_data("pipeline.toml")
+
+
 
 # config test
 config = eegfun.load_config("pipeline.toml");
