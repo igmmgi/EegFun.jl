@@ -824,9 +824,15 @@ end
 
 function _print_epochs_table(df::DataFrame, io::Union{IO, Nothing}, alignments::Vector{Symbol})
     if io !== nothing
-        # pretty_table(io, df; alignment = alignments, crop = :none, show_subheader = false)
-        pretty_table(io, df; alignment = alignments, maximum_number_of_columns = 10)
-        # pretty_table(df; alignment = alignments, maximum_number_of_columns = 10)
+        # Capture table output using sprint with proper display context
+        table_output = sprint() do output_io
+            io_context = IOContext(output_io, :displaysize => displaysize(stdout))
+            pretty_table(io_context, df; alignment = alignments)
+        end
+        
+        # Write to both console and provided io
+        println(table_output)
+        println(io, table_output)
     end
 end
 
@@ -837,8 +843,16 @@ Log an epochs table with message and return the DataFrame.
 Combines logging and table creation in one clean call.
 """
 function log_epochs_table(message::String, epochs...; kwargs...)
-    io_buffer = nothing #IOBuffer()
-    df = epochs_table(epochs...; io = io_buffer, kwargs...)
-    @info "$message\n$(String(take!(io_buffer)))"
+    # Create the table first (without writing to IO)
+    df = epochs_table(epochs...; io = nothing, kwargs...)
+    
+    # Generate table output using sprint with proper display context
+    table_output = sprint() do output_io
+        io_context = IOContext(output_io, :displaysize => displaysize(stdout))
+        pretty_table(io_context, df; alignment = [:l, :r, :l, :r, :r, :r])
+    end
+    
+    # Write to both console and log
+    @info "$message\n$table_output"
     return df
 end
