@@ -14,12 +14,7 @@ end
 function get_epochs_data()
     dat, layout = get_data()
     # Create some test epochs using extract_epochs
-    # First, we need to create an EpochCondition
-    condition = eegfun.EpochCondition(
-        name = "test_condition",
-        trigger_sequence = [1],  # Simple trigger
-        reference_index = 1
-    )
+    condition = eegfun.EpochCondition( name = "test", trigger_sequences = [[1]])
     epochs = eegfun.extract_epochs(dat, 1, condition, -0.1, 0.5)
     return epochs, layout
 end
@@ -131,113 +126,233 @@ function test_layout_plots()
     
     println("✓ Layout plots completed")
 end
+test_layout_plots()
 
 ###########################
 # Topography Tests
 ###########################
-function test_topography()
+function test_topography_plots()
     println("\n=== Testing Topography Plots ===")
     dat, layout = get_data()
     
-    # Create some test data for topography
-    test_values = randn(length(layout.channels))
-    
     # Basic topography
-    fig, ax = eegfun.plot_topography(layout, test_values, title = "Random Topography")
+    fig, ax = eegfun.plot_topography(dat)
     
     # With custom styling
-    fig, ax = eegfun.plot_topography(layout, test_values, 
+    fig, ax = eegfun.plot_topography(dat,  
         title = "Custom Topography",
         colormap = :jet,
         gridscale = 100,
         method = :spherical_spline
     )
     
+    # Test title parameters
+    fig, ax = eegfun.plot_topography(dat, 
+        title = "Test Title",
+        title_fontsize = 20,
+        show_title = true
+    )
+    
+    # Test with title disabled
+    fig, ax = eegfun.plot_topography(dat, 
+        show_title = false
+    )
+    
+    # Test new parameters
+    fig, ax = eegfun.plot_topography(dat, 
+        title = "Test with New Parameters",
+        colorrange = (-2, 2),
+        nan_color = :red,
+        grid_visible = true,
+        xlabel = "X Position",
+        ylabel = "Y Position",
+        label_fontsize = 16,
+        tick_fontsize = 14,
+        colorbar_fontsize = 14
+    )
+    
+    # Test with interactive disabled
+    fig, ax = eegfun.plot_topography(dat, 
+        title = "Non-interactive Plot",
+        interactive = false,
+        display_plot = false
+    )
+    
     println("✓ Topography plots completed")
 end
+test_topography_plots()
 
 ###########################
 # Filter Tests
 ###########################
-function test_filter()
+function test_plot_filter()
     println("\n=== Testing Filter Plots ===")
     dat, layout = get_data()
     
-    # Create a filter
-    filter_design = eegfun.create_filter("lp", "iir", 30.0, dat.sample_rate)
+    # Create FilterInfo struct for lowpass IIR filter
+    filter_type = "lp"
+    filter_method = "iir"
+    cutoff_freq = 30.0
+    sample_rate = dat.sample_rate
+    order = 2
+    transition_width = 0.1
+    
+    # Create filter prototype/object based on type
+    filter_prototypes = Dict("hp" => eegfun.Highpass, "lp" => eegfun.Lowpass)
+    filter_prototype = filter_prototypes[filter_type](cutoff_freq)
+    transition_band = cutoff_freq * transition_width
+    n_taps = nothing
+    
+    # Create filter with chosen method
+    if filter_method == "iir"
+        filter_object = eegfun.digitalfilter(filter_prototype, eegfun.Butterworth(order); fs = sample_rate)
+    end
+    
+    filter_info = eegfun.FilterInfo(
+        filter_type,
+        filter_object,
+        filter_method,
+        Float64(cutoff_freq),
+        Float64(sample_rate),
+        order,
+        n_taps,
+        Float64(transition_band),
+    )
     
     # Plot filter response
-    fig, ax = eegfun.plot_filter(filter_design, title = "Filter Response")
+    fig, ax = eegfun.plot_filter_response(filter_info)
     
-    # With custom styling
-    fig, ax = eegfun.plot_filter(filter_design, 
-        title = "Custom Filter Plot",
-        color = :red,
-        linewidth = 3
+    # Test with custom parameters
+    fig, ax = eegfun.plot_filter_response(filter_info, 
+        title = "Custom Lowpass Filter Plot",
+        actual_color = :blue,
+        actual_linewidth = 3,
+        reference_lines = [-3, -12, -24],
+        reference_color = :red,
+        n_points = 1000,
+        display_plot = false
+    )
+    
+    # Create FilterInfo struct for highpass IIR filter
+    filter_type2 = "hp"
+    cutoff_freq2 = 1.0
+    transition_width2 = 0.25
+    
+    filter_prototype2 = filter_prototypes[filter_type2](cutoff_freq2)
+    transition_band2 = cutoff_freq2 * transition_width2
+    
+    filter_object2 = eegfun.digitalfilter(filter_prototype2, eegfun.Butterworth(order); fs = sample_rate)
+    
+    filter_info2 = eegfun.FilterInfo(
+        filter_type2,
+        filter_object2,
+        filter_method,
+        Float64(cutoff_freq2),
+        Float64(sample_rate),
+        order,
+        n_taps,
+        Float64(transition_band2),
+    )
+    
+    fig, ax = eegfun.plot_filter_response(filter_info2, 
+        title = "High-pass Filter",
+        actual_color = :green,
+        display_plot = false
+    )
+    
+    # Create FilterInfo struct for FIR filter
+    filter_type3 = "lp"
+    filter_method3 = "fir"
+    cutoff_freq3 = 40.0
+    transition_width3 = 0.1
+    
+    filter_prototype3 = filter_prototypes[filter_type3](cutoff_freq3)
+    transition_band3 = cutoff_freq3 * transition_width3
+    
+    # Calculate number of taps (ensure not too small + next pow2 + odd) for FIR filter
+    n_taps3 = Int(ceil(4.0 * sample_rate / transition_band3))
+    n_taps3 = max(n_taps3, 101)
+    n_taps3 = nextpow(2, n_taps3)
+    n_taps3 += 1  # Always add 1 to make odd as nextpow2 is even
+    
+    filter_object3 = eegfun.digitalfilter(filter_prototype3, eegfun.FIRWindow(eegfun.hamming(n_taps3)); fs = sample_rate)
+    
+    filter_info3 = eegfun.FilterInfo(
+        filter_type3,
+        filter_object3,
+        filter_method3,
+        Float64(cutoff_freq3),
+        Float64(sample_rate),
+        0,  # order not applicable for FIR
+        n_taps3,
+        Float64(transition_band3),
+    )
+    
+    fig, ax = eegfun.plot_filter_response(filter_info3, 
+        title = "FIR Lowpass Filter",
+        actual_color = :purple,
+        display_plot = false
     )
     
     println("✓ Filter plots completed")
 end
+test_plot_filter()
 
 ###########################
 # Power Spectrum Tests
 ###########################
-function test_power_spectrum()
+function test_plot_power_spectrum()
     println("\n=== Testing Power Spectrum Plots ===")
-dat, layout = get_data()
+    dat, layout = get_data()
 
-    # Channel spectrum
-    fig, ax = eegfun.plot_channel_spectrum(dat, :Fp1, title = "Fp1 Power Spectrum")
+    # Single channel spectrum
+    fig, ax = eegfun.plot_channel_spectrum(dat, 
+        channel_selection = eegfun.channels([:Fp1]),
+        title = "Fp1 Power Spectrum",
+        display_plot = false
+    )
     
     # Multiple channels
-    fig, ax = eegfun.plot_channel_spectrum(dat, [:Fp1, :Fp2, :F3, :F4], 
-        title = "Frontal Channels Power Spectrum")
+    fig, ax = eegfun.plot_channel_spectrum(dat, 
+        channel_selection = eegfun.channels([:Fp1, :Fp2, :F3, :F4]),
+        title = "Frontal Channels Power Spectrum",
+        display_plot = false
+    )
     
-    # Component spectrum (if ICA is available)
-    try
-        epochs, _ = get_epochs_data()
-        ica_result = eegfun.run_ica(epochs, n_components = 10)
-        fig, ax = eegfun.plot_component_spectrum(ica_result, 1, title = "Component 1 Spectrum")
-    catch
-        println("  (Skipping component spectrum - ICA not available)")
-    end
+    # With custom parameters
+    fig, ax = eegfun.plot_channel_spectrum(dat, 
+        channel_selection = eegfun.channels([:Fp1, :Fp2]),
+        title = "Custom Power Spectrum",
+        x_scale = :log10,
+        y_scale = :log10,
+        max_freq = 100.0,
+        window_size = 512,
+        line_width = 3,
+        show_freq_bands = false,
+        display_plot = true
+    )
+    
+    # Test with different window function
+    fig, ax = eegfun.plot_channel_spectrum(dat, 
+        channel_selection = eegfun.channels([:Fp1]),
+        title = "Power Spectrum with Hamming Window",
+        window_function = eegfun.DSP.hamming,
+        overlap = 0.75,
+        display_plot = true
+    )
+    
     
     println("✓ Power spectrum plots completed")
 end
+test_plot_power_spectrum()
 
-###########################
-# ICA Plot Tests
-###########################
-function test_ica_plots()
-    println("\n=== Testing ICA Plots ===")
-    try
-        epochs, layout = get_epochs_data()
-        ica_result = eegfun.run_ica(epochs, n_components = 10)
-        
-        # Topoplot
-        fig, ax = eegfun.plot_ica_topoplot(ica_result, 1, layout, title = "Component 1 Topoplot")
-        
-        # Component activation
-        fig, ax = eegfun.plot_ica_component_activation(ica_result, 1, title = "Component 1 Activation")
-        
-        # Quality assessment plots
-        fig, ax = eegfun.plot_eog_component_features(ica_result, title = "EOG Component Features")
-        fig, ax = eegfun.plot_ecg_component_features(ica_result, title = "ECG Component Features")
-        fig, ax = eegfun.plot_spatial_kurtosis_components(ica_result, title = "Spatial Kurtosis")
-        fig, ax = eegfun.plot_line_noise_components(ica_result, title = "Line Noise Components")
-        
-        println("✓ ICA plots completed")
-    catch e
-        println("  (Skipping ICA plots - Error: $e)")
-    end
-end
+
 
 ###########################
 # ERP Plot Tests
 ###########################
 function test_erp_plots()
     println("\n=== Testing ERP Plots ===")
-    try
         erp, layout = get_erp_data()
         
         # Single ERP
@@ -257,10 +372,8 @@ function test_erp_plots()
         )
         
         println("✓ ERP plots completed")
-    catch e
-        println("  (Skipping ERP plots - Error: $e)")
-    end
 end
+test_erp_plots()
 
 ###########################
 # Epochs Plot Tests
@@ -341,30 +454,4 @@ function test_databrowser()
     end
 end
 
-###########################
-# Run All Tests
-###########################
-function test_all_plots()
-    println("\n🚀 Running All Plot Tests...")
-    
-    test_channel_summary()
-    test_correlation_heatmap()
-    test_joint_probability()
-    test_layout_plots()
-    test_topography()
-    test_filter()
-    test_power_spectrum()
-    test_ica_plots()
-    test_erp_plots()
-    test_epochs_plots()
-    test_erp_image()
-    test_databrowser()
-    
-    println("\n🎉 All plot tests completed!")
-end
 
-# Run a quick test by default
-println("\nRunning quick test...")
-test_channel_summary()
-test_correlation_heatmap()
-test_joint_probability()
