@@ -2,16 +2,40 @@
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    :interactive => (true, "Whether to enable interactive features"),
+    
     # Topography-specific parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
     :gridscale => (200, "Grid resolution for interpolation"),
     :colormap => (:jet, "Colormap for the topography"),
     :ylim => (nothing, "Y-axis limits (nothing for auto)"),
+    :colorrange => (nothing, "Color range for the topography. If nothing, automatically determined"),
+    :nan_color => (:transparent, "Color for NaN values"),
+    
+    # Title parameters
+    :title => ("", "Plot title"),
+    :title_fontsize => (16, "Font size for the title"),
+    :show_title => (true, "Whether to show the title"),
+    
+    # Axis labels and styling
+    :xlabel => ("", "Label for x-axis"),
+    :ylabel => ("", "Label for y-axis"),
+    :label_fontsize => (14, "Font size for axis labels"),
+    :tick_fontsize => (12, "Font size for tick labels"),
     
     # Colorbar parameters
     :plot_colorbar => (true, "Whether to display the colorbar"),
     :colorbar_width => (30, "Width of the colorbar"),
     :colorbar_label => ("μV", "Label for the colorbar"),
+    :colorbar_fontsize => (12, "Font size for colorbar labels"),
+    
+    # Grid parameters
+    :grid_visible => (false, "Whether to show grid"),
+    :grid_alpha => (0.3, "Transparency of grid"),
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
     
     # Head shape parameters (reusing layout kwargs)
     :head_color => (:black, "Color of the head shape outline."),
@@ -58,6 +82,8 @@ function _plot_topography!(
     gridscale = plot_kwargs[:gridscale]
     ylim = plot_kwargs[:ylim]
     plot_colorbar = plot_kwargs[:plot_colorbar]
+    colorrange = plot_kwargs[:colorrange]
+    nan_color = plot_kwargs[:nan_color]
 
     # actual data interpolation
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
@@ -74,11 +100,18 @@ function _plot_topography!(
         ylim = (-max_abs, max_abs)
     end
 
-    # Set default title showing time range if data has time column
-    if hasproperty(dat, :time) && !isempty(dat.time)
-        time_min, time_max = extrema(dat.time)
-        time_title = @sprintf("%.3f to %.3f s", time_min, time_max)
-        ax.title = time_title
+    # Set title based on user preferences and data
+    if plot_kwargs[:show_title]
+        if plot_kwargs[:title] != ""
+            # Use user-provided title
+            ax.title = plot_kwargs[:title]
+        elseif hasproperty(dat, :time) && !isempty(dat.time)
+            # Set default title showing time range if data has time column
+            time_min, time_max = extrema(dat.time)
+            time_title = @sprintf("%.3f to %.3f s", time_min, time_max)
+            ax.title = time_title
+        end
+        ax.titlesize = plot_kwargs[:title_fontsize]
     end
 
     # Clear the axis 
@@ -87,20 +120,35 @@ function _plot_topography!(
     # Use different ranges based on interpolation method
     contour_range = method == :spherical_spline ? 88.0 * 4 : 88.0 * 2
 
+    # Set contour parameters
+    contour_kwargs = Dict{Symbol, Any}(
+        :extendlow => :auto,
+        :extendhigh => :auto,
+        :colormap => plot_kwargs[:colormap],
+    )
+    
+    if !isnothing(nan_color)
+        contour_kwargs[:nan_color] = nan_color
+    end
+
     co = contourf!(
         range(-contour_range, contour_range, length = gridscale),
         range(-contour_range, contour_range, length = gridscale),
         data,
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
-        extendlow = :auto,
-        extendhigh = :auto,
-        colormap = plot_kwargs[:colormap],
+        contour_kwargs...
     )
+    
+    # Set color range on the contour plot if specified
+    if !isnothing(colorrange)
+        co.colorrange = colorrange
+    end
 
     if plot_colorbar
         Colorbar(fig[1, 2], co; 
                 width = plot_kwargs[:colorbar_width],
-                label = plot_kwargs[:colorbar_label])
+                label = plot_kwargs[:colorbar_label],
+                labelsize = plot_kwargs[:colorbar_fontsize])
     end
 
     # head shape
@@ -110,6 +158,30 @@ function _plot_topography!(
         layout;
         plot_kwargs...,
     )
+
+    # Apply axis styling
+    if plot_kwargs[:xlabel] != ""
+        ax.xlabel = plot_kwargs[:xlabel]
+    end
+    if plot_kwargs[:ylabel] != ""
+        ax.ylabel = plot_kwargs[:ylabel]
+    end
+    
+    # Set font sizes
+    ax.xlabelsize = plot_kwargs[:label_fontsize]
+    ax.ylabelsize = plot_kwargs[:label_fontsize]
+    ax.xticklabelsize = plot_kwargs[:tick_fontsize]
+    ax.yticklabelsize = plot_kwargs[:tick_fontsize]
+    
+    # Set grid properties
+    ax.xgridvisible = plot_kwargs[:xgrid]
+    ax.ygridvisible = plot_kwargs[:ygrid]
+    if plot_kwargs[:grid_visible]
+        ax.xgridvisible = true
+        ax.ygridvisible = true
+    end
+    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
+    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
 
     return fig, ax
 
@@ -137,13 +209,6 @@ function plot_topography!(
 )
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
-    
-    # Set default title showing time range if data has time column
-    if hasproperty(dat_subset.data, :time) && !isempty(dat_subset.data.time)
-        time_min, time_max = extrema(dat_subset.data.time)
-        time_title = @sprintf("%.3f to %.3f s", time_min, time_max)
-        ax.title = time_title
-    end
 end
 
 function plot_topography(
@@ -154,16 +219,23 @@ function plot_topography(
     interactive = true,  
     kwargs...,
 )
+    # Merge user kwargs with defaults to get all parameters
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    
+    # Override with function parameters if provided
+    plot_kwargs[:display_plot] = display_plot
+    plot_kwargs[:interactive] = interactive
+    
     fig = Figure()
     ax = Axis(fig[1, 1])
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
-    _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
+    _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
     
-    if interactive
+    if plot_kwargs[:interactive]
         _setup_topo_interactivity!(fig, ax, dat)
     end
     
-    if display_plot
+    if plot_kwargs[:display_plot]
         display_figure(fig)
     end
     return fig, ax
@@ -183,9 +255,10 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
+    interactive = true,
     kwargs...,
 )
-    return plot_topography.(dat; channel_selection = channel_selection, sample_selection = sample_selection, display_plot = display_plot, kwargs...)
+    return plot_topography.(dat; channel_selection = channel_selection, sample_selection = sample_selection, display_plot = display_plot, interactive = interactive, kwargs...)
 end
 
 
@@ -211,15 +284,22 @@ function plot_topography(
     interactive = true,  
     kwargs...,
 )
+    # Merge user kwargs with defaults to get all parameters
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
+    
+    # Override with function parameters if provided
+    plot_kwargs[:display_plot] = display_plot
+    plot_kwargs[:interactive] = interactive
+    
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
+    plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, plot_kwargs...)
     
-    if interactive
+    if plot_kwargs[:interactive]
         _setup_topo_interactivity!(fig, ax, dat)
     end
     
-    if display_plot
+    if plot_kwargs[:display_plot]
         display_figure(fig)
     end
     return fig, ax

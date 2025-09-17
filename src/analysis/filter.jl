@@ -40,7 +40,7 @@ end
 
 """
     create_filter(filter_type::String, filter_method::String, filter_freq::Real, sample_rate::Real; 
-                 order::Integer = 2, transition_width::Real = 0.1, plot_filter::Bool = false, print_filter::Bool = false)
+                 order::Integer = 2, transition_width::Real = 0.1, plot_filter::Bool = false, print_filter::Bool = false, kwargs...)
 
 Create a digital filter object for the specified parameters.
 
@@ -53,6 +53,7 @@ Create a digital filter object for the specified parameters.
 - `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
 - `plot_filter`: Boolean to plot frequency response (default: false)
 - `print_filter`: Boolean to print filter characteristics (default: false)
+- `kwargs...`: Additional keyword arguments passed to plot_filter_response when plot_filter is true
 
 # Returns
 - `FilterInfo`: A struct containing all filter information and the actual filter object
@@ -75,6 +76,7 @@ function create_filter(
     transition_width::Real = 0.1,
     plot_filter::Bool = false,
     print_filter::Bool = false,
+    kwargs...,
 )
 
     # Input validation
@@ -133,7 +135,7 @@ function create_filter(
 
     # Print/plot filter characteristics if requested
     print_filter && print_filter_characteristics(filter_info)
-    plot_filter && plot_filter_response(filter_info, filter_func = filtfilt)
+    plot_filter && plot_filter_response(filter_info, filter_func = filtfilt; kwargs...)
 
     return filter_info
 end
@@ -398,128 +400,3 @@ function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 10
 end
 
 
-# =============================================================================
-# FILTER VISUALIZATION
-# =============================================================================
-
-"""
-    plot_filter_response(filter_info::FilterInfo; xlimit::Union{Nothing,Tuple{Real,Real}} = nothing, xscale::Symbol = :log)
-
-Plot the frequency response of a digital filter with ideal response overlay.
-
-# Arguments
-- `filter_info::FilterInfo`: Filter information struct
-- `xlimit::Union{Nothing,Tuple{Real,Real}}`: Optional X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined.
-- `xscale::Symbol`: X-axis scale type, `:log` for logarithmic (default) or `:linear` for linear scale
-
-# Returns
-- `fig`: Makie Figure object
-- `ax`: Tuple of Makie Axis objects (linear, dB, impulse)
-"""
-function plot_filter_response(
-    filter_info::FilterInfo;
-    xlimit::Union{Nothing,Tuple{Real,Real}} = nothing,
-    xscale::Symbol = :log,  # :log or :linear
-    filter_func::Function = filtfilt,  # Default to zero-phase filtering
-    display_plot::Bool = true,
-)
-    # Determine x-axis limits based on filter type and cutoff
-    if isnothing(xlimit)
-        if filter_info.cutoff_freq < 2
-            xlimit = (0, filter_info.cutoff_freq * 10)
-        else
-            xlimit = (0, filter_info.sample_rate / 2)
-        end
-    end
-
-    fig = Figure()
-
-    # Base axis properties
-    base_props = (
-        xlabel = "Frequency (Hz)",
-        title = "Magnitude response",
-        titlesize = 20,
-        xlabelsize = 18,
-        ylabelsize = 18,
-        xticklabelsize = 16,
-        yticklabelsize = 16,
-    )
-
-    # Add xscale conditionally
-    xscale_props = xscale == :log ? (xscale = Makie.Symlog10(10.0),) : NamedTuple()
-
-    # Create three axes in a row
-    ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = "Magnitude (linear)", limits = (xlimit, (0, 1.1)))
-    ax2 = Axis(fig[1, 2]; base_props..., xscale_props..., ylabel = "Magnitude (dB)", limits = (xlimit, (-200, 5)))
-    ax3 = Axis(
-        fig[1, 3];
-        xlabel = "Time (samples)",
-        ylabel = "Amplitude",
-        title = "Impulse response",
-        titlesize = 20,
-        xlabelsize = 18,
-        ylabelsize = 18,
-        xticklabelsize = 16,
-        yticklabelsize = 16,
-    )
-
-    # Simple logarithmic frequency spacing
-    n_points = 2000
-    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate/2), length = n_points))
-    freqs = [0.0; freqs]  # Add DC point
-
-    w = 2π * freqs / filter_info.sample_rate
-
-    # Get frequency response
-    if filter_info.filter_object isa Vector  # FIR filter coefficients
-        n = 0:(length(filter_info.filter_object)-1)
-        resp = [sum(filter_info.filter_object .* exp.(-im * w_k * n)) for w_k in w]
-    else  # Other filter types
-        resp = freqresp(filter_info.filter_object, w)
-    end
-
-    # Calculate magnitude responses
-    mag_linear = abs.(resp)
-    mag_db = 20 * log10.(mag_linear)
-
-    # Plot actual responses
-    lines!(ax1, freqs, mag_linear, label = "Actual", color = :black, linewidth = 4)
-    lines!(ax2, freqs, mag_db, label = "Actual", color = :black, linewidth = 4)
-
-    # Add vertical line at cutoff frequency to both subplots
-    vlines!(ax1, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
-    vlines!(ax2, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
-
-    # Add reference lines
-    hlines!(ax1, [0.707], color = :gray, linestyle = :dash, alpha = 0.5)  # -3 dB point
-    hlines!(ax2, [-3, -6], color = :gray, linestyle = :dash, alpha = 0.5)
-
-    # Calculate and plot impulse response
-    # Create a unit impulse with samples before and after
-    n_samples_before = 200  # Samples before impulse
-    n_samples_after = 200  # Samples after impulse
-    n_total = n_samples_before + n_samples_after + 1
-    impulse = zeros(n_total)
-    impulse[n_samples_before+1] = 1.0  # Unit impulse at t=0
-
-    # Apply the specified filter function to get impulse response
-    if filter_info.filter_method == "fir"
-        impulse_response = filter_info.filter_object
-        time_samples = (-(length(impulse_response)÷2)):((length(impulse_response)-1)÷2)
-    else  # IIR filter
-        impulse_response = filter_func(filter_info.filter_object, impulse)
-        time_samples = (-n_samples_before):n_samples_after
-    end
-
-    # Plot impulse response
-    lines!(ax3, time_samples, impulse_response, color = :red, linewidth = 2)
-
-    # Add zero line for reference
-    hlines!(ax3, [0], color = :gray, linestyle = :dash, alpha = 0.5)
-
-    if display_plot
-        display_figure(fig)
-    end
-
-    return fig, (ax1, ax2, ax3)
-end
