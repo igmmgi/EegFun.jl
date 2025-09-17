@@ -16,6 +16,7 @@ layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # test plot_channel_summary
 dat = eegfun.create_eeg_dataframe(dat, layout);
 jp = eegfun.channel_joint_probability(dat)
+
 eegfun.plot_joint_probability(jp)
 
 
