@@ -206,23 +206,11 @@ test_plot_filter()
 ###########################
 function test_plot_power_spectrum()
     println("\n=== Testing Power Spectrum Plots ===")
-    dat, layout = get_data()
+    dat, epochs, erps, layout = get_data()
 
-    # Single channel spectrum
-    fig, ax = eegfun.plot_channel_spectrum(dat, 
-        channel_selection = eegfun.channels([:Fp1]),
-        title = "Fp1 Power Spectrum",
-        display_plot = false
-    )
-    
-    # Multiple channels
-    fig, ax = eegfun.plot_channel_spectrum(dat, 
-        channel_selection = eegfun.channels([:Fp1, :Fp2, :F3, :F4]),
-        title = "Frontal Channels Power Spectrum",
-        display_plot = false
-    )
-    
-    # With custom parameters
+    # Plots
+    fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1]), title = "Fp1 Power Spectrum")
+    fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :F3, :F4]), title = "Frontal Channels Power Spectrum")
     fig, ax = eegfun.plot_channel_spectrum(dat, 
         channel_selection = eegfun.channels([:Fp1, :Fp2]),
         title = "Custom Power Spectrum",
@@ -232,18 +220,13 @@ function test_plot_power_spectrum()
         window_size = 512,
         line_width = 3,
         show_freq_bands = false,
-        display_plot = true
     )
-    
-    # Test with different window function
     fig, ax = eegfun.plot_channel_spectrum(dat, 
         channel_selection = eegfun.channels([:Fp1]),
         title = "Power Spectrum with Hamming Window",
         window_function = eegfun.DSP.hamming,
         overlap = 0.75,
-        display_plot = true
     )
-    
     
     println("✓ Power spectrum plots completed")
 end
@@ -256,105 +239,61 @@ test_plot_power_spectrum()
 ###########################
 function test_erp_plots()
     println("\n=== Testing ERP Plots ===")
-        erp, layout = get_erp_data()
+    dat, epochs, erps, layout = get_data()
         
-        # Single ERP
-        fig, ax = eegfun.plot_erp(erp, title = "ERP Waveform")
-        
-        # Multiple ERPs
-        erp2 = deepcopy(erp)
-        erp2.condition = 2
-        fig, ax = eegfun.plot_erp([erp, erp2], title = "Multiple ERP Conditions")
-        
-        # With custom styling
-        fig, ax = eegfun.plot_erp(erp, 
-            title = "Custom ERP Plot",
-            color = :red,
-            linewidth = 2,
-            ylabel = "Amplitude (μV)"
-        )
-        
-        println("✓ ERP plots completed")
+    # Plots
+    fig, ax = eegfun.plot_erp(erps[1], title = "ERP Waveform")
+    fig, ax = eegfun.plot_erp(erps, title = "Multiple ERP Conditions")
+    fig, ax = eegfun.plot_erp(erp, title = "Custom ERP Plot", color = :red, linewidth = 2, ylabel = "Amplitude (μV)")
+    
+    println("✓ ERP plots completed")
 end
 test_erp_plots()
 
 ###########################
 # Epochs Plot Tests
 ###########################
-function test_epochs_plots()
+function test_epoch_plots()
     println("\n=== Testing Epochs Plots ===")
-    try
-        epochs, layout = get_epochs_data()
+    dat, epochs, erps, layout = get_data()
         
-        # Basic epochs plot
-        fig, ax = eegfun.plot_epochs(epochs, title = "Epochs Plot")
-        
-        # With custom styling
-        fig, ax = eegfun.plot_epochs(epochs, 
-            title = "Custom Epochs Plot",
-            color = :blue,
-            alpha = 0.7
-        )
-        
-        println("✓ Epochs plots completed")
-    catch e
-        println("  (Skipping epochs plots - Error: $e)")
-    end
+    # Plots
+    fig, ax = eegfun.plot_epochs(epochs[1], title = "Epochs Plot")
+    fig, ax = eegfun.plot_epochs(epochs[1], title = "Custom Epochs Plot", color = [:blue, :red], alpha = [0.7, 1.0])
+    
+    println("✓ Epochs plots completed")
 end
+test_epoch_plots()
 
 ###########################
 # ERP Image Tests
 ###########################
 function test_erp_image()
     println("\n=== Testing ERP Image Plots ===")
-    try
-        epochs, layout = get_epochs_data()
+    dat, epochs, erps, layout = get_data()
         
-        # Basic ERP image
-        fig, ax = eegfun.plot_erp_image(epochs, title = "ERP Image")
-        
-        # With smoothing
-        fig, ax = eegfun.plot_erp_image(epochs, 
-            title = "ERP Image with Smoothing",
-            boxcar_average = 5,
-            time_smoothing = 3
-        )
-        
-        # With custom styling
-        fig, ax = eegfun.plot_erp_image(epochs, 
-            title = "Custom ERP Image",
-            colormap = :viridis,
-            ylim = (-50, 50)
-        )
-        
-        println("✓ ERP image plots completed")
-    catch e
-        println("  (Skipping ERP image plots - Error: $e)")
-    end
+    # Plots
+    fig, ax = eegfun.plot_erp_image(epochs[1], title = "ERP Image")
+    fig, ax = eegfun.plot_erp_image(epochs[1], title = "ERP Image with Smoothing", boxcar_average = 5)
+    fig, ax = eegfun.plot_erp_image(epochs[1], title = "Custom ERP Image", colormap = :viridis)
+    
+    println("✓ ERP image plots completed")
 end
+test_erp_image()
 
 ###########################
 # Data Browser Tests
 ###########################
 function test_databrowser()
     println("\n=== Testing Data Browser ===")
-    try
-        dat, layout = get_data()
-        
-        # Basic data browser
-        fig, ax = eegfun.plot_databrowser(dat, title = "Data Browser")
-        
-        # With custom styling
-        fig, ax = eegfun.plot_databrowser(dat, 
-            title = "Custom Data Browser",
-            channels = [:Fp1, :Fp2, :F3, :F4],
-            color = :blue
-        )
-        
-        println("✓ Data browser plots completed")
-    catch e
-        println("  (Skipping data browser plots - Error: $e)")
-    end
+    dat, epochs, erps, layout = get_data()
+   
+    # Plots
+    # fig, ax = eegfun.plot_databrowser(dat) 
+    fig, ax = eegfun.plot_databrowser(epochs[1]) 
+      
+    println("✓ Data browser plots completed")
 end
+test_databrowser()
 
 
