@@ -617,7 +617,7 @@ using eegfun
     # Test log_pretty_table (only function remaining in data.jl)
     @testset "log_pretty_table" begin
         df = DataFrame(a = [1, 2], b = [3, 4])
-        @test eegfun.log_pretty_table("Test message", df) === nothing
+        @test eegfun.log_pretty_table(df) === nothing
     end
 
     # === SUBSET FUNCTION TESTS ===
