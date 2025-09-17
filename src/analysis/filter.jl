@@ -40,7 +40,7 @@ end
 
 """
     create_filter(filter_type::String, filter_method::String, filter_freq::Real, sample_rate::Real; 
-                 order::Integer = 2, transition_width::Real = 0.1, plot_filter::Bool = false, print_filter::Bool = false, kwargs...)
+                 order::Integer = 2, transition_width::Real = 0.1)
 
 Create a digital filter object for the specified parameters.
 
@@ -51,9 +51,6 @@ Create a digital filter object for the specified parameters.
 - `sample_rate`: Sampling rate in Hz
 - `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
 - `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
-- `plot_filter`: Boolean to plot frequency response (default: false)
-- `print_filter`: Boolean to print filter characteristics (default: false)
-- `kwargs...`: Additional keyword arguments passed to plot_filter_response when plot_filter is true
 
 # Returns
 - `FilterInfo`: A struct containing all filter information and the actual filter object
@@ -62,10 +59,26 @@ Create a digital filter object for the specified parameters.
 - Validates all input parameters
 - Creates appropriate filter prototype based on type and method
 - Returns a FilterInfo object that can be reused for multiple datasets
-- If plot_filter is true, displays the filter frequency response
-- If print_filter is true, prints detailed filter characteristics
 - Optimized for EEG analysis with appropriate defaults
 - NOTE: When using filtfilt (default), effective filter order is approximately doubled
+
+# Examples
+```julia
+# Create a lowpass filter
+filter_info = create_filter("lp", "iir", 30.0, 256.0)
+
+# Create a highpass filter with custom order
+filter_info = create_filter("hp", "iir", 1.0, 256.0, order = 4)
+
+# Create a FIR filter
+filter_info = create_filter("lp", "fir", 40.0, 256.0)
+
+# Plot the filter response
+plot_filter_response(filter_info)
+
+# Print filter characteristics
+print_filter_characteristics(filter_info)
+```
 """
 function create_filter(
     filter_type::String,
@@ -74,9 +87,6 @@ function create_filter(
     sample_rate::Real;
     order::Integer = 2,
     transition_width::Real = 0.1,
-    plot_filter::Bool = false,
-    print_filter::Bool = false,
-    kwargs...,
 )
 
     # Input validation
@@ -133,10 +143,6 @@ function create_filter(
         Float64(transition_band),
     )
 
-    # Print/plot filter characteristics if requested
-    print_filter && print_filter_characteristics(filter_info)
-    plot_filter && plot_filter_response(filter_info, filter_func = filtfilt; kwargs...)
-
     return filter_info
 end
 
@@ -190,25 +196,33 @@ function _update_filter_info!(dat::EegData, filter_info::FilterInfo)::Nothing
 end
 
 """
-    filter_data!(dat::EegData, filter_type::String, filter_method::String, filter_freq::Real; kwargs...)
+    filter_data!(dat::EegData, filter_type::String, cutoff_freq::Real; kwargs...)
 
 Apply a digital filter to EEG data. Modifies the data in place.
 
 # Arguments
 - `dat::EegData`: EegData object (ContinuousData, ErpData, or EpochData)
 - `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
-- `filter_method::String`: Filter implementation ("iir" or "fir")
 - `cutoff_freq::Real`: Cutoff frequency in Hz
 
 # Keyword Arguments
 - `order::Integer`: Filter order for IIR filters (default: 3)
 - `transition_width::Real`: Relative width of transition band as fraction of cutoff (default: 0.25)
+- `filter_method::String`: Filter implementation ("iir" or "fir")
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
 - `filter_func::String`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
-- `plot_filter::Bool`: Boolean to plot frequency response (default: false)
-- `print_filter::Bool`: Boolean to print filter characteristics (default: false)
-            order=2, 
-            channel_selection=channels([:Fp1, :Fp2, :F3, :F4]))
+
+# Examples
+```julia
+# Apply highpass filter
+filter_data!(dat, "hp", 1.0)
+
+# Apply lowpass filter with custom parameters
+filter_data!(dat, "lp", 30.0, order = 4, filter_method = "fir")
+
+# Apply filter to specific channels
+filter_data!(dat, "hp", 1.0, channel_selection = channels([:Fp1, :Fp2]))
+```
 """
 function filter_data!(
     dat::EegData,
@@ -219,8 +233,6 @@ function filter_data!(
     filter_method::String = "iir",
     channel_selection::Function = channels(),
     filter_func::String = "filtfilt",
-    plot_filter::Bool = false,
-    print_filter::Bool = false,
 )
 
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -238,8 +250,6 @@ function filter_data!(
         dat.sample_rate;
         order = order,
         transition_width = transition_width,
-        plot_filter = plot_filter,
-        print_filter = print_filter,
     )
     _update_filter_info!(dat, filter_info)
     _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
