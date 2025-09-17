@@ -23,7 +23,7 @@ detect_eog_onsets!(dat, 50.0, :HEOG, :is_eog_onset)
 ```
 """
 function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
-    if !(channel_in in names(dat.data))
+    if !(channel_in in propertynames(dat.data))
         @minimal_error("Channel $channel_in not found in data")
     end
     
@@ -166,8 +166,8 @@ function is_extreme_value!(dat::SingleDataFrameEeg, threshold::Real; channel_sel
         channel_data = dat.data[!, ch]
         extreme_mask = _is_extreme_value(channel_data, Float64(threshold))
         
-        # Add column with extreme value detection results
-        column_name = Symbol("is_extreme_value_$(threshold)")
+        # Add column with extreme value detection results for this specific channel
+        column_name = Symbol("is_extreme_value_$(ch)_$(threshold)")
         dat.data[!, column_name] = extreme_mask
     end
     

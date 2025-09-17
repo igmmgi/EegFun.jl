@@ -108,8 +108,8 @@ Internal function to calculate joint probability for specified channels.
 - `DataFrame`: Joint probability data with channel names and probability values
 """
 function _channel_joint_probability(df::DataFrame, channels::Vector{Symbol}, threshold::Float64, normalize::Int, discret::Int)
-    # Extract data for selected channels
-    data_matrix = Matrix(df[:, channels])
+    # Extract data for selected channels (transpose to get channels × samples)
+    data_matrix = Matrix(df[:, channels])'
     
     # Calculate joint probability
     jp_values = _joint_probability(data_matrix, threshold, normalize, discret)
@@ -147,7 +147,7 @@ function _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64,
         
         # Calculate probability map
         proba_map = zeros(Float64, discret)
-        compute_probability!(proba_map, channel_signal, discret)
+        compute_probability!(proba_map, channel_signal, length(proba_map))
         
         # Calculate joint probability
         if normalize == 1
@@ -177,8 +177,16 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
     # Trim extreme values
     trimmed_data = _trim_extremes(data)
     
-    # Calculate histogram
-    hist = fit(Histogram, trimmed_data, nbins = bins)
+    # Calculate histogram with explicit bin edges to ensure correct number of bins
+    min_val, max_val = extrema(trimmed_data)
+    if min_val == max_val
+        # Handle case where all values are the same
+        probaMap .= 1.0 / length(probaMap)
+        return probaMap
+    end
+    
+    bin_edges = range(min_val, max_val, length = bins + 1)
+    hist = fit(Histogram, trimmed_data, bin_edges)
     
     # Normalize to get probabilities
     probaMap .= hist.weights ./ sum(hist.weights)
