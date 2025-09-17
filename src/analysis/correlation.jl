@@ -23,13 +23,16 @@ cm = correlation_matrix(dat)
 cm = correlation_matrix(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
 ```
 """
-function correlation_matrix(dat::SingleDataFrameEeg; channel_selection::Function = channels())
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_error("No channels selected for correlation analysis")
-    end
-    
-    return _correlation_matrix(dat.data, selected_channels)
+function correlation_matrix(
+    dat::SingleDataFrameEeg;
+    sample_selection::Function = samples(),
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+)::DataFrame
+    selected_channels = eegfun.get_selected_channels(dat, channel_selection; include_meta = false,include_extra = include_extra)
+    isempty(selected_channels) && @minimal_error_throw "No channels selected for correlation matrix"
+    selected_samples = eegfun.get_selected_samples(dat, sample_selection)
+    return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
 
 """
@@ -44,19 +47,15 @@ Internal function to calculate correlation matrix for specified channels.
 # Returns
 - `DataFrame`: Correlation matrix with channel names as both row and column names
 """
-function _correlation_matrix(df::DataFrame, channels::Vector{Symbol})
-    # Extract data for selected channels
-    data_matrix = Matrix(df[:, channels])
-    
-    # Calculate correlation matrix
-    corr_matrix = cor(data_matrix)
-    
-    # Create DataFrame with channel names
-    corr_df = DataFrame(corr_matrix, channels)
-    corr_df[!, :channel] = channels
-    select!(corr_df, :channel, channels...)
-    
-    return corr_df
+function _correlation_matrix(
+    dat::DataFrame,
+    selected_samples::Vector{Int},
+    selected_channels::Vector{Symbol},
+)::DataFrame
+    selected_data = select(dat, selected_channels)[selected_samples, :]
+    df = DataFrame(cor(Matrix(selected_data)), selected_channels)
+    insertcols!(df, 1, :row => selected_channels)
+    return df
 end
 
 """
@@ -83,13 +82,27 @@ jp = channel_joint_probability(dat)
 jp = channel_joint_probability(dat, threshold = 0.3)
 ```
 """
-function channel_joint_probability(dat::SingleDataFrameEeg; channel_selection::Function = channels(), threshold::Real = 0.5, normalize::Int = 1, discret::Int = 1000)
-    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_error("No channels selected for joint probability analysis")
-    end
-    
-    return _channel_joint_probability(dat.data, selected_channels, threshold, normalize, discret)
+function channel_joint_probability(
+    dat::SingleDataFrameEeg;
+    sample_selection::Function = samples(),
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+    threshold::Real = 3.0,
+    normalize::Int = 2,
+    discret::Int = 1000,
+)::DataFrame
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    isempty(selected_channels) && @minimal_error_throw "No channels selected for joint probability calculation"
+    selected_samples = get_selected_samples(dat, sample_selection)
+
+    return _channel_joint_probability(
+        dat.data,
+        selected_samples,
+        selected_channels;
+        threshold = threshold,
+        normval = normalize,
+        discret = discret,
+    )
 end
 
 """
@@ -107,20 +120,22 @@ Internal function to calculate joint probability for specified channels.
 # Returns
 - `DataFrame`: Joint probability data with channel names and probability values
 """
-function _channel_joint_probability(df::DataFrame, channels::Vector{Symbol}, threshold::Float64, normalize::Int, discret::Int)
-    # Extract data for selected channels (transpose to get channels × samples)
-    data_matrix = Matrix(df[:, channels])'
-    
-    # Calculate joint probability
-    jp_values = _joint_probability(data_matrix, threshold, normalize, discret)
-    
-    # Create DataFrame with results
-    jp_df = DataFrame(
-        channel = channels,
-        jp = jp_values
-    )
-    
-    return jp_df
+function _channel_joint_probability(
+    dat::DataFrame,
+    selected_samples::Vector{Int},
+    selected_channels::Vector{Symbol};
+    threshold::Float64 = 5.0,
+    normval::Int = 2,
+    discret::Int = 1000,
+)::DataFrame
+    @info "channel_joint_probability: Computing probability for channels $(print_vector(selected_channels))"
+
+    # Select the specified channels and filter by samples
+    data = select(dat[selected_samples, :], selected_channels)
+
+    # Convert to matrix and compute joint probability
+    jp, indelec = _joint_probability(Matrix(data)', threshold, normval)
+    return DataFrame(channel = selected_channels, jp = jp, rejection = indelec)
 end
 
 """
@@ -138,26 +153,23 @@ Calculate joint probability of extreme values in a signal matrix.
 - `Vector{Float64}`: Joint probability values for each channel
 """
 function _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
-    n_channels, n_samples = size(signal)
-    jp_values = zeros(Float64, n_channels)
-    
-    for ch in 1:n_channels
-        # Get signal for this channel
-        channel_signal = signal[ch, :]
-        
-        # Calculate probability map
-        proba_map = zeros(Float64, discret)
-        compute_probability!(proba_map, channel_signal, length(proba_map))
-        
-        # Calculate joint probability
-        if normalize == 1
-            jp_values[ch] = sum(proba_map .> threshold) / discret
-        else
-            jp_values[ch] = sum(proba_map .> threshold)
-        end
+    nbchan = size(signal, 1)
+    jp = zeros(nbchan)
+    dataProba = Vector{Float64}(undef, size(signal, 2)) # Pre-allocate
+
+    @inbounds for rc = 1:nbchan
+        compute_probability!(dataProba, view(signal, rc, :), discret)
+        jp[rc] = -sum(log, dataProba)
     end
-    
-    return jp_values
+
+    # Normalize the joint probability
+    if normalize != 0
+        tmpjp = normalize == 2 ? _trim_extremes(jp) : jp
+        jp .= (jp .- mean(tmpjp)) ./ std(tmpjp)
+    end
+
+    rej = threshold != 0 ? abs.(jp) .> threshold : falses(nbchan)
+    return jp, rej
 end
 
 """
@@ -174,25 +186,40 @@ Compute probability distribution for a data vector.
 - `Vector{Float64}`: Probability distribution (same as probaMap)
 """
 function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
-    # Trim extreme values
-    trimmed_data = _trim_extremes(data)
-    
-    # Calculate histogram with explicit bin edges to ensure correct number of bins
-    min_val, max_val = extrema(trimmed_data)
-    if min_val == max_val
-        # Handle case where all values are the same
-        probaMap .= 1.0 / length(probaMap)
-        return probaMap
+
+    if bins > 0
+        min_val, max_val = extrema(data)
+        range_val = max_val - min_val
+        sortbox = zeros(Int, bins)
+
+        # Single-pass binning and counting
+        @inbounds for x in data
+            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
+            sortbox[bin] += 1
+        end
+
+        # Compute probabilities
+        n = length(data)
+        @inbounds for (i, x) in enumerate(data)
+            bin = clamp(floor(Int, (x - min_val) / range_val * (bins - 1)) + 1, 1, bins)
+            probaMap[i] = sortbox[bin] / n
+        end
+    else
+        # Gaussian approximation
+        μ, σ = mean(data), std(data)
+        inv_sqrt2pi = 1 / (√(2π))
+        @inbounds for (i, x) in enumerate(data)
+            z = (x - μ) / σ
+            probaMap[i] = exp(-0.5 * z * z) * inv_sqrt2pi
+        end
+        sum_p = sum(probaMap)
+        probaMap ./= sum_p
     end
-    
-    bin_edges = range(min_val, max_val, length = bins + 1)
-    hist = fit(Histogram, trimmed_data, bin_edges)
-    
-    # Normalize to get probabilities
-    probaMap .= hist.weights ./ sum(hist.weights)
-    
+
     return probaMap
+
 end
+
 
 """
     _trim_extremes(x::Vector{Float64})
@@ -206,18 +233,8 @@ Trim extreme values from a data vector using robust statistics.
 - `Vector{Float64}`: Data vector with extreme values trimmed
 """
 function _trim_extremes(x::Vector{Float64})
-    # Calculate robust statistics
-    q25, q75 = quantile(x, [0.25, 0.75])
-    iqr = q75 - q25
-    
-    # Define outlier bounds
-    lower_bound = q25 - 1.5 * iqr
-    upper_bound = q75 + 1.5 * iqr
-    
-    # Trim extreme values
-    trimmed = copy(x)
-    trimmed[trimmed .< lower_bound] .= lower_bound
-    trimmed[trimmed .> upper_bound] .= upper_bound
-    
-    return trimmed
+    n = length(x)
+    trim = round(Int, n * 0.1)
+    sorted = sort(x)
+    return view(sorted, (trim+1):(n-trim))
 end
