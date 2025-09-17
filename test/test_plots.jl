@@ -5,24 +5,33 @@ using GLMakie
 # using BenchmarkTools
 
 function get_data() 
+
+    # read **.bdf file 
     dat = eegfun.read_bdf("../Flank_C_3.bdf");
     layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
     dat = eegfun.create_eeg_dataframe(dat, layout);
-    return dat, layout
-end
 
-function get_epochs_data()
-    dat, layout = get_data()
-    # Create some test epochs using extract_epochs
-    condition = eegfun.EpochCondition( name = "test", trigger_sequences = [[1]])
-    epochs = eegfun.extract_epochs(dat, 1, condition, -0.1, 0.5)
-    return epochs, layout
-end
+    # neighbours
+    eegfun.polar_to_cartesian_xy!(layout);
+    eegfun.get_layout_neighbours_xy!(layout, 40);
+    eegfun.polar_to_cartesian_xyz!(layout);
+    eegfun.get_layout_neighbours_xyz!(layout, 40);
 
-function get_erp_data()
-    epochs, layout = get_epochs_data()
-    erp = eegfun.average_epochs(epochs)
-    return erp, layout
+    # basic preprocessing
+    eegfun.filter_data!(dat, "hp", 1)
+    eegfun.rereference!(dat, :avg)
+
+    # epoching
+    epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]), eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]])]
+    epochs = eegfun.EpochData[]
+    for (idx, epoch) in enumerate(epoch_cfg)
+        push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+    end
+
+    # ERP average
+    erps = [eegfun.average_epochs(epoch) for epoch in epochs]
+
+    return dat, epochs, erps, layout 
 end
 
 
@@ -33,16 +42,13 @@ function test_channel_summary()
 
     # setup data and call function
     println("\n=== Testing Channel Summary Plots ===")
-    dat, layout = get_data()
+    dat, epochs, erps, layout = get_data()
+
     cs = eegfun.channel_summary(dat) 
 
-    # Basic plot
+    # Plots
     fig, ax = eegfun.plot_channel_summary(cs, :max)
-    
-    # With custom styling
     fig, ax = eegfun.plot_channel_summary(cs, :max, ylabel = "Max Value", title = "Channel Max", bar_color = :blue)
-    
-    # Test different metrics
     fig, ax = eegfun.plot_channel_summary(cs, :std, title = "Channel Standard Deviation")
     fig, ax = eegfun.plot_channel_summary(cs, :range, title = "Channel Range")
     
@@ -57,26 +63,15 @@ function test_correlation_heatmap()
 
     # setup data and call function
     println("\n=== Testing Correlation Heatmap Plots ===")
-    dat, layout = get_data()
+    dat, epochs, erps, layout = get_data()
     cm = eegfun.correlation_matrix(dat)
 
-    # Basic plot
+    # Plots
     fig, ax = eegfun.plot_correlation_heatmap(cm, title = "Full Correlation Matrix")
     
-    # Subset of channels
-    cm_subset = eegfun.correlation_matrix(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :F3, :F4, :C3, :C4]))
-    fig, ax = eegfun.plot_correlation_heatmap(cm_subset, 
-        title = "Frontal-Central Correlations",
-        colorrange = (0, 1),
-        colormap = :viridis
-    )
-    
-    # With masking
-    fig, ax = eegfun.plot_correlation_heatmap(cm_subset, 
-        title = "Masked Correlations (0.3-0.7)",
-        mask_range = (0.3, 0.7),
-        colorrange = (-1, 1)
-    )
+    cm = eegfun.correlation_matrix(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :F3, :F4, :C3, :C4]))
+    fig, ax = eegfun.plot_correlation_heatmap(cm, title = "Frontal-Central Correlations", colorrange = (0, 1), colormap = :viridis)
+    fig, ax = eegfun.plot_correlation_heatmap(cm, title = "Masked Correlations (0.3-0.7)", mask_range = (0.3, 0.7), colorrange = (-1, 1))
     
     println("✓ Correlation heatmap plots completed")
 end
@@ -89,13 +84,12 @@ function test_joint_probability()
     
     # setup data and call function
     println("\n=== Testing Joint Probability Plots ===")
-    dat, layout = get_data()
+    dat, epochs, erps, layout = get_data()
+    
     jp = eegfun.channel_joint_probability(dat)
     
-    # Basic plot
+    # Plots 
     fig, ax = eegfun.plot_joint_probability(jp, title = "Channel Joint Probability")
-    
-    # With custom styling
     fig, ax = eegfun.plot_joint_probability(jp, title = "Joint Probability - Custom Style", bar_color = :red, sort_values = true)
     
     println("✓ Joint probability plots completed")
@@ -107,15 +101,11 @@ test_joint_probability()
 ###########################
 function test_layout_plots()
     println("\n=== Testing Layout Plots ===")
-    dat, layout = get_data()
+    dat, epochs, erps, layout = get_data()
     
-    # 2D layout
+    # Plots
     fig, ax = eegfun.plot_layout_2d(layout, title = "2D Electrode Layout")
-    
-    # 3D layout
     fig, ax = eegfun.plot_layout_3d(layout, title = "3D Electrode Layout")
-    
-    # With custom styling
     fig, ax = eegfun.plot_layout_2d(layout, 
         title = "Custom 2D Layout",
         head_color = :red,
@@ -133,32 +123,13 @@ test_layout_plots()
 ###########################
 function test_topography_plots()
     println("\n=== Testing Topography Plots ===")
-    dat, layout = get_data()
+    dat, epochs, erps, layout = get_data()
     
-    # Basic topography
+    # Plots
     fig, ax = eegfun.plot_topography(dat)
-    
-    # With custom styling
-    fig, ax = eegfun.plot_topography(dat,  
-        title = "Custom Topography",
-        colormap = :jet,
-        gridscale = 100,
-        method = :spherical_spline
-    )
-    
-    # Test title parameters
-    fig, ax = eegfun.plot_topography(dat, 
-        title = "Test Title",
-        title_fontsize = 20,
-        show_title = true
-    )
-    
-    # Test with title disabled
-    fig, ax = eegfun.plot_topography(dat, 
-        show_title = false
-    )
-    
-    # Test new parameters
+    fig, ax = eegfun.plot_topography(dat, title = "Custom Topography", colormap = :jet, gridscale = 100, method = :spherical_spline)
+    fig, ax = eegfun.plot_topography(dat, title = "Test Title", title_fontsize = 20, show_title = true)
+    fig, ax = eegfun.plot_topography(dat, show_title = false)
     fig, ax = eegfun.plot_topography(dat, 
         title = "Test with New Parameters",
         colorrange = (-2, 2),
@@ -171,12 +142,7 @@ function test_topography_plots()
         colorbar_fontsize = 14
     )
     
-    # Test with interactive disabled
-    fig, ax = eegfun.plot_topography(dat, 
-        title = "Non-interactive Plot",
-        interactive = false,
-        display_plot = false
-    )
+    fig, ax = eegfun.plot_topography(dat, title = "Non-interactive Plot", interactive = false, display_plot = false)
     
     println("✓ Topography plots completed")
 end
@@ -187,37 +153,9 @@ test_topography_plots()
 ###########################
 function test_plot_filter()
     println("\n=== Testing Filter Plots ===")
-    dat, layout = get_data()
     
-    # Create FilterInfo struct for lowpass IIR filter
-    filter_type = "lp"
-    filter_method = "iir"
-    cutoff_freq = 30.0
-    sample_rate = dat.sample_rate
-    order = 2
-    transition_width = 0.1
-    
-    # Create filter prototype/object based on type
-    filter_prototypes = Dict("hp" => eegfun.Highpass, "lp" => eegfun.Lowpass)
-    filter_prototype = filter_prototypes[filter_type](cutoff_freq)
-    transition_band = cutoff_freq * transition_width
-    n_taps = nothing
-    
-    # Create filter with chosen method
-    if filter_method == "iir"
-        filter_object = eegfun.digitalfilter(filter_prototype, eegfun.Butterworth(order); fs = sample_rate)
-    end
-    
-    filter_info = eegfun.FilterInfo(
-        filter_type,
-        filter_object,
-        filter_method,
-        Float64(cutoff_freq),
-        Float64(sample_rate),
-        order,
-        n_taps,
-        Float64(transition_band),
-    )
+    # Create lowpass IIR filter using create_filter
+    filter_info = eegfun.create_filter("lp", "iir", 30.0, 256.0)
     
     # Plot filter response
     fig, ax = eegfun.plot_filter_response(filter_info)
@@ -233,26 +171,8 @@ function test_plot_filter()
         display_plot = false
     )
     
-    # Create FilterInfo struct for highpass IIR filter
-    filter_type2 = "hp"
-    cutoff_freq2 = 1.0
-    transition_width2 = 0.25
-    
-    filter_prototype2 = filter_prototypes[filter_type2](cutoff_freq2)
-    transition_band2 = cutoff_freq2 * transition_width2
-    
-    filter_object2 = eegfun.digitalfilter(filter_prototype2, eegfun.Butterworth(order); fs = sample_rate)
-    
-    filter_info2 = eegfun.FilterInfo(
-        filter_type2,
-        filter_object2,
-        filter_method,
-        Float64(cutoff_freq2),
-        Float64(sample_rate),
-        order,
-        n_taps,
-        Float64(transition_band2),
-    )
+    # Create highpass IIR filter using create_filter
+    filter_info2 = eegfun.create_filter("hp", "iir", 1.0, 256.0)
     
     fig, ax = eegfun.plot_filter_response(filter_info2, 
         title = "High-pass Filter",
@@ -260,37 +180,20 @@ function test_plot_filter()
         display_plot = false
     )
     
-    # Create FilterInfo struct for FIR filter
-    filter_type3 = "lp"
-    filter_method3 = "fir"
-    cutoff_freq3 = 40.0
-    transition_width3 = 0.1
-    
-    filter_prototype3 = filter_prototypes[filter_type3](cutoff_freq3)
-    transition_band3 = cutoff_freq3 * transition_width3
-    
-    # Calculate number of taps (ensure not too small + next pow2 + odd) for FIR filter
-    n_taps3 = Int(ceil(4.0 * sample_rate / transition_band3))
-    n_taps3 = max(n_taps3, 101)
-    n_taps3 = nextpow(2, n_taps3)
-    n_taps3 += 1  # Always add 1 to make odd as nextpow2 is even
-    
-    filter_object3 = eegfun.digitalfilter(filter_prototype3, eegfun.FIRWindow(eegfun.hamming(n_taps3)); fs = sample_rate)
-    
-    filter_info3 = eegfun.FilterInfo(
-        filter_type3,
-        filter_object3,
-        filter_method3,
-        Float64(cutoff_freq3),
-        Float64(sample_rate),
-        0,  # order not applicable for FIR
-        n_taps3,
-        Float64(transition_band3),
-    )
+    # Create FIR filter using create_filter
+    filter_info3 = eegfun.create_filter("lp", "fir", 40.0, 256.0)
     
     fig, ax = eegfun.plot_filter_response(filter_info3, 
         title = "FIR Lowpass Filter",
         actual_color = :purple,
+        display_plot = false
+    )
+    
+    # Test create_filter with plot customization
+    filter_info4 = eegfun.create_filter("hp", "iir", 0.5, 256.0, 
+        plot_filter = true,
+        title = "High-pass Filter with Plot",
+        actual_color = :orange,
         display_plot = false
     )
     
