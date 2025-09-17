@@ -19,6 +19,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Line styling
     :linewidth => ([1, 2], "Line width for epoch traces and average"),
     :color => ([:grey, :red], "Colors for epoch traces and average"),
+    :alpha => ([0.3, 1.0], "Transparency for epoch traces and average"),
     :yreversed => (false, "Whether to reverse the y-axis"),
     
     # Layout configuration
@@ -139,7 +140,7 @@ function plot_epochs(
     @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(length(dat_subset.data)) epochs"
 
     # Merge user kwargs and default kwargs
-    plot_kwargs = merge(copy(DEFAULT_EPOCHS_KWARGS), kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
 
     fig = Figure()
     axes = Axis[]  # Keep track of all axes created
@@ -478,18 +479,18 @@ function _plot_epochs_grid!(fig::Figure, axes::Vector{Axis}, dat::EpochData, erp
 end
 
 function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::Nothing
-    !isnothing(plot_kwargs[:xlim]) && xlims!(ax, plot_kwargs[:xlim])
-    !isnothing(plot_kwargs[:ylim]) && ylims!(ax, plot_kwargs[:ylim])
-    ax.title = isnothing(plot_kwargs[:title]) ? default_title : plot_kwargs[:title]
-    ax.xlabel = plot_kwargs[:xlabel]
-    ax.ylabel = plot_kwargs[:ylabel]
-    ax.yreversed = plot_kwargs[:yreversed]
+    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
+    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
+    ax.title = isnothing(kwargs[:title]) ? default_title : kwargs[:title]
+    ax.xlabel = kwargs[:xlabel]
+    ax.ylabel = kwargs[:ylabel]
+    ax.yreversed = kwargs[:yreversed]
     
     # Apply grid settings
-    ax.xgridvisible = plot_kwargs[:xgrid]
-    ax.ygridvisible = plot_kwargs[:ygrid]
-    ax.xminorgridvisible = plot_kwargs[:xminorgrid]
-    ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+    ax.xgridvisible = kwargs[:xgrid]
+    ax.ygridvisible = kwargs[:ygrid]
+    ax.xminorgridvisible = kwargs[:xminorgrid]
+    ax.yminorgridvisible = kwargs[:yminorgrid]
     
     return nothing
 end

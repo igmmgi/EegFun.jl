@@ -474,7 +474,7 @@ function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_
         valid_keys = keys(defaults)
         unknown_keys = setdiff(keys(user_dict), valid_keys)
         if !isempty(unknown_keys)
-            @minimal_error "Unknown keyword arguments: $(join(unknown_keys, ", ")). Valid arguments: $(join(valid_keys, ", "))"
+            @minimal_error_throw "Unknown keyword arguments: $(join(unknown_keys, ", ")). Valid arguments: $(join(valid_keys, ", "))"
         end
     end
     

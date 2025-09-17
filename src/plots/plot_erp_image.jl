@@ -11,6 +11,15 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xlabel => ("Time (S)", "Label for x-axis"),
     :ylabel => ("Epoch", "Label for y-axis"),
     
+    # Title parameters
+    :title => ("", "Plot title"),
+    :title_fontsize => (16, "Font size for the title"),
+    :show_title => (true, "Whether to show the title"),
+    
+    # Font sizes
+    :label_fontsize => (14, "Font size for axis labels"),
+    :tick_fontsize => (12, "Font size for tick labels"),
+    
     # Layout configuration
     :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
     :hidedecorations => (false, "Whether to hide axis decorations"),
