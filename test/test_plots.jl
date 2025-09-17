@@ -189,9 +189,9 @@ function test_plot_filter()
         display_plot = false
     )
     
-    # Test create_filter with plot customization
-    filter_info4 = eegfun.create_filter("hp", "iir", 0.5, 256.0, 
-        plot_filter = true,
+    # Test additional filter with separate plotting
+    filter_info4 = eegfun.create_filter("hp", "iir", 0.5, 256.0)
+    fig, ax = eegfun.plot_filter_response(filter_info4, 
         title = "High-pass Filter with Plot",
         actual_color = :orange,
         display_plot = false
