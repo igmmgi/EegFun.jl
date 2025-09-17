@@ -1,6 +1,7 @@
 using Test
 using DataFrames
 using eegfun
+using BiosemiDataFormat
 
 @testset "Data Utilities" begin
 
@@ -851,6 +852,52 @@ using eegfun
         @test :Fp1 ∉ propertynames(dat_erp.data)
     end
 
+    # === DATA CREATION FUNCTION TESTS ===
+    @testset "create_eeg_dataframe" begin
+        # Note: These tests would require BiosemiDataFormat data
+        # For now, we'll test that the functions exist and have correct signatures
+        @test hasmethod(eegfun.create_eeg_dataframe, (BiosemiDataFormat.BiosemiData,))
+        @test hasmethod(eegfun.create_eeg_dataframe, (BiosemiDataFormat.BiosemiData, eegfun.Layout))
+    end
+
+    # === DATA MANIPULATION FUNCTION TESTS ===
+    @testset "combine_boolean_columns!" begin
+        # Create test data with boolean columns
+        dat = create_test_continuous_data()
+        dat.data.flag1 = [true, false, true, false, true, false, true, false, true, false]
+        dat.data.flag2 = [false, true, true, false, false, true, true, false, false, true]
+        dat.data.flag3 = [true, true, false, true, false, true, true, false, true, false]
+        
+        # Test AND operation
+        eegfun.combine_boolean_columns!(dat, [:flag1, :flag2], :and)
+        @test :combined_flags in propertynames(dat.data)
+        expected_and = [false, false, true, false, false, false, true, false, false, false]  # AND of flag1 and flag2
+        @test dat.data.combined_flags == expected_and
+        
+        # Test OR operation
+        eegfun.combine_boolean_columns!(dat, [:flag1, :flag2], :or, output_column = :any_flag)
+        @test :any_flag in propertynames(dat.data)
+        expected_or = [true, true, true, false, true, true, true, false, true, true]  # OR of flag1 and flag2
+        @test dat.data.any_flag == expected_or
+        
+        # Test NAND operation
+        eegfun.combine_boolean_columns!(dat, [:flag1, :flag2], :nand, output_column = :nand_flag)
+        @test :nand_flag in propertynames(dat.data)
+        expected_nand = [true, true, false, true, true, true, false, true, true, true]  # !(AND result)
+        @test dat.data.nand_flag == expected_nand
+        
+        # Test NOR operation
+        eegfun.combine_boolean_columns!(dat, [:flag1, :flag2], :nor, output_column = :nor_flag)
+        @test :nor_flag in propertynames(dat.data)
+        expected_nor = [false, false, false, true, false, false, false, true, false, false]  # !(OR result)
+        @test dat.data.nor_flag == expected_nor
+        
+        # Test with three columns
+        eegfun.combine_boolean_columns!(dat, [:flag1, :flag2, :flag3], :and, output_column = :all_flags)
+        @test :all_flags in propertynames(dat.data)
+        expected_all = [false, false, false, false, false, false, true, false, false, false]  # All three must be true
+        @test dat.data.all_flags == expected_all
+    end
 
     end
 end
