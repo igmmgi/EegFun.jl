@@ -527,3 +527,61 @@ function generate_kwargs_doc(kwargs_dict::Dict{Symbol,Tuple{Any,String}})::Strin
     end
     return join(doc_lines, "\n")
 end
+
+# =============================================================================
+# DATA MANIPULATION UTILITIES
+# =============================================================================
+
+"""
+    combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
+
+Combine multiple boolean columns using logical operations.
+
+# Arguments
+- `dat::ContinuousData`: The continuous EEG data object
+- `columns::Vector{Symbol}`: Vector of column names to combine
+- `operation::Symbol`: Logical operation to apply (:and, :or, :nand, :nor)
+- `output_column::Symbol`: Name of the output column (default: :combined_flags)
+
+# Modifies
+- `dat`: Adds the combined boolean column to the data
+
+# Examples
+```julia
+# Combine multiple artifact detection columns with AND operation
+combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :and)
+
+# Combine with OR operation
+combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :or, output_column = :any_artifact)
+```
+"""
+function combine_boolean_columns!(
+    dat::ContinuousData,
+    columns::Vector{Symbol},
+    operation::Symbol;
+    output_column::Symbol = :combined_flags,
+)
+    # Input validation
+    @assert !isempty(columns) "Must specify at least one column to combine"
+    @assert all(col -> hasproperty(dat.data, col), columns) "All specified columns must exist in the data"
+    @assert operation in [:and, :or, :nand, :nor] "Invalid operation. Must be one of: :and, :or, :nand, :nor"
+
+    # Get the boolean columns
+    bool_columns = [dat.data[!, col] for col in columns]
+
+    # Apply the logical operation
+    result = if operation == :and
+        all.(zip(bool_columns...))
+    elseif operation == :or
+        any.(zip(bool_columns...))
+    elseif operation == :nand
+        .!(all.(zip(bool_columns...)))
+    elseif operation == :nor
+        .!(any.(zip(bool_columns...)))
+    end
+
+    # Store the result
+    dat.data[!, output_column] = result
+
+    @info "combine_boolean_columns!: Combined $(length(columns)) columns using :$operation operation into column :$output_column"
+end

@@ -32,14 +32,14 @@ function repair_bad_channels!(
         # Get bad channel index
         bad_idx = get(ch_indices, bad_ch, nothing)
         if isnothing(bad_idx)
-            @warn "Channel $bad_ch not found in channel list, skipping"
+            @minimal_warning "Channel $bad_ch not found in channel list, skipping"
             continue
         end
 
         # Get neighbors information
         neighbours = get(neighbours_dict, bad_ch, nothing)
         if isnothing(neighbours) || isempty(neighbours.electrodes)
-            @warn "No neighbors found for channel $bad_ch, skipping"
+            @minimal_warning "No neighbors found for channel $bad_ch, skipping"
             continue
         end
 

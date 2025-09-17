@@ -93,8 +93,20 @@ function plot_filter_response(
         yticklabelsize = plot_kwargs[:tick_fontsize],
     )
 
+    # Convert xscale symbol to function if needed
+    xscale = plot_kwargs[:xscale]
+    if xscale == :linear
+        xscale = identity
+    elseif xscale == :log
+        xscale = log10
+        # Adjust x-limits for log scale (can't include 0)
+        if xlimit[1] == 0
+            xlimit = (0.01, xlimit[2])  # Use small positive value instead of 0
+        end
+    end
+    
     # Add xscale from kwargs
-    xscale_props = (xscale = plot_kwargs[:xscale],)
+    xscale_props = (xscale = xscale,)
 
     # Create three axes in a row
     ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = "Magnitude (linear)", limits = (xlimit, (0, 1.1)))

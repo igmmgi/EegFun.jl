@@ -803,9 +803,9 @@ end
 
 
 """
-    log_pretty_table(message::String, df::DataFrame; kwargs...)
+    log_pretty_table(df::DataFrame; kwargs...)
 
-Log a pretty table with message. For general DataFrame logging.
+Log a pretty table. For general DataFrame logging.
 Sets show_row_number=false and show_subheader=false by default for cleaner logs.
 """
 function log_pretty_table(df::DataFrame; kwargs...)
@@ -1083,6 +1083,55 @@ function rename_channel(dat::EegData, rename_dict::Dict{Symbol, Symbol})
 end
 
 
+# =============================================================================
+# DATA CREATION FUNCTIONS
+# =============================================================================
 
+"""
+    create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
 
+Creates a DataFrame from a BiosemiDataFormat data structure.
+
+# Arguments
+- `dat::BiosemiDataFormat.BiosemiData`: The BiosemiDataFormat data structure containing EEG data.
+
+# Returns
+- `DataFrame`: DataFrame containing the EEG data with time, sample, triggers, and channel columns.
+
+# Examples
+```julia
+# Create DataFrame from BiosemiDataFormat data
+df = create_eeg_dataframe(biosemi_data)
+```
+"""
+function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
+    @info "create_eeg_dataframe: Creating EEG DataFrame"
+    df = hcat(
+        DataFrame(file = filename(dat), time = dat.time, sample = 1:length(dat.time), triggers = _clean_triggers(dat.triggers.raw)),
+        DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
+    )
+    return df
+end
+
+"""
+    create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
+
+Creates a ContinuousData object from a BiosemiDataFormat data structure and a layout.
+
+# Arguments
+- `dat::BiosemiDataFormat.BiosemiData`: The BiosemiDataFormat data structure containing EEG data.
+- `layout::Layout`: The layout object containing electrode information.
+
+# Returns
+- `ContinuousData`: ContinuousData object containing the EEG data and layout information.
+
+# Examples
+```julia
+# Create ContinuousData from BiosemiDataFormat data and layout
+eeg_data = create_eeg_dataframe(biosemi_data, layout)
+```
+"""
+function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
+    return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
+end
 
