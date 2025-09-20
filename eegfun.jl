@@ -11,7 +11,7 @@ using GLMakie
 # using CairoMakie
 # using BenchmarkTools
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
-layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 
 # test plot_channel_summary
 dat = eegfun.create_eeg_dataframe(dat, layout);

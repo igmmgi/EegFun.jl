@@ -4,7 +4,7 @@ using OrderedCollections
 
 @testset "Layout Tests" begin
     # Read the BioSemi 64-channel layout
-    layout_path = joinpath(@__DIR__, "..", "data", "layouts", "biosemi64.csv")
+    layout_path = joinpath(@__DIR__, "..", "data", "layouts", "biosemi", "biosemi64.csv")
     test_layout = eegfun.read_layout(layout_path)
 
     @testset "Layout Reading" begin
@@ -131,7 +131,7 @@ using OrderedCollections
         # Test read_layout
         @testset "read_layout" begin
             # Test reading a valid layout file
-            layout_file = joinpath(@__DIR__, "..", "data", "layouts", "biosemi64.csv")
+            layout_file = joinpath(@__DIR__, "..", "data", "layouts", "biosemi", "biosemi64.csv")
             layout = eegfun.read_layout(layout_file)
             @test size(layout.data, 1) > 0
             @test :label in propertynames(layout.data)
