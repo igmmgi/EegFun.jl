@@ -90,6 +90,47 @@ function _trigger_time_count(time, triggers, ignore_triggers=Int[])
 end
 
 """
+    _trigger_time_count(times::Vector{Float64}, trigger_codes::Vector{Int16}, trigger_info::Vector{String}, ignore_triggers=Int[])
+
+Count trigger occurrences with trigger info support.
+
+# Arguments
+- `times`: Vector of trigger times
+- `trigger_codes`: Vector of trigger codes
+- `trigger_info`: Vector of trigger info strings
+- `ignore_triggers`: Vector of trigger codes to ignore (optional)
+
+# Returns
+- `trigger_times`: Vector of trigger times
+- `trigger_values`: Vector of trigger values
+- `trigger_count`: OrderedDict mapping trigger codes to counts
+"""
+function _trigger_time_count(times::Vector{Float64}, trigger_codes::Vector{Int16}, trigger_info::Vector{String}, ignore_triggers=Int[])
+    # Filter out ignored triggers if any are specified
+    if !isempty(ignore_triggers)
+        times, trigger_codes, trigger_info = _filter_triggers(times, trigger_codes, trigger_info, ignore_triggers)
+    end
+
+    # Count occurrences of each trigger code
+    trigger_count = OrderedDict{Int,Int}()
+    for val in trigger_codes
+        trigger_count[Int(val)] = get(trigger_count, Int(val), 0) + 1
+    end
+
+    return times, Int.(trigger_codes), trigger_count
+end
+
+"""
+    _filter_triggers(trigger_times, trigger_codes, trigger_info, ignore_triggers)
+
+Filter out specified trigger codes from trigger data with trigger info.
+"""
+function _filter_triggers(trigger_times, trigger_codes, trigger_info, ignore_triggers)
+    keep_mask = .!in.(trigger_codes, Ref(ignore_triggers))
+    return trigger_times[keep_mask], trigger_codes[keep_mask], trigger_info[keep_mask]
+end
+
+"""
     _plot_trigger_vertical_lines!(ax::Axis, times::Vector{Float64}, y_pos::Vector{Int})
 
 Helper function to plot vertical lines for trigger events.
@@ -124,34 +165,6 @@ function _add_trigger_text!(ax::Axis, x::Float64, y::Float64, text_str::String, 
     text!(ax, x, y, text = text_str, align = align, color = :black, fontsize = PLOT_TRIGGERS_KWARGS[:font_size][1])
 end
 
-"""
-    _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData, ignore_triggers=Int[])
-
-Extract trigger information from BioSemi data.
-
-# Arguments
-- `dat`: BioSemiData object
-- `ignore_triggers`: Vector of trigger codes to ignore (optional)
-
-# Returns
-- `trigger_codes`: Vector of trigger codes
-- `trigger_times`: Vector of trigger times
-"""
-function _extract_trigger_data(dat::BiosemiDataFormat.BiosemiData, ignore_triggers=Int[])
-    cleaned_triggers = _clean_triggers(dat.triggers.raw)
-    trigger_positions = findall(x -> x != 0, cleaned_triggers)
-    trigger_codes = Int16.(cleaned_triggers[trigger_positions])
-    trigger_times = dat.time[trigger_positions]
-    
-    # Filter out ignored triggers if any are specified
-    if !isempty(ignore_triggers)
-        keep_mask = .!in.(trigger_codes, Ref(ignore_triggers))
-        trigger_codes = trigger_codes[keep_mask]
-        trigger_times = trigger_times[keep_mask]
-    end
-    
-    return trigger_codes, trigger_times
-end
 
 """
     _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
@@ -165,6 +178,7 @@ Extract trigger information from ContinuousData.
 # Returns
 - `trigger_codes`: Vector of trigger codes
 - `trigger_times`: Vector of trigger times
+- `trigger_info`: Vector of trigger info strings (empty strings if not available)
 """
 function _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
     trigger_col = :triggers
@@ -176,15 +190,23 @@ function _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
     trigger_codes = Int16.(dat.data[trigger_positions, trigger_col])
     trigger_times = dat.data[trigger_positions, :time]
     
+    # Extract trigger info if available
+    trigger_info = hasproperty(dat.data, :triggers_info) ? 
+        dat.data[trigger_positions, :triggers_info] : 
+        fill("", length(trigger_positions))
+    
     # Filter out ignored triggers if any are specified
     if !isempty(ignore_triggers)
         keep_mask = .!in.(trigger_codes, Ref(ignore_triggers))
         trigger_codes = trigger_codes[keep_mask]
         trigger_times = trigger_times[keep_mask]
+        trigger_info = trigger_info[keep_mask]
     end
     
-    return trigger_codes, trigger_times
+    return trigger_codes, trigger_times, trigger_info
 end
+
+
 
 """
     _count_triggers(trigger_codes::Vector{Int16})
@@ -200,6 +222,40 @@ function _count_triggers(trigger_codes::Vector{Int16})
 end
 
 """
+    _count_triggers(trigger_codes::Vector{Int16}, trigger_info::Vector{String})
+
+Count occurrences of each trigger code with info labels.
+
+# Returns
+- `trigger_count`: OrderedDict mapping trigger codes to counts
+- `trigger_labels`: OrderedDict mapping trigger codes to display labels (code + info if available)
+"""
+function _count_triggers(trigger_codes::Vector{Int16}, trigger_info::Vector{String})
+    trigger_count = OrderedDict{Int,Int}()
+    trigger_labels = OrderedDict{Int,String}()
+    
+    for code in sort!(collect(Set(trigger_codes)))
+        trigger_count[code] = count(x -> x == code, trigger_codes)
+        
+        # Find the first occurrence of this trigger code to get its info
+        first_idx = findfirst(x -> x == code, trigger_codes)
+        if !isnothing(first_idx) && first_idx <= length(trigger_info)
+            info = trigger_info[first_idx]
+            if !isempty(info)
+                trigger_labels[code] = "$code ($info)"
+            else
+                trigger_labels[code] = string(code)
+            end
+        else
+            trigger_labels[code] = string(code)
+        end
+    end
+    
+    return trigger_count, trigger_labels
+end
+
+
+"""
     _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,Int})
 
 Add invisible scatter points with labels for legend creation.
@@ -211,6 +267,22 @@ function _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,I
     # Add invisible scatter points with labels for each trigger type
     for (key, value) in trigger_count
         scatter!(ax, [-1000], [-1000], label = "$key: $value", markersize = 0, color = :transparent, alpha = 0)
+    end
+end
+
+"""
+    _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,Int}, trigger_labels::OrderedDict{Int,String})
+
+Add invisible scatter points with labels for legend creation using trigger info.
+"""
+function _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,Int}, trigger_labels::OrderedDict{Int,String})
+    if isempty(trigger_count)
+        return
+    end
+    # Add invisible scatter points with labels for each trigger type using trigger info
+    for (key, value) in trigger_count
+        label = haskey(trigger_labels, key) ? "$(trigger_labels[key]): $value" : "$key: $value"
+        scatter!(ax, [-1000], [-1000], label = label, markersize = 0, color = :transparent, alpha = 0)
     end
 end
 
@@ -269,36 +341,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
 
 end
 
-"""
-    plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData; kwargs...)
 
-Plot trigger events from BioSemi BDF data.
-
-# Arguments
-- `dat`: BioSemiData object containing the EEG data
-- `ignore_triggers`: Vector of trigger codes to ignore (optional)
-- Other plotting parameters (window_size, display_plot, etc.)
-
-# Returns
-- `fig`: The Makie Figure object
-- `ax`: The Axis object containing the plot
-
-# Example
-```julia
-# Plot all triggers
-fig, ax = plot_trigger_overview(dat)
-
-# Ignore specific trigger codes
-fig, ax = plot_trigger_overview(dat; ignore_triggers=[1, 255])
-```
-"""
-function plot_trigger_overview(dat::BiosemiDataFormat.BiosemiData; kwargs...)
-    @info "Plotting trigger (raw) overview for BioSemi data"
-    # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.time, dat.triggers.raw, plot_kwargs[:ignore_triggers])
-    return plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
-end
 
 """
     plot_trigger_overview(dat::ContinuousData; kwargs...)
@@ -327,8 +370,49 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
     @info "Plotting trigger (cleaned) overview for ContinuousData"
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    trigger_times, trigger_values, trigger_count = _trigger_time_count(dat.data.time, dat.data.triggers, plot_kwargs[:ignore_triggers])
-    return plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwargs...)
+    
+    # Extract trigger data (now always returns trigger_info)
+    trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
+    
+    # Check if we have any non-empty trigger info
+    has_info = any(!isempty, trigger_info)
+    
+    if has_info
+        # Use enhanced plotting with trigger info
+        trigger_count, trigger_labels = _count_triggers(trigger_codes, trigger_info)
+        
+        # Create the plot manually to avoid duplicate legends
+        fig = Figure()
+        ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), [trigger_labels[k] for k in trigger_count.keys]))
+        
+        # Pre-compute trigger data for each type
+        trigger_data = Dict{Int,Vector{Float64}}()
+        for (key, _) in trigger_count
+            trigger_data[key] = trigger_times[Int.(trigger_codes) .== key]
+        end
+        
+        for (unique, (key, value)) in enumerate(trigger_count)
+            times = trigger_data[key]
+            y_pos = fill(unique, length(times))
+            scatter!(ax, times, y_pos, label = "$(trigger_labels[key]): $(string(value))", markersize = PLOT_TRIGGERS_KWARGS[:marker_size][1])
+            _plot_trigger_vertical_lines!(ax, times, y_pos)
+        end
+        
+        fig[1, 2] = Legend(fig, ax)
+        ax.ylabel = "Trigger Value"
+        ax.xlabel = "Time (S)"
+        
+        if plot_kwargs[:display_plot]
+            display_figure(fig)
+        end
+        
+        return fig, ax
+    else
+        # Fall back to original behavior
+        trigger_count = _count_triggers(trigger_codes)
+        fig, ax = plot_trigger_overview(trigger_times, Int.(trigger_codes), trigger_count; kwargs...)
+        return fig, ax
+    end
 end
 
 ########################################################
@@ -385,14 +469,31 @@ function _plot_trigger_events!(
     trigger_times::Vector{Float64},
     trigger_codes::Vector{Int16}
 )
+    _plot_trigger_events!(ax, trigger_times, trigger_codes, fill("", length(trigger_codes)))
+end
+
+function _plot_trigger_events!(
+    ax::Axis,
+    trigger_times::Vector{Float64},
+    trigger_codes::Vector{Int16},
+    trigger_info::Vector{String}
+)
     # Early return if no triggers to plot
     if isempty(trigger_times)
         @minimal_error "No triggers to plot"
         return
     end
 
-    # Pre-compute string conversions
-    code_strings = [string(Int(code)) for code in trigger_codes]
+    # Pre-compute string conversions with optional trigger info
+    code_strings = String[]
+    for (code, info) in zip(trigger_codes, trigger_info)
+        if !isempty(info)
+            push!(code_strings, "$(Int(code)) ($info)")
+        else
+            push!(code_strings, string(Int(code)))
+        end
+    end
+    
     time_strings = [string(round(time, digits = 2)) for time in trigger_times]
 
     # Pre-compute intervals and their string representations
@@ -408,7 +509,7 @@ function _plot_trigger_events!(
     for (time, code_str, time_str) in zip(trigger_times, code_strings, time_strings)
         _plot_single_trigger_line!(ax, time)
 
-        # Add trigger code at the top of the line
+        # Add trigger code (with optional info) at the top of the line
         _add_trigger_text!(ax, time, PLOT_TRIGGERS_KWARGS[:event_line_height][1], code_str, (:center, :bottom))
         
         # Add time value below the line
@@ -421,12 +522,17 @@ function _plot_trigger_events!(
     end
 end
 
+
 """
     _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_times::Vector{Float64}; kwargs...)
 
 Internal function to create interactive trigger timing plot.
 """
 function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_times::Vector{Float64}; kwargs...)
+    _create_interactive_trigger_plot(trigger_codes, trigger_times, fill("", length(trigger_codes)); kwargs...)
+end
+
+function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_times::Vector{Float64}, trigger_info::Vector{String}; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     if isempty(trigger_times)
@@ -443,9 +549,15 @@ function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_
     fig = Figure()
     ax = Axis(fig[1, 1])
 
-    # Add trigger count legend entries
-    trigger_count = _count_triggers(trigger_codes)
-    _add_trigger_legend_entries!(ax, trigger_count)
+    # Add trigger count legend entries (with or without trigger info)
+    has_info = any(!isempty, trigger_info)
+    if has_info
+        trigger_count, trigger_labels = _count_triggers(trigger_codes, trigger_info)
+        _add_trigger_legend_entries!(ax, trigger_count, trigger_labels)
+    else
+        trigger_count = _count_triggers(trigger_codes)
+        _add_trigger_legend_entries!(ax, trigger_count)
+    end
     fig[1, 2] = Legend(fig, ax)
 
     # Create Observables for reactive plotting
@@ -471,9 +583,14 @@ function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_
         window_mask = (trigger_times .>= current_start) .&& (trigger_times .<= current_end)
         window_times = trigger_times[window_mask]
         window_codes = trigger_codes[window_mask]
+        window_info = trigger_info[window_mask]
 
         if !isempty(window_times)
-            _plot_trigger_events!(ax, window_times, window_codes)
+            if has_info
+                _plot_trigger_events!(ax, window_times, window_codes, window_info)
+            else
+                _plot_trigger_events!(ax, window_times, window_codes)
+            end
         end
 
         # Update only x-axis limits
@@ -500,34 +617,8 @@ function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_
 end
 
 
-"""
-    plot_trigger_timing(dat::BiosemiDataFormat.BiosemiData; kwargs...)
 
-Plot trigger timing with interactive x-axis sliders for scrolling and window size.
 
-# Arguments
-- `dat::BiosemiDataFormat.BiosemiData`: The BioSemiData object containing the triggers
-- `ignore_triggers`: Vector of trigger codes to ignore (optional)
-- Other plotting parameters (window_size, display_plot, etc.)
-
-# Returns
-- `fig::Figure`: The Makie figure object
-- `ax::Axis`: The Makie axis object
-
-# Example
-```julia
-# Plot all triggers
-fig, ax = plot_trigger_timing(dat)
-
-# Ignore specific trigger codes
-fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
-```
-"""
-function plot_trigger_timing(dat::BiosemiDataFormat.BiosemiData; kwargs...)
-    plot_kwargs = merge(PLOT_TRIGGERS_KWARGS, Dict(kwargs))
-    trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
-    return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
-end
 
 """
     plot_trigger_timing(dat::ContinuousData; kwargs...)
@@ -554,6 +645,6 @@ fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 """
 function plot_trigger_timing(dat::ContinuousData; kwargs...)
     plot_kwargs = merge(PLOT_TRIGGERS_KWARGS, Dict(kwargs))
-    trigger_codes, trigger_times = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
-    return _create_interactive_trigger_plot(trigger_codes, trigger_times; kwargs...)
+    trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
+    return _create_interactive_trigger_plot(trigger_codes, trigger_times, trigger_info; kwargs...)
 end

@@ -1135,3 +1135,164 @@ function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::Layout
     return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 
+"""
+    create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
+
+Creates a DataFrame from a BrainVisionDataFormat data structure.
+
+# Arguments
+- `dat::BrainVisionDataFormat.BrainVisionData`: The BrainVisionDataFormat data structure containing EEG data.
+
+# Returns
+- `DataFrame`: DataFrame containing the EEG data with time, sample, triggers, and channel columns.
+
+# Examples
+```julia
+# Create DataFrame from BrainVisionDataFormat data
+df = create_eeg_dataframe(brainvision_data)
+```
+"""
+function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
+    @info "create_eeg_dataframe: Creating EEG DataFrame from BrainVision data"
+    
+    # Check if data is available
+    if isnothing(dat.data)
+        @minimal_error_throw "BrainVision data is empty (data field is nothing)"
+    end
+    
+    if isnothing(dat.header)
+        @minimal_error_throw "BrainVision header is empty (header field is nothing)"
+    end
+    
+    # Extract basic information
+    # BrainVision data is now samples × channels (after package modification)
+    n_samples = size(dat.data, 1)
+    n_channels = size(dat.data, 2)
+    sample_rate = dat.header.Fs
+    
+    # Create time vector
+    time = collect(0:(n_samples-1)) ./ sample_rate
+    
+    # Create sample vector
+    sample = 1:n_samples
+    
+    # Extract channel labels from header
+    channel_labels = dat.header.label
+    
+    # Verify channel count matches
+    if length(channel_labels) != n_channels
+        @minimal_error_throw "Number of channel labels ($(length(channel_labels))) does not match number of channels ($n_channels)"
+    end
+    
+    # Create triggers and marker strings columns from markers
+    if isnothing(dat.markers) || isempty(dat.markers)
+        @info "create_eeg_dataframe: No markers found, creating empty trigger columns"
+        triggers = zeros(Int, n_samples)
+        triggers_info = fill("", n_samples)
+    else
+        @info "create_eeg_dataframe: Found $(length(dat.markers)) markers"
+        triggers, triggers_info = _extract_triggers_from_markers(dat.markers, n_samples)
+    end
+    
+    # Create the DataFrame
+    df = hcat(
+        DataFrame(file = dat.filename, time = time, sample = sample, triggers = triggers, triggers_info = triggers_info),
+        DataFrame(dat.data, channel_labels)
+    );
+    
+    return df
+end
+
+"""
+    create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
+
+Creates a ContinuousData object from a BrainVisionDataFormat data structure and a layout.
+
+# Arguments
+- `dat::BrainVisionDataFormat.BrainVisionData`: The BrainVisionDataFormat data structure containing EEG data.
+- `layout::Layout`: The layout object containing electrode information.
+
+# Returns
+- `ContinuousData`: ContinuousData object containing the EEG data and layout information.
+
+# Examples
+```julia
+# Create ContinuousData from BrainVisionDataFormat data and layout
+eeg_data = create_eeg_dataframe(brainvision_data, layout)
+```
+"""
+function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
+    return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.Fs, AnalysisInfo())
+end
+
+"""
+    _extract_triggers_from_markers(markers::Vector{BrainVisionDataFormat.BrainVisionMarker}, n_samples::Int)::Tuple{Vector{Int}, Vector{String}}
+
+Extract trigger values from BrainVision markers and create trigger and marker string vectors.
+
+# Arguments
+- `markers::Vector{BrainVisionDataFormat.BrainVisionMarker}`: Vector of BrainVision markers
+- `n_samples::Int`: Number of samples in the data
+
+# Returns
+- `Tuple{Vector{Int}, Vector{String}}`: (trigger vector, marker string vector) with values at appropriate sample positions
+"""
+function _extract_triggers_from_markers(markers::Vector{BrainVisionDataFormat.BrainVisionMarker}, n_samples::Int)::Tuple{Vector{Int}, Vector{String}}
+    triggers = zeros(Int, n_samples)
+    triggers_info = fill("", n_samples)
+    
+    @info "Processing $(length(markers)) markers for $n_samples samples"
+    
+    # Debug: Show first few marker sample indices
+    if length(markers) > 0
+        first_few_samples = [marker.sample for marker in markers[1:min(5, length(markers))]]
+        @info "First few marker sample indices: $first_few_samples"
+    end
+    
+    # First pass: extract all unique trigger values (including empty strings for system markers)
+    # Check if markers are 0-based or 1-based by looking at the first marker
+    is_zero_based = length(markers) > 0 && markers[1].sample == 0
+    @info "Detected $(is_zero_based ? "0-based" : "1-based") indexing for marker samples"
+    
+    unique_values = Set{String}()
+    valid_markers = 0
+    for marker in markers
+        # Convert to 1-based if needed
+        sample_idx = is_zero_based ? marker.sample + 1 : marker.sample
+        
+        if 1 <= sample_idx <= n_samples
+            # Include all markers, even those with empty values (like "New Segment")
+            push!(unique_values, marker.value)
+            valid_markers += 1
+        else
+            @warn "Marker sample $sample_idx out of bounds (1:$n_samples), skipping"
+        end
+    end
+    
+    @info "Found $valid_markers valid markers with $(length(unique_values)) unique values: $(collect(unique_values))"
+    
+    # Create mapping from original values to sequential integers (1, 2, 3, ...)
+    value_to_trigger = Dict{String, Int}()
+    for (i, value) in enumerate(sort(collect(unique_values)))
+        value_to_trigger[value] = i
+    end
+    
+    # Second pass: assign sequential trigger values and original marker strings
+    for marker in markers
+        # Convert to 1-based if needed
+        sample_idx = is_zero_based ? marker.sample + 1 : marker.sample
+        
+        if 1 <= sample_idx <= n_samples
+            # Include all markers, even those with empty values
+            triggers[sample_idx] = value_to_trigger[marker.value]
+            triggers_info[sample_idx] = marker.value
+        end
+    end
+    
+    non_zero_triggers = count(x -> x != 0, triggers)
+    non_empty_strings = count(x -> x != "", triggers_info)
+    @info "Created triggers with $non_zero_triggers non-zero values and $non_empty_strings non-empty marker strings"
+    
+    return triggers, triggers_info
+end
+
