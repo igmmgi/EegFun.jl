@@ -51,7 +51,10 @@ function get_cols_by_group(dat::EegData, group::Symbol)
     elseif group == :extra
         isempty(layout_channels) && return Symbol[]
         last_channel_idx = findlast(col -> col == layout_channels[end], labels)
-        isnothing(last_channel_idx) && @minimal_error "Last channel label not found in data"
+        if isnothing(last_channel_idx)
+            @warn "Last channel label $(layout_channels[end]) not found in data columns. Available columns: $(labels)"
+            return Symbol[]  # Return empty array instead of throwing error
+        end
         return labels[(last_channel_idx+1):end]
     end
 end
