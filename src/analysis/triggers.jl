@@ -68,72 +68,18 @@ trigger_counts = trigger_count(dat, print_table = false)
 """
 function trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
     @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
-    return _trigger_count_impl([dat.data.triggers], ["count"], print_table = print_table)
+    
+    # Check if triggers_info column exists and pass it along
+    triggers_info = hasproperty(dat.data, :triggers_info) ? dat.data.triggers_info : nothing
+    return _trigger_count_impl([dat.data.triggers], ["count"], print_table = print_table, triggers_info = triggers_info)
 end
 
-"""
-    _count_triggers_core(trigger_datasets, column_names)
-
-Core helper function for counting triggers across multiple datasets.
-
-This function efficiently counts trigger occurrences across one or more datasets,
-returning a unified DataFrame with counts for each trigger value.
-
-# Arguments
-- `trigger_datasets::Vector{<:Vector{<:Integer}}`: Vector of trigger datasets to analyze
-- `column_names::Vector{String}`: Names for the count columns in the output DataFrame
-
-# Returns
-- `DataFrame`: DataFrame with 'trigger' column and one count column per dataset
-
-# Notes
-- Zero values are excluded from counting
-- Uses single-pass counting with Dict for efficiency
-- Returns empty DataFrame with correct structure when no triggers found
-"""
-function _count_triggers_core(trigger_datasets::Vector{<:Vector{<:Integer}}, column_names::Vector{String})
-    # Get unique non-zero trigger values from all datasets
-    all_triggers = vcat(trigger_datasets...)
-    unique_triggers = unique(all_triggers)
-    non_zero_triggers = filter(x -> x != 0, unique_triggers)
-
-    if isempty(non_zero_triggers)
-        # Return empty DataFrame with correct column structure
-        empty_cols = [Int[]]  # trigger column
-        append!(empty_cols, [Int[] for _ in column_names])  # count columns
-        column_symbols = [:trigger; Symbol.(column_names)]
-        return DataFrame([col => data for (col, data) in zip(column_symbols, empty_cols)]...)
-    end
-
-    # Count occurrences of each trigger value across all datasets
-    sorted_triggers = sort(non_zero_triggers)
-    result_data = Vector{Vector{Int}}(undef, length(column_names) + 1)
-    result_data[1] = sorted_triggers
-
-    for (i, dataset) in enumerate(trigger_datasets)
-        # Count all triggers in one pass using a dictionary
-        trigger_counts = Dict{Int, Int}()
-        for val in dataset
-            if val != 0
-                trigger_counts[val] = get(trigger_counts, val, 0) + 1
-            end
-        end
-        
-        # Fill counts array in trigger order
-        counts = [get(trigger_counts, trigger, 0) for trigger in sorted_triggers]
-        result_data[i + 1] = counts
-    end
-
-    # Create DataFrame
-    column_symbols = [:trigger; Symbol.(column_names)]
-    return DataFrame([col => data for (col, data) in zip(column_symbols, result_data)]...)
-end
 
 """
     _trigger_count_impl(trigger_datasets, column_names; print_table=true, title="Trigger Count Summary", 
-                        headers=nothing, note=nothing)
+                        headers=nothing, note=nothing, triggers_info=nothing)
 
-Unified helper function for counting triggers across one or more datasets with flexible printing.
+Simplified trigger counting function with optional trigger info support.
 
 # Arguments
 - `trigger_datasets::Vector{<:Vector{<:Integer}}`: Vector of trigger datasets to analyze
@@ -141,19 +87,11 @@ Unified helper function for counting triggers across one or more datasets with f
 - `print_table::Bool`: Whether to print formatted table (default: true)
 - `title::String`: Title for the printed table (default: "Trigger Count Summary")
 - `headers::Union{Nothing,Vector{String}}`: Custom headers for table (auto-generated if nothing)
-- `note::Union{Nothing,String}`: Optional note to display after table
+- `note::Union{Nothing,String}`: Optional note to display as footnote
+- `triggers_info::Union{Nothing,Vector{String}}`: Optional trigger info strings
 
 # Returns
-- `DataFrame`: DataFrame with 'trigger' column and count columns
-
-# Examples
-```julia
-# Single dataset
-df = _trigger_count_impl([triggers], ["count"])
-
-# Multiple datasets (e.g., raw vs cleaned)
-df = _trigger_count_impl([raw_triggers, cleaned_triggers], ["raw_count", "cleaned_count"])
-```
+- `DataFrame`: DataFrame with 'trigger' column and count columns (plus triggers_info if provided)
 """
 function _trigger_count_impl(
     trigger_datasets::Vector{<:Vector{<:Integer}},
@@ -161,54 +99,90 @@ function _trigger_count_impl(
     print_table::Bool = true,
     title::String = "Trigger Count Summary",
     headers::Union{Nothing,Vector{String}} = nothing,
-    note::Union{Nothing,String} = nothing
+    note::Union{Nothing,String} = nothing,
+    triggers_info::Union{Nothing,Vector{String}} = nothing
 )
-    result_df = _count_triggers_core(trigger_datasets, column_names)
+    # Get unique non-zero trigger values from all datasets
+    all_triggers = vcat(trigger_datasets...)
+    non_zero_triggers = sort(unique(filter(x -> x != 0, all_triggers)))
 
-    if isempty(result_df.trigger)
+    if isempty(non_zero_triggers)
         if print_table
-            if length(trigger_datasets) > 1
-                @minimal_warning "No non-zero triggers found in the data."
-            else
-                println("No non-zero triggers found in the data.")
+            println("No non-zero triggers found in the data.")
+        end
+        # Return empty DataFrame with correct structure
+        empty_cols = [Int[]]  # trigger column
+        append!(empty_cols, [Int[] for _ in column_names])  # count columns
+        if triggers_info !== nothing
+            insert!(empty_cols, 2, String[])  # triggers_info column
+        end
+        column_symbols = [:trigger; triggers_info !== nothing ? [:triggers_info] : []; Symbol.(column_names)]
+        return DataFrame([col => data for (col, data) in zip(column_symbols, empty_cols)]...)
+    end
+
+    # Count occurrences of each trigger value across all datasets
+    result_data = Vector{Vector{Int}}(undef, length(column_names) + 1)
+    result_data[1] = non_zero_triggers
+
+    for (i, dataset) in enumerate(trigger_datasets)
+        trigger_counts = Dict{Int, Int}()
+        for val in dataset
+            if val != 0
+                trigger_counts[val] = get(trigger_counts, val, 0) + 1
             end
         end
-        return result_df
+        result_data[i + 1] = [get(trigger_counts, trigger, 0) for trigger in non_zero_triggers]
+    end
+
+    # Create basic DataFrame
+    column_symbols = [:trigger; Symbol.(column_names)]
+    result_df = DataFrame([col => data for (col, data) in zip(column_symbols, result_data)]...)
+
+    # Add triggers_info column if provided
+    if triggers_info !== nothing
+        trigger_info_map = Dict{Int, String}()
+        for (trigger, info) in zip(trigger_datasets[1], triggers_info)
+            if trigger != 0 && !haskey(trigger_info_map, trigger)
+                trigger_info_map[trigger] = info
+            end
+        end
+        
+        # Insert triggers_info column after trigger column
+        triggers_info_col = [get(trigger_info_map, trigger, "") for trigger in non_zero_triggers]
+        result_df.triggers_info = triggers_info_col
+        
+        # Reorder columns: trigger, triggers_info, count columns
+        count_cols = [col for col in names(result_df) if col != :trigger && col != :triggers_info]
+        result_df = result_df[:, Cols(:trigger, :triggers_info, count_cols...)]
     end
 
     # Print table if requested
     if print_table
-        # Generate headers if not provided
         if headers === nothing
-            headers = ["Trigger"; [uppercasefirst(replace(name, "_" => " ")) for name in column_names]]
+            if triggers_info !== nothing
+                headers = ["Trigger", "Triggers Info", [uppercasefirst(replace(name, "_" => " ")) for name in column_names]...]
+            else
+                headers = ["Trigger"; [uppercasefirst(replace(name, "_" => " ")) for name in column_names]]
+            end
         end
+        
+        alignment = triggers_info !== nothing ? 
+            [:r, :l, [:r for _ in 1:length(column_names)]...] : 
+            [:r for _ in 1:length(headers)]
         
         pretty_table(
             result_df, 
             title = title, 
-            header = headers, 
-            alignment = [:r for _ in 1:length(headers)], 
-            crop = :none
+            alignment = alignment,
+            footnotes = note !== nothing ? [note] : nothing
         )
         println()
-        
-        # Print note if provided
-        if note !== nothing
-            println(note)
-        end
     end
 
     return result_df
 end
 
-# Backward compatibility method for old test signature
-function _trigger_count_impl(
-    trigger_data::Vector{<:Integer};
-    print_table::Bool = true,
-    title::String = "Trigger Count Summary"
-)
-    return _trigger_count_impl([trigger_data], ["count"], print_table=print_table, title=title)
-end
+
 
 
 """

@@ -4,6 +4,7 @@ module eegfun
 
 # Core dependencies
 using BiosemiDataFormat
+using BrainVisionDataFormat
 using CSV
 using DataFrames
 using JLD2

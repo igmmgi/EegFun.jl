@@ -5,16 +5,31 @@
 # # Show only warnings and errors
 # global_logger(ConsoleLogger(stderr, Logging.Warn))
 
+
 # package
 using eegfun
 using GLMakie
 # using CairoMakie
 # using BenchmarkTools
-layout = eegfun.read_layout("./data/layouts/easycap/easycapM1.csv");
-#layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-eegfun.plot_layout_2d(layout)
-# eegfun.plot_layout_3d(layout)
+dat = eegfun.read_bdf("../Flank_C_3.bdf");
+layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.trigger_count(dat)
+# eegfun.plot_trigger_overview(dat)
 
+
+
+# package
+using eegfun
+using GLMakie
+# using CairoMakie
+# using BenchmarkTools
+dat = eegfun.read_brainvision("../exp2_1002");
+layout = eegfun.read_layout("./data/layouts/easycap/easycapM1.csv");
+dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.trigger_count(dat)
+# eegfun.plot_trigger_overview(dat)
+# eegfun.plot_trigger_timing(dat)
 
 
 # package

@@ -93,6 +93,26 @@ using OrderedCollections
             @test size(result, 1) == 2  # Two unique non-zero triggers
             @test result.trigger == [1, 2]
             @test result.count == [3, 3]  # Raw counts before cleaning
+            @test !("triggers_info" in names(result))  # No triggers_info column when not present
+        end
+
+        @testset "ContinuousData with triggers_info" begin
+            # Create test data with triggers_info
+            triggers = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
+            triggers_info = ["", "S 1", "", "", "S 2", "", "", "", "S 1", ""]
+            time = collect(0:9) ./ 100.0
+            df = DataFrame(time = time, triggers = triggers, triggers_info = triggers_info, A = zeros(10), B = zeros(10))
+            layout = eegfun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+            dat = eegfun.ContinuousData(df, layout, 100, eegfun.AnalysisInfo())
+            
+            # Test with printing disabled
+            result = eegfun.trigger_count(dat, print_table = false)
+            @test isa(result, DataFrame)
+            @test size(result, 1) == 2  # Two unique non-zero triggers
+            @test result.trigger == [1, 2]
+            @test result.count == [3, 3]  # Raw counts before cleaning
+            @test "triggers_info" in names(result)  # triggers_info column should be present
+            @test result.triggers_info == ["S 1", "S 2"]  # Should show the info for each trigger
         end
 
         @testset "empty triggers" begin
@@ -162,6 +182,18 @@ using OrderedCollections
             @test names(result) == ["trigger", "count"]
         end
 
+        @testset "with triggers_info" begin
+            triggers = [0, 1, 1, 0, 2, 2, 0]
+            triggers_info = ["", "S 1", "", "", "S 2", "", ""]
+            result = eegfun._trigger_count_impl([triggers], ["count"], print_table = false, triggers_info = triggers_info)
+            @test isa(result, DataFrame)
+            @test size(result, 1) == 2
+            @test result.trigger == [1, 2]
+            @test result.count == [2, 2]
+            @test "triggers_info" in names(result)
+            @test result.triggers_info == ["S 1", "S 2"]
+        end
+
         @testset "custom headers and notes" begin
             triggers = [0, 1, 0, 2, 0]
             result = eegfun._trigger_count_impl(
@@ -178,43 +210,6 @@ using OrderedCollections
         end
     end
 
-    @testset "_count_triggers_core helper function" begin
-        @testset "single dataset" begin
-            triggers = [0, 1, 1, 0, 2, 2, 2, 0, 1, 0]
-            result = eegfun._count_triggers_core([triggers], ["count"])
-            @test isa(result, DataFrame)
-            @test size(result, 1) == 2
-            @test result.trigger == [1, 2]
-            @test result.count == [3, 3]
-        end
-
-        @testset "multiple datasets" begin
-            raw_triggers = [0, 1, 1, 1, 0, 2, 2, 0, 0]
-            cleaned_triggers = [0, 1, 0, 0, 0, 2, 0, 0, 0]
-            result = eegfun._count_triggers_core([raw_triggers, cleaned_triggers], ["raw_count", "cleaned_count"])
-            @test isa(result, DataFrame)
-            @test size(result, 1) == 2
-            @test result.trigger == [1, 2]
-            @test result.raw_count == [3, 2]
-            @test result.cleaned_count == [1, 1]
-        end
-
-        @testset "empty datasets" begin
-            result = eegfun._count_triggers_core([Int[], Int[]], ["count1", "count2"])
-            @test isa(result, DataFrame)
-            @test size(result, 1) == 0
-            @test names(result) == ["trigger", "count1", "count2"]
-        end
-
-        @testset "no non-zero triggers" begin
-            triggers1 = [0, 0, 0, 0]
-            triggers2 = [0, 0, 0]
-            result = eegfun._count_triggers_core([triggers1, triggers2], ["count1", "count2"])
-            @test isa(result, DataFrame)
-            @test size(result, 1) == 0
-            @test names(result) == ["trigger", "count1", "count2"]
-        end
-    end
 
 
 
