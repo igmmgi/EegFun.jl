@@ -4,7 +4,7 @@
 const PLOT_LAYOUT_HEAD_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :head_color => (:black, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
-    :head_radius => (88.0, "Radius of the head shape in mm."),
+    :head_radius => (1, "Radius of the head shape (normalized units)."),
     :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
     :head_nose_scale => (4.0, "Scale factor for nose size."),
 )
@@ -84,10 +84,10 @@ function plot_layout_2d!(
 
     # Head shape - Use kwargs
     radius = head_kwargs[:head_radius]
-    arc!(ax, Point2f(0), radius * 2, -π, π; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # head
-    arc!(ax, Point2f(radius * 2, 0), radius * 2 * head_kwargs[:head_ear_ratio], -π / 2, π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear right
-    arc!(ax, Point2f(-radius * 2, 0), -radius * 2 * head_kwargs[:head_ear_ratio], π / 2, -π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear left
-    lines!(ax, Point2f[(-0.05, 0.5), (0.0, 0.6), (0.05, 0.5)] .* radius * head_kwargs[:head_nose_scale]; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # nose
+    arc!(ax, Point2f(0), radius, -π, π; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # head
+    arc!(ax, Point2f(radius, 0), radius * head_kwargs[:head_ear_ratio], -π / 2, π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear right
+    arc!(ax, Point2f(-radius, 0), -radius * head_kwargs[:head_ear_ratio], π / 2, -π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear left
+    lines!(ax, Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # nose
 
     # Regular points
     if plot_points

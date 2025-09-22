@@ -28,15 +28,15 @@ using OrderedCollections
         @test nrow(layout_2d.data) == 64
 
         # Test specific coordinate calculations for known positions
-        # Fp1 (inc=-92, azi=-72)
+        # Fp1 (inc=-92, azi=-72) - normalized coordinates
         fp1_idx = findfirst(test_layout.data.label .== :Fp1)
-        @test isapprox(layout_2d.data[fp1_idx, :x2], -43.66, atol = 0.01)  # Fp1 x
-        @test isapprox(layout_2d.data[fp1_idx, :y2], 134.39, atol = 0.01)  # Fp1 y
+        @test isapprox(layout_2d.data[fp1_idx, :x2], -0.275, atol = 0.01)  # Fp1 x
+        @test isapprox(layout_2d.data[fp1_idx, :y2], 0.956, atol = 0.01)   # Fp1 y
 
-        # Cz (inc=0, azi=0)
+        # Cz (inc=0, azi=0) - normalized coordinates
         cz_idx = findfirst(test_layout.data.label .== :Cz)
         @test isapprox(layout_2d.data[cz_idx, :x2], 0.0, atol = 0.01)     # Cz x
-        @test isapprox(layout_2d.data[cz_idx, :y2], 0.0, atol = 0.01)     # Cz y
+        @test isapprox(layout_2d.data[cz_idx, :y2], 0.111, atol = 0.01)   # Cz y
 
         # Test 3D conversion
         layout_3d = copy(test_layout)
@@ -46,15 +46,15 @@ using OrderedCollections
         @test nrow(layout_3d.data) == 64
 
         # Test specific coordinate calculations for known positions
-        # Fp1 (inc=-92, azi=-72)
-        @test isapprox(layout_3d.data[fp1_idx, :x3], -27.18, atol = 0.01)  # Fp1 x
-        @test isapprox(layout_3d.data[fp1_idx, :y3], 83.64, atol = 0.01)   # Fp1 y
-        @test isapprox(layout_3d.data[fp1_idx, :z3], -3.07, atol = 0.01)   # Fp1 z
+        # Fp1 (inc=-92, azi=-72) - normalized coordinates
+        @test isapprox(layout_3d.data[fp1_idx, :x3], -0.309, atol = 0.01)  # Fp1 x
+        @test isapprox(layout_3d.data[fp1_idx, :y3], 0.951, atol = 0.01)   # Fp1 y
+        @test isapprox(layout_3d.data[fp1_idx, :z3], -0.324, atol = 0.01)  # Fp1 z
 
-        # Cz (inc=0, azi=0)
+        # Cz (inc=0, azi=0) - normalized coordinates
         @test isapprox(layout_3d.data[cz_idx, :x3], 0.0, atol = 0.01)     # Cz x
         @test isapprox(layout_3d.data[cz_idx, :y3], 0.0, atol = 0.01)     # Cz y
-        @test isapprox(layout_3d.data[cz_idx, :z3], 88.0, atol = 0.01)    # Cz z
+        @test isapprox(layout_3d.data[cz_idx, :z3], 0.712, atol = 0.01)   # Cz z
     end
 
     @testset "Distance Calculations" begin

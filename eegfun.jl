@@ -10,6 +10,18 @@ using eegfun
 using GLMakie
 # using CairoMakie
 # using BenchmarkTools
+layout = eegfun.read_layout("./data/layouts/easycap/easycapM1.csv");
+#layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+eegfun.plot_layout_2d(layout)
+# eegfun.plot_layout_3d(layout)
+
+
+
+# package
+using eegfun
+using GLMakie
+# using CairoMakie
+# using BenchmarkTools
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 
