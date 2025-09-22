@@ -19,8 +19,6 @@ eegfun.filter_data!(dat, "hp", 1)
 eegfun.plot_databrowser(dat)
 # eegfun.plot_trigger_overview(dat)
 
-
-
 # package
 using eegfun
 using GLMakie
