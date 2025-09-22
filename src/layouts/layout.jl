@@ -177,6 +177,7 @@ function read_layout(file)
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
 
+
     return Layout(df, nothing, nothing)
 end
 
@@ -258,12 +259,23 @@ function polar_to_cartesian_xy!(layout::Layout)
         throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
-    radius = 88 # mm
+    # Convert degrees to radians
     inc = df[!, :inc] .* (pi / 180)
     azi = df[!, :azi] .* (pi / 180)
 
-    df[!, :x2] = inc .* cos.(azi) .* radius
-    df[!, :y2] = inc .* sin.(azi) .* radius
+    # Convert to Cartesian coordinates
+    df[!, :x2] = inc .* cos.(azi)
+    df[!, :y2] = inc .* sin.(azi)
+    
+    # Normalize to [-1, 1] range
+    x_range = maximum(df.x2) - minimum(df.x2)
+    y_range = maximum(df.y2) - minimum(df.y2)
+    max_range = max(x_range, y_range)
+    
+    if max_range > 0
+        df.x2 = (df.x2 .- (maximum(df.x2) + minimum(df.x2)) / 2) ./ (max_range / 2)
+        df.y2 = (df.y2 .- (maximum(df.y2) + minimum(df.y2)) / 2) ./ (max_range / 2)
+    end
 
     # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)
@@ -300,17 +312,29 @@ function polar_to_cartesian_xyz!(layout::Layout)
         throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
-    radius = 88.0  # mm
-    inc = df[!, :inc] .* (pi / 180)  # Convert to radians
-    azi = df[!, :azi] .* (pi / 180)  # Convert to radians
+    # Convert degrees to radians
+    inc = df[!, :inc] .* (pi / 180)
+    azi = df[!, :azi] .* (pi / 180)
 
     # Store existing metadata before adding columns
     existing_metadata = copy(DataFrames.metadata(df))
 
     # Standard spherical to Cartesian conversion
-    df[!, :x3] = radius .* sin.(inc) .* cos.(azi)
-    df[!, :y3] = radius .* sin.(inc) .* sin.(azi)
-    df[!, :z3] = radius .* cos.(inc)
+    df[!, :x3] = sin.(inc) .* cos.(azi)
+    df[!, :y3] = sin.(inc) .* sin.(azi)
+    df[!, :z3] = cos.(inc)
+    
+    # Normalize to [-1, 1] range
+    x_range = maximum(df.x3) - minimum(df.x3)
+    y_range = maximum(df.y3) - minimum(df.y3)
+    z_range = maximum(df.z3) - minimum(df.z3)
+    max_range = max(x_range, y_range, z_range)
+    
+    if max_range > 0
+        df.x3 = (df.x3 .- (maximum(df.x3) + minimum(df.x3)) / 2) ./ (max_range / 2)
+        df.y3 = (df.y3 .- (maximum(df.y3) + minimum(df.y3)) / 2) ./ (max_range / 2)
+        df.z3 = (df.z3 .- (maximum(df.z3) + minimum(df.z3)) / 2) ./ (max_range / 2)
+    end
 
     # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)

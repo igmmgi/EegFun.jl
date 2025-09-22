@@ -145,8 +145,8 @@ using eegfun
     a_b_row = coord_dat_avg.layout.data[coord_dat_avg.layout.data.label .== :A_B, :]
     # Note: The mathematical average of 3D coordinates gives the geometric center
     # This may not preserve the sign convention of the original polar coordinates
-    @test a_b_row[1, :inc] ≈ 92.0 atol=0.1   # Should be around 92° (geometric center)
-    @test a_b_row[1, :azi] ≈ 118.0 atol=0.1  # Mathematical result from 3D averaging
+    @test a_b_row[1, :inc] ≈ 77.52 atol=0.1   # Geometric center of A and B
+    @test a_b_row[1, :azi] ≈ 111.72 atol=0.1  # Mathematical result from 3D averaging
     
     # 14a) Test that averaged channels have different coordinates (the original issue)
     # Create a second averaged channel to verify they're different
@@ -216,7 +216,7 @@ using eegfun
     # This may not preserve the sign convention of the original polar coordinates
     # The important thing is that the coordinates are mathematically correct
     @test a_b_mixed[1, :inc] > 0  # Should be positive (geometric center)
-    @test a_b_mixed[1, :azi] ≈ 118.0 atol=0.1  # Mathematical result from 3D averaging
+    @test a_b_mixed[1, :azi] ≈ 111.72 atol=0.1  # Mathematical result from 3D averaging
   
 end
 
