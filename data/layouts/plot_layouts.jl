@@ -62,7 +62,7 @@ function main()
             
             # Save the plot using CairoMakie with specific pixel dimensions
             output_file = replace(csv_file, ".csv" => ".png")
-            CairoMakie.save(output_file, fig; size=(400, 400), px_per_unit=1)
+            CairoMakie.save(output_file, fig; size=(800, 800), px_per_unit=1)
             println("  ✓ Saved: $output_file")
             
         catch e
