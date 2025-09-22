@@ -268,7 +268,8 @@ function setup_ui_base(fig, ax, state, dat, ica = nothing, plot_kwargs = nothing
     end
 
     extra_menu = nothing
-    if !isempty(extra_labels(state.data.original))
+    extra_labels_result = extra_labels(state.data.original)
+    if !isnothing(extra_labels_result) && !isempty(extra_labels_result)
         extra_menu = create_extra_channel_menu(fig, ax, state, dat)
     end
 
