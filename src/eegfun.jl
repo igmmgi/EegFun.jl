@@ -91,4 +91,8 @@ include("plots/plot_topography.jl")
 include("plots/plot_triggers.jl")
 include("plots/plot_filter.jl")
 
+# Examples
+include("examples/signal_example_1.jl")
+include("examples/signal_example_2.jl")
+
 end # module eegfun 
