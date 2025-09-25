@@ -9,6 +9,11 @@
 # package
 using eegfun
 using GLMakie
+# eegfun.signal_example_1()
+eegfun.signal_example_2()
+
+
+
 # using CairoMakie
 # using BenchmarkTools
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
@@ -24,7 +29,8 @@ using eegfun
 using GLMakie
 # using CairoMakie
 # using BenchmarkTools
-dat = eegfun.read_brainvision("../exp2_1002");
+dat = eegfun.read_brainvision("../exp2_1004");
+
 layout = eegfun.read_layout("./data/layouts/easycap/easycapM1.csv");
 
 
