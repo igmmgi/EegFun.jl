@@ -28,17 +28,43 @@ function signal_example_1()
         backgroundcolor = :white
     )
     
+    # Set up adaptive font and UI sizing
+    function setup_adaptive_sizing(fig)
+        # Create observables for different font sizes and UI elements
+        title_font = Observable(24)
+        label_font = Observable(22)
+        tick_font = Observable(18)
+        slider_font = Observable(30)
+        slider_width = Observable(300)
+        slider_height = Observable(25)
+        
+        # Update fonts and UI elements when figure is resized
+        on(fig.scene.viewport) do area
+            scale_factor = area.widths[1] / 4000  # Base on 1000px width
+            title_font[] = max(16, round(Int, 24 * scale_factor))
+            label_font[] = max(14, round(Int, 22 * scale_factor))
+            tick_font[] = max(12, round(Int, 18 * scale_factor))
+            slider_font[] = max(20, round(Int, 30 * scale_factor))
+            slider_width[] = max(200, round(Int, 300 * scale_factor))
+            slider_height[] = max(15, round(Int, 25 * scale_factor))
+        end
+        
+        return title_font, label_font, tick_font, slider_font, slider_width, slider_height
+    end
+    
+    title_font, label_font, tick_font, slider_font, slider_width, slider_height = setup_adaptive_sizing(fig)
+    
     ax = Axis(fig[1, 1:6], 
               title = "Interactive Signal Generator",
               xlabel = "Time (s)",
               ylabel = "Amplitude",
               xgridvisible = true,
               ygridvisible = true,
-              titlesize = 24,
-              xlabelsize = 22,
-              ylabelsize = 22,
-              xticklabelsize = 18,
-              yticklabelsize = 18)
+              titlesize = title_font,
+              xlabelsize = label_font,
+              ylabelsize = label_font,
+              xticklabelsize = tick_font,
+              yticklabelsize = tick_font)
     
     sig_dur = Observable(1.0)
     freq = Observable(10.0)
@@ -112,79 +138,54 @@ function signal_example_1()
                               rowgap = 1,
                               colgap = 5)
     
-    # Duration slider
-    duration_slider = Slider(slider_layout[1, 1], 
-                            range = 0.2:0.1:5.0, 
-                            startvalue = 1.0,
-                            width = 300,
-                            height = 25)
-    duration_label = Label(slider_layout[2, 1], 
-                          text = "Duration: 1.0 secs",
-                          width = 300,
-                          fontsize = 30)
+    # Define slider parameters
+    slider_configs = [
+        (name = "Duration", range = 1.0:1.0:10.0, startvalue = 1.0, label_text = "Duration: 1.0 secs", format_func = x -> "Duration: $(round(x, digits=1)) secs"),
+        (name = "Frequency", range = 1.0:1.0:100.0, startvalue = 10.0, label_text = "Frequency: 10 Hz", format_func = x -> "Frequency: $(round(Int, x)) Hz"),
+        (name = "Phase", range = -π:π/4:π, startvalue = 0.0, label_text = "Phase Angle: 0.0", format_func = x -> "Phase Angle: $(round(x, digits=2))"),
+        (name = "Sample Rate", range = 1.0:1.0:500.0, startvalue = 100.0, label_text = "Sample Rate: 100 Hz", format_func = x -> "Sample Rate: $(round(Int, x)) Hz")
+    ]
     
-    # Frequency slider
-    freq_slider = Slider(slider_layout[1, 2], 
-                        range = 1.0:1.0:100.0, 
-                        startvalue = 10.0,
-                        width = 300,
-                        height = 25)
-    freq_label = Label(slider_layout[2, 2], 
-                      text = "Frequency: 10 Hz",
-                      width = 300,
-                      fontsize = 30)
+    # Create sliders and labels
+    sliders = []
+    labels = []
     
-    # Phase slider
-    phase_slider = Slider(slider_layout[1, 3], 
-                         range = -π:π/8:π, 
-                         startvalue = 0.0,
-                         width = 300,
-                         height = 25)
-    phase_label = Label(slider_layout[2, 3], 
-                       text = "Phase Angle: 0.0",
-                       width = 300,
-                       fontsize = 30)
+    for (i, config) in enumerate(slider_configs)
+        slider = Slider(slider_layout[1, i], 
+                       range = config.range, 
+                       startvalue = config.startvalue,
+                       width = slider_width,
+                       height = slider_height)
+        label = Label(slider_layout[2, i], 
+                     text = config.label_text,
+                     width = slider_width,
+                     fontsize = slider_font)
+        push!(sliders, slider)
+        push!(labels, label)
+    end
     
-    # Sample rate slider
-    samp_slider = Slider(slider_layout[1, 4], 
-                        range = 1.0:1.0:200.0, 
-                        startvalue = 100.0,
-                        width = 300,
-                        height = 25)
-    samp_label = Label(slider_layout[2, 4], 
-                      text = "Sample Rate: 100 Hz",
-                      width = 300,
-                      fontsize = 30)
+    # Extract individual sliders and labels for easier reference
+    duration_slider, freq_slider, phase_slider, samp_slider = sliders
+    duration_label, freq_label, phase_label, samp_label = labels
     
     # Checkbox for showing sampled signal
     show_sampled_checkbox = Checkbox(slider_layout[1, 5], 
                                    checked = false,
-                                   width = 300,
-                                   height = 30)
+                                   width = slider_width,
+                                   height = slider_height)
     show_sampled_label = Label(slider_layout[2, 5], 
                               text = "Show Sampled Signal",
-                              width = 300,
-                              fontsize = 30)
+                              width = slider_width,
+                              fontsize = slider_font)
     
     # Connect sliders to observables and labels
-    on(duration_slider.value) do val
-        sig_dur[] = val
-        duration_label.text = "Duration: $(round(val, digits=1)) secs"
-    end
+    observables = [sig_dur, freq, phase, samp_rate]
     
-    on(freq_slider.value) do val
-        freq[] = val
-        freq_label.text = "Frequency: $(round(Int, val)) Hz"
-    end
-    
-    on(phase_slider.value) do val
-        phase[] = val
-        phase_label.text = "Phase Angle: $(round(val, digits=2))"
-    end
-    
-    on(samp_slider.value) do val
-        samp_rate[] = val
-        samp_label.text = "Sample Rate: $(round(Int, val)) Hz"
+    for (i, config) in enumerate(slider_configs)
+        on(sliders[i].value) do val
+            observables[i][] = val
+            labels[i].text = config.format_func(val)
+        end
     end
     
     # Connect checkbox to observable
