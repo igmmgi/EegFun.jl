@@ -19,7 +19,7 @@ eegfun.plot_my_data_gui()
 function plot_my_data_gui()
     # Create the main figure
     fig = Figure(
-        size = (1200, 800),
+        size = (900, 600),
         title = "Plot My Data",
         backgroundcolor = :white
     )
@@ -32,12 +32,12 @@ function plot_my_data_gui()
         tick_font = Observable(18)
         slider_font = Observable(16)
         button_font = Observable(18)
-        input_width = Observable(200)
-        input_height = Observable(30)
+        input_width = Observable(150)
+        input_height = Observable(25)
         
         # Update fonts and UI elements when figure is resized
         on(fig.scene.viewport) do area
-            scale_factor = area.widths[1] / 1200  # Base on 1200px width
+            scale_factor = area.widths[1] / 900  # Base on 900px width
             title_font[] = max(16, round(Int, 24 * scale_factor))
             label_font[] = max(14, round(Int, 20 * scale_factor))
             tick_font[] = max(12, round(Int, 18 * scale_factor))
@@ -54,9 +54,9 @@ function plot_my_data_gui()
     
     # Create main layout with proper 3-column structure
     main_layout = GridLayout(fig[1, 1:3], 
-                            colgap = 30, 
-                            rowgap = 20,
-                            padding = (30, 30, 30, 30))
+                            colgap = 15, 
+                            rowgap = 15,
+                            padding = (20, 5, 20, 5))
     
     # Column 1: File & Data Selection
     # File Type Section
