@@ -40,7 +40,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Head shape parameters (reusing layout kwargs)
     :head_color => (:black, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
-    :head_radius => (88.0, "Radius of the head shape in mm."),
+    :head_radius => (1.0, "Radius of the head shape in mm."),
     :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
     :head_nose_scale => (4.0, "Scale factor for nose size."),
     
@@ -117,8 +117,8 @@ function _plot_topography!(
     # Clear the axis 
     empty!(ax)
 
-    # Use different ranges based on interpolation method
-    contour_range = method == :spherical_spline ? 88.0 * 4 : 88.0 * 2
+    # Use normalized coordinate ranges since layout coordinates are normalized to [-1, 1]
+    contour_range = 1.0  # Since coordinates are normalized to [-1, 1]
 
     # Set contour parameters
     contour_kwargs = Dict{Symbol, Any}(
@@ -331,11 +331,12 @@ function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
     end
 
     center = grid_scale / 2
+    radius = grid_scale / 2  # For normalized coordinates, the radius is half the grid size
     @inbounds for col = 1:grid_scale
         for row = 1:grid_scale
             x_dist = center - col
             y_dist = center - row
-            if sqrt(x_dist^2 + y_dist^2) > center
+            if sqrt(x_dist^2 + y_dist^2) > radius
                 dat[col, row] = NaN
             end
         end
@@ -362,8 +363,9 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
     end
 
     points  = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
-    x_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
-    y_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
+    # Use normalized coordinate ranges since layout coordinates are normalized to [-1, 1]
+    x_range = range(-1.0, 1.0, length = grid_scale)
+    y_range = range(-1.0, 1.0, length = grid_scale)
 
     # Create regular grid more efficiently
     grid_points = zeros(2, grid_scale^2)
@@ -416,9 +418,9 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     # Find the actual radius of the electrode positions
     electrode_radius = mean([sqrt(sum(coords[i, :] .^ 2)) for i = 1:n_channels])
 
-    # Create a 2D grid for plotting
-    x_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
-    y_range = range(-88.0 * 2, 88.0 * 2, length = grid_scale)
+    # Create a 2D grid for plotting using normalized coordinates
+    x_range = range(-1.0, 1.0, length = grid_scale)
+    y_range = range(-1.0, 1.0, length = grid_scale)
 
     # For spherical spline calculation, we need unit sphere coordinates
     # So we normalize for the G matrix calculation only
@@ -464,7 +466,8 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     interpolated_values = fill(NaN, length(grid_x))
 
     # Find valid grid points (within head and plotting area)
-    valid_mask = (r_2d .<= 88.0) .& (r_2d .<= 88.0 * 2.0)
+    # Since coordinates are normalized to [-1, 1], the head radius is 1.0
+    valid_mask = (r_2d .<= 1.0) .& (r_2d .<= 1.0)
     valid_indices = findall(valid_mask)
 
     if !isempty(valid_indices)
@@ -474,7 +477,8 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
         valid_r = r_2d[valid_indices]
 
         # Pre-compute stereographic projection for all valid points at once
-        r_norm = valid_r ./ 88.0
+        # Since coordinates are normalized, use 1.0 as the head radius
+        r_norm = valid_r ./ 1.0
 
         # Vectorized stereographic projection
         # Fix coordinate conversion to prevent 90-degree offset
