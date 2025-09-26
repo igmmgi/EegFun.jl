@@ -10,7 +10,14 @@
 using eegfun
 using GLMakie
 # eegfun.signal_example_1()
-eegfun.signal_example_2()
+# eegfun.signal_example_2()
+eegfun.plot_my_data_gui()
+# eegfun.plot_my_data_gui_gtk()
+# eegfun.plot_my_data_gui_gtk4()
+# eegfun.plot_my_data_gui_qml()
+# eegfun.plot_my_data_gui_qml_simple()
+# eegfun.plot_my_data_gui_qml_minimal()
+
 
 
 
