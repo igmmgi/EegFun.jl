@@ -94,5 +94,6 @@ include("plots/plot_filter.jl")
 # Examples
 include("examples/signal_example_1.jl")
 include("examples/signal_example_2.jl")
+include("examples/plot_my_data_gui.jl")
 
 end # module eegfun 
