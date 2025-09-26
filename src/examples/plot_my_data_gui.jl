@@ -17,6 +17,8 @@ eegfun.plot_my_data_gui()
 - `fig::Figure`: The Makie figure object containing the interactive GUI
 """
 function plot_my_data_gui()
+    # Import NativeFileDialog for file picking
+    
     # Create the main figure
     fig = Figure(
         size = (900, 600),
@@ -266,6 +268,7 @@ function plot_my_data_gui()
         additional = Observable(""),
         plottype = Observable("select"),
         layout = Observable("select"),
+        layout_file = Observable(""),
         electrodes = Observable(Int[]),
         xlim = Observable((nothing, nothing)),
         ylim = Observable((nothing, nothing)),
@@ -278,9 +281,50 @@ function plot_my_data_gui()
     
     # Callback functions
     function update_filetype(selection)
-        gui_state.filetype[] = filetype_options[selection]
+        # Handle both string and integer selection
+        if isa(selection, String)
+            selected_option = selection
+        else
+            selected_option = filetype_options[selection]
+        end
+        
+        gui_state.filetype[] = selected_option
         # Update electrode labels based on file type
         update_electrode_labels(selection)
+        
+        # If BDF is selected, open file picker
+        if selected_option == "*.bdf"
+            @async begin 
+                try
+                    filename = fetch(Threads.@spawn pick_file(""))
+                    if filename !== nothing && filename != ""
+                        # Extract just the filename (basename) from the full path
+                        basename_only = basename(filename)
+                        
+                        # Update the textbox with just the filename
+                        bdf_filename_input.stored_string[] = basename_only
+                        gui_state.bdf_filename[] = filename  # Keep full path in state for processing
+        
+                        # Try different properties that might control display
+                        if hasfield(typeof(bdf_filename_input), :value)
+                            bdf_filename_input.value[] = basename_only
+                        end
+                        if hasfield(typeof(bdf_filename_input), :displayed_string)
+                            bdf_filename_input.displayed_string[] = basename_only
+                        end
+                        
+                        # Force update the display
+                        notify(bdf_filename_input.stored_string)
+                        
+                        println("Selected file: $filename")  # Debug output
+                        println("Displaying basename: $basename_only")
+                        println("Textbox stored_string: $(bdf_filename_input.stored_string[])")
+                    end
+                catch e
+                    println("File picker error: $e")
+                end
+            end
+        end
     end
     
     function update_plottype(selection)
@@ -288,7 +332,60 @@ function plot_my_data_gui()
     end
     
     function update_layout(selection)
-        gui_state.layout[] = layout_options[selection]
+        # Handle both string and integer selections
+        if isa(selection, String)
+            selected_layout = selection
+        else
+            selected_layout = layout_options[selection]
+        end
+        
+        gui_state.layout[] = selected_layout
+        
+        # If "Select" is chosen, open file picker for custom layout
+        if selected_layout == "Select"
+            @async begin 
+                try
+                    filename = fetch(Threads.@spawn pick_file(""))
+                    if filename !== nothing && filename != ""
+                        # Extract just the filename (basename) from the full path
+                        basename_only = basename(filename)
+                        
+                        # Store the full path in the GUI state
+                        gui_state.layout_file[] = filename
+                        
+                        # Update the dropdown to show the selected file
+                        # Add the selected file to the options and select it
+                        new_options = vcat(layout_options, basename_only)
+                        layout_dropdown.options = new_options
+                        layout_dropdown.selection = length(new_options)
+                        
+                        println("Selected custom layout file: $filename")  # Debug output
+                        println("Displaying basename: $basename_only")
+                    end
+                catch e
+                    println("Layout file picker error: $e")
+                end
+            end
+        else
+            # For predefined layouts, set the layout file path based on the selection
+            # This would map to actual layout files in your data/layouts directory
+            if selected_layout == "BioSemi72"
+                gui_state.layout_file[] = "data/layouts/biosemi/biosemi72.csv"
+            elseif selected_layout == "BioSemi70"
+                gui_state.layout_file[] = "data/layouts/biosemi/biosemi70.csv"
+            elseif selected_layout == "BioSemi68"
+                gui_state.layout_file[] = "data/layouts/biosemi/biosemi68.csv"
+            elseif selected_layout == "BioSemi66"
+                gui_state.layout_file[] = "data/layouts/biosemi/biosemi66.csv"
+            elseif selected_layout == "BioSemi64"
+                gui_state.layout_file[] = "data/layouts/biosemi/biosemi64.csv"
+            elseif selected_layout == "Custom"
+                gui_state.layout_file[] = ""  # Will need to be set via file picker
+            end
+            
+            println("Selected predefined layout: $selected_layout")
+            println("Layout file path: $(gui_state.layout_file[])")
+        end
     end
     
     function update_electrode_labels(filetype_selection)
@@ -298,48 +395,60 @@ function plot_my_data_gui()
     end
     
     function execute_plot()
-        println("Executing plot with:")
+        println("Executing EEG plot with:")
         println("  File Type: $(gui_state.filetype[])")
         println("  BDF File: $(gui_state.bdf_filename[])")
         println("  Plot Type: $(gui_state.plottype[])")
         println("  Layout: $(gui_state.layout[])")
+        println("  Layout File: $(gui_state.layout_file[])")
         println("  Electrodes: $(gui_state.electrodes[])")
         println("  X Limits: $(gui_state.xlim[])")
         println("  Y Limits: $(gui_state.ylim[])")
         
-        # Create a new figure and plot 1:10
+        # Check if we have the required files
+        if gui_state.bdf_filename[] == ""
+            println("Error: No BDF file selected!")
+            return
+        end
+        
+        if gui_state.layout_file[] == ""
+            println("Error: No layout file selected!")
+            return
+        end
+        
         try
-            # Create a new figure
-            fig = Figure(size = (800, 600), title = "Test Plot - 1:10")
+            println("Loading BDF data...")
+            # Load BDF data
+            dat = eegfun.read_bdf(gui_state.bdf_filename[])
             
-            # Simple plot of 1:10
-            x = 1:10
-            y = collect(1:10)
+            println("Loading layout...")
+            # Load layout
+            layout = eegfun.read_layout(gui_state.layout_file[])
             
-            ax = Axis(fig[1, 1], 
-                     title = "Plot of 1:10",
-                     xlabel = "X",
-                     ylabel = "Y")
+            println("Creating EEG dataframe...")
+            # Create EEG dataframe
+            dat = eegfun.create_eeg_dataframe(dat, layout)
             
-            lines!(ax, x, y, color = :blue, linewidth = 2)
-            scatter!(ax, x, y, color = :red, markersize = 8)
+            println("Creating plot...")
+            # Create the plot based on plot type
+            if gui_state.plottype[] == "Data Browser"
+                eegfun.plot_databrowser(dat)
+            else
+                # For other plot types, you can add more cases here
+                println("Plot type '$(gui_state.plottype[])' not yet implemented")
+                # Fallback to databrowser for now
+                eegfun.plot_databrowser(dat)
+            end
             
-            # Add styling
-            ax.xgridvisible = true
-            ax.ygridvisible = true
-            ax.xgridcolor = :gray
-            ax.ygridcolor = :gray
-            ax.xgridwidth = 0.5
-            ax.ygridwidth = 0.5
-            
-            # Create a new screen (window) for the plot using your method
-            new_screen = getfield(Main, :GLMakie).Screen()
-            display(new_screen, fig)
-            
-            println("Plot created and displayed in new window!")
+            println("Plot created and displayed successfully!")
             
         catch e
-            println("Error creating plot: $e")
+            println("Error creating EEG plot: $e")
+            println("Stacktrace:")
+            for (exc, bt) in Base.catch_stack()
+                showerror(stdout, exc, bt)
+                println()
+            end
         end
     end
     
@@ -370,9 +479,9 @@ function plot_my_data_gui()
         gui_state.condition[] = value
     end
     
-    on(bdf_filename_input.stored_string) do value
-        gui_state.bdf_filename[] = value
-    end
+    # Note: bdf_filename is set directly in the file picker callback, not here
+    # to avoid overriding the full path with just the basename
+    
     
     on(xmin_input.stored_string) do value
         try
@@ -416,18 +525,18 @@ function plot_my_data_gui()
         plottype_dropdown.selection = 1
         layout_dropdown.selection = 1
         electrode_menu.selection = 1
-        participant_input.stored_string = ""
-        condition_input.stored_string = ""
-        bdf_filename_input.stored_string = ""
-        xmin_input.stored_string = ""
-        xmax_input.stored_string = ""
-        ymin_input.stored_string = ""
-        ymax_input.stored_string = ""
-        zmin_input.stored_string = ""
-        zmax_input.stored_string = ""
-        xtopo_input.stored_string = ""
-        baseline_start.stored_string = ""
-        baseline_end.stored_string = ""
+        participant_input.stored_string[] = ""
+        condition_input.stored_string[] = ""
+        bdf_filename_input.stored_string[] = ""
+        xmin_input.stored_string[] = ""
+        xmax_input.stored_string[] = ""
+        ymin_input.stored_string[] = ""
+        ymax_input.stored_string[] = ""
+        zmin_input.stored_string[] = ""
+        zmax_input.stored_string[] = ""
+        xtopo_input.stored_string[] = ""
+        baseline_start.stored_string[] = ""
+        baseline_end.stored_string[] = ""
         baseline_type.selection = 1
         additional_label.text = ""
     end

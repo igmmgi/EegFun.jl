@@ -16,6 +16,7 @@ using FFTW
 
 # Plotting and visualization
 using Makie
+using NativeFileDialog
 using ScatteredInterpolation
 
 # Utilities
