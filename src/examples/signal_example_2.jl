@@ -18,26 +18,53 @@ eegfun.signal_example_2()
 ```
 """
 function signal_example_2()
-    # Create the main figure
+
     fig = Figure(
         size = (1200, 800),
         title = "Signal Example 2",
         backgroundcolor = :white
     )
     
+    # Set up adaptive font and UI sizing
+    function setup_adaptive_sizing(fig)
+        # Create observables for different font sizes and UI elements
+        title_font = Observable(24)
+        label_font = Observable(20)
+        tick_font = Observable(18)
+        slider_font = Observable(20)
+        slider_width = Observable(120)
+        slider_height = Observable(20)
+        
+        # Update fonts and UI elements when figure is resized
+        on(fig.scene.viewport) do area
+            scale_factor = area.widths[1] / 4000  # Base on 1200px width
+            title_font[] = max(16, round(Int, 24 * scale_factor))
+            label_font[] = max(14, round(Int, 20 * scale_factor))
+            tick_font[] = max(12, round(Int, 18 * scale_factor))
+            slider_font[] = max(12, round(Int, 20 * scale_factor))
+            slider_width[] = max(80, round(Int, 120 * scale_factor))
+            slider_height[] = max(15, round(Int, 20 * scale_factor))
+        end
+        
+        return title_font, label_font, tick_font, slider_font, slider_width, slider_height
+    end
+    
+    title_font, label_font, tick_font, slider_font, slider_width, slider_height = setup_adaptive_sizing(fig)
+    
     # Create 6 subplots
-    ax1 = Axis(fig[1, 2:6], title = "Signal 1", xlabel = "Time (s)", ylabel = "Amplitude",
-               titlesize = 22, xlabelsize = 20, ylabelsize = 20)
-    ax2 = Axis(fig[2, 2:6], title = "Signal 2", xlabel = "Time (s)", ylabel = "Amplitude",
-               titlesize = 22, xlabelsize = 20, ylabelsize = 20)
-    ax3 = Axis(fig[3, 2:6], title = "Signal 3", xlabel = "Time (s)", ylabel = "Amplitude",
-               titlesize = 22, xlabelsize = 20, ylabelsize = 20)
-    ax4 = Axis(fig[4, 2:6], title = "Noise", xlabel = "Time (s)", ylabel = "Amplitude",
-               titlesize = 22, xlabelsize = 20, ylabelsize = 20)
-    ax5 = Axis(fig[5, 2:6], title = "Combined Signal", xlabel = "Time (s)", ylabel = "Amplitude",
-               titlesize = 22, xlabelsize = 20, ylabelsize = 20)
-    ax6 = Axis(fig[6, 2:6], title = "Frequency Domain", xlabel = "Frequency (Hz)", ylabel = "Power",
-               titlesize = 22, xlabelsize = 20, ylabelsize = 20)
+    plot_titles = ["Signal 1", "Signal 2", "Signal 3", "Noise", "Combined Signal", "Frequency Domain"]
+    plot_ylabels = ["Amplitude", "Amplitude", "Amplitude", "Amplitude", "Amplitude", "Power"]
+    plot_xlabels = ["Time (s)", "Time (s)", "Time (s)", "Time (s)", "Time (s)", "Frequency (Hz)"]
+    
+    axes = [Axis(fig[i, 2:6], 
+                 title = plot_titles[i], 
+                 xlabel = plot_xlabels[i], 
+                 ylabel = plot_ylabels[i],
+                 titlesize = title_font, xlabelsize = label_font, ylabelsize = label_font) 
+            for i in 1:6]
+    
+    # Extract individual axes for easier reference
+    ax1, ax2, ax3, ax4, ax5, ax6 = axes
     
     # Set up observables for parameters
     sig_dur = Observable(3.0)
@@ -77,6 +104,7 @@ function signal_example_2()
     combined_data = Observable(Float64[])
     filtered_data = Observable(Float64[])
     freq_domain_data = Observable(Float64[])
+    freq_domain_data_filtered = Observable(Float64[])
     freq_axis = Observable(Float64[])
     
     # Function to update all signals
@@ -114,15 +142,24 @@ function signal_example_2()
         n = length(fft_result)
         hz = collect(0:samp_rate[]/n:samp_rate[]*(n-1)/n)
         
-        # Calculate power spectrum - power should scale as amplitude squared
-        # Raw power spectrum without normalization
-        power_spectrum = abs.(fft_result).^2
-        # Take only the first half (up to Nyquist frequency)
+        # Calculate power spectrum 
+        fft_normalized = fft_result ./ n
         half_n = n ÷ 2 + 1
-        # For single-sided spectrum, multiply by 2 (except DC and Nyquist)
-        power_spectrum[2:half_n-1] .*= 2
+        power_spectrum = abs.(fft_normalized[1:half_n]) .* 2
+        power_spectrum = power_spectrum.^2
         freq_domain_data[] = power_spectrum[1:half_n]
         freq_axis[] = hz[1:half_n]
+        
+        # Calculate filtered power spectrum if filter is enabled
+        if low_pass_filter[] && filter_freq[] > 0
+            fft_filtered = fft(filtered)
+            fft_filtered_normalized = fft_filtered ./ n
+            power_spectrum_filtered = abs.(fft_filtered_normalized[1:half_n]) .* 2
+            power_spectrum_filtered = power_spectrum_filtered.^2
+            freq_domain_data_filtered[] = power_spectrum_filtered[1:half_n]
+        else
+            freq_domain_data_filtered[] = zeros(half_n)
+        end
         
         # Update observables
         sig1_data[] = sig1
@@ -152,20 +189,13 @@ function signal_example_2()
     
     # Simple low-pass filter implementation
     function apply_lowpass_filter(signal, fs, cutoff)
-        # Simple moving average filter as a basic low-pass
-        # For production use, consider using DSP.jl with proper Butterworth filters
-        window_size = max(1, Int(round(fs / cutoff / 4)))
-        if window_size >= length(signal)
+        if cutoff <= 0 || cutoff >= fs/2
             return signal
         end
+        filter_info = create_filter("lp", "iir", cutoff, fs, order = 4)
+
+        return filtfilt(filter_info.filter_object, signal)
         
-        filtered = similar(signal)
-        for i in 1:length(signal)
-            start_idx = max(1, i - window_size ÷ 2)
-            end_idx = min(length(signal), i + window_size ÷ 2)
-            filtered[i] = mean(signal[start_idx:end_idx])
-        end
-        return filtered
     end
     
     # Connect observables to update function
@@ -175,8 +205,6 @@ function signal_example_2()
             update_signals()
         end
     end
-    
-    # Frequency domain plot will update automatically via observables
     
     # Generate initial signal data
     update_signals()
@@ -189,7 +217,7 @@ function signal_example_2()
     lines!(ax5, time, combined_data, color = :blue, linewidth = 2)
     
     # Add filtered signal if enabled
-    filtered_line = lines!(ax5, time, filtered_data, color = :red, linewidth = 2, visible = false)
+    filtered_line = lines!(ax5, time, filtered_data, color = :red, linewidth = 3, visible = false)
     
     # Update filtered line visibility
     on(low_pass_filter) do val
@@ -200,11 +228,37 @@ function signal_example_2()
         end
     end
     
-    # Frequency domain plot - using stem for discrete points
-    stem!(ax6, freq_axis, freq_domain_data, color = :blue, markersize = 4)
+    # Frequency domain plot - original signal (always visible)
+    stem!(ax6, freq_axis, freq_domain_data, color = :blue, markersize = 4, label = "Original")
     
     # Add filtered frequency domain if enabled
-    filtered_freq_line = stem!(ax6, freq_axis, freq_domain_data, color = :red, markersize = 4, visible = false)
+    filtered_freq_line = stem!(ax6, freq_axis, freq_domain_data_filtered, color = :red, markersize = 4, visible = false, label = "Filtered")
+    
+    # Update y-axis limits when power data changes
+    on(freq_domain_data) do data
+        if length(data) > 0
+            max_power = maximum(data)
+            if max_power > 0
+                ylims!(ax6, 0, max_power * 1.1)  # Add 10% margin
+            else
+                ylims!(ax6, 0, 1)  # Default range when all power is zero
+            end
+        end
+    end
+    
+    # Also update y-axis limits when filtered power data changes
+    on(freq_domain_data_filtered) do data
+        if length(data) > 0
+            max_original = maximum(freq_domain_data[])
+            max_filtered = maximum(data)
+            max_power = max(max_original, max_filtered)
+            if max_power > 0
+                ylims!(ax6, 0, max_power * 1.1)  # Add 10% margin
+            else
+                ylims!(ax6, 0, 1)  # Default range when all power is zero
+            end
+        end
+    end
     
     # Update filtered frequency line visibility
     on(low_pass_filter) do val
@@ -216,94 +270,92 @@ function signal_example_2()
     end
     
     # Control panels - one for each row to align with plots
-    # Signal 1 controls (row 1)
-    sig1_layout = GridLayout(fig[1, 1], tellheight = false, valign = :center, padding = (5, 5, 5, 5), rowgap = 0)
-    Label(sig1_layout[1, 1], "Signal 1", fontsize = 14, font = :bold)
-    freq1_label = Label(sig1_layout[2, 1], "Freq: 0.0 Hz", width = 120, fontsize = 20)
-    freq1_slider = Slider(sig1_layout[3, 1], range = 0.0:0.1:100.0, startvalue = 0.0, width = 120, height = 20)
-    amp1_label = Label(sig1_layout[4, 1], "Amp: 1.0", width = 120, fontsize = 20)
-    amp1_slider = Slider(sig1_layout[5, 1], range = 0.0:0.1:5.0, startvalue = 1.0, width = 120, height = 20)
-    phase1_label = Label(sig1_layout[6, 1], "Phase: 0.0", width = 120, fontsize = 20)
-    phase1_slider = Slider(sig1_layout[7, 1], range = -π:π/16:π, startvalue = 0.0, width = 120, height = 20)
+    signal_layouts = []
+    freq_labels = []
+    freq_sliders = []
+    amp_labels = []
+    amp_sliders = []
+    phase_labels = []
+    phase_sliders = []
     
-    # Signal 2 controls (row 2)
-    sig2_layout = GridLayout(fig[2, 1], tellheight = false, valign = :center, padding = (5, 5, 5, 5), rowgap = 0)
-    Label(sig2_layout[1, 1], "Signal 2", fontsize = 14, font = :bold)
-    freq2_label = Label(sig2_layout[2, 1], "Freq: 0.0 Hz", width = 120, fontsize = 20)
-    freq2_slider = Slider(sig2_layout[3, 1], range = 0.0:0.1:100.0, startvalue = 0.0, width = 120, height = 20)
-    amp2_label = Label(sig2_layout[4, 1], "Amp: 1.0", width = 120, fontsize = 20)
-    amp2_slider = Slider(sig2_layout[5, 1], range = 0.0:0.1:5.0, startvalue = 1.0, width = 120, height = 20)
-    phase2_label = Label(sig2_layout[6, 1], "Phase: 0.0", width = 120, fontsize = 20)
-    phase2_slider = Slider(sig2_layout[7, 1], range = -π:π/16:π, startvalue = 0.0, width = 120, height = 20)
+    for i in 1:3
+        # Create layout for this signal
+        layout = GridLayout(fig[i, 1], tellheight = false, valign = :center, padding = (5, 5, 5, 5), rowgap = 0)
+        push!(signal_layouts, layout)
+        
+        # Create controls
+        Label(layout[1, 1], "Signal $i", fontsize = slider_font, font = :bold)
+        
+        freq_label = Label(layout[2, 1], "Freq: 0.0 Hz", width = slider_width, fontsize = slider_font, height = 10)
+        freq_slider = Slider(layout[3, 1], range = 0.0:1.0:100.0, startvalue = 0.0, width = slider_width, height = slider_height)
+        push!(freq_labels, freq_label)
+        push!(freq_sliders, freq_slider)
+        
+        amp_label = Label(layout[4, 1], "Amp: 1.0", width = slider_width, fontsize = slider_font, height = 10)
+        amp_slider = Slider(layout[5, 1], range = 0.0:1.0:10.0, startvalue = 1.0, width = slider_width, height = slider_height)
+        push!(amp_labels, amp_label)
+        push!(amp_sliders, amp_slider)
+        
+        phase_label = Label(layout[6, 1], "Phase: 0.0", width = slider_width, fontsize = slider_font, height = 10)
+        phase_slider = Slider(layout[7, 1], range = -π:π/16:π, startvalue = 0.0, width = slider_width, height = slider_height)
+        push!(phase_labels, phase_label)
+        push!(phase_sliders, phase_slider)
+    end
     
-    # Signal 3 controls (row 3)
-    sig3_layout = GridLayout(fig[3, 1], tellheight = false, valign = :center, padding = (5, 5, 5, 5), rowgap = 0)
-    Label(sig3_layout[1, 1], "Signal 3", fontsize = 14, font = :bold)
-    freq3_label = Label(sig3_layout[2, 1], "Freq: 0.0 Hz", width = 120, fontsize = 20)
-    freq3_slider = Slider(sig3_layout[3, 1], range = 0.0:0.1:100.0, startvalue = 0.0, width = 120, height = 20)
-    amp3_label = Label(sig3_layout[4, 1], "Amp: 1.0", width = 120, fontsize = 20)
-    amp3_slider = Slider(sig3_layout[5, 1], range = 0.0:0.1:5.0, startvalue = 1.0, width = 120, height = 20)
-    phase3_label = Label(sig3_layout[6, 1], "Phase: 0.0", width = 120, fontsize = 20)
-    phase3_slider = Slider(sig3_layout[7, 1], range = -π:π/16:π, startvalue = 0.0, width = 120, height = 20)
+    # Extract individual controls for easier reference
+    sig1_layout, sig2_layout, sig3_layout = signal_layouts
+    freq1_label, freq2_label, freq3_label = freq_labels
+    freq1_slider, freq2_slider, freq3_slider = freq_sliders
+    amp1_label, amp2_label, amp3_label = amp_labels
+    amp1_slider, amp2_slider, amp3_slider = amp_sliders
+    phase1_label, phase2_label, phase3_label = phase_labels
+    phase1_slider, phase2_slider, phase3_slider = phase_sliders
     
     # Noise control (row 4)
     noise_layout = GridLayout(fig[4, 1], tellheight = false, valign = :center, padding = (5, 5, 5, 5), rowgap = 0)
-    Label(noise_layout[1, 1], "Noise", fontsize = 14, font = :bold)
-    noise_label = Label(noise_layout[2, 1], "Level: 0.0", width = 120, fontsize = 20)
-    noise_slider = Slider(noise_layout[3, 1], range = 0.0:0.1:10.0, startvalue = 0.0, width = 120, height = 20)
+    Label(noise_layout[1, 1], "Noise", fontsize = slider_font, font = :bold)
+    noise_label = Label(noise_layout[2, 1], "Level: 0.0", width = slider_width, fontsize = slider_font, height = 10)
+    noise_slider = Slider(noise_layout[3, 1], range = 0.0:1.0:10.0, startvalue = 0.0, width = slider_width, height = slider_height)
     
     # Filter control (row 5)
     filter_layout = GridLayout(fig[5, 1], tellheight = false, valign = :center, padding = (5, 5, 5, 5), rowgap = 0)
-    Label(filter_layout[1, 1], "Filter", fontsize = 14, font = :bold)
-    filter_label = Label(filter_layout[2, 1], "Cutoff: 0.0 Hz", width = 120, fontsize = 20)
-    filter_slider = Slider(filter_layout[3, 1], range = 0.0:1.0:1000.0, startvalue = 0.0, width = 120, height = 20)
-    filter_checkbox_label = Label(filter_layout[4, 1], "Enable LP", width = 120, fontsize = 20)
-    filter_checkbox = Checkbox(filter_layout[5, 1], checked = false, width = 20, height = 20)
+    Label(filter_layout[1, 1], "LP Filter", fontsize = slider_font, font = :bold)
+    filter_label = Label(filter_layout[2, 1], "Cutoff: 0.0 Hz", width = slider_width, fontsize = slider_font, height = 10)
+    filter_slider = Slider(filter_layout[3, 1], range = 0.0:1.0:100.0, startvalue = 0.0, width = slider_width, height = slider_height)
+    filter_checkbox_label = Label(filter_layout[4, 1], "Enable LP", width = slider_width, fontsize = slider_font)
+    filter_checkbox = Checkbox(filter_layout[5, 1], checked = false, width = slider_height, height = slider_height)
     
     # Output selection (row 6) - Power spectrum only
     output_layout = GridLayout(fig[6, 1], tellheight = false, valign = :center, padding = (5, 5, 5, 5), rowgap = 0)
-    Label(output_layout[1, 1], "Power\nSpectrum", fontsize = 14, font = :bold)
+    Label(output_layout[1, 1], "Power\nSpectrum", fontsize = slider_font, font = :bold)
 
     # Connect sliders to observables
-    on(freq1_slider.value) do val
-        freq1[] = val
-        freq1_label.text = "Freq: $(round(val, digits=1)) Hz"
-    end
-    on(amp1_slider.value) do val
-        amp1[] = val
-        amp1_label.text = "Amp: $(round(val, digits=1))"
-    end
-    on(phase1_slider.value) do val
-        phase1[] = val
-        phase1_label.text = "Phase: $(round(val, digits=2))"
+    # Signal controls (freq, amp, phase for each of 3 signals)
+    freq_observables = [freq1, freq2, freq3]
+    amp_observables = [amp1, amp2, amp3]
+    phase_observables = [phase1, phase2, phase3]
+    
+    for i in 1:3
+        # Frequency sliders
+        on(freq_sliders[i].value) do val
+            freq_observables[i][] = val
+            freq_labels[i].text = "Freq: $(round(val, digits=1)) Hz"
+        end
+        
+        # Amplitude sliders
+        on(amp_sliders[i].value) do val
+            amp_observables[i][] = val
+            amp_labels[i].text = "Amp: $(round(val, digits=1))"
+        end
+        
+        # Phase sliders
+        on(phase_sliders[i].value) do val
+            phase_observables[i][] = val
+            phase_labels[i].text = "Phase: $(round(val, digits=2))"
+        end
     end
     
-    on(freq2_slider.value) do val
-        freq2[] = val
-        freq2_label.text = "Freq: $(round(val, digits=1)) Hz"
-    end
-    on(amp2_slider.value) do val
-        amp2[] = val
-        amp2_label.text = "Amp: $(round(val, digits=1))"
-    end
-    on(phase2_slider.value) do val
-        phase2[] = val
-        phase2_label.text = "Phase: $(round(val, digits=2))"
-    end
-    
-    on(freq3_slider.value) do val
-        freq3[] = val
-        freq3_label.text = "Freq: $(round(val, digits=1)) Hz"
-    end
-    on(amp3_slider.value) do val
-        amp3[] = val
-        amp3_label.text = "Amp: $(round(val, digits=1))"
-    end
-    on(phase3_slider.value) do val
-        phase3[] = val
-        phase3_label.text = "Phase: $(round(val, digits=2))"
-    end
-    
+    # Other controls
     on(noise_slider.value) do val
         noise_level[] = val
         noise_label.text = "Level: $(round(val, digits=1))"
@@ -316,8 +368,6 @@ function signal_example_2()
     on(filter_checkbox.checked) do val
         low_pass_filter[] = val
     end
-    
-    # Power spectrum is always shown - no callbacks needed
     
     display(fig)
     return fig
