@@ -52,16 +52,17 @@ function plot_my_data_gui()
     
     title_font, label_font, tick_font, slider_font, button_font, input_width, input_height = setup_adaptive_sizing(fig)
     
-    # Create main layout with 3 columns
+    # Create main layout with proper 3-column structure
     main_layout = GridLayout(fig[1, 1:3], 
-                            colgap = 20, 
-                            rowgap = 10,
-                            padding = (20, 20, 20, 20))
+                            colgap = 30, 
+                            rowgap = 20,
+                            padding = (30, 30, 30, 30))
     
     # Column 1: File & Data Selection
     col1_layout = GridLayout(main_layout[1, 1], 
                             tellwidth = false, 
-                            rowgap = 15)
+                            rowgap = 15,
+                            colgap = 10)
     
     # File Type Section
     Label(col1_layout[1, 1], "File Type", fontsize = label_font, font = :bold)
@@ -73,10 +74,11 @@ function plot_my_data_gui()
     
     # BDF File Name Section
     Label(col1_layout[3, 1], "BDF File Name", fontsize = label_font, font = :bold)
-    bdf_filename_label = Label(col1_layout[4, 1], "", 
-                              fontsize = slider_font,
-                              width = input_width,
-                              height = input_height)
+    bdf_filename_input = Textbox(col1_layout[4, 1], 
+                                placeholder = "Enter BDF filename...",
+                                fontsize = slider_font,
+                                width = input_width,
+                                height = input_height)
     
     # Participant Section
     Label(col1_layout[5, 1], "Participant", fontsize = label_font, font = :bold)
@@ -110,7 +112,8 @@ function plot_my_data_gui()
     # Column 2: Plot Configuration
     col2_layout = GridLayout(main_layout[1, 2], 
                             tellwidth = false, 
-                            rowgap = 15)
+                            rowgap = 15,
+                            colgap = 10)
     
     # Plot Type Section
     Label(col2_layout[1, 1], "Plot Type", fontsize = label_font, font = :bold)
@@ -143,116 +146,118 @@ function plot_my_data_gui()
     # Column 3: Settings Panel
     col3_layout = GridLayout(main_layout[1, 3], 
                             tellwidth = false, 
-                            rowgap = 10)
+                            rowgap = 20,
+                            colgap = 10)
     
     # Create a panel-like appearance for settings
-    settings_panel = GridLayout(col3_layout[1:12, 1], 
+    settings_panel = GridLayout(col3_layout[1:14, 1], 
                                tellwidth = false, 
-                               rowgap = 8,
+                               rowgap = 15,
+                               colgap = 10,
                                color = :lightgray,
                                cornerradius = 8,
-                               padding = (10, 10, 10, 10))
+                               padding = (20, 20, 20, 20))
     
     # Settings Panel Title
-    Label(settings_panel[1, 1], "Settings", fontsize = label_font, font = :bold)
+    Label(settings_panel[1, 1:2], "Settings", fontsize = label_font, font = :bold)
     
     # X Limits Section
-    Label(settings_panel[2, 1], "X Limits", fontsize = slider_font, font = :bold)
+    Label(settings_panel[2, 1:2], "X Limits", fontsize = slider_font, font = :bold)
     xmin_input = Textbox(settings_panel[3, 1], 
                         placeholder = "min", 
                         fontsize = slider_font,
-                        width = 100,  # Fixed width for now
+                        width = 90,
                         height = input_height)
     xmax_input = Textbox(settings_panel[3, 2], 
                         placeholder = "max", 
                         fontsize = slider_font,
-                        width = 100,  # Fixed width for now
+                        width = 90,
                         height = input_height)
     
     # X Topo Series
-    Label(settings_panel[4, 1], "X Topo Series", fontsize = slider_font, font = :bold)
-    xtopo_input = Textbox(settings_panel[5, 1], 
+    Label(settings_panel[4, 1:2], "X Topo Series", fontsize = slider_font, font = :bold)
+    xtopo_input = Textbox(settings_panel[5, 1:2], 
                          placeholder = "series", 
                          fontsize = slider_font,
                          width = input_width,
                          height = input_height)
     
     # Y Limits Section
-    Label(settings_panel[6, 1], "Y Limits", fontsize = slider_font, font = :bold)
+    Label(settings_panel[6, 1:2], "Y Limits", fontsize = slider_font, font = :bold)
     ymin_input = Textbox(settings_panel[7, 1], 
                         placeholder = "min", 
                         fontsize = slider_font,
-                        width = 100,  # Fixed width for now
+                        width = 90,
                         height = input_height)
     ymax_input = Textbox(settings_panel[7, 2], 
                         placeholder = "max", 
                         fontsize = slider_font,
-                        width = 100,  # Fixed width for now
+                        width = 90,
                         height = input_height)
     
     # Z Limits Section
-    Label(settings_panel[8, 1], "Z Limits", fontsize = slider_font, font = :bold)
+    Label(settings_panel[8, 1:2], "Z Limits", fontsize = slider_font, font = :bold)
     zmin_input = Textbox(settings_panel[9, 1], 
                         placeholder = "min", 
                         fontsize = slider_font,
-                        width = 100,  # Fixed width for now
+                        width = 90,
                         height = input_height)
     zmax_input = Textbox(settings_panel[9, 2], 
                         placeholder = "max", 
                         fontsize = slider_font,
-                        width = 100,  # Fixed width for now
+                        width = 90,
                         height = input_height)
     
     # Baseline Section
-    Label(settings_panel[10, 1], "Baseline", fontsize = slider_font, font = :bold)
+    Label(settings_panel[10, 1:2], "Baseline", fontsize = slider_font, font = :bold)
     baseline_start = Textbox(settings_panel[11, 1], 
                             placeholder = "start", 
                             fontsize = slider_font,
-                            width = 100,  # Fixed width for now
+                            width = 90,
                             height = input_height)
     baseline_end = Textbox(settings_panel[11, 2], 
                           placeholder = "end", 
                           fontsize = slider_font,
-                          width = 100,  # Fixed width for now
+                          width = 90,
                           height = input_height)
     
     # Baseline Type
-    Label(settings_panel[12, 1], "Baseline Type", fontsize = slider_font, font = :bold)
-    baseline_type = Menu(settings_panel[13, 1], 
+    Label(settings_panel[12, 1:2], "Baseline Type", fontsize = slider_font, font = :bold)
+    baseline_type = Menu(settings_panel[13, 1:2], 
                         options = ["Select", "absolute", "relative", "relchange", "perchange", "db"],
                         width = input_width,
                         height = input_height)
     
-    # Action Buttons Section
-    button_layout = GridLayout(col3_layout[13:16, 1], 
+    # Action Buttons Section - Outside the settings panel
+    button_layout = GridLayout(col3_layout[25:28, 1], 
                               tellwidth = false, 
-                              colgap = 10,
-                              rowgap = 10)
+                              colgap = 15,
+                              rowgap = 20)
     
     # First row of buttons
     examples_button = Button(button_layout[1, 1], 
                            label = "Examples",
                            fontsize = button_font,
-                           width = 100,  # Fixed width for now
+                           width = 120,
                            height = input_height)
     
     clear_button = Button(button_layout[1, 2], 
                         label = "Clear GUI",
                         fontsize = button_font,
-                        width = 100,  # Fixed width for now
+                        width = 120,
                         height = input_height)
     
     # Second row of buttons
     export_button = Button(button_layout[2, 1], 
                           label = "Export",
                           fontsize = button_font,
-                          width = 100,  # Fixed width for now
+                          width = 120,
                           height = input_height)
     
     cursor_button = Button(button_layout[2, 2], 
                           label = "Cursor",
                           fontsize = button_font,
-                          width = 100,  # Fixed width for now
+                          width = 120,
                           height = input_height)
     
     # Third row - Main plot button
@@ -260,12 +265,13 @@ function plot_my_data_gui()
                         label = "PLOT",
                         fontsize = title_font,
                         buttoncolor = :lightblue,
-                        width = input_width,
-                        height = 45)  # Fixed height (30 * 1.5)
+                        width = 255,  # 120 + 15 + 120
+                        height = 50)
     
     # Data structure to store GUI state
     gui_state = (
         filetype = Observable("select"),
+        bdf_filename = Observable(""),
         participant = Observable(""),
         condition = Observable(""),
         additional = Observable(""),
@@ -299,12 +305,13 @@ function plot_my_data_gui()
     function update_electrode_labels(filetype_selection)
         # This would be implemented to load electrode labels based on file type
         # For now, just show a placeholder
-        electrode_listbox.options = ["Select", "Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2"]
+        electrode_menu.options = ["Select", "Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2"]
     end
     
     function execute_plot()
         println("Executing plot with:")
         println("  File Type: $(gui_state.filetype[])")
+        println("  BDF File: $(gui_state.bdf_filename[])")
         println("  Plot Type: $(gui_state.plottype[])")
         println("  Layout: $(gui_state.layout[])")
         println("  Electrodes: $(gui_state.electrodes[])")
@@ -374,6 +381,10 @@ function plot_my_data_gui()
         gui_state.condition[] = value
     end
     
+    on(bdf_filename_input.stored_string) do value
+        gui_state.bdf_filename[] = value
+    end
+    
     on(xmin_input.stored_string) do value
         try
             gui_state.xlim[] = (parse(Float64, value), gui_state.xlim[][2])
@@ -418,6 +429,7 @@ function plot_my_data_gui()
         electrode_menu.selection = 1
         participant_input.stored_string = ""
         condition_input.stored_string = ""
+        bdf_filename_input.stored_string = ""
         xmin_input.stored_string = ""
         xmax_input.stored_string = ""
         ymin_input.stored_string = ""
@@ -428,7 +440,6 @@ function plot_my_data_gui()
         baseline_start.stored_string = ""
         baseline_end.stored_string = ""
         baseline_type.selection = 1
-        bdf_filename_label.text = ""
         additional_label.text = ""
     end
     
