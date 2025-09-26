@@ -75,7 +75,9 @@ Apply rereferencing to EEG data types using predicate-based channel selection.
 """
 # helper function to handle special reference cases such as :avg and :mastoid
 function get_reference_channels(dat, reference_channel::Vector{Symbol})
-    if reference_channel[1] == :avg # all channels
+    if reference_channel[1] == :none
+        return Symbol[]  # No reference channels for :none
+    elseif reference_channel[1] == :avg # all channels
         return channel_labels(dat)
     elseif reference_channel[1] == :mastoid
         return [:M1, :M2]
@@ -95,6 +97,13 @@ function rereference!(
 )
 
     reference_channels = get_reference_channels(dat, reference_selection)
+    
+    # If no reference channels (e.g., :none), return early without rereferencing
+    if isempty(reference_channels)
+        @info "No rereferencing applied (reference: $(reference_selection))"
+        return
+    end
+    
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     # Verify reference channels exist in the data
