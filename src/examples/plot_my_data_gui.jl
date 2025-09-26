@@ -59,177 +59,166 @@ function plot_my_data_gui()
                             padding = (30, 30, 30, 30))
     
     # Column 1: File & Data Selection
-    col1_layout = GridLayout(main_layout[1, 1], 
-                            tellwidth = false, 
-                            rowgap = 15,
-                            colgap = 10)
-    
     # File Type Section
-    Label(col1_layout[1, 1], "File Type", fontsize = label_font, font = :bold)
+    Label(main_layout[1, 1], "File Type", fontsize = label_font, font = :bold)
     filetype_options = ["Select", "*.bdf", "*all.mat", "*pre.mat", "*ica.mat", "*avg.mat", "GA_avg.mat", "*lrp.mat", "GA_lrp.mat", "*tf.mat", "GA_tf.mat", "ERP Stats", "TF Stats"]
-    filetype_dropdown = Menu(col1_layout[2, 1], 
+    filetype_dropdown = Menu(main_layout[2, 1], 
                             options = filetype_options,
                             width = input_width,
                             height = input_height)
     
     # BDF File Name Section
-    Label(col1_layout[3, 1], "BDF File Name", fontsize = label_font, font = :bold)
-    bdf_filename_input = Textbox(col1_layout[4, 1], 
+    Label(main_layout[3, 1], "BDF File Name", fontsize = label_font, font = :bold)
+    bdf_filename_input = Textbox(main_layout[4, 1], 
                                 placeholder = "Enter BDF filename...",
                                 fontsize = slider_font,
                                 width = input_width,
                                 height = input_height)
     
     # Participant Section
-    Label(col1_layout[5, 1], "Participant", fontsize = label_font, font = :bold)
-    participant_input = Textbox(col1_layout[6, 1], 
+    Label(main_layout[5, 1], "Participant", fontsize = label_font, font = :bold)
+    participant_input = Textbox(main_layout[6, 1], 
                                placeholder = "Enter participant numbers...",
                                fontsize = slider_font,
                                width = input_width,
                                height = input_height)
     
     # Condition Section
-    Label(col1_layout[7, 1], "Condition", fontsize = label_font, font = :bold)
-    condition_input = Textbox(col1_layout[8, 1], 
+    Label(main_layout[7, 1], "Condition", fontsize = label_font, font = :bold)
+    condition_input = Textbox(main_layout[8, 1], 
                              placeholder = "Enter condition numbers...",
                              fontsize = slider_font,
                              width = input_width,
                              height = input_height)
     
     # Additional Inputs Button
-    additional_button = Button(col1_layout[9, 1], 
+    additional_button = Button(main_layout[9, 1], 
                               label = "Additional Inputs",
                               fontsize = button_font,
                               width = input_width,
                               height = input_height)
     
     # Additional Inputs Label
-    additional_label = Label(col1_layout[10, 1], "", 
+    additional_label = Label(main_layout[10, 1], "", 
                             fontsize = slider_font,
                             width = input_width,
                             height = input_height)
     
     # Column 2: Plot Configuration
-    col2_layout = GridLayout(main_layout[1, 2], 
-                            tellwidth = false, 
-                            rowgap = 15,
-                            colgap = 10)
-    
     # Plot Type Section
-    Label(col2_layout[1, 1], "Plot Type", fontsize = label_font, font = :bold)
+    Label(main_layout[1, 2], "Plot Type", fontsize = label_font, font = :bold)
     plottype_options = ["Select", "Data Browser", "Data Browser (Python)", "Data Summary", "Electrode(s)", "ERP Image", "Multiplot (Grid)", "Multiplot (Topo)", "Topoplot", "Boxplot"]
-    plottype_dropdown = Menu(col2_layout[2, 1], 
+    plottype_dropdown = Menu(main_layout[2, 2], 
                             options = plottype_options,
                             width = input_width,
                             height = input_height)
     
     # Layout Section
-    Label(col2_layout[3, 1], "Layout", fontsize = label_font, font = :bold)
+    Label(main_layout[3, 2], "Layout", fontsize = label_font, font = :bold)
     layout_options = ["Select", "BioSemi72", "BioSemi70", "BioSemi68", "BioSemi66", "BioSemi64", "Custom"]
-    layout_dropdown = Menu(col2_layout[4, 1], 
+    layout_dropdown = Menu(main_layout[4, 2], 
                           options = layout_options,
                           width = input_width,
                           height = input_height)
     
     # Electrode Selection Section
-    Label(col2_layout[5, 1], "Electrode", fontsize = label_font, font = :bold)
-    electrode_menu = Menu(col2_layout[6, 1], 
+    Label(main_layout[5, 2], "Electrode", fontsize = label_font, font = :bold)
+    electrode_menu = Menu(main_layout[6, 2], 
                          options = ["Select"], 
                          width = input_width,
                          height = input_height)
     
     # Multi-select electrode info
-    electrode_info = Label(col2_layout[7, 1], "Use Ctrl+Click for multiple selection", 
+    electrode_info = Label(main_layout[7, 2], "Use Ctrl+Click for multiple selection", 
                           fontsize = slider_font,
                           color = :gray)
     
-    # Column 3: Settings Panel
-    col3_layout = GridLayout(main_layout[1, 3], 
-                            tellwidth = false, 
-                            rowgap = 20,
-                            colgap = 10)
-    
-    # Create a panel-like appearance for settings
-    settings_panel = GridLayout(col3_layout[1:14, 1], 
-                               tellwidth = false, 
-                               rowgap = 15,
-                               colgap = 10,
-                               color = :lightgray,
-                               cornerradius = 8,
-                               padding = (20, 20, 20, 20))
-    
-    # Settings Panel Title
-    Label(settings_panel[1, 1:2], "Settings", fontsize = label_font, font = :bold)
+    # Column 3: Settings
+    # Settings Title
+    Label(main_layout[1, 3], "Settings", fontsize = label_font, font = :bold)
     
     # X Limits Section
-    Label(settings_panel[2, 1:2], "X Limits", fontsize = slider_font, font = :bold)
-    xmin_input = Textbox(settings_panel[3, 1], 
+    Label(main_layout[2, 3], "X Limits", fontsize = slider_font, font = :bold)
+    x_limits_layout = GridLayout(main_layout[3, 3], 
+                                tellwidth = false, 
+                                colgap = 10)
+    xmin_input = Textbox(x_limits_layout[1, 1], 
                         placeholder = "min", 
                         fontsize = slider_font,
                         width = 90,
                         height = input_height)
-    xmax_input = Textbox(settings_panel[3, 2], 
+    xmax_input = Textbox(x_limits_layout[1, 2], 
                         placeholder = "max", 
                         fontsize = slider_font,
                         width = 90,
                         height = input_height)
     
     # X Topo Series
-    Label(settings_panel[4, 1:2], "X Topo Series", fontsize = slider_font, font = :bold)
-    xtopo_input = Textbox(settings_panel[5, 1:2], 
+    Label(main_layout[4, 3], "X Topo Series", fontsize = slider_font, font = :bold)
+    xtopo_input = Textbox(main_layout[5, 3], 
                          placeholder = "series", 
                          fontsize = slider_font,
                          width = input_width,
                          height = input_height)
     
     # Y Limits Section
-    Label(settings_panel[6, 1:2], "Y Limits", fontsize = slider_font, font = :bold)
-    ymin_input = Textbox(settings_panel[7, 1], 
+    Label(main_layout[6, 3], "Y Limits", fontsize = slider_font, font = :bold)
+    y_limits_layout = GridLayout(main_layout[7, 3], 
+                                tellwidth = false, 
+                                colgap = 10)
+    ymin_input = Textbox(y_limits_layout[1, 1], 
                         placeholder = "min", 
                         fontsize = slider_font,
                         width = 90,
                         height = input_height)
-    ymax_input = Textbox(settings_panel[7, 2], 
+    ymax_input = Textbox(y_limits_layout[1, 2], 
                         placeholder = "max", 
                         fontsize = slider_font,
                         width = 90,
                         height = input_height)
     
     # Z Limits Section
-    Label(settings_panel[8, 1:2], "Z Limits", fontsize = slider_font, font = :bold)
-    zmin_input = Textbox(settings_panel[9, 1], 
+    Label(main_layout[8, 3], "Z Limits", fontsize = slider_font, font = :bold)
+    z_limits_layout = GridLayout(main_layout[9, 3], 
+                                tellwidth = false, 
+                                colgap = 10)
+    zmin_input = Textbox(z_limits_layout[1, 1], 
                         placeholder = "min", 
                         fontsize = slider_font,
                         width = 90,
                         height = input_height)
-    zmax_input = Textbox(settings_panel[9, 2], 
+    zmax_input = Textbox(z_limits_layout[1, 2], 
                         placeholder = "max", 
                         fontsize = slider_font,
                         width = 90,
                         height = input_height)
     
     # Baseline Section
-    Label(settings_panel[10, 1:2], "Baseline", fontsize = slider_font, font = :bold)
-    baseline_start = Textbox(settings_panel[11, 1], 
+    Label(main_layout[10, 3], "Baseline", fontsize = slider_font, font = :bold)
+    baseline_layout = GridLayout(main_layout[11, 3], 
+                                tellwidth = false, 
+                                colgap = 10)
+    baseline_start = Textbox(baseline_layout[1, 1], 
                             placeholder = "start", 
                             fontsize = slider_font,
                             width = 90,
                             height = input_height)
-    baseline_end = Textbox(settings_panel[11, 2], 
+    baseline_end = Textbox(baseline_layout[1, 2], 
                           placeholder = "end", 
                           fontsize = slider_font,
                           width = 90,
                           height = input_height)
     
     # Baseline Type
-    Label(settings_panel[12, 1:2], "Baseline Type", fontsize = slider_font, font = :bold)
-    baseline_type = Menu(settings_panel[13, 1:2], 
+    Label(main_layout[12, 3], "Baseline Type", fontsize = slider_font, font = :bold)
+    baseline_type = Menu(main_layout[13, 3], 
                         options = ["Select", "absolute", "relative", "relchange", "perchange", "db"],
                         width = input_width,
                         height = input_height)
     
     # Action Buttons Section - Outside the settings panel
-    button_layout = GridLayout(col3_layout[25:28, 1], 
+    # Create a button layout for the third column
+    button_layout = GridLayout(main_layout[15:17, 3], 
                               tellwidth = false, 
                               colgap = 15,
                               rowgap = 20)
@@ -265,7 +254,7 @@ function plot_my_data_gui()
                         label = "PLOT",
                         fontsize = title_font,
                         buttoncolor = :lightblue,
-                        width = 255,  # 120 + 15 + 120
+                        width = 255,
                         height = 50)
     
     # Data structure to store GUI state
