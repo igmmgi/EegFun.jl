@@ -11,21 +11,7 @@ using eegfun
 using GLMakie
 # eegfupn.signal_example_1()
 # eegfun.signal_example_2()
-eegfun.plot_my_data_gui()
-
-
-# using GLMakie, NativeFileDialog
-# fig = Figure(size=(200, 200), backgroundcolor=RGBf(0.7, 0.8, 1))
-# btn_RUN  = Button(fig, label = " Open file... ")
-# on(btn_RUN.clicks) do c;
-#     @async begin 
-#         filename = fetch(Threads.@spawn pick_file(""))
-#         println(filename)
-#     end
-# end
-# fig
-
-
+eegfun.plot_gui()
 
 # using CairoMakie
 # using BenchmarkTools
