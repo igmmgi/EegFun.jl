@@ -46,7 +46,7 @@ eegfun.plot_my_data_gui()
 function plot_gui()
 
     # Create the main figure
-    fig = Figure(size = (900, 600), title = "Plot GUI", backgroundcolor = :white)
+    fig = Figure(size = (700, 800), title = "Plot GUI", backgroundcolor = :white)
 
     # Try and make sizing adaptive?
     function setup_adaptive_sizing(fig)
@@ -70,7 +70,7 @@ function plot_gui()
     ui_style = setup_adaptive_sizing(fig)
 
     # Create main layout with proper 3-column structure
-    main_layout = GridLayout(fig[1, 1:3], colgap = 5, rowgap = 5, padding = (50, 50, 50, 50))
+    main_layout = GridLayout(fig[1, 1:3], colgap = 10, rowgap = 10)
 
     # Column 1: File & Data Selection
     # File Type Section
@@ -265,7 +265,7 @@ function plot_gui()
 
     # Action Buttons Section - Outside the settings panel
     # Create a button layout for the third column
-    button_layout = GridLayout(main_layout[15:17, 3], tellwidth = false, colgap = 15, rowgap = 20)
+    button_layout = GridLayout(main_layout[12:14, 3], tellwidth = false, colgap = 15, rowgap = 10)
 
     # First row of buttons
     examples_button = Button(
@@ -515,9 +515,17 @@ function plot_gui()
     end
 
     # Connect callbacks
-    on(filetype_dropdown.selection, update_filetype)
-    on(plottype_dropdown.selection, update_plottype)
-    on(layout_dropdown.selection, update_layout)
+    on(filetype_dropdown.selection) do selection
+        update_filetype(selection)
+    end
+
+    on(plottype_dropdown.selection) do selection
+        update_plottype(selection)
+    end
+
+    on(layout_dropdown.selection) do selection
+        update_layout(selection)
+    end
     
     on(electrode_menu.selection) do selection
         gui_state.electrodes[] = [selection]
