@@ -112,7 +112,61 @@ function find_file(filename::String, search_dir::String;
     return nothing
 end
 
+"""
+    _filter_files(files::Vector{String}; include::Union{Vector{Int}, Int, Nothing} = nothing, 
+                  exclude::Union{Vector{Int}, Int, Nothing} = nothing) -> Vector{String}
 
+Filter files by participant number extracted from filename.
+
+# Arguments
+- `files::Vector{String}`: List of filenames to filter
+- `include::Union{Vector{Int}, Int, Nothing}`: Participant number(s) to include (default: nothing = all)
+- `exclude::Union{Vector{Int}, Int, Nothing}`: Participant number(s) to exclude (default: nothing = none)
+
+# Returns
+- `Vector{String}`: Filtered list of files matching the criteria
+
+# Note
+Assumes filename format like "Flank_C_3_epochs_cleaned.jld2" where participant number is the first numeric part.
+"""
+function _filter_files(files::Vector{String}; 
+                      include::Union{Vector{Int}, Int, Nothing} = nothing, 
+                      exclude::Union{Vector{Int}, Int, Nothing} = nothing)
+    
+    # Convert single values to vectors
+    include_nums = include isa Int ? [include] : include
+    exclude_nums = exclude isa Int ? [exclude] : exclude
+    
+    return filter(files) do file
+        # Extract participant number from filename (assuming format like "Flank_C_3_epochs_cleaned.jld2")
+        parts = split(file, "_")
+        file_participant = nothing
+        
+        for part in parts
+            if !isempty(part) && isdigit(part[1])  # First character is a digit
+                file_participant = parse(Int, part)
+                break
+            end
+        end
+        
+        # If no participant number found, include the file unless explicitly excluded
+        if file_participant === nothing
+            return exclude_nums === nothing || !(nothing in exclude_nums)
+        end
+        
+        # Apply include filter
+        if include_nums !== nothing && !(file_participant in include_nums)
+            return false
+        end
+        
+        # Apply exclude filter
+        if exclude_nums !== nothing && file_participant in exclude_nums
+            return false
+        end
+        
+        return true
+    end
+end
 
 """
     check_files_exist(subjects::Union{Vector{Int}, Int}, conditions::Union{Vector{Int}, Int},, filetype::String) -> Bool
