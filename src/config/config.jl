@@ -97,7 +97,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.epoch_start"                  => number_param("Epoch start (seconds).", -1),
     "preprocess.epoch_end"                    => number_param("Epoch end (seconds).", 1),
     "preprocess.reference_channel"            => string_param("Channels(s) to use as reference", "avg"),
-    "preprocess.layout.neighbour_criterion"   => number_param("Distance criterion (in mm) for channel neighbour definition.", 40, 0),
+    "preprocess.layout.neighbour_criterion"   => number_param("Distance criterion (in mm) for channel neighbour definition.", 0.5, 0),
     "preprocess.eog.vEOG_channels"            => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]),
     "preprocess.eog.hEOG_channels"            => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
     "preprocess.eog.vEOG_criterion"           => number_param("Distance criterion for vertical EOG channel definition.", 50, 0),
@@ -370,7 +370,7 @@ function _show_specific_parameter(parameter_name)
         if !isempty(matching_params)
             _show_section_overview(parameter_name, matching_params)
         else
-            @warn "Parameter or section not found: $parameter_name"
+            @minimal_warning "Parameter or section not found: $parameter_name"
             @info "Use show_parameter_info() to see all available parameters and sections"
         end
     end

@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-08-25 12:05:26
+# Generated on 2025-09-29 10:40:22
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -276,5 +276,5 @@ vEOG_criterion = 50
 # Distance criterion (in mm) for channel neighbour definition.
 # Type: Real
 # Range: 0 ≤ value
-# Default: 40
-neighbour_criterion = 40
+# Default: 0.5
+neighbour_criterion = 0.5
