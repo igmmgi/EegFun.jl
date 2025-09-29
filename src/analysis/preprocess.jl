@@ -1,3 +1,4 @@
+
 """
     preprocess_eeg_data(config::String; log::Bool = true, global_log_file::String = "")
 
@@ -56,14 +57,10 @@ function preprocess_eeg_data(config::String)
         epoch_cfgs = parse_epoch_conditions(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
         @info "Epoch conditions loaded successfully"
 
-        # Check if electrode configuration file exists and load
-        layout_file = joinpath(@__DIR__, "..", "..", "data", "layouts", cfg["files"]["input"]["layout_file"])
-        if !isfile(layout_file)
-            # not default layout file so check if custom file specified
-            layout_file = cfg["files"]["input"]["layout_file"]
-            if !isfile(layout_file)
-                @minimal_error "Electrode configuration file does not exist: $layout_file"
-            end
+        # Find and load layout file
+        layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
+        if layout_file === nothing
+            @minimal_error "Electrode configuration file not found: $layout_name"
         end
         layout = read_layout(layout_file)
         @info "Electrode layout loaded from $layout_file"
@@ -165,6 +162,7 @@ function preprocess_eeg_data(config::String)
                 is_extreme_value!(
                     dat,
                     cfg["preprocess"]["eeg"]["extreme_value_criterion"],
+                    mode = :combined,
                     channel_out = Symbol(
                         "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
                     ),
@@ -277,6 +275,7 @@ function preprocess_eeg_data(config::String)
                 is_extreme_value!(
                     dat_cleaned,
                     cfg["preprocess"]["eeg"]["artifact_value_criterion"],
+                    mode = :combined,
                     channel_out = Symbol(
                         "is_artifact_value" * "_" * string(cfg["preprocess"]["eeg"]["artifact_value_criterion"]),
                     ),

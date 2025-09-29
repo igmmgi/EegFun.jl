@@ -96,6 +96,8 @@ eegfun.polar_to_cartesian_xy!(layout);
 eegfun.get_layout_neighbours_xy!(layout, 40);
 eegfun.polar_to_cartesian_xyz!(layout);
 eegfun.get_layout_neighbours_xyz!(layout, 40);
+
+
 # create our eeg ContinuousData type
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
@@ -966,3 +968,36 @@ fig, ax = eegfun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
 fig, ax = eegfun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
 fig, ax = eegfun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
 fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
+
+
+
+
+
+# manual testing
+using eegfun
+using GLMakie
+dat = eegfun.read_bdf("../Flank_C_3.bdf");
+layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+dat = eegfun.create_eeg_dataframe(dat, layout);
+eegfun.filter_data!(dat, "hp", 1)
+
+# is_extreme_value
+extreme_values = eegfun.is_extreme_value(dat, 10)
+extreme_values = eegfun.is_extreme_value(dat, 1000, mode = :separate)
+eegfun.is_extreme_value!(dat, 10)
+eegfun.is_extreme_value!(dat, 1000, mode = :separate)
+
+# n_extreme_values
+eegfun.n_extreme_value(dat, 10)
+eegfun.n_extreme_value(dat, 10, mode = :separate)
+
+layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+# define neighbours 2D/3D defined by distance (mm)
+eegfun.polar_to_cartesian_xy!(layout);
+eegfun.get_layout_neighbours_xy!(layout, 0.5);
+eegfun.polar_to_cartesian_xyz!(layout);
+eegfun.get_layout_neighbours_xyz!(layout, 0.5);
+
+eegfun.plot_layout_2d(layout)
+eegfun.plot_layout_2d(layout, neighbours = true)
+eegfun.plot_layout_3d(layout, neighbours = true)

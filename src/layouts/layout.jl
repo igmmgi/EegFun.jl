@@ -407,11 +407,11 @@ end
 """
     get_electrode_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
-Identifies the neighbours of each electrode based on their Cartesian coordinates.
+Identifies the neighbours of each electrode based on their normalized Cartesian coordinates.
 
 # Arguments
-- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, Cartesian coordinates (`x2`, `y2`).
-- `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours.
+- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, normalized Cartesian coordinates (`x2`, `y2`) in range [-1, 1].
+- `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours in normalized coordinates (e.g., 0.5 = 25% of head diameter).
 
 # Returns
 - `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
@@ -426,7 +426,7 @@ function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
     end
     _ensure_coordinates_2d!(layout)
 
-    @info "Calculating neighbours with distance criterion $distance_criterion mm"
+    @info "Calculating neighbours with distance criterion $distance_criterion (normalized coordinates)"
     # Precompute coordinates
     coords = Matrix{Float64}(undef, size(layout.data, 1), 2)
     coords[:, 1] = layout.data.x2
@@ -473,11 +473,11 @@ end
 """
     get_electrode_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
-Identifies the neighbours of each electrode based on their Cartesian coordinates.
+Identifies the neighbours of each electrode based on their normalized Cartesian coordinates.
 
 # Arguments
-- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, Cartesian coordinates (`x3`, `y3`, `z3`).
-- `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours.
+- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, normalized Cartesian coordinates (`x3`, `y3`, `z3`) in range [-1, 1].
+- `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours in normalized coordinates (e.g., 0.5 = 25% of head diameter).
 
 # Returns
 - `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
@@ -492,7 +492,7 @@ function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
     end
     _ensure_coordinates_3d!(layout)
 
-    @info "Calculating neighbours with distance criterion $distance_criterion mm"
+    @info "Calculating neighbours with distance criterion $distance_criterion (normalized coordinates)"
     # Precompute coordinates
     coords = Matrix{Float64}(undef, size(layout.data, 1), 3)
     coords[:, 1] = layout.data.x3
@@ -750,7 +750,7 @@ function _format_electrode(io, electrode, neighbours)
     n_neighbours = length(neighbours.electrodes)
     avg_distance = round(mean(neighbours.distances), digits = 1)
 
-    println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance)mm)")
+    println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance))")
     if n_neighbours > 0
         neighbour_details = []
         for j = 1:n_neighbours
