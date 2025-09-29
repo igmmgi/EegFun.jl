@@ -106,5 +106,6 @@ include("analysis/batch/combine_channels.jl")
 include("examples/signal_example_1.jl")
 include("examples/signal_example_2.jl")
 include("examples/plot_gui.jl")
+include("examples/simulate_erp.jl")
 
 end # module eegfun 
