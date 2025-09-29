@@ -92,6 +92,16 @@ include("plots/plot_topography.jl")
 include("plots/plot_triggers.jl")
 include("plots/plot_filter.jl")
 
+# Batch processing utilities
+include("analysis/batch/batch_utils.jl")
+include("analysis/batch/filter.jl")
+include("analysis/batch/rereference.jl")
+include("analysis/batch/combine_conditions.jl")
+include("analysis/batch/average_epochs.jl")
+include("analysis/batch/difference_conditions.jl")
+include("analysis/batch/grandaverage_participants.jl")
+include("analysis/batch/combine_channels.jl")
+
 # Examples
 include("examples/signal_example_1.jl")
 include("examples/signal_example_2.jl")
