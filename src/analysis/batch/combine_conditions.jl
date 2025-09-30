@@ -42,10 +42,8 @@ function combine_conditions(file_pattern::String, condition_groups::Vector{Vecto
     try
         @info "Batch condition combining started at $(now())"
         
-        # Log the function call generically
-        args = [file_pattern, condition_groups]
-        kwargs = [:input_dir => input_dir, :participants => participants, :output_dir => output_dir]
-        _log_function_call("combine_conditions", args, kwargs)
+        # Log the function call
+        @log_call "combine_conditions" (file_pattern, condition_groups)
         
         @info "File pattern: $file_pattern"
         @info "Input directory: $input_dir"

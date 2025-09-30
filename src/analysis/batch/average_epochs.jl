@@ -50,10 +50,8 @@ function average_epochs_data(file_pattern::String;
     try
         @info "Batch epoch averaging started at $(now())"
         
-        # Log the function call generically
-        args = [file_pattern]
-        kwargs = [:input_dir => input_dir, :participants => participants, :conditions => conditions, :output_dir => output_dir]
-        _log_function_call("average_epochs_data", args, kwargs)
+        # Log the function call
+        @log_call "average_epochs_data" (file_pattern,)
         
         @info "File pattern: $file_pattern"
         @info "Input directory: $input_dir"

@@ -53,10 +53,8 @@ function combine_channels_data(file_pattern::String, channel_groups::Vector{Vect
     try
         @info "Batch channel combining started at $(now())"
         
-        # Log the function call generically
-        args = [file_pattern, channel_groups]
-        kwargs = [:input_dir => input_dir, :participants => participants, :conditions => conditions, :output_dir => output_dir, :reduce => reduce]
-        _log_function_call("combine_channels_data", args, kwargs)
+        # Log the function call
+        @log_call "combine_channels_data" (file_pattern, channel_groups)
         
         @info "File pattern: $file_pattern"
         @info "Input directory: $input_dir"

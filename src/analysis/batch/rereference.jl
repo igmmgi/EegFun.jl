@@ -45,10 +45,8 @@ function rereference_data(file_pattern::String;
     try
         @info "Batch rereferencing started at $(now())"
         
-        # Log the function call generically
-        args = [file_pattern]
-        kwargs = [:input_dir => input_dir, :reference_type => reference_type, :participants => participants, :conditions => conditions, :output_dir => output_dir]
-        _log_function_call("rereference_data", args, kwargs)
+        # Log the function call
+        @log_call "rereference_data" (file_pattern,)
         
         @info "File pattern: $file_pattern"
         @info "Input directory: $input_dir"
