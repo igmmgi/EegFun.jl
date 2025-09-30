@@ -163,11 +163,9 @@ function combine_conditions(file_pattern::String, condition_groups::Vector{Vecto
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
                                       operation_name="Combining conditions")
         
-        # Log summary
         _log_batch_summary(results, output_dir)
         
     finally
-        # Cleanup logging
         _cleanup_logging(log_file, output_dir)
     end
 end

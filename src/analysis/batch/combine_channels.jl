@@ -157,11 +157,9 @@ function combine_channels(file_pattern::String, channel_selections::Vector{<:Fun
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
                                       operation_name="Combining channels")
         
-        # Log summary
         _log_batch_summary(results, output_dir)
         
     finally
-        # Cleanup logging
         _cleanup_logging(log_file, output_dir)
     end
 end

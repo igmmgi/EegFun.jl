@@ -237,7 +237,7 @@ extract_int("no_numbers_here")   # Returns: nothing
 ```
 """
 function extract_int(s::String)::Union{Int, Nothing}
-    digits_only = filter(isdigit, s)
+    digits_only = Base.filter(isdigit, s)
     return isempty(digits_only) ? nothing : parse(Int, digits_only)
 end
 
@@ -397,7 +397,7 @@ function parse_string_to_ints(text::String)
     end
 
     # Split by comma or semicolon and filter empty parts
-    parts = filter(!isempty, strip.(split(text, r"[,;]")))
+    parts = Base.filter(!isempty, strip.(split(text, r"[,;]")))
 
     # Filter non-numeric parts (except :) and warn
     numeric_parts = []

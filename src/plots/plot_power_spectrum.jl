@@ -200,7 +200,7 @@ function _plot_power_spectrum!(
     # Apply initial y-axis scale settings (after data is calculated)
     if y_scale == :log10
         # Calculate valid limits first
-        positive_powers = filter(x -> x > 0, vcat(power_data...))
+        positive_powers = Base.filter(x -> x > 0, vcat(power_data...))
         if isempty(positive_powers)
             log_min, log_max = 0.001, 1.0
         else
@@ -267,7 +267,7 @@ function _plot_power_spectrum!(
     function update_y_scale(scale)
         if scale == :log10
             # Calculate valid limits first
-            positive_powers = filter(x -> x > 0, vcat(power_data...))
+            positive_powers = Base.filter(x -> x > 0, vcat(power_data...))
             if isempty(positive_powers)
                 # Fallback: no positive values, use safe defaults
                 log_min = 0.001
