@@ -137,7 +137,7 @@ function _filter_files(files::Vector{String};
     include_nums = include isa Int ? [include] : include
     exclude_nums = exclude isa Int ? [exclude] : exclude
     
-    return filter(files) do file
+    return Base.filter(files) do file
         # Extract participant number from filename (assuming format like "Flank_C_3_epochs_cleaned.jld2")
         parts = split(file, "_")
         file_participant = nothing
