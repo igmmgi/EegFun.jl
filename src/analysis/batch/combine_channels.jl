@@ -1,189 +1,167 @@
 """
-    combine_channels_data(file_pattern::String, channel_groups::Vector{Vector{Symbol}}; 
-                         input_dir::String = pwd(), 
-                         participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                         conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                         output_dir::Union{String, Nothing} = nothing,
-                         reduce::Bool = false)
+Batch channel combining for EEG/ERP data.
+"""
 
-Batch process EEG data files to combine specified channels.
+#=============================================================================
+    COMBINE-CHANNELS-SPECIFIC HELPERS
+=============================================================================#
+
+"""Generate default output directory name for channel combining."""
+function _default_combine_channels_output_dir(input_dir::String, pattern::String)
+    joinpath(input_dir, "combined_channels_$(pattern)")
+end
+
+#=============================================================================
+    COMBINE-CHANNELS-SPECIFIC PROCESSING
+=============================================================================#
+
+"""
+Process a single file through channel combining pipeline.
+Returns BatchResult with success/failure info.
+"""
+function _process_combine_channels_file(filepath::String, output_path::String,
+                                       channel_selections::Vector{<:Function},
+                                       output_labels::Vector{Symbol},
+                                       conditions, reduce::Bool)
+    filename = basename(filepath)
+    
+    # Load data
+    data_result = _load_eeg_data(filepath)
+    if isnothing(data_result)
+        return BatchResult(false, filename, "No recognized data variable")
+    end
+    
+    data, var_name = data_result
+    
+    # Select conditions
+    data = _select_conditions(data, conditions)
+    
+    # Apply channel combination to each data item
+    foreach(data) do item
+        channel_average!(item, 
+                       channel_selections = channel_selections,
+                       output_labels = output_labels,
+                       reduce = reduce)
+    end
+    
+    # Save
+    save(output_path, var_name, data)
+    
+    n_groups = length(channel_selections)
+    return BatchResult(true, filename, "Combined $n_groups channel group(s)")
+end
+
+#=============================================================================
+    MAIN API FUNCTION
+=============================================================================#
+
+"""
+    combine_channels(file_pattern::String, channel_selections::Vector{Function}; 
+                    output_labels::Union{Vector{Symbol}, Nothing} = nothing,
+                    input_dir::String = pwd(), 
+                    participants::Union{Int, Vector{Int}, Nothing} = nothing,
+                    conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                    output_dir::Union{String, Nothing} = nothing,
+                    reduce::Bool = false)
+
+Batch process EEG data files to combine specified channels using predicates.
 
 This function loads JLD2 files containing EEG data, combines specified channel groups by averaging,
 and saves the resulting data with new combined channels to a new directory.
 
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned", "epochs_cleaned")
-- `channel_groups::Vector{Vector{Symbol}}`: Groups of channels to combine (e.g., `[[:Fp1, :Fp2], [:PO7, :PO8]]`)
+- `channel_selections::Vector{Function}`: Channel selection predicates (e.g., `[channels([:Fp1, :Fp2]), channels([:PO7, :PO8])]`)
+- `output_labels::Union{Vector{Symbol}, Nothing}`: Labels for combined channels (default: auto-generated from selection)
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
 - `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
 - `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 - `reduce::Bool`: Whether to keep only combined channels (true) or append to existing (false, default)
 
-# Returns
-- `Nothing`: Saves data with combined channels to output directory
-
 # Examples
 ```julia
-# Combine frontal and parietal channels
-combine_channels_data("erps_cleaned", [[:Fp1, :Fp2], [:PO7, :PO8]])
+# Combine frontal and parietal channels using predicates
+combine_channels("erps_cleaned", [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])])
+
+# With custom output labels
+combine_channels("erps_cleaned", 
+                [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])],
+                output_labels = [:frontal, :parietal])
 
 # Process specific participants and conditions
-combine_channels_data("erps_cleaned", [[:Fp1, :Fp2]], 
-                     input_dir = "/path/to/data", 
-                     participants = [1, 2, 3], 
-                     conditions = [1, 2])
+combine_channels("erps_cleaned", [channels([:Fp1, :Fp2])], 
+                input_dir = "/path/to/data", 
+                participants = [1, 2, 3], 
+                conditions = [1, 2])
 
 # Create reduced dataset with only combined channels
-combine_channels_data("erps_cleaned", [[:Fp1, :Fp2], [:PO7, :PO8]], 
-                     reduce = true)
+combine_channels("erps_cleaned", 
+                [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])], 
+                reduce = true)
 ```
 """
-function combine_channels_data(file_pattern::String, channel_groups::Vector{Vector{Symbol}}; 
+function combine_channels(file_pattern::String, channel_selections::Vector{<:Function}; 
+                              output_labels::Union{Vector{Symbol}, Nothing} = nothing, 
                               input_dir::String = pwd(), 
                               participants::Union{Int, Vector{Int}, Nothing} = nothing,
                               conditions::Union{Int, Vector{Int}, Nothing} = nothing,
                               output_dir::Union{String, Nothing} = nothing,
                               reduce::Bool = false)
     
-    # Set up global logging
-    log_file = "combine_channels_data.log"
+    # Setup logging
+    log_file = "combine_channels.log"
     setup_global_logging(log_file)
     
     try
         @info "Batch channel combining started at $(now())"
+        @log_call "combine_channels" (file_pattern, channel_selections)
         
-        # Log the function call
-        @log_call "combine_channels_data" (file_pattern, channel_groups)
-        
-        @info "File pattern: $file_pattern"
-        @info "Input directory: $input_dir"
-        @info "Channel groups: $channel_groups"
-        @info "Reduce mode: $reduce"
-        
-        # Validate inputs
-        if !isdir(input_dir)
-            @minimal_error_throw("Input directory does not exist: $input_dir")
+        # Validation (early return on error)
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
         end
         
-        if isempty(channel_groups)
-            @minimal_error_throw("Channel groups cannot be empty")
+        # Generate output labels if not provided
+        if isnothing(output_labels)
+            output_labels = [Symbol("combined_$i") for i in 1:length(channel_selections)]
         end
         
-        # Validate channel groups
-        for (i, group) in enumerate(channel_groups)
-            if isempty(group)
-                @minimal_error_throw("Channel group $i is empty")
-            end
-            if length(group) < 2
-                @minimal_warning "Channel group $i has only $(length(group)) channel(s): $group. Consider using more channels for meaningful averaging."
-            end
+        # Validate output labels length matches channel selections
+        if length(output_labels) != length(channel_selections)
+            @minimal_error_throw("Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))")
         end
         
-        # Create default output directory if not specified
-        if output_dir === nothing
-            groups_str = join([join(group, "_") for group in channel_groups], "_")
-            output_dir = joinpath(input_dir, "combined_channels_$(file_pattern)_$(groups_str)")
-        end
-        
-        # Create output directory if it doesn't exist
+        # Setup directories
+        output_dir = something(output_dir, _default_combine_channels_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
         
-        # Find JLD2 files matching the pattern
-        all_files = readdir(input_dir)
-        jld2_files = filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
+        # Find files
+        files = _find_batch_files(file_pattern, input_dir; participants)
         
-        # Filter by participant number if specified
-        if participants !== nothing
-            jld2_files = _filter_files(jld2_files; include = participants)
-        end
-        
-        if isempty(jld2_files)
+        if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            @info "Available files: $(filter(x -> endswith(x, ".jld2"), all_files))"
             return nothing
         end
         
-        @info "Found $(length(jld2_files)) JLD2 files matching pattern '$file_pattern'"
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+        @info "Channel selections: $(length(channel_selections)) group(s)"
+        @info "Output labels: $output_labels"
+        @info "Reduce mode: $reduce"
         
-        processed_count = 0
-        error_count = 0
+        # Create processing function with captured parameters
+        process_fn = (input_path, output_path) -> 
+            _process_combine_channels_file(input_path, output_path, channel_selections, output_labels, conditions, reduce)
         
-        for (i, file) in enumerate(jld2_files)
-            input_path = joinpath(input_dir, file)
-            output_path = joinpath(output_dir, file)
-            
-            @info("Processing: $file ($(i)/$(length(jld2_files)))")
-            
-            try
-                # Load the file and determine what data we have
-                file_data = load(input_path)
-                
-                # Check what type of data we have
-                possible_vars = ["erps", "epochs"]
-                data = nothing
-                var_name = nothing
-                
-                for var in possible_vars
-                    if haskey(file_data, var)
-                        data = file_data[var]
-                        var_name = var
-                        break
-                    end
-                end
-                
-                if data === nothing
-                    @minimal_warning "No recognized data variable found in $file. Available: $(keys(file_data))"
-                    continue
-                end
-                
-                # Filter by condition if specified
-                if conditions !== nothing
-                    condition_nums = conditions isa Int ? [conditions] : conditions
-                    # Filter data to only include specified conditions
-                    data = data[condition_nums]
-                    @info "  Filtering conditions: $condition_nums"
-                end
-                
-                # Combine channels for each data item
-                for (j, item) in enumerate(data)
-                    @info "  Combining channels $j/$(length(data))"
-                    
-                    # Create channel selection functions from groups
-                    channel_selections = [channels(group) for group in channel_groups]
-                    
-                    # Generate output labels (underscore-joined channel names)
-                    output_labels = [Symbol(join(group, "_")) for group in channel_groups]
-                    
-                    # Apply channel combination
-                    channel_average!(item, 
-                                   channel_selections = channel_selections,
-                                   output_labels = output_labels,
-                                   reduce = reduce)
-                end
-                
-                # Save data with combined channels
-                save(output_path, var_name, data)
-                
-                @info "  Saved: $output_path"
-                processed_count += 1
-                
-            catch e
-                @error "Error processing $file: $e"
-                error_count += 1
-                continue
-            end
-        end
+        # Execute batch operation
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
+                                      operation_name="Combining channels")
         
-        @info "Channel combining complete! Processed $processed_count files successfully, $error_count errors, output saved to: $output_dir"
+        # Log summary
+        _log_batch_summary(results, output_dir)
         
     finally
-        # Close global logging and move log file to output directory
-        close_global_logging()
-        log_source = "combine_channels_data.log"
-        log_dest = joinpath(output_dir, "combine_channels_data.log")
-        if log_source != log_dest
-            mv(log_source, log_dest, force = true)
-        end
+        # Cleanup logging
+        _cleanup_logging(log_file, output_dir)
     end
 end
