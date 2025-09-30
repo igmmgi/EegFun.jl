@@ -1,4 +1,87 @@
 """
+Batch combining of conditions for epoch data.
+"""
+
+#=============================================================================
+    COMBINE-CONDITIONS-SPECIFIC VALIDATION
+=============================================================================#
+
+"""Validate that file pattern is for epochs data."""
+function _validate_epochs_pattern_combine(pattern::String)
+    !contains(pattern, "epochs") && 
+        return "combine_conditions only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
+    return nothing
+end
+
+"""Generate default output directory name for condition combining."""
+function _default_combine_conditions_output_dir(input_dir::String, pattern::String, groups::Vector{Vector{Int}})
+    groups_str = join([join(group, "-") for group in groups], "_")
+    joinpath(input_dir, "combined_$(pattern)_$(groups_str)")
+end
+
+#=============================================================================
+    COMBINE-CONDITIONS-SPECIFIC PROCESSING
+=============================================================================#
+
+"""
+Process a single epochs file through condition combining pipeline.
+Returns BatchResult with success/failure info.
+"""
+function _process_combine_conditions_file(filepath::String, output_path::String,
+                                         condition_groups::Vector{Vector{Int}})
+    filename = basename(filepath)
+    
+    # Load data
+    file_data = load(filepath)
+    
+    if !haskey(file_data, "epochs")
+        return BatchResult(false, filename, "No 'epochs' variable found")
+    end
+    
+    data = file_data["epochs"]
+    max_condition = length(data)
+    
+    # Combine conditions for epochs
+    combined_data = Vector{Any}()
+    
+    for (group_idx, original_conditions) in enumerate(condition_groups)
+        # Validate that all requested conditions exist
+        missing_conditions = Base.filter(c -> c > max_condition || c < 1, original_conditions)
+        if !isempty(missing_conditions)
+            return BatchResult(false, filename, "Condition(s) $missing_conditions not found (only has 1-$max_condition)")
+        end
+        
+        # Get data for the specified conditions
+        condition_data = data[original_conditions]
+        
+        # For epochs: combine (concatenate) the conditions
+        # Each condition is an EpochData object, we need to concatenate their data fields
+        combined_data_frames = vcat([epoch_data.data for epoch_data in condition_data]...)
+        
+        # Create new EpochData with concatenated data, using metadata from first condition
+        combined_epochs = EpochData(
+            combined_data_frames,
+            condition_data[1].layout,
+            condition_data[1].sample_rate,
+            condition_data[1].analysis_info
+        )
+        
+        push!(combined_data, combined_epochs)
+    end
+    
+    # Save
+    save(output_path, "epochs", combined_data)
+    
+    n_groups = length(condition_groups)
+    total_epochs = sum(length(cond.data) for cond in combined_data)
+    return BatchResult(true, filename, "Combined into $n_groups group(s) with $total_epochs total epochs")
+end
+
+#=============================================================================
+    MAIN API FUNCTION
+=============================================================================#
+
+"""
     combine_conditions(file_pattern::String, condition_groups::Vector{Vector{Int}}; 
                       input_dir::String = pwd(), 
                       participants::Union{Int, Vector{Int}, Nothing} = nothing,
@@ -35,161 +118,56 @@ function combine_conditions(file_pattern::String, condition_groups::Vector{Vecto
                            participants::Union{Int, Vector{Int}, Nothing} = nothing,
                            output_dir::Union{String, Nothing} = nothing)
     
-    # Set up global logging
+    # Setup logging
     log_file = "combine_conditions.log"
     setup_global_logging(log_file)
     
     try
         @info "Batch condition combining started at $(now())"
-        
-        # Log the function call
         @log_call "combine_conditions" (file_pattern, condition_groups)
         
-        @info "File pattern: $file_pattern"
-        @info "Input directory: $input_dir"
-        @info "Condition groups: $condition_groups"
-        
-        # Validate inputs
-        if !isdir(input_dir)
-            @minimal_error_throw("Input directory does not exist: $input_dir")
+        # Validation (early return on error)
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
         end
         
-        if isempty(condition_groups)
-            @minimal_error_throw("Condition groups cannot be empty")
+        if (error_msg = _validate_epochs_pattern_combine(file_pattern)) !== nothing
+            @minimal_error_throw(error_msg)
         end
         
-        # Validate that file pattern contains "epochs"
-        if !contains(file_pattern, "epochs")
-            @minimal_error_throw("combine_conditions only works with epoch data. File pattern must contain 'epochs', got: '$file_pattern'")
+        # Validate and clean condition groups (modifies in-place)
+        if (error_msg = _validate_condition_groups(condition_groups)) !== nothing
+            @minimal_error_throw(error_msg)
         end
         
-        # Validate condition groups for duplicates and overlaps
-        all_conditions = Int[]
-        for (group_idx, group) in enumerate(condition_groups)
-            # Check for duplicates within the group
-            if length(group) != length(unique(group))
-                duplicates = group[findall(x -> count(==(x), group) > 1, group)]
-                @minimal_warning "Group $group_idx contains duplicate conditions: $duplicates. Only unique conditions will be used."
-            end
-            
-            # Remove duplicates and update the group
-            unique_group = unique(group)
-            if length(unique_group) != length(group)
-                @info "  Group $group_idx: $(group) → $(unique_group) (removed duplicates)"
-            end
-            condition_groups[group_idx] = unique_group
-            
-            # Check for overlaps between groups
-            overlap = intersect(all_conditions, unique_group)
-            if !isempty(overlap)
-                @minimal_warning "Condition(s) $overlap appear in multiple groups. This may not be intended."
-            end
-            
-            append!(all_conditions, unique_group)
-        end
-        
-        # Create default output directory if not specified
-        if output_dir === nothing
-            groups_str = join([join(group, "-") for group in condition_groups], "_")
-            output_dir = joinpath(input_dir, "combined_$(file_pattern)_$(groups_str)")
-        end
-        
-        # Create output directory if it doesn't exist
+        # Setup directories
+        output_dir = something(output_dir, _default_combine_conditions_output_dir(input_dir, file_pattern, condition_groups))
         mkpath(output_dir)
         
-        # Find JLD2 files matching the pattern
-        all_files = readdir(input_dir)
-        jld2_files = filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
+        # Find files
+        files = _find_batch_files(file_pattern, input_dir; participants)
         
-        # Filter by participant number if specified
-        if participants !== nothing
-            jld2_files = _filter_files(jld2_files; include = participants)
-        end
-        
-        if isempty(jld2_files)
+        if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            @info "Available files: $(filter(x -> endswith(x, ".jld2"), all_files))"
             return nothing
         end
         
-        @info "Found $(length(jld2_files)) JLD2 files matching pattern '$file_pattern'"
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+        @info "Condition groups: $condition_groups"
         
-        processed_count = 0
-        error_count = 0
+        # Create processing function with captured parameters
+        process_fn = (input_path, output_path) -> 
+            _process_combine_conditions_file(input_path, output_path, condition_groups)
         
-        for (i, file) in enumerate(jld2_files)
-            input_path = joinpath(input_dir, file)
-            output_path = joinpath(output_dir, file)
-            
-            @info("Processing: $file ($(i)/$(length(jld2_files)))")
-            
-            try
-                # Load epochs data
-                file_data = load(input_path)
-                
-                if !haskey(file_data, "epochs")
-                    @minimal_warning "No 'epochs' variable found in $file. Available: $(keys(file_data))"
-                    continue
-                end
-                
-                data = file_data["epochs"]
-                @info "  Found $(length(data)) conditions in data"
-                
-                # Combine conditions for epochs
-                combined_data = Vector{Any}()
-                
-                for (group_idx, original_conditions) in enumerate(condition_groups)
-                    @info "  Creating condition group $group_idx from conditions $original_conditions"
-                    
-                    # Validate that all requested conditions exist
-                    max_condition = length(data)
-                    missing_conditions = filter(c -> c > max_condition || c < 1, original_conditions)
-                    if !isempty(missing_conditions)
-                        @error "  Condition(s) $missing_conditions not found in data (only has conditions 1-$max_condition)"
-                        continue
-                    end
-                    
-                    # Get data for the specified conditions
-                    condition_data = data[original_conditions]
-                    
-                    # For epochs: combine (concatenate) the conditions
-                    # Each condition is an EpochData object, we need to concatenate their data fields
-                    combined_data_frames = vcat([epoch_data.data for epoch_data in condition_data]...)
-                    
-                    # Create new EpochData with concatenated data, using metadata from first condition
-                    combined_epochs = EpochData(
-                        combined_data_frames,
-                        condition_data[1].layout,
-                        condition_data[1].sample_rate,
-                        condition_data[1].analysis_info
-                    )
-                    
-                    push!(combined_data, combined_epochs)
-                    @info "    Combined $(length(condition_data)) conditions into $(length(combined_data_frames)) epochs"
-                end
-                
-                # Save combined data
-                save(output_path, "epochs", combined_data)
-                
-                @info "  Saved: $output_path"
-                processed_count += 1
-                
-            catch e
-                @error "Error processing $file: $e"
-                error_count += 1
-                continue
-            end
-        end
+        # Execute batch operation
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
+                                      operation_name="Combining conditions")
         
-        @info "Condition combining complete! Processed $processed_count files successfully, $error_count errors, output saved to: $output_dir"
+        # Log summary
+        _log_batch_summary(results, output_dir)
         
     finally
-        # Close global logging and move log file to output directory
-        close_global_logging()
-        log_source = "combine_conditions.log"
-        log_dest = joinpath(output_dir, "combine_conditions.log")
-        if log_source != log_dest
-            mv(log_source, log_dest, force = true)
-        end
+        # Cleanup logging
+        _cleanup_logging(log_file, output_dir)
     end
 end

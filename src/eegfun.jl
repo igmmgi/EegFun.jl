@@ -93,7 +93,7 @@ include("plots/plot_triggers.jl")
 include("plots/plot_filter.jl")
 
 # Batch processing utilities
-include("analysis/batch/batch_utils.jl")
+include("analysis/batch/utils.jl")
 include("analysis/batch/filter.jl")
 include("analysis/batch/rereference.jl")
 include("analysis/batch/combine_conditions.jl")
@@ -102,6 +102,7 @@ include("analysis/batch/difference_conditions.jl")
 include("analysis/batch/grandaverage.jl")
 include("analysis/batch/combine_channels.jl")
 include("analysis/batch/erp_measurements.jl")
+include("analysis/batch/channel_summary.jl")
 
 # Examples
 include("examples/signal_example_1.jl")

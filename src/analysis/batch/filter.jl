@@ -1,4 +1,61 @@
 """
+Batch filtering for EEG/ERP data.
+"""
+
+#=============================================================================
+    FILTER-SPECIFIC VALIDATION
+=============================================================================#
+
+"""Validate filter-specific parameters, returning error message or nothing."""
+function _validate_filter_params(cutoff_freq::Real, filter_type::String)
+    cutoff_freq <= 0 && return "Cutoff frequency must be positive, got: $cutoff_freq"
+    filter_type ∉ ["lp", "hp"] && return "Filter type must be one of: lp, hp, got: $filter_type"
+    return nothing
+end
+
+"""Generate default output directory name for filter operation."""
+function _default_filter_output_dir(input_dir::String, pattern::String, filter_type::String, freq::Real)
+    joinpath(input_dir, "filtered_$(pattern)_$(filter_type)_$(freq)hz")
+end
+
+#=============================================================================
+    FILTER-SPECIFIC PROCESSING
+=============================================================================#
+
+"""
+Process a single file through filtering pipeline.
+Returns BatchResult with success/failure info.
+"""
+function _process_filter_file(filepath::String, output_path::String, 
+                             filter_type::String, cutoff_freq::Real,
+                             conditions)
+    filename = basename(filepath)
+    
+    # Load data
+    data_result = _load_eeg_data(filepath)
+    if isnothing(data_result)
+        return BatchResult(false, filename, "No recognized data variable")
+    end
+    
+    data, var_name = data_result
+    
+    # Select conditions
+    data = _select_conditions(data, conditions)
+    
+    # Apply filter (mutates data in-place)
+    filter_data!.(data, filter_type, cutoff_freq)
+    
+    # Save
+    save(output_path, var_name, data)
+    
+    return BatchResult(true, filename, "Filtered successfully")
+end
+
+#=============================================================================
+    MAIN API FUNCTION
+=============================================================================#
+
+"""
     filter(file_pattern::String, cutoff_freq::Real; 
            input_dir::String = pwd(), 
            filter_type::String = "lp", 
@@ -12,7 +69,7 @@ Filter EEG/ERP data from JLD2 files and save to a new directory.
 - `file_pattern::String`: Pattern to match files ("epochs", "erps", "cleaned", "original", or custom)
 - `cutoff_freq::Real`: Cutoff frequency in Hz
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `filter_type::String`: Type of filter ("lp", "hp", "bp", "bs")
+- `filter_type::String`: Type of filter ("lp", "hp")
 - `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
 - `conditions::Union{Int, Vector{Int}, Nothing}`: Condition number(s) to process (default: all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on filter settings)
@@ -27,137 +84,55 @@ filter("epochs", 30.0, participants=3)
 
 # Filter specific participants and conditions
 filter("epochs", 30.0, participants=[3, 4], conditions=[1, 2])
-
-# Filter specific directory with participant and condition
-filter("epochs", 30.0, input_dir="/path/to/input/", participants=3, conditions=1)
 ```
 """
 function filter(file_pattern::String, cutoff_freq::Real; 
-                    input_dir::String = pwd(), 
-                    filter_type::String = "lp", 
-                    participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                    conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                    output_dir::Union{String, Nothing} = nothing)
+                input_dir::String = pwd(), 
+                filter_type::String = "lp", 
+                participants::Union{Int, Vector{Int}, Nothing} = nothing,
+                conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                output_dir::Union{String, Nothing} = nothing)
     
-    # Set up global logging
+    # Setup logging
     log_file = "filter_data.log"
     setup_global_logging(log_file)
     
     try
         @info "Batch filtering started at $(now())"
-        
-        # Log the function call
         @log_call "filter" (file_pattern, cutoff_freq)
         
-        @info "File pattern: $file_pattern"
-        @info "Input directory: $input_dir"
-        @info "Filter type: $filter_type, Cutoff frequency: $cutoff_freq Hz"
-        
-        # Validate inputs
-    if !isdir(input_dir)
-        @minimal_error_throw("Input directory does not exist: $input_dir")
-    end
-    
-    if cutoff_freq <= 0
-        @minimal_error_throw("Cutoff frequency must be positive, got: $cutoff_freq")
-    end
-    
-    if filter_type ∉ ["lp", "hp"]
-        @minimal_error_throw("Filter type must be one of: lp, hp, got: $filter_type")
-    end
-    
-    # Create default output directory if not specified
-    if output_dir === nothing
-        output_dir = joinpath(input_dir, "filtered_$(file_pattern)_$(filter_type)_$(cutoff_freq)hz")
-    end
-    
-    # Create output directory if it doesn't exist
-    mkpath(output_dir)
-    
-    # Find JLD2 files matching the pattern
-    all_files = readdir(input_dir)
-    jld2_files = Base.filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
-    
-    # Filter by participant number if specified
-    if participants !== nothing
-        jld2_files = _filter_files(jld2_files; include = participants)
-    end
-    
-    if isempty(jld2_files)
-        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-        @info "Available files: $(filter(x -> endswith(x, ".jld2"), all_files))"
-        return nothing
-    end
-    
-    @info "Found $(length(jld2_files)) JLD2 files matching pattern '$file_pattern'"
-    @info "Filter settings: $filter_type filter, cutoff: $cutoff_freq Hz"
-    
-    processed_count = 0
-    error_count = 0
-    
-    for (i, file) in enumerate(jld2_files)
-        input_path = joinpath(input_dir, file)
-        output_path = joinpath(output_dir, file)
-        
-        @info("Processing: $file ($(i)/$(length(jld2_files)))")
-        
-        try
-            # Define possible variable names to try
-            possible_vars = ["erps", "epochs"]
-            file_data = load(input_path)
-
-            data = nothing
-            var_name = nothing
-
-            for var in possible_vars
-                if haskey(file_data, var)
-                    data = file_data[var]
-                    var_name = var
-                    break
-                end
-            end
-
-            if data === nothing
-                @minimal_warning "No recognized data variable found in $file. Available: $(keys(file_data))"
-                continue
-            end
-            
-            # Filter by condition if specified
-            if conditions !== nothing
-                condition_nums = conditions isa Int ? [conditions] : conditions
-                # Filter data to only include specified conditions
-                data = data[condition_nums]
-                @info "  Filtering conditions: $condition_nums"
-            end
-            
-            # Apply filter to each item
-            for (i, item) in enumerate(data)
-                @info "  Filtering $var_name $i/$(length(data))"
-                filter_data!(item, filter_type, cutoff_freq)
-            end
-            
-            # Save filtered data
-            save(output_path, var_name, data)
-            
-            @info "  Saved: $output_path"
-            processed_count += 1
-            
-        catch e
-            @error "Error processing $file: $e"
-            error_count += 1
-            continue
+        # Validation 
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
         end
-    end
-    
-        @info "Filtering complete! Processed $processed_count files successfully, $error_count errors, output saved to: $output_dir"
+        if (error_msg = _validate_filter_params(cutoff_freq, filter_type)) !== nothing
+            @minimal_error_throw(error_msg)
+        end
+        
+        # Setup directories
+        output_dir = something(output_dir, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
+        mkpath(output_dir)
+        
+        # Find files
+        files = _find_batch_files(file_pattern, input_dir; participants)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+
+        # Create processing function with captured parameters
+        @info "Filter settings: $filter_type filter, cutoff: $cutoff_freq Hz"
+        process_fn = (input_path, output_path) -> 
+            _process_filter_file(input_path, output_path, filter_type, cutoff_freq, conditions)
+        
+        # Execute batch operation
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name="Filtering")
+        
+        # Log summary
+        _log_batch_summary(results, output_dir)
         
     finally
-        # Close global logging and move log file to output directory
-        close_global_logging()
-        log_source = "filter_data.log"
-        log_dest = joinpath(output_dir, "filter_data.log")
-        if log_source != log_dest
-            mv(log_source, log_dest, force = true)
-        end
+        _cleanup_logging(log_file, output_dir)
     end
 end

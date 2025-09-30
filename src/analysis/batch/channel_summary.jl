@@ -1,4 +1,75 @@
 """
+Batch channel summary statistics for EEG/ERP data.
+"""
+
+#=============================================================================
+    CHANNEL-SUMMARY-SPECIFIC HELPERS
+=============================================================================#
+
+"""Generate default output directory name for channel summary."""
+function _default_channel_summary_output_dir(input_dir::String)
+    timestamp = Dates.format(now(), "yyyy-mm-dd_HHMMSS")
+    joinpath(input_dir, "channel_summary_$(timestamp)")
+end
+
+#=============================================================================
+    CHANNEL-SUMMARY-SPECIFIC PROCESSING
+=============================================================================#
+
+"""
+Process a single file through channel summary pipeline.
+Returns BatchResult with success/failure info.
+Saves individual CSV files for each condition.
+"""
+function _process_channel_summary_file(filepath::String, output_dir::String,
+                                     conditions, sample_selection::Function,
+                                     channel_selection::Function, include_extra::Bool,
+                                     output_file::String)
+    filename = basename(filepath)
+    
+    # Load data
+    data_result = _load_eeg_data(filepath)
+    if isnothing(data_result)
+        return BatchResult(false, filename, "No recognized data variable")
+    end
+    
+    data_var, var_name = data_result
+    
+    # Select conditions
+    data_var = _select_conditions(data_var, conditions)
+    
+    # Process each condition
+    n_conditions = 0
+    for (cond_idx, data) in enumerate(data_var)
+        condition = isnothing(conditions) ? cond_idx : 
+                   (conditions isa Int ? conditions : conditions[cond_idx])
+        
+        # Compute channel summary
+        summary_df = eegfun.channel_summary(data; 
+                                           sample_selection = sample_selection,
+                                           channel_selection = channel_selection,
+                                           include_extra = include_extra)
+        
+        # Add metadata columns
+        insertcols!(summary_df, 1, :file => splitext(filename)[1])
+        insertcols!(summary_df, 2, :condition => condition)
+        
+        # Save to CSV
+        output_filename = "$(splitext(filename)[1])_condition$(condition)_$(output_file).csv"
+        output_path = joinpath(output_dir, output_filename)
+        CSV.write(output_path, summary_df)
+        
+        n_conditions += 1
+    end
+    
+    return BatchResult(true, filename, "Processed $n_conditions condition(s)")
+end
+
+#=============================================================================
+    MAIN API FUNCTION
+=============================================================================#
+
+"""
     channel_summary(file_pattern::String; 
                     input_dir::String = pwd(), 
                     participants::Union{Int, Vector{Int}, Nothing} = nothing,
@@ -25,9 +96,6 @@ and saves the results to CSV files.
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 - `output_file::String`: Base name for output files (default: "channel_summary")
 
-# Returns
-- `Nothing`: Saves channel summary statistics to CSV files in output directory
-
 # Examples
 ```julia
 # Compute channel summary for all epoch files
@@ -53,120 +121,49 @@ function channel_summary(file_pattern::String;
                         output_dir::Union{String, Nothing} = nothing,
                         output_file::String = "channel_summary")
     
-    # Set up global logging
+    # Setup logging
     log_file = "$(output_file).log"
     setup_global_logging(log_file)
     
     try
         @info "Batch channel summary started at $(now())"
-        
-        # Log the function call
         @log_call "channel_summary" (file_pattern,)
         
-        @info "File pattern: $file_pattern"
-        @info "Input directory: $input_dir"
-        
-        # Validate inputs
-        if !isdir(input_dir)
-            @minimal_error_throw("Input directory does not exist: $input_dir")
+        # Validation (early return on error)
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
         end
         
-        # Create default output directory if not specified
-        if output_dir === nothing
-            timestamp = Dates.format(now(), "yyyy-mm-dd_HHMMSS")
-            output_dir = joinpath(input_dir, "channel_summary_$(timestamp)")
-        end
-        
-        # Create output directory if it doesn't exist
+        # Setup directories
+        output_dir = something(output_dir, _default_channel_summary_output_dir(input_dir))
         mkpath(output_dir)
         
-        # Find JLD2 files matching the pattern
-        all_files = readdir(input_dir)
-        jld2_files = Base.filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
+        # Find files
+        files = _find_batch_files(file_pattern, input_dir; participants)
         
-        # Filter by participant number if specified
-        if participants !== nothing
-            jld2_files = _filter_files(jld2_files; include = participants)
-        end
-        
-        if isempty(jld2_files)
-            @minimal_warning "No JLD2 files found matching pattern \"$file_pattern\" in $input_dir"
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
         
-        @info "Found $(length(jld2_files)) JLD2 files to process"
+        @info "Found $(length(files)) JLD2 files to process"
         
-        processed_count = 0
-        error_count = 0
+        # Create processing function with captured parameters
+        process_fn = (input_path, output_path) -> 
+            _process_channel_summary_file(input_path, output_dir, conditions, 
+                                        sample_selection, channel_selection, 
+                                        include_extra, output_file)
         
-        for (file_idx, file) in enumerate(jld2_files)
-            input_path = joinpath(input_dir, file)
-            
-            @info "Processing: $file ($(file_idx)/$(length(jld2_files)))"
-            
-            try
-                # Load the file
-                file_data = load(input_path)
-                
-                # Determine data type
-                data_var = nothing
-                if haskey(file_data, "erps")
-                    data_var = file_data["erps"]
-                elseif haskey(file_data, "epochs")
-                    data_var = file_data["epochs"]
-                else
-                    @minimal_warning "No recognized data variable in $file"
-                    error_count += 1
-                    continue
-                end
-                
-                # Filter by condition if specified
-                if conditions !== nothing
-                    condition_nums = conditions isa Int ? [conditions] : conditions
-                    data_var = data_var[condition_nums]
-                end
-                
-                # Process each condition
-                for (cond_idx, data) in enumerate(data_var)
-                    condition = conditions !== nothing ? conditions[cond_idx] : cond_idx
-                    
-                    @info "  Processing condition $condition"
-                    
-                    # Compute channel summary
-                    summary_df = eegfun.channel_summary(data; 
-                                                       sample_selection = sample_selection,
-                                                       channel_selection = channel_selection,
-                                                       include_extra = include_extra)
-                    
-                    # Add metadata columns
-                    insertcols!(summary_df, 1, :file => splitext(file)[1])
-                    insertcols!(summary_df, 2, :condition => condition)
-                    
-                    # Save to CSV
-                    output_filename = "$(splitext(file)[1])_condition$(condition)_$(output_file).csv"
-                    output_path = joinpath(output_dir, output_filename)
-                    CSV.write(output_path, summary_df)
-                    
-                    @info "  Saved: $output_filename"
-                end
-                
-                processed_count += 1
-                
-            catch e
-                @error "Error processing $file: $e"
-                @error "Stack trace: $(stacktrace(catch_backtrace()))"
-                error_count += 1
-                continue
-            end
-        end
+        # Note: output_path not actually used, we save per-condition files
+        # Execute batch operation
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
+                                      operation_name="Channel summary")
         
-        @info "Batch channel summary complete!"
-        @info "Processed $processed_count files successfully, $error_count errors"
-        @info "Results saved to: $output_dir"
+        # Log summary
+        _log_batch_summary(results, output_dir)
         
     finally
-        close(global_logger())
+        # Cleanup logging
+        _cleanup_logging(log_file, output_dir)
     end
-    
-    return nothing
 end

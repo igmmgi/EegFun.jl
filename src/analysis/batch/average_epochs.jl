@@ -1,5 +1,61 @@
 """
-    average_epochs_data(file_pattern::String; 
+Batch averaging of epoch data to create ERPs.
+"""
+
+#=============================================================================
+    AVERAGE-SPECIFIC VALIDATION
+=============================================================================#
+
+"""Validate that file pattern is for epochs data."""
+function _validate_epochs_pattern(pattern::String)
+    !contains(pattern, "epochs") && 
+        return "average_epochs only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
+    return nothing
+end
+
+"""Generate default output directory name for averaging operation."""
+function _default_average_output_dir(input_dir::String, pattern::String)
+    joinpath(input_dir, "averaged_$(pattern)")
+end
+
+#=============================================================================
+    AVERAGE-SPECIFIC PROCESSING
+=============================================================================#
+
+"""
+Process a single epochs file through averaging pipeline.
+Returns BatchResult with success/failure info.
+"""
+function _process_average_file(filepath::String, output_path::String, conditions)
+    filename = basename(filepath)
+    
+    # Load data
+    file_data = load(filepath)
+    
+    if !haskey(file_data, "epochs")
+        return BatchResult(false, filename, "No 'epochs' variable found")
+    end
+    
+    epochs_data = file_data["epochs"]
+    
+    # Select conditions
+    epochs_data = _select_conditions(epochs_data, conditions)
+    
+    # Average epochs for each condition
+    erps_data = average_epochs.(epochs_data)
+    
+    # Save
+    save(output_path, "erps", erps_data)
+    
+    return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")
+end
+
+#=============================================================================
+    MAIN API FUNCTION
+=============================================================================#
+
+"""
+    average_epochs(file_pattern::String; 
                        input_dir::String = pwd(), 
                        participants::Union{Int, Vector{Int}, Nothing} = nothing,
                        conditions::Union{Int, Vector{Int}, Nothing} = nothing,
@@ -17,140 +73,71 @@ and saves the resulting ERP data to a new directory.
 - `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 
-# Returns
-- `Nothing`: Saves averaged ERP data to output directory
-
 # Examples
 ```julia
 # Average all epoch files in current directory
-average_epochs_data("epochs_cleaned")
+average_epochs("epochs_cleaned")
 
 # Process specific participants and conditions
-average_epochs_data("epochs_cleaned", 
-                   input_dir = "/path/to/data", 
-                   participants = [1, 2, 3], 
-                   conditions = [1, 2])
+average_epochs("epochs_cleaned", 
+              input_dir = "/path/to/data", 
+              participants = [1, 2, 3], 
+              conditions = [1, 2])
 
 # Specify custom output directory
-average_epochs_data("epochs_cleaned", 
+average_epochs("epochs_cleaned", 
                    input_dir = "/path/to/data", 
                    output_dir = "/path/to/output")
 ```
 """
-function average_epochs_data(file_pattern::String; 
-                            input_dir::String = pwd(), 
-                            participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                            conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                            output_dir::Union{String, Nothing} = nothing)
+function average_epochs(file_pattern::String; 
+                       input_dir::String = pwd(), 
+                       participants::Union{Int, Vector{Int}, Nothing} = nothing,
+                       conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                       output_dir::Union{String, Nothing} = nothing)
     
-    # Set up global logging
-    log_file = "average_epochs_data.log"
+    # Setup logging
+    log_file = "average_epochs.log"
     setup_global_logging(log_file)
     
     try
         @info "Batch epoch averaging started at $(now())"
+        @log_call "average_epochs" (file_pattern,)
         
-        # Log the function call
-        @log_call "average_epochs_data" (file_pattern,)
-        
-        @info "File pattern: $file_pattern"
-        @info "Input directory: $input_dir"
-        
-        # Validate inputs
-        if !isdir(input_dir)
-            @minimal_error_throw("Input directory does not exist: $input_dir")
+        # Validation (early return on error)
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
         end
         
-        # Validate that file pattern contains "epochs"
-        if !contains(file_pattern, "epochs")
-            @minimal_error_throw("average_epochs_data only works with epoch data. File pattern must contain 'epochs', got: '$file_pattern'")
+        if (error_msg = _validate_epochs_pattern(file_pattern)) !== nothing
+            @minimal_error_throw(error_msg)
         end
         
-        # Create default output directory if not specified
-        if output_dir === nothing
-            output_dir = joinpath(input_dir, "averaged_$(file_pattern)")
-        end
-        
-        # Create output directory if it doesn't exist
+        # Setup directories
+        output_dir = something(output_dir, _default_average_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
         
-        # Find JLD2 files matching the pattern
-        all_files = readdir(input_dir)
-        jld2_files = filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
+        # Find files
+        files = _find_batch_files(file_pattern, input_dir; participants)
         
-        # Filter by participant number if specified
-        if participants !== nothing
-            jld2_files = _filter_files(jld2_files; include = participants)
-        end
-        
-        if isempty(jld2_files)
+        if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            @info "Available files: $(filter(x -> endswith(x, ".jld2"), all_files))"
             return nothing
         end
         
-        @info "Found $(length(jld2_files)) JLD2 files matching pattern '$file_pattern'"
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
         
-        processed_count = 0
-        error_count = 0
+        # Create processing function with captured parameters
+        process_fn = (input_path, output_path) -> 
+            _process_average_file(input_path, output_path, conditions)
         
-        for (i, file) in enumerate(jld2_files)
-            input_path = joinpath(input_dir, file)
-            output_path = joinpath(output_dir, file)
-            
-            @info("Processing: $file ($(i)/$(length(jld2_files)))")
-            
-            try
-                # Load the file and determine what data we have
-                file_data = load(input_path)
-                
-                # Check what type of data we have
-                if haskey(file_data, "epochs")
-                    epochs_data = file_data["epochs"]
-                    var_name = "epochs"
-                else
-                    @minimal_warning "No 'epochs' variable found in $file. Available: $(keys(file_data))"
-                    continue
-                end
-                
-                # Filter by condition if specified
-                if conditions !== nothing
-                    condition_nums = conditions isa Int ? [conditions] : conditions
-                    # Filter data to only include specified conditions
-                    epochs_data = epochs_data[condition_nums]
-                    @info "  Filtering conditions: $condition_nums"
-                end
-                
-                # Average epochs for each condition
-                erps_data = EegData[]
-                for (i, epoch_data) in enumerate(epochs_data)
-                    @info "  Averaging epochs $i/$(length(epochs_data))"
-                    erp_data = average_epochs(epoch_data)
-                    push!(erps_data, erp_data)
-                end
-                
-                # Save averaged data
-                save(output_path, "erps", erps_data)
-                
-                @info "  Saved: $output_path"
-                processed_count += 1
-                
-            catch e
-                @error "Error processing $file: $e"
-                error_count += 1
-                continue
-            end
-        end
+        # Execute batch operation
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name="Averaging")
         
-        @info "Epoch averaging complete! Processed $processed_count files successfully, $error_count errors, output saved to: $output_dir"
+        # Log summary
+        _log_batch_summary(results, output_dir)
         
     finally
-        # Close global logging and move log file to output directory
-        close_global_logging()
-        log_source = "average_epochs_data.log"
-        log_dest = joinpath(output_dir, "average_epochs_data.log")
-        if log_source != log_dest
-            mv(log_source, log_dest, force = true)
-        end
+        _cleanup_logging(log_file, output_dir)
     end
 end
