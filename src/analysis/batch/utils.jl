@@ -79,6 +79,7 @@ Returns filtered data or original if `conditions` is `nothing`.
 """
 function _select_conditions(data, conditions)
     isnothing(conditions) && return data
+    isempty(data) && return data
     condition_nums = conditions isa Int ? [conditions] : conditions
     return data[condition_nums]
 end
