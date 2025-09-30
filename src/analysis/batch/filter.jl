@@ -94,7 +94,7 @@ function filter(file_pattern::String, cutoff_freq::Real;
                 output_dir::Union{String, Nothing} = nothing)
     
     # Setup logging
-    log_file = "filter_data.log"
+    log_file = "filter.log"
     setup_global_logging(log_file)
     
     try
