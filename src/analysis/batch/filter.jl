@@ -1,10 +1,10 @@
 """
-    filter_data(file_pattern::String, cutoff_freq::Real; 
-                input_dir::String = pwd(), 
-                filter_type::String = "lp", 
-                participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                output_dir::Union{String, Nothing} = nothing)
+    filter(file_pattern::String, cutoff_freq::Real; 
+           input_dir::String = pwd(), 
+           filter_type::String = "lp", 
+           participants::Union{Int, Vector{Int}, Nothing} = nothing,
+           conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+           output_dir::Union{String, Nothing} = nothing)
 
 Filter EEG/ERP data from JLD2 files and save to a new directory.
 
@@ -20,19 +20,19 @@ Filter EEG/ERP data from JLD2 files and save to a new directory.
 # Example
 ```julia
 # Filter all epochs at 30 Hz
-filter_data("epochs", 30.0)
+filter("epochs", 30.0)
 
 # Filter specific participant
-filter_data("epochs", 30.0, participants=3)
+filter("epochs", 30.0, participants=3)
 
 # Filter specific participants and conditions
-filter_data("epochs", 30.0, participants=[3, 4], conditions=[1, 2])
+filter("epochs", 30.0, participants=[3, 4], conditions=[1, 2])
 
 # Filter specific directory with participant and condition
-filter_data("epochs", 30.0, input_dir="/path/to/input/", participants=3, conditions=1)
+filter("epochs", 30.0, input_dir="/path/to/input/", participants=3, conditions=1)
 ```
 """
-function filter_data(file_pattern::String, cutoff_freq::Real; 
+function filter(file_pattern::String, cutoff_freq::Real; 
                     input_dir::String = pwd(), 
                     filter_type::String = "lp", 
                     participants::Union{Int, Vector{Int}, Nothing} = nothing,
@@ -46,10 +46,8 @@ function filter_data(file_pattern::String, cutoff_freq::Real;
     try
         @info "Batch filtering started at $(now())"
         
-        # Log the function call generically
-        args = [file_pattern, cutoff_freq]
-        kwargs = [:input_dir => input_dir, :filter_type => filter_type, :participants => participants, :conditions => conditions, :output_dir => output_dir]
-        _log_function_call("filter_data", args, kwargs)
+        # Log the function call
+        @log_call "filter" (file_pattern, cutoff_freq)
         
         @info "File pattern: $file_pattern"
         @info "Input directory: $input_dir"
@@ -78,7 +76,7 @@ function filter_data(file_pattern::String, cutoff_freq::Real;
     
     # Find JLD2 files matching the pattern
     all_files = readdir(input_dir)
-    jld2_files = filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
+    jld2_files = Base.filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
     
     # Filter by participant number if specified
     if participants !== nothing

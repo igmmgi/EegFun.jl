@@ -1,9 +1,9 @@
 """
-    grandaverage_participants_data(file_pattern::String; 
-                                  input_dir::String = pwd(), 
-                                  participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                                  conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                                  output_dir::Union{String, Nothing} = nothing)
+    grandaverage(file_pattern::String; 
+                 input_dir::String = pwd(), 
+                 participants::Union{Int, Vector{Int}, Nothing} = nothing,
+                 conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                 output_dir::Union{String, Nothing} = nothing)
 
 Batch process ERP data files to create grand averages across participants.
 
@@ -23,7 +23,7 @@ and creates grand averages by averaging the EEG channel data across participants
 # Examples
 ```julia
 # Grand average all ERP files in current directory
-grandaverage_participants_data("erps_cleaned")
+grandaverage("erps_cleaned")
 
 # Process specific participants and conditions
 grandaverage_participants_data("erps_cleaned", 
@@ -37,23 +37,21 @@ grandaverage_participants_data("erps_cleaned",
                               output_dir = "/path/to/output")
 ```
 """
-function grandaverage_participants_data(file_pattern::String; 
-                                       input_dir::String = pwd(), 
-                                       participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                                       conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                                       output_dir::Union{String, Nothing} = nothing)
+function grandaverage(file_pattern::String; 
+                      input_dir::String = pwd(), 
+                      participants::Union{Int, Vector{Int}, Nothing} = nothing,
+                      conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                      output_dir::Union{String, Nothing} = nothing)
     
     # Set up global logging
-    log_file = "grandaverage_participants_data.log"
+    log_file = "grandaverage.log"
     setup_global_logging(log_file)
     
     try
         @info "Batch grand averaging started at $(now())"
         
-        # Log the function call generically
-        args = [file_pattern]
-        kwargs = [:input_dir => input_dir, :participants => participants, :conditions => conditions, :output_dir => output_dir]
-        _log_function_call("grandaverage_participants_data", args, kwargs)
+        # Log the function call
+        @log_call "grandaverage" (file_pattern,)
         
         @info "File pattern: $file_pattern"
         @info "Input directory: $input_dir"
@@ -78,7 +76,7 @@ function grandaverage_participants_data(file_pattern::String;
         
         # Find JLD2 files matching the pattern
         all_files = readdir(input_dir)
-        jld2_files = filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
+        jld2_files = Base.filter(x -> endswith(x, ".jld2") && contains(x, file_pattern), all_files)
         
         # Filter by participant number if specified
         if participants !== nothing
@@ -87,7 +85,7 @@ function grandaverage_participants_data(file_pattern::String;
         
         if isempty(jld2_files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            @info "Available files: $(filter(x -> endswith(x, ".jld2"), all_files))"
+            @info "Available files: $(Base.filter(x -> endswith(x, ".jld2"), all_files))"
             return nothing
         end
         
@@ -124,7 +122,8 @@ function grandaverage_participants_data(file_pattern::String;
                 
                 # Group ERPs by condition
                 for erp in erps_data
-                    cond_num = condition_number(erp)
+                    # For ErpData, condition is stored in the DataFrame
+                    cond_num = hasproperty(erp.data, :condition) ? erp.data[1, :condition] : 1
                     if !haskey(all_erps_by_condition, cond_num)
                         all_erps_by_condition[cond_num] = ErpData[]
                     end
@@ -178,8 +177,8 @@ function grandaverage_participants_data(file_pattern::String;
     finally
         # Close global logging and move log file to output directory
         close_global_logging()
-        log_source = "grandaverage_participants_data.log"
-        log_dest = joinpath(output_dir, "grandaverage_participants_data.log")
+        log_source = "grandaverage.log"
+        log_dest = joinpath(output_dir, "grandaverage.log")
         if log_source != log_dest
             mv(log_source, log_dest, force = true)
         end
@@ -224,10 +223,11 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     # Average EEG channels across participants
     for ch in eeg_channels
         # Collect data from all participants for this channel
-        channel_data = [erp.data[!, ch] for erp in erps]
+        # Stack as columns: n_timepoints x n_participants
+        channel_matrix = hcat([erp.data[!, ch] for erp in erps]...)
         
         # Average across participants (mean of each time point)
-        grand_avg_data[!, ch] = mean(channel_data, dims=1)[:]
+        grand_avg_data[!, ch] = vec(mean(channel_matrix, dims=2))
     end
     
     # Calculate total number of epochs across all participants

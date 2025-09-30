@@ -47,10 +47,8 @@ function difference_conditions_data(file_pattern::String, condition_pairs::Vecto
     try
         @info "Batch condition differencing started at $(now())"
         
-        # Log the function call generically
-        args = [file_pattern, condition_pairs]
-        kwargs = [:input_dir => input_dir, :participants => participants, :output_dir => output_dir]
-        _log_function_call("difference_conditions_data", args, kwargs)
+        # Log the function call
+        @log_call "difference_conditions_data" (file_pattern, condition_pairs)
         
         @info "File pattern: $file_pattern"
         @info "Input directory: $input_dir"

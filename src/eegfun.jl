@@ -99,8 +99,9 @@ include("analysis/batch/rereference.jl")
 include("analysis/batch/combine_conditions.jl")
 include("analysis/batch/average_epochs.jl")
 include("analysis/batch/difference_conditions.jl")
-include("analysis/batch/grandaverage_participants.jl")
+include("analysis/batch/grandaverage.jl")
 include("analysis/batch/combine_channels.jl")
+include("analysis/batch/erp_measurements.jl")
 
 # Examples
 include("examples/signal_example_1.jl")
