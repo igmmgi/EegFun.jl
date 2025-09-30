@@ -129,7 +129,6 @@ function filter(file_pattern::String, cutoff_freq::Real;
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name="Filtering")
         
-        # Log summary
         _log_batch_summary(results, output_dir)
         
     finally

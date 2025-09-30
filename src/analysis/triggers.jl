@@ -104,7 +104,7 @@ function _trigger_count_impl(
 )
     # Get unique non-zero trigger values from all datasets
     all_triggers = vcat(trigger_datasets...)
-    non_zero_triggers = sort(unique(filter(x -> x != 0, all_triggers)))
+    non_zero_triggers = sort(unique(Base.filter(x -> x != 0, all_triggers)))
 
     if isempty(non_zero_triggers)
         if print_table

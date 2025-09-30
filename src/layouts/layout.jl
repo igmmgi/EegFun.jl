@@ -872,7 +872,7 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
     
     # Check for duplicates in final names
     if length(final_names) != length(unique(final_names))
-        duplicate_names = filter(x -> count(==(x), final_names) > 1, unique(final_names))
+        duplicate_names = Base.filter(x -> count(==(x), final_names) > 1, unique(final_names))
         @minimal_error_throw "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
     end
     
@@ -982,7 +982,7 @@ function subset_layout!(layout::Layout; channel_selection = channels())
     selected_channels = get_selected_channels(layout, channel_selection)
 
     # Filter the layout data to keep only selected channels
-    layout.data = filter(:label => in(selected_channels), layout.data)
+    layout.data = DataFrames.filter(:label => in(selected_channels), layout.data)
 
     # Clear any cached neighbour information since channels have changed
     if has_neighbours(layout)

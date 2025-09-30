@@ -627,7 +627,7 @@ function _calculate_topo_levels(
 
     # Find local min/max, ignoring NaNs
     local_min, local_max = -1.0, 1.0
-    valid_values = filter(!isnan, data)
+    valid_values = Base.filter(!isnan, data)
     if !isempty(valid_values)
         local_min = minimum(valid_values)
         local_max = maximum(valid_values)
@@ -1389,7 +1389,7 @@ function _calculate_ica_topo_levels(
     global_max = nothing,
 )
     if use_global_scale # Find global min/max across all data 
-        valid_data = filter(!isnan, vcat(all_data...))
+        valid_data = Base.filter(!isnan, vcat(all_data...))
         if !isempty(valid_data)
             actual_min, actual_max = extrema(valid_data)
             # Use provided min/max if given, otherwise use actual min/max
@@ -2079,7 +2079,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     max_hr = 120  # Default maximum heart rate
     if !isempty(ecg_df) && any(.!isnan.(ecg_df.heart_rate_bpm))
         # Use the actual range from identified components
-        valid_hrs = filter(!isnan, ecg_df.heart_rate_bpm)
+        valid_hrs = Base.filter(!isnan, ecg_df.heart_rate_bpm)
         if !isempty(valid_hrs)
             min_hr = floor(Int, minimum(valid_hrs))
             max_hr = ceil(Int, maximum(valid_hrs))

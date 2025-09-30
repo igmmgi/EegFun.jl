@@ -156,18 +156,49 @@ function _process_measurements_file(filepath::String,
     for (cond_idx, data) in enumerate(data_var)
         condition = cond_idx
         
-        # Apply baseline correction if specified
-        if baseline_interval !== nothing
-            data = baseline(data, baseline_interval)
-        end
+        # Get metadata columns from the original data object
+        metadata_cols = meta_labels(data)
         
         # Get DataFrame(s) - ErpData has single df, EpochData has vector
-        dfs_to_process = data isa DataFrame ? [data] : (hasproperty(data, :data) ? data.data : [data.data])
+        dfs_to_process = if data isa DataFrame
+            [data]
+        elseif hasproperty(data, :data)
+            data.data isa Vector{DataFrame} ? data.data : [data.data]
+        else
+            [data.data]
+        end
+        
+        # Apply baseline correction if specified
+        if baseline_interval !== nothing
+            # Convert time interval to index interval
+            time_col = dfs_to_process[1][!, :time]
+            baseline_start_idx = findfirst(x -> x >= baseline_interval[1], time_col)
+            baseline_end_idx = findlast(x -> x <= baseline_interval[2], time_col)
+            
+            if isnothing(baseline_start_idx) || isnothing(baseline_end_idx)
+                @minimal_warning "Baseline interval $(baseline_interval) is outside data range. Skipping baseline correction."
+            else
+                # Get channel columns (exclude metadata)
+                all_channels = setdiff(propertynames(dfs_to_process[1]), metadata_cols)
+                # channels() returns a predicate that operates on a vector, not individual elements
+                eeg_channels = all_channels[channels()(all_channels)]
+                
+                if !isempty(eeg_channels)
+                    # Use existing baseline infrastructure from baseline.jl
+                    interval = IntervalIdx(baseline_start_idx, baseline_end_idx)
+                    @info "Applying baseline correction to $(length(eeg_channels)) channels over interval: $(baseline_start_idx) to $(baseline_end_idx)"
+                    _apply_baseline!(dfs_to_process, eeg_channels, interval)
+                else
+                    @minimal_warning "No EEG channels found for baseline correction"
+                end
+            end
+        end
         
         # Get selected channels from first df
         first_df = dfs_to_process[1]
-        all_channels = setdiff(propertynames(first_df), meta_labels(first_df))
-        selected_channels = Base.filter(channel_selection, all_channels)
+        all_channels = setdiff(propertynames(first_df), metadata_cols)
+        # Channel selection predicate operates on the entire vector
+        selected_channels = all_channels[channel_selection(all_channels)]
         
         # Check for condition_name and epoch columns once per condition (optimization #2)
         has_condition_name = hasproperty(first_df, :condition_name)
@@ -352,7 +383,6 @@ function erp_measurements(file_pattern::String,
         return results_df
         
     finally
-        # Cleanup logging
         _cleanup_logging(log_file, output_dir)
     end
 end

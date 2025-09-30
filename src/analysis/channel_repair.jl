@@ -319,7 +319,7 @@ function repair_channels_spherical_spline!(
 
     # Filter out any channels not found in the data
     valid_channels = channels[.!isnothing.(channel_indices)]
-    valid_indices = filter(x -> !isnothing(x), channel_indices)
+    valid_indices = Base.filter(x -> !isnothing(x), channel_indices)
 
     # Create the data matrix (channels × time points)
     data_matrix = Matrix(data.data[:, valid_indices])'

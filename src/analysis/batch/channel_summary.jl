@@ -7,9 +7,8 @@ Batch channel summary statistics for EEG/ERP data.
 =============================================================================#
 
 """Generate default output directory name for channel summary."""
-function _default_channel_summary_output_dir(input_dir::String)
-    timestamp = Dates.format(now(), "yyyy-mm-dd_HHMMSS")
-    joinpath(input_dir, "channel_summary_$(timestamp)")
+function _default_channel_summary_output_dir(input_dir::String, pattern::String)
+    joinpath(input_dir, "channel_summary_$(pattern)")
 end
 
 #=============================================================================
@@ -18,19 +17,17 @@ end
 
 """
 Process a single file through channel summary pipeline.
-Returns BatchResult with success/failure info.
-Saves individual CSV files for each condition.
+Returns tuple of (BatchResult, Vector{DataFrame}) with all condition results.
 """
-function _process_channel_summary_file(filepath::String, output_dir::String,
+function _process_channel_summary_file(filepath::String,
                                      conditions, sample_selection::Function,
-                                     channel_selection::Function, include_extra::Bool,
-                                     output_file::String)
+                                     channel_selection::Function, include_extra::Bool)
     filename = basename(filepath)
     
     # Load data
     data_result = _load_eeg_data(filepath)
     if isnothing(data_result)
-        return BatchResult(false, filename, "No recognized data variable")
+        return (BatchResult(false, filename, "No recognized data variable"), DataFrame[])
     end
     
     data_var, var_name = data_result
@@ -38,8 +35,8 @@ function _process_channel_summary_file(filepath::String, output_dir::String,
     # Select conditions
     data_var = _select_conditions(data_var, conditions)
     
-    # Process each condition
-    n_conditions = 0
+    # Process each condition and collect results
+    summary_dfs = DataFrame[]
     for (cond_idx, data) in enumerate(data_var)
         condition = isnothing(conditions) ? cond_idx : 
                    (conditions isa Int ? conditions : conditions[cond_idx])
@@ -54,15 +51,11 @@ function _process_channel_summary_file(filepath::String, output_dir::String,
         insertcols!(summary_df, 1, :file => splitext(filename)[1])
         insertcols!(summary_df, 2, :condition => condition)
         
-        # Save to CSV
-        output_filename = "$(splitext(filename)[1])_condition$(condition)_$(output_file).csv"
-        output_path = joinpath(output_dir, output_filename)
-        CSV.write(output_path, summary_df)
-        
-        n_conditions += 1
+        push!(summary_dfs, summary_df)
     end
     
-    return BatchResult(true, filename, "Processed $n_conditions condition(s)")
+    n_conditions = length(summary_dfs)
+    return (BatchResult(true, filename, "Processed $n_conditions condition(s)"), summary_dfs)
 end
 
 #=============================================================================
@@ -135,7 +128,7 @@ function channel_summary(file_pattern::String;
         end
         
         # Setup directories
-        output_dir = something(output_dir, _default_channel_summary_output_dir(input_dir))
+        output_dir = something(output_dir, _default_channel_summary_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
         
         # Find files
@@ -148,22 +141,50 @@ function channel_summary(file_pattern::String;
         
         @info "Found $(length(files)) JLD2 files to process"
         
-        # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> 
-            _process_channel_summary_file(input_path, output_dir, conditions, 
-                                        sample_selection, channel_selection, 
-                                        include_extra, output_file)
+        # Process all files and collect DataFrames
+        all_summaries = DataFrame[]
+        n_success = 0
+        n_error = 0
         
-        # Note: output_path not actually used, we save per-condition files
-        # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
-                                      operation_name="Channel summary")
+        for (i, file) in enumerate(files)
+            @info "Channel summary: $file ($i/$(length(files)))"
+            
+            input_path = joinpath(input_dir, file)
+            
+            result, summary_dfs = try
+                _process_channel_summary_file(input_path, conditions, 
+                                            sample_selection, channel_selection, 
+                                            include_extra)
+            catch e
+                @error "Error processing $file" exception=(e, catch_backtrace())
+                (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])
+            end
+            
+            # Log result
+            if result.success
+                @info "  ✓ $(result.message)"
+                append!(all_summaries, summary_dfs)
+                n_success += 1
+            else
+                @minimal_warning "  ✗ $(result.message)"
+                n_error += 1
+            end
+        end
         
-        # Log summary
-        _log_batch_summary(results, output_dir)
+        # Save combined results to single CSV
+        if !isempty(all_summaries)
+            combined_df = vcat(all_summaries...)
+            output_path = joinpath(output_dir, "$(output_file).csv")
+            CSV.write(output_path, combined_df)
+            @info "Combined results saved to: $output_path"
+        else
+            @minimal_warning "No results to save"
+        end
+        
+        @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
+        @info "Output saved to: $output_dir"
         
     finally
-        # Cleanup logging
         _cleanup_logging(log_file, output_dir)
     end
 end

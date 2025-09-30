@@ -40,7 +40,7 @@ end
 
 function get_files(directory::String, files::String)
     # replace common wildcard with regex syntax
-    files = filter(f -> occursin(Regex(files), f), readdir(directory))
+    files = Base.filter(f -> occursin(Regex(files), f), readdir(directory))
     return [joinpath(directory, file) for file in files]
 end
 
