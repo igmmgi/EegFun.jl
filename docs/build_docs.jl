@@ -1,25 +1,32 @@
 #!/usr/bin/env julia
 
 using Logging
+using Pkg
+
+# Load documentation packages from extras in temporary environment
+Pkg.activate(; temp=true)
+Pkg.add(["Documenter", "DocumenterTools", "JuliaFormatter"])
+
+# Now load the packages
+using Documenter
+using DocumenterTools
+using JuliaFormatter
 
 """
 Documentation Manager for eegfun
 
 This is a comprehensive documentation management tool that provides:
 - Building documentation with Documenter.jl
-- Link checking and validation
-- Spell checking
 - Documentation coverage analysis
+- Code formatting with JuliaFormatter
 - Cleanup and maintenance tasks
 - Interactive menu system
 
 Usage:
-    julia --project=. docs/doc_manager.jl [command] [options]
+    julia --project=. docs/build_docs.jl [command] [options]
 
 Commands:
     build                    - Build documentation
-    check-links              - Check for broken links
-    spell-check              - Check spelling in documentation
     coverage                 - Check documentation coverage
     clean                    - Clean build artifacts
     interactive              - Show interactive menu
@@ -28,17 +35,7 @@ Commands:
 If no command is provided, shows interactive menu.
 """
 
-using Pkg
 using Printf
-
-# Try to import Documenter, but don't fail if it's not available
-HAS_DOCUMENTER = false
-try
-    using Documenter
-    global HAS_DOCUMENTER = true
-catch
-    # Documenter not available
-end
 
 # Colors for output
 const RED = "\033[0;31m"
@@ -57,56 +54,17 @@ function print_header()
     println()
 end
 
-function check_project_directory()
-    if !isfile("Project.toml") && !isfile("../Project.toml")
-        print_colored(RED, "Error: Not in eegfun project directory")
-        println("Please run this script from the eegfun root directory or docs subdirectory")
-        exit(1)
-    end
-    
-    # If we're in the docs directory, change to root directory
-    if isfile("../Project.toml") && !isfile("Project.toml")
-        cd("..")
-        println("Changed to root directory")
-    end
+function get_project_root()
+    # The script is in docs/, so project root is one level up
+    return dirname(@__DIR__)
 end
 
-function check_documenter()
-    return HAS_DOCUMENTER
-end
 
-function install_documenter()
-    print_colored(YELLOW, "Installing Documenter.jl...")
+function build_documentation(project_root::String)
+
     try
-        Pkg.add("Documenter")
-        print_colored(GREEN, "✓ Documenter.jl installed successfully")
-        print_colored(YELLOW, "Please restart Julia and run the command again to use documentation features.")
-        return true
-    catch e
-        print_colored(RED, "✗ Error installing Documenter.jl: $e")
-        return false
-    end
-end
-
-function build_documentation()
-    print_colored(YELLOW, "Building documentation...")
-    
-    if !check_documenter()
-        print_colored(YELLOW, "Documenter.jl not found. Installing...")
-        if !install_documenter()
-            return false
-        end
-    end
-    
-    try
-        # Check if build.jl exists
-        if !isfile("docs/build.jl")
-            print_colored(RED, "Error: docs/build.jl not found")
-            println("Please create a build.jl file in the docs directory first")
-            return false
-        end
-        
         # Build documentation
+        build_jl_path = joinpath(project_root, "docs", "build.jl")
         print_colored(GREEN, "✓ Building documentation with Documenter.jl...")
         
         # Suppress warnings during build
@@ -115,7 +73,7 @@ function build_documentation()
             # Use a logger that only shows errors
             logger = ConsoleLogger(stderr, Logging.Error)
             global_logger(logger)
-            include(joinpath(pwd(), "docs", "build.jl"))
+            include(build_jl_path)
         finally
             # Restore original logger
             global_logger(old_logger)
@@ -132,77 +90,18 @@ function build_documentation()
 end
 
 
-function check_links()
-    print_colored(YELLOW, "Checking for broken links...")
-    
-    if !check_documenter()
-        print_colored(RED, "Documenter.jl not available. Please install it first.")
-        return false
-    end
-    
-    try
-        # This would require a more sophisticated implementation
-        # For now, just check if build directory exists
-        if isdir("docs/build")
-            print_colored(GREEN, "✓ Documentation build directory found")
-            println("Note: Full link checking requires Documenter.jl link checking features")
-        else
-            print_colored(YELLOW, "⚠ No build directory found. Run 'build' first.")
-        end
-        
-    catch e
-        print_colored(RED, "✗ Error checking links: $e")
-        return false
-    end
-    
-    println()
-    return true
-end
 
-function spell_check()
-    print_colored(YELLOW, "Checking spelling in documentation...")
-    
-    # Find all markdown files in docs
-    markdown_files = String[]
-    if isdir("docs")
-        for (root, dirs, files) in walkdir("docs")
-            for file in files
-                if endswith(file, ".md")
-                    push!(markdown_files, joinpath(root, file))
-                end
-            end
-        end
-    end
-    
-    if isempty(markdown_files)
-        print_colored(YELLOW, "No markdown files found in docs directory")
-        return true
-    end
-    
-    println("Found $(length(markdown_files)) markdown file(s):")
-    for file in markdown_files
-        println("  - $file")
-    end
-    
-    # Basic spell checking (this is a simplified version)
-    print_colored(GREEN, "✓ Basic file check completed")
-    println("Note: For comprehensive spell checking, consider using external tools like aspell or hunspell")
-    
-    println()
-    return true
-end
 
-function check_doc_coverage()
+function check_doc_coverage(project_root::String; skip_build_check::Bool = false)
     print_colored(YELLOW, "Checking documentation coverage...")
-    
-    if !check_documenter()
-        print_colored(RED, "Documenter.jl not available. Please install it first.")
-        return false
-    end
     
     try
         # Check for basic documentation files
-        doc_files = ["docs/src/index.md", "docs/src/api.md", "docs/build.jl"]
+        doc_files = [
+            joinpath(project_root, "docs", "src", "index.md"),
+            joinpath(project_root, "docs", "src", "api.md"),
+            joinpath(project_root, "docs", "build.jl")
+        ]
         missing_files = []
         
         for file in doc_files
@@ -219,10 +118,13 @@ function check_doc_coverage()
             return false
         end
         
-        # Check if documentation has been built
-        if !isdir("docs/build")
-            print_colored(YELLOW, "⚠ Documentation not built yet. Run 'build' first.")
-            return true
+        # Check if documentation has been built (only if not skipping)
+        if !skip_build_check
+            build_dir = joinpath(project_root, "docs", "build")
+            if !isdir(build_dir)
+                print_colored(YELLOW, "⚠ Documentation not built yet. Run 'build' first.")
+                return true
+            end
         end
         
         # Analyze source code documentation (docstrings)
@@ -230,8 +132,9 @@ function check_doc_coverage()
         println("=" ^ 50)
         
         # Find all Julia source files
+        src_dir = joinpath(project_root, "src")
         source_files = String[]
-        for (root, dirs, files) in walkdir("src")
+        for (root, dirs, files) in walkdir(src_dir)
             for file in files
                 if endswith(file, ".jl")
                     push!(source_files, joinpath(root, file))
@@ -345,23 +248,25 @@ function check_doc_coverage()
     return true
 end
 
-function clean_docs()
+function clean_docs(project_root::String)
     print_colored(YELLOW, "Cleaning documentation build artifacts...")
     
     # Clean build directory
-    if isdir("docs/build")
-        rm("docs/build", recursive=true)
+    build_dir = joinpath(project_root, "docs", "build")
+    if isdir(build_dir)
+        rm(build_dir, recursive=true)
         print_colored(GREEN, "✓ Removed docs/build directory")
     else
         print_colored(YELLOW, "No build directory found")
     end
     
     # Clean other common build artifacts
-    artifacts = ["docs/site", "docs/.documenter", "docs/Manifest.toml"]
+    artifacts = ["site", ".documenter", "Manifest.toml"]
     for artifact in artifacts
-        if isdir(artifact) || isfile(artifact)
-            rm(artifact, recursive=true)
-            print_colored(GREEN, "✓ Removed $artifact")
+        artifact_path = joinpath(project_root, "docs", artifact)
+        if isdir(artifact_path) || isfile(artifact_path)
+            rm(artifact_path, recursive=true)
+            print_colored(GREEN, "✓ Removed docs/$artifact")
         end
     end
     
@@ -369,176 +274,123 @@ function clean_docs()
     println()
 end
 
-function create_build_jl()
-    print_colored(YELLOW, "Creating basic build.jl file...")
-    
-    build_jl_content = """
-using Documenter
-using eegfun
 
-# Setup
-makedocs(
-    sitename = "eegfun",
-    format = Documenter.HTML(
-        prettyurls = get(ENV, "CI", "false") == "true",
-        canonical = "https://yourusername.github.io/eegfun.jl",
-        assets = String[],
-    ),
-    pages = [
-        "Home" => "index.md",
-        "API Reference" => "api.md",
-    ],
-    modules = [eegfun],
-    authors = "Your Name <your.email@example.com>",
-    repo = "https://github.com/yourusername/eegfun.jl",
-)
 
-# Deploy
-deploydocs(
-    repo = "github.com/yourusername/eegfun.jl",
-    devbranch = "main",
-)
-"""
-    
+function format_source_files(project_root::String)
+    print_colored(YELLOW, "Formatting Julia source files...")
+
     try
-        write("docs/build.jl", build_jl_content)
-        print_colored(GREEN, "✓ Created docs/build.jl")
-        println("Please edit the file to customize for your project")
+        # Find all Julia files in src directory
+        src_dir = joinpath(project_root, "src")
+        julia_files = String[]
+        for (root, dirs, files) in walkdir(src_dir)
+            for file in files
+                if endswith(file, ".jl")
+                    push!(julia_files, joinpath(root, file))
+                end
+            end
+        end
+
+        if isempty(julia_files)
+            print_colored(YELLOW, "No Julia files found in src directory")
+            return true
+        end
+
+        println("Found $(length(julia_files)) Julia file(s) to format:")
+        for file in julia_files
+            println("  - $file")
+        end
+
+        # Format files
+        formatted_count = 0
+        for file in julia_files
+            try
+                JuliaFormatter.format_file(file)
+                formatted_count += 1
+            catch e
+                print_colored(RED, "✗ Error formatting $file: $e")
+            end
+        end
+
+        print_colored(GREEN, "✓ Successfully formatted $formatted_count/$(length(julia_files)) file(s)")
+
+        # Also format test files
+        test_dir = joinpath(project_root, "test")
+        test_files = String[]
+        for (root, dirs, files) in walkdir(test_dir)
+            for file in files
+                if endswith(file, ".jl") && !endswith(file, ".cov")
+                    push!(test_files, joinpath(root, file))
+                end
+            end
+        end
+
+        if !isempty(test_files)
+            println("\nFormatting $(length(test_files)) test file(s)...")
+            for file in test_files
+                try
+                    JuliaFormatter.format_file(file)
+                catch e
+                    print_colored(RED, "✗ Error formatting $file: $e")
+                end
+            end
+        end
+
     catch e
-        print_colored(RED, "✗ Error creating build.jl: $e")
+        print_colored(RED, "✗ Error during formatting: $e")
         return false
     end
-    
+
     println()
     return true
 end
 
-function create_index_md()
-    print_colored(YELLOW, "Creating basic index.md file...")
-    
-    index_content = """
-# eegfun
+function format_and_check(project_root::String)
+    print_colored(YELLOW, "Formatting and checking Julia files...")
 
-A Julia package for EEG data analysis.
-
-## Installation
-
-```julia
-using Pkg
-Pkg.add("eegfun")
-```
-
-## Quick Start
-
-```julia
-using eegfun
-
-# Your example code here
-```
-
-## Documentation
-
-See the [API Reference](api.md) for detailed documentation.
-"""
-    
-    try
-        write("docs/index.md", index_content)
-        print_colored(GREEN, "✓ Created docs/index.md")
-        println("Please edit the file to customize for your project")
-    catch e
-        print_colored(RED, "✗ Error creating index.md: $e")
+    if !format_source_files(project_root)
         return false
     end
-    
+
+    # Run a quick syntax check
+    print_colored(YELLOW, "Running syntax check...")
+    try
+        Pkg.precompile()
+        print_colored(GREEN, "✓ Syntax check passed")
+    catch e
+        print_colored(RED, "✗ Syntax check failed: $e")
+        return false
+    end
+
+    print_colored(GREEN, "✓ Formatting and syntax check completed")
     println()
     return true
 end
 
-function create_api_md()
-    print_colored(YELLOW, "Creating basic api.md file...")
-    
-    api_content = """
-# API Reference
 
-## Main Functions
 
-```@docs
-eegfun.load_data
-eegfun.process_data
-```
 
-## Utilities
-
-```@docs
-eegfun.helper_function
-```
-"""
-    
-    try
-        write("docs/api.md", api_content)
-        print_colored(GREEN, "✓ Created docs/api.md")
-        println("Please edit the file to customize for your project")
-    catch e
-        print_colored(RED, "✗ Error creating api.md: $e")
-        return false
-    end
-    
-    println()
-    return true
-end
-
-function setup_documentation()
-    print_colored(YELLOW, "Setting up documentation structure...")
-    
-    # Create docs directory if it doesn't exist
-    if !isdir("docs")
-        mkdir("docs")
-        print_colored(GREEN, "✓ Created docs directory")
-    end
-    
-    # Create basic files
-    success = true
-    success &= create_build_jl()
-    success &= create_index_md()
-    success &= create_api_md()
-    
-    if success
-        print_colored(GREEN, "✓ Documentation setup completed")
-        println("Next steps:")
-        println("1. Edit docs/build.jl to customize for your project")
-        println("2. Edit docs/index.md with your package description")
-        println("3. Edit docs/api.md with your API documentation")
-        println("4. Run 'build' to generate documentation")
-    else
-        print_colored(RED, "✗ Documentation setup failed")
-    end
-    
-    println()
-    return success
-end
-
-function run_all_docs()
+function run_all_docs(project_root::String)
     print_colored(GREEN, "Running complete documentation workflow...")
     println()
     
-    # Check if docs are set up
-    if !isfile("docs/build.jl")
-        print_colored(YELLOW, "No docs/build.jl found. Setting up documentation...")
-        if !setup_documentation()
-            return false
-        end
-    end
-    
-    # Build documentation
-    if !build_documentation()
+    # Step 1: Format source files
+    print_colored(YELLOW, "Step 1: Formatting source files...")
+    if !format_source_files(project_root)
+        print_colored(RED, "✗ Formatting failed")
         return false
     end
     
-    # Check links
-    check_links()
+    # Step 2: Build documentation
+    print_colored(YELLOW, "Step 2: Building documentation...")
+    if !build_documentation(project_root)
+        print_colored(RED, "✗ Documentation build failed")
+        return false
+    end
     
-    # Check spelling
-    spell_check()
+    # Step 3: Check documentation coverage
+    print_colored(YELLOW, "Step 3: Checking documentation coverage...")
+    check_doc_coverage(project_root)
     
     print_colored(GREEN, "=== Documentation Workflow Complete ===")
     println("Next steps:")
@@ -549,15 +401,15 @@ function run_all_docs()
     return true
 end
 
-function show_interactive_menu()
+function show_interactive_menu(project_root::String)
     print_header()
     
     while true
         println("\nChoose an option:")
         println("1. Build documentation")
-        println("2. Check links")
-        println("3. Spell check")
-        println("4. Check documentation coverage")
+        println("2. Check documentation coverage")
+        println("3. Format source files")
+        println("4. Format and check syntax")
         println("5. Clean build artifacts")
         println("6. Run complete workflow")
         println("7. Exit")
@@ -566,21 +418,21 @@ function show_interactive_menu()
         choice = readline()
         
         if choice == "1"
-            build_documentation()
-            if isfile("docs/build/index.html")
+            build_documentation(project_root)
+            if isfile(joinpath(project_root, "docs", "build", "index.html"))
                 print_colored(GREEN, "✓ Documentation built successfully!")
                 print_colored(CYAN, "Open docs/build/index.html in your browser to view the documentation")
             end
         elseif choice == "2"
-            check_links()
+            check_doc_coverage(project_root)
         elseif choice == "3"
-            spell_check()
+            format_source_files(project_root)
         elseif choice == "4"
-            check_doc_coverage()
+            format_and_check(project_root)
         elseif choice == "5"
-            clean_docs()
+            clean_docs(project_root)
         elseif choice == "6"
-            run_all_docs()
+            run_all_docs(project_root)
         elseif choice == "7"
             break
         else
@@ -590,7 +442,7 @@ function show_interactive_menu()
 end
 
 function main()
-    check_project_directory()
+    project_root = get_project_root()
     
     # Simple command line argument parsing
     if length(ARGS) == 0
@@ -603,41 +455,41 @@ function main()
     end
     
     if command == "build"
-        build_documentation()
-    elseif command == "check-links"
-        check_links()
-    elseif command == "spell-check"
-        spell_check()
+        build_documentation(project_root)
     elseif command == "coverage"
-        check_doc_coverage()
+        check_doc_coverage(project_root)
+    elseif command == "format"
+        format_source_files(project_root)
+    elseif command == "format-check"
+        format_and_check(project_root)
     elseif command == "clean"
-        clean_docs()
+        clean_docs(project_root)
     elseif command == "all"
-        run_all_docs()
+        run_all_docs(project_root)
     elseif command == "interactive"
-        show_interactive_menu()
+        show_interactive_menu(project_root)
     else
         print_header()
-        println("Usage: julia --project=. docs/doc_manager.jl [command]")
+        println("Usage: julia --project=. docs/build_docs.jl [command]")
         println()
         println("Commands:")
         println("  build                    - Build documentation")
-        println("  check-links              - Check for broken links")
-        println("  spell-check              - Check spelling in documentation")
+        println("")
+        println("")
         println("  coverage                 - Check documentation coverage")
+        println("  format                   - Format Julia source files")
+        println("  format-check             - Format files and run syntax check")
         println("  clean                    - Clean build artifacts")
         println("  interactive              - Show interactive menu")
         println("  all                      - Run complete documentation workflow")
         println()
         println("Examples:")
-        println("  julia --project=. docs/doc_manager.jl build")
-        println("  julia --project=. docs/doc_manager.jl check-links")
-        println("  julia --project=. docs/doc_manager.jl clean")
-        println("  julia --project=. docs/doc_manager.jl interactive")
+        println("  julia --project=. docs/build_docs.jl build")
+        println("  julia --project=. docs/build_docs.jl format")
+        println("  julia --project=. docs/build_docs.jl clean")
+        println("  julia --project=. docs/build_docs.jl interactive")
     end
 end
 
-# Run if called directly
-if abspath(PROGRAM_FILE) == @__FILE__
-    main()
-end
+# Run the main function
+main()

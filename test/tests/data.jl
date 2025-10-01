@@ -128,25 +128,25 @@ using eegfun
         analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
         continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
 
-            # Test sample_rate
+        # Test sample_rate
         @test eegfun.sample_rate(continuous_data) == 250
         @test eegfun.sample_rate(df) == 10  # 1 / mean(diff([0.1, 0.2, 0.3])) = 1 / 0.1 = 10
 
-            # Test reference
+        # Test reference
         @test eegfun.reference(continuous_data) == :avg
         @test eegfun.reference(analysis_info) == :avg
 
-            # Test filter_info
+        # Test filter_info
         @test eegfun.filter_info(analysis_info) == [0.1, 30.0]
 
-            # Test n_samples
+        # Test n_samples
         @test eegfun.n_samples(continuous_data) == 3
         @test eegfun.n_samples(df) == 3
 
-            # Test n_channels
+        # Test n_channels
         @test eegfun.n_channels(continuous_data) == 2
 
-            # Test n_layout
+        # Test n_layout
         @test eegfun.n_layout(layout) == 2
 
         # Test n_epochs
@@ -155,11 +155,11 @@ using eegfun
         # Test duration
         @test isapprox(eegfun.duration(continuous_data), 0.2, atol = 1e-10)
 
-            # Test has_channels
+        # Test has_channels
         @test eegfun.has_channels(continuous_data, [:Fz, :Cz]) == true
         @test eegfun.has_channels(continuous_data, [:Fz, :Pz]) == false
 
-            # Test common_channels
+        # Test common_channels
         df2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Pz = [7.0, 8.0])
         layout2 = eegfun.Layout(DataFrame(label = [:Fz, :Pz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         continuous_data2 = eegfun.ContinuousData(df2, layout2, 250, analysis_info)
@@ -170,7 +170,7 @@ using eegfun
         # Create test ERP data
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-            analysis_info = eegfun.AnalysisInfo()
+        analysis_info = eegfun.AnalysisInfo()
         erp_data = eegfun.ErpData(df, layout, 250, analysis_info, 10)
 
         # Test n_epochs for ErpData
@@ -244,12 +244,12 @@ using eegfun
     end
 
     @testset "Mathematical utilities" begin
-    # Test datarange
+        # Test datarange
         @test eegfun.datarange([1, 2, 3, 4, 5]) == 4.0
         @test eegfun.datarange([5, 1, 3, 2, 4]) == 4.0
         @test eegfun.datarange([1.0]) == 0.0
 
-    # Test colmeans
+        # Test colmeans
         df = DataFrame(A = [1.0, 2.0, 3.0], B = [4.0, 5.0, 6.0], C = [7.0, 8.0, 9.0])
         @test eegfun.colmeans(df, [:A, :B]) == [2.5, 3.5, 4.5]  # mean of A and B for each row
         @test eegfun.colmeans(df, [1, 2]) == [2.5, 3.5, 4.5]  # using indices
@@ -269,7 +269,7 @@ using eegfun
         df = DataFrame(Fz = [1.0, 2.0, 3.0, 4.0, 5.0])
         @test eegfun.data_limits_y(df, :Fz) == [1.0, 5.0]
         @test eegfun.data_limits_y(DataFrame(), :Fz) === nothing
-        
+
         # Test data_limits_y with multiple columns
         df = DataFrame(Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0], Pz = [7.0, 8.0, 9.0])
         @test eegfun.data_limits_y(df, [:Fz, :Cz, :Pz]) == [1.0, 9.0]
@@ -301,7 +301,7 @@ using eegfun
 
     @testset "Helper functions" begin
         # Create test data
-            df = DataFrame(
+        df = DataFrame(
             time = [0.1, 0.2, 0.3],
             sample = [1, 2, 3],
             Fz = [1.0, 2.0, 3.0],
