@@ -27,19 +27,15 @@ Commands:
 If no command is provided, shows interactive menu.
 """
 
+using Printf
+
+# Load coverage packages from extras
+using Pkg
+Pkg.activate(; temp = true)
+Pkg.add(["Coverage", "CoverageTools"])
 using Coverage
 using CoverageTools
-using Printf
-using Pkg
 
-# Try to import JuliaFormatter, but don't fail if it's not available
-HAS_JULIA_FORMATTER = false
-try
-    using JuliaFormatter
-    global HAS_JULIA_FORMATTER = true
-catch
-    # JuliaFormatter not available
-end
 
 # Colors for output
 const RED = "\033[0;31m"
@@ -57,33 +53,7 @@ function print_header()
     println()
 end
 
-function check_project_directory()
-    if !isfile("Project.toml") && !isfile("../Project.toml")
-        print_colored(RED, "Error: Not in eegfun project directory")
-        println("Please run this script from the eegfun root directory or test subdirectory")
-        exit(1)
-    end
 
-    # If we're in the test directory, change to root directory
-    if isfile("../Project.toml") && !isfile("Project.toml")
-        cd("..")
-        println("Changed to root directory")
-    end
-end
-
-function run_tests_with_coverage()
-    print_colored(YELLOW, "Step 1: Running tests with coverage...")
-
-    try
-        run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
-        print_colored(GREEN, "✓ Tests completed successfully")
-    catch e
-        print_colored(RED, "✗ Error running tests: $e")
-        return false
-    end
-    println()
-    return true
-end
 
 function show_coverage_summary()
     print_colored(YELLOW, "Step 2: Coverage Summary")
@@ -362,143 +332,10 @@ function clean_coverage_files()
     println()
 end
 
-function check_julia_formatter()
-    return HAS_JULIA_FORMATTER
-end
 
-function install_julia_formatter()
-    print_colored(YELLOW, "Installing JuliaFormatter...")
-    try
-        Pkg.add("JuliaFormatter")
-        print_colored(GREEN, "✓ JuliaFormatter installed successfully")
-        print_colored(YELLOW, "Please restart Julia and run the command again to use formatting features.")
-        return true
-    catch e
-        print_colored(RED, "✗ Error installing JuliaFormatter: $e")
-        return false
-    end
-end
 
-function format_source_files()
-    print_colored(YELLOW, "Formatting Julia source files...")
 
-    # Check if JuliaFormatter is available
-    if !check_julia_formatter()
-        print_colored(YELLOW, "JuliaFormatter not found. Installing...")
-        if !install_julia_formatter()
-            return false
-        end
-    end
 
-    try
-        # Check if JuliaFormatter is available
-        if !HAS_JULIA_FORMATTER
-            print_colored(RED, "JuliaFormatter not available. Please install it first.")
-            return false
-        end
-
-        # Find all .jl files in src directory
-        julia_files = String[]
-        for (root, dirs, files) in walkdir("src")
-            for file in files
-                if endswith(file, ".jl")
-                    push!(julia_files, joinpath(root, file))
-                end
-            end
-        end
-
-        if isempty(julia_files)
-            print_colored(YELLOW, "No Julia files found in src directory")
-            return true
-        end
-
-        println("Found $(length(julia_files)) Julia file(s) to format:")
-        for file in julia_files
-            println("  - $file")
-        end
-
-        # Format files
-        formatted_count = 0
-        for file in julia_files
-            try
-                format_file(file)
-                formatted_count += 1
-            catch e
-                print_colored(RED, "✗ Error formatting $file: $e")
-            end
-        end
-
-        print_colored(GREEN, "✓ Successfully formatted $formatted_count/$(length(julia_files)) file(s)")
-
-        # Also format test files
-        test_files = String[]
-        for (root, dirs, files) in walkdir("test")
-            for file in files
-                if endswith(file, ".jl") && !endswith(file, ".cov")
-                    push!(test_files, joinpath(root, file))
-                end
-            end
-        end
-
-        if !isempty(test_files)
-            println("\nFormatting $(length(test_files)) test file(s)...")
-            for file in test_files
-                try
-                    format_file(file)
-                catch e
-                    print_colored(RED, "✗ Error formatting $file: $e")
-                end
-            end
-        end
-
-    catch e
-        print_colored(RED, "Error: $e")
-        return false
-    end
-
-    println()
-    return true
-end
-
-function format_and_check()
-    print_colored(YELLOW, "Formatting and checking Julia files...")
-
-    if !format_source_files()
-        return false
-    end
-
-    # Run a quick syntax check
-    print_colored(YELLOW, "Running syntax check...")
-    try
-        run(`julia --project=. -e "using Pkg; Pkg.precompile()"`)
-        print_colored(GREEN, "✓ Syntax check passed")
-    catch e
-        print_colored(RED, "✗ Syntax check failed: $e")
-        return false
-    end
-
-    println()
-    return true
-end
-
-function run_all_analyses()
-    print_colored(GREEN, "Running complete test and coverage analysis workflow...")
-    println()
-
-    if !run_tests_with_coverage()
-        return
-    end
-
-    show_coverage_summary()
-    show_detailed_analysis()
-    generate_html_report()
-
-    print_colored(GREEN, "=== Analysis Complete ===")
-    println("Next steps:")
-    println("1. Check the coverage summary above")
-    println("2. View detailed analysis for specific files")
-    println("3. Open test/coverage_html/index.html for visual report")
-end
 
 function show_interactive_menu()
     print_header()
@@ -512,16 +349,20 @@ function show_interactive_menu()
         println("5. Show missed code branches")
         println("6. Generate HTML report")
         println("7. Clean .cov files")
-        println("8. Format source files")
-        println("9. Format and check")
-        println("10. Run complete workflow")
-        println("11. Exit")
+        println("8. Exit")
 
-        print("\nEnter your choice (1-11): ")
+        print("\nEnter your choice (1-8): ")
         choice = readline()
 
         if choice == "1"
-            run_tests_with_coverage()
+            print_colored(YELLOW, "Running tests with coverage...")
+            try
+                run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
+                print_colored(GREEN, "✓ Tests completed successfully")
+            catch e
+                print_colored(RED, "✗ Error running tests: $e")
+            end
+            println()
         elseif choice == "2"
             show_coverage_summary()
         elseif choice == "3"
@@ -543,23 +384,15 @@ function show_interactive_menu()
         elseif choice == "7"
             clean_coverage_files()
         elseif choice == "8"
-            format_source_files()
-        elseif choice == "9"
-            format_and_check()
-        elseif choice == "10"
-            run_all_analyses()
-        elseif choice == "11"
             break
         else
-            print_colored(RED, "Invalid choice. Please enter 1-11.")
+            print_colored(RED, "Invalid choice. Please enter 1-8.")
         end
     end
 end
 
 
 function main()
-    check_project_directory()
-
     # Simple command line argument parsing
     if length(ARGS) == 0
         command = "interactive"
@@ -596,10 +429,6 @@ function main()
         generate_html_report()
     elseif command == "clean"
         clean_coverage_files()
-    elseif command == "format"
-        format_source_files()
-    elseif command == "format-check"
-        format_and_check()
     elseif command == "all"
         run_all_analyses()
     elseif command == "interactive"
@@ -616,8 +445,6 @@ function main()
         println("  missed FILENAME         - Show missed code branches")
         println("  html                    - Generate HTML report")
         println("  clean                   - Remove all .cov files")
-        println("  format                  - Format Julia source files")
-        println("  format-check            - Format files and run syntax check")
         println("  interactive             - Show interactive menu")
         println("  all                     - Run complete workflow")
         println()
@@ -629,12 +456,9 @@ function main()
         println("  julia --project=. test/test_manager.jl all")
         println("  julia --project=. test/test_manager.jl file utils/data.jl")
         println("  julia --project=. test/test_manager.jl missed utils/data.jl")
-        println("  julia --project=. test/test_manager.jl format")
         println("  julia --project=. test/test_manager.jl clean")
     end
 end
 
-# Run if called directly
-if abspath(PROGRAM_FILE) == @__FILE__
-    main()
-end
+# Run the main function
+main()
