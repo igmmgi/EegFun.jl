@@ -1,7 +1,7 @@
 using Coverage
 
 # Find all .cov files
-src_dir = joinpath(@__DIR__, "..", "src")
+src_dir = joinpath(@__DIR__, "..", "..", "src")
 test_dir = @__DIR__
 
 println("Looking for .cov files in:")
