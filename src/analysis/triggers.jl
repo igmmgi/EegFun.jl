@@ -68,7 +68,7 @@ trigger_counts = trigger_count(dat, print_table = false)
 """
 function trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
     @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
-    
+
     # Check if triggers_info column exists and pass it along
     triggers_info = hasproperty(dat.data, :triggers_info) ? dat.data.triggers_info : nothing
     return _trigger_count_impl([dat.data.triggers], ["count"], print_table = print_table, triggers_info = triggers_info)
@@ -100,7 +100,7 @@ function _trigger_count_impl(
     title::String = "Trigger Count Summary",
     headers::Union{Nothing,Vector{String}} = nothing,
     note::Union{Nothing,String} = nothing,
-    triggers_info::Union{Nothing,Vector{String}} = nothing
+    triggers_info::Union{Nothing,Vector{String}} = nothing,
 )
     # Get unique non-zero trigger values from all datasets
     all_triggers = vcat(trigger_datasets...)
@@ -125,13 +125,13 @@ function _trigger_count_impl(
     result_data[1] = non_zero_triggers
 
     for (i, dataset) in enumerate(trigger_datasets)
-        trigger_counts = Dict{Int, Int}()
+        trigger_counts = Dict{Int,Int}()
         for val in dataset
             if val != 0
                 trigger_counts[val] = get(trigger_counts, val, 0) + 1
             end
         end
-        result_data[i + 1] = [get(trigger_counts, trigger, 0) for trigger in non_zero_triggers]
+        result_data[i+1] = [get(trigger_counts, trigger, 0) for trigger in non_zero_triggers]
     end
 
     # Create basic DataFrame
@@ -140,17 +140,17 @@ function _trigger_count_impl(
 
     # Add triggers_info column if provided
     if triggers_info !== nothing
-        trigger_info_map = Dict{Int, String}()
+        trigger_info_map = Dict{Int,String}()
         for (trigger, info) in zip(trigger_datasets[1], triggers_info)
             if trigger != 0 && !haskey(trigger_info_map, trigger)
                 trigger_info_map[trigger] = info
             end
         end
-        
+
         # Insert triggers_info column after trigger column
         triggers_info_col = [get(trigger_info_map, trigger, "") for trigger in non_zero_triggers]
         result_df.triggers_info = triggers_info_col
-        
+
         # Reorder columns: trigger, triggers_info, count columns
         count_cols = [col for col in names(result_df) if col != :trigger && col != :triggers_info]
         result_df = result_df[:, Cols(:trigger, :triggers_info, count_cols...)]
@@ -160,22 +160,21 @@ function _trigger_count_impl(
     if print_table
         if headers === nothing
             if triggers_info !== nothing
-                headers = ["Trigger", "Triggers Info", [uppercasefirst(replace(name, "_" => " ")) for name in column_names]...]
+                headers = [
+                    "Trigger",
+                    "Triggers Info",
+                    [uppercasefirst(replace(name, "_" => " ")) for name in column_names]...,
+                ]
             else
                 headers = ["Trigger"; [uppercasefirst(replace(name, "_" => " ")) for name in column_names]]
             end
         end
-        
-        alignment = triggers_info !== nothing ? 
-            [:r, :l, [:r for _ in 1:length(column_names)]...] : 
-            [:r for _ in 1:length(headers)]
-        
-        pretty_table(
-            result_df, 
-            title = title, 
-            alignment = alignment,
-            footnotes = note !== nothing ? [note] : nothing
-        )
+
+        alignment =
+            triggers_info !== nothing ? [:r, :l, [:r for _ = 1:length(column_names)]...] :
+            [:r for _ = 1:length(headers)]
+
+        pretty_table(result_df, title = title, alignment = alignment, footnotes = note !== nothing ? [note] : nothing)
         println()
     end
 
@@ -214,11 +213,11 @@ function trigger_count(dat::BiosemiDataFormat.BiosemiData; print_table::Bool = t
     # Get cleaned trigger data (onset detection only)
     cleaned_triggers = _clean_triggers(dat.triggers.raw)
     return _trigger_count_impl(
-        [dat.triggers.raw, cleaned_triggers], 
+        [dat.triggers.raw, cleaned_triggers],
         ["raw_count", "cleaned_count"],
         print_table = print_table,
         title = "Trigger Count Summary (Raw vs Cleaned)",
-        note = "Note: Cleaned counts show only trigger onset events (sustained signals converted to single onsets)"
+        note = "Note: Cleaned counts show only trigger onset events (sustained signals converted to single onsets)",
     )
 end
 
@@ -410,13 +409,13 @@ Find starting indices of a sequence in an array (onset detection).
 """
 function search_sequence(array::AbstractVector, sequence::Int)
     isempty(array) && return Int[]
-    
+
     # Find all positions where the trigger value matches
     value_matches = findall(array .== sequence)
-    
+
     # Find all positions where there's an onset (value increases from previous)
     onset_positions = findall(diff(vcat(0, array)) .>= 1)
-    
+
     # Return intersection (positions that are both value matches and onsets)
     return intersect(value_matches, onset_positions)
 end

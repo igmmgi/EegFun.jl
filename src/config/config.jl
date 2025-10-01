@@ -38,26 +38,18 @@ end
 # =============================================================================
 
 # Helper to create ConfigParameter with common defaults
-function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where T
+function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = nothing, max = nothing) where {T}
     ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
 end
 
-string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
+string_param(desc, default = ""; allowed = nothing) =
+    _param(Union{Vector{String},String}, desc, default, allowed = allowed)
 bool_param(desc, default = false) = _param(Bool, desc, default)
 number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
 channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, default)
 
 # Helper function to create filter parameter specifications
-function _filter_param_spec(
-    prefix,
-    apply,
-    freq,
-    min_freq,
-    max_freq,
-    order,
-    min_order,
-    max_order,
-)
+function _filter_param_spec(prefix, apply, freq, min_freq, max_freq, order, min_order, max_order)
     # fmt: off
     Dict(
         "$prefix.apply"  => bool_param("Apply: true/false", apply),
@@ -109,11 +101,10 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "ica.apply" => bool_param("Independent Component Analysis (ICA) true/false."),
 
     # Filtering settings - using helper function
-    _filter_param_spec("filter.highpass",     true,   0.1, 0.01,  20.0, 1, 1, 4)...,
-    _filter_param_spec("filter.lowpass",      false, 30.0, 5.00, 500.0, 3, 1, 8)...,
-    _filter_param_spec("filter.ica_highpass", true,   1.0, 1.00,  20.0, 1, 1, 4)...,
-    _filter_param_spec("filter.ica_lowpass",  false, 30.0, 5.00, 500.0, 3, 1, 4)...,
-
+    _filter_param_spec("filter.highpass", true, 0.1, 0.01, 20.0, 1, 1, 4)...,
+    _filter_param_spec("filter.lowpass", false, 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("filter.ica_highpass", true, 1.0, 1.00, 20.0, 1, 1, 4)...,
+    _filter_param_spec("filter.ica_lowpass", false, 30.0, 5.00, 500.0, 3, 1, 4)...,
 )
 # fmt: on
 

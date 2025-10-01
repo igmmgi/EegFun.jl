@@ -2,55 +2,55 @@
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    
+
     # Figure and layout
     :figure_size => (nothing, "Figure size as (width, height). If nothing, uses default size"),
     :figure_padding => ((10, 10, 10, 10), "Figure padding as (left, right, bottom, top)"),
-    
+
     # Axis styling
     :xlabel => ("Time (S)", "X-axis label"),
     :ylabel => ("Amplitude (μV)", "Y-axis label"),
     :title_fontsize => (16, "Font size for plot title"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
-    
+
     # UI styling
     :ui_fontsize => (18, "Font size for UI elements"),
     :ui_label_fontsize => (22, "Font size for UI labels"),
     :menu_fontsize => (18, "Font size for menu items"),
     :menu_width => (200, "Width of dropdown menus"),
-    
+
     # Line styling
     :line_width => (1, "Line width for data lines"),
     :line_alpha => (1.0, "Transparency for data lines"),
     :marker_line_width => (1, "Line width for marker lines"),
     :marker_line_color => (:grey, "Color for marker lines"),
-    
+
     # Channel styling
     :channel_line_width => (1, "Line width for channel lines"),
     :selected_channel_color => (:black, "Color for selected channels"),
     :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
     :channel_offset_scale => (1500, "Scale factor for channel vertical offset"),
     :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
-    
+
     # Selection styling
     :selection_color => ((:blue, 0.3), "Color and transparency for selection rectangle"),
     :selection_line_width => (2, "Line width for selection rectangle"),
-    
+
     # Filter parameters
     :default_hp_freq => (0.1, "Default high-pass filter frequency in Hz"),
     :default_lp_freq => (40.0, "Default low-pass filter frequency in Hz"),
     :default_crit_val => (100.0, "Default extreme value threshold in μV"),
-    
+
     # View parameters
     :default_window_size => (5000, "Default window size in samples"),
     :default_amplitude_scale => (1.0, "Default amplitude scaling factor"),
     :default_butterfly => (false, "Default butterfly plot mode"),
-    
+
     # Marker styling
     :marker_fontsize => (22, "Font size for marker labels"),
     :marker_text_offset => (0.98, "Vertical offset factor for marker text"),
-    
+
     # Extra channel styling
     :extra_channel_line_width => (2, "Line width for extra channel lines"),
     :extra_channel_alpha => (0.8, "Transparency for extra channel lines"),
@@ -80,9 +80,7 @@ mutable struct SelectionState
     rectangle::Makie.Poly
     function SelectionState(ax, plot_kwargs)
         initial_points = [Point2f(0.0, 0.0)]
-        poly_element = poly!(ax, initial_points, 
-                           color = plot_kwargs[:selection_color], 
-                           visible = false)
+        poly_element = poly!(ax, initial_points, color = plot_kwargs[:selection_color], visible = false)
         new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
     end
 end
@@ -91,9 +89,11 @@ mutable struct FilterState
     active::Observable{NamedTuple{(:hp, :lp),Tuple{Bool,Bool}}}
     hp_freq::Observable{Float64}
     lp_freq::Observable{Float64}
-    FilterState(plot_kwargs) = new(Observable((hp = false, lp = false)), 
-                                  Observable(plot_kwargs[:default_hp_freq]), 
-                                  Observable(plot_kwargs[:default_lp_freq]))
+    FilterState(plot_kwargs) = new(
+        Observable((hp = false, lp = false)),
+        Observable(plot_kwargs[:default_hp_freq]),
+        Observable(plot_kwargs[:default_lp_freq]),
+    )
 end
 
 struct ToggleConfig
@@ -112,8 +112,18 @@ mutable struct ViewState
         # TODO: could this be done better?
         offset_scale = plot_kwargs[:channel_offset_scale]
         offset_margin = plot_kwargs[:channel_offset_margin]
-        offset = n_channels > 1 ? LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)] : zeros(n_channels)
-        new(Observable(1:n_samples), Observable(-1500:1500), offset, Observable(0.0), Observable(false), Observable(1.0))
+        offset =
+            n_channels > 1 ?
+            LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)] :
+            zeros(n_channels)
+        new(
+            Observable(1:n_samples),
+            Observable(-1500:1500),
+            offset,
+            Observable(0.0),
+            Observable(false),
+            Observable(1.0),
+        )
     end
 end
 
@@ -299,18 +309,19 @@ function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ic
 end
 
 function create_toggles(fig, ax, state)
-    configs = [
-        ToggleConfig("Butterfly Plot", (active) -> butterfly_plot!(ax, state)),
-    ]
+    configs = [ToggleConfig("Butterfly Plot", (active) -> butterfly_plot!(ax, state))]
 
     # Add toggles for available markers
     # Find markers by name instead of relying on index positions
-    
+
     # Trigger toggle
     if has_column(state.data, "triggers")
         trigger_marker = findfirst(m -> m.name == :triggers, state.markers)
         if !isnothing(trigger_marker)
-            push!(configs, ToggleConfig("Trigger", (active) -> plot_vertical_lines!(ax, state.markers[trigger_marker], active)))
+            push!(
+                configs,
+                ToggleConfig("Trigger", (active) -> plot_vertical_lines!(ax, state.markers[trigger_marker], active)),
+            )
         end
     end
 
@@ -318,15 +329,21 @@ function create_toggles(fig, ax, state)
     if has_column(state.data, "is_vEOG")
         veog_marker = findfirst(m -> m.name == :is_vEOG, state.markers)
         if !isnothing(veog_marker)
-            push!(configs, ToggleConfig("vEOG", (active) -> plot_vertical_lines!(ax, state.markers[veog_marker], active)))
+            push!(
+                configs,
+                ToggleConfig("vEOG", (active) -> plot_vertical_lines!(ax, state.markers[veog_marker], active)),
+            )
         end
     end
-    
+
     # hEOG toggle
     if has_column(state.data, "is_hEOG")
         heog_marker = findfirst(m -> m.name == :is_hEOG, state.markers)
         if !isnothing(heog_marker)
-            push!(configs, ToggleConfig("hEOG", (active) -> plot_vertical_lines!(ax, state.markers[heog_marker], active)))
+            push!(
+                configs,
+                ToggleConfig("hEOG", (active) -> plot_vertical_lines!(ax, state.markers[heog_marker], active)),
+            )
         end
     end
 
@@ -943,12 +960,11 @@ function subset_selected_data(state::EpochedDataBrowserState)
 
     # Create a sample_selection function that works with epoch DataFrame
     # Note: 'epochs' parameter is actually a single epoch DataFrame, not an array
-    sample_selection =
-        epochs -> begin
-            # epochs is the current epoch DataFrame, use it directly
-            time_mask = (epochs.time .>= x_min) .& (epochs.time .<= x_max)
-            return time_mask  # Return boolean vector, not indices
-        end
+    sample_selection = epochs -> begin
+        # epochs is the current epoch DataFrame, use it directly
+        time_mask = (epochs.time .>= x_min) .& (epochs.time .<= x_max)
+        return time_mask  # Return boolean vector, not indices
+    end
 
     epoch_data = subset(
         state.data.current[],
@@ -1172,12 +1188,11 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Channel data (compute once)
             channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), $col))
-            channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
+            channel_data_with_offset =
+                @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
 
             # Line properties (reuse channel_data_obs for efficiency)
-            line_color =
-                is_selected ? :black :
-                @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
+            line_color = is_selected ? :black : @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
             line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
             line_width = is_selected ? 4 : 2
 
@@ -1333,17 +1348,14 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
 
     # Common fig/ax/state/ui setup
     fig = Figure(figure_padding = plot_kwargs[:figure_padding])
-    ax = Axis(fig[1, 1], 
-              xlabel = plot_kwargs[:xlabel], 
-              ylabel = plot_kwargs[:ylabel], 
-              title = get_title(dat))
+    ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = get_title(dat))
     state = create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
     setup_ui(fig, ax, state, dat, ica, plot_kwargs)
 
     # Render and return
     draw(ax, state)
     draw_extra_channel!(ax, state)
-    
+
     if plot_kwargs[:display_plot]
         display(fig)
     end
@@ -1408,7 +1420,7 @@ function plot_databrowser_subset(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     ica = nothing,
-    kwargs...
+    kwargs...,
 )
     # Create data subset and plot
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
@@ -1421,7 +1433,7 @@ function plot_databrowser_subset(
     sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
     ica = nothing,
-    kwargs...
+    kwargs...,
 )
     # Create data subset and plot
     dat_subset = subset(

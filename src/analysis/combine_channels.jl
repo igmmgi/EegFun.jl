@@ -19,34 +19,35 @@ end
 Process a single file through channel combining pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_combine_channels_file(filepath::String, output_path::String,
-                                       channel_selections::Vector{<:Function},
-                                       output_labels::Vector{Symbol},
-                                       conditions, reduce::Bool)
+function _process_combine_channels_file(
+    filepath::String,
+    output_path::String,
+    channel_selections::Vector{<:Function},
+    output_labels::Vector{Symbol},
+    conditions,
+    reduce::Bool,
+)
     filename = basename(filepath)
-    
+
     # Load data
     data_result = _load_eeg_data(filepath)
     if isnothing(data_result)
         return BatchResult(false, filename, "No recognized data variable")
     end
-    
+
     data, var_name = data_result
-    
+
     # Select conditions
     data = _select_conditions(data, conditions)
-    
+
     # Apply channel combination to each data item
     foreach(data) do item
-        channel_average!(item, 
-                       channel_selections = channel_selections,
-                       output_labels = output_labels,
-                       reduce = reduce)
+        channel_average!(item, channel_selections = channel_selections, output_labels = output_labels, reduce = reduce)
     end
-    
+
     # Save
     save(output_path, var_name, data)
-    
+
     n_groups = length(channel_selections)
     return BatchResult(true, filename, "Combined $n_groups channel group(s)")
 end
@@ -101,64 +102,75 @@ combine_channels("erps_cleaned",
                 reduce = true)
 ```
 """
-function combine_channels(file_pattern::String, channel_selections::Vector{<:Function}; 
-                              output_labels::Union{Vector{Symbol}, Nothing} = nothing, 
-                              input_dir::String = pwd(), 
-                              participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                              conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                              output_dir::Union{String, Nothing} = nothing,
-                              reduce::Bool = false)
-    
+function combine_channels(
+    file_pattern::String,
+    channel_selections::Vector{<:Function};
+    output_labels::Union{Vector{Symbol},Nothing} = nothing,
+    input_dir::String = pwd(),
+    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    output_dir::Union{String,Nothing} = nothing,
+    reduce::Bool = false,
+)
+
     # Setup logging
     log_file = "combine_channels.log"
     setup_global_logging(log_file)
-    
+
     try
         @info "Batch channel combining started at $(now())"
         @log_call "combine_channels" (file_pattern, channel_selections)
-        
+
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        
+
         # Generate output labels if not provided
         if isnothing(output_labels)
-            output_labels = [Symbol("combined_$i") for i in 1:length(channel_selections)]
+            output_labels = [Symbol("combined_$i") for i = 1:length(channel_selections)]
         end
-        
+
         # Validate output labels length matches channel selections
         if length(output_labels) != length(channel_selections)
-            @minimal_error_throw("Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))")
+            @minimal_error_throw(
+                "Number of output_labels ($(length(output_labels))) must match number of channel_selections ($(length(channel_selections)))"
+            )
         end
-        
+
         # Setup directories
         output_dir = something(output_dir, _default_combine_channels_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
-        
+
         # Find files
         files = _find_batch_files(file_pattern, input_dir; participants)
-        
+
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-        
+
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
         @info "Channel selections: $(length(channel_selections)) group(s)"
         @info "Output labels: $output_labels"
         @info "Reduce mode: $reduce"
-        
+
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> 
-            _process_combine_channels_file(input_path, output_path, channel_selections, output_labels, conditions, reduce)
-        
+        process_fn =
+            (input_path, output_path) -> _process_combine_channels_file(
+                input_path,
+                output_path,
+                channel_selections,
+                output_labels,
+                conditions,
+                reduce,
+            )
+
         # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
-                                      operation_name="Combining channels")
-        
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Combining channels")
+
         _log_batch_summary(results, output_dir)
-        
+
     finally
         _cleanup_logging(log_file, output_dir)
     end

@@ -359,12 +359,14 @@ Get the duration of the EEG data in seconds.
 # Returns
 - `Float64`: Duration in seconds
 """
-duration(dat::SingleDataFrameEeg)::Float64 = 
+duration(dat::SingleDataFrameEeg)::Float64 =
     hasproperty(dat.data, :time) && !isempty(dat.data.time) ? last(dat.data.time) - first(dat.data.time) : 0.0
-duration(dat::MultiDataFrameEeg)::Float64 = 
-    hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) : 0.0
+duration(dat::MultiDataFrameEeg)::Float64 =
+    hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) :
+    0.0
 duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
-    hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ? last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
+    hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ?
+    last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
 
 
 """
@@ -628,7 +630,7 @@ function ylimits(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     include_extra::Bool = false,
- )::Tuple{Float64,Float64}
+)::Tuple{Float64,Float64}
 
     # Apply predicates via subset first
     dat_sub = subset(
@@ -665,7 +667,12 @@ Create subsets of multiple DataFrames by selecting specific epochs, channels, an
 # Returns
 - `Vector{DataFrame}`: Vector of subset DataFrames
 """
-function subset_dataframes(dataframes::Vector{DataFrame}, selected_epochs::Vector{Int}, selected_channels::Vector{Symbol}, selected_samples::Vector{Int})::Vector{DataFrame}
+function subset_dataframes(
+    dataframes::Vector{DataFrame},
+    selected_epochs::Vector{Int},
+    selected_channels::Vector{Symbol},
+    selected_samples::Vector{Int},
+)::Vector{DataFrame}
     return subset_dataframe.(dataframes[selected_epochs], Ref(selected_channels), Ref(selected_samples))
 end
 
@@ -694,7 +701,7 @@ function _subset_common(dat, channel_selection, sample_selection, include_extra)
     selected_channels = get_selected_channels(dat, channel_selection, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
     layout_subset = subset_layout(dat.layout, channel_selection = channel_selection)
-    
+
     return selected_channels, selected_samples, layout_subset
 end
 
@@ -717,7 +724,8 @@ function _subset_common(dat::EpochData, epoch_selection, channel_selection, samp
     @debug "Subsetting $(typeof(dat)): selecting epochs, channels and samples"
     # Get subset selected epochs, channels, samples, and layout
     selected_epochs = get_selected_epochs(dat, epoch_selection)
-    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
+    selected_channels, selected_samples, layout_subset =
+        _subset_common(dat, channel_selection, sample_selection, include_extra)
     return selected_epochs, selected_channels, selected_samples, layout_subset
 end
 
@@ -756,7 +764,8 @@ function subset(
     sample_selection::Function = samples(),
     include_extra::Bool = false,
 )::SingleDataFrameEeg
-    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
+    selected_channels, selected_samples, layout_subset =
+        _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
 end
@@ -767,7 +776,8 @@ function subset(
     sample_selection::Function = samples(),
     include_extra::Bool = false,
 )::ErpData
-    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
+    selected_channels, selected_samples, layout_subset =
+        _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
     return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.n_epochs)
 end
@@ -779,7 +789,8 @@ function subset(
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::EpochData
-    selected_epochs, selected_channels, selected_samples, layout_subset = _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
+    selected_epochs, selected_channels, selected_samples, layout_subset =
+        _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
     return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
 end
@@ -790,7 +801,12 @@ function subset(
     sample_selection::Function = samples(),
     include_extra::Bool = false,
 )::Vector{ErpData}
-    return subset.(datasets; channel_selection=channel_selection, sample_selection=sample_selection, include_extra=include_extra)
+    return subset.(
+        datasets;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = include_extra,
+    )
 end
 
 function subset(
@@ -800,7 +816,13 @@ function subset(
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::Vector{EpochData}
-    return subset.(datasets; channel_selection=channel_selection, sample_selection=sample_selection, epoch_selection=epoch_selection, include_extra=include_extra)
+    return subset.(
+        datasets;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        epoch_selection = epoch_selection,
+        include_extra = include_extra,
+    )
 end
 
 
@@ -955,32 +977,32 @@ rename_channel!(dat, Dict(:Cz => :Cz_new))
 - Clears any cached neighbour information in the layout since channel names have changed
 - Properly handles swaps (e.g., Dict(:A => :B, :B => :A) correctly exchanges the channels)
 """
-function rename_channel!(dat::EegData, rename_dict::Dict{Symbol, Symbol})
+function rename_channel!(dat::EegData, rename_dict::Dict{Symbol,Symbol})
     # Capture original channel names before renaming layout
     original_channels = Set(dat.layout.data.label)
-    
+
     # First rename channels in the layout
     rename_channel!(dat.layout, rename_dict)
-    
+
     # Get the list of channels that were actually renamed in the layout
     layout_channels = dat.layout.data.label
     channels_to_rename = keys(rename_dict)
     channels_found = intersect(original_channels, channels_to_rename)
-    
+
     if isempty(channels_found)
         @info "rename_channel!: No channels found to rename in data"
         return nothing
     end
-    
+
     # Now rename the corresponding data columns using multiple dispatch
     _rename_data_columns!(dat, rename_dict, original_channels)
-    
+
     @info "rename_channel!: Renamed $(length(channels_found)) channels in data and layout"
     return nothing
 end
 
 # Multiple dispatch for different EEG data types
-function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol, Symbol}, existing_channels::Set{Symbol})
+function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
     # Check for potential duplicate names before applying any renames
     final_names = Symbol[]
     for (old_name, new_name) in rename_dict
@@ -997,7 +1019,7 @@ function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol, Symbol},
 
     # Apply the renaming with proper swap handling
     # First, collect all the final rename mappings to avoid interference
-    final_renames = Dict{Symbol, Symbol}()  # old_name => final_name
+    final_renames = Dict{Symbol,Symbol}()  # old_name => final_name
 
     for (old_name, new_name) in rename_dict
         if old_name ∈ existing_channels && old_name ∈ propertynames(df)
@@ -1040,11 +1062,15 @@ function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol, Symbol},
     end
 end
 
-function _rename_data_columns!(dat::SingleDataFrameEeg, rename_dict::Dict{Symbol, Symbol}, existing_channels::Set{Symbol})
+function _rename_data_columns!(
+    dat::SingleDataFrameEeg,
+    rename_dict::Dict{Symbol,Symbol},
+    existing_channels::Set{Symbol},
+)
     _rename_data_columns!(dat.data, rename_dict, existing_channels)
 end
 
-function _rename_data_columns!(dat::MultiDataFrameEeg, rename_dict::Dict{Symbol, Symbol}, existing_channels::Set{Symbol})
+function _rename_data_columns!(dat::MultiDataFrameEeg, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
     # Use broadcasting to apply the DataFrame method to all DataFrames
     _rename_data_columns!.(dat.data, Ref(rename_dict), Ref(existing_channels))
 end
@@ -1078,7 +1104,7 @@ new_dat = rename_channel(dat, rename_dict)
 - The original data is not modified
 - Properly handles swaps (e.g., Dict(:A => :B, :B => :A) correctly exchanges the channels)
 """
-function rename_channel(dat::EegData, rename_dict::Dict{Symbol, Symbol})
+function rename_channel(dat::EegData, rename_dict::Dict{Symbol,Symbol})
     # Create a copy of the data using the existing copy function
     new_dat = copy(dat)
     rename_channel!(new_dat, rename_dict)
@@ -1110,7 +1136,12 @@ df = create_eeg_dataframe(biosemi_data)
 function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame"
     df = hcat(
-        DataFrame(file = filename(dat), time = dat.time, sample = 1:length(dat.time), triggers = _clean_triggers(dat.triggers.raw)),
+        DataFrame(
+            file = filename(dat),
+            time = dat.time,
+            sample = 1:length(dat.time),
+            triggers = _clean_triggers(dat.triggers.raw),
+        ),
         DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
     )
     return df
@@ -1157,36 +1188,36 @@ df = create_eeg_dataframe(brainvision_data)
 """
 function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame from BrainVision data"
-    
+
     # Check if data is available
     if isnothing(dat.data)
         @minimal_error_throw "BrainVision data is empty (data field is nothing)"
     end
-    
+
     if isnothing(dat.header)
         @minimal_error_throw "BrainVision header is empty (header field is nothing)"
     end
-    
+
     # Extract basic information
     # BrainVision data is now samples × channels (after package modification)
     n_samples = size(dat.data, 1)
     n_channels = size(dat.data, 2)
     sample_rate = dat.header.Fs
-    
+
     # Create time vector
     time = collect(0:(n_samples-1)) ./ sample_rate
-    
+
     # Create sample vector
     sample = 1:n_samples
-    
+
     # Extract channel labels from header
     channel_labels = dat.header.label
-    
+
     # Verify channel count matches
     if length(channel_labels) != n_channels
         @minimal_error_throw "Number of channel labels ($(length(channel_labels))) does not match number of channels ($n_channels)"
     end
-    
+
     # Create triggers and marker strings columns from markers
     if isnothing(dat.markers) || isempty(dat.markers)
         @info "create_eeg_dataframe: No markers found, creating empty trigger columns"
@@ -1196,13 +1227,19 @@ function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataF
         @info "create_eeg_dataframe: Found $(length(dat.markers)) markers"
         triggers, triggers_info = _extract_triggers_from_markers(dat.markers, n_samples)
     end
-    
+
     # Create the DataFrame
     df = hcat(
-        DataFrame(file = dat.filename, time = time, sample = sample, triggers = triggers, triggers_info = triggers_info),
-        DataFrame(dat.data, channel_labels)
+        DataFrame(
+            file = dat.filename,
+            time = time,
+            sample = sample,
+            triggers = triggers,
+            triggers_info = triggers_info,
+        ),
+        DataFrame(dat.data, channel_labels),
     );
-    
+
     return df
 end
 
@@ -1240,29 +1277,32 @@ Extract trigger values from BrainVision markers and create trigger and marker st
 # Returns
 - `Tuple{Vector{Int}, Vector{String}}`: (trigger vector, marker string vector) with values at appropriate sample positions
 """
-function _extract_triggers_from_markers(markers::Vector{BrainVisionDataFormat.BrainVisionMarker}, n_samples::Int)::Tuple{Vector{Int}, Vector{String}}
+function _extract_triggers_from_markers(
+    markers::Vector{BrainVisionDataFormat.BrainVisionMarker},
+    n_samples::Int,
+)::Tuple{Vector{Int},Vector{String}}
     triggers = zeros(Int, n_samples)
     triggers_info = fill("", n_samples)
-    
+
     @info "Processing $(length(markers)) markers for $n_samples samples"
-    
+
     # Debug: Show first few marker sample indices
     if length(markers) > 0
         first_few_samples = [marker.sample for marker in markers[1:min(5, length(markers))]]
         @info "First few marker sample indices: $first_few_samples"
     end
-    
+
     # First pass: extract all unique trigger values (including empty strings for system markers)
     # Check if markers are 0-based or 1-based by looking at the first marker
     is_zero_based = length(markers) > 0 && markers[1].sample == 0
     @info "Detected $(is_zero_based ? "0-based" : "1-based") indexing for marker samples"
-    
+
     unique_values = Set{String}()
     valid_markers = 0
     for marker in markers
         # Convert to 1-based if needed
         sample_idx = is_zero_based ? marker.sample + 1 : marker.sample
-        
+
         if 1 <= sample_idx <= n_samples
             # Include all markers, even those with empty values (like "New Segment")
             push!(unique_values, marker.value)
@@ -1271,31 +1311,30 @@ function _extract_triggers_from_markers(markers::Vector{BrainVisionDataFormat.Br
             @warn "Marker sample $sample_idx out of bounds (1:$n_samples), skipping"
         end
     end
-    
+
     @info "Found $valid_markers valid markers with $(length(unique_values)) unique values: $(collect(unique_values))"
-    
+
     # Create mapping from original values to sequential integers (1, 2, 3, ...)
-    value_to_trigger = Dict{String, Int}()
+    value_to_trigger = Dict{String,Int}()
     for (i, value) in enumerate(sort(collect(unique_values)))
         value_to_trigger[value] = i
     end
-    
+
     # Second pass: assign sequential trigger values and original marker strings
     for marker in markers
         # Convert to 1-based if needed
         sample_idx = is_zero_based ? marker.sample + 1 : marker.sample
-        
+
         if 1 <= sample_idx <= n_samples
             # Include all markers, even those with empty values
             triggers[sample_idx] = value_to_trigger[marker.value]
             triggers_info[sample_idx] = marker.value
         end
     end
-    
+
     non_zero_triggers = count(x -> x != 0, triggers)
     non_empty_strings = count(x -> x != "", triggers_info)
     @info "Created triggers with $non_zero_triggers non-zero values and $non_empty_strings non-empty marker strings"
-    
+
     return triggers, triggers_info
 end
-

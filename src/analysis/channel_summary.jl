@@ -32,15 +32,15 @@ function _channel_summary_impl(
     # Input validation
     isempty(sample_selection) && @minimal_error_throw("No samples selected for channel summary")
     isempty(channel_selection) && @minimal_error_throw("No channels selected for channel summary")
-    
+
     # Check that all selected channels exist in data
     missing_channels = setdiff(channel_selection, propertynames(data))
     !isempty(missing_channels) && @minimal_error_throw("Channels not found in data: $(missing_channels)")
-    
+
     # Check that all sample indices are valid
-    invalid_samples = sample_selection[sample_selection .< 1 .|| sample_selection .> nrow(data)]
+    invalid_samples = sample_selection[(sample_selection .< 1).||(sample_selection .> nrow(data))]
     !isempty(invalid_samples) && @minimal_error_throw("Invalid sample indices: $(invalid_samples)")
-    
+
     selected_data = @view data[sample_selection, channel_selection]
 
     # Get base statistics from describe
@@ -49,7 +49,7 @@ function _channel_summary_impl(
     # Add our custom columns
     stats.range = stats.max .- stats.min
     stats.var = var.(eachcol(selected_data))
-    
+
     # Handle case where all channels have zero variance (avoid NaN in zscore)
     if all(stats.var .== 0.0)
         stats.zvar = zeros(length(stats.var))
@@ -177,11 +177,11 @@ function channel_summary(
 )::DataFrame
     # Input validation
     nrow(dat.data) == 0 && @minimal_error_throw("Cannot compute channel summary: data is empty")
-    
+
     selected_channels =
         get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
+
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
 end
 
@@ -225,7 +225,7 @@ function channel_summary(
 )::DataFrame
     # Input validation
     isempty(dat.data) && @minimal_error_throw("Cannot compute channel summary: no epochs in data")
-    
+
     # Process each epoch and collect results
     results = DataFrame[]
 
@@ -235,7 +235,7 @@ function channel_summary(
             @minimal_warning("Skipping empty epoch $(epoch_idx)")
             continue
         end
-        
+
         # Get the original epoch number from the data
         original_epoch_number = epoch_df.epoch[1]  # All rows in an epoch have the same epoch number
 
@@ -259,7 +259,7 @@ function channel_summary(
 
     # Check if we have any results
     isempty(results) && @minimal_error_throw("No valid epochs found for channel summary")
-    
+
     # Combine all results
     return vcat(results...)
 end
@@ -286,41 +286,46 @@ end
 Process a single file through channel summary pipeline.
 Returns tuple of (BatchResult, Vector{DataFrame}) with all condition results.
 """
-function _process_channel_summary_file(filepath::String,
-                                     conditions, sample_selection::Function,
-                                     channel_selection::Function, include_extra::Bool)
+function _process_channel_summary_file(
+    filepath::String,
+    conditions,
+    sample_selection::Function,
+    channel_selection::Function,
+    include_extra::Bool,
+)
     filename = basename(filepath)
-    
+
     # Load data
     data_result = _load_eeg_data(filepath)
     if isnothing(data_result)
         return (BatchResult(false, filename, "No recognized data variable"), DataFrame[])
     end
-    
+
     data_var, var_name = data_result
-    
+
     # Select conditions
     data_var = _select_conditions(data_var, conditions)
-    
+
     # Process each condition and collect results
     summary_dfs = DataFrame[]
     for (cond_idx, data) in enumerate(data_var)
-        condition = isnothing(conditions) ? cond_idx : 
-                   (conditions isa Int ? conditions : conditions[cond_idx])
-        
+        condition = isnothing(conditions) ? cond_idx : (conditions isa Int ? conditions : conditions[cond_idx])
+
         # Compute channel summary
-        summary_df = eegfun.channel_summary(data; 
-                                           sample_selection = sample_selection,
-                                           channel_selection = channel_selection,
-                                           include_extra = include_extra)
-        
+        summary_df = eegfun.channel_summary(
+            data;
+            sample_selection = sample_selection,
+            channel_selection = channel_selection,
+            include_extra = include_extra,
+        )
+
         # Add metadata columns
         insertcols!(summary_df, 1, :file => splitext(filename)[1])
         insertcols!(summary_df, 2, :condition => condition)
-        
+
         push!(summary_dfs, summary_df)
     end
-    
+
     n_conditions = length(summary_dfs)
     return (BatchResult(true, filename, "Processed $n_conditions condition(s)"), summary_dfs)
 end
@@ -371,62 +376,62 @@ channel_summary("epochs", channel_selection=channels([:Fp1, :Fp2, :F3, :F4]))
 channel_summary("epochs", include_extra=true)
 ```
 """
-function channel_summary(file_pattern::String; 
-                        input_dir::String = pwd(), 
-                        participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                        conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                        sample_selection::Function = samples(),
-                        channel_selection::Function = channels(),
-                        include_extra::Bool = false,
-                        output_dir::Union{String, Nothing} = nothing,
-                        output_file::String = "channel_summary")
-    
+function channel_summary(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    sample_selection::Function = samples(),
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+    output_dir::Union{String,Nothing} = nothing,
+    output_file::String = "channel_summary",
+)
+
     # Setup logging
     log_file = "$(output_file).log"
     setup_global_logging(log_file)
-    
+
     try
         @info "Batch channel summary started at $(now())"
         @log_call "channel_summary" (file_pattern,)
-        
+
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        
+
         # Setup directories
         output_dir = something(output_dir, _default_channel_summary_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
-        
+
         # Find files
         files = _find_batch_files(file_pattern, input_dir; participants)
-        
+
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-        
+
         @info "Found $(length(files)) JLD2 files to process"
-        
+
         # Process all files and collect DataFrames
         all_summaries = DataFrame[]
         n_success = 0
         n_error = 0
-        
+
         for (i, file) in enumerate(files)
             @info "Channel summary: $file ($i/$(length(files)))"
-            
+
             input_path = joinpath(input_dir, file)
-            
+
             result, summary_dfs = try
-                _process_channel_summary_file(input_path, conditions, 
-                                            sample_selection, channel_selection, 
-                                            include_extra)
+                _process_channel_summary_file(input_path, conditions, sample_selection, channel_selection, include_extra)
             catch e
                 @error "Error processing $file" exception=(e, catch_backtrace())
                 (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])
             end
-            
+
             # Log result
             if result.success
                 @info "  ✓ $(result.message)"
@@ -437,7 +442,7 @@ function channel_summary(file_pattern::String;
                 n_error += 1
             end
         end
-        
+
         # Save combined results to single CSV
         if !isempty(all_summaries)
             combined_df = vcat(all_summaries...)
@@ -447,10 +452,10 @@ function channel_summary(file_pattern::String;
         else
             @minimal_warning "No results to save"
         end
-        
+
         @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
         @info "Output saved to: $output_dir"
-        
+
     finally
         _cleanup_logging(log_file, output_dir)
     end

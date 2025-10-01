@@ -120,11 +120,17 @@ function validate_baseline_interval(
     return baseline_interval
 end
 
-function validate_baseline_interval(dat::MultiDataFrameEeg, baseline_interval::Union{IntervalIdx,IntervalTime})::IntervalIdx
+function validate_baseline_interval(
+    dat::MultiDataFrameEeg,
+    baseline_interval::Union{IntervalIdx,IntervalTime},
+)::IntervalIdx
     return validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
 end
 
-function validate_baseline_interval(dat::SingleDataFrameEeg, baseline_interval::Union{IntervalIdx,IntervalTime})::IntervalIdx
+function validate_baseline_interval(
+    dat::SingleDataFrameEeg,
+    baseline_interval::Union{IntervalIdx,IntervalTime},
+)::IntervalIdx
     return validate_baseline_interval(dat.data.time, baseline_interval)
 end
 
@@ -212,7 +218,7 @@ y_detrended = detrend(x, y)
 function detrend(x::AbstractVector, y::AbstractVector)::Vector{Float64}
     length(x) == length(y) || @minimal_error "x and y must have the same length"
     length(x) < 2 && @minimal_error "Need at least 2 points for detrending"
-    
+
     X = hcat(ones(length(x)), x)  # Design matrix (with intercept)
     β = X \ y  # Solve for coefficients (m, b)
     return y - (X * β)
@@ -236,7 +242,7 @@ extract_int("channel_123_data")  # Returns: 123
 extract_int("no_numbers_here")   # Returns: nothing
 ```
 """
-function extract_int(s::String)::Union{Int, Nothing}
+function extract_int(s::String)::Union{Int,Nothing}
     digits_only = Base.filter(isdigit, s)
     return isempty(digits_only) ? nothing : parse(Int, digits_only)
 end
@@ -463,12 +469,16 @@ plot_kwargs = _merge_plot_kwargs(PLOT_KWARGS, kwargs)
 plot_kwargs = _merge_plot_kwargs(PLOT_KWARGS, kwargs; validate=false)
 ```
 """
-function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::NamedTuple; validate::Bool = true)::Dict{Symbol,Any}
-    
+function _merge_plot_kwargs(
+    defaults_dict::Dict{Symbol,Tuple{Any,String}},
+    user_kwargs::NamedTuple;
+    validate::Bool = true,
+)::Dict{Symbol,Any}
+
     # Get default and user kwargs
     defaults = _get_defaults(defaults_dict)
     user_dict = Dict{Symbol,Any}(pairs(user_kwargs))
-    
+
     # Check for unknown parameters (only if validation is enabled)
     if validate
         valid_keys = keys(defaults)
@@ -477,20 +487,28 @@ function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_
             @minimal_error_throw "Unknown keyword arguments: $(join(unknown_keys, ", ")). Valid arguments: $(join(valid_keys, ", "))"
         end
     end
-    
+
     # Merge defaults with user kwargs
     merged_kwargs = merge(defaults, user_dict)
-    
+
     return merged_kwargs
 end
 
 # Convenience function for the common pattern
-function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Dict; validate::Bool = true)::Dict{Symbol,Any}
+function _merge_plot_kwargs(
+    defaults_dict::Dict{Symbol,Tuple{Any,String}},
+    user_kwargs::Dict;
+    validate::Bool = true,
+)::Dict{Symbol,Any}
     return _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
 end
 
 # Handle empty keyword arguments (Base.Pairs)
-function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Base.Pairs; validate::Bool = true)::Dict{Symbol,Any}
+function _merge_plot_kwargs(
+    defaults_dict::Dict{Symbol,Tuple{Any,String}},
+    user_kwargs::Base.Pairs;
+    validate::Bool = true,
+)::Dict{Symbol,Any}
     return _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
 end
 

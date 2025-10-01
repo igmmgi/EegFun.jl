@@ -251,14 +251,14 @@ using OrderedCollections
         @testset "rename_channel! - Single channel" begin
             layout = copy(test_layout)
             original_labels = copy(layout.data.label)
-            
+
             # Rename a single channel
             eegfun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
-            
+
             @test :Fpz in layout.data.label
             @test :Fp1 ∉ layout.data.label
             @test length(layout.data.label) == length(original_labels)
-            
+
             # Check that other channels remain unchanged
             unchanged_channels = setdiff(original_labels, [:Fp1])
             for ch in unchanged_channels
@@ -269,18 +269,18 @@ using OrderedCollections
         @testset "rename_channel! - Multiple channels" begin
             layout = copy(test_layout)
             original_labels = copy(layout.data.label)
-            
+
             # Rename multiple channels to unique names
             rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fp2_new, :F3 => :F3_new)
             eegfun.rename_channel!(layout, rename_dict)
-            
+
             @test :Fpz in layout.data.label
             @test :Fp2_new in layout.data.label
             @test :F3_new in layout.data.label
             @test :Fp1 ∉ layout.data.label
             @test :Fp2 ∉ layout.data.label
             @test :F3 ∉ layout.data.label
-            
+
             # Check that other channels remain unchanged
             unchanged_channels = setdiff(original_labels, [:Fp1, :Fp2, :F3])
             for ch in unchanged_channels
@@ -290,11 +290,11 @@ using OrderedCollections
 
         @testset "rename_channel! - Multiple channels to same name (prevented)" begin
             layout = copy(test_layout)
-            
+
             # When multiple channels would be renamed to the same name, an error should be thrown
             rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fpz)
             @test_throws Any eegfun.rename_channel!(layout, rename_dict)
-            
+
             # Layout should remain unchanged
             @test layout.data.label == test_layout.data.label
         end
@@ -302,10 +302,10 @@ using OrderedCollections
         @testset "rename_channel! - Non-existent channels" begin
             layout = copy(test_layout)
             original_labels = copy(layout.data.label)
-            
+
             # Try to rename channels that don't exist
             eegfun.rename_channel!(layout, Dict(:NonExistent => :NewName))
-            
+
             # Layout should remain unchanged
             @test layout.data.label == original_labels
         end
@@ -313,10 +313,10 @@ using OrderedCollections
         @testset "rename_channel! - Empty rename dict" begin
             layout = copy(test_layout)
             original_labels = copy(layout.data.label)
-            
+
             # Empty rename dictionary should do nothing
-            eegfun.rename_channel!(layout, Dict{Symbol, Symbol}())
-            
+            eegfun.rename_channel!(layout, Dict{Symbol,Symbol}())
+
             # Layout should remain unchanged
             @test layout.data.label == original_labels
         end
@@ -324,15 +324,15 @@ using OrderedCollections
         @testset "rename_channel - Non-mutating version" begin
             layout = copy(test_layout)
             original_layout = copy(test_layout)
-            
+
             # Use non-mutating version
             new_layout = eegfun.rename_channel(layout, Dict(:Fp1 => :Fpz))
-            
+
             # Original should be unchanged
             @test original_layout.data.label == test_layout.data.label
             @test :Fp1 in original_layout.data.label
             @test :Fpz ∉ original_layout.data.label
-            
+
             # New layout should have the changes
             @test :Fpz in new_layout.data.label
             @test :Fp1 ∉ new_layout.data.label
@@ -341,29 +341,29 @@ using OrderedCollections
 
         @testset "rename_channel! - Neighbour cache clearing" begin
             layout = copy(test_layout)
-            
+
             # Add some neighbours first
             eegfun.polar_to_cartesian_xy!(layout)
             eegfun.get_layout_neighbours_xy!(layout, 100.0)
-            
+
             # Verify neighbours exist
             @test !isnothing(layout.neighbours)
             @test haskey(layout.neighbours, :Fp1)
-            
+
             # Rename a channel
             eegfun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
-            
+
             # Neighbours should be cleared
             @test isnothing(layout.neighbours)
         end
 
         @testset "rename_channel! - Coordinate preservation" begin
             layout = copy(test_layout)
-            
+
             # Add coordinates first
             eegfun.polar_to_cartesian_xy!(layout)
             eegfun.polar_to_cartesian_xyz!(layout)
-            
+
             # Store original coordinates for Fp1
             fp1_idx = findfirst(layout.data.label .== :Fp1)
             original_x2 = layout.data[fp1_idx, :x2]
@@ -371,13 +371,13 @@ using OrderedCollections
             original_x3 = layout.data[fp1_idx, :x3]
             original_y3 = layout.data[fp1_idx, :y3]
             original_z3 = layout.data[fp1_idx, :z3]
-            
+
             # Rename Fp1 to Fpz
             eegfun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
-            
+
             # Find the renamed channel
             fpz_idx = findfirst(layout.data.label .== :Fpz)
-            
+
             # Coordinates should be preserved
             @test layout.data[fpz_idx, :x2] == original_x2
             @test layout.data[fpz_idx, :y2] == original_y2
@@ -388,16 +388,16 @@ using OrderedCollections
 
         @testset "rename_channel! - Edge cases" begin
             layout = copy(test_layout)
-            
+
             # Test renaming to the same name (should be a no-op)
             eegfun.rename_channel!(layout, Dict(:Fp1 => :Fp1))
             @test :Fp1 in layout.data.label
-            
+
             # Test renaming all channels
             all_channels = copy(layout.data.label)
             rename_dict = Dict(old => Symbol("new_$(old)") for old in all_channels)
             eegfun.rename_channel!(layout, rename_dict)
-            
+
             # All original names should be gone, all new names should exist
             for old in all_channels
                 @test old ∉ layout.data.label
@@ -410,27 +410,27 @@ using OrderedCollections
         @testset "rename_channel! - Swap behavior" begin
             layout = copy(test_layout)
             original_labels = copy(layout.data.label)
-            
+
             # Test swapping Fp1 and Fp2
             swap_dict = Dict(:Fp1 => :Fp2, :Fp2 => :Fp1)
             eegfun.rename_channel!(layout, swap_dict)
-            
+
             # Should have swapped positions
             @test layout.data.label[1] == :Fp2  # First position now has Fp2
             @test layout.data.label[2] == :Fp1  # Second position now has Fp1
-            
+
             # Other channels should remain unchanged
             @test layout.data.label[3] == :F3
             @test layout.data.label[4] == :F4
             @test layout.data.label[5] == :Cz
-            
+
             # Total number of channels should remain the same
             @test length(layout.data.label) == 5
-            
+
             # Verify it's a proper swap by checking the inverse operation
             inverse_swap = Dict(:Fp2 => :Fp1, :Fp1 => :Fp2)
             eegfun.rename_channel!(layout, inverse_swap)
-            
+
             # Should be back to original
             @test layout.data.label == original_labels
         end

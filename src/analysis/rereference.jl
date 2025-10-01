@@ -97,13 +97,13 @@ function rereference!(
 )
 
     reference_channels = get_reference_channels(dat, reference_selection)
-    
+
     # If no reference channels (e.g., :none), return early without rereferencing
     if isempty(reference_channels)
         @info "No rereferencing applied (reference: $(reference_selection))"
         return
     end
-    
+
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
 
     # Verify reference channels exist in the data
@@ -150,27 +150,26 @@ end
 Process a single file through rereferencing pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_rereference_file(filepath::String, output_path::String, 
-                                  reference_selection, conditions)
+function _process_rereference_file(filepath::String, output_path::String, reference_selection, conditions)
     filename = basename(filepath)
-    
+
     # Load data
     data_result = _load_eeg_data(filepath)
     if isnothing(data_result)
         return BatchResult(false, filename, "No recognized data variable")
     end
-    
+
     data, var_name = data_result
-    
+
     # Select conditions
     data = _select_conditions(data, conditions)
-    
+
     # Apply rereferencing (mutates data in-place)
     rereference!.(data, reference_selection)
-    
+
     # Save
     save(output_path, var_name, data)
-    
+
     ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
     return BatchResult(true, filename, "Rereferenced to $ref_str")
 end
@@ -211,52 +210,55 @@ rereference("epochs", reference_selection=:mastoid, participants=3)
 rereference("epochs", reference_selection=[:Cz], participants=[3, 4], conditions=[1, 2])
 ```
 """
-function rereference(file_pattern::String; 
-                    input_dir::String = pwd(), 
-                    reference_selection::Union{Symbol, Vector{Symbol}} = :avg, 
-                    participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                    conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                    output_dir::Union{String, Nothing} = nothing)
-    
+function rereference(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    reference_selection::Union{Symbol,Vector{Symbol}} = :avg,
+    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    output_dir::Union{String,Nothing} = nothing,
+)
+
     # Setup logging
     log_file = "rereference.log"
     setup_global_logging(log_file)
-    
+
     try
         @info "Batch rereferencing started at $(now())"
         @log_call "rereference" (file_pattern,)
-        
+
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        
+
         # Setup directories
-        output_dir = something(output_dir, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
+        output_dir =
+            something(output_dir, _default_rereference_output_dir(input_dir, file_pattern, reference_selection))
         mkpath(output_dir)
-        
+
         # Find files
         files = _find_batch_files(file_pattern, input_dir; participants)
-        
+
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-        
+
         ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
         @info "Reference settings: $ref_str"
-        
+
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> 
-            _process_rereference_file(input_path, output_path, reference_selection, conditions)
-        
+        process_fn =
+            (input_path, output_path) ->
+                _process_rereference_file(input_path, output_path, reference_selection, conditions)
+
         # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
-                                      operation_name="Rereferencing")
-        
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Rereferencing")
+
         _log_batch_summary(results, output_dir)
-        
+
     finally
         _cleanup_logging(log_file, output_dir)
     end

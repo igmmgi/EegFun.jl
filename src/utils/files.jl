@@ -22,10 +22,10 @@ function check_files_exist(conditions::Vector{Int}, filetype::String)
     return all_files_exist
 end
 
-function check_files_exist(conditions:: Int, filetype::String)
+function check_files_exist(conditions::Int, filetype::String)
     return check_files_exist([conditions], filetype)
 end
-  
+
 
 function check_files_exist(files::Vector{String})
     all_files_exist = true
@@ -75,21 +75,20 @@ csv_file = find_file("biosemi64", "data/layouts", extensions = [".csv"])
 direct_file = find_file("README.txt", "data/layouts", recursive = false)
 ```
 """
-function find_file(filename::String, search_dir::String; 
-                   recursive::Bool = true, extensions::Vector{String} = String[])
-    
+function find_file(filename::String, search_dir::String; recursive::Bool = true, extensions::Vector{String} = String[])
+
     # Check if directory exists
     if !isdir(search_dir)
         return nothing
     end
-    
+
     # Add extensions to filename if specified
     if isempty(extensions)
         filenames_to_find = [filename]
     else
         filenames_to_find = [filename * ext for ext in extensions]
     end
-    
+
     # Try exact match in the directory first
     for target_filename in filenames_to_find
         exact_path = joinpath(search_dir, target_filename)
@@ -97,7 +96,7 @@ function find_file(filename::String, search_dir::String;
             return exact_path
         end
     end
-    
+
     # If recursive search is enabled, search subdirectories
     if recursive
         for (root, dirs, files) in walkdir(search_dir)
@@ -108,7 +107,7 @@ function find_file(filename::String, search_dir::String;
             end
         end
     end
-    
+
     return nothing
 end
 
@@ -129,41 +128,43 @@ Filter files by participant number extracted from filename.
 # Note
 Assumes filename format like "Flank_C_3_epochs_cleaned.jld2" where participant number is the first numeric part.
 """
-function _filter_files(files::Vector{String}; 
-                      include::Union{Vector{Int}, Int, Nothing} = nothing, 
-                      exclude::Union{Vector{Int}, Int, Nothing} = nothing)
-    
+function _filter_files(
+    files::Vector{String};
+    include::Union{Vector{Int},Int,Nothing} = nothing,
+    exclude::Union{Vector{Int},Int,Nothing} = nothing,
+)
+
     # Convert single values to vectors
     include_nums = include isa Int ? [include] : include
     exclude_nums = exclude isa Int ? [exclude] : exclude
-    
+
     return Base.filter(files) do file
         # Extract participant number from filename (assuming format like "Flank_C_3_epochs_cleaned.jld2")
         parts = split(file, "_")
         file_participant = nothing
-        
+
         for part in parts
             if !isempty(part) && isdigit(part[1])  # First character is a digit
                 file_participant = parse(Int, part)
                 break
             end
         end
-        
+
         # If no participant number found, include the file unless explicitly excluded
         if file_participant === nothing
             return exclude_nums === nothing || !(nothing in exclude_nums)
         end
-        
+
         # Apply include filter
         if include_nums !== nothing && !(file_participant in include_nums)
             return false
         end
-        
+
         # Apply exclude filter
         if exclude_nums !== nothing && file_participant in exclude_nums
             return false
         end
-        
+
         return true
     end
 end
@@ -194,5 +195,3 @@ function check_files_exist(subjects::Union{Vector{Int},Int}, conditions::Union{V
     end
     return all_files_exist
 end
-
-

@@ -114,7 +114,8 @@ using eegfun
 
         @testset "Valid Configuration Loading" begin
             # Test 1: Load default config only - should work without errors
-            default_config = eegfun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
+            default_config =
+                eegfun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
             @test default_config isa Dict
             @test haskey(default_config, "preprocess")
             @test haskey(default_config, "filter")
@@ -705,7 +706,7 @@ using eegfun
     @testset "_filter_param_spec Tests" begin
         # Test filter parameter specification creation
         filter_spec = eegfun._filter_param_spec("test.prefix", true, 1.0, 0.1, 10.0, 2, 1, 5)
-        
+
         @test haskey(filter_spec, "test.prefix.apply")
         @test haskey(filter_spec, "test.prefix.method")
         @test haskey(filter_spec, "test.prefix.func")
@@ -729,7 +730,7 @@ using eegfun
     @testset "_group_parameters_by_section Tests" begin
         # Test parameter grouping
         sections = eegfun._group_parameters_by_section()
-        
+
         @test haskey(sections, "files")
         @test haskey(sections, "filter")
         @test haskey(sections, "preprocess")
@@ -750,13 +751,13 @@ using eegfun
         # Test basic subsection extraction
         @test eegfun._extract_subsection("files", "files.input.directory") == "input"
         @test eegfun._extract_subsection("filter", "filter.highpass.freq") == "highpass"
-        
+
         # Test nested subsections
         @test eegfun._extract_subsection("filter", "filter.ica_highpass.freq") == "ica_highpass"
-        
+
         # Test no subsection
         @test eegfun._extract_subsection("ica", "ica.apply") == ""
-        
+
         # Test non-matching prefix
         @test eegfun._extract_subsection("files", "filter.highpass.freq") == ""
     end
@@ -765,12 +766,12 @@ using eegfun
         # Test parameter grouping by subsection
         matching_params = ["filter.highpass.freq", "filter.highpass.apply", "filter.lowpass.freq"]
         grouped = eegfun._group_params_by_subsection("filter", matching_params)
-        
+
         @test haskey(grouped, "highpass")
         @test haskey(grouped, "lowpass")
         @test length(grouped["highpass"]) == 2
         @test length(grouped["lowpass"]) == 1
-        
+
         # Test parameter content
         highpass_params = [p[1] for p in grouped["highpass"]]
         @test "filter.highpass.freq" in highpass_params
@@ -788,16 +789,8 @@ using eegfun
         @test merged["a"] == 1
 
         # Test deep merging
-        default = Dict(
-            "a" => Dict(
-                "b" => Dict("c" => 1)
-            )
-        )
-        user = Dict(
-            "a" => Dict(
-                "b" => Dict("d" => 2)
-            )
-        )
+        default = Dict("a" => Dict("b" => Dict("c" => 1)))
+        user = Dict("a" => Dict("b" => Dict("d" => 2)))
         merged = eegfun._merge_configs(default, user)
         @test merged["a"]["b"]["c"] == 1
         @test merged["a"]["b"]["d"] == 2
@@ -809,17 +802,8 @@ using eegfun
         @test merged["a"] == 2
 
         # Test nested user config overrides default
-        default = Dict(
-            "a" => Dict(
-                "b" => 1,
-                "c" => 2
-            )
-        )
-        user = Dict(
-            "a" => Dict(
-                "b" => 3
-            )
-        )
+        default = Dict("a" => Dict("b" => 1, "c" => 2))
+        user = Dict("a" => Dict("b" => 3))
         merged = eegfun._merge_configs(default, user)
         @test merged["a"]["b"] == 3
         @test merged["a"]["c"] == 2
@@ -829,7 +813,7 @@ using eegfun
         # Test merging with non-dict values (using compatible types)
         target = Dict("a" => Dict("b" => 1), "c" => 5)
         source = Dict("a" => Dict("d" => 2), "c" => 10)  # Override with compatible types
-        
+
         eegfun._merge_nested!(target, source)
         @test target["a"]["b"] == 1  # Original value preserved
         @test target["a"]["d"] == 2  # New value added
@@ -839,7 +823,7 @@ using eegfun
         target = Dict("a" => 1, "b" => 2)
         source = Dict()
         original_target = copy(target)
-        
+
         eegfun._merge_nested!(target, source)
         @test target == original_target  # Should be unchanged
     end
@@ -904,8 +888,14 @@ using eegfun
 
     @testset "_show_parameter_details Tests" begin
         # Test with parameter that has all fields
-        param = eegfun.ConfigParameter{Real}(description = "Test param", default = 5.0, min = 0.0, max = 10.0, allowed = ["a", "b"])
-        
+        param = eegfun.ConfigParameter{Real}(
+            description = "Test param",
+            default = 5.0,
+            min = 0.0,
+            max = 10.0,
+            allowed = ["a", "b"],
+        )
+
         # Capture output (this is tricky with @info, so we'll test the function exists)
         @test typeof(eegfun._show_parameter_details) <: Function
     end
@@ -914,7 +904,7 @@ using eegfun
         # Test section display
         sections = eegfun._group_parameters_by_section()
         files_section = sections["files"]
-        
+
         # Test function exists and can be called
         @test typeof(eegfun._display_section) <: Function
     end
@@ -923,7 +913,7 @@ using eegfun
         # Test subsection display
         sections = eegfun._group_parameters_by_section()
         input_params = sections["files"]["input"]
-        
+
         # Test function exists and can be called
         @test typeof(eegfun._display_subsection) <: Function
     end
@@ -931,10 +921,10 @@ using eegfun
     @testset "_show_specific_parameter Tests" begin
         # Test with exact parameter match
         @test typeof(eegfun._show_specific_parameter) <: Function
-        
+
         # Test with section prefix
         @test typeof(eegfun._show_specific_parameter) <: Function
-        
+
         # Test with non-existent parameter
         @test typeof(eegfun._show_specific_parameter) <: Function
     end
@@ -942,7 +932,7 @@ using eegfun
     @testset "_show_section_overview Tests" begin
         # Test section overview
         matching_params = ["filter.highpass.freq", "filter.highpass.apply", "filter.lowpass.freq"]
-        
+
         # Test function exists and can be called
         @test typeof(eegfun._show_section_overview) <: Function
     end
@@ -951,7 +941,7 @@ using eegfun
         # Test grouped parameters display
         sections = eegfun._group_parameters_by_section()
         files_section = sections["files"]
-        
+
         # Test function exists and can be called
         @test typeof(eegfun._display_grouped_params) <: Function
     end
@@ -959,7 +949,7 @@ using eegfun
     @testset "_show_all_parameters Tests" begin
         # Test that the function exists and can be called
         @test typeof(eegfun._show_all_parameters) <: Function
-        
+
         # Test that it doesn't throw errors when called
         # (This function uses @info for output, so we can't easily capture it)
         @test nothing === nothing  # Placeholder to ensure test runs
@@ -1017,13 +1007,13 @@ using eegfun
     @testset "show_parameter_info Integration Tests" begin
         # Test with empty parameter name (show all)
         @test typeof(eegfun.show_parameter_info) <: Function
-        
+
         # Test with specific parameter
         @test typeof(eegfun.show_parameter_info) <: Function
-        
+
         # Test with section prefix
         @test typeof(eegfun.show_parameter_info) <: Function
-        
+
         # Test with non-existent parameter
         @test typeof(eegfun.show_parameter_info) <: Function
     end
@@ -1033,7 +1023,7 @@ using eegfun
         custom_template = joinpath(test_dir, "custom_template.toml")
         eegfun.generate_config_template(filename = custom_template)
         @test isfile(custom_template)
-        
+
         # Verify template content
         template_content = read(custom_template, String)
         @test contains(template_content, "# EEG Processing Configuration Template")
@@ -1041,7 +1031,7 @@ using eegfun
         @test contains(template_content, "[filter]")
         @test contains(template_content, "[preprocess]")
         @test contains(template_content, "[ica]")
-        
+
         # Clean up
         rm(custom_template)
     end
@@ -1050,7 +1040,7 @@ using eegfun
         io = IOBuffer()
         eegfun._write_template_header(io)
         output = String(take!(io))
-        
+
         @test contains(output, "# EEG Processing Configuration Template")
         @test contains(output, "# Generated on")
         @test contains(output, "# This template shows all available configuration options")
@@ -1062,11 +1052,11 @@ using eegfun
         # Create test data using the actual PARAMETERS structure
         sections = eegfun._group_parameters_by_section()
         files_section = sections["files"]
-        
+
         io = IOBuffer()
         eegfun._write_section(io, "files", files_section)
         output = String(take!(io))
-        
+
         @test contains(output, "# files Settings")
         @test contains(output, "[files]")
         @test contains(output, "# input Settings")
@@ -1079,11 +1069,11 @@ using eegfun
         # Create test data using the actual PARAMETERS structure
         sections = eegfun._group_parameters_by_section()
         input_params = sections["files"]["input"]
-        
+
         io = IOBuffer()
         eegfun._write_subsection(io, "files", "input", input_params)
         output = String(take!(io))
-        
+
         @test contains(output, "# input Settings")
         @test contains(output, "[files.input]")
         @test contains(output, "directory = \".\"")
@@ -1093,7 +1083,7 @@ using eegfun
         io = IOBuffer()
         eegfun._write_template_sections(io)
         output = String(take!(io))
-        
+
         # Should contain all major sections
         @test contains(output, "# files Settings")
         @test contains(output, "# filter Settings")
@@ -1103,11 +1093,17 @@ using eegfun
 
     @testset "_write_parameter_docs Tests" begin
         # Test parameter with all fields
-        param = eegfun.ConfigParameter{Real}(description = "Test param", default = 5.0, min = 0.0, max = 10.0, allowed = ["a", "b"])
+        param = eegfun.ConfigParameter{Real}(
+            description = "Test param",
+            default = 5.0,
+            min = 0.0,
+            max = 10.0,
+            allowed = ["a", "b"],
+        )
         io = IOBuffer()
         eegfun._write_parameter_docs(io, param)
         output = String(take!(io))
-        
+
         @test contains(output, "# Test param")
         @test contains(output, "# Type: Real")
         @test contains(output, "# Range: 0.0 ≤ value ≤ 10.0")
@@ -1119,7 +1115,7 @@ using eegfun
         io = IOBuffer()
         eegfun._write_parameter_docs(io, param)
         output = String(take!(io))
-        
+
         @test contains(output, "# [REQUIRED]")
         @test !contains(output, "# Default:")
     end
@@ -1163,12 +1159,12 @@ using eegfun
     @testset "Error Handling Tests" begin
         # Test template generation with invalid filename
         invalid_path = "/invalid/path/that/does/not/exist/template.toml"
-        
+
         # This should not throw an error but return gracefully
         # (The actual error handling depends on the implementation)
         @test typeof(eegfun.generate_config_template) <: Function
     end
 
     # Cleanup
-    rm(test_dir, recursive=true, force=true)
+    rm(test_dir, recursive = true, force = true)
 end

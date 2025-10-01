@@ -5,39 +5,39 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits
     :ylimit => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),
     :xlimit => (nothing, "X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined"),
-    
+
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    
+
     # Plot styling
     :title => ("Filter Frequency Response", "Plot title"),
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Magnitude (dB)", "Y-axis label"),
-    
+
     # Font sizes
     :title_fontsize => (24, "Font size for title"),
     :label_fontsize => (22, "Font size for axis labels"),
     :tick_fontsize => (20, "Font size for tick labels"),
     :legend_fontsize => (32, "Font size for legend"),
-    
+
     # Line styling
     :actual_linewidth => (4, "Line width for actual response"),
     :ideal_linewidth => (3, "Line width for ideal response"),
     :actual_color => (:black, "Color for actual response"),
     :ideal_color => (:green, "Color for ideal response"),
     :ideal_linestyle => (:dash, "Line style for ideal response"),
-    
+
     # Reference lines
     :reference_lines => ([-3, -6], "Reference lines in dB to display"),
     :reference_color => (:gray, "Color for reference lines"),
     :reference_linestyle => (:dash, "Line style for reference lines"),
-    
+
     # Transition region styling
     :transition_alpha => (0.2, "Transparency for transition region shading"),
     :transition_color => (:gray, "Color for transition region shading"),
     :transition_line_color => (:gray, "Color for transition region lines"),
     :transition_line_style => (:dash, "Line style for transition region lines"),
-    
+
     # Plot parameters
     :n_points => (2000, "Number of frequency points for response calculation"),
     :xscale => (Makie.Symlog10(10.0), "X-axis scale type"),
@@ -69,7 +69,7 @@ function plot_filter_response(
 )
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, kwargs)
-    
+
     # Determine x-axis limits based on filter type and cutoff
     xlimit = plot_kwargs[:xlimit]
     if isnothing(xlimit)
@@ -104,13 +104,19 @@ function plot_filter_response(
             xlimit = (0.01, xlimit[2])  # Use small positive value instead of 0
         end
     end
-    
+
     # Add xscale from kwargs
     xscale_props = (xscale = xscale,)
 
     # Create three axes in a row
     ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = "Magnitude (linear)", limits = (xlimit, (0, 1.1)))
-    ax2 = Axis(fig[1, 2]; base_props..., xscale_props..., ylabel = plot_kwargs[:ylabel], limits = (xlimit, plot_kwargs[:ylimit]))
+    ax2 = Axis(
+        fig[1, 2];
+        base_props...,
+        xscale_props...,
+        ylabel = plot_kwargs[:ylabel],
+        limits = (xlimit, plot_kwargs[:ylimit]),
+    )
     ax3 = Axis(
         fig[1, 3];
         xlabel = "Time (samples)",
@@ -143,16 +149,42 @@ function plot_filter_response(
     mag_db = 20 * log10.(mag_linear)
 
     # Plot actual responses
-    lines!(ax1, freqs, mag_linear, label = "Actual", color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
-    lines!(ax2, freqs, mag_db, label = "Actual", color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
+    lines!(
+        ax1,
+        freqs,
+        mag_linear,
+        label = "Actual",
+        color = plot_kwargs[:actual_color],
+        linewidth = plot_kwargs[:actual_linewidth],
+    )
+    lines!(
+        ax2,
+        freqs,
+        mag_db,
+        label = "Actual",
+        color = plot_kwargs[:actual_color],
+        linewidth = plot_kwargs[:actual_linewidth],
+    )
 
     # Add vertical line at cutoff frequency to both subplots
     vlines!(ax1, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
     vlines!(ax2, [filter_info.cutoff_freq], color = :red, linestyle = :dash, linewidth = 2)
 
     # Add reference lines
-    hlines!(ax1, [0.707], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)  # -3 dB point
-    hlines!(ax2, plot_kwargs[:reference_lines], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
+    hlines!(
+        ax1,
+        [0.707],
+        color = plot_kwargs[:reference_color],
+        linestyle = plot_kwargs[:reference_linestyle],
+        alpha = 0.5,
+    )  # -3 dB point
+    hlines!(
+        ax2,
+        plot_kwargs[:reference_lines],
+        color = plot_kwargs[:reference_color],
+        linestyle = plot_kwargs[:reference_linestyle],
+        alpha = 0.5,
+    )
 
     # Calculate and plot impulse response
     # Create a unit impulse with samples before and after
@@ -172,7 +204,13 @@ function plot_filter_response(
     end
 
     # Plot impulse response
-    lines!(ax3, time_samples, impulse_response, color = plot_kwargs[:actual_color], linewidth = plot_kwargs[:actual_linewidth])
+    lines!(
+        ax3,
+        time_samples,
+        impulse_response,
+        color = plot_kwargs[:actual_color],
+        linewidth = plot_kwargs[:actual_linewidth],
+    )
 
     # Add zero line for reference
     hlines!(ax3, [0], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
@@ -183,4 +221,3 @@ function plot_filter_response(
 
     return fig, (ax1, ax2, ax3)
 end
-

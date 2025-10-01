@@ -71,13 +71,7 @@ fig, ax = plot_channel_summary(summary_df, :kurtosis,
     error_linewidth = 3)
 ```
 """
-function plot_channel_summary!(
-    fig::Figure,
-    ax::Axis,
-    dat::DataFrame,
-    col::Symbol;
-    kwargs...
-)
+function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbol; kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
@@ -135,7 +129,7 @@ function plot_channel_summary!(
     ax.ylabelsize = plot_kwargs[:label_fontsize]
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
-    
+
     # Configure grid
     ax.xgridvisible = plot_kwargs[:grid_visible]
     ax.ygridvisible = plot_kwargs[:grid_visible]
@@ -145,15 +139,24 @@ function plot_channel_summary!(
     ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
 
     # Create the bar plot
-    barplot!(ax, 1:length(values_to_plot), values_to_plot, 
-             color = plot_kwargs[:bar_color], 
-             width = plot_kwargs[:bar_width],
-             alpha = plot_kwargs[:bar_alpha])
-    
+    barplot!(
+        ax,
+        1:length(values_to_plot),
+        values_to_plot,
+        color = plot_kwargs[:bar_color],
+        width = plot_kwargs[:bar_width],
+        alpha = plot_kwargs[:bar_alpha],
+    )
+
     if plot_kwargs[:average_over] !== nothing # add error bars
-        errorbars!(ax, 1:length(values_to_plot), values_to_plot, margin_of_error, 
-                  color = plot_kwargs[:error_color], 
-                  linewidth = plot_kwargs[:error_linewidth])
+        errorbars!(
+            ax,
+            1:length(values_to_plot),
+            values_to_plot,
+            margin_of_error,
+            color = plot_kwargs[:error_color],
+            linewidth = plot_kwargs[:error_linewidth],
+        )
     end
 
     return nothing
@@ -161,19 +164,15 @@ end
 
 # Share documentation with the non-mutating version
 @doc (@doc plot_channel_summary!) plot_channel_summary
-function plot_channel_summary(
-    dat::DataFrame,
-    col::Symbol;
-    kwargs...
-)
+function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
-    
+
     # Check if required columns exist - throw error for non-mutating version
     if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
         @minimal_error_throw("DataFrame must contain :channel and :$col columns.")
     end
-    
+
     # Create the figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])

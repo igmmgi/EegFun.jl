@@ -23,7 +23,7 @@ using eegfun
         X = S * mixing'  # n x nch
         # Channels
         cols = Dict{Symbol,Vector{Float64}}()
-        for i in 1:nch
+        for i = 1:nch
             cols[Symbol("ch", i)] = X[:, i]
         end
         # EOG channels roughly correlated to first two sources
@@ -36,9 +36,13 @@ using eegfun
         df[!, :vEOG] = vEOG
         df[!, :hEOG] = hEOG
         # Keep mask: first half only
-        df[!, :keepmask] = [i <= n ÷ 2 for i in 1:n]
-        layout = eegfun.Layout(DataFrame(label = Symbol.(collect(keys(cols))), inc = zeros(nch), azi = zeros(nch)), nothing, nothing)
-        dat = eegfun.ContinuousData(copy(df, copycols=true), layout, fs, eegfun.AnalysisInfo())
+        df[!, :keepmask] = [i <= n ÷ 2 for i = 1:n]
+        layout = eegfun.Layout(
+            DataFrame(label = Symbol.(collect(keys(cols))), inc = zeros(nch), azi = zeros(nch)),
+            nothing,
+            nothing,
+        )
+        dat = eegfun.ContinuousData(copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
         return dat
     end
 
@@ -89,7 +93,7 @@ using eegfun
         df = vcat(dat.data, dat.data)
         mat = eegfun.create_ica_data_matrix(df, [:ch1, :ch2, :ch3, :ch4], 1:nrow(df))
         @test size(mat, 1) == 4
-        @test size(mat, 2) == nrow(df)  
+        @test size(mat, 2) == nrow(df)
         # Non-existent channels get dropped by intersect
         mat2 = eegfun.create_ica_data_matrix(df, [:ch1, :chX], 1:nrow(df))
         @test size(mat2, 1) == 1
@@ -99,15 +103,18 @@ using eegfun
         dat = create_synthetic_continuous()
         ica_res = eegfun.run_ica(dat; n_components = 3)
         # Non-mutating removal
-        cleaned_df, ica_updated = eegfun.remove_ica_components(dat.data, ica_res; component_selection = eegfun.components([1]))
+        cleaned_df, ica_updated =
+            eegfun.remove_ica_components(dat.data, ica_res; component_selection = eegfun.components([1]))
         @test !isempty(ica_updated.removed_activations)
         @test cleaned_df isa DataFrame
         # Restore non-mutating
-        restored_df, ica_restored = eegfun.restore_ica_components(cleaned_df, ica_updated; component_selection = eegfun.components([1]))
+        restored_df, ica_restored =
+            eegfun.restore_ica_components(cleaned_df, ica_updated; component_selection = eegfun.components([1]))
         @test isempty(ica_restored.removed_activations)
 
         # Mutating on ContinuousData
-        dat2 = copy(dat); ica2 = copy(ica_res)
+        dat2 = copy(dat);
+        ica2 = copy(ica_res)
         eegfun.remove_ica_components!(dat2, ica2; component_selection = eegfun.components([1, 2]))
         @test length(keys(ica2.removed_activations)) == 2
         eegfun.restore_ica_components!(dat2, ica2; component_selection = eegfun.components([1]))
@@ -121,15 +128,20 @@ using eegfun
         @test length(keys(ica2.removed_activations)) == before
 
         # Restoring a valid component that was not removed should throw
-        dat3 = create_synthetic_continuous(); ica3 = eegfun.run_ica(dat3; n_components = 3)
-        @test_throws ArgumentError eegfun.restore_ica_components!(dat3.data, ica3; component_selection = eegfun.components([1]))
+        dat3 = create_synthetic_continuous();
+        ica3 = eegfun.run_ica(dat3; n_components = 3)
+        @test_throws ArgumentError eegfun.restore_ica_components!(
+            dat3.data,
+            ica3;
+            component_selection = eegfun.components([1]),
+        )
 
         # Roundtrip (mutating): remove then restore yields original data
         dat4 = create_synthetic_continuous()
         # Use full-rank ICA (components == channels) to make the transform invertible
         nfull = eegfun.n_channels(dat4)
         ica4 = eegfun.run_ica(dat4; n_components = nfull)
-        orig_ch = select(copy(dat4.data, copycols=true), dat4.layout.data.label)
+        orig_ch = select(copy(dat4.data, copycols = true), dat4.layout.data.label)
         eegfun.remove_ica_components!(dat4, ica4; component_selection = eegfun.components([1, 2]))
         eegfun.restore_ica_components!(dat4, ica4; component_selection = eegfun.components([1, 2]))
         roundtrip_ch = select(dat4.data, dat4.layout.data.label)
@@ -161,7 +173,18 @@ using eegfun
         ecg_vec, ecg_df = eegfun.identify_ecg_components(ica_res, dat)
         @test ecg_vec isa Vector{Int}
         @test ecg_df isa DataFrame
-        @test all(c in propertynames(ecg_df) for c in [:Component, :num_peaks, :num_valid_ibis, :mean_ibi_s, :std_ibi_s, :peak_ratio, :heart_rate_bpm, :is_ecg_artifact])
+        @test all(
+            c in propertynames(ecg_df) for c in [
+                :Component,
+                :num_peaks,
+                :num_valid_ibis,
+                :mean_ibi_s,
+                :std_ibi_s,
+                :peak_ratio,
+                :heart_rate_bpm,
+                :is_ecg_artifact,
+            ]
+        )
         # No samples selected -> empty results
         ecg_vec0, ecg_df0 = eegfun.identify_ecg_components(ica_res, dat; sample_selection = x -> falses(nrow(x)))
         @test isempty(ecg_vec0) && size(ecg_df0) == (0, 0)
@@ -176,7 +199,17 @@ using eegfun
         ln_vec, ln_df = eegfun.identify_line_noise_components(ica_res, dat)
         @test ln_vec isa Vector{Int}
         @test ln_df isa DataFrame
-        @test all(c in propertynames(ln_df) for c in [:Component, :LinePower, :SurroundingPower, :PowerRatio, :Harmonic2Ratio, :Harmonic3Ratio, :PowerRatioZScore])
+        @test all(
+            c in propertynames(ln_df) for c in [
+                :Component,
+                :LinePower,
+                :SurroundingPower,
+                :PowerRatio,
+                :Harmonic2Ratio,
+                :Harmonic3Ratio,
+                :PowerRatioZScore,
+            ]
+        )
         # No samples selected -> empty results
         ln_vec0, ln_df0 = eegfun.identify_line_noise_components(ica_res, dat; sample_selection = x -> falses(nrow(x)))
         @test isempty(ln_vec0) && size(ln_df0) == (0, 0)
@@ -194,5 +227,3 @@ using eegfun
     end
 
 end
-
-

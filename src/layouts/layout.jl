@@ -266,12 +266,12 @@ function polar_to_cartesian_xy!(layout::Layout)
     # Convert to Cartesian coordinates
     df[!, :x2] = inc .* cos.(azi)
     df[!, :y2] = inc .* sin.(azi)
-    
+
     # Normalize to [-1, 1] range
     x_range = maximum(df.x2) - minimum(df.x2)
     y_range = maximum(df.y2) - minimum(df.y2)
     max_range = max(x_range, y_range)
-    
+
     if max_range > 0
         df.x2 = (df.x2 .- (maximum(df.x2) + minimum(df.x2)) / 2) ./ (max_range / 2)
         df.y2 = (df.y2 .- (maximum(df.y2) + minimum(df.y2)) / 2) ./ (max_range / 2)
@@ -323,13 +323,13 @@ function polar_to_cartesian_xyz!(layout::Layout)
     df[!, :x3] = sin.(inc) .* cos.(azi)
     df[!, :y3] = sin.(inc) .* sin.(azi)
     df[!, :z3] = cos.(inc)
-    
+
     # Normalize to [-1, 1] range
     x_range = maximum(df.x3) - minimum(df.x3)
     y_range = maximum(df.y3) - minimum(df.y3)
     z_range = maximum(df.z3) - minimum(df.z3)
     max_range = max(x_range, y_range, z_range)
-    
+
     if max_range > 0
         df.x3 = (df.x3 .- (maximum(df.x3) + minimum(df.x3)) / 2) ./ (max_range / 2)
         df.y3 = (df.y3 .- (maximum(df.y3) + minimum(df.y3)) / 2) ./ (max_range / 2)
@@ -851,17 +851,17 @@ rename!(layout, Dict(:Cz => :Cz_new))
 - If multiple channels would be renamed to the same name, an error is thrown to prevent duplicates
 - Clears any cached neighbour information since channel names have changed
 """
-function rename_channel!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
     # Check if any channels in the rename_dict exist in the layout
     existing_channels = Set(layout.data.label)
     channels_to_rename = keys(rename_dict)
     channels_found = intersect(existing_channels, channels_to_rename)
-    
+
     if isempty(channels_found)
         @info "rename!: No channels found to rename"
         return nothing
     end
-    
+
     # Check for potential duplicate names before applying any renames
     final_names = Symbol[]
     for (old_name, new_name) in rename_dict
@@ -869,17 +869,17 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
             push!(final_names, new_name)
         end
     end
-    
+
     # Check for duplicates in final names
     if length(final_names) != length(unique(final_names))
         duplicate_names = Base.filter(x -> count(==(x), final_names) > 1, unique(final_names))
         @minimal_error_throw "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
     end
-    
+
     # Apply the renaming with proper swap handling
     # First, collect all the final rename mappings to avoid interference
-    final_renames = Dict{Int, Symbol}()  # row_index => final_name
-    
+    final_renames = Dict{Int,Symbol}()  # row_index => final_name
+
     for (old_name, new_name) in rename_dict
         if old_name ∈ existing_channels
             # Find the row index for this channel
@@ -889,18 +889,18 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol, Symbol})
             end
         end
     end
-    
+
     # Now apply all renames simultaneously
     for (row_idx, final_name) in final_renames
         layout.data[row_idx, :label] = final_name
     end
-    
+
     # Clear any cached neighbour information since channel names have changed
     if has_neighbours(layout)
         @info "rename!: Clearing neighbours since channel names have changed"
         clear_neighbours!(layout)
     end
-    
+
     @info "rename!: Renamed $(length(channels_found)) channels"
     return nothing
 end
@@ -929,7 +929,7 @@ new_layout = rename(layout, rename_dict)
 - If multiple channels would be renamed to the same name, an error is thrown to prevent duplicates
 - The original layout is not modified
 """
-function rename_channel(layout::Layout, rename_dict::Dict{Symbol, Symbol})
+function rename_channel(layout::Layout, rename_dict::Dict{Symbol,Symbol})
     # Create a copy of the layout and apply renaming
     renamed_layout = Layout(copy(layout.data), nothing, nothing)
     rename_channel!(renamed_layout, rename_dict)

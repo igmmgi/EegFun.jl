@@ -236,10 +236,12 @@ function preprocess_eeg_data(config::String)
                             ),
                         ),
                     )
-                    channel_noise_comps, channel_noise_comps_metrics_df = identify_spatial_kurtosis_components(ica_result, dat_ica)
+                    channel_noise_comps, channel_noise_comps_metrics_df =
+                        identify_spatial_kurtosis_components(ica_result, dat_ica)
 
                     # Combine above component artifact results into a single structure
-                    component_artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+                    component_artifacts =
+                        combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
                     println(component_artifacts)
                     # plot_ica_topoplot(ica_result)
                     plot_ica_component_activation(dat, ica_result)
@@ -303,16 +305,22 @@ function preprocess_eeg_data(config::String)
                 # Log epoch counts and store for summary
                 df = log_epochs_table(epochs_original, epochs_cleaned, title = "Epoch counts per condition:")
                 push!(all_epoch_counts, df)
-                
+
                 # save epochs
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
-                    jldsave(make_output_filename(output_directory, data_file, "_epochs_original"); epochs = epochs_original)
+                    jldsave(
+                        make_output_filename(output_directory, data_file, "_epochs_original");
+                        epochs = epochs_original,
+                    )
                 end
 
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
                     @info "Saving epoch data (cleaned)"
-                    jldsave(make_output_filename(output_directory, data_file, "_epochs_cleaned"); epochs = epochs_cleaned)
+                    jldsave(
+                        make_output_filename(output_directory, data_file, "_epochs_cleaned");
+                        epochs = epochs_cleaned,
+                    )
                 end
 
                 # save erp data
