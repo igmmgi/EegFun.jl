@@ -114,7 +114,7 @@ using eegfun
 
         @testset "Valid Configuration Loading" begin
             # Test 1: Load default config only - should work without errors
-            default_config = eegfun.load_config(joinpath(dirname(@__FILE__), "..", "src", "config", "default.toml"))
+            default_config = eegfun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
             @test default_config isa Dict
             @test haskey(default_config, "preprocess")
             @test haskey(default_config, "filter")
