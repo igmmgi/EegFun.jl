@@ -220,3 +220,7 @@ function difference_conditions(file_pattern::String, condition_pairs::Union{Vect
         _cleanup_logging(log_file, output_dir)
     end
 end
+
+"""
+Batch computation of condition difference waves for ERP data.
+"""
