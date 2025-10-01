@@ -169,3 +169,7 @@ function combine_conditions(file_pattern::String, condition_groups::Vector{Vecto
         _cleanup_logging(log_file, output_dir)
     end
 end
+
+"""
+Batch combining of conditions for epoch data.
+"""
