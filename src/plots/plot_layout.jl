@@ -61,21 +61,15 @@ $(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout)
 """
-function plot_layout_2d!(
-    fig::Figure,
-    ax::Axis,
-    layout::Layout;
-    neighbours::Bool = false,
-    kwargs...
-)
+function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool = false, kwargs...)
 
     _ensure_coordinates_2d!(layout)
 
     # Handle each component's kwargs directly using prefixes (no cross-component validation)
-    head_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_HEAD_KWARGS, kwargs; validate=false)
-    point_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_POINT_KWARGS, kwargs; validate=false)
-    label_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_LABEL_KWARGS, kwargs; validate=false)
-    
+    head_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_HEAD_KWARGS, kwargs; validate = false)
+    point_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_POINT_KWARGS, kwargs; validate = false)
+    label_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_LABEL_KWARGS, kwargs; validate = false)
+
     # Extract control variables
     plot_points = point_kwargs[:point_plot]
     plot_labels = label_kwargs[:label_plot]
@@ -84,17 +78,42 @@ function plot_layout_2d!(
 
     # Head shape - Use kwargs
     radius = head_kwargs[:head_radius]
-    arc!(ax, Point2f(0), radius, -π, π; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # head
-    arc!(ax, Point2f(radius, 0), radius * head_kwargs[:head_ear_ratio], -π / 2, π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear right
-    arc!(ax, Point2f(-radius, 0), -radius * head_kwargs[:head_ear_ratio], π / 2, -π / 2; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # ear left
-    lines!(ax, Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius; color=head_kwargs[:head_color], linewidth=head_kwargs[:head_linewidth]) # nose
+    arc!(ax, Point2f(0), radius, -π, π; color = head_kwargs[:head_color], linewidth = head_kwargs[:head_linewidth]) # head
+    arc!(
+        ax,
+        Point2f(radius, 0),
+        radius * head_kwargs[:head_ear_ratio],
+        -π / 2,
+        π / 2;
+        color = head_kwargs[:head_color],
+        linewidth = head_kwargs[:head_linewidth],
+    ) # ear right
+    arc!(
+        ax,
+        Point2f(-radius, 0),
+        -radius * head_kwargs[:head_ear_ratio],
+        π / 2,
+        -π / 2;
+        color = head_kwargs[:head_color],
+        linewidth = head_kwargs[:head_linewidth],
+    ) # ear left
+    lines!(
+        ax,
+        Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius;
+        color = head_kwargs[:head_color],
+        linewidth = head_kwargs[:head_linewidth],
+    ) # nose
 
     # Regular points
     if plot_points
-        scatter!(ax, layout.data[!, :x2], layout.data[!, :y2]; 
-                marker=point_kwargs[:point_marker], 
-                markersize=point_kwargs[:point_markersize], 
-                color=point_kwargs[:point_color])
+        scatter!(
+            ax,
+            layout.data[!, :x2],
+            layout.data[!, :y2];
+            marker = point_kwargs[:point_marker],
+            markersize = point_kwargs[:point_markersize],
+            color = point_kwargs[:point_color],
+        )
     end
 
     if plot_labels
@@ -102,9 +121,13 @@ function plot_layout_2d!(
         y_coords = layout.data[!, :y2] .+ yoffset
         labels = String.(layout.data[!, :label])
         for i in eachindex(labels)
-            text!(ax, position = (x_coords[i], y_coords[i]), labels[i]; 
-                  fontsize=label_kwargs[:label_fontsize], 
-                  color=label_kwargs[:label_color])
+            text!(
+                ax,
+                position = (x_coords[i], y_coords[i]),
+                labels[i];
+                fontsize = label_kwargs[:label_fontsize],
+                color = label_kwargs[:label_color],
+            )
         end
     end
 
@@ -240,16 +263,10 @@ $(generate_kwargs_doc(PLOT_LAYOUT_ROI_KWARGS))
     # Add filled ROI
     add_topo_rois!(ax, layout, [[:Fp1]], border_size=5, fill=true, fillcolor=:red, fillalpha=0.2)
 """
-function add_topo_rois!(
-    ax::Axis,
-    layout::DataFrame,
-    rois::Vector{<:Vector{Symbol}};
-    border_size::Real = 10,
-    kwargs...
-)
+function add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbol}}; border_size::Real = 10, kwargs...)
     # Merge user kwargs with defaults for ROI component only
-    roi_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_ROI_KWARGS, kwargs; validate=false)
-    
+    roi_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_ROI_KWARGS, kwargs; validate = false)
+
     # Handle multiple ROIs with different styles
     n_rois = length(rois)
 
@@ -323,21 +340,15 @@ $(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     ax = Axis3(fig[1, 1])
     plot_layout_3d!(fig, ax, layout)
 """
-function plot_layout_3d!(
-    fig::Figure,
-    ax::Axis3,
-    layout::Layout;
-    neighbours::Bool = false,
-    kwargs...
-)
+function plot_layout_3d!(fig::Figure, ax::Axis3, layout::Layout; neighbours::Bool = false, kwargs...)
 
     _ensure_coordinates_3d!(layout)
 
     # Handle each component's kwargs directly using prefixes (no cross-component validation)
-    head_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_HEAD_KWARGS, kwargs; validate=false)
-    point_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_POINT_KWARGS, kwargs; validate=false)
-    label_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_LABEL_KWARGS, kwargs; validate=false)
-    
+    head_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_HEAD_KWARGS, kwargs; validate = false)
+    point_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_POINT_KWARGS, kwargs; validate = false)
+    label_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_LABEL_KWARGS, kwargs; validate = false)
+
     # Extract control variables
     plot_points = point_kwargs[:point_plot]
     plot_labels = label_kwargs[:label_plot]
@@ -347,10 +358,15 @@ function plot_layout_3d!(
 
     # Regular points
     if plot_points
-        scatter!(ax, layout.data[!, :x3], layout.data[!, :y3], layout.data[!, :z3]; 
-                marker=point_kwargs[:point_marker], 
-                markersize=point_kwargs[:point_markersize], 
-                color=point_kwargs[:point_color])
+        scatter!(
+            ax,
+            layout.data[!, :x3],
+            layout.data[!, :y3],
+            layout.data[!, :z3];
+            marker = point_kwargs[:point_marker],
+            markersize = point_kwargs[:point_markersize],
+            color = point_kwargs[:point_color],
+        )
     end
 
     if plot_labels
@@ -359,9 +375,13 @@ function plot_layout_3d!(
         z_coords = layout.data[!, :z3] .+ zoffset
         labels = String.(layout.data[!, :label])
         for i in eachindex(labels)
-            text!(ax, position = (x_coords[i], y_coords[i], z_coords[i]), labels[i]; 
-                  fontsize=label_kwargs[:label_fontsize], 
-                  color=label_kwargs[:label_color])
+            text!(
+                ax,
+                position = (x_coords[i], y_coords[i], z_coords[i]),
+                labels[i];
+                fontsize = label_kwargs[:label_fontsize],
+                color = label_kwargs[:label_color],
+            )
         end
     end
 

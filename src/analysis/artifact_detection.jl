@@ -26,16 +26,16 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     if !(channel_in in propertynames(dat.data))
         @minimal_error_throw("Channel $channel_in not found in data")
     end
-    
+
     # Get the input channel data
     input_data = dat.data[!, channel_in]
-    
+
     # Detect onsets (positive-going threshold crossings)
     onsets = _is_extreme_value(input_data, Float64(criterion))
-    
+
     # Add the output channel to the data
     dat.data[!, channel_out] = onsets
-    
+
     return nothing
 end
 
@@ -83,11 +83,11 @@ _is_extreme_value!(mask, signal, 50.0)
 """
 function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Float64)
     @assert length(mask) == length(signal) "Mask and signal must have the same length"
-    
+
     @inbounds for i in eachindex(signal)
         mask[i] = abs(signal[i]) > threshold
     end
-    
+
     return nothing
 end
 
@@ -129,69 +129,75 @@ is_extreme_value!(dat, 100, channel_selection = channels([:Fp1, :Fp2]))
 is_extreme_value!(dat, 100, sample_selection = sample_mask)
 ```
 """
-function is_extreme_value!(dat::SingleDataFrameEeg, threshold::Int; 
-                          channel_selection::Function = channels(), 
-                          sample_selection::Union{Vector{Bool}, Nothing} = nothing,
-                          mode::Symbol = :combined,
-                          channel_out::Union{Symbol, Nothing} = nothing)
-    
+function is_extreme_value!(
+    dat::SingleDataFrameEeg,
+    threshold::Int;
+    channel_selection::Function = channels(),
+    sample_selection::Union{Vector{Bool},Nothing} = nothing,
+    mode::Symbol = :combined,
+    channel_out::Union{Symbol,Nothing} = nothing,
+)
+
     # Validate mode
     if mode ∉ [:separate, :combined]
         @minimal_error_throw("mode must be :separate or :combined, got :$mode")
     end
-    
+
     if mode == :combined
         # Combined mode - use all channels (same as original behavior)
         results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
-        
+
         # Use provided channel_out or generate default name
         output_channel = channel_out === nothing ? Symbol("is_extreme_value_$(threshold)") : channel_out
-        
+
         # Initialize the output channel with false values
         dat.data[!, output_channel] = falses(nrow(dat.data))
-        
+
         # Combine results from all channels (OR operation)
         for (ch, extreme_mask) in results
             dat.data[!, output_channel] .|= extreme_mask
         end
-        
+
     else  # mode == :separate
         # Separate mode - use specified channel selection
         results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
-        
+
         # Add results to data object
         for (ch, extreme_mask) in results
             column_name = Symbol("is_extreme_value_$(ch)_$(threshold)")
             dat.data[!, column_name] = extreme_mask
         end
     end
-    
+
     return nothing
 end
 
 # Helper function to detect extreme values for selected channels
-function _detect_extreme_values(dat::SingleDataFrameEeg, threshold::Real; 
-                               channel_selection::Function = channels(), 
-                               sample_selection::Union{Vector{Bool}, Nothing} = nothing)
+function _detect_extreme_values(
+    dat::SingleDataFrameEeg,
+    threshold::Real;
+    channel_selection::Function = channels(),
+    sample_selection::Union{Vector{Bool},Nothing} = nothing,
+)
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
         @minimal_error_throw("No channels selected for extreme value detection")
     end
-    
-    results = Dict{Symbol, Vector{Bool}}()
-    
+
+    results = Dict{Symbol,Vector{Bool}}()
+
     for ch in selected_channels
         channel_data = dat.data[!, ch]
         extreme_mask = _is_extreme_value(channel_data, Float64(threshold))
-        
+
         # Apply sample selection if provided
         if sample_selection !== nothing
             extreme_mask = extreme_mask .& sample_selection
         end
-        
+
         results[ch] = extreme_mask
     end
-    
+
     return results
 end
 
@@ -228,30 +234,33 @@ extreme_mask = is_extreme_value(dat, 100, channel_selection = channels([:Fp1, :F
 extreme_mask = is_extreme_value(dat, 100, sample_selection = sample_mask)
 ```
 """
-function is_extreme_value(dat::SingleDataFrameEeg, threshold::Int; 
-                         channel_selection::Function = channels(), 
-                         sample_selection::Union{Vector{Bool}, Nothing} = nothing,
-                         mode::Symbol = :combined)
-    
+function is_extreme_value(
+    dat::SingleDataFrameEeg,
+    threshold::Int;
+    channel_selection::Function = channels(),
+    sample_selection::Union{Vector{Bool},Nothing} = nothing,
+    mode::Symbol = :combined,
+)
+
     if mode == :combined
         # Combined mode - return boolean vector directly
         results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
-        
+
         # Initialize the result with false values
         combined_mask = Vector{Bool}(falses(nrow(dat.data)))
-        
+
         # Combine results from all channels (OR operation)
         for (ch, extreme_mask) in results
             combined_mask .|= extreme_mask
         end
-        
+
         return combined_mask
-        
+
     else  # mode == :separate
         # Separate mode - create temporary data object and use mutating version
         temp_dat = deepcopy(dat)
         is_extreme_value!(temp_dat, threshold; channel_selection, sample_selection, mode = :separate)
-        
+
         # Extract the extreme value columns in the same order as the original channels
         selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
         extreme_cols = [Symbol("is_extreme_value_$(ch)_$(threshold)") for ch in selected_channels]
@@ -292,10 +301,13 @@ total_count = n_extreme_value(dat, 100, sample_selection = sample_mask)
 count_df = n_extreme_value(dat, 100, mode = :separate)
 ```
 """
-function n_extreme_value(dat::SingleDataFrameEeg, threshold::Int; 
-                        channel_selection::Function = channels(), 
-                        sample_selection::Union{Vector{Bool}, Nothing} = nothing,
-                        mode::Symbol = :combined)
+function n_extreme_value(
+    dat::SingleDataFrameEeg,
+    threshold::Int;
+    channel_selection::Function = channels(),
+    sample_selection::Union{Vector{Bool},Nothing} = nothing,
+    mode::Symbol = :combined,
+)
     # Validate mode
     if mode ∉ [:separate, :combined]
         @minimal_error_throw("mode must be :separate or :combined, got :$mode")
@@ -304,35 +316,35 @@ function n_extreme_value(dat::SingleDataFrameEeg, threshold::Int;
     if mode == :combined
         # Combined mode - use all channels (same as original behavior)
         results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
-        
+
         # Initialize the result with false values
         combined_mask = Vector{Bool}(falses(nrow(dat.data)))
-        
+
         # Combine results from all channels (OR operation)
         for (ch, extreme_mask) in results
             combined_mask .|= extreme_mask
         end
-        
+
         # Return total count
         return sum(combined_mask)
-        
+
     else  # mode == :separate
         # Separate mode - count for each channel
         results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
-        
+
         # Get channels in original order
         selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-        
+
         # Count extreme values for each channel in original order
         counts = [sum(results[ch]) for ch in selected_channels]
-        
+
         # Create result DataFrame
         result_df = DataFrame(
             channel = selected_channels,
             n_extreme = counts,
-            threshold = fill(threshold, length(selected_channels))
+            threshold = fill(threshold, length(selected_channels)),
         )
-        
+
         return result_df
     end
 end
@@ -352,12 +364,12 @@ Internal function to count extreme values for specified channels.
 """
 function _n_extreme_value(df::DataFrame, channels::Vector{Symbol}, threshold::Float64)
     counts = Int[]
-    
+
     for ch in channels
         channel_data = df[!, ch]
         extreme_mask = _is_extreme_value(channel_data, threshold)
         push!(counts, sum(extreme_mask))
     end
-    
+
     return counts
 end

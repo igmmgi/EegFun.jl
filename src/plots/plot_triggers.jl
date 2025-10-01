@@ -62,7 +62,7 @@ Internal function to process trigger data and count occurrences.
 - `trigger_values`: Vector of trigger values at those times
 - `trigger_count`: OrderedDict mapping trigger values to their counts
 """
-function _trigger_time_count(time, triggers, ignore_triggers=Int[])
+function _trigger_time_count(time, triggers, ignore_triggers = Int[])
 
     # Since triggers are already cleaned (only onset values), just find non-zero values
     trigger_indices = findall(triggers .!= 0)
@@ -72,7 +72,7 @@ function _trigger_time_count(time, triggers, ignore_triggers=Int[])
 
     trigger_values = triggers[trigger_indices]
     trigger_times = time[trigger_indices]
-    
+
     # Filter out ignored triggers if any are specified
     if !isempty(ignore_triggers)
         trigger_times, trigger_values = _filter_triggers(trigger_times, trigger_values, ignore_triggers)
@@ -80,7 +80,7 @@ function _trigger_time_count(time, triggers, ignore_triggers=Int[])
             return Float64[], Int[], OrderedDict{Int,Int}()
         end
     end
-    
+
     trigger_count = OrderedDict(i => 0 for i in sort!(collect(Set(trigger_values))))
     for val in trigger_values
         trigger_count[val] += 1
@@ -105,7 +105,12 @@ Count trigger occurrences with trigger info support.
 - `trigger_values`: Vector of trigger values
 - `trigger_count`: OrderedDict mapping trigger codes to counts
 """
-function _trigger_time_count(times::Vector{Float64}, trigger_codes::Vector{Int16}, trigger_info::Vector{String}, ignore_triggers=Int[])
+function _trigger_time_count(
+    times::Vector{Float64},
+    trigger_codes::Vector{Int16},
+    trigger_info::Vector{String},
+    ignore_triggers = Int[],
+)
     # Filter out ignored triggers if any are specified
     if !isempty(ignore_triggers)
         times, trigger_codes, trigger_info = _filter_triggers(times, trigger_codes, trigger_info, ignore_triggers)
@@ -153,7 +158,13 @@ end
 Helper function to plot a single trigger vertical line.
 """
 function _plot_single_trigger_line!(ax::Axis, time::Float64)
-    lines!(ax, [time, time], [0, PLOT_TRIGGERS_KWARGS[:event_line_height][1]], color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:event_line_width][1])
+    lines!(
+        ax,
+        [time, time],
+        [0, PLOT_TRIGGERS_KWARGS[:event_line_height][1]],
+        color = :black,
+        linewidth = PLOT_TRIGGERS_KWARGS[:event_line_width][1],
+    )
 end
 
 """
@@ -180,7 +191,7 @@ Extract trigger information from ContinuousData.
 - `trigger_times`: Vector of trigger times
 - `trigger_info`: Vector of trigger info strings (empty strings if not available)
 """
-function _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
+function _extract_trigger_data(dat::ContinuousData, ignore_triggers = Int[])
     trigger_col = :triggers
     if !hasproperty(dat.data, trigger_col)
         @minimal_error("No triggers column found in data. Expected column name: $trigger_col")
@@ -189,12 +200,12 @@ function _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
     trigger_positions = findall(x -> x != 0, dat.data[!, trigger_col])
     trigger_codes = Int16.(dat.data[trigger_positions, trigger_col])
     trigger_times = dat.data[trigger_positions, :time]
-    
+
     # Extract trigger info if available
-    trigger_info = hasproperty(dat.data, :triggers_info) ? 
-        dat.data[trigger_positions, :triggers_info] : 
+    trigger_info =
+        hasproperty(dat.data, :triggers_info) ? dat.data[trigger_positions, :triggers_info] :
         fill("", length(trigger_positions))
-    
+
     # Filter out ignored triggers if any are specified
     if !isempty(ignore_triggers)
         keep_mask = .!in.(trigger_codes, Ref(ignore_triggers))
@@ -202,7 +213,7 @@ function _extract_trigger_data(dat::ContinuousData, ignore_triggers=Int[])
         trigger_times = trigger_times[keep_mask]
         trigger_info = trigger_info[keep_mask]
     end
-    
+
     return trigger_codes, trigger_times, trigger_info
 end
 
@@ -233,10 +244,10 @@ Count occurrences of each trigger code with info labels.
 function _count_triggers(trigger_codes::Vector{Int16}, trigger_info::Vector{String})
     trigger_count = OrderedDict{Int,Int}()
     trigger_labels = OrderedDict{Int,String}()
-    
+
     for code in sort!(collect(Set(trigger_codes)))
         trigger_count[code] = count(x -> x == code, trigger_codes)
-        
+
         # Find the first occurrence of this trigger code to get its info
         first_idx = findfirst(x -> x == code, trigger_codes)
         if !isnothing(first_idx) && first_idx <= length(trigger_info)
@@ -250,7 +261,7 @@ function _count_triggers(trigger_codes::Vector{Int16}, trigger_info::Vector{Stri
             trigger_labels[code] = string(code)
         end
     end
-    
+
     return trigger_count, trigger_labels
 end
 
@@ -275,7 +286,11 @@ end
 
 Add invisible scatter points with labels for legend creation using trigger info.
 """
-function _add_trigger_legend_entries!(ax::Axis, trigger_count::OrderedDict{Int,Int}, trigger_labels::OrderedDict{Int,String})
+function _add_trigger_legend_entries!(
+    ax::Axis,
+    trigger_count::OrderedDict{Int,Int},
+    trigger_labels::OrderedDict{Int,String},
+)
     if isempty(trigger_count)
         return
     end
@@ -370,42 +385,48 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
     @info "Plotting trigger (cleaned) overview for ContinuousData"
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-    
+
     # Extract trigger data (now always returns trigger_info)
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
-    
+
     # Check if we have any non-empty trigger info
     has_info = any(!isempty, trigger_info)
-    
+
     if has_info
         # Use enhanced plotting with trigger info
         trigger_count, trigger_labels = _count_triggers(trigger_codes, trigger_info)
-        
+
         # Create the plot manually to avoid duplicate legends
         fig = Figure()
         ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), [trigger_labels[k] for k in trigger_count.keys]))
-        
+
         # Pre-compute trigger data for each type
         trigger_data = Dict{Int,Vector{Float64}}()
         for (key, _) in trigger_count
             trigger_data[key] = trigger_times[Int.(trigger_codes) .== key]
         end
-        
+
         for (unique, (key, value)) in enumerate(trigger_count)
             times = trigger_data[key]
             y_pos = fill(unique, length(times))
-            scatter!(ax, times, y_pos, label = "$(trigger_labels[key]): $(string(value))", markersize = PLOT_TRIGGERS_KWARGS[:marker_size][1])
+            scatter!(
+                ax,
+                times,
+                y_pos,
+                label = "$(trigger_labels[key]): $(string(value))",
+                markersize = PLOT_TRIGGERS_KWARGS[:marker_size][1],
+            )
             _plot_trigger_vertical_lines!(ax, times, y_pos)
         end
-        
+
         fig[1, 2] = Legend(fig, ax)
         ax.ylabel = "Trigger Value"
         ax.xlabel = "Time (S)"
-        
+
         if plot_kwargs[:display_plot]
             display_figure(fig)
         end
-        
+
         return fig, ax
     else
         # Fall back to original behavior
@@ -440,10 +461,14 @@ end
 Create interactive sliders for position and window size.
 """
 function _create_interactive_sliders(fig::Figure, end_time::Float64, plot_kwargs::Dict)
-    initial_position = PLOT_TRIGGERS_KWARGS[:initial_position][1] 
+    initial_position = PLOT_TRIGGERS_KWARGS[:initial_position][1]
 
-    slider_position =
-        Slider(fig[2, 1], range = initial_position:PLOT_TRIGGERS_KWARGS[:position_step][1]:end_time, startvalue = initial_position, snap = true)
+    slider_position = Slider(
+        fig[2, 1],
+        range = initial_position:PLOT_TRIGGERS_KWARGS[:position_step][1]:end_time,
+        startvalue = initial_position,
+        snap = true,
+    )
 
     slider_size = Slider(
         fig[3, 1],
@@ -464,11 +489,7 @@ end
 
 Core function to plot trigger events on the given axis.
 """
-function _plot_trigger_events!(
-    ax::Axis,
-    trigger_times::Vector{Float64},
-    trigger_codes::Vector{Int16}
-)
+function _plot_trigger_events!(ax::Axis, trigger_times::Vector{Float64}, trigger_codes::Vector{Int16})
     _plot_trigger_events!(ax, trigger_times, trigger_codes, fill("", length(trigger_codes)))
 end
 
@@ -476,7 +497,7 @@ function _plot_trigger_events!(
     ax::Axis,
     trigger_times::Vector{Float64},
     trigger_codes::Vector{Int16},
-    trigger_info::Vector{String}
+    trigger_info::Vector{String},
 )
     # Early return if no triggers to plot
     if isempty(trigger_times)
@@ -493,7 +514,7 @@ function _plot_trigger_events!(
             push!(code_strings, string(Int(code)))
         end
     end
-    
+
     time_strings = [string(round(time, digits = 2)) for time in trigger_times]
 
     # Pre-compute intervals and their string representations
@@ -503,7 +524,13 @@ function _plot_trigger_events!(
 
     # Plot horizontal timeline
     timeline_start = 0.0
-    lines!(ax, [timeline_start, trigger_times[end]], [0, 0], color = :black, linewidth = PLOT_TRIGGERS_KWARGS[:timeline_width][1])
+    lines!(
+        ax,
+        [timeline_start, trigger_times[end]],
+        [0, 0],
+        color = :black,
+        linewidth = PLOT_TRIGGERS_KWARGS[:timeline_width][1],
+    )
 
     # Plot vertical lines for each event
     for (time, code_str, time_str) in zip(trigger_times, code_strings, time_strings)
@@ -511,14 +538,22 @@ function _plot_trigger_events!(
 
         # Add trigger code (with optional info) at the top of the line
         _add_trigger_text!(ax, time, PLOT_TRIGGERS_KWARGS[:event_line_height][1], code_str, (:center, :bottom))
-        
+
         # Add time value below the line
         _add_trigger_text!(ax, time, PLOT_TRIGGERS_KWARGS[:time_label_offset][1], time_str, (:center, :top))
     end
 
     # Plot intervals as text
     for (x, interval_str) in zip(interval_positions, interval_strings)
-        text!(ax, x, 0, text = interval_str, align = (:center, :top), color = :black, fontsize = PLOT_TRIGGERS_KWARGS[:font_size][1])
+        text!(
+            ax,
+            x,
+            0,
+            text = interval_str,
+            align = (:center, :top),
+            color = :black,
+            fontsize = PLOT_TRIGGERS_KWARGS[:font_size][1],
+        )
     end
 end
 
@@ -532,7 +567,12 @@ function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_
     _create_interactive_trigger_plot(trigger_codes, trigger_times, fill("", length(trigger_codes)); kwargs...)
 end
 
-function _create_interactive_trigger_plot(trigger_codes::Vector{Int16}, trigger_times::Vector{Float64}, trigger_info::Vector{String}; kwargs...)
+function _create_interactive_trigger_plot(
+    trigger_codes::Vector{Int16},
+    trigger_times::Vector{Float64},
+    trigger_info::Vector{String};
+    kwargs...,
+)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
     if isempty(trigger_times)

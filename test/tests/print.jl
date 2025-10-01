@@ -66,7 +66,7 @@ using eegfun
         commit = eegfun.get_git_commit()
         @test typeof(commit) === String
         @test !isempty(commit)
-        
+
         # Test that it returns a valid git hash format or "unknown"
         if commit != "unknown"
             @test length(commit) == 40  # SHA-1 hash length
@@ -78,7 +78,7 @@ using eegfun
         version = eegfun.get_eegfun_version()
         @test typeof(version) === String
         @test !isempty(version)
-        
+
         # Test that it returns a valid version format or "unknown"
         if version != "unknown"
             @test occursin(r"^\d+\.\d+\.\d+", version)  # Should match semver pattern
@@ -146,22 +146,19 @@ using eegfun
                 "float_val" => 3.14,
                 "bool_val" => true,
                 "array_val" => [1, 2, 3, 4, 5],
-                "nested" => Dict(
-                    "deep_key" => "deep_value",
-                    "numbers" => [10, 20, 30]
-                )
+                "nested" => Dict("deep_key" => "deep_value", "numbers" => [10, 20, 30]),
             ),
             "section2" => Dict(
                 "empty_array" => Int[],
                 "empty_dict" => Dict{String,Any}(),
-                "mixed_array" => [1, "string", 3.14, true]
-            )
+                "mixed_array" => [1, "string", 3.14, true],
+            ),
         )
-        
+
         io = IOBuffer()
         eegfun.print_config(complex_config, io)
         output = String(take!(io))
-        
+
         # Test that all values are properly formatted
         @test contains(output, "string_val = \"hello world\"")
         @test contains(output, "int_val = 42")
@@ -221,14 +218,14 @@ using eegfun
                 "large_int" => typemax(Int64),
                 "small_int" => typemin(Int64),
                 "large_float" => 1e308,
-                "small_float" => 1e-308
-            )
+                "small_float" => 1e-308,
+            ),
         )
-        
+
         io = IOBuffer()
         eegfun.print_config(edge_config, io)
         output = String(take!(io))
-        
+
         # Test that special values are handled properly
         @test contains(output, "nan_val = nan")  # TOML uses lowercase
         @test contains(output, "inf_val = +inf")  # TOML uses +inf
@@ -260,6 +257,9 @@ using eegfun
         eegfun.print_config(large_config, io)
         output = String(take!(io))
         @test contains(output, "large_section")
-        @test contains(output, "array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]")
+        @test contains(
+            output,
+            "array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]",
+        )
     end
 end

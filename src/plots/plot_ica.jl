@@ -4,44 +4,46 @@
 const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Component selection
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
-    :dims => (nothing, "Tuple specifying grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
-    
+    :dims =>
+        (nothing, "Tuple specifying grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
+
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    :use_global_scale => (false, "If true, all topoplots share the same color scale based on min/max across all components"),
-    
+    :use_global_scale =>
+        (false, "If true, all topoplots share the same color scale based on min/max across all components"),
+
     # Topography parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
     :colormap => (:jet, "Colormap for the topography"),
     :gridscale => (100, "Grid resolution for interpolation"),
     :num_levels => (20, "Number of contour levels"),
     :nan_color => (:transparent, "Color for NaN values"),
-    
+
     # Head shape parameters
     :head_color => (:black, "Color of the head shape outline"),
     :head_linewidth => (2, "Line width of the head shape outline"),
     :head_radius => (88.0, "Radius of the head shape in mm"),
     :head_ear_ratio => (1/7, "Ratio of ear size to head radius"),
     :head_nose_scale => (4.0, "Scale factor for nose size"),
-    
+
     # Electrode point parameters
     :plot_points => (false, "Whether to plot electrode points"),
     :point_marker => (:circle, "Marker style for electrode points"),
     :point_markersize => (12, "Size of electrode point markers"),
     :point_color => (:black, "Color of electrode points"),
-    
+
     # Electrode label parameters
     :plot_labels => (false, "Whether to plot electrode labels"),
     :label_fontsize => (20, "Font size for electrode labels"),
     :label_color => (:black, "Color of electrode labels"),
     :label_xoffset => (0, "X-axis offset for electrode labels"),
     :label_yoffset => (0, "Y-axis offset for electrode labels"),
-    
+
     # Colorbar parameters
     :plot_colorbar => (true, "Whether to display colorbars"),
     :colorbar_width => (30, "Width of the colorbar"),
     :colorbar_plot_numbers => (Int[], "Plot indices (1-based) that should have visible colorbars"),
-    
+
     # Layout parameters
     :figure_padding => ((0, 60, 0, 0), "Figure padding as (left, right, bottom, top)"),
     :subplot_spacing => (5, "Spacing between subplots"),
@@ -90,13 +92,10 @@ fig = plot_ica_topoplot(ica_result,
 )
 ```
 """
-function plot_ica_topoplot(
-    ica;
-    kwargs...
-)
+function plot_ica_topoplot(ica; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     component_selection = plot_kwargs[:component_selection]
     dims = plot_kwargs[:dims]
@@ -122,14 +121,14 @@ function plot_ica_topoplot(
         :linewidth => plot_kwargs[:head_linewidth],
         :radius => plot_kwargs[:head_radius],
         :ear_ratio => plot_kwargs[:head_ear_ratio],
-        :nose_scale => plot_kwargs[:head_nose_scale]
+        :nose_scale => plot_kwargs[:head_nose_scale],
     )
 
     point_kwargs = Dict(
         :plot_points => plot_kwargs[:plot_points],
         :marker => plot_kwargs[:point_marker],
         :markersize => plot_kwargs[:point_markersize],
-        :color => plot_kwargs[:point_color]
+        :color => plot_kwargs[:point_color],
     )
 
     label_kwargs = Dict(
@@ -137,17 +136,12 @@ function plot_ica_topoplot(
         :fontsize => plot_kwargs[:label_fontsize],
         :color => plot_kwargs[:label_color],
         :xoffset => plot_kwargs[:label_xoffset],
-        :yoffset => plot_kwargs[:label_yoffset]
+        :yoffset => plot_kwargs[:label_yoffset],
     )
 
-    topo_kwargs = Dict(
-        :colormap => plot_kwargs[:colormap],
-        :nan_color => plot_kwargs[:nan_color]
-    )
+    topo_kwargs = Dict(:colormap => plot_kwargs[:colormap], :nan_color => plot_kwargs[:nan_color])
 
-    colorbar_kwargs = Dict(
-        :width => plot_kwargs[:colorbar_width]
-    )
+    colorbar_kwargs = Dict(:width => plot_kwargs[:colorbar_width])
 
     # Get selected components using the helper function
     comps = get_selected_components(ica, component_selection)
@@ -190,7 +184,7 @@ function plot_ica_topoplot(
 
         row, col = divrem(i - 1, dims[2]) .+ (1, 1)
         grids[i] = fig[row, col] = GridLayout()
-        
+
         # Add spacing between subplots
         if i > 1
             rowgap!(fig.layout, row, subplot_spacing)
@@ -437,37 +431,37 @@ const PLOT_ICA_COMPONENT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
     :n_visible_components => (10, "Number of components to display simultaneously"),
     :window_size => (2000, "Size of the time window to display"),
-    
+
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    
+
     # Topography parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
     :colormap => (:jet, "Colormap for the topography"),
     :gridscale => (100, "Grid resolution for interpolation"),
     :num_levels => (20, "Number of contour levels"),
     :nan_color => (:transparent, "Color for NaN values"),
-    
+
     # Head shape parameters
     :head_color => (:black, "Color of the head shape outline"),
     :head_linewidth => (2, "Line width of the head shape outline"),
     :head_radius => (88.0, "Radius of the head shape in mm"),
     :head_ear_ratio => (1/7, "Ratio of ear size to head radius"),
     :head_nose_scale => (4.0, "Scale factor for nose size"),
-    
+
     # Electrode point parameters
     :plot_points => (false, "Whether to plot electrode points"),
     :point_marker => (:circle, "Marker style for electrode points"),
     :point_markersize => (12, "Size of electrode point markers"),
     :point_color => (:black, "Color of electrode points"),
-    
+
     # Electrode label parameters
     :plot_labels => (false, "Whether to plot electrode labels"),
     :label_fontsize => (20, "Font size for electrode labels"),
     :label_color => (:black, "Color of electrode labels"),
     :label_xoffset => (0, "X-axis offset for electrode labels"),
     :label_yoffset => (0, "Y-axis offset for electrode labels"),
-    
+
     # Layout parameters
     :figure_padding => ((0, 20, 0, 0), "Figure padding as (left, right, bottom, top)"),
     :subplot_spacing => (5, "Spacing between subplots"),
@@ -496,27 +490,23 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 # Returns
 - `fig::Figure`: The Makie Figure object containing the interactive plot.
 """
-function plot_ica_component_activation(
-    dat::ContinuousData,
-    ica_result::InfoIca;
-    kwargs...
-)
+function plot_ica_component_activation(dat::ContinuousData, ica_result::InfoIca; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_COMPONENT_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     component_selection = plot_kwargs[:component_selection]
     n_visible_components = plot_kwargs[:n_visible_components]
     window_size = plot_kwargs[:window_size]
     method = plot_kwargs[:method]
     display_plot = plot_kwargs[:display_plot]
-    
+
     # Create individual kwargs dictionaries for sub-functions
     topo_kwargs = Dict(
         :colormap => plot_kwargs[:colormap],
         :gridscale => plot_kwargs[:gridscale],
         :num_levels => plot_kwargs[:num_levels],
-        :nan_color => plot_kwargs[:nan_color]
+        :nan_color => plot_kwargs[:nan_color],
     )
 
     head_kwargs = Dict(
@@ -524,14 +514,14 @@ function plot_ica_component_activation(
         :linewidth => plot_kwargs[:head_linewidth],
         :radius => plot_kwargs[:head_radius],
         :ear_ratio => plot_kwargs[:head_ear_ratio],
-        :nose_scale => plot_kwargs[:head_nose_scale]
+        :nose_scale => plot_kwargs[:head_nose_scale],
     )
 
     point_kwargs = Dict(
         :plot_points => plot_kwargs[:plot_points],
         :marker => plot_kwargs[:point_marker],
         :markersize => plot_kwargs[:point_markersize],
-        :color => plot_kwargs[:point_color]
+        :color => plot_kwargs[:point_color],
     )
 
     label_kwargs = Dict(
@@ -539,7 +529,7 @@ function plot_ica_component_activation(
         :fontsize => plot_kwargs[:label_fontsize],
         :color => plot_kwargs[:label_color],
         :xoffset => plot_kwargs[:label_xoffset],
-        :yoffset => plot_kwargs[:label_yoffset]
+        :yoffset => plot_kwargs[:label_yoffset],
     )
     # Pass kwargs to constructor
     state = IcaComponentState(
@@ -1435,33 +1425,33 @@ end
 const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    
+
     # Statistical thresholds
     :z_threshold => (3.0, "Z-score threshold for identifying components"),
     :min_harmonic_power => (0.5, "Minimum harmonic power threshold for line noise detection"),
     :max_ibi_std_s => (0.2, "Maximum inter-beat interval standard deviation for ECG detection"),
     :min_peak_ratio => (0.7, "Minimum peak ratio for ECG detection"),
-    
+
     # Plot styling
     :title_fontsize => (16, "Font size for plot titles"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
     :legend_fontsize => (12, "Font size for legend"),
-    
+
     # Line styling
     :line_width => (2, "Line width for plot lines"),
     :line_alpha => (0.8, "Transparency for plot lines"),
-    
+
     # Marker styling
     :marker_size => (8, "Size of markers"),
     :marker_alpha => (0.7, "Transparency of markers"),
-    
+
     # Color schemes
     :correlation_color => (:steelblue, "Color for correlation plots"),
     :threshold_color => (:red, "Color for threshold lines"),
     :identified_color => (:green, "Color for identified components"),
     :rejected_color => (:red, "Color for rejected components"),
-    
+
     # Layout parameters
     :figure_padding => ((10, 10, 10, 10), "Figure padding as (left, right, bottom, top)"),
     :subplot_spacing => (20, "Spacing between subplots"),
@@ -1484,14 +1474,10 @@ Uses the results from `identify_eye_components`.
 # Returns
 - `fig::Figure`: The Makie Figure containing the z-score plots.
 """
-function plot_eog_component_features(
-    identified_comps::Dict,
-    metrics_df::DataFrame;
-    kwargs...
-)
+function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     z_threshold = plot_kwargs[:z_threshold]
     display_plot = plot_kwargs[:display_plot]
@@ -1624,14 +1610,10 @@ Plot spatial kurtosis z-scores for all ICA components and highlight those exceed
 # Returns
 - `fig::Figure`: The Makie Figure containing the spatial kurtosis plot.
 """
-function plot_spatial_kurtosis_components(
-    kurtosis_comps::Vector{Int},
-    metrics_df::DataFrame;
-    kwargs...
-)
+function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     z_threshold = plot_kwargs[:z_threshold]
     display_plot = plot_kwargs[:display_plot]
@@ -1701,11 +1683,11 @@ function plot_ecg_component_features_(
     metrics_df::DataFrame;
     min_bpm::Real = 40,
     max_bpm::Real = 120,
-    kwargs...
+    kwargs...,
 )
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     max_ibi_std_s = plot_kwargs[:max_ibi_std_s]
     min_peak_ratio = plot_kwargs[:min_peak_ratio]
@@ -1835,11 +1817,11 @@ function plot_line_noise_components(
     metrics_df::DataFrame;
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
-    kwargs...
+    kwargs...,
 )
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     z_threshold = plot_kwargs[:z_threshold]
     min_harmonic_power = plot_kwargs[:min_harmonic_power]
@@ -1942,7 +1924,7 @@ Create a simplified visualization of ECG component detection metrics.
 function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df::DataFrame; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_QUALITY_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     display_plot = plot_kwargs[:display_plot]
     # Create figure with two panels
@@ -2098,6 +2080,6 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     if display_plot
         display_figure(fig)
     end
-    
+
     return fig
 end

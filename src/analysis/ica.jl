@@ -111,14 +111,14 @@ function create_ica_data_matrix(dat::DataFrame, channels, samples)
     existing_channels = intersect(propertynames(dat), channels)
     n_channels = length(existing_channels)
     n_samples = length(samples)
-    
+
     # Pre-allocate result matrix
     result = Matrix{Float64}(undef, n_channels, n_samples)
-    
+
     for (i, ch) in enumerate(existing_channels)
-        result[i,:] = dat[samples, ch]
+        result[i, :] = dat[samples, ch]
     end
-    
+
     return result
 end
 
@@ -157,12 +157,7 @@ function create_work_arrays(n_components::Int, block_size::Int)
     )
 end
 
-function infomax_ica(
-    dat_ica::Matrix{Float64},
-    layout::Layout,
-    n_components::Int;
-    params::IcaPrms = IcaPrms(),
-)
+function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, n_components::Int; params::IcaPrms = IcaPrms())
 
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
@@ -200,12 +195,12 @@ function infomax_ica(
 
         randperm!(permute_indices)
 
-        for t in 1:block:n_samples
+        for t = 1:block:n_samples
             block_size = min(block, n_samples - t + 1)
-            perm_view = view(permute_indices, t:(t + block_size - 1))
-            
-            @inbounds for i in 1:n_channels
-                @simd for j in 1:block_size
+            perm_view = view(permute_indices, t:(t+block_size-1))
+
+            @inbounds for i = 1:n_channels
+                @simd for j = 1:block_size
                     work.data_block[i, j] = dat_ica[i, perm_view[j]]
                 end
             end
@@ -215,12 +210,12 @@ function infomax_ica(
 
             @. work.y = 1 / (1 + exp(-work.u)) # Sigmoid activation
             @. work.y_temp = 1 - 2 * work.y    # Sigmoid derivative
-            
+
             mul!(work.wu_term, work.y_temp, transpose(work.u))
-            
+
             work.bi_weights .= work.BI .+ work.wu_term
             mul!(work.weights_temp, work.bi_weights, work.weights)
-            
+
             # Weight update - keep it simple
             @. work.weights += params.l_rate * work.weights_temp
 
@@ -264,7 +259,7 @@ function infomax_ica(
         end
 
         # stopping/adapting learning rate?
-        if step > 2 && change < params.w_change 
+        if step > 2 && change < params.w_change
             break
         elseif change > params.blowup
             params.l_rate *= params.blowup_fac
@@ -1111,4 +1106,3 @@ function Base.show(io::IO, artifacts::ArtifactComponents)
     println(io, "Channel Noise: $(artifacts.channel_noise)")
     println(io, "All: $all_comps")
 end
-

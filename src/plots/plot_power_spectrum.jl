@@ -7,35 +7,35 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :overlap => (0.5, "Overlap between windows for Welch's method (0.0 to 1.0)"),
     :max_freq => (200.0, "Maximum frequency to display in Hz"),
     :window_function => (DSP.hanning, "Window function for spectral estimation"),
-    
+
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
     :show_legend => (true, "Whether to show the legend"),
     :show_freq_bands => (true, "Whether to show frequency band indicators"),
-    
+
     # Axis styling
     :xlabel => ("Frequency (Hz)", "X-axis label"),
     :ylabel => ("Power Spectral Density (μV²/Hz)", "Y-axis label"),
     :title => ("Power Spectrum", "Plot title"),
-    
+
     # Scale parameters
     :x_scale => (:linear, "X-axis scale: :linear or :log10"),
     :y_scale => (:linear, "Y-axis scale: :linear or :log10"),
-    
+
     # Font sizes
     :title_fontsize => (16, "Font size for title"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
     :legend_fontsize => (12, "Font size for legend"),
-    
+
     # Line styling
     :line_width => (2, "Line width for spectrum lines"),
     :line_alpha => (0.8, "Transparency for spectrum lines"),
-    
+
     # Frequency band styling
     :freq_band_alpha => (0.3, "Transparency for frequency band indicators"),
     :freq_band_height => (0.1, "Height of frequency band indicators"),
-    
+
     # Grid styling
     :grid_visible => (true, "Whether to show grid"),
     :grid_alpha => (0.3, "Transparency of grid"),
@@ -79,17 +79,10 @@ fig, ax = plot_channel_spectrum(dat;
     grid_visible = false)
 ```
 """
-function _plot_power_spectrum!(
-    fig,
-    ax,
-    df::DataFrame,
-    channels_to_plot::Vector{Symbol},
-    fs::Real;
-    kwargs...
-)
+function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{Symbol}, fs::Real; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
-    
+
     # Extract commonly used values
     window_size = plot_kwargs[:window_size]
     overlap = plot_kwargs[:overlap]
@@ -128,7 +121,7 @@ function _plot_power_spectrum!(
     ax.ylabelsize = plot_kwargs[:label_fontsize]
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
-    
+
     # Configure grid
     ax.xgridvisible = plot_kwargs[:grid_visible]
     ax.ygridvisible = plot_kwargs[:grid_visible]
@@ -191,10 +184,14 @@ function _plot_power_spectrum!(
         push!(power_data, psd)
 
         # Plot this channel's spectrum
-        lines!(ax, freqs, psd, 
-               label = string(ch),
-               linewidth = plot_kwargs[:line_width],
-               alpha = plot_kwargs[:line_alpha])
+        lines!(
+            ax,
+            freqs,
+            psd,
+            label = string(ch),
+            linewidth = plot_kwargs[:line_width],
+            alpha = plot_kwargs[:line_alpha],
+        )
     end
 
     # Apply initial y-axis scale settings (after data is calculated)
@@ -234,10 +231,14 @@ function _plot_power_spectrum!(
                 # Add colored bar and label
                 bar_x = [fmin, fmax]
                 bar_y = [0.5, 0.5]
-                lines!(band_ax, bar_x, bar_y, 
-                       color = band_colors[i], 
-                       linewidth = 8,
-                       alpha = plot_kwargs[:freq_band_alpha])
+                lines!(
+                    band_ax,
+                    bar_x,
+                    bar_y,
+                    color = band_colors[i],
+                    linewidth = 8,
+                    alpha = plot_kwargs[:freq_band_alpha],
+                )
                 text!(
                     band_ax,
                     (fmin + fmax) / 2,

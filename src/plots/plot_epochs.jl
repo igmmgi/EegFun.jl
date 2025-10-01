@@ -4,24 +4,24 @@
 const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    
+
     # Data processing
     :average_channels => (false, "Whether to average across channels"),
     :plot_avg_trials => (true, "Whether to draw ERP average overlay"),
-    
+
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :title => (nothing, "Plot title. If nothing, automatically determined"),
     :xlabel => ("Time (S)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
-    
+
     # Line styling
     :linewidth => ([1, 2], "Line width for epoch traces and average"),
     :color => ([:grey, :red], "Colors for epoch traces and average"),
     :alpha => ([0.3, 1.0], "Transparency for epoch traces and average"),
     :yreversed => (false, "Whether to reverse the y-axis"),
-    
+
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
     :layout_plot_width => (0.12, "Width of individual plots in layout"),
@@ -32,26 +32,26 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :layout_scale_width => (0.14, "Width of scale in layout"),
     :layout_scale_height => (0.14, "Height of scale in layout"),
     :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
-    
+
     # Display options
     :hidedecorations => (false, "Whether to hide axis decorations"),
     :theme_fontsize => (24, "Font size for theme"),
-    
+
     # Legend
     :legend => (true, "Whether to show the legend"),
     :legend_label => ("", "Custom label for the legend"),
-    
+
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
-    
+
     # Origin lines
     :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
-    
+
     # Minor grid
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
-    
+
     # Interactive features
     :interactive => (true, "Whether to enable interactive features"),
 )
@@ -110,32 +110,33 @@ fig, ax = plot_epochs(dat;
 function plot_epochs(
     dat::EpochData;
     channel_selection::Function = channels(),
-    sample_selection::Function = samples(), 
+    sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
     layout = :single,  # :single (default), :grid, :topo, or [rows, cols]
-    kwargs...)::Tuple{Figure, Union{Axis, Vector{Axis}}}
-    
+    kwargs...,
+)::Tuple{Figure,Union{Axis,Vector{Axis}}}
+
     # Merge user kwargs and default kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
-    
+
     # Use subset to get the data we want to plot (same pattern as other functions)
     dat_subset = subset(
         dat;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         epoch_selection = epoch_selection,
-        include_extra = include_extra
+        include_extra = include_extra,
     )
-    
+
     # Get all non-metadata channels from the subset (it already contains only what we want)
     selected_channels = channel_labels(dat_subset)  # Gets EEG channels from layout
     extra_channels = extra_labels(dat_subset)       # Gets extra channels (EOG, etc.)
     all_plot_channels = vcat(selected_channels, extra_channels)
-    
+
     # Validate we have channels to plot
     isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
-    
+
     # Info about what we're plotting
     @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(length(dat_subset.data)) epochs"
 
@@ -179,7 +180,11 @@ function plot_epochs(
         if length(all_plot_channels) == 1
             _set_axis_properties!(ax, plot_kwargs, "$(all_plot_channels[1])")
         else
-            _set_axis_properties!(ax, plot_kwargs, "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))")
+            _set_axis_properties!(
+                ax,
+                plot_kwargs,
+                "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))",
+            )
         end
 
     else
@@ -187,7 +192,7 @@ function plot_epochs(
         # Separate subplot for each channel
         n_channels = length(all_plot_channels)
         # Handle layout parameter: :single, :grid, :topo, or custom [rows, cols]
-        
+
         if layout === :topo
             # Topographic layout using data's layout semantics
             erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
@@ -200,26 +205,27 @@ function plot_epochs(
         elseif layout === :single
             # Single plot - create one axis with all channels
             erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
-            
+
             # Create a single axis
             ax = Axis(fig[1, 1])
             push!(axes, ax)
-            
+
             # Plot each channel on the same axis
             for channel in all_plot_channels
                 _plot_epochs!(ax, dat_subset, [channel], plot_kwargs)
                 erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], plot_kwargs)
             end
-            
+
             # Draw axes through origin if requested
             if get(plot_kwargs, :axes_through_origin, false)
                 hlines!(ax, [0.0], color = :black, linewidth = 1)
                 vlines!(ax, [0.0], color = :black, linewidth = 1)
             end
-            
+
             # Set title based on selected channels (like plot_erp does)
-            channel_title = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
-            
+            channel_title =
+                length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+
             # Set axis properties
             _set_axis_properties!(ax, plot_kwargs, channel_title)
         elseif typeof(layout) <: Vector{<:Integer}
@@ -242,27 +248,40 @@ function plot_epochs(
     if length(axes) > 1
         Makie.linkaxes!(axes...)
     end
-    
+
     # Add keyboard interactivity (zoom with arrow keys)
     if plot_kwargs[:interactive]
         # Disable default Makie interactions that would conflict with our custom handling
         for ax in axes
             deregister_interaction!(ax, :rectanglezoom)
         end
-        
+
         _setup_shared_interactivity!(fig, axes)
     end
-    
+
     # Add unified selection functionality (time + channel selection)
     if plot_kwargs[:interactive]
         # Create a selection state for both time and channel selection
         selection_state = SharedSelectionState(axes)
-        
+
         # Set up unified selection (time selection with Shift, channel selection with Ctrl)
         if layout === :topo
             # Topographic layout - use unified selection + topo channel selection
-            _setup_unified_selection!(fig, axes, selection_state, dat_subset, create_topo_layout(dat_subset.layout, all_plot_channels))
-            _setup_channel_selection_events!(fig, selection_state, create_topo_layout(dat_subset.layout, all_plot_channels), dat_subset, axes, :topo)
+            _setup_unified_selection!(
+                fig,
+                axes,
+                selection_state,
+                dat_subset,
+                create_topo_layout(dat_subset.layout, all_plot_channels),
+            )
+            _setup_channel_selection_events!(
+                fig,
+                selection_state,
+                create_topo_layout(dat_subset.layout, all_plot_channels),
+                dat_subset,
+                axes,
+                :topo,
+            )
         elseif layout === :grid || typeof(layout) <: Vector{<:Integer}
             # Grid layout - use unified selection + grid channel selection
             if layout === :grid
@@ -270,8 +289,21 @@ function plot_epochs(
             else
                 rows, cols = layout
             end
-            _setup_unified_selection!(fig, axes, selection_state, dat_subset, create_grid_layout(all_plot_channels, rows = rows, cols = cols))
-            _setup_channel_selection_events!(fig, selection_state, create_grid_layout(all_plot_channels, rows = rows, cols = cols), dat_subset, axes, :grid)
+            _setup_unified_selection!(
+                fig,
+                axes,
+                selection_state,
+                dat_subset,
+                create_grid_layout(all_plot_channels, rows = rows, cols = cols),
+            )
+            _setup_channel_selection_events!(
+                fig,
+                selection_state,
+                create_grid_layout(all_plot_channels, rows = rows, cols = cols),
+                dat_subset,
+                axes,
+                :grid,
+            )
         elseif layout === :single
             # Single plot layout - only time selection, no channel selection needed
             _setup_unified_selection!(fig, axes, selection_state, dat_subset, nothing)
@@ -285,7 +317,7 @@ function plot_epochs(
     if plot_kwargs[:display_plot]
         display_figure(fig)
     end
-    
+
     # Return fig and all axes (or single axis if only one)
     return fig, length(axes) == 1 ? first(axes) : axes
 
@@ -312,10 +344,10 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs)::Nothing
     y_cat = Vector{Float64}(undef, total_len)
 
     pos = 1
-    @inbounds for t in 1:m
+    @inbounds for t = 1:m
         df = trials[t]
         y = df[!, ch]
-        for i in 1:n
+        for i = 1:n
             time_cat[pos] = time_vec[i]
             y_cat[pos] = y[i]
             pos += 1
@@ -345,7 +377,14 @@ function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, 
     return nothing
 end
 
-function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, erp_dat, all_plot_channels::Vector{Symbol}, kwargs::Dict)
+function _plot_epochs_layout!(
+    fig::Figure,
+    axes::Vector{Axis},
+    dat::EpochData,
+    erp_dat,
+    all_plot_channels::Vector{Symbol},
+    kwargs::Dict,
+)
     # Ensure 2D coordinates exist
     if !all(in.([:x2, :y2], Ref(propertynames(dat.layout.data))))
         polar_to_cartesian_xy!(dat.layout)
@@ -415,13 +454,7 @@ function _plot_epochs_layout!(fig::Figure, axes::Vector{Axis}, dat::EpochData, e
         sp = get(kwargs, :layout_scale_position, [0.95, 0.05])
         sw = get(kwargs, :layout_scale_width, 0.14)
         sh = get(kwargs, :layout_scale_height, 0.14)
-        scale_ax = Axis(
-            fig[1, 1],
-            width = Relative(sw),
-            height = Relative(sh),
-            halign = sp[1],
-            valign = sp[2],
-        )
+        scale_ax = Axis(fig[1, 1], width = Relative(sw), height = Relative(sh), halign = sp[1], valign = sp[2])
         push!(axes, scale_ax)
         # No data in this axis; just show labels and limits
         tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
@@ -437,9 +470,18 @@ end
 
 Create a grid layout for plotting epochs.
 """
-function _plot_epochs_grid!(fig::Figure, axes::Vector{Axis}, dat::EpochData, erp_dat, all_plot_channels::Vector{Symbol}, rows::Int, cols::Int, kwargs::Dict)
+function _plot_epochs_grid!(
+    fig::Figure,
+    axes::Vector{Axis},
+    dat::EpochData,
+    erp_dat,
+    all_plot_channels::Vector{Symbol},
+    rows::Int,
+    cols::Int,
+    kwargs::Dict,
+)
     n_channels = length(all_plot_channels)
-    
+
     # Calculate y-range if not provided (using shared yrange helper)
     ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
@@ -485,12 +527,12 @@ function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::N
     ax.xlabel = kwargs[:xlabel]
     ax.ylabel = kwargs[:ylabel]
     ax.yreversed = kwargs[:yreversed]
-    
+
     # Apply grid settings
     ax.xgridvisible = kwargs[:xgrid]
     ax.ygridvisible = kwargs[:ygrid]
     ax.xminorgridvisible = kwargs[:xminorgrid]
     ax.yminorgridvisible = kwargs[:yminorgrid]
-    
+
     return nothing
 end

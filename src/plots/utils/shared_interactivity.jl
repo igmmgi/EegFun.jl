@@ -3,12 +3,8 @@
 # =============================================================================
 # SHARED CONSTANTS
 # =============================================================================
-const SHARED_KEYBOARD_ACTIONS = Dict(
-    Keyboard.up => :up,
-    Keyboard.down => :down,
-    Keyboard.left => :left,
-    Keyboard.right => :right
-)
+const SHARED_KEYBOARD_ACTIONS =
+    Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
 
 # =============================================================================
 # SHARED SELECTION STATE
@@ -22,25 +18,36 @@ mutable struct SharedSelectionState
     active::Observable{Bool}
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
-    rectangles::Vector{Makie.Poly}  
-    channel_rectangles::Vector{Makie.Poly}  
-    selection_rectangles::Vector{Makie.Poly}  
-    selection_bounds::Vector{Tuple{Float64,Float64,Float64,Float64}}  
-    current_selection_idx::Union{Int, Nothing}  
-    
+    rectangles::Vector{Makie.Poly}
+    channel_rectangles::Vector{Makie.Poly}
+    selection_rectangles::Vector{Makie.Poly}
+    selection_bounds::Vector{Tuple{Float64,Float64,Float64,Float64}}
+    current_selection_idx::Union{Int,Nothing}
+
     function SharedSelectionState(axes::Vector{Axis})
         # Create time selection rectangles for each axis
-        rectangles = [poly!(ax, [Point2f(0.0, 0.0)], color = (:blue, 0.3), strokecolor = :darkblue, strokewidth = 1, visible = false, overdraw = true, space = :data) for ax in axes]
-        
+        rectangles = [
+            poly!(
+                ax,
+                [Point2f(0.0, 0.0)],
+                color = (:blue, 0.3),
+                strokecolor = :darkblue,
+                strokewidth = 1,
+                visible = false,
+                overdraw = true,
+                space = :data,
+            ) for ax in axes
+        ]
+
         new(
-            Observable(false), 
-            Observable((0.0, 0.0)), 
-            Observable(false), 
-            rectangles, 
-            Makie.Poly[], 
-            Makie.Poly[], 
-            Tuple{Float64,Float64,Float64,Float64}[], 
-            nothing
+            Observable(false),
+            Observable((0.0, 0.0)),
+            Observable(false),
+            rectangles,
+            Makie.Poly[],
+            Makie.Poly[],
+            Tuple{Float64,Float64,Float64,Float64}[],
+            nothing,
         )
     end
 end
@@ -132,7 +139,7 @@ function _is_mouse_in_axis(ax::Axis, mouse_pos)
     ax_y = ax_pos.origin[2]
     ax_w = ax_pos.widths[1]
     ax_h = ax_pos.widths[2]
-    
+
     return (ax_x <= mouse_pos[1] <= ax_x + ax_w) && (ax_y <= mouse_pos[2] <= ax_y + ax_h)
 end
 
@@ -145,7 +152,7 @@ function _is_within_selection(selection_state::SharedSelectionState, mouse_x)
     if !selection_state.visible[]
         return false
     end
-    
+
     x_min, x_max = minmax(selection_state.bounds[]...)
     return x_min <= mouse_x <= x_max
 end
@@ -192,7 +199,7 @@ function _update_shared_selection!(ax::Axis, selection_state::SharedSelectionSta
             y_lims = ax.yaxis.attributes.limits[]
             y_min = y_lims[1]
             y_max = y_lims[2]
-            
+
             rect[1] = Point2f[
                 Point2f(Float64(x1), Float64(y_min)),
                 Point2f(Float64(x2), Float64(y_min)),
@@ -228,7 +235,13 @@ end
 
 Start channel selection with Ctrl + drag.
 """
-function _start_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, channel_selection_active)
+function _start_figure_channel_selection!(
+    fig::Figure,
+    selection_state::SharedSelectionState,
+    plot_layout,
+    data,
+    channel_selection_active,
+)
     if plot_layout.type != :topo && plot_layout.type != :grid
         return
     end
@@ -257,7 +270,15 @@ function _update_figure_channel_selection!(fig::Figure, selection_state::SharedS
     current_idx = selection_state.current_selection_idx
     if isnothing(current_idx) || current_idx > length(selection_state.selection_rectangles)
         rect_points = [Point2f(x1, y1), Point2f(x2, y1), Point2f(x2, y2), Point2f(x1, y2)]
-        rect = poly!(fig.scene, rect_points, color = (:blue, 0.3), strokecolor = :red, strokewidth = 2, overdraw = true, space = :relative)
+        rect = poly!(
+            fig.scene,
+            rect_points,
+            color = (:blue, 0.3),
+            strokecolor = :red,
+            strokewidth = 2,
+            overdraw = true,
+            space = :relative,
+        )
         push!(selection_state.selection_rectangles, rect)
         push!(selection_state.selection_bounds, (x1, y1, x2, y2))
     else
@@ -273,7 +294,14 @@ end
 
 Finish channel selection and highlight selected channels.
 """
-function _finish_figure_channel_selection!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, channel_selection_active, axes::Vector{Axis})
+function _finish_figure_channel_selection!(
+    fig::Figure,
+    selection_state::SharedSelectionState,
+    plot_layout,
+    data,
+    channel_selection_active,
+    axes::Vector{Axis},
+)
     if (plot_layout.type != :topo && plot_layout.type != :grid) || !channel_selection_active[]
         return
     end
@@ -354,7 +382,20 @@ Draw highlight rectangles for selected channels.
 function _draw_channel_rectangles!(fig::Figure, all_overlapping_axes_rects)
     rectangles = []
     for (axis_rect, channels) in all_overlapping_axes_rects
-        rect = poly!(fig.scene, [Point2f(axis_rect[1], axis_rect[2]), Point2f(axis_rect[3], axis_rect[2]), Point2f(axis_rect[3], axis_rect[4]), Point2f(axis_rect[1], axis_rect[4])], color = (:blue, 0.6), strokecolor = :darkblue, strokewidth = 2, overdraw = true, space = :relative)
+        rect = poly!(
+            fig.scene,
+            [
+                Point2f(axis_rect[1], axis_rect[2]),
+                Point2f(axis_rect[3], axis_rect[2]),
+                Point2f(axis_rect[3], axis_rect[4]),
+                Point2f(axis_rect[1], axis_rect[4]),
+            ],
+            color = (:blue, 0.6),
+            strokecolor = :darkblue,
+            strokewidth = 2,
+            overdraw = true,
+            space = :relative,
+        )
         push!(rectangles, rect)
     end
     return rectangles
@@ -413,7 +454,7 @@ Returns Refs for tracking key states.
 function _setup_keyboard_tracking(fig::Figure)
     shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
-    
+
     on(events(fig).keyboardbutton) do key_event
         if key_event.key == Keyboard.left_shift
             shift_pressed[] = key_event.action == Keyboard.press
@@ -421,7 +462,7 @@ function _setup_keyboard_tracking(fig::Figure)
             ctrl_pressed[] = key_event.action == Keyboard.press
         end
     end
-    
+
     return shift_pressed, ctrl_pressed
 end
 
@@ -430,13 +471,20 @@ end
 
 Handle mouse button events for selection.
 """
-function _handle_mouse_button_events(fig::Figure, axes::Vector{Axis}, selection_state::SharedSelectionState, data, right_click_handler, shift_pressed)
+function _handle_mouse_button_events(
+    fig::Figure,
+    axes::Vector{Axis},
+    selection_state::SharedSelectionState,
+    data,
+    right_click_handler,
+    shift_pressed,
+)
     on(events(fig).mousebutton) do event
         mouse_pos = events(fig).mouseposition[]
         active_ax = _find_active_axis(axes, mouse_pos)
-        
+
         isnothing(active_ax) && return
-        
+
         mouse_x = mouseposition(active_ax)[1]
 
         if event.button == Mouse.left
@@ -469,7 +517,7 @@ function _handle_mouse_movement(fig::Figure, axes::Vector{Axis}, selection_state
         if selection_state.active[]
             mouse_pos = events(fig).mouseposition[]
             active_ax = _find_active_axis(axes, mouse_pos)
-            
+
             if !isnothing(active_ax)
                 world_pos = mouseposition(active_ax)[1]
                 _update_shared_selection!(active_ax, selection_state, selection_state.bounds[][1], world_pos)
@@ -484,7 +532,14 @@ end
 Set up unified mouse selection that works across all layouts.
 Uses figure-level events to avoid conflicts with multiple axis handlers.
 """
-function _setup_unified_selection!(fig::Figure, axes::Vector{Axis}, selection_state::SharedSelectionState, data, plot_layout, right_click_handler=nothing)
+function _setup_unified_selection!(
+    fig::Figure,
+    axes::Vector{Axis},
+    selection_state::SharedSelectionState,
+    data,
+    plot_layout,
+    right_click_handler = nothing,
+)
     shift_pressed, ctrl_pressed = _setup_keyboard_tracking(fig)
     _handle_mouse_button_events(fig, axes, selection_state, data, right_click_handler, shift_pressed)
     _handle_mouse_movement(fig, axes, selection_state)
@@ -499,7 +554,14 @@ end
 
 Set up figure-level event handlers for channel selection in topo and grid layouts.
 """
-function _setup_channel_selection_events!(fig::Figure, selection_state::SharedSelectionState, plot_layout, data, axes::Vector{Axis}, layout_type::Symbol)
+function _setup_channel_selection_events!(
+    fig::Figure,
+    selection_state::SharedSelectionState,
+    plot_layout,
+    data,
+    axes::Vector{Axis},
+    layout_type::Symbol,
+)
     channel_selection_active = Ref(false)
     shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
@@ -514,7 +576,7 @@ function _setup_channel_selection_events!(fig::Figure, selection_state::SharedSe
         if key_event.action == Keyboard.release
             channel_selection_active[] = false
         end
-    end   
+    end
 
     # Mouse events
     on(events(fig).mousebutton) do event
@@ -522,19 +584,26 @@ function _setup_channel_selection_events!(fig::Figure, selection_state::SharedSe
             if event.action == Mouse.press
                 _start_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active)
             elseif event.action == Mouse.release && channel_selection_active[]
-                _finish_figure_channel_selection!(fig, selection_state, plot_layout, data, channel_selection_active, axes)
+                _finish_figure_channel_selection!(
+                    fig,
+                    selection_state,
+                    plot_layout,
+                    data,
+                    channel_selection_active,
+                    axes,
+                )
             end
         end
-        
+
         if event.button == Mouse.left && event.action == Mouse.press && !ctrl_pressed[] && !shift_pressed[]
             _clear_all_shared_channel_selections!(fig, selection_state)
         end
-        
+
         if event.button == Mouse.right && event.action == Mouse.press
             @info "TODO: implement right click functionality for $layout_type"
         end
     end
-    
+
     # Mouse movement
     on(events(fig).mouseposition) do _
         if channel_selection_active[]
@@ -557,5 +626,3 @@ function _rectangles_overlap(rect1, rect2)
     x2_min, y2_min, x2_max, y2_max = rect2
     return !(x1_max < x2_min || x2_max < x1_min || y1_max < y2_min || y2_max < y1_min)
 end
-
-

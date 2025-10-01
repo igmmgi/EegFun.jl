@@ -16,30 +16,25 @@ using Makie
     function create_test_continuous_data(; n_samples::Int = 1000, fs::Int = 1000)
         """Create mock ContinuousData for testing"""
         time = collect(0:(n_samples-1)) ./ fs
-        
+
         # Create trigger pattern: [0,1,0,0,2,2,0,0,3,0,0,1,0,0]
         triggers = zeros(Int16, n_samples)
         triggers[100] = 1              # Single trigger 1
         triggers[200:201] = [2, 2]     # Sustained trigger 2
         triggers[300] = 3              # Single trigger 3
         triggers[400] = 1              # Single trigger 1
-        
+
         # Create channel data
         channel_data = randn(n_samples, 2)
-        
-        df = DataFrame(
-            time = time,
-            triggers = triggers,
-            channel1 = channel_data[:, 1],
-            channel2 = channel_data[:, 2]
-        )
-        
+
+        df = DataFrame(time = time, triggers = triggers, channel1 = channel_data[:, 1], channel2 = channel_data[:, 2])
+
         layout = eegfun.Layout(
-            DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), 
-            nothing, 
-            nothing
+            DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]),
+            nothing,
+            nothing,
         )
-        
+
         dat = eegfun.ContinuousData(df, layout, fs, eegfun.AnalysisInfo())
         return dat
     end
@@ -48,20 +43,15 @@ using Makie
         """Create data with no triggers for edge case testing"""
         time = collect(0:(n_samples-1)) ./ fs
         triggers = zeros(Int16, n_samples)
-        
-        df = DataFrame(
-            time = time,
-            triggers = triggers,
-            channel1 = randn(n_samples),
-            channel2 = randn(n_samples)
-        )
-        
+
+        df = DataFrame(time = time, triggers = triggers, channel1 = randn(n_samples), channel2 = randn(n_samples))
+
         layout = eegfun.Layout(
-            DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), 
-            nothing, 
-            nothing
+            DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]),
+            nothing,
+            nothing,
         )
-        
+
         dat = eegfun.ContinuousData(df, layout, fs, eegfun.AnalysisInfo())
         return dat
     end
@@ -75,9 +65,9 @@ using Makie
             trigger_times = [1.0, 2.0, 3.0, 4.0, 5.0]
             trigger_values = [1, 2, 1, 3, 2]
             ignore_triggers = [1, 3]
-            
+
             filtered_times, filtered_values = eegfun._filter_triggers(trigger_times, trigger_values, ignore_triggers)
-            
+
             @test filtered_times == [2.0, 5.0]
             @test filtered_values == [2, 2]
         end
@@ -86,9 +76,9 @@ using Makie
             trigger_times = [1.0, 2.0, 3.0]
             trigger_values = [1, 2, 3]
             ignore_triggers = [4, 5]  # No overlap
-            
+
             filtered_times, filtered_values = eegfun._filter_triggers(trigger_times, trigger_values, ignore_triggers)
-            
+
             @test filtered_times == trigger_times
             @test filtered_values == trigger_values
         end
@@ -97,16 +87,16 @@ using Makie
             trigger_times = [1.0, 2.0, 3.0]
             trigger_values = [1, 2, 3]
             ignore_triggers = [1, 2, 3]
-            
+
             filtered_times, filtered_values = eegfun._filter_triggers(trigger_times, trigger_values, ignore_triggers)
-            
+
             @test isempty(filtered_times)
             @test isempty(filtered_values)
         end
 
         @testset "empty input" begin
             filtered_times, filtered_values = eegfun._filter_triggers(Float64[], Int[], [1, 2])
-            
+
             @test isempty(filtered_times)
             @test isempty(filtered_values)
         end
@@ -116,9 +106,9 @@ using Makie
         @testset "basic counting" begin
             time = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
             triggers = [0, 1, 0, 2, 0, 1]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test trigger_times == [0.1, 0.3, 0.5]
             @test trigger_values == [1, 2, 1]
             @test trigger_count[1] == 2
@@ -129,9 +119,9 @@ using Makie
             time = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
             triggers = [0, 1, 0, 2, 0, 1]
             ignore_triggers = [1]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers, ignore_triggers)
-            
+
             @test trigger_times == [0.3]
             @test trigger_values == [2]
             @test length(trigger_count) == 1
@@ -141,9 +131,9 @@ using Makie
         @testset "no triggers" begin
             time = [0.0, 0.1, 0.2, 0.3]
             triggers = [0, 0, 0, 0]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test isempty(trigger_times)
             @test isempty(trigger_values)
             @test isempty(trigger_count)
@@ -153,9 +143,9 @@ using Makie
             time = [0.0, 0.1, 0.2, 0.3]
             triggers = [0, 1, 0, 2]
             ignore_triggers = [1, 2]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers, ignore_triggers)
-            
+
             @test isempty(trigger_times)
             @test isempty(trigger_values)
             @test isempty(trigger_count)
@@ -167,9 +157,9 @@ using Makie
 
         @testset "ContinuousData extraction" begin
             dat = create_test_continuous_data()
-            
+
             trigger_codes, trigger_times = eegfun._extract_trigger_data(dat)
-            
+
             @test length(trigger_codes) == 5  # 5 trigger events (1,2,2,3,1)
             @test length(trigger_times) == 5
             @test 1 in trigger_codes
@@ -180,9 +170,9 @@ using Makie
         @testset "ContinuousData with filtering" begin
             dat = create_test_continuous_data()
             ignore_triggers = [2, 3]
-            
+
             trigger_codes, trigger_times = eegfun._extract_trigger_data(dat, ignore_triggers)
-            
+
             @test length(trigger_codes) == 2  # Only trigger 1
             @test all(trigger_codes .== 1)
         end
@@ -192,7 +182,7 @@ using Makie
             df = DataFrame(time = [0.0, 0.1, 0.2], channel = [1.0, 2.0, 3.0])
             layout = eegfun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
             dat = eegfun.ContinuousData(df, layout, 100, eegfun.AnalysisInfo())
-            
+
             # Should trigger minimal_error and return nothing
             @test eegfun._extract_trigger_data(dat) === nothing
         end
@@ -202,7 +192,7 @@ using Makie
         @testset "basic counting" begin
             trigger_codes = Int16[1, 2, 1, 3, 2, 1]
             trigger_count = eegfun._count_triggers(trigger_codes)
-            
+
             @test trigger_count[1] == 3
             @test trigger_count[2] == 2
             @test trigger_count[3] == 1
@@ -211,7 +201,7 @@ using Makie
         @testset "single trigger type" begin
             trigger_codes = Int16[1, 1, 1, 1]
             trigger_count = eegfun._count_triggers(trigger_codes)
-            
+
             @test length(trigger_count) == 1
             @test trigger_count[1] == 4
         end
@@ -219,7 +209,7 @@ using Makie
         @testset "empty input" begin
             trigger_codes = Int16[]
             trigger_count = eegfun._count_triggers(trigger_codes)
-            
+
             @test isempty(trigger_count)
         end
     end
@@ -233,9 +223,9 @@ using Makie
             trigger_times = [1.0, 2.0, 3.0, 4.0]
             trigger_values = [1, 2, 1, 3]
             trigger_count = OrderedDict(1 => 2, 2 => 1, 3 => 1)
-            
+
             fig, ax = eegfun.plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
@@ -244,9 +234,9 @@ using Makie
             trigger_times = Float64[]
             trigger_values = Int[]
             trigger_count = OrderedDict{Int,Int}()
-            
+
             fig, ax = eegfun.plot_trigger_overview(trigger_times, trigger_values, trigger_count; display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
@@ -255,41 +245,37 @@ using Makie
 
         @testset "ContinuousData input" begin
             dat = create_test_continuous_data()
-            
+
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
 
         @testset "ContinuousData with ignore_triggers" begin
             dat = create_test_continuous_data()
-            
+
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [2, 3], display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
 
         @testset "empty ContinuousData" begin
             dat = create_empty_trigger_data()
-            
+
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
 
         @testset "parameter passing" begin
             dat = create_test_continuous_data()
-            
+
             # Test that custom parameters are passed through
-            fig, ax = eegfun.plot_trigger_overview(dat; 
-                window_size = 15.0, 
-                display_plot = false,
-                ignore_triggers = [1]
-            )
-            
+            fig, ax = eegfun.plot_trigger_overview(dat; window_size = 15.0, display_plot = false, ignore_triggers = [1])
+
             @test fig isa Figure
             @test ax isa Axis
         end
@@ -300,42 +286,43 @@ using Makie
 
         @testset "ContinuousData input" begin
             dat = create_test_continuous_data()
-            
+
             fig, ax = eegfun.plot_trigger_timing(dat; display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
 
         @testset "ContinuousData with ignore_triggers" begin
             dat = create_test_continuous_data()
-            
+
             fig, ax = eegfun.plot_trigger_timing(dat; ignore_triggers = [2, 3], display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
 
         @testset "empty ContinuousData" begin
             dat = create_empty_trigger_data()
-            
+
             fig, ax = eegfun.plot_trigger_timing(dat; display_plot = false)
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
 
         @testset "parameter passing" begin
             dat = create_test_continuous_data()
-            
+
             # Test that custom parameters are passed through
-            fig, ax = eegfun.plot_trigger_timing(dat; 
+            fig, ax = eegfun.plot_trigger_timing(
+                dat;
                 window_size = 20.0,
                 initial_position = -5.0,
                 display_plot = false,
-                ignore_triggers = [1]
+                ignore_triggers = [1],
             )
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
@@ -349,22 +336,22 @@ using Makie
         @testset "end-to-end workflow" begin
             # Test complete workflow from data creation to plotting
             dat = create_test_continuous_data()
-            
+
             # Test overview plot
             fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
             @test fig1 isa Figure
             @test ax1 isa Axis
-            
+
             # Test timing plot
             fig2, ax2 = eegfun.plot_trigger_timing(dat; display_plot = false)
             @test fig2 isa Figure
             @test ax2 isa Axis
-            
+
             # Test with filtering
             fig3, ax3 = eegfun.plot_trigger_overview(dat; ignore_triggers = [1], display_plot = false)
             @test fig3 isa Figure
             @test ax3 isa Axis
-            
+
             fig4, ax4 = eegfun.plot_trigger_timing(dat; ignore_triggers = [1], display_plot = false)
             @test fig4 isa Figure
             @test ax4 isa Axis
@@ -372,24 +359,24 @@ using Makie
 
         @testset "parameter consistency" begin
             dat = create_test_continuous_data()
-            
+
             # Test that same parameters work across all functions
             common_params = (ignore_triggers = [1], display_plot = false)
-            
+
             fig1, ax1 = eegfun.plot_trigger_overview(dat; common_params...)
             fig2, ax2 = eegfun.plot_trigger_timing(dat; common_params...)
-            
+
             @test fig1 isa Figure && fig2 isa Figure
             @test ax1 isa Axis && ax2 isa Axis
         end
 
         @testset "return value consistency" begin
             dat = create_test_continuous_data()
-            
+
             # All functions should return (fig, ax) tuple
             fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
             fig2, ax2 = eegfun.plot_trigger_timing(dat; display_plot = false)
-            
+
             @test isa(fig1, Figure) && isa(fig2, Figure)
             @test isa(ax1, Axis) && isa(ax2, Axis)
         end
@@ -403,12 +390,12 @@ using Makie
         @testset "large dataset handling" begin
             # Test with larger dataset
             dat = create_test_continuous_data(n_samples = 10000)
-            
+
             # Should complete without errors
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
-            
+
             fig, ax = eegfun.plot_trigger_timing(dat; display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
@@ -417,11 +404,11 @@ using Makie
         @testset "filtering efficiency" begin
             # Test that empty ignore_triggers has no performance penalty
             dat = create_test_continuous_data(n_samples = 5000)
-            
+
             # Time both versions
             @time fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
             @time fig2, ax2 = eegfun.plot_trigger_overview(dat; ignore_triggers = Int[], display_plot = false)
-            
+
             @test fig1 isa Figure && fig2 isa Figure
             @test ax1 isa Axis && ax2 isa Axis
         end
@@ -429,13 +416,13 @@ using Makie
         @testset "memory usage" begin
             # Test that functions don't leak memory
             dat = create_test_continuous_data()
-            
+
             # Create multiple plots to check for memory leaks
-            for i in 1:5
+            for i = 1:5
                 fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
                 @test fig isa Figure
                 @test ax isa Axis
-                
+
                 fig, ax = eegfun.plot_trigger_timing(dat; display_plot = false)
                 @test fig isa Figure
                 @test ax isa Axis
@@ -451,9 +438,9 @@ using Makie
         @testset "single trigger" begin
             time = [0.0, 0.1, 0.2, 0.3]
             triggers = [0, 1, 0, 0]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test length(trigger_times) == 1
             @test trigger_times[1] == 0.1
             @test trigger_values[1] == 1
@@ -463,9 +450,9 @@ using Makie
         @testset "all same triggers" begin
             time = [0.0, 0.1, 0.2, 0.3, 0.4]
             triggers = [0, 1, 1, 1, 0]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test length(trigger_times) == 3  # All three triggers (not cleaned in this function)
             @test trigger_times == [0.1, 0.2, 0.3]
             @test trigger_values == [1, 1, 1]
@@ -475,9 +462,9 @@ using Makie
         @testset "consecutive different triggers" begin
             time = [0.0, 0.1, 0.2, 0.3, 0.4]
             triggers = [0, 1, 2, 3, 0]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test length(trigger_times) == 3
             @test trigger_times == [0.1, 0.2, 0.3]
             @test trigger_values == [1, 2, 3]
@@ -489,10 +476,10 @@ using Makie
         @testset "ignore_triggers edge cases" begin
             time = [0.0, 0.1, 0.2, 0.3, 0.4]
             triggers = [0, 1, 2, 3, 0]
-            
+
             # Ignore non-existent triggers
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers, [99, 100])
-            
+
             @test length(trigger_times) == 3  # No filtering
             @test trigger_times == [0.1, 0.2, 0.3]
             @test trigger_values == [1, 2, 3]
@@ -501,10 +488,10 @@ using Makie
         @testset "empty ignore_triggers" begin
             time = [0.0, 0.1, 0.2, 0.3]
             triggers = [0, 1, 2, 0]
-            
+
             # Empty ignore list should not filter anything
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers, Int[])
-            
+
             @test length(trigger_times) == 2
             @test trigger_times == [0.1, 0.2]
             @test trigger_values == [1, 2]
@@ -519,7 +506,7 @@ using Makie
         @testset "invalid ignore_triggers types" begin
             # Test that functions handle invalid types gracefully
             dat = create_test_continuous_data()
-            
+
             # These should not throw errors but may not work as expected
             # The functions should handle type conversion internally
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [1.0, 2.0], display_plot = false)
@@ -531,14 +518,15 @@ using Makie
 
         @testset "extreme parameter values" begin
             dat = create_test_continuous_data()
-            
+
             # Test with extreme parameter values
-            fig, ax = eegfun.plot_trigger_timing(dat; 
+            fig, ax = eegfun.plot_trigger_timing(
+                dat;
                 window_size = 0.01,  # Very small window
                 initial_position = -1000.0,  # Very negative position
-                display_plot = false
+                display_plot = false,
             )
-            
+
             @test fig isa Figure
             @test ax isa Axis
         end
@@ -553,9 +541,9 @@ using Makie
             # Test with negative trigger values
             time = [0.0, 0.1, 0.2, 0.3]
             triggers = [0, -1, 0, -2]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test length(trigger_times) == 2
             @test trigger_times == [0.1, 0.3]
             @test trigger_values == [-1, -2]
@@ -567,9 +555,9 @@ using Makie
             # Test with non-monotonic time (should still work)
             time = [0.0, 0.1, 0.05, 0.2]  # Non-monotonic
             triggers = [0, 1, 0, 2]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test length(trigger_times) == 2
             @test trigger_times == [0.1, 0.2]  # Should preserve original order
             @test trigger_values == [1, 2]
@@ -579,9 +567,9 @@ using Makie
             # Test with single element arrays
             time = [1.0]
             triggers = [1]
-            
+
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers)
-            
+
             @test length(trigger_times) == 1
             @test trigger_times == [1.0]
             @test trigger_values == [1]
@@ -590,27 +578,30 @@ using Makie
 
         @testset "interactive plot edge cases" begin
             dat = create_test_continuous_data()
-            
+
             # Test with window size larger than data range
-            fig, ax = eegfun.plot_trigger_timing(dat; 
+            fig, ax = eegfun.plot_trigger_timing(
+                dat;
                 window_size = 10000.0,  # Much larger than data
-                display_plot = false
+                display_plot = false,
             )
             @test fig isa Figure
             @test ax isa Axis
-            
+
             # Test with very small window size
-            fig, ax = eegfun.plot_trigger_timing(dat; 
+            fig, ax = eegfun.plot_trigger_timing(
+                dat;
                 window_size = 0.001,  # Very small
-                display_plot = false
+                display_plot = false,
             )
             @test fig isa Figure
             @test ax isa Axis
-            
+
             # Test with extreme initial position
-            fig, ax = eegfun.plot_trigger_timing(dat; 
+            fig, ax = eegfun.plot_trigger_timing(
+                dat;
                 initial_position = 10000.0,  # Way beyond data
-                display_plot = false
+                display_plot = false,
             )
             @test fig isa Figure
             @test ax isa Axis
@@ -619,11 +610,11 @@ using Makie
         @testset "memory and performance edge cases" begin
             # Test with very large dataset
             dat = create_test_continuous_data(n_samples = 50000)
-            
+
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
-            
+
             fig, ax = eegfun.plot_trigger_timing(dat; display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
@@ -633,10 +624,10 @@ using Makie
             # Test with boundary values
             time = [0.0, 0.1, 0.2, 0.3]
             triggers = [0, 1, 0, 0]
-            
+
             # Test with ignore_triggers containing the only trigger
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, triggers, [1])
-            
+
             @test isempty(trigger_times)
             @test isempty(trigger_values)
             @test isempty(trigger_count)
@@ -646,10 +637,10 @@ using Makie
             # Test that functions handle type conversions gracefully
             time = [0.0, 0.1, 0.2, 0.3]
             triggers = [0, 1, 0, 2]
-            
+
             # Test with different integer types
             trigger_times, trigger_values, trigger_count = eegfun._trigger_time_count(time, Int8.(triggers))
-            
+
             @test length(trigger_times) == 2
             @test trigger_times == [0.1, 0.3]
             @test trigger_values == [1, 2]
@@ -663,12 +654,12 @@ using Makie
     @testset "ignore_triggers feature" begin
         @testset "basic filtering functionality" begin
             dat = create_test_continuous_data()
-            
+
             # Test filtering out specific triggers
             fig1, ax1 = eegfun.plot_trigger_overview(dat; ignore_triggers = [1], display_plot = false)
             fig2, ax2 = eegfun.plot_trigger_overview(dat; ignore_triggers = [2, 3], display_plot = false)
             fig3, ax3 = eegfun.plot_trigger_overview(dat; ignore_triggers = [1, 2, 3], display_plot = false)
-            
+
             @test fig1 isa Figure && fig2 isa Figure && fig3 isa Figure
             @test ax1 isa Axis && ax2 isa Axis && ax3 isa Axis
         end
@@ -676,40 +667,40 @@ using Makie
         @testset "filtering consistency across functions" begin
             dat = create_test_continuous_data()
             ignore_list = [1, 2]
-            
+
             # Both functions should handle filtering the same way
             fig1, ax1 = eegfun.plot_trigger_overview(dat; ignore_triggers = ignore_list, display_plot = false)
             fig2, ax2 = eegfun.plot_trigger_timing(dat; ignore_triggers = ignore_list, display_plot = false)
-            
+
             @test fig1 isa Figure && fig2 isa Figure
             @test ax1 isa Axis && ax2 isa Axis
         end
 
         @testset "performance optimization verification" begin
             dat = create_test_continuous_data(n_samples = 2000)
-            
+
             # Test that empty ignore_triggers doesn't add overhead
             # This is more of a design verification than a strict performance test
             fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
             fig2, ax2 = eegfun.plot_trigger_overview(dat; ignore_triggers = Int[], display_plot = false)
-            
+
             @test fig1 isa Figure && fig2 isa Figure
             @test ax1 isa Axis && ax2 isa Axis
         end
 
         @testset "filtering edge cases" begin
             dat = create_test_continuous_data()
-            
+
             # Filter all triggers
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [1, 2, 3], display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
-            
+
             # Filter non-existent triggers
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [99, 100], display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
-            
+
             # Filter with mixed types (should be handled gracefully)
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [1.0, 2], display_plot = false)
             @test fig isa Figure
@@ -718,19 +709,19 @@ using Makie
 
         @testset "advanced filtering edge cases" begin
             dat = create_test_continuous_data()
-            
+
             # Very large ignore_triggers list
             large_ignore = collect(1:1000)
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = large_ignore, display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
-            
+
             # Duplicate values in ignore_triggers
             duplicate_ignore = [1, 1, 2, 2, 3, 3]
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = duplicate_ignore, display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
-            
+
             # Negative trigger values (if they exist in data)
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [-1, -2], display_plot = false)
             @test fig isa Figure

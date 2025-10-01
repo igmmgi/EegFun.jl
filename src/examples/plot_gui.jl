@@ -161,12 +161,8 @@ function plot_gui()
         Menu(main_layout[6, 2], options = ["Select"], width = ui_style.input_width, height = ui_style.input_height)
 
     # Multi-select electrode info
-    electrode_info = Label(
-        main_layout[7, 2],
-        "Ctrl+Click for multiple selection",
-        fontsize = ui_style.slider_font,
-        color = :gray,
-    )
+    electrode_info =
+        Label(main_layout[7, 2], "Ctrl+Click for multiple selection", fontsize = ui_style.slider_font, color = :gray)
 
     # Column 3: Settings
     # Settings Title
@@ -526,7 +522,7 @@ function plot_gui()
     on(layout_dropdown.selection) do selection
         update_layout(selection)
     end
-    
+
     on(electrode_menu.selection) do selection
         gui_state.electrodes[] = [selection]
     end

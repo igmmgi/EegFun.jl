@@ -5,7 +5,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
     :interactive => (true, "Whether to enable interactive features"),
-    
+
     # Topography-specific parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
     :gridscale => (200, "Grid resolution for interpolation"),
@@ -13,43 +13,43 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylim => (nothing, "Y-axis limits (nothing for auto)"),
     :colorrange => (nothing, "Color range for the topography. If nothing, automatically determined"),
     :nan_color => (:transparent, "Color for NaN values"),
-    
+
     # Title parameters
     :title => ("", "Plot title"),
     :title_fontsize => (16, "Font size for the title"),
     :show_title => (true, "Whether to show the title"),
-    
+
     # Axis labels and styling
     :xlabel => ("", "Label for x-axis"),
     :ylabel => ("", "Label for y-axis"),
     :label_fontsize => (14, "Font size for axis labels"),
     :tick_fontsize => (12, "Font size for tick labels"),
-    
+
     # Colorbar parameters
     :plot_colorbar => (true, "Whether to display the colorbar"),
     :colorbar_width => (30, "Width of the colorbar"),
     :colorbar_label => ("μV", "Label for the colorbar"),
     :colorbar_fontsize => (12, "Font size for colorbar labels"),
-    
+
     # Grid parameters
     :grid_visible => (false, "Whether to show grid"),
     :grid_alpha => (0.3, "Transparency of grid"),
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
-    
+
     # Head shape parameters (reusing layout kwargs)
     :head_color => (:black, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
     :head_radius => (1.0, "Radius of the head shape in mm."),
     :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
     :head_nose_scale => (4.0, "Scale factor for nose size."),
-    
+
     # Electrode point parameters
     :point_plot => (true, "Whether to plot electrode points."),
     :point_marker => (:circle, "Marker style for electrode points."),
     :point_markersize => (12, "Size of electrode point markers."),
     :point_color => (:black, "Color of electrode points."),
-    
+
     # Electrode label parameters
     :label_plot => (true, "Whether to plot electrode labels."),
     :label_fontsize => (20, "Font size for electrode labels."),
@@ -63,20 +63,14 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 # 2D topographic plot
 ##########################################
 
-function _plot_topography!(
-    fig::Figure,
-    ax::Axis,
-    dat::DataFrame,
-    layout::Layout;
-    kwargs...
-)
+function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout; kwargs...)
     # ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    
+
     # Extract specific values
     method = plot_kwargs[:method]
     gridscale = plot_kwargs[:gridscale]
@@ -121,12 +115,8 @@ function _plot_topography!(
     contour_range = 1.0  # Since coordinates are normalized to [-1, 1]
 
     # Set contour parameters
-    contour_kwargs = Dict{Symbol, Any}(
-        :extendlow => :auto,
-        :extendhigh => :auto,
-        :colormap => plot_kwargs[:colormap],
-    )
-    
+    contour_kwargs = Dict{Symbol,Any}(:extendlow => :auto, :extendhigh => :auto, :colormap => plot_kwargs[:colormap])
+
     if !isnothing(nan_color)
         contour_kwargs[:nan_color] = nan_color
     end
@@ -136,28 +126,26 @@ function _plot_topography!(
         range(-contour_range, contour_range, length = gridscale),
         data,
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
-        contour_kwargs...
+        contour_kwargs...,
     )
-    
+
     # Set color range on the contour plot if specified
     if !isnothing(colorrange)
         co.colorrange = colorrange
     end
 
     if plot_colorbar
-        Colorbar(fig[1, 2], co; 
-                width = plot_kwargs[:colorbar_width],
-                label = plot_kwargs[:colorbar_label],
-                labelsize = plot_kwargs[:colorbar_fontsize])
+        Colorbar(
+            fig[1, 2],
+            co;
+            width = plot_kwargs[:colorbar_width],
+            label = plot_kwargs[:colorbar_label],
+            labelsize = plot_kwargs[:colorbar_fontsize],
+        )
     end
 
     # head shape
-    plot_layout_2d!(
-        fig,
-        ax,
-        layout;
-        plot_kwargs...,
-    )
+    plot_layout_2d!(fig, ax, layout; plot_kwargs...)
 
     # Apply axis styling
     if plot_kwargs[:xlabel] != ""
@@ -166,13 +154,13 @@ function _plot_topography!(
     if plot_kwargs[:ylabel] != ""
         ax.ylabel = plot_kwargs[:ylabel]
     end
-    
+
     # Set font sizes
     ax.xlabelsize = plot_kwargs[:label_fontsize]
     ax.ylabelsize = plot_kwargs[:label_fontsize]
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
-    
+
     # Set grid properties
     ax.xgridvisible = plot_kwargs[:xgrid]
     ax.ygridvisible = plot_kwargs[:ygrid]
@@ -216,25 +204,25 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
-    interactive = true,  
+    interactive = true,
     kwargs...,
 )
     # Merge user kwargs with defaults to get all parameters
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    
+
     # Override with function parameters if provided
     plot_kwargs[:display_plot] = display_plot
     plot_kwargs[:interactive] = interactive
-    
+
     fig = Figure()
     ax = Axis(fig[1, 1])
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
-    
+
     if plot_kwargs[:interactive]
         _setup_topo_interactivity!(fig, ax, dat)
     end
-    
+
     if plot_kwargs[:display_plot]
         display_figure(fig)
     end
@@ -258,7 +246,14 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
-    return plot_topography.(dat; channel_selection = channel_selection, sample_selection = sample_selection, display_plot = display_plot, interactive = interactive, kwargs...)
+    return plot_topography.(
+        dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        display_plot = display_plot,
+        interactive = interactive,
+        kwargs...,
+    )
 end
 
 
@@ -272,7 +267,14 @@ function plot_topography!(
     sample_selection::Function = samples(),
     kwargs...,
 )
-    plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
+    plot_topography!(
+        fig,
+        ax,
+        convert(epoch_data, epoch);
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        kwargs...,
+    )
 end
 
 function plot_topography(
@@ -281,24 +283,31 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
-    interactive = true,  
+    interactive = true,
     kwargs...,
 )
     # Merge user kwargs with defaults to get all parameters
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-    
+
     # Override with function parameters if provided
     plot_kwargs[:display_plot] = display_plot
     plot_kwargs[:interactive] = interactive
-    
+
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, convert(epoch_data, epoch); channel_selection = channel_selection, sample_selection = sample_selection, plot_kwargs...)
-    
+    plot_topography!(
+        fig,
+        ax,
+        convert(epoch_data, epoch);
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        plot_kwargs...,
+    )
+
     if plot_kwargs[:interactive]
         _setup_topo_interactivity!(fig, ax, dat)
     end
-    
+
     if plot_kwargs[:display_plot]
         display_figure(fig)
     end
@@ -362,7 +371,7 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
         throw(ArgumentError("Input data contains NaN or Inf values"))
     end
 
-    points  = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
+    points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
     # Use normalized coordinate ranges since layout coordinates are normalized to [-1, 1]
     x_range = range(-1.0, 1.0, length = grid_scale)
     y_range = range(-1.0, 1.0, length = grid_scale)
@@ -592,7 +601,7 @@ Set up keyboard interactivity for topographic plots.
 function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing)
 
     deregister_interaction!(ax, :rectanglezoom)
-    
+
     # Handle keyboard events at the figure level
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
@@ -603,7 +612,7 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothi
             end
         end
     end
-    
+
     _setup_topo_selection!(fig, ax, original_data)
 end
 
@@ -613,29 +622,29 @@ end
 Increase the scale of the topographic plot (zoom in on color range).
 """
 function _topo_scale_up!(ax::Axis)
-    
+
     # Find the Contourf plot in the axis
     for plot in ax.scene.plots
         if plot isa Makie.Contourf
-            
+
             # Get current levels
             current_levels = plot.levels[]
             if !isnothing(current_levels)
-                
+
                 # For zoom in: compress the range around 0 for better contrast
                 level_min, level_max = extrema(current_levels)
                 center = (level_min + level_max) / 2
                 range_size = level_max - level_min
-                
+
                 # Compress the range by 20% but keep it centered
                 new_range = range_size * 0.8
                 new_min = center - new_range / 2
                 new_max = center + new_range / 2
-                
+
                 # Create new levels with the same density but compressed range
                 new_levels = range(new_min, new_max, length = length(current_levels))
                 plot.levels[] = new_levels
-                
+
                 break
             else
             end
@@ -649,29 +658,29 @@ end
 Decrease the scale of the topographic plot (zoom out from color range).
 """
 function _topo_scale_down!(ax::Axis)
-    
+
     # Find the Contourf plot in the axis
     for plot in ax.scene.plots
         if plot isa Makie.Contourf
-            
+
             # Get current levels
             current_levels = plot.levels[]
             if !isnothing(current_levels)
-                
+
                 # For zoom out: expand the range around 0 for less contrast
                 level_min, level_max = extrema(current_levels)
                 center = (level_min + level_max) / 2
                 range_size = level_max - level_min
-                
+
                 # Expand the range by 25% but keep it centered
                 new_range = range_size * 1.25
                 new_min = center - new_range / 2
                 new_max = center + new_range / 2
-                
+
                 # Create new levels with the same density but expanded range
                 new_levels = range(new_min, new_max, length = length(current_levels))
                 plot.levels[] = new_levels
-                
+
                 break
             end
         end
@@ -693,17 +702,17 @@ mutable struct TopoSelectionState
     visible::Observable{Bool}
     rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
     bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}  # Store all selection bounds
-    temp_rectangle::Union{Makie.Poly, Nothing}  # Temporary rectangle for dragging
-    
+    temp_rectangle::Union{Makie.Poly,Nothing}  # Temporary rectangle for dragging
+
     function TopoSelectionState(ax::Axis)
         # Initialize with empty lists for multiple selections
         new(
-            Observable(false), 
-            Observable((0.0, 0.0, 0.0, 0.0)), 
-            Observable(false), 
+            Observable(false),
+            Observable((0.0, 0.0, 0.0, 0.0)),
+            Observable(false),
             Makie.Poly[],  # Empty vector for rectangles
             Observable{Tuple{Float64,Float64,Float64,Float64}}[],  # Empty vector for bounds
-            nothing  # No temporary rectangle initially
+            nothing,  # No temporary rectangle initially
         )
     end
 end
@@ -715,10 +724,10 @@ Set up simple region selection for topographic plots.
 """
 function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
     selection_state = TopoSelectionState(ax)
-    
+
     # Track Shift key state
     shift_pressed = Observable(false)
-    
+
     # Handle keyboard events to track Shift key
     on(events(fig).keyboardbutton) do event
         if event.key == Keyboard.left_shift
@@ -729,7 +738,7 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
             end
         end
     end
-    
+
     # Handle mouse events at the figure level
     on(events(fig).mousebutton) do event
         if event.button == Mouse.left
@@ -752,7 +761,7 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
             @info "TODO! :-)"
         end
     end
-    
+
     # Handle mouse movement for selection dragging
     on(events(fig).mouseposition) do pos
         if selection_state.active[]
@@ -769,17 +778,18 @@ Start spatial region selection in topographic plot.
 function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event)
     selection_state.active[] = true
     selection_state.visible[] = true
-    
+
     # Get mouse position in screen coordinates and convert to axis coordinates
     screen_pos = events(ax.scene).mouseposition[]
     mouse_pos = mouseposition(ax)
     mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
-    
+
     # Store axis coordinates for spatial selection
     selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
-    
+
     # Create a temporary rectangle for dragging
-    initial_points = [Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y)]
+    initial_points =
+        [Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y)]
     selection_state.temp_rectangle = poly!(
         ax,
         initial_points,
@@ -787,9 +797,9 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
         strokecolor = :black,    # Black border
         strokewidth = 1,         # Thin border
         visible = true,
-        overdraw = true          # Ensure it's drawn on top
+        overdraw = true,          # Ensure it's drawn on top
     )
-    
+
     _update_topo_selection!(ax, selection_state, mouse_pos)
 end
 
@@ -798,40 +808,40 @@ end
 
 Finish spatial region selection in topographic plot.
 """
-function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event, original_data=nothing)
+function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event, original_data = nothing)
     selection_state.active[] = false
-    
+
     # Get final mouse position in screen coordinates and convert to axis coordinates
     screen_pos = events(ax.scene).mouseposition[]
     mouse_pos = mouseposition(ax)
     mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
-    
+
     # Get start position
     start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
-    
+
     # Update bounds with final position (x_min, y_min, x_max, y_max) in axis coords
     x_min, x_max = minmax(start_x, mouse_x)
     y_min, y_max = minmax(start_y, mouse_y)
     final_bounds = (x_min, y_min, x_max, y_max)
     selection_state.bounds[] = final_bounds
-    
+
     # Store this selection in the bounds list
     current_bounds = selection_state.bounds_list[]
     push!(current_bounds, final_bounds)
     selection_state.bounds_list[] = current_bounds
-    
+
     # Create the permanent rectangle for this selection
     bounds = selection_state.bounds[]
     start_x, start_y = bounds[1], bounds[2]
     end_x, end_y = bounds[3], bounds[4]
-    
+
     rect_points = Point2f[
         Point2f(Float64(start_x), Float64(start_y)),
         Point2f(Float64(end_x), Float64(start_y)),
         Point2f(Float64(end_x), Float64(end_y)),
         Point2f(Float64(start_x), Float64(end_y)),
     ]
-    
+
     # Create permanent rectangle
     permanent_rectangle = poly!(
         ax,
@@ -840,18 +850,18 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         strokecolor = :black,     # Black border
         strokewidth = 1,          # Thin border
         visible = true,
-        overdraw = true           # Ensure it's drawn on top
+        overdraw = true,           # Ensure it's drawn on top
     )
-    
+
     # Store the permanent rectangle
     push!(selection_state.rectangles, permanent_rectangle)
-    
+
     # Remove the temporary rectangle
     if !isnothing(selection_state.temp_rectangle)
         delete!(selection_state.temp_rectangle.parent, selection_state.temp_rectangle)
         selection_state.temp_rectangle = nothing
     end
-    
+
     # Find electrodes within ALL selected spatial regions
     all_selected_electrodes = Symbol[]
     for bounds in selection_state.bounds_list[]
@@ -859,7 +869,7 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         region_electrodes = _find_electrodes_in_region(ax, x_min, y_min, x_max, y_max, original_data)
         append!(all_selected_electrodes, region_electrodes)
     end
-    
+
     unique_electrodes = unique(all_selected_electrodes)
     @info "N selections: $(length(selection_state.bounds_list[])); Electrodes found: $unique_electrodes"
 end
@@ -876,16 +886,16 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         axis_pos = mouseposition(ax)
         mouse_x, mouse_y = axis_pos[1], axis_pos[2]
         start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
-        
+
         # Update bounds with the axis coordinates
         selection_state.bounds[] = (start_x, start_y, mouse_x, mouse_y)
-        
+
         # Update the temporary rectangle during dragging
         if !isnothing(selection_state.temp_rectangle)
             bounds = selection_state.bounds[]
             start_x, start_y = bounds[1], bounds[2]
             end_x, end_y = bounds[3], bounds[4]
-            
+
             # Update rectangle points for the temporary rectangle
             rect_points = Point2f[
                 Point2f(Float64(start_x), Float64(start_y)),
@@ -893,11 +903,11 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
                 Point2f(Float64(end_x), Float64(end_y)),
                 Point2f(Float64(start_x), Float64(end_y)),
             ]
-            
+
             # Update the temporary rectangle
             selection_state.temp_rectangle[1] = rect_points
         end
-        
+
 
     end
 end
@@ -912,21 +922,21 @@ function _clear_all_topo_selections!(selection_state::TopoSelectionState)
     for rect in selection_state.rectangles
         delete!(rect.parent, rect)
     end
-    
+
     # Remove temporary rectangle if it exists
     if !isnothing(selection_state.temp_rectangle)
         delete!(selection_state.temp_rectangle.parent, selection_state.temp_rectangle)
         selection_state.temp_rectangle = nothing
     end
-    
+
     # Clear the lists
     empty!(selection_state.rectangles)
     selection_state.bounds_list[] = Tuple{Float64,Float64,Float64,Float64}[]
-    
+
     # Reset state
     selection_state.active[] = false
     selection_state.visible[] = false
-    
+
 
 end
 
@@ -937,11 +947,11 @@ end
 Create a mapping from electrode coordinates to electrode labels for the topographic plot.
 This uses the actual layout data from the original plot data.
 """
-function _create_position_channel_map(ax::Axis, original_data=nothing)
+function _create_position_channel_map(ax::Axis, original_data = nothing)
 
     layout = original_data.layout
     _ensure_coordinates_2d!(layout)
-    
+
     # Create mapping from electrode coordinates to labels
     position_channel_map = Dict()
     for (i, label) in enumerate(layout.data.label)
@@ -958,14 +968,21 @@ end
 Find electrodes within the selected spatial region using actual electrode coordinates.
 This approach uses the real layout data from the topographic plot.
 """
-function _find_electrodes_in_region(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
+function _find_electrodes_in_region(
+    ax::Axis,
+    x_min::Float64,
+    y_min::Float64,
+    x_max::Float64,
+    y_max::Float64,
+    original_data = nothing,
+)
     position_channel_map = _create_position_channel_map(ax, original_data)
-    
+
     if isempty(position_channel_map)
         @minimal_warning "No electrode mapping available, returning placeholder"
         return nothing
     end
-    
+
     # Find electrodes within the selected region
     selected_electrodes = Symbol[]
     for ((x, y), channel) in position_channel_map
@@ -974,6 +991,6 @@ function _find_electrodes_in_region(ax::Axis, x_min::Float64, y_min::Float64, x_
             push!(selected_electrodes, channel)
         end
     end
-    
+
     return selected_electrodes
 end

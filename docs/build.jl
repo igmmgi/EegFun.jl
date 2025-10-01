@@ -7,18 +7,20 @@ using eegfun
 # Set up the documentation
 makedocs(
     sitename = "eegfun",
+    modules = [eegfun],
+    pages = [
+        "Home" => "index.md",
+        "API Reference" => [
+            "Public API" => "api.md",
+        ],
+    ],
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
         assets = String[],
         size_threshold = nothing,  # Disable size threshold
     ),
-    modules = [eegfun],
-    pages = [
-        "Home" => "index.md",
-        "API Reference" => "api.md",
-    ],
     doctest = true,
-    checkdocs = :exports,
+    checkdocs = :all,
 )
 
 deploydocs(;

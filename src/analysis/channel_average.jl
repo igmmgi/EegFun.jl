@@ -53,19 +53,20 @@ function channel_average!(
 
     # Resolve actual channel groups (exclude metadata; optionally include extra)
     # For the default case (channels()), we want to select only original channel columns, not derived averaged columns
-    selected_channel_groups::Vector{Vector{Symbol}} = if length(channel_selections) == 1 && channel_selections[1] == channels()
-        # Default case: select only original channel columns
-        all_cols = all_labels(dat)
-        meta_cols = meta_labels(dat)
-        original_channels = [col for col in all_cols if col ∉ meta_cols && !contains(string(col), "_")]
-        [original_channels]
-    else
-        # Custom selections: use the provided functions
-        [
-            get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra)
-            for sel in channel_selections
-        ]
-    end
+    selected_channel_groups::Vector{Vector{Symbol}} =
+        if length(channel_selections) == 1 && channel_selections[1] == channels()
+            # Default case: select only original channel columns
+            all_cols = all_labels(dat)
+            meta_cols = meta_labels(dat)
+            original_channels = [col for col in all_cols if col ∉ meta_cols && !contains(string(col), "_")]
+            [original_channels]
+        else
+            # Custom selections: use the provided functions
+            [
+                get_selected_channels(dat, sel; include_meta = false, include_extra = include_extra) for
+                sel in channel_selections
+            ]
+        end
 
     # Validate channel groups
     if any(isempty, selected_channel_groups)
@@ -79,10 +80,10 @@ function channel_average!(
         # We need to identify which columns are the original channels vs derived averaged columns
         all_cols = all_labels(dat)
         meta_cols = meta_labels(dat)
-        
+
         # Original channels are those that are not metadata and don't contain underscores (averaged columns)
         original_channels = [col for col in all_cols if col ∉ meta_cols && !contains(string(col), "_")]
-        
+
         labels = Vector{Symbol}(undef, length(selected_channel_groups))
         @inbounds for (i, grp) in enumerate(selected_channel_groups)
             # Check if this group covers all original channel columns (excluding metadata)
@@ -141,11 +142,12 @@ function channel_average(
     include_extra::Bool = false,
     reduce::Bool = false,
 )
-    return channel_average.(dat; 
-        channel_selections=channel_selections, 
-        output_labels=output_labels, 
-        include_extra=include_extra, 
-        reduce=reduce
+    return channel_average.(
+        dat;
+        channel_selections = channel_selections,
+        output_labels = output_labels,
+        include_extra = include_extra,
+        reduce = reduce,
     )
 end
 
@@ -179,7 +181,7 @@ end
 function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbol}}, labels::Vector{Symbol})::Layout
     df = layout.data
     isempty(df) && return Layout(DataFrame(), nothing, nothing)
-    
+
     # Ensure coordinates once
     work_layout = copy(layout)
     _ensure_all_coordinates!(work_layout)
@@ -191,16 +193,16 @@ function _layout_from_groups(layout::Layout, channel_groups::Vector{Vector{Symbo
     for (grp, lbl) in zip(channel_groups, labels)
         sel_idx = findall(in(grp), labels_in_layout)
         isempty(sel_idx) && continue
-        
+
         # Calculate averaged coordinates
         coords = _average_coordinates(wdf[sel_idx, :])
         isnothing(coords) && continue
-        
+
         # Create row with averaged coordinates
         row = _create_layout_row(df, lbl, coords)
         push!(new_rows, row)
     end
-    
+
     # Build new layout and ensure coordinates
     new_df = isempty(new_rows) ? df[1:0, :] : reduce(vcat, new_rows)
     new_layout = Layout(new_df, nothing, nothing)
@@ -221,15 +223,15 @@ function _average_coordinates(coord_df)
     mx, my, mz = mean(Float64.(coord_df[!, :x3])), mean(Float64.(coord_df[!, :y3])), mean(Float64.(coord_df[!, :z3]))
     norm_m = sqrt(mx^2 + my^2 + mz^2)
     norm_m == 0 && return nothing
-    
+
     # Convert to polar (degrees) using standard spherical coordinate formulas
     # This gives the geometric center of the channel positions
     inc_deg = acos(clamp(mz / norm_m, -1.0, 1.0)) * (180 / pi)
     azi_deg = atan(my, mx) * (180 / pi)
-    
+
     # Note: The mathematical result represents the true geometric center
     # EEG layout sign conventions may vary, but this is mathematically correct
-    
+
     return (inc = inc_deg, azi = azi_deg)
 end
 
@@ -238,7 +240,7 @@ function _create_layout_row(template_df, label, coords)
     # Create a minimal row with only essential columns
     essential_cols = [:label, :inc, :azi]
     available_cols = [col for col in essential_cols if col in propertynames(template_df)]
-    
+
     # Create new DataFrame with only essential columns
     new_df = DataFrame()
     for col in available_cols
@@ -250,7 +252,7 @@ function _create_layout_row(template_df, label, coords)
             new_df[!, col] = [coords.azi]
         end
     end
-    
+
     return new_df
 end
 
@@ -261,10 +263,8 @@ function _append_layouts(base_layout::Layout, avg_layout::Layout)::Layout
     _ensure_all_coordinates!(base_copy)
     avg_copy = copy(avg_layout)
     _ensure_all_coordinates!(avg_copy)
-    
+
     # Simple append - no complex merging needed
     combined_df = vcat(base_copy.data, avg_copy.data)
     return Layout(combined_df, nothing, nothing)
 end
-
-

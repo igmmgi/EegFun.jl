@@ -29,7 +29,8 @@ function correlation_matrix(
     channel_selection::Function = channels(),
     include_extra::Bool = false,
 )::DataFrame
-    selected_channels = eegfun.get_selected_channels(dat, channel_selection; include_meta = false,include_extra = include_extra)
+    selected_channels =
+        eegfun.get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && @minimal_error_throw "No channels selected for correlation matrix"
     selected_samples = eegfun.get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
@@ -91,7 +92,8 @@ function channel_joint_probability(
     normalize::Int = 2,
     discret::Int = 1000,
 )::DataFrame
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    selected_channels =
+        get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && @minimal_error_throw "No channels selected for joint probability calculation"
     selected_samples = get_selected_samples(dat, sample_selection)
 

@@ -171,32 +171,32 @@ Internal helper function to mark time windows around specific reference indices.
 """
 function _mark_windows_at_indices!(
     dat::ContinuousData,
-    reference_indices::Vector{Int}, 
-    time_window::Vector{<:Real}, 
-    channel_out::Symbol
+    reference_indices::Vector{Int},
+    time_window::Vector{<:Real},
+    channel_out::Symbol,
 )::Int
     n_marked = 0
-    
+
     for idx in reference_indices
         # Bounds check
         if idx < 1 || idx > length(dat.data.time)
             @minimal_warning "Reference index $idx is out of bounds, skipping"
             continue
         end
-        
+
         reference_time = dat.data.time[idx]
-        
+
         # Calculate window bounds
         window_start = reference_time + time_window[1]
         window_end = reference_time + time_window[2]
-        
+
         # Mark samples within the window (vectorized for efficiency)
         in_window = (dat.data.time .>= window_start) .& (dat.data.time .<= window_end)
         dat.data[in_window, channel_out] .= true
-        
+
         n_marked += sum(in_window)
     end
-    
+
     return n_marked
 end
 
@@ -275,7 +275,7 @@ function mark_epoch_windows!(
 
     # Collect all relevant trigger indices
     all_reference_indices = Int[]
-    
+
     for trigger in triggers_of_interest
         trigger_indices = findall(dat.data.triggers .== trigger)
         if isempty(trigger_indices)
@@ -287,7 +287,7 @@ function mark_epoch_windows!(
 
     # Mark windows around all collected indices
     n_marked = _mark_windows_at_indices!(dat, all_reference_indices, time_window, channel_out)
-    
+
     return dat
 end
 
@@ -424,7 +424,7 @@ function mark_epoch_windows!(
 
     # Mark windows around all collected reference indices
     n_marked = _mark_windows_at_indices!(dat, all_reference_indices, time_window, channel_out)
-    
+
     return dat
 end
 
@@ -594,13 +594,18 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
     # Extract and create array of dataframes with bounds checking
     epochs = DataFrame[]
-    
+
     for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
         # Bounds checking to prevent out-of-bounds errors
         if pre < 1 || post > nrow(dat.data)
-            throw(BoundsError(dat.data, "Epoch $epoch extends beyond data bounds (pre=$pre, post=$post, data_length=$(nrow(dat.data)))"))
+            throw(
+                BoundsError(
+                    dat.data,
+                    "Epoch $epoch extends beyond data bounds (pre=$pre, post=$post, data_length=$(nrow(dat.data)))",
+                ),
+            )
         end
-        
+
         epoch_df = DataFrame(dat.data[pre:post, :])
         epoch_df.time = epoch_df.time .- dat.data.time[zero]
         insertcols!(epoch_df, 4, :condition => condition)
@@ -608,7 +613,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
         insertcols!(epoch_df, 6, :epoch => epoch)
         push!(epochs, epoch_df)
     end
-    
+
     return EpochData(epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
@@ -633,7 +638,7 @@ Average epochs to create an ERP. This function:
 function average_epochs(dat::EpochData)
     # Input validation
     isempty(dat.data) && @minimal_error_throw("Cannot average empty EpochData")
-    
+
     # Get all columns from the first epoch
     first_epoch = first(dat.data)
     all_columns = propertynames(first_epoch)
@@ -650,17 +655,17 @@ function average_epochs(dat::EpochData)
     # Define columns that should not be averaged (metadata columns)
     # Keep :time for grouping, but don't average it
     metadata_columns = meta_labels(dat)
-    
+
     # Get EEG channels to average (numeric columns minus metadata)
     eeg_channels = setdiff(numeric_columns, metadata_columns)
-    
+
     # Ensure we have some channels to average
     isempty(eeg_channels) && @minimal_error_throw("No EEG channels found to average")
 
     # Concatenate all epochs with error handling
     try
         all_epochs = reduce(vcat, dat.data)
-        
+
         # Verify we have the required grouping columns
         required_cols = [:time, :condition, :condition_name]
         for col in required_cols
@@ -702,14 +707,14 @@ function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     # Input validation
     isempty(dat.data) && @minimal_error_throw("Cannot remove bad epochs from empty EpochData")
     isempty(bad_columns) && return dat  # No columns to check
-    
+
     # Validate that all bad_columns exist in the data
     first_epoch = first(dat.data)
     for col in bad_columns
         if !hasproperty(first_epoch, col)
             @minimal_error_throw("Column '$col' not found in epoch data")
         end
-        
+
         # Check if column is boolean
         col_type = eltype(first_epoch[!, col])
         if col_type != Bool
@@ -721,7 +726,7 @@ function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     n_epochs = length(dat.data)
     good_epochs = DataFrame[]
     sizehint!(good_epochs, n_epochs)  # Performance hint
-    
+
     n_removed = 0
 
     for epoch_df in dat.data
@@ -787,10 +792,10 @@ Display a pretty table showing epoch information to console and return the DataF
 """
 function epochs_table(epochs::Vector{EpochData}; print_table::Bool = true, kwargs...)
     isempty(epochs) && throw(ArgumentError("epochs vector cannot be empty"))
-    
+
     df = _build_base_epochs_df(epochs)
     df.n_epochs = [n_epochs(epoch) for epoch in epochs]
-   
+
     if print_table
         pretty_table(stdout, df; alignment = [:l, :r, :l, :r], kwargs...)
     end
@@ -803,14 +808,20 @@ end
 
 Display comparison table between original and cleaned epochs to console and return DataFrame.
 """
-function epochs_table(epochs_original::Vector{EpochData}, epochs_cleaned::Vector{EpochData}; print_table::Bool = true, kwargs...)
-    length(epochs_original) != length(epochs_cleaned) && throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
-    
+function epochs_table(
+    epochs_original::Vector{EpochData},
+    epochs_cleaned::Vector{EpochData};
+    print_table::Bool = true,
+    kwargs...,
+)
+    length(epochs_original) != length(epochs_cleaned) &&
+        throw(ArgumentError("epochs_original and epochs_cleaned must have same length"))
+
     df = _build_base_epochs_df(epochs_original)
     df.n_epochs_original = [n_epochs(epoch) for epoch in epochs_original]
     df.n_epochs_cleaned = [n_epochs(epoch) for epoch in epochs_cleaned]
-    df.percentage = round.((df.n_epochs_cleaned ./ df.n_epochs_original) .* 100; digits=1)
-   
+    df.percentage = round.((df.n_epochs_cleaned ./ df.n_epochs_original) .* 100; digits = 1)
+
     if print_table
         pretty_table(stdout, df; alignment = [:l, :r, :l, :r, :r, :r], kwargs...)
     end
@@ -823,7 +834,7 @@ function _build_base_epochs_df(epochs::Vector{EpochData})::DataFrame
     return DataFrame(
         file = [filename(epoch) for epoch in epochs],
         condition = [condition_number(epoch) for epoch in epochs],
-        condition_name = [condition_name(epoch) for epoch in epochs]
+        condition_name = [condition_name(epoch) for epoch in epochs],
     )
 end
 
@@ -854,7 +865,7 @@ Batch averaging of epoch data to create ERPs.
 
 """Validate that file pattern is for epochs data."""
 function _validate_epochs_pattern(pattern::String)
-    !contains(pattern, "epochs") && 
+    !contains(pattern, "epochs") &&
         return "average_epochs only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
     return nothing
 end
@@ -874,25 +885,25 @@ Returns BatchResult with success/failure info.
 """
 function _process_average_file(filepath::String, output_path::String, conditions)
     filename = basename(filepath)
-    
+
     # Load data
     file_data = load(filepath)
-    
+
     if !haskey(file_data, "epochs")
         return BatchResult(false, filename, "No 'epochs' variable found")
     end
-    
+
     epochs_data = file_data["epochs"]
-    
+
     # Select conditions
     epochs_data = _select_conditions(epochs_data, conditions)
-    
+
     # Average epochs for each condition
     erps_data = average_epochs.(epochs_data)
-    
+
     # Save
     save(output_path, "erps", erps_data)
-    
+
     return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")
 end
 
@@ -936,53 +947,54 @@ average_epochs("epochs_cleaned",
                    output_dir = "/path/to/output")
 ```
 """
-function average_epochs(file_pattern::String; 
-                       input_dir::String = pwd(), 
-                       participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                       conditions::Union{Int, Vector{Int}, Nothing} = nothing,
-                       output_dir::Union{String, Nothing} = nothing)
-    
+function average_epochs(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    output_dir::Union{String,Nothing} = nothing,
+)
+
     # Setup logging
     log_file = "average_epochs.log"
     setup_global_logging(log_file)
-    
+
     try
         @info "Batch epoch averaging started at $(now())"
         @log_call "average_epochs" (file_pattern,)
-        
+
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        
+
         if (error_msg = _validate_epochs_pattern(file_pattern)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        
+
         # Setup directories
         output_dir = something(output_dir, _default_average_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
-        
+
         # Find files
         files = _find_batch_files(file_pattern, input_dir; participants)
-        
+
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-        
+
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        
+
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> 
-            _process_average_file(input_path, output_path, conditions)
-        
+        process_fn = (input_path, output_path) -> _process_average_file(input_path, output_path, conditions)
+
         # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name="Averaging")
-        
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Averaging")
+
         # Log summary
         _log_batch_summary(results, output_dir)
-        
+
     finally
         _cleanup_logging(log_file, output_dir)
     end
