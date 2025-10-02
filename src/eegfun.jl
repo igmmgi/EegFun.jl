@@ -79,6 +79,7 @@ include("analysis/realign.jl")
 include("analysis/reject_epochs_automatic.jl")
 include("analysis/reject_epochs_visual.jl")
 include("analysis/rereference.jl")
+include("analysis/resample.jl")
 include("analysis/tf.jl")
 include("analysis/triggers.jl")
 
