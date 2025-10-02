@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `mirror_data()` function adds time-reversed (mirrored) copies of data before and/or after epochs. This is primarily used to reduce edge artifacts when filtering EEG data, as the mirrored sections create smooth transitions at epoch boundaries.
+The `mirror()` function adds time-reversed (mirrored) copies of data before and/or after epochs. This is primarily used to reduce edge artifacts when filtering EEG data, as the mirrored sections create smooth transitions at epoch boundaries.
 
 ## Why Mirror Data?
 
@@ -23,13 +23,13 @@ using eegfun, JLD2
 epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Mirror on both sides (recommended)
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 
 # Apply processing (e.g., filtering)
 filter!(epochs, 0.1, 30.0)
 
 # Remove mirrored sections
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 
 # Continue with analysis
 save("participant_1_epochs_filtered.jld2", "epochs", epochs)
@@ -42,9 +42,9 @@ save("participant_1_epochs_filtered.jld2", "epochs", epochs)
 erp = load("participant_1_erp.jld2", "erp")
 
 # Mirror, process, unmirror
-mirror_data!(erp, :both)
+mirror!(erp, :both)
 filter!(erp, 0.1, 30.0)
-unmirror_data!(erp, :both)
+unmirror!(erp, :both)
 ```
 
 ## How It Works
@@ -80,7 +80,7 @@ Data:  [  5,    4,    3,    2,    2,   3,   4,   4,   3,   2,   1 ]
 
 ### :both (Default - Recommended)
 ```julia
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 # Mirrors on both sides
 # Use when: You need maximum protection from edge effects
 # Results in: ~3× epoch length
@@ -88,7 +88,7 @@ mirror_data!(epochs, :both)
 
 ### :pre (Mirror Before Only)
 ```julia
-mirror_data!(epochs, :pre)
+mirror!(epochs, :pre)
 # Mirrors only at the beginning
 # Use when: Edge effects mainly at epoch start
 # Results in: ~2× epoch length
@@ -96,7 +96,7 @@ mirror_data!(epochs, :pre)
 
 ### :post (Mirror After Only)
 ```julia
-mirror_data!(epochs, :post)
+mirror!(epochs, :post)
 # Mirrors only at the end
 # Use when: Edge effects mainly at epoch end
 # Results in: ~2× epoch length
@@ -115,14 +115,14 @@ epochs = load("participant_1_epochs.jld2", "epochs")
 println("Original epoch length: $(nrow(epochs.data[1])) samples")
 
 # Step 1: Mirror data
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 println("After mirroring: $(nrow(epochs.data[1])) samples")
 
 # Step 2: Apply filter
 filter!(epochs, 0.1, 30.0)  # High-pass 0.1 Hz, low-pass 30 Hz
 
 # Step 3: Remove mirrors
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 println("After unmirroring: $(nrow(epochs.data[1])) samples")
 
 # Save filtered data
@@ -136,13 +136,13 @@ save("participant_1_epochs_filtered.jld2", "epochs", epochs)
 epochs_original = load("participant_1_epochs.jld2", "epochs")
 
 # Create mirrored copy
-epochs_mirrored = mirror_data(epochs_original, :both)
+epochs_mirrored = mirror(epochs_original, :both)
 
 # Filter the mirrored copy
 filter!(epochs_mirrored, 0.1, 30.0)
 
 # Unmirror
-epochs_filtered = unmirror_data(epochs_mirrored, :both)
+epochs_filtered = unmirror(epochs_mirrored, :both)
 
 # Now you have both original and filtered
 ```
@@ -161,9 +161,11 @@ for participant in participants
     epochs = load(filename, "epochs")
     
     # Mirror → Filter → Unmirror
-    mirror_data!(epochs, :both)
+    mirror
+!(epochs, :both)
     filter!(epochs, 0.1, 30.0)
-    unmirror_data!(epochs, :both)
+    unmirror
+!(epochs, :both)
     
     # Save
     output_file = "participant_$(participant)_epochs_filtered.jld2"
@@ -181,7 +183,7 @@ end
 epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Mirror first
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 
 # Baseline correction (works on mirrored data)
 baseline!(epochs, IntervalTime(-0.2, 0.0))
@@ -190,7 +192,7 @@ baseline!(epochs, IntervalTime(-0.2, 0.0))
 filter!(epochs, 0.1, 30.0)
 
 # Unmirror
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 
 # Save
 save("participant_1_epochs_processed.jld2", "epochs", epochs)
@@ -203,9 +205,9 @@ save("participant_1_epochs_processed.jld2", "epochs", epochs)
 erp = load("grand_average.jld2", "grand_avg")
 
 # Mirror, filter, unmirror
-mirror_data!(erp, :both)
+mirror!(erp, :both)
 filter!(erp, 0.5, 30.0)
-unmirror_data!(erp, :both)
+unmirror!(erp, :both)
 
 # Save
 save("grand_average_filtered.jld2", "grand_avg", erp)
@@ -217,12 +219,12 @@ save("grand_average_filtered.jld2", "grand_avg", erp)
 
 ```julia
 # ✓ CORRECT
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 filter!(epochs, 0.1, 30.0)
-unmirror_data!(epochs, :both)  # Don't forget!
+unmirror!(epochs, :both)  # Don't forget!
 
 # ✗ WRONG - leaves mirrored sections
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 filter!(epochs, 0.1, 30.0)
 # Oops! Data is now 3× longer than it should be
 ```
@@ -231,14 +233,14 @@ filter!(epochs, 0.1, 30.0)
 
 ```julia
 # ✓ CORRECT
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 # ... processing ...
-unmirror_data!(epochs, :both)  # Same side
+unmirror!(epochs, :both)  # Same side
 
 # ✗ WRONG - sides don't match
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 # ... processing ...
-unmirror_data!(epochs, :pre)  # Wrong! Should be :both
+unmirror!(epochs, :pre)  # Wrong! Should be :both
 ```
 
 ### 3. Memory Considerations
@@ -252,9 +254,11 @@ For large datasets:
 # Process one condition at a time
 for cond in conditions
     epochs_cond = load("participant_1_cond_$(cond)_epochs.jld2", "epochs")
-    mirror_data!(epochs_cond, :both)
+    mirror
+!(epochs_cond, :both)
     filter!(epochs_cond, 0.1, 30.0)
-    unmirror_data!(epochs_cond, :both)
+    unmirror
+!(epochs_cond, :both)
     save("participant_1_cond_$(cond)_filtered.jld2", "epochs", epochs_cond)
 end
 ```
@@ -280,7 +284,8 @@ end
 ```julia
 function custom_filter_with_mirror!(epochs, hp_freq, lp_freq)
     # Mirror
-    mirror_data!(epochs, :both)
+    mirror
+!(epochs, :both)
     
     # Apply high-pass
     if hp_freq > 0
@@ -293,7 +298,8 @@ function custom_filter_with_mirror!(epochs, hp_freq, lp_freq)
     end
     
     # Unmirror
-    unmirror_data!(epochs, :both)
+    unmirror
+!(epochs, :both)
     
     return epochs
 end
@@ -316,9 +322,9 @@ filter!(epochs_no_mirror, 0.1, 30.0)
 
 # Filter with mirroring
 epochs_with_mirror = copy(epochs_original)
-mirror_data!(epochs_with_mirror, :both)
+mirror!(epochs_with_mirror, :both)
 filter!(epochs_with_mirror, 0.1, 30.0)
-unmirror_data!(epochs_with_mirror, :both)
+unmirror!(epochs_with_mirror, :both)
 
 # Compare edge effects
 fig = Figure()
@@ -350,13 +356,15 @@ function smart_filter!(epochs, hp_freq, lp_freq; use_mirror = :auto)
     end
     
     if use_mirror
-        mirror_data!(epochs, :both)
+        mirror
+    !(epochs, :both)
     end
     
     filter!(epochs, hp_freq, lp_freq)
     
     if use_mirror
-        unmirror_data!(epochs, :both)
+        unmirror
+    !(epochs, :both)
     end
     
     return epochs
@@ -378,14 +386,14 @@ original_time_start = epochs.data[1].time[1]
 original_time_end = epochs.data[1].time[end]
 
 # Mirror
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 
 # Check lengths
 mirrored_length = nrow(epochs.data[1])
 @assert mirrored_length ≈ 3 * original_length - 4  # Approximate
 
 # Unmirror
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 
 # Should be back to original
 @assert nrow(epochs.data[1]) == original_length
@@ -404,9 +412,9 @@ println("✓ Mirroring/unmirroring worked correctly")
 **Solution**: 
 ```julia
 # Always use matching sides
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 # ... processing ...
-unmirror_data!(epochs, :both)  # Must match!
+unmirror!(epochs, :both)  # Must match!
 ```
 
 ### Issue: Time vector doesn't make sense
@@ -420,7 +428,7 @@ println("Current epoch length: $(nrow(epochs.data[1]))")
 println("Expected original length: ???")
 
 # If too long, unmirror with appropriate side
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 ```
 
 ### Issue: Edge artifacts still present
@@ -433,9 +441,9 @@ unmirror_data!(epochs, :both)
 **Solutions**:
 ```julia
 # Ensure mirroring is applied
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 filter!(epochs, hp_freq, lp_freq)
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 
 # Or use longer epochs if possible
 ```
