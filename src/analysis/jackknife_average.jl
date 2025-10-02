@@ -1,0 +1,411 @@
+"""
+Jackknife averaging for ERP/LRP data.
+
+The jackknife technique creates leave-one-out averages: for each participant,
+compute the average of all other participants (excluding that participant).
+This is commonly used with LRP data to reduce variance for statistical testing.
+"""
+
+#=============================================================================
+    JACKKNIFE-SPECIFIC VALIDATION
+=============================================================================#
+
+"""Validate jackknife parameters."""
+function _validate_jackknife_params(erps::Vector{ErpData})
+    length(erps) < 2 && return "Need at least 2 participants for jackknife averaging"
+    
+    # Validate that all ERPs have the same structure
+    first_erp = erps[1]
+    sample_rate = first_erp.sample_rate
+    n_timepoints = nrow(first_erp.data)
+    channels = propertynames(first_erp.data)
+    
+    for (i, erp) in enumerate(erps[2:end])
+        if erp.sample_rate != sample_rate
+            return "ERP $(i+1) has different sample rate: $(erp.sample_rate) vs $(sample_rate)"
+        end
+        if nrow(erp.data) != n_timepoints
+            return "ERP $(i+1) has different number of time points: $(nrow(erp.data)) vs $(n_timepoints)"
+        end
+        if propertynames(erp.data) != channels
+            return "ERP $(i+1) has different channels"
+        end
+    end
+    
+    return nothing
+end
+
+"""Generate default output directory name for jackknife operation."""
+function _default_jackknife_output_dir(input_dir::String, pattern::String)
+    joinpath(input_dir, "jackknife_$(pattern)")
+end
+
+#=============================================================================
+    JACKKNIFE-SPECIFIC HELPERS
+=============================================================================#
+
+"""
+Create jackknife averages: for each participant, average all other participants.
+
+Returns a vector where element i is the average of all participants except participant i.
+"""
+function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
+    n_participants = length(erps)
+    
+    if n_participants < 2
+        @minimal_error_throw("Need at least 2 participants for jackknife averaging, got $(n_participants)")
+    end
+    
+    # Get metadata columns and EEG channels from first ERP
+    first_erp = erps[1]
+    metadata_cols = meta_labels(first_erp)
+    eeg_channels = setdiff(propertynames(first_erp.data), metadata_cols)
+    
+    # Pre-allocate result vector
+    jackknife_erps = ErpData[]
+    
+    @info "Creating jackknife averages for $n_participants participants"
+    
+    for excluded_idx in 1:n_participants
+        # Get indices of all participants except the current one
+        included_indices = setdiff(1:n_participants, excluded_idx)
+        included_erps = erps[included_indices]
+        
+        @info "  Participant $excluded_idx: averaging $(length(included_erps)) other participants"
+        
+        # Create a copy of the first included ERP's data as the base
+        jackknife_data = copy(included_erps[1].data)
+        
+        # Update metadata to indicate this is a jackknife average
+        if hasproperty(jackknife_data, :condition_name)
+            cond_name = jackknife_data[1, :condition_name]
+            jackknife_data.condition_name .= "$(cond_name)_jackknife_$(excluded_idx)"
+        end
+        
+        # Average EEG channels across included participants
+        for ch in eeg_channels
+            # Collect data from all included participants for this channel
+            # Stack as columns: n_timepoints x n_included_participants
+            channel_matrix = hcat([erp.data[!, ch] for erp in included_erps]...)
+            
+            # Average across participants (mean of each time point)
+            jackknife_data[!, ch] = vec(mean(channel_matrix, dims = 2))
+        end
+        
+        # Calculate total number of epochs across included participants
+        total_epochs = sum(erp.n_epochs for erp in included_erps)
+        
+        # Create ErpData object for this jackknife average
+        jackknife_erp = ErpData(
+            jackknife_data,
+            first_erp.layout,
+            first_erp.sample_rate,
+            copy(first_erp.analysis_info),
+            total_epochs
+        )
+        
+        push!(jackknife_erps, jackknife_erp)
+    end
+    
+    @info "Created $(length(jackknife_erps)) jackknife averages"
+    return jackknife_erps
+end
+
+"""
+Load ERP/LRP data from multiple files and organize by condition.
+Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
+"""
+function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, conditions, data_var::String)
+    all_erps_by_condition = Dict{Int,Vector{ErpData}}()
+    participant_ids = Int[]
+    
+    for (i, file) in enumerate(files)
+        input_path = joinpath(input_dir, file)
+        @info "Loading: $file ($i/$(length(files)))"
+        
+        # Extract participant ID from filename (assumes format like "1_pattern.jld2")
+        m = match(r"^(\d+)_", file)
+        participant_id = m !== nothing ? parse(Int, m.captures[1]) : i
+        push!(participant_ids, participant_id)
+        
+        # Load data
+        file_data = load(input_path)
+        
+        if !haskey(file_data, data_var)
+            @minimal_warning "No '$data_var' variable found in $file. Skipping."
+            continue
+        end
+        
+        data = file_data[data_var]
+        
+        # Handle both single ErpData and Vector{ErpData}
+        if data isa ErpData
+            data = [data]
+        end
+        
+        # Select conditions if specified
+        data = _select_conditions(data, conditions)
+        
+        # Group by condition
+        for erp in data
+            # For ErpData, condition is stored in the DataFrame
+            cond_num = hasproperty(erp.data, :condition) ? erp.data[1, :condition] : 1
+            if !haskey(all_erps_by_condition, cond_num)
+                all_erps_by_condition[cond_num] = ErpData[]
+            end
+            push!(all_erps_by_condition[cond_num], erp)
+        end
+    end
+    
+    return all_erps_by_condition, participant_ids
+end
+
+#=============================================================================
+    MAIN API FUNCTIONS
+=============================================================================#
+
+"""
+    jackknife_average(erps::Vector{ErpData})::Vector{ErpData}
+
+Create jackknife averages from a vector of ERP/LRP data.
+
+For each participant i, creates an average of all other participants (excluding i).
+This leave-one-out approach is commonly used with LRP data to reduce variance
+for statistical testing.
+
+# Arguments
+- `erps::Vector{ErpData}`: Vector of ERP/LRP data, one per participant
+
+# Returns
+- `Vector{ErpData}`: Vector of jackknifed averages, where element i is the average
+  of all participants except participant i
+
+# Examples
+```julia
+using JLD2
+
+# Load LRP data from multiple participants
+lrp_data = ErpData[]
+for participant in 1:20
+    data = load("participant_\$(participant)_lrp.jld2", "lrp")
+    # If data is a vector, take the first condition, or specify which one
+    lrp_result = data isa Vector ? data[1] : data
+    push!(lrp_data, lrp_result)
+end
+
+# Create jackknife averages
+jackknife_results = jackknife_average(lrp_data)
+
+# Now jackknife_results[1] is the average of participants 2-20 (excluding 1)
+# jackknife_results[2] is the average of participants 1,3-20 (excluding 2)
+# etc.
+
+# Save results
+save("jackknife_lrp.jld2", "jackknife", jackknife_results)
+```
+
+# Multiple Conditions
+```julia
+# If you have multiple condition pairs, process each separately
+lrp_data_cond1 = [load("participant_\$(i)_lrp.jld2", "lrp")[1] for i in 1:20]
+lrp_data_cond2 = [load("participant_\$(i)_lrp.jld2", "lrp")[2] for i in 1:20]
+
+jackknife_cond1 = jackknife_average(lrp_data_cond1)
+jackknife_cond2 = jackknife_average(lrp_data_cond2)
+```
+
+# Notes
+- Requires at least 2 participants
+- All ERP/LRP data must have matching structure (same channels, time points, sample rate)
+- The resulting data has the same format as the input (ErpData objects)
+- Common workflow: Calculate LRP → Jackknife average → Statistical testing
+"""
+function jackknife_average(erps::Vector{ErpData})::Vector{ErpData}
+    @info "Starting jackknife averaging"
+    
+    # Validate inputs
+    if (error_msg = _validate_jackknife_params(erps)) !== nothing
+        @minimal_error_throw(error_msg)
+    end
+    
+    # Create jackknife averages
+    jackknife_results = _create_jackknife_averages(erps)
+    
+    @info "Jackknife averaging complete"
+    return jackknife_results
+end
+
+
+"""
+    jackknife_average(file_pattern::String;
+                      input_dir::String = pwd(),
+                      participants::Union{Int, Vector{Int}, Nothing} = nothing,
+                      conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                      output_dir::Union{String, Nothing} = nothing,
+                      data_var::String = "lrp")
+
+Batch process ERP/LRP files to create jackknife averages across participants.
+
+This function loads data from multiple participant files, groups by condition,
+and creates jackknife (leave-one-out) averages for each participant and condition.
+
+# Arguments
+- `file_pattern::String`: Pattern to match files (e.g., "lrp", "erps_cleaned")
+- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
+- `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
+- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
+- `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
+- `data_var::String`: Variable name to load from JLD2 files (default: "lrp", can also use "erps")
+
+# Examples
+```julia
+# Jackknife average all LRP files in current directory
+jackknife_average("lrp")
+
+# Process specific participants and conditions
+jackknife_average("lrp",
+                  input_dir = "/path/to/data",
+                  participants = 1:20,
+                  conditions = [1, 2])
+
+# Process ERP data instead of LRP
+jackknife_average("erps_cleaned",
+                  data_var = "erps",
+                  input_dir = "/path/to/data")
+
+# Specify custom output directory
+jackknife_average("lrp",
+                  output_dir = "/path/to/output")
+```
+
+# Output
+The function creates a new directory containing jackknifed data files:
+- One file per participant
+- Each file contains "jackknife" variable with jackknifed average(s)
+- If multiple conditions exist, each file contains a Vector{ErpData} with one element per condition
+- Log file saved to output directory
+
+# Typical Workflow
+```julia
+# 1. Calculate LRP for all participants
+pairs = [(i, i+1) for i in 1:2:15]
+lrp("erps_cleaned", pairs)
+
+# 2. Create jackknife averages
+jackknife_average("lrp")
+
+# 3. Results are in jackknife_lrp/ directory
+# Load and analyze:
+using JLD2
+participant_1_jackknife = load("jackknife_lrp/1_lrp.jld2", "jackknife")
+```
+"""
+function jackknife_average(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    output_dir::Union{String,Nothing} = nothing,
+    data_var::String = "lrp",
+)
+    # Setup logging
+    log_file = "jackknife.log"
+    setup_global_logging(log_file)
+    
+    try
+        @info "Batch jackknife averaging started at $(now())"
+        @log_call "jackknife_average" (file_pattern,)
+        
+        # Validation
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
+        end
+        
+        # Setup directories
+        output_dir = something(output_dir, _default_jackknife_output_dir(input_dir, file_pattern))
+        mkpath(output_dir)
+        
+        # Find files
+        files = _find_batch_files(file_pattern, input_dir; participants)
+        
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+        
+        if length(files) < 2
+            @minimal_warning "Need at least 2 participants for jackknife averaging, found $(length(files))"
+            return nothing
+        end
+        
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+        @info "Loading data using variable name: '$data_var'"
+        
+        # Load and group data by condition
+        erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, conditions, data_var)
+        
+        if isempty(erps_by_condition)
+            @minimal_warning "No valid data found in any files"
+            return nothing
+        end
+        
+        @info "Found conditions: $(sort(collect(keys(erps_by_condition))))"
+        
+        # Create jackknife averages for each condition
+        jackknife_by_condition = Dict{Int,Vector{ErpData}}()
+        
+        for (cond_num, erps) in erps_by_condition
+            @info "Creating jackknife averages for condition $cond_num (n=$(length(erps)) participants)"
+            
+            if length(erps) < 2
+                @minimal_warning "Only $(length(erps)) participant(s) for condition $cond_num. Skipping jackknife."
+                continue
+            end
+            
+            jackknife_erps = _create_jackknife_averages(erps)
+            jackknife_by_condition[cond_num] = jackknife_erps
+        end
+        
+        if isempty(jackknife_by_condition)
+            @minimal_warning "No jackknife averages created"
+            return nothing
+        end
+        
+        # Save jackknife data: one file per participant
+        # Each file contains Vector{ErpData} if multiple conditions, or single ErpData if one condition
+        n_participants = length(files)
+        
+        for (idx, (file, participant_id)) in enumerate(zip(files, participant_ids))
+            # Collect jackknife data for this participant across all conditions
+            participant_jackknife = ErpData[]
+            
+            for cond_num in sort(collect(keys(jackknife_by_condition)))
+                jackknife_erps = jackknife_by_condition[cond_num]
+                
+                # The idx-th jackknife is the one excluding participant idx
+                if idx <= length(jackknife_erps)
+                    push!(participant_jackknife, jackknife_erps[idx])
+                end
+            end
+            
+            if !isempty(participant_jackknife)
+                # Save with participant ID from filename
+                output_file = file  # Keep original filename
+                output_path = joinpath(output_dir, output_file)
+                
+                # If single condition, save as single ErpData, otherwise as Vector
+                data_to_save = length(participant_jackknife) == 1 ? participant_jackknife[1] : participant_jackknife
+                save(output_path, "jackknife", data_to_save)
+                
+                @info "  Saved participant $participant_id: $output_file"
+            end
+        end
+        
+        @info "Jackknife averaging complete!"
+        @info "Output saved to: $output_dir"
+        
+    finally
+        _cleanup_logging(log_file, output_dir)
+    end
+end
+
