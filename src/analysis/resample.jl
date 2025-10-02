@@ -6,9 +6,50 @@ rate while preserving all metadata including triggers, trial information, and
 other columns. Works with continuous, epoched, and ERP data.
 """
 
-#=============================================================================
-    CORE RESAMPLING FUNCTIONS
-=============================================================================#
+# =============================================================================
+#     CORE RESAMPLING FUNCTIONS
+# =============================================================================
+
+"""
+Helper function to resample a single DataFrame by downsampling.
+Handles trigger preservation and sample column updates.
+"""
+function _resample_dataframe!(df::DataFrame, factor::Int, trigger_col::Symbol)
+    # Get indices of samples to keep (regular downsampling grid)
+    keep_indices = collect(1:factor:nrow(df))
+    
+    # If trigger column exists, preserve triggers by scaling their positions
+    if hasproperty(df, trigger_col)
+        # Find all triggers in original data
+        trigger_indices = findall(df[!, trigger_col] .!= 0)
+        trigger_values = df[!, trigger_col][trigger_indices]
+        
+        # Downsample the data
+        df_new = df[keep_indices, :]
+        
+        # Clear all triggers in downsampled data
+        df_new[!, trigger_col] .= 0
+        
+        # For each original trigger, scale its position by the downsampling factor
+        for (orig_idx, trig_val) in zip(trigger_indices, trigger_values)
+            new_idx = round(Int, orig_idx / factor)
+            new_idx = clamp(new_idx, 1, nrow(df_new))
+            df_new[!, trigger_col][new_idx] = trig_val
+        end
+        
+        df_resampled = df_new
+    else
+        # No triggers, just downsample
+        df_resampled = df[keep_indices, :]
+    end
+    
+    # Update sample column if it exists
+    if hasproperty(df_resampled, :sample)
+        df_resampled.sample = 1:nrow(df_resampled)
+    end
+    
+    return df_resampled
+end
 
 """
     resample!(dat::Union{ContinuousData, ErpData}, factor::Int)::Nothing
@@ -53,9 +94,9 @@ resample!(data, 2)
 - Match sampling rates across different recordings
 - Prepare data for algorithms requiring specific sampling rates
 """
-function resample!(dat::Union{ContinuousData,ErpData}, factor::Int)::Nothing
+function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
     # Validation
-    if factor <= 0
+    if factor < 1
         @minimal_error_throw("Downsampling factor must be positive, got $factor")
     end
     
@@ -73,22 +114,10 @@ function resample!(dat::Union{ContinuousData,ErpData}, factor::Int)::Nothing
     end
     
     @info "Resampling data from $(dat.sample_rate) Hz to $(dat.sample_rate ÷ factor) Hz (factor: $factor)"
-   
-     # Get indices of samples to keep
-     base_indices = 1:factor:nrow(dat.data)
     
-     # Find indices of samples with triggers (if trigger column exists)
-     if hasproperty(dat.data, :trigger)
-         trigger_indices = findall(dat.data.trigger .!= 0)
-         all_indices = sort(unique(vcat(base_indices, trigger_indices)))
-     else
-         all_indices = base_indices
-     end
-     
-     # Downsample by keeping selected indices
-     dat.data = dat.data[collect(all_indices), :]
-
-   
+    # Resample the DataFrame
+    dat.data = _resample_dataframe!(dat.data, factor, :triggers)
+    
     # Update sample rate
     dat.sample_rate = dat.sample_rate ÷ factor
     
@@ -146,7 +175,7 @@ resample!(epochs, 2)
 """
 function resample!(dat::EpochData, factor::Int)::Nothing
     # Validation
-    if factor <= 0
+    if factor < 1
         @minimal_error_throw("Downsampling factor must be positive, got $factor")
     end
     
@@ -165,21 +194,9 @@ function resample!(dat::EpochData, factor::Int)::Nothing
     
     @info "Resampling $(length(dat.data)) epochs from $(dat.sample_rate) Hz to $(dat.sample_rate ÷ factor) Hz (factor: $factor)"
     
-      # Downsample each epoch
-      for (i, epoch) in enumerate(dat.data)
-        # Get indices of samples to keep
-        base_indices = 1:factor:nrow(epoch)
-        
-        # Find indices of samples with triggers (if trigger column exists)
-        if hasproperty(epoch, :trigger)
-            trigger_indices = findall(epoch.trigger .!= 0)
-            all_indices = sort(unique(vcat(base_indices, trigger_indices)))
-        else
-            all_indices = base_indices
-        end
-        
-        # Downsample by keeping selected indices
-        dat.data[i] = epoch[collect(all_indices), :]
+    # Downsample each epoch
+    for (i, epoch) in enumerate(dat.data)
+        dat.data[i] = _resample_dataframe!(epoch, factor, :trigger)
     end
     
     # Update sample rate
@@ -193,7 +210,7 @@ end
 
 
 """
-    resample(dat::Union{ContinuousData, ErpData, EpochData}, factor::Int)
+    resample(dat::ContinuousData, factor::Int)
 
 Non-mutating version of resample!. Returns a new data object with resampled data.
 
@@ -207,56 +224,35 @@ data_256hz = resample(data_512hz, 2)
 @assert data_256hz.sample_rate == 256
 ```
 """
-function resample(dat::ContinuousData, factor::Int)::ContinuousData
-    # Create a deep copy
-    dat_copy = ContinuousData(
-        copy(dat.data, copycols = true),
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info)
-    )
-    
-    # Apply resampling
+function resample(dat::T, factor::Int)::T where T <: EegData
+    dat_copy = copy(dat)
     resample!(dat_copy, factor)
-    
     return dat_copy
 end
 
-function resample(dat::ErpData, factor::Int)::ErpData
-    # Create a deep copy
-    dat_copy = ErpData(
-        copy(dat.data, copycols = true),
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info),
-        dat.n_epochs
-    )
-    
-    # Apply resampling
-    resample!(dat_copy, factor)
-    
-    return dat_copy
-end
+"""
+    resample(data_vec::Vector{T}, factor::Int)::Vector{T} where T <: EegData
 
-function resample(dat::EpochData, factor::Int)::EpochData
-    # Create a deep copy
-    dat_copy = EpochData(
-        [copy(epoch, copycols = true) for epoch in dat.data],
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info)
-    )
-    
-    # Apply resampling
-    resample!(dat_copy, factor)
-    
-    return dat_copy
+Resample a vector of EEG data objects (e.g., multiple participants or conditions).
+Returns a new vector with each element resampled.
+
+# Examples
+```julia
+# Resample multiple participants' data
+resampled_data = resample(all_participants, 2)
+```
+"""
+function resample(data_vec::Vector{T}, factor::Int)::Vector{T} where T <: EegData
+    return [resample(dat, factor) for dat in data_vec]
 end
 
 
-#=============================================================================
-    BATCH PROCESSING FUNCTIONS
-=============================================================================#
+
+
+
+# =============================================================================
+#     BATCH PROCESSING FUNCTIONS
+# =============================================================================
 
 """Generate default output directory name for resampling operation."""
 function _default_resample_output_dir(input_dir::String, pattern::String, factor::Int)

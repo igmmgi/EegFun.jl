@@ -981,6 +981,29 @@ layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
 
+# test resample
+dat_resampled = eegfun.resample(dat, 2)
+eegfun.trigger_count(dat);
+eegfun.trigger_count(dat_resampled);
+dat
+dat_resampled
+
+eegfun.plot_databrowser(dat)
+eegfun.plot_databrowser(dat_resampled)
+
+
+epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epochs = eegfun.EpochData[]
+for (idx, epoch) in enumerate(epoch_cfg)
+    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+end
+
+epochs_resampled = eegfun.resample(epochs, 2)
+
+
+
+
+
 # is_extreme_value
 extreme_values = eegfun.is_extreme_value(dat, 10)
 extreme_values = eegfun.is_extreme_value(dat, 1000, mode = :separate)

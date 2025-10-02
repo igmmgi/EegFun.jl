@@ -24,10 +24,10 @@ using JLD2
             time = time,
             C3 = sin.(2π .* 10 .* time),  # 10 Hz signal
             C4 = cos.(2π .* 10 .* time),
-            trigger = zeros(Int, n_samples)
+            triggers = zeros(Int, n_samples)
         )
-        data.trigger[100] = 1  # Add a trigger
-        data.trigger[500] = 2
+        data.triggers[100] = 1  # Add a trigger
+        data.triggers[500] = 2
         
         continuous = eegfun.ContinuousData(
             data,
@@ -43,17 +43,17 @@ using JLD2
         @test resampled.sample_rate == 256
         @test continuous.sample_rate == 512  # Original unchanged
         
-        # Check number of samples (500 from regular downsampling + 2 from trigger preservation)
-        @test nrow(resampled.data) == 502
+        # Check number of samples (exactly 500 from regular downsampling)
+        @test nrow(resampled.data) == 500
         
         # Check that we kept the right samples (every 2nd)
         @test resampled.data.time[1] == continuous.data.time[1]
         @test resampled.data.time[2] == continuous.data.time[3]
         @test resampled.data.time[end] == continuous.data.time[end-1]
         
-        # Check that trigger is preserved
-        @test sum(resampled.data.trigger .== 1) == 1
-        @test sum(resampled.data.trigger .== 2) == 1
+        # Check that triggers are preserved
+        @test sum(resampled.data.triggers .== 1) == 1
+        @test sum(resampled.data.triggers .== 2) == 1
         
         # Check columns are preserved
         @test names(resampled.data) == names(continuous.data)
@@ -134,12 +134,12 @@ using JLD2
             time = collect(0:n_samples-1) ./ 500,
             C3 = randn(n_samples),
             C4 = randn(n_samples),
-            trigger = zeros(Int, n_samples),
+            triggers = zeros(Int, n_samples),
             trial = ones(Int, n_samples),
             condition = fill("A", n_samples),
             rt = fill(0.5, n_samples)
         )
-        data.trigger[100] = 1
+        data.triggers[100] = 1
         
         continuous = eegfun.ContinuousData(
             data,
@@ -158,8 +158,8 @@ using JLD2
         @test all(resampled.data.condition .== "A")
         @test all(resampled.data.rt .== 0.5)
         
-        # Trigger should be preserved
-        @test sum(resampled.data.trigger .== 1) == 1
+        # Triggers should be preserved
+        @test sum(resampled.data.triggers .== 1) == 1
     end
 end
 
