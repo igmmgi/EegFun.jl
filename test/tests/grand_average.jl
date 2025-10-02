@@ -1,5 +1,5 @@
 """
-Test suite for src/analysis/grandaverage.jl
+Test suite for src/analysis/grand_average.jl
 """
 
 using Test
