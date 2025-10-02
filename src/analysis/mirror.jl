@@ -11,7 +11,7 @@ creating smooth transitions at the epoch boundaries.
 =============================================================================#
 
 """
-    mirror_data!(dat::EpochData, side::Symbol = :both)::Nothing
+    mirror!(dat::EpochData, side::Symbol = :both)::Nothing
 
 Mirror epoched data in-place by appending reversed data sections.
 
@@ -42,13 +42,13 @@ using eegfun, JLD2
 epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Mirror on both sides (recommended for filtering)
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 
 # Now filter the data (edges are protected)
 filter!(epochs, 0.1, 30.0)
 
 # Remove mirrored sections after filtering
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 
 # Continue with analysis
 ```
@@ -59,12 +59,12 @@ unmirror_data!(epochs, :both)
 - **Any processing sensitive to edges**: FFT, wavelet analysis, etc.
 
 # Important Notes
-- Always call `unmirror_data!()` after processing to remove mirrored sections
+- Always call `unmirror!()` after processing to remove mirrored sections
 - The `side` parameter for unmirroring must match the mirroring side
 - Epochs will be approximately 3× longer with `:both` mirroring
 - Sample rate is preserved
 """
-function mirror_data!(dat::EpochData, side::Symbol = :both)::Nothing
+function mirror!(dat::EpochData, side::Symbol = :both)::Nothing
     
     @info "Mirroring epoched data on side: $side"
     
@@ -79,18 +79,18 @@ function mirror_data!(dat::EpochData, side::Symbol = :both)::Nothing
     end
     
     @info "Mirroring complete. $(length(dat.data)) epochs mirrored."
-    @info "Remember to call unmirror_data!() after processing to remove mirrored sections."
+    @info "Remember to call unmirror!() after processing to remove mirrored sections."
     
     return nothing
 end
 
 
 """
-    mirror_data(dat::EpochData, side::Symbol = :both)::EpochData
+    mirror(dat::EpochData, side::Symbol = :both)::EpochData
 
-Non-mutating version of mirror_data!. Returns new EpochData with mirrored epochs.
+Non-mutating version of mirror!. Returns new EpochData with mirrored epochs.
 """
-function mirror_data(dat::EpochData, side::Symbol = :both)::EpochData
+function mirror(dat::EpochData, side::Symbol = :both)::EpochData
     # Create deep copy
     dat_copy = EpochData(
         [copy(epoch, copycols = true) for epoch in dat.data],
@@ -99,14 +99,14 @@ function mirror_data(dat::EpochData, side::Symbol = :both)::EpochData
         copy(dat.analysis_info)
     )
     
-    mirror_data!(dat_copy, side)
+    mirror!(dat_copy, side)
     
     return dat_copy
 end
 
 
 """
-    mirror_data!(dat::ErpData, side::Symbol = :both)::Nothing
+    mirror!(dat::ErpData, side::Symbol = :both)::Nothing
 
 Mirror ERP data in-place by appending reversed data sections.
 
@@ -119,12 +119,12 @@ This is useful before filtering averaged data to reduce edge artifacts.
 erp = load("participant_1_erp.jld2", "erp")
 
 # Mirror, filter, then unmirror
-mirror_data!(erp, :both)
+mirror!(erp, :both)
 filter!(erp, 0.1, 30.0)
-unmirror_data!(erp, :both)
+unmirror!(erp, :both)
 ```
 """
-function mirror_data!(dat::ErpData, side::Symbol = :both)::Nothing
+function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
     
     @info "Mirroring ERP data on side: $side"
     
@@ -136,18 +136,18 @@ function mirror_data!(dat::ErpData, side::Symbol = :both)::Nothing
     _mirror_dataframe!(dat.data, side)
     
     @info "Mirroring complete."
-    @info "Remember to call unmirror_data!() after processing to remove mirrored sections."
+    @info "Remember to call unmirror!() after processing to remove mirrored sections."
     
     return nothing
 end
 
 
 """
-    mirror_data(dat::ErpData, side::Symbol = :both)::ErpData
+    mirror(dat::ErpData, side::Symbol = :both)::ErpData
 
-Non-mutating version of mirror_data! for ERP data.
+Non-mutating version of mirror! for ERP data.
 """
-function mirror_data(dat::ErpData, side::Symbol = :both)::ErpData
+function mirror(dat::ErpData, side::Symbol = :both)::ErpData
     # Create copy
     dat_copy = ErpData(
         copy(dat.data, copycols = true),
@@ -157,7 +157,7 @@ function mirror_data(dat::ErpData, side::Symbol = :both)::ErpData
         dat.n_epochs
     )
     
-    mirror_data!(dat_copy, side)
+    mirror!(dat_copy, side)
     
     return dat_copy
 end
@@ -168,11 +168,11 @@ end
 =============================================================================#
 
 """
-    unmirror_data!(dat::EpochData, side::Symbol = :both)::Nothing
+    unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
 
 Remove mirrored sections from epoched data in-place.
 
-This function removes the mirrored sections that were added by `mirror_data!()`,
+This function removes the mirrored sections that were added by `mirror!()`,
 restoring the data to its original length. Must be called with the same `side`
 parameter as was used for mirroring.
 
@@ -183,12 +183,12 @@ parameter as was used for mirroring.
 # Examples
 ```julia
 # Mirror, process, then unmirror
-mirror_data!(epochs, :both)
+mirror!(epochs, :both)
 filter!(epochs, 0.1, 30.0)
-unmirror_data!(epochs, :both)
+unmirror!(epochs, :both)
 ```
 """
-function unmirror_data!(dat::EpochData, side::Symbol = :both)::Nothing
+function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
     
     @info "Unmirroring epoched data on side: $side"
     
@@ -209,11 +209,11 @@ end
 
 
 """
-    unmirror_data(dat::EpochData, side::Symbol = :both)::EpochData
+    unmirror(dat::EpochData, side::Symbol = :both)::EpochData
 
-Non-mutating version of unmirror_data!.
+Non-mutating version of unmirror!.
 """
-function unmirror_data(dat::EpochData, side::Symbol = :both)::EpochData
+function unmirror(dat::EpochData, side::Symbol = :both)::EpochData
     # Create deep copy
     dat_copy = EpochData(
         [copy(epoch, copycols = true) for epoch in dat.data],
@@ -222,18 +222,18 @@ function unmirror_data(dat::EpochData, side::Symbol = :both)::EpochData
         copy(dat.analysis_info)
     )
     
-    unmirror_data!(dat_copy, side)
+    unmirror!(dat_copy, side)
     
     return dat_copy
 end
 
 
 """
-    unmirror_data!(dat::ErpData, side::Symbol = :both)::Nothing
+    unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
 
 Remove mirrored sections from ERP data in-place.
 """
-function unmirror_data!(dat::ErpData, side::Symbol = :both)::Nothing
+function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
     
     @info "Unmirroring ERP data on side: $side"
     
@@ -251,11 +251,11 @@ end
 
 
 """
-    unmirror_data(dat::ErpData, side::Symbol = :both)::ErpData
+    unmirror(dat::ErpData, side::Symbol = :both)::ErpData
 
-Non-mutating version of unmirror_data! for ERP data.
+Non-mutating version of unmirror! for ERP data.
 """
-function unmirror_data(dat::ErpData, side::Symbol = :both)::ErpData
+function unmirror(dat::ErpData, side::Symbol = :both)::ErpData
     # Create copy
     dat_copy = ErpData(
         copy(dat.data, copycols = true),
@@ -265,7 +265,7 @@ function unmirror_data(dat::ErpData, side::Symbol = :both)::ErpData
         dat.n_epochs
     )
     
-    unmirror_data!(dat_copy, side)
+    unmirror!(dat_copy, side)
     
     return dat_copy
 end

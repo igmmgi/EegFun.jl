@@ -1,7 +1,7 @@
 """
 Tests for data mirroring functions.
 
-Tests mirror_data() and unmirror_data() for both EpochData and ErpData.
+Tests mirror() and unmirror() for both EpochData and ErpData.
 """
 
 using DataFrames
@@ -30,7 +30,7 @@ using DataFrames
         original_length = nrow(epochs.data[1])
         
         # Mirror :pre
-        eegfun.mirror_data!(epochs, :pre)
+        eegfun.mirror!(epochs, :pre)
         
         # Check length increased
         @test nrow(epochs.data[1]) > original_length
@@ -40,7 +40,7 @@ using DataFrames
         @test all(time_diffs .≈ time_diffs[1])  # Uniform spacing
         
         # Unmirror
-        eegfun.unmirror_data!(epochs, :pre)
+        eegfun.unmirror!(epochs, :pre)
         
         # Check restored to original
         @test nrow(epochs.data[1]) == original_length
@@ -65,7 +65,7 @@ using DataFrames
         original_data = copy(epochs.data[1])
         
         # Mirror :post
-        eegfun.mirror_data!(epochs, :post)
+        eegfun.mirror!(epochs, :post)
         
         # Check length increased
         @test nrow(epochs.data[1]) > original_length
@@ -75,7 +75,7 @@ using DataFrames
         @test all(time_diffs .≈ time_diffs[1])
         
         # Unmirror
-        eegfun.unmirror_data!(epochs, :post)
+        eegfun.unmirror!(epochs, :post)
         
         # Check restored
         @test nrow(epochs.data[1]) == original_length
@@ -103,7 +103,7 @@ using DataFrames
         original_cz = copy(epochs.data[1].Cz)
         
         # Mirror :both
-        eegfun.mirror_data!(epochs, :both)
+        eegfun.mirror!(epochs, :both)
         
         # Check length (should be roughly 3× original)
         mirrored_length = nrow(epochs.data[1])
@@ -114,7 +114,7 @@ using DataFrames
         @test all(time_diffs .≈ time_diffs[1])
         
         # Unmirror
-        eegfun.unmirror_data!(epochs, :both)
+        eegfun.unmirror!(epochs, :both)
         
         # Check fully restored
         @test nrow(epochs.data[1]) == original_length
@@ -136,7 +136,7 @@ using DataFrames
         original_length = nrow(epochs_original.data[1])
         
         # Non-mutating mirror
-        epochs_mirrored = eegfun.mirror_data(epochs_original, :both)
+        epochs_mirrored = eegfun.mirror(epochs_original, :both)
         
         # Check original unchanged
         @test nrow(epochs_original.data[1]) == original_length
@@ -145,7 +145,7 @@ using DataFrames
         @test nrow(epochs_mirrored.data[1]) > original_length
         
         # Non-mutating unmirror
-        epochs_unmirrored = eegfun.unmirror_data(epochs_mirrored, :both)
+        epochs_unmirrored = eegfun.unmirror(epochs_mirrored, :both)
         
         # Check unmirrored matches original
         @test nrow(epochs_unmirrored.data[1]) == original_length
@@ -171,7 +171,7 @@ using DataFrames
         original_cz = copy(erp.data.Cz)
         
         # Mirror
-        eegfun.mirror_data!(erp, :both)
+        eegfun.mirror!(erp, :both)
         
         # Check length increased
         @test nrow(erp.data) > 2 * original_length
@@ -181,7 +181,7 @@ using DataFrames
         @test all(time_diffs .≈ time_diffs[1])
         
         # Unmirror
-        eegfun.unmirror_data!(erp, :both)
+        eegfun.unmirror!(erp, :both)
         
         # Check restored
         @test nrow(erp.data) == original_length
@@ -203,7 +203,7 @@ using DataFrames
         original_length = nrow(erp_original.data)
         
         # Non-mutating mirror
-        erp_mirrored = eegfun.mirror_data(erp_original, :both)
+        erp_mirrored = eegfun.mirror(erp_original, :both)
         
         # Check original unchanged
         @test nrow(erp_original.data) == original_length
@@ -212,7 +212,7 @@ using DataFrames
         @test nrow(erp_mirrored.data) > original_length
         
         # Non-mutating unmirror
-        erp_unmirrored = eegfun.unmirror_data(erp_mirrored, :both)
+        erp_unmirrored = eegfun.unmirror(erp_mirrored, :both)
         
         # Check matches original
         @test nrow(erp_unmirrored.data) == original_length
@@ -233,8 +233,8 @@ using DataFrames
         epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
         
         # Test invalid side
-        @test_throws Exception mirror_data!(epochs, :invalid)
-        @test_throws Exception unmirror_data!(epochs, :middle)
+        @test_throws Exception mirror!(epochs, :invalid)
+        @test_throws Exception unmirror!(epochs, :middle)
     end
     
     
@@ -265,8 +265,8 @@ using DataFrames
         original_cz3 = copy(epochs.data[3].Cz)
         
         # Mirror and unmirror
-        eegfun.mirror_data!(epochs, :both)
-        eegfun.unmirror_data!(epochs, :both)
+        eegfun.mirror!(epochs, :both)
+        eegfun.unmirror!(epochs, :both)
         
         # Check all epochs restored correctly
         @test epochs.data[1].Cz ≈ original_cz1
@@ -291,7 +291,7 @@ using DataFrames
         epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
         
         # Mirror
-        eegfun.mirror_data!(epochs, :both)
+        eegfun.mirror!(epochs, :both)
         
         # Check metadata preserved
         @test all(epochs.data[1].trial .== 1)
@@ -299,7 +299,7 @@ using DataFrames
         @test all(epochs.data[1].response .== "left")
         
         # Unmirror
-        eegfun.unmirror_data!(epochs, :both)
+        eegfun.unmirror!(epochs, :both)
         
         # Check metadata still there
         @test all(epochs.data[1].trial .== 1)
@@ -324,9 +324,9 @@ using DataFrames
         # epochs = EpochData([epoch1], Layout(), 1000.0, AnalysisInfo())
         # 
         # # Mirror, filter, unmirror
-        # mirror_data!(epochs, :both)
+        # mirror!(epochs, :both)
         # filter!(epochs, 5.0, 15.0)  # Bandpass around 10 Hz
-        # unmirror_data!(epochs, :both)
+        # unmirror!(epochs, :both)
         # 
         # # Check epoch restored to original length
         # @test nrow(epochs.data[1]) == n_samples
@@ -351,16 +351,16 @@ using DataFrames
         original_time = copy(epochs.data[1].time)
         
         # First roundtrip
-        eegfun.mirror_data!(epochs, :both)
-        eegfun.unmirror_data!(epochs, :both)
+        eegfun.mirror!(epochs, :both)
+        eegfun.unmirror!(epochs, :both)
         
         @test epochs.data[1].Cz ≈ original_cz
         @test epochs.data[1].Pz ≈ original_pz
         @test epochs.data[1].time ≈ original_time
         
         # Second roundtrip
-        eegfun.mirror_data!(epochs, :both)
-        eegfun.unmirror_data!(epochs, :both)
+        eegfun.mirror!(epochs, :both)
+        eegfun.unmirror!(epochs, :both)
         
         @test epochs.data[1].Cz ≈ original_cz
         @test epochs.data[1].Pz ≈ original_pz
