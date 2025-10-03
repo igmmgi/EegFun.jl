@@ -998,6 +998,11 @@ epochs = eegfun.EpochData[]
 for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
+
+# eegfun.plot_epochs(epochs[1])
+eegfun.reject_epochs_interactive(epochs[1])
+
+
 epochs_resampled = eegfun.resample(epochs, 2)
 epochs[1].data
 epochs_resampled[1].data[1]
