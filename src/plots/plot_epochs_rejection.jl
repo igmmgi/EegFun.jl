@@ -48,7 +48,6 @@ allow scrolling through pages of epochs.
 # Arguments
 - `dat::EpochData`: Epoched EEG data to review
 - `channel_selection::Function`: Channels to display (default: all channels)
-- `epochs_per_page::Int`: Number of epochs to show per page (default: 12)
 - `grid_size::Tuple{Int,Int}`: Grid dimensions as (rows, cols) (default: (3, 4) for 12 epochs)
 
 # Returns
@@ -112,14 +111,13 @@ save("participant_1_epochs_cleaned.jld2", "epochs", clean_data)
 function reject_epochs_interactive(
     dat::EpochData;
     channel_selection::Function = channels(),
-    epochs_per_page::Int = 12,
-    grid_size::Tuple{Int,Int} = (3, 4),
+    grid_size::Tuple{Int,Int} = (4, 6),
 )::EpochRejectionState
 
     @info "Starting interactive epoch rejection interface"
     
     # Validate inputs
-    _validate_rejection_gui_inputs(dat, epochs_per_page, grid_size)
+    _validate_rejection_gui_inputs(dat, grid_size)
     
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -128,8 +126,17 @@ function reject_epochs_interactive(
         @minimal_error_throw("No channels selected for display")
     end
     
+    # Check for NaN values in data
+    for (i, epoch) in enumerate(dat.data)
+        for ch in selected_channels
+            if any(isnan, epoch[!, ch])
+                @warn "Epoch $i contains NaN values in channel $ch"
+            end
+        end
+    end
+    
     n_total_epochs = length(dat.data)
-    n_pages = ceil(Int, n_total_epochs / epochs_per_page)
+    n_pages = ceil(Int, n_total_epochs / grid_size[1] * grid_size[2])
     
     @info "Displaying $(length(selected_channels)) channels"
     @info "Total epochs: $n_total_epochs across $n_pages pages"
@@ -137,8 +144,8 @@ function reject_epochs_interactive(
     # Initialize rejection state (all epochs start as not rejected)
     rejected = fill(false, n_total_epochs)
     
-    # Create figure
-    fig = Figure(size = (1400, 900))
+    # Create figure sized to fit typical screens
+    fig = Figure()
     
     # Create state object
     current_page = Observable(1)
@@ -147,7 +154,7 @@ function reject_epochs_interactive(
         selected_channels,
         rejected,
         current_page,
-        epochs_per_page,
+        grid_size[1] * grid_size[2],
         n_total_epochs,
         n_pages,
         Toggle[],
@@ -157,6 +164,8 @@ function reject_epochs_interactive(
     
     # Create UI layout
     _create_rejection_interface!(fig, state, grid_size)
+    
+    # Avoid auto-growing beyond the window; rely on set resolution and relative sizing
     
     # Display figure
     display(fig)
@@ -178,117 +187,79 @@ Create the main interface layout with epoch grid, checkboxes, and navigation.
 function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, grid_size::Tuple{Int,Int})
     rows, cols = grid_size
     
-    # Title
-    Label(fig[1, 1:cols], "Interactive Epoch Rejection", 
-          fontsize = 24, font = :bold, halign = :center)
+    @info "Creating $rows x $cols grid of epoch plots"
     
-    # Info label (updates with page info)
-    info_label = Label(fig[2, 1:cols], "", fontsize = 18, halign = :center)
+    # Clear any existing UI handles
+    empty!(state.epoch_axes)
+    empty!(state.checkboxes)
     
-    # Update info label when page changes
-    on(state.current_page) do page
-        rejected_count = sum(state.rejected)
-        info_label.text[] = "Page $page/$(state.n_pages) | " *
-                           "Rejected: $rejected_count/$(state.n_total_epochs) epochs | " *
-                           "✓ = REJECT, ✗ = KEEP"
-    end
-    notify(state.current_page)  # Trigger initial update
-    
-    # Create grid of epoch plots with checkboxes
+    # Root layout with two rows: axes grid (1) and nav bar (2)
+    root = GridLayout(fig[1, 1])
+
+    # Strict sublayout for axes: rows x cols
+    axes_gl = GridLayout(root[1, 1])
+    # Build per-cell sublayouts: axis on top, checkbox below
     for row in 1:rows
         for col in 1:cols
-            epoch_idx_in_page = (row - 1) * cols + col
-            
-            # Calculate grid position (epochs start at row 3)
-            grid_row = 3 + (row - 1) * 2  # 2 rows per epoch (plot + checkbox)
-            grid_col = col
-            
-            # Create axis for epoch plot
-            ax = Axis(fig[grid_row, grid_col],
-                     xlabel = "Time (s)",
-                     ylabel = "μV",
-                     xlabelsize = 12,
-                     ylabelsize = 12,
-                     xticklabelsize = 10,
-                     yticklabelsize = 10)
-            
+            idx = (row - 1) * cols + col
+            cell_gl = GridLayout(axes_gl[row, col])
+            ax = Axis(cell_gl[1, 1])
             push!(state.epoch_axes, ax)
-            
-            # Create checkbox below the plot
-            checkbox = Toggle(fig[grid_row + 1, grid_col], active = false)
-            push!(state.checkboxes, checkbox)
-            
-            # Checkbox label
-            checkbox_label = Label(fig[grid_row + 1, grid_col], "",
-                                  fontsize = 14, halign = :center)
-            
-            # Setup checkbox observer to update rejection state
-            on(checkbox.active) do is_checked
-                # Calculate actual epoch index
+            t = Toggle(cell_gl[2, 1], active = false)
+            rowsize!(cell_gl, 1, Relative(1))
+            rowsize!(cell_gl, 2, Fixed(22))
+            colsize!(cell_gl, 1, Relative(1))
+            on(t.active) do is_checked
                 page = state.current_page[]
-                epoch_idx = (page - 1) * state.epochs_per_page + epoch_idx_in_page
-                
+                epoch_idx = (page - 1) * state.epochs_per_page + idx
                 if epoch_idx <= state.n_total_epochs
                     state.rejected[epoch_idx] = is_checked
-                    
-                    # Update label text
-                    if is_checked
-                        checkbox_label.text[] = "Epoch $epoch_idx: REJECT ✗"
-                        checkbox_label.color[] = :red
-                    else
-                        checkbox_label.text[] = "Epoch $epoch_idx: Keep ✓"
-                        checkbox_label.color[] = :green
-                    end
-                    
-                    # Update info label
-                    rejected_count = sum(state.rejected)
-                    info_label.text[] = "Page $(state.current_page[])/$(state.n_pages) | " *
-                                       "Rejected: $rejected_count/$(state.n_total_epochs) epochs | " *
-                                       "✓ = REJECT, ✗ = KEEP"
                 end
             end
+            push!(state.checkboxes, t)
         end
     end
+
+    # Navigation sublayout
+    nav_gl = GridLayout(root[2, 1])
     
-    # Navigation buttons at the bottom
-    nav_row = 3 + rows * 2 + 1
-    
-    # First button
-    btn_first = Button(fig[nav_row, 1], label = "|◀ First", fontsize = 16)
+    # Now that both rows exist in root, set their sizes
+    # rowsize!(root, 1, Relative(1))
+    # rowsize!(root, 2, Fixed(40))
+    # colsize!(root, 1, Relative(1))
+    btn_first = Button(nav_gl[1, 1], label = "|◀ First")
     on(btn_first.clicks) do _
         state.current_page[] = 1
         _update_epoch_display!(state)
     end
-    
-    # Previous button
-    btn_prev = Button(fig[nav_row, 2], label = "◀ Previous", fontsize = 16)
+    btn_prev = Button(nav_gl[1, 2], label = "◀ Prev")
     on(btn_prev.clicks) do _
         if state.current_page[] > 1
             state.current_page[] -= 1
             _update_epoch_display!(state)
         end
     end
-    
-    # Page indicator
-    Label(fig[nav_row, 3:4], "", fontsize = 16, halign = :center)
-    
-    # Next button
-    btn_next = Button(fig[nav_row, 5], label = "Next ▶", fontsize = 16)
+    Label(nav_gl[1, 3], "Page", halign = :center)
+    btn_next = Button(nav_gl[1, 4], label = "Next ▶")
     on(btn_next.clicks) do _
         if state.current_page[] < state.n_pages
             state.current_page[] += 1
             _update_epoch_display!(state)
         end
     end
-    
-    # Last button
-    btn_last = Button(fig[nav_row, 6], label = "Last ▶|", fontsize = 16)
+    btn_last = Button(nav_gl[1, 5], label = "Last ▶|")
     on(btn_last.clicks) do _
         state.current_page[] = state.n_pages
         _update_epoch_display!(state)
     end
     
-    # Initial display
+    # Size root rows/cols now
+    rowsize!(root, 1, Relative(1))
+    rowsize!(root, 2, Fixed(44))
+    colsize!(root, 1, Relative(1))
+    
+    # No per-cell toggles in this strict grid; toggles removed for clarity
+    
     _update_epoch_display!(state)
 end
 
@@ -299,32 +270,27 @@ Update the display when page changes.
 function _update_epoch_display!(state::EpochRejectionState)
     page = state.current_page[]
     start_idx = (page - 1) * state.epochs_per_page + 1
-    end_idx = min(start_idx + state.epochs_per_page - 1, state.n_total_epochs)
     
     for (i, ax) in enumerate(state.epoch_axes)
         epoch_idx = start_idx + i - 1
-        
-        # Clear previous content
         empty!(ax)
-        
         if epoch_idx <= state.n_total_epochs
-            # Plot this epoch
             _plot_single_epoch!(ax, state, epoch_idx)
-            
-            # Update checkbox state
-            state.checkboxes[i].active[] = state.rejected[epoch_idx]
-            
-            # Set title
             ax.title = "Epoch $epoch_idx"
-            ax.titlesize = 14
+            ax.titlesize = 12
+            if i <= length(state.checkboxes)
+                state.checkboxes[i].active[] = state.rejected[epoch_idx]
+            end
         else
-            # Hide empty slots
             ax.title = ""
             hidedecorations!(ax)
             hidespines!(ax)
-            state.checkboxes[i].active[] = false
+            if i <= length(state.checkboxes)
+                state.checkboxes[i].active[] = false
+            end
         end
     end
+    return nothing
 end
 
 
@@ -333,46 +299,56 @@ Plot a single epoch in the given axis.
 """
 function _plot_single_epoch!(ax::Axis, state::EpochRejectionState, epoch_idx::Int)
     epoch = state.epoch_data.data[epoch_idx]
-    
-    # Plot each channel
+    t = epoch.time
     colors = Makie.wong_colors()
     for (ch_idx, ch) in enumerate(state.selected_channels)
         color = colors[mod1(ch_idx, length(colors))]
-        lines!(ax, epoch.time, epoch[!, ch], 
-              color = color, 
-              linewidth = 1,
-              label = string(ch))
+        lines!(ax, t, epoch[!, ch], color = color, linewidth = 1)
     end
-    
-    # Add zero lines
     hlines!(ax, [0.0], color = :black, linewidth = 0.5, linestyle = :dash)
-    vlines!(ax, [0.0], color = :black, linewidth = 0.5, linestyle = :dash)
-    
-    # Only show legend if few channels
-    if length(state.selected_channels) <= 5
-        axislegend(ax, position = :rt, labelsize = 10)
-    end
 end
 
 
 """
+Apply the rejection state to the epoch data, removing marked epochs.
+"""
+function apply_rejection!(state::EpochRejectionState)
+    # TODO: Implement this once basic grid works
+    return nothing
+end
+
+
+function Base.show(io::IO, state::EpochRejectionState)
+    rejected_count = sum(state.rejected)
+    kept_count = state.n_total_epochs - rejected_count
+    
+    println(io, "EpochRejectionState:")
+    println(io, "  Total epochs: $(state.n_total_epochs)")
+    println(io, "  Rejected epochs: $rejected_count ($(round(100 * rejected_count / state.n_total_epochs, digits=1))%)")
+    println(io, "  Kept epochs: $kept_count ($(round(100 * kept_count / state.n_total_epochs, digits=1))%)")
+    println(io, "  Current page: $(state.current_page[])/$(state.n_pages)")
+    println(io, "  Epochs per page: $(state.epochs_per_page)")
+    println(io, "  Channels displayed: $(length(state.selected_channels))")
+end
+
+
+#=============================================================================
+    INPUT VALIDATION
+=============================================================================#
+
+"""
 Validate inputs for the rejection GUI.
 """
-function _validate_rejection_gui_inputs(dat::EpochData, epochs_per_page::Int, grid_size::Tuple{Int,Int})
+function _validate_rejection_gui_inputs(dat::EpochData, grid_size::Tuple{Int,Int})
     if isempty(dat.data)
         @minimal_error_throw("Cannot create rejection interface for empty EpochData")
     end
     
-    if epochs_per_page < 1
-        @minimal_error_throw("epochs_per_page must be positive, got $epochs_per_page")
+    if grid_size[1] * grid_size[2] < 1
+        @minimal_error_throw("grid_size must be positive, got $grid_size")
     end
     
-    rows, cols = grid_size
-    if rows * cols != epochs_per_page
-        @minimal_error_throw("grid_size ($rows × $cols = $(rows*cols)) must equal epochs_per_page ($epochs_per_page)")
-    end
-    
-    if rows < 1 || cols < 1
+    if grid_size[1] < 1 || grid_size[2] < 1
         @minimal_error_throw("grid_size must have positive dimensions, got $grid_size")
     end
 end
@@ -474,24 +450,5 @@ function save_rejection_decisions(state::EpochRejectionState, filename::String)
     end
     
     @info "Rejection decisions saved to: $filename"
-end
-
-
-"""
-    Base.show(io::IO, state::EpochRejectionState)
-
-Display epoch rejection state information.
-"""
-function Base.show(io::IO, state::EpochRejectionState)
-    rejected_count = sum(state.rejected)
-    kept_count = state.n_total_epochs - rejected_count
-    
-    println(io, "EpochRejectionState:")
-    println(io, "  Total epochs: $(state.n_total_epochs)")
-    println(io, "  Rejected epochs: $rejected_count ($(round(100 * rejected_count / state.n_total_epochs, digits=1))%)")
-    println(io, "  Kept epochs: $kept_count ($(round(100 * kept_count / state.n_total_epochs, digits=1))%)")
-    println(io, "  Current page: $(state.current_page[])/$(state.n_pages)")
-    println(io, "  Epochs per page: $(state.epochs_per_page)")
-    println(io, "  Channels displayed: $(length(state.selected_channels))")
 end
 
