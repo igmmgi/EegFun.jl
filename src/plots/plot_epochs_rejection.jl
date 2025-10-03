@@ -194,7 +194,32 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
             cell_gl = GridLayout(axes_gl[row, col])
             ax = Axis(cell_gl[1, 1])
             push!(state.epoch_axes, ax)
-            t = Toggle(cell_gl[2, 1], active = false)
+            # Place a small toggle inside the plot area, top-left
+            t = Toggle(
+                cell_gl[1, 1];
+                halign = :left,
+                valign = :top,
+                tellwidth = false,
+                tellheight = false,
+                length = 60,
+                markersize=30
+            )
+
+            ax.spinewidth = 2
+            on(t.active) do active
+                if active 
+                    ax.leftspinecolor = :red
+                    ax.rightspinecolor = :red
+                    ax.bottomspinecolor = :red
+                    ax.topspinecolor = :red
+                else
+                    ax.leftspinecolor = :green
+                    ax.rightspinecolor = :green
+                    ax.bottomspinecolor = :green
+                    ax.topspinecolor = :green
+                end
+            end
+
             colsize!(cell_gl, 1, Relative(1))
             on(t.active) do is_checked
                 page = state.current_page[]
@@ -236,7 +261,13 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
         state.current_page[] = state.n_pages
         _update_epoch_display!(state)
     end
-    
+
+    # close_button = Button(nav_gl[1,6], label = "Close")
+    # on(close_button.clicks) do _
+    #     println(state)
+    #     close(Makie.get_scene(fig))
+    # end
+
     # # Size root rows/cols now
     colsize!(root, 1, Relative(1))
     
@@ -256,8 +287,8 @@ function _update_epoch_display!(state::EpochRejectionState)
         empty!(ax)
         if epoch_idx <= state.n_total_epochs
             _plot_single_epoch!(ax, state, epoch_idx)
-            ax.title = "Epoch $epoch_idx"
-            ax.titlesize = 12
+            ax.title = "Epoch $epoch_idx: $(print_vector(state.selected_channels))"
+            ax.titlesize = 22
             if i <= length(state.checkboxes)
                 state.checkboxes[i].active[] = state.rejected[epoch_idx]
             end
@@ -288,16 +319,6 @@ function _plot_single_epoch!(ax::Axis, state::EpochRejectionState, epoch_idx::In
     hlines!(ax, [0.0], color = :black, linewidth = 0.5, linestyle = :dash)
 end
 
-
-"""
-Apply the rejection state to the epoch data, removing marked epochs.
-"""
-function apply_rejection!(state::EpochRejectionState)
-    # TODO: Implement this once basic grid works
-    return nothing
-end
-
-
 function Base.show(io::IO, state::EpochRejectionState)
     rejected_count = sum(state.rejected)
     kept_count = state.n_total_epochs - rejected_count
@@ -323,13 +344,8 @@ function _validate_rejection_gui_inputs(dat::EpochData, grid_size::Tuple{Int,Int
     if isempty(dat.data)
         @minimal_error_throw("Cannot create rejection interface for empty EpochData")
     end
-    
-    if grid_size[1] * grid_size[2] < 1
+    if grid_size[1] * grid_size[2] <= 1
         @minimal_error_throw("grid_size must be positive, got $grid_size")
-    end
-    
-    if grid_size[1] < 1 || grid_size[2] < 1
-        @minimal_error_throw("grid_size must have positive dimensions, got $grid_size")
     end
 end
 
@@ -369,12 +385,12 @@ save("epochs_cleaned.jld2", "epochs", clean_epochs)
 ```
 """
 function get_clean_epochs(state::EpochRejectionState)::EpochData
+
     kept_epochs = state.epoch_data.data[.!state.rejected]
-    
     if isempty(kept_epochs)
         @minimal_warning "All epochs were rejected! Returning empty EpochData."
     end
-    
+
     return EpochData(
         kept_epochs,
         state.epoch_data.layout,
