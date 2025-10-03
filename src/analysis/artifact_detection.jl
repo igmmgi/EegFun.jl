@@ -3,6 +3,7 @@
 # =============================================================================
 
 import .==
+using Makie
 
 """
     detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
@@ -378,7 +379,7 @@ without manual inspection.
 
 struct Rejection
     label::Symbol
-    epcoch::Int
+    epoch::Int
 end
 
 ==(a::eegfun.Rejection, b::eegfun.Rejection) = a.label == b.label && a.epoch == b.epoch
@@ -543,7 +544,7 @@ function detect_bad_epochs(
             for (_, rejection_list, metric_set) in metric_mappings
                 if epoch_idx in metric_set[ch]
                     rejection = Rejection(ch, epoch_idx) 
-                    if rejection === nothing
+                    if rejection !== nothing
                         push!(rejected_epochs_info, rejection)
                         push!(rejection_list, rejection)
                     end
@@ -647,7 +648,7 @@ function _calculate_epoch_metrics(
         variances = var.(channel_data_all)
         max_values = maximum.(channel_data_all)
         min_values = minimum.(channel_data_all)
-        abs_values = maximum.(abs.(channel_data_all))
+        abs_values = maximum.([abs.(epoch_data) for epoch_data in channel_data_all])
         ranges = max_values .- min_values
         kurtoses = kurtosis.(channel_data_all)
 
@@ -697,15 +698,494 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     # end
     println(io, "")
     println(io, "  Rejection breakdown (z-score):")
-    println(io, "    Z-Variance:  $(length(info.rejected_by_z_variance)) epochs")
-    println(io, "    Z-Maximum:   $(length(info.rejected_by_z_max)) epochs")
-    println(io, "    Z-Minimum:   $(length(info.rejected_by_z_min)) epochs")
-    println(io, "    Z-Absolute:  $(length(info.rejected_by_z_abs)) epochs")
-    println(io, "    Z-Range:     $(length(info.rejected_by_z_range)) epochs")
-    println(io, "    Z-Kurtosis:  $(length(info.rejected_by_z_kurtosis)) epochs")
+    println(io, "    Z-Variance:  $(length(info.z_variance)) epochs")
+    println(io, "    Z-Maximum:   $(length(info.z_max)) epochs")
+    println(io, "    Z-Minimum:   $(length(info.z_min)) epochs")
+    println(io, "    Z-Absolute:  $(length(info.z_abs)) epochs")
+    println(io, "    Z-Range:     $(length(info.z_range)) epochs")
+    println(io, "    Z-Kurtosis:  $(length(info.z_kurtosis)) epochs")
     if info.abs_criterion !== nothing
         println(io, "")
         println(io, "  Rejection breakdown (absolute):")
-        println(io, "    Abs threshold: $(length(info.rejected_by_abs_threshold)) epochs")
+        println(io, "    Abs threshold: $(length(info.absolute_threshold)) epochs")
     end
 end
+
+#=============================================================================
+    UNIFIED ARTIFACT DETECTION & REPAIR API
+=============================================================================#
+
+
+"""
+    ArtifactRepairMethod
+
+Enumeration of available artifact repair methods.
+
+# Values
+- `:neighbor_interpolation` - Weighted neighbor interpolation (default)
+- `:spherical_spline` - Spherical spline interpolation
+- `:reject` - Remove bad epochs entirely
+"""
+@enum ArtifactRepairMethod neighbor_interpolation spherical_spline reject
+
+
+
+"""
+    repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo, method::Symbol=:neighbor_interpolation; kwargs...)
+
+Repair detected artifacts using the specified method.
+
+# Arguments
+- `dat::EpochData`: The epoch data to repair (modified in-place)
+- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
+- `method::Symbol`: Repair method to use
+
+# Keyword Arguments (for :neighbor_interpolation method)
+- `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (default: auto-generate)
+
+# Keyword Arguments (for :spherical_spline method)
+- `m::Int`: Order of Legendre polynomials (default: 4)
+- `lambda::Float64`: Regularization parameter (default: 1e-5)
+
+# Returns
+- `EpochData`: The repaired epoch data (same object, modified in-place)
+"""
+function repair_artifacts!(
+    dat::EpochData, 
+    artifacts::EpochRejectionInfo, 
+    method::Symbol=:neighbor_interpolation;
+    kwargs...
+)
+    # Convert symbol to enum
+    repair_method = if method == :neighbor_interpolation
+        neighbor_interpolation
+    elseif method == :spherical_spline
+        spherical_spline
+    elseif method == :reject
+        reject
+    else
+        throw(ArgumentError("Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline, :reject"))
+    end
+    
+    return repair_artifacts!(dat, artifacts, repair_method; kwargs...)
+end
+
+function repair_artifacts!(
+    dat::EpochData, 
+    artifacts::EpochRejectionInfo, 
+    method::ArtifactRepairMethod;
+    kwargs...
+)
+    if method == neighbor_interpolation
+        return repair_artifacts_neighbor!(dat, artifacts; kwargs...)
+    elseif method == spherical_spline
+        return repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
+    elseif method == reject
+        return repair_artifacts_reject!(dat, artifacts; kwargs...)
+    else
+        throw(ArgumentError("Unknown repair method: $method"))
+    end
+end
+
+"""
+    repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInfo; neighbours_dict::Union{OrderedDict, Nothing}=nothing)
+
+Repair artifacts using weighted neighbor interpolation.
+
+# Arguments
+- `dat::EpochData`: The epoch data to repair (modified in-place)
+- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
+- `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (default: auto-generate)
+
+# Returns
+- `EpochData`: The repaired epoch data (same object, modified in-place)
+"""
+function repair_artifacts_neighbor!(
+    dat::EpochData, 
+    artifacts::EpochRejectionInfo;
+    neighbours_dict::Union{OrderedDict, Nothing}=nothing
+)
+    # Get neighbor information
+    if isnothing(neighbours_dict)
+        neighbours_dict = get_electrode_neighbours_xyz(dat.layout)
+    end
+    
+    # Get all rejected epochs
+    rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
+    
+    for epoch_idx in rejected_epochs
+        # Get bad channels for this epoch
+        bad_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
+        isempty(bad_channels) && continue
+        
+        # Get current epoch data
+        epoch = dat.data[epoch_idx]
+        
+        # Repair each bad channel
+        for bad_ch in bad_channels
+            # Get neighbor information
+            neighbours = get(neighbours_dict, bad_ch, nothing)
+            if isnothing(neighbours) || isempty(neighbours.electrodes)
+                @warn "No neighbors found for channel $bad_ch, skipping"
+                continue
+            end
+            
+            # Find good neighbors (not in bad_channels)
+            good_neighbors = setdiff(neighbours.electrodes, bad_channels)
+            if length(good_neighbors) < 2
+                @warn "Not enough good neighbors for channel $bad_ch, skipping"
+                continue
+            end
+            
+            # Calculate weights based on distance
+            weights = Float64[]
+            for neighbor in good_neighbors
+                neighbor_idx = findfirst(==(neighbor), neighbours.electrodes)
+                if !isnothing(neighbor_idx)
+                    weight = 1.0 / neighbours.distances[neighbor_idx]
+                    push!(weights, weight)
+                end
+            end
+            
+            # Normalize weights
+            weights ./= sum(weights)
+            
+            # Interpolate using weighted average
+            interpolated = zeros(nrow(epoch))
+            for (weight, neighbor) in zip(weights, good_neighbors)
+                if hasproperty(epoch, neighbor)
+                    interpolated .+= weight .* epoch[!, neighbor]
+                end
+            end
+            
+            # Update the bad channel data
+            epoch[!, bad_ch] = interpolated
+        end
+    end
+    
+    return dat
+end
+
+"""
+    repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int=4, lambda::Float64=1e-5)
+
+Repair artifacts using spherical spline interpolation.
+
+# Arguments
+- `dat::EpochData`: The epoch data to repair (modified in-place)
+- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
+- `m::Int`: Order of Legendre polynomials (default: 4)
+- `lambda::Float64`: Regularization parameter (default: 1e-5)
+
+# Returns
+- `EpochData`: The repaired epoch data (same object, modified in-place)
+"""
+function repair_artifacts_spherical_spline!(
+    dat::EpochData, 
+    artifacts::EpochRejectionInfo;
+    m::Int=4, 
+    lambda::Float64=1e-5
+)
+    # Get all rejected epochs
+    rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
+    
+    for epoch_idx in rejected_epochs
+        # Get bad channels for this epoch
+        bad_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
+        isempty(bad_channels) && continue
+        
+        # Get current epoch data
+        epoch = dat.data[epoch_idx]
+        
+        # Use the spherical spline repair function from channel_repair.jl
+        # We need to convert the epoch data to the format expected by the repair function
+        channels = Symbol.(dat.layout.data.label)
+        data_matrix = Matrix(epoch[:, channels])'
+        
+        # Call the spherical spline repair
+        repair_channels_spherical_spline!(data_matrix, bad_channels, channels, dat.layout; m=m, lambda=lambda)
+        
+        # Update the epoch data
+        epoch[:, channels] = data_matrix'
+    end
+    
+    return dat
+end
+
+"""
+    repair_artifacts_reject!(dat::EpochData, artifacts::EpochRejectionInfo)
+
+Remove epochs that contain artifacts entirely.
+
+# Arguments
+- `dat::EpochData`: The epoch data to repair (modified in-place)
+- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
+
+# Returns
+- `EpochData`: The repaired epoch data (same object, modified in-place)
+"""
+function repair_artifacts_reject!(
+    dat::EpochData, 
+    artifacts::EpochRejectionInfo
+)
+    # Get all rejected epochs
+    rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
+    
+    # Remove rejected epochs (in reverse order to maintain indices)
+    for epoch_idx in sort(rejected_epochs, rev=true)
+        deleteat!(dat.data, epoch_idx)
+    end
+    
+    return dat
+end
+
+#=============================================================================
+    VISUALIZATION FUNCTIONS
+=============================================================================#
+
+"""
+    plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; epoch_idx::Int=1, channels::Vector{Symbol}=Symbol[])
+
+Plot artifact detection results showing original data with rejected channels/epochs highlighted.
+
+# Arguments
+- `epochs::EpochData`: The epoch data
+- `artifacts::EpochRejectionInfo`: Artifact detection results
+- `epoch_idx::Int`: Epoch index to plot (default: 1)
+- `channels::Vector{Symbol}`: Specific channels to plot (default: all channels)
+
+# Returns
+- `Figure`: Makie figure showing the plot
+"""
+function plot_artifact_detection(
+    epochs::EpochData, 
+    artifacts::EpochRejectionInfo; 
+    epoch_idx::Int=1, 
+    channels::Vector{Symbol}=Symbol[]
+)
+    
+    # Get channels to plot
+    if isempty(channels)
+        channels = Symbol.(epochs.layout.data.label)
+    end
+    
+    # Get epoch data
+    epoch = epochs.data[epoch_idx]
+    time_points = epoch.time
+    
+    # Find rejected channels for this epoch
+    rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
+    
+    # Create figure
+    fig = Figure(size=(800, 600))
+    ax = Axis(fig[1, 1], xlabel="Time (s)", ylabel="Amplitude (μV)", title="Artifact Detection - Epoch $epoch_idx")
+    
+    # Plot each channel
+    for (i, ch) in enumerate(channels)
+        if hasproperty(epoch, ch)
+            color = ch in rejected_channels ? :red : :blue
+            alpha = ch in rejected_channels ? 0.8 : 0.6
+            linewidth = ch in rejected_channels ? 2 : 1
+            
+            lines!(ax, time_points, epoch[!, ch], 
+                   color=color, alpha=alpha, linewidth=linewidth, 
+                   label=ch in rejected_channels ? "$ch (rejected)" : "$ch")
+        end
+    end
+    
+    # Add legend
+    axislegend(ax, position=:topright)
+    
+    return fig
+end
+
+"""
+    plot_repair_comparison(epochs_original::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; 
+                          epoch_idx::Int=1, channels::Vector{Symbol}=Symbol[])
+
+Plot comparison between original and repaired epochs.
+
+# Arguments
+- `epochs_original::EpochData`: Original epoch data
+- `epochs_repaired::EpochData`: Repaired epoch data  
+- `artifacts::EpochRejectionInfo`: Artifact detection results
+- `epoch_idx::Int`: Epoch index to plot (default: 1)
+- `channels::Vector{Symbol}`: Specific channels to plot (default: all channels)
+
+# Returns
+- `Figure`: Makie figure showing before/after comparison
+"""
+function plot_repair_comparison(
+    epochs_original::EpochData, 
+    epochs_repaired::EpochData, 
+    artifacts::EpochRejectionInfo;
+    epoch_idx::Int=1, 
+    channels::Vector{Symbol}=Symbol[]
+)
+    
+    # Get channels to plot
+    if isempty(channels)
+        channels = Symbol.(epochs_original.layout.data.label)
+    end
+    
+    # Get epoch data
+    epoch_orig = epochs_original.data[epoch_idx]
+    epoch_repaired = epochs_repaired.data[epoch_idx]
+    time_points = epoch_orig.time
+    
+    # Find rejected channels for this epoch
+    rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
+    
+    # Create figure with subplots
+    fig = Figure(size=(1000, 800))
+    
+    # Original data
+    ax1 = Axis(fig[1, 1], xlabel="Time (s)", ylabel="Amplitude (μV)", title="Original Data - Epoch $epoch_idx")
+    
+    # Repaired data  
+    ax2 = Axis(fig[2, 1], xlabel="Time (s)", ylabel="Amplitude (μV)", title="Repaired Data - Epoch $epoch_idx")
+    
+    # Plot each channel
+    for (i, ch) in enumerate(channels)
+        if hasproperty(epoch_orig, ch) && hasproperty(epoch_repaired, ch)
+            # Original plot
+            color = ch in rejected_channels ? :red : :blue
+            alpha = ch in rejected_channels ? 0.8 : 0.6
+            linewidth = ch in rejected_channels ? 2 : 1
+            
+            lines!(ax1, time_points, epoch_orig[!, ch], 
+                   color=color, alpha=alpha, linewidth=linewidth,
+                   label=ch in rejected_channels ? "$ch (rejected)" : "$ch")
+            
+            # Repaired plot
+            lines!(ax2, time_points, epoch_repaired[!, ch], 
+                   color=:green, alpha=0.8, linewidth=1,
+                   label="$ch (repaired)")
+        end
+    end
+    
+    # Add legends
+    axislegend(ax1, position=:topright)
+    axislegend(ax2, position=:topright)
+    
+    # Link axes
+    linkaxes!(ax1, ax2)
+    
+    return fig
+end
+
+# """
+#     plot_erp_comparison(epochs_original::EpochData, epochs_repaired::EpochData; 
+#                        channels::Vector{Symbol}=Symbol[], condition::Symbol=:all)
+# 
+# Plot ERP comparison between original and repaired data.
+# 
+# # Arguments
+# - `epochs_original::EpochData`: Original epoch data
+# - `epochs_repaired::EpochData`: Repaired epoch data
+# - `channels::Vector{Symbol}`: Specific channels to plot (default: all channels)
+# - `condition::Symbol`: Condition to plot (default: :all)
+# 
+# # Returns
+# - `Figure`: Makie figure showing ERP comparison
+# """
+# function plot_erp_comparison(
+#     epochs_original::EpochData, 
+#     epochs_repaired::EpochData;
+#     channels::Vector{Symbol}=Symbol[],
+#     condition::Symbol=:all
+# )
+#     using Makie
+#     
+#     # Get channels to plot
+#     if isempty(channels)
+#         channels = Symbol.(epochs_original.layout.data.label)
+#     end
+#     
+#     # Calculate ERPs
+#     erp_orig = grandaverage(epochs_original, condition=condition)
+#     erp_repaired = grandaverage(epochs_repaired, condition=condition)
+#     
+#     time_points = erp_orig.time
+#     
+#     # Create figure
+#     fig = Figure(size=(1200, 800))
+#     
+#     # Plot each channel
+#     n_channels = length(channels)
+#     n_cols = min(4, n_channels)
+#     n_rows = ceil(Int, n_channels / n_cols)
+#     
+#     for (i, ch) in enumerate(channels)
+#         if hasproperty(erp_orig, ch) && hasproperty(erp_repaired, ch)
+#             row = ((i-1) ÷ n_cols) + 1
+#             col = ((i-1) % n_cols) + 1
+#             
+#             ax = Axis(fig[row, col], xlabel="Time (s)", ylabel="Amplitude (μV)", title="$ch")
+#             
+#             # Plot original and repaired ERPs
+#             lines!(ax, time_points, erp_orig[!, ch], color=:blue, linewidth=2, label="Original")
+#             lines!(ax, time_points, erp_repaired[!, ch], color=:green, linewidth=2, label="Repaired")
+#             
+#             # Add legend for first subplot
+#             if i == 1
+#                 axislegend(ax, position=:topright)
+#             end
+#         end
+#     end
+#     
+#     return fig
+# end
+
+# """
+#     plot_artifact_summary(artifacts::EpochRejectionInfo)
+# 
+# Plot summary of artifact detection results.
+# 
+# # Arguments
+# - `artifacts::EpochRejectionInfo`: Artifact detection results
+# 
+# # Returns
+# - `Figure`: Makie figure showing artifact summary
+# """
+# function plot_artifact_summary(artifacts::EpochRejectionInfo)
+#     using Makie
+#     
+#     # Create figure
+#     fig = Figure(size=(800, 600))
+#     
+#     # Artifact counts by type
+#     ax1 = Axis(fig[1, 1], xlabel="Detection Method", ylabel="Number of Rejections", title="Artifact Detection Summary")
+#     
+#     methods = ["Z-Variance", "Z-Max", "Z-Min", "Z-Abs", "Z-Range", "Z-Kurtosis"]
+#     counts = [length(artifacts.z_variance), length(artifacts.z_max), length(artifacts.z_min), 
+#               length(artifacts.z_abs), length(artifacts.z_range), length(artifacts.z_kurtosis)]
+#     
+#     if artifacts.abs_criterion !== nothing
+#         push!(methods, "Abs-Threshold")
+#         push!(counts, length(artifacts.absolute_threshold))
+#     end
+#     
+#     barplot!(ax1, 1:length(methods), counts, color=:steelblue)
+#     ax1.xticks = (1:length(methods), methods)
+#     
+#     # Overall statistics
+#     ax2 = Axis(fig[1, 2], title="Overall Statistics")
+#     
+#     stats_text = """
+#     Total Epochs: $(artifacts.n_epochs)
+#     Rejected Epochs: $(artifacts.n_artifacts)
+#     Rejection Rate: $(round(100 * artifacts.n_artifacts / artifacts.n_epochs, digits=1))%
+#     
+#     Z-Criterion: $(artifacts.z_criterion)
+#     Abs-Criterion: $(artifacts.abs_criterion === nothing ? "None" : "$(artifacts.abs_criterion) μV")
+#     """
+#     
+#     text!(ax2, 0.1, 0.5, text=stats_text, fontsize=12, align=(:left, :center))
+#     xlims!(ax2, 0, 1)
+#     ylims!(ax2, 0, 1)
+#     hidespines!(ax2)
+#     hidedecorations!(ax2)
+#     
+#     return fig
+# end

@@ -414,7 +414,7 @@ end
         @testset "Invalid reference channels" begin
             output_dir = joinpath(test_dir, "rereferenced_invalid")
 
-            # This should still work but may produce warnings
+            # This should handle invalid channels gracefully in batch processing
             result = eegfun.rereference(
                 "erps_cleaned",
                 input_dir = test_dir,
@@ -422,7 +422,9 @@ end
                 output_dir = output_dir,
             )
 
-            @test isdir(output_dir)
+            # Should have errors due to invalid channels
+            @test result !== nothing
+            @test result.errors > 0
         end
     end
 

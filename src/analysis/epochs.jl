@@ -728,10 +728,11 @@ function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
     end
     
     n_epochs = length(dat.data)
-    epochs_to_keep = setdiff(1:n_epochs, info.rejected_epochs)
+    rejected_indices = [r.epoch for r in info.rejected_epochs]
+    epochs_to_keep = setdiff(1:n_epochs, rejected_indices)
     dat.data = dat.data[epochs_to_keep]
     
-    @info "Rejected $(length(info.rejected_epochs)) of $(info.n_original) epochs."
+    @info "Rejected $(length(info.rejected_epochs)) of $(info.n_epochs) epochs."
     
     return dat
 end
@@ -847,10 +848,10 @@ Remove epochs that contain any true values in the specified boolean column.
 # Examples
 ```julia
 # Remove epochs with extreme values
-cleaned_epochs = remove_bad_epochs(epochs, :is_extreme_value_100)
+cleaned_epochs = reject_epochs(epochs, :is_extreme_value_100)
 
 # Remove epochs with EOG artifacts
-cleaned_epochs = remove_bad_epochs(epochs, :is_vEOG)
+cleaned_epochs = reject_epochs(epochs, :is_vEOG)
 ```
 """
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
