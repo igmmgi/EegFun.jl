@@ -29,10 +29,10 @@ at epoch boundaries.
 - Original data is preserved in the middle section
 
 # How it works
-For each epoch with data [a, b, c, d, e]:
-- `:pre` → [e, d, c, b, a, b, c, d] (mirror prepended, excluding first point)
-- `:post` → [b, c, d, e, d, c, b, a] (mirror appended, excluding last point)
-- `:both` → [e, d, c, b, a, b, c, d, e, d, c, b, a] (both mirrors)
+For each epoch with data [1, 2, 3, 4, 5]:
+- `:pre` → [5, 4, 3, 2, 1, 2, 3, 4] (mirror prepended, excluding first point)
+- `:post` → [4, 3, 2, 1, 2, 3, 4, 5] (mirror appended, excluding last point)
+- `:both` → [5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2, 1] (both mirrors)
 
 # Examples
 ```julia
@@ -45,7 +45,7 @@ epochs = load("participant_1_epochs.jld2", "epochs")
 mirror!(epochs, :both)
 
 # Now filter the data (edges are protected)
-filter!(epochs, 0.1, 30.0)
+filter!(epochs, 1, filter_type = "hp")
 
 # Remove mirrored sections after filtering
 unmirror!(epochs, :both)
@@ -55,31 +55,25 @@ unmirror!(epochs, :both)
 
 # Use Cases
 - **Before filtering**: Reduce edge artifacts
-- **Before baseline correction**: Ensure smooth baseline region
 - **Any processing sensitive to edges**: FFT, wavelet analysis, etc.
 
 # Important Notes
 - Always call `unmirror!()` after processing to remove mirrored sections
 - The `side` parameter for unmirroring must match the mirroring side
-- Epochs will be approximately 3× longer with `:both` mirroring
+- Mirrored epochs will be approximately 3× longer with `:both` mirroring
 - Sample rate is preserved
 """
 function mirror!(dat::EpochData, side::Symbol = :both)::Nothing
-    
-    @info "Mirroring epoched data on side: $side"
     
     # Validate side parameter
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
+    @info "Mirroring epoched data on side: $side"
     
-    # Mirror each epoch
     for (epoch_idx, epoch) in enumerate(dat.data)
-        _mirror_epoch!(epoch, side)
+        _mirror_dataframe!(epoch, side)
     end
-    
-    @info "Mirroring complete. $(length(dat.data)) epochs mirrored."
-    @info "Remember to call unmirror!() after processing to remove mirrored sections."
     
     return nothing
 end
@@ -91,16 +85,8 @@ end
 Non-mutating version of mirror!. Returns new EpochData with mirrored epochs.
 """
 function mirror(dat::EpochData, side::Symbol = :both)::EpochData
-    # Create deep copy
-    dat_copy = EpochData(
-        [copy(epoch, copycols = true) for epoch in dat.data],
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info)
-    )
-    
+    dat_copy = deepcopy(dat)
     mirror!(dat_copy, side)
-    
     return dat_copy
 end
 
@@ -115,28 +101,23 @@ This is useful before filtering averaged data to reduce edge artifacts.
 
 # Examples
 ```julia
-# Load averaged ERP
+# Load some data
 erp = load("participant_1_erp.jld2", "erp")
 
 # Mirror, filter, then unmirror
 mirror!(erp, :both)
-filter!(erp, 0.1, 30.0)
+filter!(erp, 1, filter_type = "hp")
 unmirror!(erp, :both)
 ```
 """
 function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
     
-    @info "Mirroring ERP data on side: $side"
-    
-    # Validate side parameter
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
+    @info "Mirroring ERP data on side: $side"
     
     _mirror_dataframe!(dat.data, side)
-    
-    @info "Mirroring complete."
-    @info "Remember to call unmirror!() after processing to remove mirrored sections."
     
     return nothing
 end
@@ -148,17 +129,8 @@ end
 Non-mutating version of mirror! for ERP data.
 """
 function mirror(dat::ErpData, side::Symbol = :both)::ErpData
-    # Create copy
-    dat_copy = ErpData(
-        copy(dat.data, copycols = true),
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info),
-        dat.n_epochs
-    )
-    
+    dat_copy = deepcopy(dat)
     mirror!(dat_copy, side)
-    
     return dat_copy
 end
 
@@ -184,25 +156,21 @@ parameter as was used for mirroring.
 ```julia
 # Mirror, process, then unmirror
 mirror!(epochs, :both)
-filter!(epochs, 0.1, 30.0)
+filter!(epochs, 1, filter_type = "hp")
 unmirror!(epochs, :both)
 ```
 """
 function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
     
-    @info "Unmirroring epoched data on side: $side"
-    
-    # Validate side parameter
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
+    @info "Unmirroring epoched data on side: $side"
     
     # Unmirror each epoch
     for (epoch_idx, epoch) in enumerate(dat.data)
-        _unmirror_epoch!(epoch, side)
+        _unmirror_dataframe!(epoch, side)
     end
-    
-    @info "Unmirroring complete. Data restored to original length."
     
     return nothing
 end
@@ -214,16 +182,8 @@ end
 Non-mutating version of unmirror!.
 """
 function unmirror(dat::EpochData, side::Symbol = :both)::EpochData
-    # Create deep copy
-    dat_copy = EpochData(
-        [copy(epoch, copycols = true) for epoch in dat.data],
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info)
-    )
-    
+    dat_copy = deepcopy(dat)
     unmirror!(dat_copy, side)
-    
     return dat_copy
 end
 
@@ -235,16 +195,12 @@ Remove mirrored sections from ERP data in-place.
 """
 function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
     
-    @info "Unmirroring ERP data on side: $side"
-    
-    # Validate side parameter
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
+    @info "Unmirroring ERP data on side: $side"
     
     _unmirror_dataframe!(dat.data, side)
-    
-    @info "Unmirroring complete. Data restored to original length."
     
     return nothing
 end
@@ -256,17 +212,8 @@ end
 Non-mutating version of unmirror! for ERP data.
 """
 function unmirror(dat::ErpData, side::Symbol = :both)::ErpData
-    # Create copy
-    dat_copy = ErpData(
-        copy(dat.data, copycols = true),
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info),
-        dat.n_epochs
-    )
-    
+    dat_copy = deepcopy(dat)
     unmirror!(dat_copy, side)
-    
     return dat_copy
 end
 
@@ -276,68 +223,8 @@ end
 =============================================================================#
 
 """
-Mirror a single epoch DataFrame in-place.
-"""
-function _mirror_epoch!(epoch::DataFrame, side::Symbol)
-    n_samples = nrow(epoch)
-    epoch_duration = epoch.time[end] - epoch.time[1]
-    
-    if side == :pre
-        # Create mirrored section (reversed, excluding last point to avoid duplication)
-        mirror_section = epoch[end-1:-1:1, :]
-        
-        # Calculate time step
-        dt = (epoch.time[end] - epoch.time[1]) / (n_samples - 1)
-        
-        # Set mirror times to extend backwards from first time point
-        n_mirror = nrow(mirror_section)
-        mirror_section.time = [epoch.time[1] - (n_mirror - i + 1) * dt for i in 1:n_mirror]
-        
-        # Concatenate: mirror + original (all points)
-        epoch_new = vcat(mirror_section, epoch)
-        empty!(epoch)
-        append!(epoch, epoch_new)
-        
-    elseif side == :post
-        # Create mirrored section (reversed, excluding first point to avoid duplication)
-        mirror_section = epoch[end:-1:2, :]
-        
-        # Calculate time step
-        dt = (epoch.time[end] - epoch.time[1]) / (n_samples - 1)
-        
-        # Set mirror times to extend forwards from last time point
-        n_mirror = nrow(mirror_section)
-        mirror_section.time = [epoch.time[end] + i * dt for i in 1:n_mirror]
-        
-        # Concatenate: original (all points) + mirror
-        epoch_new = vcat(epoch, mirror_section)
-        empty!(epoch)
-        append!(epoch, epoch_new)
-        
-    else  # :both
-        # Calculate time step
-        dt = (epoch.time[end] - epoch.time[1]) / (n_samples - 1)
-        
-        # Create pre-mirror section (reversed, excluding last point to avoid duplication)
-        pre_mirror = epoch[end-1:-1:1, :]
-        n_pre = nrow(pre_mirror)
-        pre_mirror.time = [epoch.time[1] - (n_pre - i + 1) * dt for i in 1:n_pre]
-        
-        # Create post-mirror section (reversed, excluding first point to avoid duplication)
-        post_mirror = epoch[end:-1:2, :]
-        n_post = nrow(post_mirror)
-        post_mirror.time = [epoch.time[end] + i * dt for i in 1:n_post]
-        
-        # Concatenate: pre_mirror + original (all points) + post_mirror
-        epoch_new = vcat(pre_mirror, epoch, post_mirror)
-        empty!(epoch)
-        append!(epoch, epoch_new)
-    end
-end
-
-
-"""
-Mirror a DataFrame (for ERP data) in-place.
+Mirror a DataFrame in-place by reflecting the data at the boundaries.
+Used for both epoch and continuous/ERP data.
 """
 function _mirror_dataframe!(df::DataFrame, side::Symbol)
     n_samples = nrow(df)
@@ -393,51 +280,8 @@ end
 
 
 """
-Unmirror a single epoch DataFrame in-place.
-"""
-function _unmirror_epoch!(epoch::DataFrame, side::Symbol)
-    n_samples = nrow(epoch)
-    
-    if side == :pre
-        # After mirroring :pre: total = (original-1) + original = 2*original - 1
-        # original = (n_samples + 1) / 2
-        original_length = div(n_samples + 1, 2)
-        mirror_length = original_length - 1
-        
-        # Keep only the last original_length rows (the original data)
-        start_idx = mirror_length + 1
-        epoch_new = epoch[start_idx:end, :]
-        empty!(epoch)
-        append!(epoch, epoch_new)
-        
-    elseif side == :post
-        # After mirroring :post: total = original + (original-1) = 2*original - 1
-        # original = (n_samples + 1) / 2
-        original_length = div(n_samples + 1, 2)
-        
-        # Keep only the first original_length rows (the original data)
-        epoch_new = epoch[1:original_length, :]
-        empty!(epoch)
-        append!(epoch, epoch_new)
-        
-    else  # :both
-        # After mirroring :both: total = (original-1) + original + (original-1) = 3*original - 2
-        # original = (n_samples + 2) / 3
-        original_length = div(n_samples + 2, 3)
-        pre_mirror_length = original_length - 1
-        
-        # Keep middle section (the original data)
-        start_idx = pre_mirror_length + 1
-        end_idx = start_idx + original_length - 1
-        epoch_new = epoch[start_idx:end_idx, :]
-        empty!(epoch)
-        append!(epoch, epoch_new)
-    end
-end
-
-
-"""
-Unmirror a DataFrame (for ERP data) in-place.
+Unmirror a DataFrame in-place by removing the mirrored sections.
+Used for both epoch and continuous/ERP data.
 """
 function _unmirror_dataframe!(df::DataFrame, side::Symbol)
     n_samples = nrow(df)

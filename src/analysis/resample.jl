@@ -43,10 +43,8 @@ function _resample_dataframe!(df::DataFrame, factor::Int, trigger_col::Symbol)
         df_resampled = df[keep_indices, :]
     end
     
-    # Update sample column if it exists
-    if hasproperty(df_resampled, :sample)
-        df_resampled.sample = 1:nrow(df_resampled)
-    end
+    # Note: sample column is already correct after downsampling
+    # (it contains the sample numbers from the kept rows)
     
     return df_resampled
 end
@@ -117,6 +115,11 @@ function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
     
     # Resample the DataFrame
     dat.data = _resample_dataframe!(dat.data, factor, :triggers)
+    
+    # For continuous/ERP data, renumber sample column to be sequential
+    if hasproperty(dat.data, :sample)
+        dat.data.sample = 1:nrow(dat.data)
+    end
     
     # Update sample rate
     dat.sample_rate = dat.sample_rate ÷ factor
@@ -197,6 +200,13 @@ function resample!(dat::EpochData, factor::Int)::Nothing
     # Downsample each epoch
     for (i, epoch) in enumerate(dat.data)
         dat.data[i] = _resample_dataframe!(epoch, factor, :trigger)
+        
+        # For epoch data, scale the first sample number and make rest sequential
+        if hasproperty(dat.data[i], :sample)
+            first_sample = round(Int, dat.data[i].sample[1] / factor)
+            n_samples = nrow(dat.data[i])
+            dat.data[i].sample = first_sample:(first_sample + n_samples - 1)
+        end
     end
     
     # Update sample rate
