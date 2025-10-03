@@ -293,7 +293,7 @@ function preprocess_eeg_data(config::String)
                     ) for (idx, epoch_cfg) in enumerate(epoch_cfgs)
                 ]
 
-                epochs_cleaned = remove_bad_epochs.(
+                epochs_cleaned = reject_epochs.(
                     epochs_cleaned,
                     Ref(
                         Symbol(
