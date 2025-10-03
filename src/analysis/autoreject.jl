@@ -36,7 +36,7 @@ Returns:
 """
 function find_bad_channels(epochs::EpochData, params::AutoRejectParams)
     n_epochs = length(epochs.data)
-    n_channels = length(epochs.layout.label)
+    n_channels = length(epochs.layout.data.label)
 
     # Pre-allocate results
     cv_scores = zeros(length(params.n_interpolate), length(params.consensus), length(params.thresh_range))
@@ -44,7 +44,7 @@ function find_bad_channels(epochs::EpochData, params::AutoRejectParams)
     # Calculate peak-to-peak amplitude for each channel/epoch
     p2p = zeros(n_channels, n_epochs)
     for (e_idx, epoch) in enumerate(epochs.data)
-        for (c_idx, chan) in enumerate(epochs.layout.label)
+        for (c_idx, chan) in enumerate(epochs.layout.data.label)
             p2p[c_idx, e_idx] = maximum(epoch[!, chan]) - minimum(epoch[!, chan])
         end
     end
@@ -77,7 +77,7 @@ function find_bad_channels(epochs::EpochData, params::AutoRejectParams)
     opt_thresh = params.thresh_range[best_params[3]]
 
     # Find bad channels using optimal parameters
-    bad_channels = Dict{Int,Vector{String}}()
+    bad_channels = Dict{Int,Vector{Symbol}}()
     for epoch_idx = 1:n_epochs
         epoch_p2p = p2p[:, epoch_idx]
         if params.thresh_method == :mad
@@ -86,7 +86,7 @@ function find_bad_channels(epochs::EpochData, params::AutoRejectParams)
             thresh = mean(epoch_p2p) + opt_thresh * std(epoch_p2p)
         end
         bad_idx = findall(epoch_p2p .> thresh)
-        bad_channels[epoch_idx] = epochs.layout.label[bad_idx]
+        bad_channels[epoch_idx] = epochs.layout.data.label[bad_idx]
     end
 
     return bad_channels, (opt_n_interp, opt_consensus, opt_thresh)
@@ -112,7 +112,7 @@ function repair_epochs!(epochs::EpochData, bad_channels::Dict, neighbours::Dict)
             good_neighbors = setdiff(neighbor_labels, bad_chans)
 
             # Skip if not enough good neighbors
-            length(good_neighbors) < 3 && continue
+            # length(good_neighbors) < 3 && continue
 
             # Get weights based on distance
             weights =
@@ -154,7 +154,7 @@ function plot_interpolation_comparison(epochs::EpochData, bad_channels::Dict, ep
 
     # Get data range for consistent y-limits
     epoch_data = epochs.data[epoch_idx]
-    all_data = Matrix(epoch_data[!, epochs.layout.label])
+    all_data = Matrix(epoch_data[!, epochs.layout.data.label])
     y_min, y_max = extrema(all_data)
     y_range = y_max - y_min
     limits = (y_min - 0.1*y_range, y_max + 0.1*y_range)
@@ -164,7 +164,7 @@ function plot_interpolation_comparison(epochs::EpochData, bad_channels::Dict, ep
 
     # Original data - all lightgrey
     ax1 = Axis(gl[2, 1], title = "Original", limits = (nothing, limits))
-    for chan in epochs.layout.label
+    for chan in epochs.layout.data.label
         lines!(
             ax1,
             epoch_data.time,
@@ -178,7 +178,7 @@ function plot_interpolation_comparison(epochs::EpochData, bad_channels::Dict, ep
 
     # Mark bad channels - bad in red, others lightgrey
     ax2 = Axis(gl[3, 1], title = "Bad Channels Marked", limits = (nothing, limits))
-    for chan in epochs.layout.label
+    for chan in epochs.layout.data.label
         color = chan in bad_channels[epoch_idx] ? :red : :lightgrey
         lines!(ax2, epoch_data.time, epoch_data[!, chan], color = color, linewidth = 1, alpha = 0.5, inspectable = true)
     end
@@ -186,9 +186,9 @@ function plot_interpolation_comparison(epochs::EpochData, bad_channels::Dict, ep
     # After interpolation
     ax3 = Axis(gl[4, 1], title = "After Interpolation", limits = (nothing, limits))
     epochs_copy = copy(epochs)
-    neighbours = get_electrode_neighbours_xyz(epochs.layout, 40)
+    get_layout_neighbours_xyz!(epochs.layout, 1.5)
 
-    for chan in epochs.layout.label
+    for chan in epochs.layout.data.label
         color = chan in bad_channels[epoch_idx] ? :red : :lightgrey
         lines!(
             ax3,
@@ -207,17 +207,17 @@ function plot_interpolation_comparison(epochs::EpochData, bad_channels::Dict, ep
             plt = pick(fig)
             if plt !== nothing && plt[1] isa Lines
                 # Get the index of the clicked line
-                for (i, chan) in enumerate(epochs.layout.label)
+                for (i, chan) in enumerate(epochs.layout.data.label)
                     if plt[1] == ax1.scene.plots[i] || plt[1] == ax2.scene.plots[i] || plt[1] == ax3.scene.plots[i]
-                        selected_channel[] = chan
-                        selected_label[] = chan
+                        selected_channel[] = string(chan)
+                        selected_label[] = string(chan)
                         break
                     end
                 end
 
                 # Top plot - all lightgrey, selected channel thicker
                 empty!(ax1)
-                for chan in epochs.layout.label
+                for chan in epochs.layout.data.label
                     linewidth = chan == selected_channel[] ? 2 : 1
                     lines!(
                         ax1,
@@ -234,7 +234,8 @@ function plot_interpolation_comparison(epochs::EpochData, bad_channels::Dict, ep
                 for ax in [ax2, ax3]
                     data = ax == ax2 ? epoch_data : epochs_copy.data[epoch_idx]
                     empty!(ax)
-                    for chan in epochs.layout.label
+                    for chan in epochs.layout.data.label
+                        println(selected_channel[])
                         color = if chan == selected_channel[]
                             :black
                         elseif chan in bad_channels[epoch_idx]
