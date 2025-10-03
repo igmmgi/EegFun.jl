@@ -999,7 +999,7 @@ for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
 
-auto_reject = eegfun.detect_bad_epochs(epochs[1], 3.0; abs_criterion = 50)
+auto_reject = eegfun.detect_bad_epochs(epochs[1], 3.0; abs_criterion = 200)
 test = eegfun.reject_epochs_interactive(epochs[1], artifact_info = auto_reject, grid_size = (6, 5))
 
 
