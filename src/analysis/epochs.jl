@@ -690,8 +690,83 @@ function average_epochs(dat::EpochData)
     end
 end
 
+
 """
-    remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
+    reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
+
+Remove epochs identified in `info` from `dat` in-place.
+
+# Arguments
+- `dat::EpochData`: Epoched EEG data to modify
+- `info::EpochRejectionInfo`: Information about which epochs to reject
+
+# Returns
+- `EpochData`: The modified data (same as input)
+
+# Examples
+```julia
+using eegfun, JLD2
+
+# Load epoched data
+epochs = load("participant_1_epochs.jld2", "epochs")
+
+# Detect bad epochs
+info = detect_bad_epochs(epochs, 2.0)
+
+# Remove the bad epochs
+reject_epochs!(epochs, info)
+
+# Save cleaned data
+save("participant_1_cleaned.jld2", "epochs", epochs)
+```
+"""
+function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
+
+    if isempty(info.rejected_epochs)
+        @info "No epochs to reject"
+        return dat
+    end
+    
+    n_epochs = length(dat.data)
+    epochs_to_keep = setdiff(1:n_epochs, info.rejected_epochs)
+    dat.data = dat.data[epochs_to_keep]
+    
+    @info "Rejected $(length(info.rejected_epochs)) of $(info.n_original) epochs."
+    
+    return dat
+end
+
+
+"""
+    reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
+
+Non-mutating version. Returns new `EpochData` with rejected epochs removed.
+
+# Arguments
+- `dat::EpochData`: Epoched EEG data (not modified)
+- `info::EpochRejectionInfo`: Information about which epochs to reject
+
+# Returns
+- `EpochData`: New data with rejected epochs removed
+
+# Examples
+```julia
+# Detect bad epochs
+info = detect_bad_epochs(epochs, 2.0)
+
+# Get cleaned copy (original preserved)
+cleaned_epochs = reject_epochs(epochs, info)
+```
+"""
+function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
+    dat_copy = copy(dat)
+    reject_epochs!(dat_copy, info)
+    return dat_copy
+end
+
+
+"""
+    reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
 
 Remove epochs that contain any true values in the specified boolean columns.
 
@@ -703,7 +778,7 @@ Remove epochs that contain any true values in the specified boolean columns.
 - `EpochData`: A new EpochData object with bad epochs removed
 
 """
-function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
+function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     # Input validation
     isempty(dat.data) && @minimal_error_throw("Cannot remove bad epochs from empty EpochData")
     isempty(bad_columns) && return dat  # No columns to check
@@ -758,7 +833,7 @@ function remove_bad_epochs(dat::EpochData, bad_columns::Vector{Symbol})
 end
 
 """
-    remove_bad_epochs(dat::EpochData, bad_column::Symbol)
+    reject_epochs(dat::EpochData, bad_column::Symbol)
 
 Remove epochs that contain any true values in the specified boolean column.
 
@@ -778,7 +853,7 @@ cleaned_epochs = remove_bad_epochs(epochs, :is_extreme_value_100)
 cleaned_epochs = remove_bad_epochs(epochs, :is_vEOG)
 ```
 """
-remove_bad_epochs(dat::EpochData, bad_column::Symbol) = remove_bad_epochs(dat, [bad_column])
+reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
 
 
 # ============================================================================ #

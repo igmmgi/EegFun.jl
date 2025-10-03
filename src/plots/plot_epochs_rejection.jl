@@ -112,10 +112,11 @@ function reject_epochs_interactive(
     dat::EpochData;
     channel_selection::Function = channels(),
     grid_size::Tuple{Int,Int} = (4, 6),
+    artifact_info::Union{Nothing,EpochRejectionInfo} = nothing,
 )::EpochRejectionState
 
     @info "Starting interactive epoch rejection interface"
-    
+
     # Validate inputs
     _validate_rejection_gui_inputs(dat, grid_size)
     
@@ -126,8 +127,10 @@ function reject_epochs_interactive(
         @minimal_error_throw("No channels selected for display")
     end
     
-    n_total_epochs = length(dat.data)
-    n_pages = ceil(Int, n_total_epochs / grid_size[1] * grid_size[2])
+    n_total_epochs = n_epochs(dat)
+    println("n_total_epochs: $n_total_epochs")
+    n_pages = floor(Int, n_total_epochs / (grid_size[1] * grid_size[2]))
+    println("n_pages: $n_pages")
     
     @info "Displaying $(length(selected_channels)) channels"
     @info "Total epochs: $n_total_epochs across $n_pages pages"
@@ -154,7 +157,7 @@ function reject_epochs_interactive(
     )
     
     # Create UI layout
-    _create_rejection_interface!(fig, state, grid_size)
+    _create_rejection_interface!(fig, state, grid_size, artifact_info)
     
     # Display figure
     display(fig)
@@ -173,7 +176,7 @@ end
 """
 Create the main interface layout with epoch grid, checkboxes, and navigation.
 """
-function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, grid_size::Tuple{Int,Int})
+function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, grid_size::Tuple{Int,Int}, artifact_info::Union{Nothing,EpochRejectionInfo})
     rows, cols = grid_size
     
     @info "Creating $rows x $cols grid of epoch plots"
@@ -235,50 +238,32 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
     # Navigation sublayout
     nav_gl = GridLayout(root[2, 1])
     
-    # Now that both rows exist in root, set their sizes
-    btn_first = Button(nav_gl[1, 1], label = "|◀ First")
-    on(btn_first.clicks) do _
-        state.current_page[] = 1
-        _update_epoch_display!(state)
-    end
-    btn_prev = Button(nav_gl[1, 2], label = "◀ Prev")
+    btn_prev = Button(nav_gl[1, 1], label = "◀ Prev")
     on(btn_prev.clicks) do _
         if state.current_page[] > 1
             state.current_page[] -= 1
-            _update_epoch_display!(state)
+            _update_epoch_display!(state, artifact_info)
         end
     end
-    Label(nav_gl[1, 3], "Page", halign = :center)
-    btn_next = Button(nav_gl[1, 4], label = "Next ▶")
+    btn_next = Button(nav_gl[1, 2], label = "Next ▶")
     on(btn_next.clicks) do _
-        if state.current_page[] < state.n_pages
+        if state.current_page[] <= state.n_pages
             state.current_page[] += 1
-            _update_epoch_display!(state)
+            _update_epoch_display!(state, artifact_info)
         end
     end
-    btn_last = Button(nav_gl[1, 5], label = "Last ▶|")
-    on(btn_last.clicks) do _
-        state.current_page[] = state.n_pages
-        _update_epoch_display!(state)
-    end
-
-    # close_button = Button(nav_gl[1,6], label = "Close")
-    # on(close_button.clicks) do _
-    #     println(state)
-    #     close(Makie.get_scene(fig))
-    # end
 
     # # Size root rows/cols now
     colsize!(root, 1, Relative(1))
     
-    _update_epoch_display!(state)
+    _update_epoch_display!(state, artifact_info)
 end
 
 
 """
 Update the display when page changes.
 """
-function _update_epoch_display!(state::EpochRejectionState)
+function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union{Nothing,EpochRejectionInfo})
     page = state.current_page[]
     start_idx = (page - 1) * state.epochs_per_page + 1
     
@@ -287,18 +272,14 @@ function _update_epoch_display!(state::EpochRejectionState)
         empty!(ax)
         if epoch_idx <= state.n_total_epochs
             _plot_single_epoch!(ax, state, epoch_idx)
-            ax.title = "Epoch $epoch_idx: $(print_vector(state.selected_channels))"
+            ax.title = "Epoch $epoch_idx: $(print_vector(state.selected_channels, n_ends = 3))"
             ax.titlesize = 22
             if i <= length(state.checkboxes)
-                state.checkboxes[i].active[] = state.rejected[epoch_idx]
+                state.checkboxes[i].active[] = state.rejected[epoch_idx] || epoch_idx ∈ artifact_info.rejected_epochs
             end
         else
             ax.title = ""
-            hidedecorations!(ax)
-            hidespines!(ax)
-            if i <= length(state.checkboxes)
-                state.checkboxes[i].active[] = false
-            end
+            state.checkboxes[i].active[] = false
         end
     end
     return nothing
@@ -368,35 +349,6 @@ rejected_indices = get_rejected_epochs(state)
 """
 function get_rejected_epochs(state::EpochRejectionState)::Vector{Int}
     return findall(state.rejected)
-end
-
-
-"""
-    get_clean_epochs(state::EpochRejectionState)::EpochData
-
-Create a new EpochData object with rejected epochs removed.
-
-# Examples
-```julia
-state = reject_epochs_interactive(epochs)
-# ... after review ...
-clean_epochs = get_clean_epochs(state)
-save("epochs_cleaned.jld2", "epochs", clean_epochs)
-```
-"""
-function get_clean_epochs(state::EpochRejectionState)::EpochData
-
-    kept_epochs = state.epoch_data.data[.!state.rejected]
-    if isempty(kept_epochs)
-        @minimal_warning "All epochs were rejected! Returning empty EpochData."
-    end
-
-    return EpochData(
-        kept_epochs,
-        state.epoch_data.layout,
-        state.epoch_data.sample_rate,
-        state.epoch_data.analysis_info
-    )
 end
 
 
