@@ -985,6 +985,7 @@ eegfun.filter_data!(dat, "hp", 1)
 dat_resampled = eegfun.resample(dat, 2)
 eegfun.trigger_count(dat);
 eegfun.trigger_count(dat_resampled);
+
 dat
 dat_resampled
 
@@ -997,11 +998,14 @@ epochs = eegfun.EpochData[]
 for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
-
 epochs_resampled = eegfun.resample(epochs, 2)
+epochs[1].data
+epochs_resampled[1].data[1]
 
 
 
+# test mirror
+epochs_mirrored = eegfun.mirror(epochs[1], :both)
 
 
 # is_extreme_value
