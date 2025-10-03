@@ -1000,7 +1000,7 @@ for (idx, epoch) in enumerate(epoch_cfg)
 end
 
 # eegfun.plot_epochs(epochs[1])
-eegfun.reject_epochs_interactive(epochs[1])
+a = eegfun.reject_epochs_interactive(epochs[1])
 
 
 epochs_resampled = eegfun.resample(epochs, 2)

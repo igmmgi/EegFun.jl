@@ -126,15 +126,6 @@ function reject_epochs_interactive(
         @minimal_error_throw("No channels selected for display")
     end
     
-    # Check for NaN values in data
-    for (i, epoch) in enumerate(dat.data)
-        for ch in selected_channels
-            if any(isnan, epoch[!, ch])
-                @warn "Epoch $i contains NaN values in channel $ch"
-            end
-        end
-    end
-    
     n_total_epochs = length(dat.data)
     n_pages = ceil(Int, n_total_epochs / grid_size[1] * grid_size[2])
     
@@ -145,7 +136,7 @@ function reject_epochs_interactive(
     rejected = fill(false, n_total_epochs)
     
     # Create figure sized to fit typical screens
-    fig = Figure()
+    fig = Figure(figure_padding = 50)
     
     # Create state object
     current_page = Observable(1)
@@ -164,8 +155,6 @@ function reject_epochs_interactive(
     
     # Create UI layout
     _create_rejection_interface!(fig, state, grid_size)
-    
-    # Avoid auto-growing beyond the window; rely on set resolution and relative sizing
     
     # Display figure
     display(fig)
@@ -206,8 +195,6 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
             ax = Axis(cell_gl[1, 1])
             push!(state.epoch_axes, ax)
             t = Toggle(cell_gl[2, 1], active = false)
-            rowsize!(cell_gl, 1, Relative(1))
-            rowsize!(cell_gl, 2, Fixed(22))
             colsize!(cell_gl, 1, Relative(1))
             on(t.active) do is_checked
                 page = state.current_page[]
@@ -224,9 +211,6 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
     nav_gl = GridLayout(root[2, 1])
     
     # Now that both rows exist in root, set their sizes
-    # rowsize!(root, 1, Relative(1))
-    # rowsize!(root, 2, Fixed(40))
-    # colsize!(root, 1, Relative(1))
     btn_first = Button(nav_gl[1, 1], label = "|◀ First")
     on(btn_first.clicks) do _
         state.current_page[] = 1
@@ -253,12 +237,8 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
         _update_epoch_display!(state)
     end
     
-    # Size root rows/cols now
-    rowsize!(root, 1, Relative(1))
-    rowsize!(root, 2, Fixed(44))
+    # # Size root rows/cols now
     colsize!(root, 1, Relative(1))
-    
-    # No per-cell toggles in this strict grid; toggles removed for clarity
     
     _update_epoch_display!(state)
 end
