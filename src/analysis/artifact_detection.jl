@@ -542,9 +542,11 @@ function detect_bad_epochs(
             rejection = nothing
             for (_, rejection_list, metric_set) in metric_mappings
                 if epoch_idx in metric_set[ch]
-                    rejection = Rejection(ch, epoch_idx) if rejection === nothing
-                    push!(rejected_epochs_info, rejection)
-                    push!(rejection_list, rejection)
+                    rejection = Rejection(ch, epoch_idx) 
+                    if rejection === nothing
+                        push!(rejected_epochs_info, rejection)
+                        push!(rejection_list, rejection)
+                    end
                 end
             end
         end
