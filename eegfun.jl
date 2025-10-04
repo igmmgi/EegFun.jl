@@ -987,7 +987,8 @@ for (idx, epoch) in enumerate(epoch_cfg)
 end
 
 bad_epochs = eegfun.detect_bad_epochs(epochs[1], 5.0; abs_criterion = 200)
-test = eegfun.reject_epochs_interactive(epochs[1], artifact_info = bad_epochs, grid_size = (6, 5))
+
+test = eegfun.reject_epochs_interactive(epochs[1], artifact_info = bad_epochs, dims = (6, 5), theme_fontsize = 22, colormap = :seaborn_colorblind)
 
 
 
