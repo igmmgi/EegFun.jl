@@ -12,35 +12,35 @@ marking epochs as good/bad and navigation buttons for scrolling through data.
 const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    
+
     # Grid configuration
     :dims => ((4, 6), "Grid dimensions as (rows, cols) for epoch display"),
-    
+
     # Plot styling
     :spine_width => (2, "Width of axis spines"),
     :theme_fontsize => (24, "Font size for theme"),
-    
+
     # Line styling
     :linewidth => (1, "Line width for epoch traces"),
     :origin_linewidth => (0.5, "Line width for origin line at y=0"),
     :origin_linestyle => (:dash, "Line style for origin line"),
     :origin_color => (:black, "Color for origin line"),
-    
+
     # Origin lines
     :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
-    
+
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
-    
+
     # Color scheme
     :colormap => (:GnBu, "Colormap for channel traces"),
     :good_epoch_color => (:green, "Color for good epoch spines"),
     :bad_epoch_color => (:red, "Color for bad epoch spines"),
-    
-    
+
+
     # Y-axis limits
     :global_ylim => (false, "Whether to use global Y-axis limits across all epochs"),
 )
@@ -161,7 +161,7 @@ function reject_epochs_interactive(
     dat::EpochData;
     channel_selection::Function = channels(),
     artifact_info::Union{Nothing,EpochRejectionInfo} = nothing,
-    kwargs...
+    kwargs...,
 )::EpochRejectionState
 
     @info "Starting interactive epoch rejection interface"
@@ -171,32 +171,32 @@ function reject_epochs_interactive(
 
     # Validate inputs
     _validate_rejection_gui_inputs(dat, plot_kwargs[:dims])
-    
+
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    
+
     if isempty(selected_channels)
         @minimal_error_throw("No channels selected for display")
     end
-    
+
     n_total_epochs = n_epochs(dat)
     epochs_per_page = plot_kwargs[:dims][1] * plot_kwargs[:dims][2]
     n_pages = floor(Int, n_total_epochs / epochs_per_page)
-    
+
     @info "Displaying $(length(selected_channels)) channels"
     @info "Total epochs: $n_total_epochs across $n_pages pages"
-    
+
     # Initialize rejection state (all epochs start as not rejected)
     rejected = fill(false, n_total_epochs)
-    
+
     # Create figure sized to fit typical screens
     fig = Figure(figure_padding = 50)
-    
+
     # Performance optimizations
     selected_channels_set = Set(selected_channels)
     colors = Makie.to_colormap(plot_kwargs[:colormap])
     global_ylim = plot_kwargs[:global_ylim] ? _calculate_global_ylim(dat, selected_channels) : nothing
-    
+
     # Create state object
     current_page = Observable(1)
     show_bad_channels_only = Observable(false)
@@ -215,20 +215,20 @@ function reject_epochs_interactive(
         show_bad_channels_only,
         artifact_info,
         colors,
-        global_ylim
+        global_ylim,
     )
-    
+
     # Create UI layout
     _create_rejection_interface!(fig, state, plot_kwargs[:dims], artifact_info, plot_kwargs)
-    
+
     # Display figure
     if plot_kwargs[:display_plot]
         display(fig)
     end
-    
+
     @info "Interface ready. Review epochs and mark bad ones by checking the boxes."
     @info "Checked = REJECT, Unchecked = KEEP"
-    
+
     return state
 end
 
@@ -240,23 +240,29 @@ end
 """
 Create the main interface layout with epoch grid, checkboxes, and navigation.
 """
-function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, dims::Tuple{Int,Int}, artifact_info::Union{Nothing,EpochRejectionInfo}, plot_kwargs::Dict{Symbol,Any})
+function _create_rejection_interface!(
+    fig::Figure,
+    state::EpochRejectionState,
+    dims::Tuple{Int,Int},
+    artifact_info::Union{Nothing,EpochRejectionInfo},
+    plot_kwargs::Dict{Symbol,Any},
+)
     rows, cols = dims
-    
+
     @info "Creating $rows x $cols grid of epoch plots"
-    
+
     # Clear any existing UI handles
     empty!(state.epoch_axes)
     empty!(state.checkboxes)
-    
+
     # Root layout with two rows: axes grid (1) and nav bar (2)
     root = GridLayout(fig[1, 1])
 
     # Strict sublayout for axes: rows x cols
     axes_gl = GridLayout(root[1, 1])
     # Build per-cell sublayouts: axis on top, checkbox below
-    for row in 1:rows
-        for col in 1:cols
+    for row = 1:rows
+        for col = 1:cols
             idx = (row - 1) * cols + col
             cell_gl = GridLayout(axes_gl[row, col])
             ax = Axis(cell_gl[1, 1])
@@ -269,24 +275,24 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, d
                 tellwidth = false,
                 tellheight = false,
                 length = 60,
-                markersize = 30
+                markersize = 30,
             )
 
-                    ax.spinewidth = plot_kwargs[:spine_width]
+            ax.spinewidth = plot_kwargs[:spine_width]
 
-                    # Configure grid
-                    ax.xgridvisible = plot_kwargs[:xgrid]
-                    ax.ygridvisible = plot_kwargs[:ygrid]
-                    ax.xminorgridvisible = plot_kwargs[:xminorgrid]
-                    ax.yminorgridvisible = plot_kwargs[:yminorgrid]
-                    
-                    # Set font sizes (only need to do this once)
-                    ax.titlesize = plot_kwargs[:theme_fontsize]
-                    ax.xlabelsize = plot_kwargs[:theme_fontsize]
-                    ax.ylabelsize = plot_kwargs[:theme_fontsize]
-                    ax.xticklabelsize = plot_kwargs[:theme_fontsize]
-                    ax.yticklabelsize = plot_kwargs[:theme_fontsize]
-            
+            # Configure grid
+            ax.xgridvisible = plot_kwargs[:xgrid]
+            ax.ygridvisible = plot_kwargs[:ygrid]
+            ax.xminorgridvisible = plot_kwargs[:xminorgrid]
+            ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+
+            # Set font sizes (only need to do this once)
+            ax.titlesize = plot_kwargs[:theme_fontsize]
+            ax.xlabelsize = plot_kwargs[:theme_fontsize]
+            ax.ylabelsize = plot_kwargs[:theme_fontsize]
+            ax.xticklabelsize = plot_kwargs[:theme_fontsize]
+            ax.yticklabelsize = plot_kwargs[:theme_fontsize]
+
             on(t.active) do active
                 color = active ? plot_kwargs[:bad_epoch_color] : plot_kwargs[:good_epoch_color]
                 for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
@@ -308,7 +314,7 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, d
 
     # Navigation sublayout
     nav_gl = GridLayout(root[2, 1])
-    
+
     # Navigation buttons
     btn_prev = Button(nav_gl[1, 1], label = "◀ Prev", width = 100, height = 40)
     on(btn_prev.clicks) do _
@@ -324,7 +330,7 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, d
             _update_epoch_display!(state, artifact_info, plot_kwargs)
         end
     end
-    
+
     # Bad channels filter checkbox
     if !isnothing(artifact_info) && !isempty(artifact_info.rejected_epochs)
         bad_channels_toggle = Toggle(nav_gl[1, 3])
@@ -334,7 +340,7 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, d
             _update_epoch_display!(state, artifact_info, plot_kwargs)
         end
     end
-    
+
     # Global Y limits checkbox
     global_ylim_toggle = Toggle(nav_gl[1, 5])
     global_ylim_label = Label(nav_gl[1, 6], "Global Y limits")
@@ -349,7 +355,7 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, d
 
     # # Size root rows/cols now
     colsize!(root, 1, Relative(1))
-    
+
     _update_epoch_display!(state, artifact_info, plot_kwargs)
 end
 
@@ -357,16 +363,20 @@ end
 """
 Update the display when page changes.
 """
-function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union{Nothing,EpochRejectionInfo}, plot_kwargs::Dict{Symbol,Any})
+function _update_epoch_display!(
+    state::EpochRejectionState,
+    artifact_info::Union{Nothing,EpochRejectionInfo},
+    plot_kwargs::Dict{Symbol,Any},
+)
     page = state.current_page[]
     start_idx = (page - 1) * state.epochs_per_page + 1
-    
+
     for (i, ax) in enumerate(state.epoch_axes)
         epoch_idx = start_idx + i - 1
         empty!(ax)
         if epoch_idx <= state.n_total_epochs
             _plot_single_epoch!(ax, state, epoch_idx, plot_kwargs)
-            
+
             # Update title to show filtered channels
             channels_to_show = if state.show_bad_channels_only[]
                 bad_channels_for_epoch = _get_bad_channels_for_epoch(state.artifact_info, epoch_idx)
@@ -374,9 +384,9 @@ function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union
             else
                 state.selected_channels
             end
-            
+
             ax.title = "Epoch $epoch_idx: $(print_vector(channels_to_show, n_ends = 3))"
-            
+
             # Apply global Y limits if enabled, otherwise reset to automatic scaling
             if plot_kwargs[:global_ylim] && !isnothing(state.global_ylim)
                 ylims!(ax, state.global_ylim)
@@ -385,7 +395,8 @@ function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union
                 ax.limits = (ax.limits[][1], nothing)
             end
             if i <= length(state.checkboxes)
-                state.checkboxes[i].active[] = state.rejected[epoch_idx] || epoch_idx ∈ unique_epochs(artifact_info.rejected_epochs)
+                state.checkboxes[i].active[] =
+                    state.rejected[epoch_idx] || epoch_idx ∈ unique_epochs(artifact_info.rejected_epochs)
             end
         else
             ax.title = ""
@@ -402,7 +413,7 @@ Plot a single epoch in the given axis.
 function _plot_single_epoch!(ax::Axis, state::EpochRejectionState, epoch_idx::Int, plot_kwargs::Dict{Symbol,Any})
     epoch = state.epoch_data.data[epoch_idx]
     t = epoch.time
-    
+
     # Filter channels based on bad channels checkbox
     channels_to_plot = if state.show_bad_channels_only[]
         # Only show channels that are bad in this specific epoch
@@ -412,16 +423,28 @@ function _plot_single_epoch!(ax::Axis, state::EpochRejectionState, epoch_idx::In
         # Show all selected channels
         state.selected_channels
     end
-    
+
     for (ch_idx, ch) in enumerate(channels_to_plot)
         color = state.colors[mod1(ch_idx, length(state.colors))]
         lines!(ax, t, epoch[!, ch], color = color, linewidth = plot_kwargs[:linewidth])
     end
-    
+
     # Add origin lines if enabled
     if plot_kwargs[:add_xy_origin]
-        hlines!(ax, [0.0], color = plot_kwargs[:origin_color], linewidth = plot_kwargs[:origin_linewidth], linestyle = plot_kwargs[:origin_linestyle])
-        vlines!(ax, [0.0], color = plot_kwargs[:origin_color], linewidth = plot_kwargs[:origin_linewidth], linestyle = plot_kwargs[:origin_linestyle])
+        hlines!(
+            ax,
+            [0.0],
+            color = plot_kwargs[:origin_color],
+            linewidth = plot_kwargs[:origin_linewidth],
+            linestyle = plot_kwargs[:origin_linestyle],
+        )
+        vlines!(
+            ax,
+            [0.0],
+            color = plot_kwargs[:origin_color],
+            linewidth = plot_kwargs[:origin_linewidth],
+            linestyle = plot_kwargs[:origin_linestyle],
+        )
     end
 end
 
@@ -465,7 +488,7 @@ function _get_bad_channels_for_epoch(artifact_info::Union{Nothing,EpochRejection
     if isnothing(artifact_info)
         return Set{Symbol}()
     end
-    
+
     bad_channels = [r.label for r in artifact_info.rejected_epochs if r.epoch == epoch_idx]
     return Set(bad_channels)
 end
@@ -478,7 +501,7 @@ Calculate global Y-axis limits across all epochs and selected channels.
 function _calculate_global_ylim(dat::EpochData, selected_channels::Vector{Symbol})::Tuple{Float64,Float64}
     min_vals = Float64[]
     max_vals = Float64[]
-    
+
     for epoch in dat.data
         for ch in selected_channels
             if hasproperty(epoch, ch)
@@ -488,10 +511,10 @@ function _calculate_global_ylim(dat::EpochData, selected_channels::Vector{Symbol
             end
         end
     end
-    
+
     global_min = minimum(min_vals)
     global_max = maximum(max_vals)
-    
+
     # Add some padding (5% on each side)
     padding = (global_max - global_min) * 0.05
     return (global_min - padding, global_max + padding)

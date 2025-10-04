@@ -64,17 +64,13 @@ gfp_values = gfp_result.gfp
 - Low GFP values indicate weak or desynchronized activity
 - Normalization to 0-100% is useful for comparing across different datasets or conditions
 """
-function gfp(
-    dat::ErpData;
-    channel_selection::Function = channels(),
-    normalize::Bool = false,
-)::DataFrame
+function gfp(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = false)::DataFrame
 
     @info "Calculating Global Field Power (GFP)"
 
     # Get selected channels (exclude metadata)
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    
+
     if isempty(selected_channels)
         @minimal_error_throw("No channels selected for GFP calculation")
     end
@@ -102,13 +98,13 @@ function gfp(
 
     # Create output DataFrame with metadata
     result_df = DataFrame()
-    
+
     # Copy metadata columns
     meta_cols = meta_labels(dat)
     for col in meta_cols
         result_df[!, col] = copy(dat.data[!, col])
     end
-    
+
     # Add GFP column
     result_df[!, :gfp] = gfp_values
 
@@ -149,21 +145,17 @@ for (i, gfp_data) in enumerate(gfp_results)
 end
 ```
 """
-function gfp(
-    dat::Vector{ErpData};
-    channel_selection::Function = channels(),
-    normalize::Bool = false,
-)::Vector{DataFrame}
+function gfp(dat::Vector{ErpData}; channel_selection::Function = channels(), normalize::Bool = false)::Vector{DataFrame}
 
     @info "Calculating GFP for $(length(dat)) dataset(s)"
-    
+
     results = DataFrame[]
     for (i, erp_data) in enumerate(dat)
         @info "Processing dataset $i/$(length(dat))"
         gfp_result = gfp(erp_data; channel_selection = channel_selection, normalize = normalize)
         push!(results, gfp_result)
     end
-    
+
     return results
 end
 
@@ -212,7 +204,7 @@ function global_dissimilarity(
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    
+
     if isempty(selected_channels)
         @minimal_error_throw("No channels selected for dissimilarity calculation")
     end
@@ -255,13 +247,13 @@ function global_dissimilarity(
 
     # Create output DataFrame with metadata
     result_df = DataFrame()
-    
+
     # Copy metadata columns
     meta_cols = meta_labels(dat)
     for col in meta_cols
         result_df[!, col] = copy(dat.data[!, col])
     end
-    
+
     # Add dissimilarity column
     result_df[!, :dissimilarity] = gd_values
 
@@ -286,14 +278,14 @@ function global_dissimilarity(
 )::Vector{DataFrame}
 
     @info "Calculating Global Dissimilarity for $(length(dat)) dataset(s)"
-    
+
     results = DataFrame[]
     for (i, erp_data) in enumerate(dat)
         @info "Processing dataset $i/$(length(dat))"
         gd_result = global_dissimilarity(erp_data; channel_selection = channel_selection, normalize = normalize)
         push!(results, gd_result)
     end
-    
+
     return results
 end
 
@@ -339,7 +331,7 @@ function gfp_and_dissimilarity(
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    
+
     if isempty(selected_channels)
         @minimal_error_throw("No channels selected for GFP/dissimilarity calculation")
     end
@@ -387,13 +379,13 @@ function gfp_and_dissimilarity(
 
     # Create output DataFrame
     result_df = DataFrame()
-    
+
     # Copy metadata columns
     meta_cols = meta_labels(dat)
     for col in meta_cols
         result_df[!, col] = copy(dat.data[!, col])
     end
-    
+
     # Add computed columns
     result_df[!, :gfp] = gfp_normalized
     result_df[!, :dissimilarity] = gd_normalized
@@ -419,14 +411,13 @@ function gfp_and_dissimilarity(
 )::Vector{DataFrame}
 
     @info "Calculating GFP and Global Dissimilarity for $(length(dat)) dataset(s)"
-    
+
     results = DataFrame[]
     for (i, erp_data) in enumerate(dat)
         @info "Processing dataset $i/$(length(dat))"
         result = gfp_and_dissimilarity(erp_data; channel_selection = channel_selection, normalize = normalize)
         push!(results, result)
     end
-    
+
     return results
 end
-

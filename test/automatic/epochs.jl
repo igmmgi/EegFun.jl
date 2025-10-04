@@ -1127,26 +1127,26 @@ function create_test_epochs_with_artifacts(
     n_timepoints::Int = 100,
     n_channels::Int = 3;
     n_bad_epochs::Int = 3,
-    artifact_scale::Float64 = 200.0
+    artifact_scale::Float64 = 200.0,
 )
     time = collect(range(-0.2, 0.8, length = n_timepoints))
     sample_rate = Int(round(n_timepoints / (time[end] - time[1])))
-    
+
     epochs = DataFrame[]
     bad_epoch_indices = sort(randperm(n_epochs)[1:n_bad_epochs])
-    
+
     for i = 1:n_epochs
         epoch_df = DataFrame()
         epoch_df.time = copy(time)
         epoch_df.trial = fill(i, n_timepoints)
         epoch_df.condition = fill(1, n_timepoints)
-        
+
         # Generate clean data
         for ch = 1:n_channels
             channel_name = Symbol("ch$ch")
             epoch_df[!, channel_name] = randn(n_timepoints) * 0.5
         end
-        
+
         # Add artifacts to bad epochs
         if i in bad_epoch_indices
             for ch = 1:n_channels
@@ -1156,22 +1156,22 @@ function create_test_epochs_with_artifacts(
                 epoch_df[artifact_samples, channel_name] .+= artifact_scale  # Constant large artifacts
             end
         end
-        
+
         push!(epochs, epoch_df)
     end
-    
+
     # Create layout
     layout = eegfun.Layout(
         DataFrame(
             label = [Symbol("ch$i") for i = 1:n_channels],
             x = randn(n_channels),
             y = randn(n_channels),
-            z = randn(n_channels)
+            z = randn(n_channels),
         ),
         nothing,  # neighbours
-        nothing   # criterion
+        nothing,   # criterion
     )
-    
+
     return eegfun.EpochData(epochs, layout, sample_rate, eegfun.AnalysisInfo()), bad_epoch_indices
 end
 
@@ -1179,14 +1179,14 @@ end
     @testset "Basic detection and rejection" begin
         epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
         original_n_epochs = length(epoch_data.data)
-        
+
         # Apply detection and rejection
         rejection_info = eegfun.detect_bad_epochs(epoch_data, 2.0)
         clean_data = eegfun.reject_epochs(epoch_data, rejection_info)
-        
+
         # Check that original data is unchanged
         @test length(epoch_data.data) == original_n_epochs
-        
+
         # Check that some epochs were rejected
         @test length(clean_data.data) < original_n_epochs
         @test length(clean_data.data) == rejection_info.n_epochs - rejection_info.n_artifacts
@@ -1196,11 +1196,11 @@ end
     @testset "In-place rejection" begin
         epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
         original_n_epochs = length(epoch_data.data)
-        
+
         # Apply detection and rejection in-place
         rejection_info = eegfun.detect_bad_epochs(epoch_data, 2.0)
         eegfun.reject_epochs!(epoch_data, rejection_info)
-        
+
         # Check that data was modified
         @test length(epoch_data.data) < original_n_epochs
         @test length(epoch_data.data) == rejection_info.n_epochs - rejection_info.n_artifacts
@@ -1208,11 +1208,11 @@ end
 
     @testset "Different z-criteria" begin
         epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
-        
+
         # Test different criteria
         rejection_info_aggressive = eegfun.detect_bad_epochs(epoch_data, 1.5)
         rejection_info_conservative = eegfun.detect_bad_epochs(epoch_data, 3.0)
-        
+
         # More aggressive should reject more epochs
         @test length(rejection_info_aggressive.rejected_epochs) >= length(rejection_info_conservative.rejected_epochs)
     end
@@ -1220,7 +1220,7 @@ end
     @testset "EpochRejectionInfo structure" begin
         epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
         rejection_info = eegfun.detect_bad_epochs(epoch_data, 2.0)
-        
+
         # Check structure
         @test rejection_info isa eegfun.EpochRejectionInfo
         @test rejection_info.n_epochs == length(epoch_data.data)
@@ -1232,9 +1232,14 @@ end
 
     @testset "Error handling" begin
         # Test with empty data
-        empty_epochs = eegfun.EpochData(DataFrame[], eegfun.Layout(DataFrame(label = [:ch1], x = [0], y = [0], z = [0]), nothing, nothing), 1000, eegfun.AnalysisInfo())
+        empty_epochs = eegfun.EpochData(
+            DataFrame[],
+            eegfun.Layout(DataFrame(label = [:ch1], x = [0], y = [0], z = [0]), nothing, nothing),
+            1000,
+            eegfun.AnalysisInfo(),
+        )
         @test_throws Exception eegfun.detect_bad_epochs(empty_epochs, 2.0)
-        
+
         # Test with invalid z-criterion
         epoch_data, _ = create_test_epochs_with_artifacts(5, 50, 2)
         @test_throws Exception eegfun.detect_bad_epochs(epoch_data, -1.0)

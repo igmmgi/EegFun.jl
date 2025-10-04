@@ -56,28 +56,28 @@ realign!(epochs, :rt)
 - Any re-referencing to a different event within the epoch
 """
 function realign!(dat::EpochData, realignment_column::Symbol)::Nothing
-    
+
     @info "Realigning epoched data to column: $realignment_column"
-    
+
     # Validate that the realignment column exists
     _validate_realignment_column(dat, realignment_column)
-    
+
     # Step 1: Realign each epoch individually
     @info "Step 1/3: Realigning individual epochs"
     _realign_epochs!(dat, realignment_column)
-    
+
     # Step 2: Find common time window across all realigned epochs
     @info "Step 2/3: Finding common time window"
     common_window = _find_common_time_window(dat)
-    
+
     @info "Common time window: $(common_window[1]) s to $(common_window[2]) s"
-    
+
     # Step 3: Crop all epochs to common window
     @info "Step 3/3: Cropping epochs to common window"
     _crop_epochs_to_window!(dat, common_window)
-    
+
     @info "Realignment complete. Final epoch length: $(nrow(dat.data[1])) samples"
-    
+
     return nothing
 end
 
@@ -93,12 +93,12 @@ function realign(dat::EpochData, realignment_column::Symbol)::EpochData
         [copy(epoch, copycols = true) for epoch in dat.data],
         copy(dat.layout),
         dat.sample_rate,
-        copy(dat.analysis_info)
+        copy(dat.analysis_info),
     )
-    
+
     # Apply realignment
     realign!(dat_copy, realignment_column)
-    
+
     return dat_copy
 end
 
@@ -119,7 +119,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
                 "Available columns: $(propertynames(epoch))"
             )
         end
-        
+
         # Check that the realignment value is constant within the epoch
         realignment_values = epoch[!, realignment_column]
         if !all(realignment_values .≈ realignment_values[1])
@@ -128,7 +128,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
                 "The realignment time should be constant for each epoch."
             )
         end
-        
+
         # Check that the realignment value is finite
         if !isfinite(realignment_values[1])
             @minimal_error_throw(
@@ -136,7 +136,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
             )
         end
     end
-    
+
     # Check that :time column exists
     if !hasproperty(dat.data[1], :time)
         @minimal_error_throw("Time column :time not found in epochs")
@@ -151,10 +151,10 @@ function _realign_epochs!(dat::EpochData, realignment_column::Symbol)
     for (i, epoch) in enumerate(dat.data)
         # Get realignment time (should be constant within epoch)
         realignment_time = epoch[1, realignment_column]
-        
+
         # Shift time vector so realignment_time becomes 0
         epoch[!, :time] .-= realignment_time
-        
+
         # Set realignment column to exactly 0 (avoid floating-point residuals)
         epoch[!, realignment_column] .= 0.0
     end
@@ -167,17 +167,17 @@ Find the common time window that is valid for all realigned epochs.
 This finds the latest start time (maximum of all minimum times) and the earliest
 end time (minimum of all maximum times) across all epochs.
 """
-function _find_common_time_window(dat::EpochData)::Tuple{Float64, Float64}
+function _find_common_time_window(dat::EpochData)::Tuple{Float64,Float64}
     # Get time ranges for all epochs
     min_times = [minimum(epoch.time) for epoch in dat.data]
     max_times = [maximum(epoch.time) for epoch in dat.data]
-    
+
     # Common window is the overlap of all individual windows
     # Latest start time
     common_start = maximum(min_times)
     # Earliest end time
     common_end = minimum(max_times)
-    
+
     if common_start >= common_end
         @minimal_error_throw(
             "No common time window found after realignment. " *
@@ -185,7 +185,7 @@ function _find_common_time_window(dat::EpochData)::Tuple{Float64, Float64}
             "The original epochs may not be long enough to accommodate all realignment times."
         )
     end
-    
+
     return (common_start, common_end)
 end
 
@@ -197,9 +197,9 @@ Uses sample-count based cropping to ensure all epochs have exactly the same leng
 avoiding floating-point precision issues that can result in different epoch lengths.
 After cropping, regenerates uniform time vectors for all epochs.
 """
-function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64, Float64})
+function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64,Float64})
     start_time, end_time = window
-    
+
     # First pass: find start and end indices for each epoch
     indices = []
     for epoch in dat.data
@@ -207,16 +207,16 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64, Float64}
         end_idx = argmin(abs.(epoch.time .- end_time))
         push!(indices, (start_idx, end_idx))
     end
-    
+
     # Find the minimum valid range across all epochs
     # (some epochs might have fewer samples due to varying RTs)
     n_samples = minimum([end_idx - start_idx + 1 for (start_idx, end_idx) in indices])
-    
+
     # Second pass: crop all epochs to this exact length
     for (i, epoch) in enumerate(dat.data)
         start_idx, _ = indices[i]
         end_idx = start_idx + n_samples - 1
-        
+
         # Validate that we have enough samples
         if end_idx > nrow(epoch)
             @minimal_error_throw(
@@ -225,16 +225,16 @@ function _crop_epochs_to_window!(dat::EpochData, window::Tuple{Float64, Float64}
                 "Window: [$start_time, $end_time]"
             )
         end
-        
+
         # Crop to exact sample range
         dat.data[i] = epoch[start_idx:end_idx, :]
     end
-    
+
     # Third pass: Regenerate uniform time vector for all epochs
     # This ensures all epochs have identical time vectors
     dt = 1.0 / dat.sample_rate
-    uniform_time = range(start_time, stop=end_time, length=n_samples)
-    
+    uniform_time = range(start_time, stop = end_time, length = n_samples)
+
     for epoch in dat.data
         epoch[!, :time] = collect(uniform_time)
     end
@@ -255,42 +255,38 @@ end
 Process a single epoch file through realignment pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_realign_file(
-    filepath::String,
-    output_path::String,
-    realignment_column::Symbol,
-)
+function _process_realign_file(filepath::String, output_path::String, realignment_column::Symbol)
     filename = basename(filepath)
-    
+
     # Load data
     file_data = load(filepath)
-    
+
     # Try common variable names for epoched data
     epoch_var_names = ["epochs", "epoch_data", "data"]
     epochs_data = nothing
-    
+
     for var_name in epoch_var_names
         if haskey(file_data, var_name)
             epochs_data = file_data[var_name]
             break
         end
     end
-    
+
     if isnothing(epochs_data)
         return BatchResult(false, filename, "No epoched data variable found (tried: $(epoch_var_names))")
     end
-    
+
     if !(epochs_data isa EpochData)
         return BatchResult(false, filename, "Data is not EpochData type")
     end
-    
+
     # Realign
     try
         realigned_epochs = realign(epochs_data, realignment_column)
-        
+
         # Save results
         save(output_path, "epochs", realigned_epochs)
-        
+
         n_epochs = length(realigned_epochs.data)
         n_samples = nrow(realigned_epochs.data[1])
         return BatchResult(true, filename, "Realigned $n_epochs epochs to $n_samples samples each")
@@ -352,46 +348,44 @@ function realign(
     participants::Union{Int,Vector{Int},Nothing} = nothing,
     output_dir::Union{String,Nothing} = nothing,
 )
-    
+
     # Setup logging
     log_file = "realign.log"
     setup_global_logging(log_file)
-    
+
     try
         @info "Batch realignment started at $(now())"
         @log_call "realign" (file_pattern, realignment_column)
-        
+
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        
+
         # Setup directories
         output_dir = something(output_dir, _default_realign_output_dir(input_dir, file_pattern, realignment_column))
         mkpath(output_dir)
-        
+
         # Find files
         files = _find_batch_files(file_pattern, input_dir; participants)
-        
+
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-        
+
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
         @info "Realigning to column: :$realignment_column"
-        
+
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) ->
-            _process_realign_file(input_path, output_path, realignment_column)
-        
+        process_fn = (input_path, output_path) -> _process_realign_file(input_path, output_path, realignment_column)
+
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Realigning epochs")
-        
+
         _log_batch_summary(results, output_dir)
-        
+
     finally
         _cleanup_logging(log_file, output_dir)
     end
 end
-
