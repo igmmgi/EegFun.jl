@@ -63,11 +63,7 @@ save("participant_05_lrp.jld2", "lrp", lrp_result)
 # References
 See the original FieldTrip implementation: `ft_lateralizedpotential.m`
 """
-function lrp(
-    erp_left::ErpData,
-    erp_right::ErpData;
-    channel_selection::Function = channels(),
-)::ErpData
+function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function = channels())::ErpData
 
     @info "Calculating lateralized readiness potential (LRP)"
 
@@ -78,7 +74,9 @@ function lrp(
     pairs = _get_channel_pairs_from_selection(erp_left, erp_right, channel_selection)
 
     if isempty(pairs)
-        @minimal_error_throw("No valid lateral channel pairs found. Check that selected channels have odd numbers and their even counterparts exist.")
+        @minimal_error_throw(
+            "No valid lateral channel pairs found. Check that selected channels have odd numbers and their even counterparts exist."
+        )
     end
 
     @info "Using $(length(pairs)) channel pair(s): $(pairs)"
@@ -101,16 +99,12 @@ Validate that the two ERP datasets are compatible for LRP calculation.
 function _validate_lrp_inputs(erp_left::ErpData, erp_right::ErpData)
     # Check sample rates match
     if erp_left.sample_rate != erp_right.sample_rate
-        @minimal_error_throw(
-            "Sample rates differ: left=$(erp_left.sample_rate) Hz, right=$(erp_right.sample_rate) Hz"
-        )
+        @minimal_error_throw("Sample rates differ: left=$(erp_left.sample_rate) Hz, right=$(erp_right.sample_rate) Hz")
     end
 
     # Check time points match
     if nrow(erp_left.data) != nrow(erp_right.data)
-        @minimal_error_throw(
-            "Number of time points differ: left=$(nrow(erp_left.data)), right=$(nrow(erp_right.data))"
-        )
+        @minimal_error_throw("Number of time points differ: left=$(nrow(erp_left.data)), right=$(nrow(erp_right.data))")
     end
 
     # Check time vectors match
@@ -130,7 +124,7 @@ function _parse_channel_label(label::Symbol)
     label_str = String(label)
     digits_only = Base.filter(isdigit, label_str)
     letters_only = Base.filter(isletter, label_str)
-    
+
     digit = isempty(digits_only) ? nothing : parse(Int, digits_only)
     return (letters_only, digit)
 end
@@ -242,12 +236,12 @@ Batch LRP calculation for multiple participants from JLD2 files.
 """Validate LRP-specific parameters, returning error message or nothing."""
 function _validate_lrp_params(condition_pairs::Vector{Tuple{Int,Int}})
     isempty(condition_pairs) && return "Condition pairs cannot be empty"
-    
+
     for (left, right) in condition_pairs
         left < 1 && return "Condition indices must be positive, got left=$left"
         right < 1 && return "Condition indices must be positive, got right=$right"
     end
-    
+
     return nothing
 end
 
@@ -281,7 +275,7 @@ function _process_lrp_file(
     end
 
     erps_data = file_data["erps"]
-    
+
     if isempty(erps_data)
         return BatchResult(false, filename, "Empty erps array")
     end
@@ -394,8 +388,8 @@ function lrp(
         @info "Channel selection: $(channel_selection == channels() ? "all lateral pairs" : "custom")"
 
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) ->
-            _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
+        process_fn =
+            (input_path, output_path) -> _process_lrp_file(input_path, output_path, condition_pairs, channel_selection)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Calculating LRP")
@@ -489,11 +483,7 @@ For a channel pair (C3, C4):
 - LRP_C3 = 0.5 × ((C3_right - C4_right) + (C4_left - C3_left))
 - LRP_C4 = 0.5 × ((C4_right - C3_right) + (C3_left - C4_left))
 """
-function _calculate_lrp(
-    erp_left::ErpData,
-    erp_right::ErpData,
-    pairs::Vector{Tuple{Symbol,Symbol}},
-)::ErpData
+function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tuple{Symbol,Symbol}})::ErpData
 
     n_timepoints = nrow(erp_left.data)
     n_pairs = length(pairs)
@@ -512,14 +502,11 @@ function _calculate_lrp(
 
         # Calculate LRP using the double-subtraction formula
         # LRP for left channel (e.g., C3)
-        lrp_matrix[:, idx] = 0.5 .* (
-            (ch_left_in_right .- ch_right_in_right) .+ (ch_right_in_left .- ch_left_in_left)
-        )
+        lrp_matrix[:, idx] = 0.5 .* ((ch_left_in_right .- ch_right_in_right) .+ (ch_right_in_left .- ch_left_in_left))
 
         # LRP for right channel (e.g., C4) 
-        lrp_matrix[:, idx+n_pairs] = 0.5 .* (
-            (ch_right_in_right .- ch_left_in_right) .+ (ch_left_in_left .- ch_right_in_left)
-        )
+        lrp_matrix[:, idx+n_pairs] =
+            0.5 .* ((ch_right_in_right .- ch_left_in_right) .+ (ch_left_in_left .- ch_right_in_left))
 
         # Build channel labels
         push!(lrp_labels, ch_left)
@@ -563,13 +550,7 @@ function _calculate_lrp(
     # Use minimum n_epochs as conservative estimate
     min_epochs = min(erp_left.n_epochs, erp_right.n_epochs)
 
-    return ErpData(
-        lrp_df,
-        lrp_layout,
-        erp_left.sample_rate,
-        copy(erp_left.analysis_info),
-        min_epochs,
-    )
+    return ErpData(lrp_df, lrp_layout, erp_left.sample_rate, copy(erp_left.analysis_info), min_epochs)
 end
 
 
@@ -597,4 +578,3 @@ function _create_lrp_layout(original_layout::Layout, lrp_channels::Vector{Symbol
 
     return Layout(filtered_layout_df, filtered_neighbours, original_layout.criterion)
 end
-

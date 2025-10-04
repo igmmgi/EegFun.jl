@@ -726,14 +726,14 @@ function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
         @info "No epochs to reject"
         return dat
     end
-    
+
     n_epochs = length(dat.data)
     rejected_indices = [r.epoch for r in info.rejected_epochs]
     epochs_to_keep = setdiff(1:n_epochs, rejected_indices)
     dat.data = dat.data[epochs_to_keep]
-    
+
     @info "Rejected $(length(info.rejected_epochs)) of $(info.n_epochs) epochs."
-    
+
     return dat
 end
 

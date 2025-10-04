@@ -202,10 +202,8 @@ end
         @testset "Multiple conditions" begin
             # Create test LRP files with multiple conditions
             for participant = 1:4
-                lrp_data = [
-                    create_test_jackknife_erp_data(participant, 1),
-                    create_test_jackknife_erp_data(participant, 2),
-                ]
+                lrp_data =
+                    [create_test_jackknife_erp_data(participant, 1), create_test_jackknife_erp_data(participant, 2)]
                 file_path = joinpath(test_dir, "$(participant)_multi_lrp.jld2")
                 save(file_path, "lrp", lrp_data)
             end
@@ -232,13 +230,14 @@ end
             # Test with specific participants
             # Note: pattern "lrp" matches both "_lrp" and "_multi_lrp" files
             # So we need to check the actual output corresponds to input files
-            result = eegfun.jackknife_average("lrp", input_dir = test_dir, participants = [1, 2, 3], output_dir = output_dir)
+            result =
+                eegfun.jackknife_average("lrp", input_dir = test_dir, participants = [1, 2, 3], output_dir = output_dir)
 
             @test isdir(output_dir)
 
             # Should have output files for the participants requested
             output_files = filter(f -> endswith(f, ".jld2"), readdir(output_dir))
-            
+
             # Files with pattern "lrp" include both "_lrp.jld2" and "_multi_lrp.jld2"
             # Check that we have the participants we requested
             @test "1_lrp.jld2" in output_files
@@ -247,7 +246,7 @@ end
             @test "1_multi_lrp.jld2" in output_files
             @test "2_multi_lrp.jld2" in output_files
             @test "3_multi_lrp.jld2" in output_files
-            
+
             # And not participant 4
             @test !("4_lrp.jld2" in output_files)
             @test !("4_multi_lrp.jld2" in output_files)
@@ -257,12 +256,8 @@ end
             output_dir = joinpath(test_dir, "jackknife_cond_filter")
 
             # Test with specific conditions
-            result = eegfun.jackknife_average(
-                "multi_lrp",
-                input_dir = test_dir,
-                conditions = [1],
-                output_dir = output_dir,
-            )
+            result =
+                eegfun.jackknife_average("multi_lrp", input_dir = test_dir, conditions = [1], output_dir = output_dir)
 
             @test isdir(output_dir)
 
@@ -296,14 +291,14 @@ end
         @testset "Jackknife calculation verification in batch" begin
             # Create a separate test directory with only single-condition files to avoid ambiguity
             verify_dir = mktempdir()
-            
+
             # Create test files with specific known values
             for participant = 1:3
                 lrp_data = create_test_jackknife_erp_data(participant, 1)
                 file_path = joinpath(verify_dir, "$(participant)_verify.jld2")
                 save(file_path, "lrp", lrp_data)
             end
-            
+
             output_dir = joinpath(verify_dir, "jackknife_output")
 
             result = eegfun.jackknife_average("verify", input_dir = verify_dir, output_dir = output_dir)
@@ -322,7 +317,7 @@ end
             # Verify: jackknife 1 should be average of participants 2 and 3
             expected_ch = (lrp2.data.C3 .+ lrp3.data.C3) ./ 2
             @test all(abs.(jk1.data.C3 .- expected_ch) .< 1e-10)
-            
+
             # Cleanup
             rm(verify_dir, recursive = true)
         end
@@ -370,7 +365,8 @@ end
         @testset "Output structure" begin
             output_dir = joinpath(test_dir, "jackknife_structure")
 
-            result = eegfun.jackknife_average("lrp", input_dir = test_dir, participants = [1, 2], output_dir = output_dir)
+            result =
+                eegfun.jackknife_average("lrp", input_dir = test_dir, participants = [1, 2], output_dir = output_dir)
 
             jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "jackknife")
 
@@ -378,7 +374,7 @@ end
             if jk1 isa Vector
                 @test length(jk1) > 0
                 @test all(x -> x isa eegfun.ErpData, jk1)
-                
+
                 # Test first condition
                 jk1_cond = jk1[1]
                 @test jk1_cond.sample_rate == 250.0
@@ -421,4 +417,3 @@ end
     # Cleanup
     rm(test_dir, recursive = true)
 end
-

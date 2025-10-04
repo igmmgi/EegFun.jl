@@ -64,17 +64,17 @@ unmirror!(epochs, :both)
 - Sample rate is preserved
 """
 function mirror!(dat::EpochData, side::Symbol = :both)::Nothing
-    
+
     # Validate side parameter
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
     @info "Mirroring epoched data on side: $side"
-    
+
     for (epoch_idx, epoch) in enumerate(dat.data)
         _mirror_dataframe!(epoch, side)
     end
-    
+
     return nothing
 end
 
@@ -111,14 +111,14 @@ unmirror!(erp, :both)
 ```
 """
 function mirror!(dat::ErpData, side::Symbol = :both)::Nothing
-    
+
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
     @info "Mirroring ERP data on side: $side"
-    
+
     _mirror_dataframe!(dat.data, side)
-    
+
     return nothing
 end
 
@@ -161,17 +161,17 @@ unmirror!(epochs, :both)
 ```
 """
 function unmirror!(dat::EpochData, side::Symbol = :both)::Nothing
-    
+
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
     @info "Unmirroring epoched data on side: $side"
-    
+
     # Unmirror each epoch
     for (epoch_idx, epoch) in enumerate(dat.data)
         _unmirror_dataframe!(epoch, side)
     end
-    
+
     return nothing
 end
 
@@ -194,14 +194,14 @@ end
 Remove mirrored sections from ERP data in-place.
 """
 function unmirror!(dat::ErpData, side::Symbol = :both)::Nothing
-    
+
     if side ∉ [:pre, :post, :both]
         @minimal_error_throw("side must be :pre, :post, or :both, got :$side")
     end
     @info "Unmirroring ERP data on side: $side"
-    
+
     _unmirror_dataframe!(dat.data, side)
-    
+
     return nothing
 end
 
@@ -228,49 +228,49 @@ Used for both epoch and continuous/ERP data.
 """
 function _mirror_dataframe!(df::DataFrame, side::Symbol)
     n_samples = nrow(df)
-    
+
     if side == :pre
         # Calculate time step
         dt = (df.time[end] - df.time[1]) / (n_samples - 1)
-        
+
         # Create mirrored section (reversed, excluding last point to avoid duplication)
-        mirror_section = df[end-1:-1:1, :]
+        mirror_section = df[(end-1):-1:1, :]
         n_mirror = nrow(mirror_section)
-        mirror_section.time = [df.time[1] - (n_mirror - i + 1) * dt for i in 1:n_mirror]
-        
+        mirror_section.time = [df.time[1] - (n_mirror - i + 1) * dt for i = 1:n_mirror]
+
         # Update df in-place
         df_new = vcat(mirror_section, df)
         empty!(df)
         append!(df, df_new)
-        
+
     elseif side == :post
         # Calculate time step
         dt = (df.time[end] - df.time[1]) / (n_samples - 1)
-        
+
         # Create mirrored section (reversed, excluding first point to avoid duplication)
         mirror_section = df[end:-1:2, :]
         n_mirror = nrow(mirror_section)
-        mirror_section.time = [df.time[end] + i * dt for i in 1:n_mirror]
-        
+        mirror_section.time = [df.time[end] + i * dt for i = 1:n_mirror]
+
         # Update df in-place
         df_new = vcat(df, mirror_section)
         empty!(df)
         append!(df, df_new)
-        
+
     else  # :both
         # Calculate time step
         dt = (df.time[end] - df.time[1]) / (n_samples - 1)
-        
+
         # Create pre-mirror section (reversed, excluding last point to avoid duplication)
-        pre_mirror = df[end-1:-1:1, :]
+        pre_mirror = df[(end-1):-1:1, :]
         n_pre = nrow(pre_mirror)
-        pre_mirror.time = [df.time[1] - (n_pre - i + 1) * dt for i in 1:n_pre]
-        
+        pre_mirror.time = [df.time[1] - (n_pre - i + 1) * dt for i = 1:n_pre]
+
         # Create post-mirror section (reversed, excluding first point to avoid duplication)
         post_mirror = df[end:-1:2, :]
         n_post = nrow(post_mirror)
-        post_mirror.time = [df.time[end] + i * dt for i in 1:n_post]
-        
+        post_mirror.time = [df.time[end] + i * dt for i = 1:n_post]
+
         # Update df in-place
         df_new = vcat(pre_mirror, df, post_mirror)
         empty!(df)
@@ -285,35 +285,34 @@ Used for both epoch and continuous/ERP data.
 """
 function _unmirror_dataframe!(df::DataFrame, side::Symbol)
     n_samples = nrow(df)
-    
+
     if side == :pre
         # After mirroring :pre: total = (original-1) + original = 2*original - 1
         original_length = div(n_samples + 1, 2)
         mirror_length = original_length - 1
         start_idx = mirror_length + 1
-        
+
         df_new = df[start_idx:end, :]
         empty!(df)
         append!(df, df_new)
-        
+
     elseif side == :post
         # After mirroring :post: total = original + (original-1) = 2*original - 1
         original_length = div(n_samples + 1, 2)
-        
+
         df_new = df[1:original_length, :]
         empty!(df)
         append!(df, df_new)
-        
+
     else  # :both
         # After mirroring :both: total = (original-1) + original + (original-1) = 3*original - 2
         original_length = div(n_samples + 2, 3)
         pre_mirror_length = original_length - 1
         start_idx = pre_mirror_length + 1
         end_idx = start_idx + original_length - 1
-        
+
         df_new = df[start_idx:end_idx, :]
         empty!(df)
         append!(df, df_new)
     end
 end
-

@@ -17,35 +17,35 @@ Handles trigger preservation and sample column updates.
 function _resample_dataframe!(df::DataFrame, factor::Int, trigger_col::Symbol)
     # Get indices of samples to keep (regular downsampling grid)
     keep_indices = collect(1:factor:nrow(df))
-    
+
     # If trigger column exists, preserve triggers by scaling their positions
     if hasproperty(df, trigger_col)
         # Find all triggers in original data
         trigger_indices = findall(df[!, trigger_col] .!= 0)
         trigger_values = df[!, trigger_col][trigger_indices]
-        
+
         # Downsample the data
         df_new = df[keep_indices, :]
-        
+
         # Clear all triggers in downsampled data
         df_new[!, trigger_col] .= 0
-        
+
         # For each original trigger, scale its position by the downsampling factor
         for (orig_idx, trig_val) in zip(trigger_indices, trigger_values)
             new_idx = round(Int, orig_idx / factor)
             new_idx = clamp(new_idx, 1, nrow(df_new))
             df_new[!, trigger_col][new_idx] = trig_val
         end
-        
+
         df_resampled = df_new
     else
         # No triggers, just downsample
         df_resampled = df[keep_indices, :]
     end
-    
+
     # Note: sample column is already correct after downsampling
     # (it contains the sample numbers from the kept rows)
-    
+
     return df_resampled
 end
 
@@ -97,12 +97,12 @@ function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
     if factor < 1
         @minimal_error_throw("Downsampling factor must be positive, got $factor")
     end
-    
+
     if factor == 1
         @info "Downsampling factor is 1, no resampling needed"
         return nothing
     end
-    
+
     if dat.sample_rate % factor != 0
         @minimal_error_throw(
             "Sample rate $(dat.sample_rate) Hz is not evenly divisible by factor $factor. " *
@@ -110,22 +110,22 @@ function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
             "Choose a factor that results in an integer sample rate."
         )
     end
-    
+
     @info "Resampling data from $(dat.sample_rate) Hz to $(dat.sample_rate ÷ factor) Hz (factor: $factor)"
-    
+
     # Resample the DataFrame
     dat.data = _resample_dataframe!(dat.data, factor, :triggers)
-    
+
     # For continuous/ERP data, renumber sample column to be sequential
     if hasproperty(dat.data, :sample)
         dat.data.sample = 1:nrow(dat.data)
     end
-    
+
     # Update sample rate
     dat.sample_rate = dat.sample_rate ÷ factor
-    
+
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data)) samples"
-    
+
     return nothing
 end
 
@@ -181,12 +181,12 @@ function resample!(dat::EpochData, factor::Int)::Nothing
     if factor < 1
         @minimal_error_throw("Downsampling factor must be positive, got $factor")
     end
-    
+
     if factor == 1
         @info "Downsampling factor is 1, no resampling needed"
         return nothing
     end
-    
+
     if dat.sample_rate % factor != 0
         @minimal_error_throw(
             "Sample rate $(dat.sample_rate) Hz is not evenly divisible by factor $factor. " *
@@ -194,26 +194,26 @@ function resample!(dat::EpochData, factor::Int)::Nothing
             "Choose a factor that results in an integer sample rate."
         )
     end
-    
+
     @info "Resampling $(length(dat.data)) epochs from $(dat.sample_rate) Hz to $(dat.sample_rate ÷ factor) Hz (factor: $factor)"
-    
+
     # Downsample each epoch
     for (i, epoch) in enumerate(dat.data)
         dat.data[i] = _resample_dataframe!(epoch, factor, :trigger)
-        
+
         # For epoch data, scale the first sample number and make rest sequential
         if hasproperty(dat.data[i], :sample)
             first_sample = round(Int, dat.data[i].sample[1] / factor)
             n_samples = nrow(dat.data[i])
-            dat.data[i].sample = first_sample:(first_sample + n_samples - 1)
+            dat.data[i].sample = first_sample:(first_sample+n_samples-1)
         end
     end
-    
+
     # Update sample rate
     dat.sample_rate = dat.sample_rate ÷ factor
-    
+
     @info "Resampling complete. New sample rate: $(dat.sample_rate) Hz, $(nrow(dat.data[1])) samples per epoch"
-    
+
     return nothing
 end
 
@@ -234,7 +234,7 @@ data_256hz = resample(data_512hz, 2)
 @assert data_256hz.sample_rate == 256
 ```
 """
-function resample(dat::T, factor::Int)::T where T <: EegData
+function resample(dat::T, factor::Int)::T where {T<:EegData}
     dat_copy = copy(dat)
     resample!(dat_copy, factor)
     return dat_copy
@@ -252,7 +252,7 @@ Returns a new vector with each element resampled.
 resampled_data = resample(all_participants, 2)
 ```
 """
-function resample(data_vec::Vector{T}, factor::Int)::Vector{T} where T <: EegData
+function resample(data_vec::Vector{T}, factor::Int)::Vector{T} where {T<:EegData}
     return [resample(dat, factor) for dat in data_vec]
 end
 
@@ -275,21 +275,17 @@ end
 Process a single data file through resampling pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_resample_file(
-    filepath::String,
-    output_path::String,
-    factor::Int,
-)
+function _process_resample_file(filepath::String, output_path::String, factor::Int)
     filename = basename(filepath)
-    
+
     # Load data
     file_data = load(filepath)
-    
+
     # Try common variable names
     var_names = ["data", "epochs", "erp", "continuous", "epoch_data", "erp_data", "continuous_data"]
     loaded_data = nothing
     data_var_name = nothing
-    
+
     for var_name in var_names
         if haskey(file_data, var_name)
             loaded_data = file_data[var_name]
@@ -297,24 +293,24 @@ function _process_resample_file(
             break
         end
     end
-    
+
     if isnothing(loaded_data)
         return BatchResult(false, filename, "No EEG data variable found (tried: $(var_names))")
     end
-    
+
     if !(loaded_data isa Union{ContinuousData,EpochData,ErpData})
         return BatchResult(false, filename, "Data is not a recognized EEG data type")
     end
-    
+
     # Resample
     try
         old_rate = loaded_data.sample_rate
         resampled_data = resample(loaded_data, factor)
         new_rate = resampled_data.sample_rate
-        
+
         # Save results using original variable name
         save(output_path, data_var_name, resampled_data)
-        
+
         message = "Resampled from $old_rate Hz to $new_rate Hz (factor: $factor)"
         return BatchResult(true, filename, message)
     catch e
@@ -376,50 +372,48 @@ function resample(
     participants::Union{Int,Vector{Int},Nothing} = nothing,
     output_dir::Union{String,Nothing} = nothing,
 )
-    
+
     # Setup logging
     log_file = "resample.log"
     setup_global_logging(log_file)
-    
+
     try
         @info "Batch resampling started at $(now())"
         @log_call "resample" (file_pattern, factor)
-        
+
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        
+
         if factor <= 0
             @minimal_error_throw("Downsampling factor must be positive, got $factor")
         end
-        
+
         # Setup directories
         output_dir = something(output_dir, _default_resample_output_dir(input_dir, file_pattern, factor))
         mkpath(output_dir)
-        
+
         # Find files
         files = _find_batch_files(file_pattern, input_dir; participants)
-        
+
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-        
+
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
         @info "Downsampling factor: $factor"
-        
+
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) ->
-            _process_resample_file(input_path, output_path, factor)
-        
+        process_fn = (input_path, output_path) -> _process_resample_file(input_path, output_path, factor)
+
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Resampling")
-        
+
         _log_batch_summary(results, output_dir)
-        
+
     finally
         _cleanup_logging(log_file, output_dir)
     end
 end
-

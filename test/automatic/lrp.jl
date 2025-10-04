@@ -6,12 +6,7 @@ using Test
 using DataFrames
 
 # Helper function to create test ERP data with lateral channel pairs
-function create_test_lrp_erp(
-    participant::Int,
-    condition::Int,
-    n_timepoints::Int = 100,
-    signal_scale::Float64 = 1.0,
-)
+function create_test_lrp_erp(participant::Int, condition::Int, n_timepoints::Int = 100, signal_scale::Float64 = 1.0)
     # Create time vector
     time = collect(range(-0.2, 0.8, length = n_timepoints))
 
@@ -40,11 +35,8 @@ function create_test_lrp_erp(
 
     # Create Layout with lateral channels
     channel_labels = [:C3, :C4, :C1, :C2, :Fp1, :Fp2, :Fz]
-    layout_df = DataFrame(
-        label = channel_labels,
-        inc = zeros(length(channel_labels)),
-        azi = zeros(length(channel_labels)),
-    )
+    layout_df =
+        DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels)))
     layout = eegfun.Layout(layout_df, nothing, nothing)
 
     # Create AnalysisInfo
@@ -154,8 +146,7 @@ end
 
         # Calculate LRP for specific left channels only (C3, C1)
         # Function will automatically pair with C4, C2
-        lrp_data = eegfun.lrp(erp_left, erp_right, 
-                              channel_selection = eegfun.channels([:C3, :C1]))
+        lrp_data = eegfun.lrp(erp_left, erp_right, channel_selection = eegfun.channels([:C3, :C1]))
 
         # Verify only specified channels are in the result
         lrp_channels = eegfun.channel_labels(lrp_data)
@@ -257,11 +248,8 @@ end
             PO8 = randn(n_timepoints),
         )
 
-        layout = eegfun.Layout(
-            DataFrame(label = [:CP3, :CP4, :PO7, :PO8], inc = zeros(4), azi = zeros(4)),
-            nothing,
-            nothing,
-        )
+        layout =
+            eegfun.Layout(DataFrame(label = [:CP3, :CP4, :PO7, :PO8], inc = zeros(4), azi = zeros(4)), nothing, nothing)
         erp1 = eegfun.ErpData(df, layout, 250.0, eegfun.AnalysisInfo(), 10)
         erp2 = eegfun.ErpData(copy(df), layout, 250.0, eegfun.AnalysisInfo(), 10)
 
@@ -347,11 +335,11 @@ end
         # LRP_C3 = 0.5 * ((5.0 - 1.0) + (5.0 - 1.0)) = 4.0
         # LRP_C4 = 0.5 * ((1.0 - 5.0) + (1.0 - 5.0)) = -4.0
         @test all(abs.(lrp_data.data.C3 .+ lrp_data.data.C4) .< 1e-10)  # C3 = -C4
-        
+
         # C3 should be positive (contralateral > ipsilateral)
         @test all(lrp_data.data.C3 .> 0)
         @test all(abs.(lrp_data.data.C3 .- 4.0) .< 1e-10)
-        
+
         # C4 should be negative
         @test all(lrp_data.data.C4 .< 0)
         @test all(abs.(lrp_data.data.C4 .+ 4.0) .< 1e-10)
@@ -360,7 +348,7 @@ end
     @testset "Batch LRP calculation for multiple condition pairs" begin
         # Create test data with multiple conditions (16 conditions: odd=left, even=right)
         erps = eegfun.ErpData[]
-        for cond in 1:16
+        for cond = 1:16
             # Alternate between "left" and "right" patterns
             is_left = isodd(cond)
             erp = create_test_lrp_erp(1, cond, 100, is_left ? 1.0 : 1.5)
@@ -368,7 +356,7 @@ end
         end
 
         # Define condition pairs (odd=left, even=right)
-        condition_pairs = [(i, i+1) for i in 1:2:15]
+        condition_pairs = [(i, i+1) for i = 1:2:15]
 
         # Calculate LRP for all pairs
         lrp_results = eegfun.lrp(erps, condition_pairs)
@@ -381,13 +369,13 @@ end
         for (idx, lrp_data) in enumerate(lrp_results)
             @test lrp_data isa eegfun.ErpData
             @test lrp_data.data.condition[1] == idx
-            
+
             # Verify condition name format
             left_cond = 2*idx - 1
             right_cond = 2*idx
             expected_name = "lrp_$(left_cond)_$(right_cond)"
             @test lrp_data.data.condition_name[1] == expected_name
-            
+
             # Verify channels are present
             @test :C3 in eegfun.channel_labels(lrp_data)
             @test :C4 in eegfun.channel_labels(lrp_data)
@@ -396,10 +384,10 @@ end
 
     @testset "Batch LRP with specific pairs" begin
         # Create test data
-        erps = [create_test_lrp_erp(1, i, 100, 1.0) for i in 1:8]
+        erps = [create_test_lrp_erp(1, i, 100, 1.0) for i = 1:8]
 
         # Calculate LRP for specific pairs only
-        lrp_results = eegfun.lrp(erps, [(1,2), (3,4), (7,8)])
+        lrp_results = eegfun.lrp(erps, [(1, 2), (3, 4), (7, 8)])
 
         @test length(lrp_results) == 3
         @test lrp_results[1].data.condition_name[1] == "lrp_1_2"
@@ -408,31 +396,30 @@ end
     end
 
     @testset "Batch LRP error handling" begin
-        erps = [create_test_lrp_erp(1, i, 100, 1.0) for i in 1:4]
+        erps = [create_test_lrp_erp(1, i, 100, 1.0) for i = 1:4]
 
         @testset "Invalid condition index - too high" begin
-            @test_throws Exception eegfun.lrp(erps, [(1,2), (5,6)])
+            @test_throws Exception eegfun.lrp(erps, [(1, 2), (5, 6)])
         end
 
         @testset "Invalid condition index - zero" begin
-            @test_throws Exception eegfun.lrp(erps, [(0,1)])
+            @test_throws Exception eegfun.lrp(erps, [(0, 1)])
         end
 
         @testset "Invalid condition index - negative" begin
-            @test_throws Exception eegfun.lrp(erps, [(-1,2)])
+            @test_throws Exception eegfun.lrp(erps, [(-1, 2)])
         end
     end
 
     @testset "Batch LRP with custom channel selection" begin
-        erps = [create_test_lrp_erp(1, i, 100, 1.0) for i in 1:4]
+        erps = [create_test_lrp_erp(1, i, 100, 1.0) for i = 1:4]
 
         # Calculate LRP for specific left channels only (C3)
         # Function will automatically pair with C4
-        lrp_results = eegfun.lrp(erps, [(1,2), (3,4)], 
-                                 channel_selection = eegfun.channels([:C3]))
+        lrp_results = eegfun.lrp(erps, [(1, 2), (3, 4)], channel_selection = eegfun.channels([:C3]))
 
         @test length(lrp_results) == 2
-        
+
         # Verify only C3/C4 are in the results
         for lrp_data in lrp_results
             channels = eegfun.channel_labels(lrp_data)
@@ -443,4 +430,3 @@ end
         end
     end
 end
-
