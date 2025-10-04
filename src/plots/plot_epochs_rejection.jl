@@ -210,17 +210,21 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
 
             ax.spinewidth = 2
             on(t.active) do active
-                if active 
-                    ax.leftspinecolor = :red
-                    ax.rightspinecolor = :red
-                    ax.bottomspinecolor = :red
-                    ax.topspinecolor = :red
-                else
-                    ax.leftspinecolor = :green
-                    ax.rightspinecolor = :green
-                    ax.bottomspinecolor = :green
-                    ax.topspinecolor = :green
+                color = active ? :red : :green
+                for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
+                    setproperty!(ax, spline, color)
                 end
+                # if active 
+                #     ax.leftspinecolor = :red
+                #     ax.rightspinecolor = :red
+                #     ax.bottomspinecolor = :red
+                #     ax.topspinecolor = :red
+                # else
+                #     ax.leftspinecolor = :green
+                #     ax.rightspinecolor = :green
+                #     ax.bottomspinecolor = :green
+                #     ax.topspinecolor = :green
+                # end
             end
 
             colsize!(cell_gl, 1, Relative(1))
@@ -275,7 +279,7 @@ function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union
             ax.title = "Epoch $epoch_idx: $(print_vector(state.selected_channels, n_ends = 3))"
             ax.titlesize = 22
             if i <= length(state.checkboxes)
-                state.checkboxes[i].active[] = state.rejected[epoch_idx] || epoch_idx ∈ artifact_info.rejected_epochs
+                state.checkboxes[i].active[] = state.rejected[epoch_idx] || epoch_idx ∈ unique_epochs(artifact_info.rejected_epochs)
             end
         else
             ax.title = ""
