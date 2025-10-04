@@ -2,9 +2,6 @@
 # ARTIFACT DETECTION
 # =============================================================================
 
-import .==
-using Makie
-
 """
     detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
 
@@ -382,8 +379,27 @@ struct Rejection
     epoch::Int
 end
 
-==(a::eegfun.Rejection, b::eegfun.Rejection) = a.label == b.label && a.epoch == b.epoch
+function is_equal_rejection(a::Rejection, b::Rejection)
+    return a.label == b.label && a.epoch == b.epoch
+end
 
+function unique_rejections(rejections::Vector{Rejection})
+    unique_rejections = Rejection[]
+    for rejection in rejections
+        if !any(x -> is_equal_rejection(x, rejection), unique_rejections)
+            push!(unique_rejections, rejection)
+        end
+    end
+    return unique_rejections
+end
+
+function unique_channels(rejections::Vector{Rejection})
+    return unique(map(x -> x.label, rejections))
+end
+
+function unique_epochs(rejections::Vector{Rejection})
+    return unique(map(x -> x.epoch, rejections))
+end
 
 
 """
@@ -557,7 +573,7 @@ function detect_bad_epochs(
     rejection_info = EpochRejectionInfo(
         length(dat.data),  # n_epochs
         length(rejected_epochs),
-        unique(rejected_epochs_info),
+        unique_rejections(rejected_epochs_info),
         z_variance,
         z_max,
         z_min,
@@ -692,22 +708,18 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     end
     println(io, "  Number epochs: $(info.n_epochs)")
     println(io, "  Number artifacts: $(info.n_artifacts)")
-    println(io, "  Rejected epochs:")
-    # for rejection in info.rejected_epochs
-    #     println(io, "    $(rejection.label): epoch $(rejection.epoch)")
-    # end
-    println(io, "")
+    println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected_epochs)))\n")
     println(io, "  Rejection breakdown (z-score):")
-    println(io, "    Z-Variance:  $(length(info.z_variance)) epochs")
-    println(io, "    Z-Maximum:   $(length(info.z_max)) epochs")
-    println(io, "    Z-Minimum:   $(length(info.z_min)) epochs")
-    println(io, "    Z-Absolute:  $(length(info.z_abs)) epochs")
-    println(io, "    Z-Range:     $(length(info.z_range)) epochs")
-    println(io, "    Z-Kurtosis:  $(length(info.z_kurtosis)) epochs")
+    println(io, "    Z-Variance:  $(length(unique_epochs(info.z_variance))) unique epochs, $(length(unique_channels(info.z_variance))) unique channels")
+    println(io, "    Z-Maximum:   $(length(unique_epochs(info.z_max))) unique epochs, $(length(unique_channels(info.z_max))) unique channels")
+    println(io, "    Z-Minimum:   $(length(unique_epochs(info.z_min))) unique epochs, $(length(unique_channels(info.z_min))) unique channels")
+    println(io, "    Z-Absolute:  $(length(unique_epochs(info.z_abs))) unique epochs, $(length(unique_channels(info.z_abs))) unique channels")
+    println(io, "    Z-Range:     $(length(unique_epochs(info.z_range))) unique epochs, $(length(unique_channels(info.z_range))) unique channels")
+    println(io, "    Z-Kurtosis:  $(length(unique_epochs(info.z_kurtosis))) unique epochs, $(length(unique_channels(info.z_kurtosis))) unique channels")
     if info.abs_criterion !== nothing
         println(io, "")
         println(io, "  Rejection breakdown (absolute):")
-        println(io, "    Abs threshold: $(length(info.absolute_threshold)) epochs")
+        println(io, "    Abs threshold: $(length(unique_epochs(info.absolute_threshold))) unique epochs, $(length(unique_channels(info.absolute_threshold))) unique channels")
     end
 end
 
