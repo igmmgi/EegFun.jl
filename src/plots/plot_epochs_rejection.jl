@@ -26,6 +26,8 @@ mutable struct EpochRejectionState
     checkboxes::Vector{Toggle}
     epoch_axes::Vector{Axis}
     fig::Figure
+    show_bad_channels_only::Observable{Bool}  # Filter to show only bad channels
+    artifact_info::Union{Nothing,EpochRejectionInfo}  # Store artifact info for per-epoch filtering
 end
 
 
@@ -100,13 +102,15 @@ save("participant_1_epochs_cleaned.jld2", "epochs", clean_data)
 - **Previous/Next**: Navigate one page at a time
 - **First/Last**: Jump to first or last page
 - **Page indicator**: Shows current page number
+- **Show bad channels only**: Filter to display only channels that are marked as bad in any epoch (only available when artifact_info is provided)
 
 # Notes
-- Epochs are displayed with all selected channels overlaid
+- Epochs are displayed with all selected channels overlaid (or only bad channels if filter is enabled)
 - Checked boxes indicate epochs to REJECT
 - Unchecked boxes indicate epochs to KEEP
 - Changes are saved in the state object
 - Close the window when done reviewing
+- Bad channels filter only appears when artifact_info is provided and contains rejected channels
 """
 function reject_epochs_interactive(
     dat::EpochData;
@@ -143,6 +147,7 @@ function reject_epochs_interactive(
     
     # Create state object
     current_page = Observable(1)
+    show_bad_channels_only = Observable(false)
     state = EpochRejectionState(
         dat,
         selected_channels,
@@ -153,7 +158,9 @@ function reject_epochs_interactive(
         n_pages,
         Toggle[],
         Axis[],
-        fig
+        fig,
+        show_bad_channels_only,
+        artifact_info
     )
     
     # Create UI layout
@@ -242,6 +249,7 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
     # Navigation sublayout
     nav_gl = GridLayout(root[2, 1])
     
+    # Navigation buttons
     btn_prev = Button(nav_gl[1, 1], label = "◀ Prev")
     on(btn_prev.clicks) do _
         if state.current_page[] > 1
@@ -253,6 +261,16 @@ function _create_rejection_interface!(fig::Figure, state::EpochRejectionState, g
     on(btn_next.clicks) do _
         if state.current_page[] <= state.n_pages
             state.current_page[] += 1
+            _update_epoch_display!(state, artifact_info)
+        end
+    end
+    
+    # Bad channels filter checkbox
+    if !isnothing(artifact_info) && !isempty(artifact_info.rejected_epochs)
+        bad_channels_toggle = Toggle(nav_gl[1, 3])
+        bad_channels_label = Label(nav_gl[1, 4], "Show bad channels only")
+        on(bad_channels_toggle.active) do active
+            state.show_bad_channels_only[] = active
             _update_epoch_display!(state, artifact_info)
         end
     end
@@ -276,7 +294,17 @@ function _update_epoch_display!(state::EpochRejectionState, artifact_info::Union
         empty!(ax)
         if epoch_idx <= state.n_total_epochs
             _plot_single_epoch!(ax, state, epoch_idx)
-            ax.title = "Epoch $epoch_idx: $(print_vector(state.selected_channels, n_ends = 3))"
+            
+            # Update title to show filtered channels
+            channels_to_show = if state.show_bad_channels_only[]
+                bad_channels_for_epoch = _get_bad_channels_for_epoch(state.artifact_info, epoch_idx)
+                intersect(state.selected_channels, bad_channels_for_epoch)
+            else
+                state.selected_channels
+            end
+            println("channels_to_show: $channels_to_show")
+            
+            ax.title = "Epoch $epoch_idx: $(print_vector(channels_to_show, n_ends = 3))"
             ax.titlesize = 22
             if i <= length(state.checkboxes)
                 state.checkboxes[i].active[] = state.rejected[epoch_idx] || epoch_idx ∈ unique_epochs(artifact_info.rejected_epochs)
@@ -297,7 +325,18 @@ function _plot_single_epoch!(ax::Axis, state::EpochRejectionState, epoch_idx::In
     epoch = state.epoch_data.data[epoch_idx]
     t = epoch.time
     colors = Makie.wong_colors()
-    for (ch_idx, ch) in enumerate(state.selected_channels)
+    
+    # Filter channels based on bad channels checkbox
+    channels_to_plot = if state.show_bad_channels_only[]
+        # Only show channels that are bad in this specific epoch
+        bad_channels_for_epoch = _get_bad_channels_for_epoch(state.artifact_info, epoch_idx)
+        intersect(state.selected_channels, bad_channels_for_epoch)
+    else
+        # Show all selected channels
+        state.selected_channels
+    end
+    
+    for (ch_idx, ch) in enumerate(channels_to_plot)
         color = colors[mod1(ch_idx, length(colors))]
         lines!(ax, t, epoch[!, ch], color = color, linewidth = 1)
     end
@@ -332,6 +371,32 @@ function _validate_rejection_gui_inputs(dat::EpochData, grid_size::Tuple{Int,Int
     if grid_size[1] * grid_size[2] <= 1
         @minimal_error_throw("grid_size must be positive, got $grid_size")
     end
+end
+
+
+#=============================================================================
+    HELPER FUNCTIONS
+=============================================================================#
+
+"""
+    _get_bad_channels_for_epoch(artifact_info::Union{Nothing,EpochRejectionInfo}, epoch_idx::Int)::Vector{Symbol}
+
+Get the list of bad channels for a specific epoch from artifact detection info.
+"""
+function _get_bad_channels_for_epoch(artifact_info::Union{Nothing,EpochRejectionInfo}, epoch_idx::Int)::Vector{Symbol}
+    if isnothing(artifact_info)
+        return Symbol[]
+    end
+    
+    # Filter rejections for this specific epoch
+    bad_channels = Symbol[]
+    for rejection in artifact_info.rejected_epochs
+        if rejection.epoch == epoch_idx
+            push!(bad_channels, rejection.label)
+        end
+    end
+    
+    return unique(bad_channels)
 end
 
 
