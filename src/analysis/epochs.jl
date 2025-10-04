@@ -711,7 +711,7 @@ using eegfun, JLD2
 epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Detect bad epochs
-info = detect_bad_epochs(epochs, 2.0)
+info = detect_bad_epochs(epochs, z_criterion = 2.0)
 
 # Remove the bad epochs
 reject_epochs!(epochs, info)
@@ -753,7 +753,7 @@ Non-mutating version. Returns new `EpochData` with rejected epochs removed.
 # Examples
 ```julia
 # Detect bad epochs
-info = detect_bad_epochs(epochs, 2.0)
+info = detect_bad_epochs(epochs, z_criterion = 2.0)
 
 # Get cleaned copy (original preserved)
 cleaned_epochs = reject_epochs(epochs, info)

@@ -433,9 +433,7 @@ struct EpochRejectionInfo
     z_kurtosis::Vector{Rejection}
     absolute_threshold::Vector{Rejection}
     z_criterion::Float64
-    abs_criterion::Union{Float64,Nothing}
-    channel_metrics::Dict{Symbol,Dict{Symbol,Float64}}
-    channel_rejections::Dict{Symbol,Int}
+    abs_criterion::Float64
 end
 
 #=============================================================================
@@ -443,26 +441,31 @@ end
 =============================================================================#
 
 """
-    reject_epochs_automatic!(dat::EpochData, z_criterion::Real;
-                             channel_selection::Function = channels())::EpochRejectionInfo
+    detect_bad_epochs(dat::EpochData; z_criterion::Real = 3,
+                     abs_criterion::Real = 100,
+                     channel_selection::Function = channels())::EpochRejectionInfo
 
-Automatically reject epochs based on statistical criteria using z-score threshold.
+Detect bad epochs using statistical criteria and/or absolute voltage thresholds.
 
-This function calculates six statistical measures for each epoch (variance, max, min,
-absolute max, range, kurtosis) across selected channels. For each measure, the maximum
-across channels is taken for each epoch, then z-scored across epochs. Epochs exceeding
-the z-criterion for any measure are rejected.
+This function can use two types of criteria for epoch rejection:
+1. **Z-score criteria**: Calculates six statistical measures for each epoch (variance, max, min,
+   absolute max, range, kurtosis) across selected channels. For each measure, the maximum
+   across channels is taken for each epoch, then z-scored across epochs. Epochs exceeding
+   the z-criterion for any measure are rejected.
+2. **Absolute voltage criteria**: Epochs with any channel exceeding the absolute voltage
+   threshold (in μV) are rejected.
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data to process
-- `z_criterion::Real`: Z-score threshold for rejection (typically 2.0 or 3.0)
+- `z_criterion::Real`: Z-score threshold for rejection (default: 3.0). Set to 0 to disable z-score based rejection.
+- `abs_criterion::Real`: Absolute voltage threshold in μV for rejection (default: 100.0). Set to 0 to disable absolute threshold rejection.
 - `channel_selection::Function`: Channel predicate for selecting channels to analyze (default: all channels)
 
 # Returns
 - `EpochRejectionInfo`: Information about which epochs were rejected and why
 
-# Effects
-- Modifies the input data in-place by removing rejected epochs
+# Requirements
+- At least one of `z_criterion` or `abs_criterion` must be greater than 0
 
 # Examples
 ```julia
@@ -471,34 +474,56 @@ using eegfun, JLD2
 # Load epoched data
 epochs = load("participant_1_epochs.jld2", "epochs")
 
-# Reject epochs with z-score > 2.0
-rejection_info = reject_epochs_automatic!(epochs, 2.0)
+# Use default criteria (z_criterion=3.0, abs_criterion=100.0)
+rejection_info = detect_bad_epochs(epochs)
+
+# Customize z-score criterion only
+rejection_info = detect_bad_epochs(epochs, z_criterion = 2.0)
+
+# Customize absolute voltage threshold only
+rejection_info = detect_bad_epochs(epochs, abs_criterion = 80.0)  # 80 μV
+
+# Use both criteria with custom values
+rejection_info = detect_bad_epochs(epochs, z_criterion = 2.5, abs_criterion = 80.0)
+
+# Disable z-score rejection (use only absolute threshold)
+rejection_info = detect_bad_epochs(epochs, z_criterion = 0, abs_criterion = 100.0)
+
+# Disable absolute threshold rejection (use only z-score)
+rejection_info = detect_bad_epochs(epochs, z_criterion = 3.0, abs_criterion = 0)
 
 # Check results
 println("Original epochs: \$(rejection_info.n_epochs)")
-println("Remaining epochs: \$(rejection_info.n_artifacts)")
+println("Rejected epochs: \$(rejection_info.n_artifacts)")
 println("Rejected epochs: \$(rejection_info.rejected_epochs)")
-
-# Save cleaned data
-save("participant_1_epochs_cleaned.jld2", "epochs", epochs)
 ```
 
 # Notes
+- Default z-criterion: 3.0 (conservative, good for most applications)
+- Default abs-criterion: 100 μV (reasonable for most EEG systems)
 - Common z-criteria: 2.0 (more aggressive), 2.5, 3.0 (more conservative)
+- Common absolute criteria: 50-100 μV (depends on amplifier and task)
+- Set either criterion to 0 to disable that type of rejection
 - Rejection is based on ANY metric exceeding the criterion
 - Uses maximum across channels to identify global artifacts
-- All six metrics are calculated independently and combined with OR logic
+- All metrics are calculated independently and combined with OR logic
 """
 function detect_bad_epochs(
-    dat::EpochData,
-    z_criterion::Real;
-    abs_criterion::Union{Real,Nothing} = nothing,
+    dat::EpochData;
+    z_criterion::Real = 3,
+    abs_criterion::Real = 100,
     channel_selection::Function = channels(),
 )::EpochRejectionInfo
+
     # Validate inputs
-    z_criterion <= 0 && @minimal_error_throw("Z-criterion must be positive, got $z_criterion")
-    if abs_criterion !== nothing && abs_criterion <= 0
-        @minimal_error_throw("Absolute criterion must be positive, got $abs_criterion")
+    if z_criterion < 0
+        @minimal_error_throw("Z-criterion must be non-negative, got $z_criterion")
+    end
+    if abs_criterion < 0
+        @minimal_error_throw("Absolute criterion must be non-negative, got $abs_criterion")
+    end
+    if z_criterion == 0 && abs_criterion == 0
+        @minimal_error_throw("At least one criterion (z_criterion or abs_criterion) must be greater than 0")
     end
 
     # Get selected channels
@@ -507,27 +532,35 @@ function detect_bad_epochs(
     isempty(selected_channels) && @minimal_error_throw("No channels selected for epoch rejection")
 
     # Calculate metrics and identify rejected epochs
+    # Note: 0 means the criterion is disabled
     metrics = _calculate_epoch_metrics(
         dat,
         selected_channels,
         Float64(z_criterion),
-        abs_criterion !== nothing ? Float64(abs_criterion) : nothing,
+        Float64(abs_criterion),
     )
 
     # Combine all rejected epochs
-    rejected_epochs = sort(
-        unique(
-            vcat(
-                values(metrics[:z_variance])...,
-                values(metrics[:z_max])...,
-                values(metrics[:z_min])...,
-                values(metrics[:z_abs])...,
-                values(metrics[:z_range])...,
-                values(metrics[:z_kurtosis])...,
-                values(metrics[:absolute_threshold])...,
-            ),
-        ),
-    )
+    rejected_epochs_vectors = []
+    
+    # Add z-score based rejections only if z_criterion > 0
+    if z_criterion > 0
+        append!(rejected_epochs_vectors, [
+            values(metrics[:z_variance])...,
+            values(metrics[:z_max])...,
+            values(metrics[:z_min])...,
+            values(metrics[:z_abs])...,
+            values(metrics[:z_range])...,
+            values(metrics[:z_kurtosis])...,
+        ])
+    end
+    
+    # Add absolute threshold rejections if abs_criterion > 0
+    if abs_criterion > 0
+        append!(rejected_epochs_vectors, [values(metrics[:absolute_threshold])...])
+    end
+    
+    rejected_epochs = sort(unique(vcat(rejected_epochs_vectors...)))
 
     # Create Rejection structs for each rejection
     rejected_epochs_info = Rejection[]
@@ -581,7 +614,7 @@ function detect_bad_epochs(
     # Create rejection info
     rejection_info = EpochRejectionInfo(
         length(dat.data),  # n_epochs
-        length(rejected_epochs),
+        length(rejected_epochs_info),
         unique_rejections(rejected_epochs_info),
         z_variance,
         z_max,
@@ -590,10 +623,8 @@ function detect_bad_epochs(
         z_range,
         z_kurtosis,
         absolute_threshold,
-        Float64(z_criterion),
-        abs_criterion !== nothing ? Float64(abs_criterion) : nothing,
-        Dict{Symbol,Dict{Symbol,Float64}}(),  # channel_metrics (optional)
-        Dict{Symbol,Int}(),  # channel_rejections (optional)
+        Float64(z_criterion),  # Store the actual value (0 means disabled)
+        Float64(abs_criterion),  # Store the actual value (0 means disabled)
     )
 
     return rejection_info
@@ -645,7 +676,7 @@ function _calculate_epoch_metrics(
     dat::EpochData,
     selected_channels::Vector{Symbol},
     z_criterion::Float64,
-    abs_criterion::Union{Float64,Nothing},
+    abs_criterion::Float64,
 )::Dict{Symbol,Dict{Symbol,Vector{Int}}}
     # Initialize metrics dictionary
     metrics = Dict{Symbol,Dict{Symbol,Vector{Int}}}()
@@ -677,17 +708,19 @@ function _calculate_epoch_metrics(
         ranges = max_values .- min_values
         kurtoses = kurtosis.(channel_data_all)
 
-        # Calculate z-scores and identify exceeding epochs
-        z_scores = zscore.([variances, max_values, min_values, abs_values, ranges, kurtoses])
-        metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis]
+        # Calculate z-scores and identify exceeding epochs (only if z_criterion > 0)
+        if z_criterion > 0
+            z_scores = zscore.([variances, max_values, min_values, abs_values, ranges, kurtoses])
+            metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis]
 
-        for (z_score, metric_key) in zip(z_scores, metric_keys)
-            exceeding_epochs = findall(abs.(z_score) .> z_criterion)
-            append!(metrics[metric_key][ch], exceeding_epochs)
+            for (z_score, metric_key) in zip(z_scores, metric_keys)
+                exceeding_epochs = findall(abs.(z_score) .> z_criterion)
+                append!(metrics[metric_key][ch], exceeding_epochs)
+            end
         end
 
-        # Check absolute threshold
-        if abs_criterion !== nothing
+        # Check absolute threshold (only if abs_criterion > 0)
+        if abs_criterion > 0
             abs_threshold_violations = findall(epoch -> any(abs.(epoch[!, ch]) .> abs_criterion), dat.data)
             append!(metrics[:absolute_threshold][ch], abs_threshold_violations)
         end
@@ -712,8 +745,10 @@ Display rejection information in a human-readable format.
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo:")
     println(io, "  Z-criterion: $(info.z_criterion)")
-    if info.abs_criterion !== nothing
+    if info.abs_criterion > 0
         println(io, "  Abs criterion: $(info.abs_criterion) μV")
+    else
+        println(io, "  Abs criterion: disabled (0)")
     end
     println(io, "  Number epochs: $(info.n_epochs)")
     println(io, "  Number artifacts: $(info.n_artifacts)")

@@ -1181,7 +1181,7 @@ end
         original_n_epochs = length(epoch_data.data)
 
         # Apply detection and rejection
-        rejection_info = eegfun.detect_bad_epochs(epoch_data, 2.0)
+        rejection_info = eegfun.detect_bad_epochs(epoch_data, z_criterion = 2.0)
         clean_data = eegfun.reject_epochs(epoch_data, rejection_info)
 
         # Check that original data is unchanged
@@ -1198,7 +1198,7 @@ end
         original_n_epochs = length(epoch_data.data)
 
         # Apply detection and rejection in-place
-        rejection_info = eegfun.detect_bad_epochs(epoch_data, 2.0)
+        rejection_info = eegfun.detect_bad_epochs(epoch_data, z_criterion = 2.0)
         eegfun.reject_epochs!(epoch_data, rejection_info)
 
         # Check that data was modified
@@ -1210,8 +1210,8 @@ end
         epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
 
         # Test different criteria
-        rejection_info_aggressive = eegfun.detect_bad_epochs(epoch_data, 1.5)
-        rejection_info_conservative = eegfun.detect_bad_epochs(epoch_data, 3.0)
+        rejection_info_aggressive = eegfun.detect_bad_epochs(epoch_data, z_criterion = 1.5)
+        rejection_info_conservative = eegfun.detect_bad_epochs(epoch_data, z_criterion = 3.0)
 
         # More aggressive should reject more epochs
         @test length(rejection_info_aggressive.rejected_epochs) >= length(rejection_info_conservative.rejected_epochs)
@@ -1219,7 +1219,7 @@ end
 
     @testset "EpochRejectionInfo structure" begin
         epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
-        rejection_info = eegfun.detect_bad_epochs(epoch_data, 2.0)
+        rejection_info = eegfun.detect_bad_epochs(epoch_data, z_criterion = 2.0)
 
         # Check structure
         @test rejection_info isa eegfun.EpochRejectionInfo
@@ -1238,11 +1238,11 @@ end
             1000,
             eegfun.AnalysisInfo(),
         )
-        @test_throws Exception eegfun.detect_bad_epochs(empty_epochs, 2.0)
+        @test_throws Exception eegfun.detect_bad_epochs(empty_epochs, z_criterion = 2.0)
 
         # Test with invalid z-criterion
         epoch_data, _ = create_test_epochs_with_artifacts(5, 50, 2)
-        @test_throws Exception eegfun.detect_bad_epochs(epoch_data, -1.0)
-        @test_throws Exception eegfun.detect_bad_epochs(epoch_data, 0.0)
+        @test_throws Exception eegfun.detect_bad_epochs(epoch_data, z_criterion = -1.0)
+        @test_throws Exception eegfun.detect_bad_epochs(epoch_data, z_criterion = 0.0)
     end
 end
