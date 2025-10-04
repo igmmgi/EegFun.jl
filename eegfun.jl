@@ -980,6 +980,19 @@ dat = eegfun.read_bdf("../Flank_C_3.bdf");
 layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 dat = eegfun.create_eeg_dataframe(dat, layout);
 eegfun.filter_data!(dat, "hp", 1)
+epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+epochs = eegfun.EpochData[]
+for (idx, epoch) in enumerate(epoch_cfg)
+    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+end
+bad_epochs = eegfun.detect_bad_epochs(epochs[1], 3.0; abs_criterion = 200)
+
+test = eegfun.reject_epochs_interactive(epochs[1], artifact_info = bad_epochs, grid_size = (6, 5))
+
+
+
+
+
 
 # test resample
 dat_resampled = eegfun.resample(dat, 2)
