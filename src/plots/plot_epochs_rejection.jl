@@ -18,7 +18,7 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Plot styling
     :spine_width => (2, "Width of axis spines"),
-    :theme_fontsize => (24, "Font size for theme"),
+    :theme_fontsize => (20, "Font size for theme"),
 
     # Line styling
     :linewidth => (1, "Line width for epoch traces"),
@@ -331,11 +331,15 @@ function _create_rejection_interface!(
         end
     end
 
-    # Bad channels filter checkbox
-    if !isnothing(artifact_info) && !isempty(artifact_info.rejected_epochs)
-        bad_channels_toggle = Toggle(nav_gl[1, 3])
-        bad_channels_label = Label(nav_gl[1, 4], "Show bad channels only")
-        on(bad_channels_toggle.active) do active
+    # Bad channels filter checkbox (always create to maintain layout)
+    bad_channels_toggle = Toggle(nav_gl[1, 3])
+    bad_channels_label = Label(nav_gl[1, 4], "Show bad channels only")
+    
+    on(bad_channels_toggle.active) do active
+        # Only show info message when trying to turn ON without artifact_info
+        if active && (isnothing(artifact_info) || isempty(artifact_info.rejected_epochs))
+            @info "Bad channel filtering requires artifact_info with rejected epochs"
+        else # Normal operation: update state and display
             state.show_bad_channels_only[] = active
             _update_epoch_display!(state, artifact_info, plot_kwargs)
         end
@@ -395,8 +399,13 @@ function _update_epoch_display!(
                 ax.limits = (ax.limits[][1], nothing)
             end
             if i <= length(state.checkboxes)
-                state.checkboxes[i].active[] =
-                    state.rejected[epoch_idx] || epoch_idx ∈ unique_epochs(artifact_info.rejected_epochs)
+                # Check if epoch is already rejected by user or by automatic detection
+                auto_rejected = if isnothing(artifact_info)
+                    false
+                else
+                    epoch_idx ∈ unique_epochs(artifact_info.rejected_epochs)
+                end
+                state.checkboxes[i].active[] = state.rejected[epoch_idx] || auto_rejected
             end
         else
             ax.title = ""
