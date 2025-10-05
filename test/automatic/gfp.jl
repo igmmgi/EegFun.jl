@@ -7,44 +7,12 @@ using DataFrames
 using Statistics
 using GLMakie
 
-# Helper function to create test ERP data
-function create_test_gfp_erp_data(n_timepoints::Int = 100, n_channels::Int = 5)
-    # Create time vector
-    time = collect(range(-0.2, 0.8, length = n_timepoints))
-
-    # Create channel data with known patterns
-    df = DataFrame()
-    df.time = time
-    df.condition = fill(1, n_timepoints)
-    df.condition_name = fill("test_condition", n_timepoints)
-
-    # Add EEG channels with sinusoidal patterns
-    # Use different phases to create varying GFP
-    for i = 1:n_channels
-        ch_name = Symbol("Ch$i")
-        # Create signal with phase offset for each channel
-        signal = sin.(2π * 2.0 * time .+ (i - 1) * π / n_channels) .* 10.0
-        df[!, ch_name] = signal
-    end
-
-    # Create layout
-    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
-    layout = eegfun.Layout(
-        DataFrame(
-            label = channel_labels,
-            inc = zeros(n_channels),
-            azi = collect(range(0, 2π, length = n_channels + 1))[1:n_channels],
-        ),
-        nothing,
-        nothing,
-    )
-
-    return eegfun.ErpData(df, layout, 250.0, eegfun.AnalysisInfo(), 10)
-end
+# Use generic create_test_erp_data from test_utils.jl
+# create_test_erp_data(participant, condition, n_timepoints, n_channels)
 
 @testset "Global Field Power (GFP)" begin
     @testset "Basic GFP calculation" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate GFP
         gfp_result = eegfun.gfp(erp_data)
@@ -67,7 +35,7 @@ end
     end
 
     @testset "GFP normalization" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate normalized GFP
         gfp_result = eegfun.gfp(erp_data, normalize = true)
@@ -81,7 +49,7 @@ end
     end
 
     @testset "GFP with channel selection" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate GFP with subset of channels
         gfp_result = eegfun.gfp(erp_data, channel_selection = eegfun.channels([:Ch1, :Ch2, :Ch3]))
@@ -95,7 +63,7 @@ end
     end
 
     @testset "GFP for multiple datasets" begin
-        erps = [create_test_gfp_erp_data(100, 5) for _ = 1:3]
+        erps = [create_test_erp_data(1, 1, 100, 5) for _ = 1:3]
 
         # Calculate GFP for all
         gfp_results = eegfun.gfp(erps)
@@ -110,7 +78,7 @@ end
     end
 
     @testset "GFP error handling" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Should error with no channels selected
         @test_throws Exception eegfun.gfp(erp_data, channel_selection = eegfun.channels([]))
@@ -146,7 +114,7 @@ end
 
 @testset "Global Dissimilarity" begin
     @testset "Basic dissimilarity calculation" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate dissimilarity
         gd_result = eegfun.global_dissimilarity(erp_data)
@@ -164,7 +132,7 @@ end
     end
 
     @testset "Dissimilarity normalization" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate normalized dissimilarity
         gd_result = eegfun.global_dissimilarity(erp_data, normalize = true)
@@ -176,7 +144,7 @@ end
     end
 
     @testset "Dissimilarity for multiple datasets" begin
-        erps = [create_test_gfp_erp_data(100, 5) for _ = 1:3]
+        erps = [create_test_erp_data(1, 1, 100, 5) for _ = 1:3]
 
         # Calculate dissimilarity for all
         gd_results = eegfun.global_dissimilarity(erps)
@@ -193,7 +161,7 @@ end
 
 @testset "GFP and Dissimilarity combined" begin
     @testset "Basic combined calculation" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate both
         result = eegfun.gfp_and_dissimilarity(erp_data)
@@ -207,7 +175,7 @@ end
     end
 
     @testset "Combined calculation with normalization" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate both with normalization
         result = eegfun.gfp_and_dissimilarity(erp_data, normalize = true)
@@ -218,7 +186,7 @@ end
     end
 
     @testset "Combined vs separate calculations" begin
-        erp_data = create_test_gfp_erp_data(100, 5)
+        erp_data = create_test_erp_data(1, 1, 100, 5)
 
         # Calculate combined
         combined = eegfun.gfp_and_dissimilarity(erp_data, normalize = true)
@@ -233,7 +201,7 @@ end
     end
 
     @testset "Combined for multiple datasets" begin
-        erps = [create_test_gfp_erp_data(100, 5) for _ = 1:3]
+        erps = [create_test_erp_data(1, 1, 100, 5) for _ = 1:3]
 
         # Calculate for all
         results = eegfun.gfp_and_dissimilarity(erps)
@@ -250,7 +218,7 @@ end
 
 @testset "Plot GFP" begin
     @testset "Basic plot creation" begin
-        erp_data = create_test_gfp_erp_data(50, 5)
+        erp_data = create_test_erp_data(1, 1, 50, 5)
 
         # Create plot (without displaying)
         fig = eegfun.plot_gfp(erp_data, display_plot = false)
@@ -259,7 +227,7 @@ end
     end
 
     @testset "Plot with ERP traces" begin
-        erp_data = create_test_gfp_erp_data(50, 5)
+        erp_data = create_test_erp_data(1, 1, 50, 5)
 
         fig = eegfun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true)
 
@@ -267,7 +235,7 @@ end
     end
 
     @testset "Plot with dissimilarity" begin
-        erp_data = create_test_gfp_erp_data(50, 5)
+        erp_data = create_test_erp_data(1, 1, 50, 5)
 
         fig = eegfun.plot_gfp(erp_data, display_plot = false, show_dissimilarity = true)
 
@@ -275,7 +243,7 @@ end
     end
 
     @testset "Plot all panels" begin
-        erp_data = create_test_gfp_erp_data(50, 5)
+        erp_data = create_test_erp_data(1, 1, 50, 5)
 
         fig = eegfun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true, show_dissimilarity = true)
 
@@ -283,7 +251,7 @@ end
     end
 
     @testset "Plot multiple datasets" begin
-        erps = [create_test_gfp_erp_data(50, 5) for _ = 1:3]
+        erps = [create_test_erp_data(1, 1, 50, 5) for _ = 1:3]
 
         fig = eegfun.plot_gfp(erps, display_plot = false)
 
@@ -291,7 +259,7 @@ end
     end
 
     @testset "Plot from pre-computed GFP" begin
-        erp_data = create_test_gfp_erp_data(50, 5)
+        erp_data = create_test_erp_data(1, 1, 50, 5)
         gfp_result = eegfun.gfp(erp_data, normalize = true)
 
         fig = eegfun.plot_gfp(gfp_result, display_plot = false)
@@ -300,7 +268,7 @@ end
     end
 
     @testset "Plot from pre-computed GFP with dissimilarity" begin
-        erp_data = create_test_gfp_erp_data(50, 5)
+        erp_data = create_test_erp_data(1, 1, 50, 5)
         result = eegfun.gfp_and_dissimilarity(erp_data, normalize = true)
 
         fig = eegfun.plot_gfp(result, display_plot = false, show_dissimilarity = true)
@@ -309,7 +277,7 @@ end
     end
 
     @testset "Plot multiple pre-computed GFP" begin
-        erps = [create_test_gfp_erp_data(50, 5) for _ = 1:3]
+        erps = [create_test_erp_data(1, 1, 50, 5) for _ = 1:3]
         gfp_results = eegfun.gfp.(erps, normalize = true)
 
         fig = eegfun.plot_gfp(gfp_results, display_plot = false)
@@ -318,7 +286,7 @@ end
     end
 
     @testset "Plot with custom styling" begin
-        erp_data = create_test_gfp_erp_data(50, 5)
+        erp_data = create_test_erp_data(1, 1, 50, 5)
 
         fig = eegfun.plot_gfp(
             erp_data,

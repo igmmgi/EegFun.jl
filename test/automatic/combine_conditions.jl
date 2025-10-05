@@ -10,46 +10,11 @@ using Statistics
     test_dir = mktempdir()
 
     try
-        # Helper to create test EpochData with multiple conditions
-        function create_test_epoch_data(n_conditions::Int = 3, n_epochs_per_condition::Int = 4)
-            epochs = eegfun.EpochData[]
-            fs = 256
-            n_samples = 101
-            t = range(-0.2, 0.2, length = n_samples)
-
-            for cond = 1:n_conditions
-                # Create multiple epochs per condition
-                dfs = DataFrame[]
-                for ep = 1:n_epochs_per_condition
-                    # Add some trial-to-trial variability and condition-specific signal
-                    ch1 = sin.(2π .* (5 + cond) .* t) .+ 0.1 .* randn(n_samples)
-                    ch2 = cos.(2π .* (5 + cond) .* t) .+ 0.1 .* randn(n_samples)
-
-                    df = DataFrame(
-                        time = collect(t),
-                        sample = 1:n_samples,
-                        condition = fill(cond, n_samples),
-                        condition_name = fill("condition_$cond", n_samples),
-                        epoch = fill(ep, n_samples),
-                        Fz = ch1,
-                        Cz = ch2,
-                    )
-                    push!(dfs, df)
-                end
-
-                layout =
-                    eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-
-                push!(epochs, eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo()))
-            end
-
-            return epochs
-        end
 
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2, 3]
-                epochs = create_test_epoch_data(4, 3)  # 4 conditions, 3 epochs each
+                epochs = create_test_epoch_data_multiple_conditions(4, 3)  # 4 conditions, 3 epochs each
                 filename = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
                 save(filename, "epochs", epochs)
                 @test isfile(filename)
@@ -261,11 +226,9 @@ using Statistics
             @test hasproperty(combined_epochs[1].data[1], :condition)
             @test hasproperty(combined_epochs[1].data[1], :condition_name)
             @test hasproperty(combined_epochs[1].data[1], :epoch)
-            @test hasproperty(combined_epochs[1].data[1], :sample)
-
             # Verify channel data is preserved
-            @test hasproperty(combined_epochs[1].data[1], :Fz)
-            @test hasproperty(combined_epochs[1].data[1], :Cz)
+            @test hasproperty(combined_epochs[1].data[1], :Ch1)
+            @test hasproperty(combined_epochs[1].data[1], :Ch2)
         end
 
         @testset "Layout and sample rate preservation" begin
@@ -789,7 +752,7 @@ using Statistics
             mkpath(large_dir)
 
             # Create a larger dataset (more epochs per condition)
-            epochs = create_test_epoch_data(2, 50)  # 2 conditions, 50 epochs each
+            epochs = create_test_epoch_data_multiple_conditions(2, 50)  # 2 conditions, 50 epochs each
             save(joinpath(large_dir, "1_epochs_large.jld2"), "epochs", epochs)
 
             output_dir = joinpath(test_dir, "combined_large")

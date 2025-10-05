@@ -6,45 +6,6 @@ using Test
 using JLD2
 using DataFrames
 
-# Helper function to create test ERP data
-function create_test_erp_data(participant::Int, condition::Int, n_timepoints::Int = 100, n_channels::Int = 3)
-    # Create time vector
-    time = collect(range(-0.2, 0.8, length = n_timepoints))
-
-    # Create channel data with some condition-specific patterns
-    channel_data = Dict{Symbol,Any}()
-    channel_data[:time] = time
-
-    # Add metadata columns
-    channel_data[:condition] = fill(condition, n_timepoints)
-    channel_data[:condition_name] = fill("condition_$condition", n_timepoints)
-    channel_data[:participant] = fill(participant, n_timepoints)
-
-    # Add EEG channels with condition-specific patterns
-    for (i, ch) in enumerate([:Fz, :Cz, :Pz][1:min(n_channels, 3)])
-        # Create some signal with condition-specific amplitude
-        signal = sin.(2π * 0.1 * time) .* (condition * 0.5) .+ randn(n_timepoints) * 0.1
-        channel_data[ch] = signal
-    end
-
-    # Create DataFrame with columns in correct order
-    df = DataFrame()
-    df.time = channel_data[:time]
-    df.condition = channel_data[:condition]
-    df.condition_name = channel_data[:condition_name]
-    df.participant = channel_data[:participant]
-    for ch in [:Fz, :Cz, :Pz][1:min(n_channels, 3)]
-        df[!, ch] = channel_data[ch]
-    end
-
-    # Create ErpData
-    layout = eegfun.Layout(
-        DataFrame(label = [:Fz, :Cz, :Pz][1:min(n_channels, 3)], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
-        nothing,
-        nothing,
-    )
-    return eegfun.ErpData(df, layout, 250.0, eegfun.AnalysisInfo(), 10)
-end
 
 @testset "Batch Utils" begin
     # Create temporary test directory

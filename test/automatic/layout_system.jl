@@ -4,39 +4,11 @@ using GLMakie
 using DataFrames
 
 # Test data setup
-function create_test_layout()
-    # Create a simple test layout with 4 channels
-    channels = [:Fp1, :Fp2, :F3, :F4]
-    positions = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+# Use generic create_test_layout from test_utils.jl
+# create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
 
-    # Create DataFrame with proper structure
-    layout_data = DataFrame(
-        :label => channels,
-        :x => [pos[1] for pos in positions],
-        :y => [pos[2] for pos in positions],
-        :x2 => [pos[1] for pos in positions],  # For compatibility
-        :y2 => [pos[2] for pos in positions],   # For compatibility
-    )
-
-    return eegfun.Layout(layout_data, nothing, nothing)
-end
-
-function create_test_erp_data()
-    # Create simple test ERP data
-    time = collect(0.0:0.001:0.5)
-    data = DataFrame(
-        :time => time,
-        :Fp1 => sin.(2π * 10 .* time),
-        :Fp2 => cos.(2π * 10 .* time),
-        :F3 => sin.(2π * 15 .* time),
-        :F4 => cos.(2π * 15 .* time),
-    )
-
-    # Create analysis info
-    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
-
-    return eegfun.ErpData(data, create_test_layout(), 1000, analysis_info, 100)
-end
+# Use generic create_test_erp_data from test_utils.jl
+# create_test_erp_data(participant, condition, n_timepoints, n_channels)
 
 @testset "Layout System Tests" begin
 
@@ -50,7 +22,7 @@ end
     end
 
     @testset "create_single_layout" begin
-        channels = [:Fp1, :Fp2, :F3]
+        channels = [:Ch1, :Ch2, :Ch3]
         layout = eegfun.create_single_layout(channels)
 
         @test layout.type == :single
@@ -61,7 +33,7 @@ end
     end
 
     @testset "create_grid_layout" begin
-        channels = [:Fp1, :Fp2, :F3, :F4]
+        channels = [:Ch1, :Ch2, :Ch3, :Ch4]
 
         # Test auto-calculated grid
         layout = eegfun.create_grid_layout(channels)
@@ -89,7 +61,7 @@ end
 
     @testset "create_topo_layout" begin
         test_layout = create_test_layout()
-        channels = [:Fp1, :Fp2]
+        channels = [:Ch1, :Ch2]
 
         layout = eegfun.create_topo_layout(test_layout, channels)
         @test layout.type == :topo
@@ -101,7 +73,7 @@ end
     end
 
     @testset "create_layout function" begin
-        channels = [:Fp1, :Fp2, :F3, :F4]
+        channels = [:Ch1, :Ch2, :Ch3, :Ch4]
         test_layout = create_test_layout()
 
         # Test symbol layouts
@@ -122,7 +94,7 @@ end
 
     @testset "apply_layout! function" begin
         fig = Figure()
-        channels = [:Fp1, :Fp2, :F3, :F4]
+        channels = [:Ch1, :Ch2, :Ch3, :Ch4]
 
         # Test single layout
         layout = eegfun.create_single_layout(channels)
@@ -191,20 +163,20 @@ end
         # Test _set_grid_axis_properties! for leftmost column (should keep label)
         ax1 = Axis(fig[1, 1])
         ax1.ylabel = "Test Label"  # Set a default label to test against
-        eegfun._set_grid_axis_properties!(ax1, layout, :Fp1, 1, 1, 2, 2)
-        @test ax1.title[] == "Fp1"  # Should set channel name as title
+        eegfun._set_grid_axis_properties!(ax1, layout, :Ch1, 1, 1, 2, 2)
+        @test ax1.title[] == "Ch1"  # Should set channel name as title
         @test ax1.ylabel[] != ""  # Should keep label (leftmost column)
 
         # Test _set_grid_axis_properties! for non-leftmost column (should hide label)
         ax2 = Axis(fig[1, 2])
-        eegfun._set_grid_axis_properties!(ax2, layout, :Fp1, 1, 2, 2, 2)
+        eegfun._set_grid_axis_properties!(ax2, layout, :Ch1, 1, 2, 2, 2)
         @test ax2.ylabel[] == ""  # Should hide label (not leftmost)
         @test ax2.yticklabelsvisible[] == false
     end
 
     @testset "Layout Axis Properties" begin
         fig = Figure()
-        channels = [:Fp1, :Fp2]
+        channels = [:Ch1, :Ch2]
         layout = eegfun.create_grid_layout(channels, rows = 1, cols = 2)
         axes, _ = eegfun.apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
 
@@ -213,8 +185,8 @@ end
         eegfun._apply_layout_axis_properties!(axes, layout; kwargs...)
 
         # Should set channel names as titles when user title is empty
-        @test axes[1].title[] == "Fp1"
-        @test axes[2].title[] == "Fp2"
+        @test axes[1].title[] == "Ch1"
+        @test axes[2].title[] == "Ch2"
 
         # Test with user title
         kwargs = Dict(:title => "User Title")
@@ -228,7 +200,7 @@ end
     @testset "Topographic Layout Properties" begin
         fig = Figure()
         test_layout = create_test_layout()
-        channels = [:Fp1, :Fp2]
+        channels = [:Ch1, :Ch2]
         layout = eegfun.create_topo_layout(test_layout, channels)
         axes, _ = eegfun.apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
 
@@ -237,8 +209,8 @@ end
         eegfun._apply_layout_axis_properties!(axes, layout; kwargs...)
 
         # Should set channel names as titles when user title is empty
-        @test axes[1].title[] == "Fp1"
-        @test axes[2].title[] == "Fp2"
+        @test axes[1].title[] == "Ch1"
+        @test axes[2].title[] == "Ch2"
 
     end
 
@@ -247,18 +219,18 @@ end
         @test_throws MethodError eegfun.create_grid_layout([], rows = 1, cols = 1)
 
         # Test single channel
-        layout = eegfun.create_grid_layout([:Fp1], rows = 1, cols = 1)
+        layout = eegfun.create_grid_layout([:Ch1], rows = 1, cols = 1)
         @test layout.rows == 1
         @test layout.cols == 1
 
         # Test prime number of channels
-        layout = eegfun.create_grid_layout([:Fp1, :Fp2, :F3, :F4, :F5])
+        layout = eegfun.create_grid_layout([:Ch1, :Ch2, :Ch3, :Ch4, :Ch5])
         @test layout.rows * layout.cols >= 5
     end
 
     @testset "Integration with plot_erp" begin
         # Test that the layout system works with actual plotting
-        erp_data = create_test_erp_data()
+        erp_data = create_test_erp_data(1, 1, 501, 4)
 
         # Test single layout
         fig, axes = eegfun.plot_erp(erp_data, layout = :single)

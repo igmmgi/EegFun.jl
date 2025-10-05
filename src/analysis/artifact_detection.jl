@@ -3,30 +3,61 @@
 # =============================================================================
 
 """
-    detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
+    detect_eog_onsets!(dat::ContinuousData, criterion::Float64, channel_in::Symbol, channel_out::Symbol)
 
-Detect EOG (eye movement) onsets in the data and mark them as extreme values.
+Detects EOG (electrooculogram) onsets in the EEG data based on a specified criterion.
 
 # Arguments
-- `dat::ContinuousData`: The continuous EEG data object
-- `criterion::Real`: Threshold criterion for EOG detection
-- `channel_in::Symbol`: Input channel symbol for EOG detection
-- `channel_out::Symbol`: Output channel symbol to mark detected EOG events
+- `dat::ContinuousData`: The ContinuousData object containing EEG data.
+- `criterion::Real`: The threshold for detecting EOG onsets.
+- `channel_in::Symbol`: The channel from which to detect EOG onsets.
+- `channel_out::Symbol`: The channel where the detected EOG onsets will be recorded as boolean values, indicating the presence of an EOG event.
 
-# Modifies
-- `dat`: Adds extreme value markers to the specified output channel
+# Returns
+Nothing. The function modifies the input data in place.
 
 # Examples
+
+## Basic Usage
 ```julia
-# Detect EOG onsets using HEOG channel
-detect_eog_onsets!(dat, 50.0, :HEOG, :is_eog_onset)
+# Detect vertical EOG onsets
+detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
+
+# Detect horizontal EOG onsets
+detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
+
+# Combine for any EOG artifact
+combine_boolean_columns!(dat, [:is_vEOG, :is_hEOG], :or, output_column = :is_any_EOG)
+
+# Create quality flags
+combine_boolean_columns!(dat, [:is_extreme_value, :is_any_EOG], :nor, output_column = :is_good_data)
+
+# Complex quality control (good samples = not extreme AND not any EOG)
+combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :nor, output_column = :is_clean_data)
+
+## Multiple EOG Channels
+```julia
+# Detect both vertical and horizontal EOG
+detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
+detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
+
+# Combine for any EOG artifact
+# dat.data[!, :is_any_EOG] = dat.data[!, :is_vEOG] .| dat.data[!, :is_hEOG]
 ```
 """
-function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol)
-    if !(channel_in in propertynames(dat.data))
-        @minimal_error_throw("Channel $channel_in not found in data")
+
+function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
+    @info "detect_eog_onsets!: Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion)"
+    if channel_in ∉ propertynames(dat.data)
+        @minimal_error_throw("channel $(channel_in) not found in data")
     end
-    dat.data[!, channel_out] = _is_extreme_value(dat.data[!, channel_in], Float64(criterion))
+    step_size = div(dat.sample_rate, 20)
+    eog_signal = dat.data[1:step_size:end, channel_in]
+    eog_diff = diff(eog_signal)
+    eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
+    eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] * step_size
+    dat.data[!, channel_out] .= false
+    dat.data[eog_idx, channel_out] .= true
     return nothing
 end
 
@@ -131,6 +162,9 @@ function is_extreme_value!(
     if mode ∉ [:separate, :combined]
         @minimal_error_throw("mode must be :separate or :combined, got :$mode")
     end
+    if threshold <= 0
+        @minimal_error_throw("threshold must be greater than 0, got :$threshold")
+    end
 
     if mode == :combined
         # Combined mode - use all channels (same as original behavior)
@@ -227,6 +261,15 @@ function is_extreme_value(
     sample_selection::Function = samples(),
     mode::Symbol = :combined,
 )
+
+    # Validate mode
+    if mode ∉ [:separate, :combined]
+        @minimal_error_throw("mode must be :separate or :combined, got :$mode")
+    end
+    if threshold <= 0
+        @minimal_error_throw("threshold must be greater than 0, got :$threshold")
+    end
+
 
     if mode == :combined
         # Combined mode - return boolean vector directly
@@ -516,14 +559,11 @@ function detect_bad_epochs(
 )::EpochRejectionInfo
 
     # Validate inputs
-    if z_criterion < 0
-        @minimal_error_throw("Z-criterion must be non-negative, got $z_criterion")
+    if z_criterion <= 0
+        @minimal_error_throw("Z-criterion must be positive, got $z_criterion")
     end
     if abs_criterion < 0
         @minimal_error_throw("Absolute criterion must be non-negative, got $abs_criterion")
-    end
-    if z_criterion == 0 && abs_criterion == 0
-        @minimal_error_throw("At least one criterion (z_criterion or abs_criterion) must be greater than 0")
     end
 
     # Get selected channels
@@ -532,7 +572,6 @@ function detect_bad_epochs(
     isempty(selected_channels) && @minimal_error_throw("No channels selected for epoch rejection")
 
     # Calculate metrics and identify rejected epochs
-    # Note: 0 means the criterion is disabled
     metrics = _calculate_epoch_metrics(
         dat,
         selected_channels,
@@ -543,18 +582,16 @@ function detect_bad_epochs(
     # Combine all rejected epochs
     rejected_epochs_vectors = []
     
-    # Add z-score based rejections only if z_criterion > 0
-    if z_criterion > 0
-        append!(rejected_epochs_vectors, [
-            values(metrics[:z_variance])...,
-            values(metrics[:z_max])...,
-            values(metrics[:z_min])...,
-            values(metrics[:z_abs])...,
-            values(metrics[:z_range])...,
-            values(metrics[:z_kurtosis])...,
-        ])
-    end
-    
+    # Add z-score based rejections (z_criterion is always > 0 now)
+    append!(rejected_epochs_vectors, [
+        values(metrics[:z_variance])...,
+        values(metrics[:z_max])...,
+        values(metrics[:z_min])...,
+        values(metrics[:z_abs])...,
+        values(metrics[:z_range])...,
+        values(metrics[:z_kurtosis])...,
+    ])
+
     # Add absolute threshold rejections if abs_criterion > 0
     if abs_criterion > 0
         append!(rejected_epochs_vectors, [values(metrics[:absolute_threshold])...])
@@ -592,7 +629,7 @@ function detect_bad_epochs(
     ]
 
     # Add absolute threshold if provided
-    if abs_criterion !== nothing
+    if abs_criterion > 0
         push!(metric_mappings, (:absolute_threshold, absolute_threshold, metric_sets[:absolute_threshold]))
     end
 

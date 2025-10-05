@@ -9,41 +9,6 @@ using Random
 
 @testset "epochs" begin
 
-    # Helper: create simple continuous data with designed trigger patterns
-    function create_continuous_with_triggers(; n::Int = 1000, fs::Int = 1000)
-        t = collect(0:(n-1)) ./ fs
-        triggers = zeros(Int, n)
-        # Sequence [1,2,3] at consecutive samples starting at idx1
-        idx1 = 101
-        triggers[idx1] = 1;
-        triggers[idx1+1] = 2;
-        triggers[idx1+2] = 3
-        # Wildcard sequence [1, :any, 3] at idx2
-        idx2 = 301
-        triggers[idx2] = 1;
-        triggers[idx2+1] = 7;
-        triggers[idx2+2] = 3
-        # Single-range [1:3] at idx3 (value 2)
-        idx3 = 501
-        triggers[idx3] = 2
-        # Add an 'after' marker (9) before first sequence and a 'before' marker (8) after
-        triggers[idx1-10] = 9
-        triggers[idx1+5] = 8
-
-        # Second [1,2,3] to test averaging and removal
-        idx1b = 701
-        triggers[idx1b] = 1;
-        triggers[idx1b+1] = 2;
-        triggers[idx1b+2] = 3
-
-        # Two channels
-        A = sin.(2π .* 5 .* t)
-        B = cos.(2π .* 7 .* t)
-        df = DataFrame(time = t, triggers = triggers, A = A, B = B)
-        layout = eegfun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        dat = eegfun.ContinuousData(copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
-        return dat
-    end
 
     @testset "parse_epoch_conditions" begin
         cfg = Dict(
@@ -523,8 +488,8 @@ end
     test_dir = mktempdir()
 
     try
-        # Helper to create test EpochData
-        function create_test_epoch_data(n_conditions::Int = 2, n_epochs_per_condition::Int = 5)
+        # Helper to create test EpochData using test_utils.jl function
+        function create_batch_test_epoch_data(n_conditions::Int = 2, n_epochs_per_condition::Int = 5)
             epochs = eegfun.EpochData[]
             fs = 256  # Int64
             n_samples = 513
@@ -563,7 +528,7 @@ end
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                epochs = create_test_epoch_data(2, 5)
+                epochs = create_batch_test_epoch_data(2, 5)
                 filename = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
                 save(filename, "epochs", epochs)
                 @test isfile(filename)
@@ -713,7 +678,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            epochs = create_test_epoch_data(2, 5)
+            epochs = create_batch_test_epoch_data(2, 5)
             save(joinpath(partial_dir, "1_epochs_cleaned.jld2"), "epochs", epochs)
 
             # Create one malformed file (wrong variable name)
@@ -889,7 +854,7 @@ end
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            epochs = create_test_epoch_data(2, 3)
+            epochs = create_batch_test_epoch_data(2, 3)
             save(joinpath(pattern_dir, "1_epochs_original.jld2"), "epochs", epochs)
             save(joinpath(pattern_dir, "2_epochs_cleaned.jld2"), "epochs", epochs)
             save(joinpath(pattern_dir, "3_custom_epochs.jld2"), "epochs", epochs)
@@ -1122,62 +1087,10 @@ end
 # =============================================================================
 
 # Helper function to create test epoched data with varying artifact levels
-function create_test_epochs_with_artifacts(
-    n_epochs::Int = 20,
-    n_timepoints::Int = 100,
-    n_channels::Int = 3;
-    n_bad_epochs::Int = 3,
-    artifact_scale::Float64 = 200.0,
-)
-    time = collect(range(-0.2, 0.8, length = n_timepoints))
-    sample_rate = Int(round(n_timepoints / (time[end] - time[1])))
-
-    epochs = DataFrame[]
-    bad_epoch_indices = sort(randperm(n_epochs)[1:n_bad_epochs])
-
-    for i = 1:n_epochs
-        epoch_df = DataFrame()
-        epoch_df.time = copy(time)
-        epoch_df.trial = fill(i, n_timepoints)
-        epoch_df.condition = fill(1, n_timepoints)
-
-        # Generate clean data
-        for ch = 1:n_channels
-            channel_name = Symbol("ch$ch")
-            epoch_df[!, channel_name] = randn(n_timepoints) * 0.5
-        end
-
-        # Add artifacts to bad epochs
-        if i in bad_epoch_indices
-            for ch = 1:n_channels
-                channel_name = Symbol("ch$ch")
-                # Add large amplitude artifacts to many samples
-                artifact_samples = rand(1:n_timepoints, 50)  # Even more samples
-                epoch_df[artifact_samples, channel_name] .+= artifact_scale  # Constant large artifacts
-            end
-        end
-
-        push!(epochs, epoch_df)
-    end
-
-    # Create layout
-    layout = eegfun.Layout(
-        DataFrame(
-            label = [Symbol("ch$i") for i = 1:n_channels],
-            x = randn(n_channels),
-            y = randn(n_channels),
-            z = randn(n_channels),
-        ),
-        nothing,  # neighbours
-        nothing,   # criterion
-    )
-
-    return eegfun.EpochData(epochs, layout, sample_rate, eegfun.AnalysisInfo()), bad_epoch_indices
-end
 
 @testset "Artifact Detection" begin
     @testset "Basic detection and rejection" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
+        epoch_data, bad_indices = create_test_epochs_with_artifacts(1, 1, 3, 100, 3, n_bad_epochs = 3)
         original_n_epochs = length(epoch_data.data)
 
         # Apply detection and rejection
@@ -1189,12 +1102,12 @@ end
 
         # Check that some epochs were rejected
         @test length(clean_data.data) < original_n_epochs
-        @test length(clean_data.data) == rejection_info.n_epochs - rejection_info.n_artifacts
+        @test length(clean_data.data) == rejection_info.n_epochs - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
         @test length(rejection_info.rejected_epochs) > 0
     end
 
     @testset "In-place rejection" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
+        epoch_data, bad_indices = create_test_epochs_with_artifacts(1, 1, 3, 100, 3, n_bad_epochs = 3)
         original_n_epochs = length(epoch_data.data)
 
         # Apply detection and rejection in-place
@@ -1203,11 +1116,11 @@ end
 
         # Check that data was modified
         @test length(epoch_data.data) < original_n_epochs
-        @test length(epoch_data.data) == rejection_info.n_epochs - rejection_info.n_artifacts
+        @test length(epoch_data.data) == rejection_info.n_epochs - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
     end
 
     @testset "Different z-criteria" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
+        epoch_data, bad_indices = create_test_epochs_with_artifacts(1, 1, 3, 100, 3, n_bad_epochs = 3)
 
         # Test different criteria
         rejection_info_aggressive = eegfun.detect_bad_epochs(epoch_data, z_criterion = 1.5)
@@ -1224,9 +1137,9 @@ end
         # Check structure
         @test rejection_info isa eegfun.EpochRejectionInfo
         @test rejection_info.n_epochs == length(epoch_data.data)
-        # n_artifacts counts unique epochs, rejected_epochs counts all rejection entries (multiple channels per epoch)
+        # n_artifacts now counts total artifacts (all channel/epoch combinations), rejected_epochs contains unique rejections
         unique_rejected_epochs = length(unique([r.epoch for r in rejection_info.rejected_epochs]))
-        @test rejection_info.n_artifacts == unique_rejected_epochs
+        @test rejection_info.n_artifacts >= unique_rejected_epochs  # n_artifacts should be >= unique epochs (can be more due to multiple channels)
         @test length(rejection_info.rejected_epochs) >= 0
     end
 

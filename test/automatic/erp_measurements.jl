@@ -33,7 +33,7 @@ using CSV
 
         @test result isa DataFrame
         @test nrow(result) == 6  # 3 participants × 2 conditions
-        @test ncol(result) >= 5  # participant, condition, condition_name, Fz, Cz, Pz
+        @test ncol(result) >= 5  # participant, condition, condition_name, Ch1, Ch2, Ch3
 
         # Verify output file was created
         @test isdir(output_dir)
@@ -46,7 +46,7 @@ using CSV
         @test nrow(csv_data) == 6
         @test "participant" in names(csv_data)
         @test "condition" in names(csv_data)
-        @test "Fz" in names(csv_data)
+        @test "Ch1" in names(csv_data)
     end
 
     @testset "Different analysis types" begin
@@ -73,7 +73,7 @@ using CSV
             @test nrow(result) == 6
 
             # Verify measurements are reasonable
-            for ch in [:Fz, :Cz, :Pz]
+            for ch in [:Ch1, :Ch2, :Ch3]
                 if hasproperty(result, ch)
                     values = result[!, ch]
                     @test all(isfinite.(values))
@@ -173,15 +173,15 @@ using CSV
             (0.1, 0.2),
             "mean_amp",
             input_dir = test_dir,
-            channel_selection = eegfun.channels([:Fz, :Cz]),
+            channel_selection = eegfun.channels([:Ch1, :Ch2]),
             output_dir = output_dir,
         )
 
         @test result isa DataFrame
         @test nrow(result) == 6
-        @test "Fz" in names(result)
-        @test "Cz" in names(result)
-        @test "Pz" ∉ names(result)  # Pz should be excluded
+        @test "Ch1" in names(result)
+        @test "Ch2" in names(result)
+        @test "Ch3" ∉ names(result)  # Ch3 should be excluded
     end
 
     @testset "Baseline correction" begin
@@ -217,7 +217,7 @@ using CSV
         )
 
         # Values should be different due to baseline correction
-        for ch in [:Fz, :Cz, :Pz]
+        for ch in [:Ch1, :Ch2, :Ch3]
             if hasproperty(result, ch) && hasproperty(result_no_baseline, ch)
                 @test !all(result[!, ch] .== result_no_baseline[!, ch])
             end
@@ -363,7 +363,7 @@ using CSV
         @test all(result.condition .∈ [[1, 2]])
 
         # Verify measurements are finite
-        for ch in [:Fz, :Cz, :Pz]
+        for ch in [:Ch1, :Ch2, :Ch3]
             if hasproperty(result, ch)
                 @test all(isfinite.(result[!, ch]))
             end
@@ -371,7 +371,7 @@ using CSV
 
         # Verify column ordering (metadata first, then channels)
         metadata_cols = [:participant, :condition, :condition_name]
-        channel_cols = [:Fz, :Cz, :Pz]
+        channel_cols = [:Ch1, :Ch2, :Ch3]
 
         for (i, col) in enumerate(metadata_cols)
             if hasproperty(result, col)

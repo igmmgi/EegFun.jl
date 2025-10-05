@@ -894,21 +894,22 @@ plot_erp([erps[1], erps[2], erps[3]], [:PO7, :PO8], kwargs = Dict(:average_chann
 using eegfun
 using GLMakie
 dat = eegfun.read_bdf("../Flank_C_3.bdf");
-layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
+layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 dat = eegfun.create_eeg_dataframe(dat, layout);
+
 # preprocessing steps
 eegfun.rereference!(dat, :avg)
-eegfun.filter_data!(dat, "hp", "fir", 1, order = 1)
-eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
-eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
-eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
+eegfun.filter_data!(dat, "hp", 1)
+# eegfun.diff_channel!(dat, [:Fp1, :Fp2], [:IO1, :IO2], :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+# eegfun.diff_channel!(dat, :F9, :F10, :hEOG);                  # horizontal EOG = F9 - F10
+# eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+# eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 eegfun.is_extreme_value!(dat, 500);
 # mark trigger windows
 eegfun.mark_epoch_windows!(dat, [1, 3, 4, 5], [-1, 1.0]) # simple epoch marking with trigger 1 and 3
 # eegfun.plot_databrowser(dat) # epoch window within extra_channel menu
 # ICA "continuous" data
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value))
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_500))
 # eegfun.plot_databrowser(dat)
 
 
@@ -916,7 +917,7 @@ ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extre
 # fig, ax = eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 # plot ICA components
 
-eegfun.plot_ica_topoplot(ica_result, dat.layout)
+eegfun.plot_ica_topoplot(ica_result)
 
 # eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:10))
 # eegfun.plot_ica_topoplot(ica_result, dat.layout; use_global_scale = true)
@@ -973,20 +974,6 @@ fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_n
 
 
 
-# manual testing
-using eegfun
-using GLMakie
-dat = eegfun.read_bdf("../Flank_C_3.bdf");
-layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-dat = eegfun.create_eeg_dataframe(dat, layout);
-eegfun.filter_data!(dat, "hp", 1)
-epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = eegfun.EpochData[]
-for (idx, epoch) in enumerate(epoch_cfg)
-    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
-end
-bad_epochs = eegfun.detect_bad_epochs(epochs[1], z_criterion = 5.0, abs_criterion = 200)
-test = eegfun.reject_epochs_interactive(epochs[1], artifact_info = bad_epochs, dims = (6, 5), theme_fontsize = 22, colormap = :seaborn_colorblind)
 
 
 
@@ -1005,21 +992,6 @@ eegfun.plot_databrowser(dat)
 eegfun.plot_databrowser(dat_resampled)
 
 
-epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
-epochs = eegfun.EpochData[]
-for (idx, epoch) in enumerate(epoch_cfg)
-    push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
-end
-
-auto_reject = eegfun.detect_bad_epochs(epochs[1], z_criterion = 3.0, abs_criterion = 200)
-test = eegfun.reject_epochs_interactive(epochs[1], artifact_info = auto_reject, grid_size = (6, 5))
-
-
-test = eegfun.reject_epochs_interactive(epochs[1], artifact_info = auto_reject, grid_size = (6, 5), channel_selection = eegfun.channels([:Fp1, :Fp2]))
-
-
-auto_reject = eegfun.detect_bad_epochs(epochs[1], z_criterion = 1.0)
-test1 = eegfun.reject_epochs(epochs[1], test)
 
 
 
