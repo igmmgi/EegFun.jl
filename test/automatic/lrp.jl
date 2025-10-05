@@ -5,7 +5,6 @@ Test suite for src/analysis/lrp.jl
 using Test
 using DataFrames
 
-include("../test_utils.jl")
 
 # Use generic create_test_lrp_erp from test_utils.jl
 # create_test_lrp_erp(participant, condition, n_timepoints, signal_scale)
