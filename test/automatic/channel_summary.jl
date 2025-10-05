@@ -13,9 +13,7 @@ using CSV
             dat = create_test_data()
 
             # Test basic functionality
-            sample_indices = 1:50  # First half of data
-            channel_names = [:Ch1, :Ch2]
-            result = eegfun._channel_summary_impl(dat.data, collect(sample_indices), channel_names)
+            result = eegfun._channel_summary_impl(dat.data, collect(1:50), [:Ch1, :Ch2])
 
             @test result isa DataFrame
             @test nrow(result) == 2  # Two channels
@@ -34,29 +32,23 @@ using CSV
             @test all(result.range .≈ result.max .- result.min)
 
             # Test variance calculation
-            selected_data = dat.data[collect(sample_indices), channel_names]
+            selected_data = dat.data[collect(1:50), [:Ch1, :Ch2]]
             expected_var = var.(eachcol(selected_data))
             @test result.var ≈ expected_var
 
             # Test that channels are correctly identified
-            @test Set(result.channel) == Set(channel_names)
+            @test Set(result.channel) == Set([:Ch1, :Ch2])
         end
 
         @testset "_channel_summary_impl input validation" begin
             dat = create_test_data(n_channels = 4)
 
-            # Test empty samples
             @test_throws Exception eegfun._channel_summary_impl(dat.data, Int[], [:Ch1, :Ch2])
-
-            # Test empty channels
             @test_throws Exception eegfun._channel_summary_impl(dat.data, [1, 2, 3], Symbol[])
-
-            # Test invalid channel names
             @test_throws Exception eegfun._channel_summary_impl(dat.data, [1, 2, 3], [:NonExistent])
-
-            # Test invalid sample indices
             @test_throws Exception eegfun._channel_summary_impl(dat.data, [3000], [:Ch1])  # Out of bounds
             @test_throws Exception eegfun._channel_summary_impl(dat.data, [0], [:Ch1])     # Below bounds
+
         end
 
         @testset "_channel_summary_impl edge cases" begin
@@ -74,6 +66,7 @@ using CSV
             @test result.channel[1] == :Ch1
 
             # Test with constant signal (zero variance case)
+            dat.data[!, :Ch4] .= 1.0
             result = eegfun._channel_summary_impl(dat.data, collect(1:50), [:Ch4])  # Ch4 is constant
             @test result.var[1] ≈ 0.0
             @test result.zvar[1] == 0.0  # Should handle zero variance case
@@ -100,7 +93,7 @@ using CSV
             n_samples = nrow(dat.data)
             result_samples = eegfun.channel_summary(dat, sample_selection = x -> 1:nrow(x) .<= div(nrow(x), 2))
             @test result_samples isa DataFrame
-            @test nrow(result_samples) == 3
+            @test nrow(result_samples) == 4
 
             # Test include_meta and include_extra flags
             result_meta = eegfun.channel_summary(dat, include_meta = true)
@@ -122,7 +115,7 @@ using CSV
         end
 
         @testset "channel_summary MultiDataFrameEeg" begin
-            epoch_dat = create_epoch_test_data()
+            epoch_dat = create_test_epoch_data()
 
             # Test basic functionality
             result = eegfun.channel_summary(epoch_dat)
@@ -155,14 +148,14 @@ using CSV
 
         @testset "channel_summary MultiDataFrameEeg input validation" begin
             # Test empty epoch data
-            empty_layout =
-                eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
+            empty_layout = eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
             empty_epochs = eegfun.EpochData(DataFrame[], empty_layout, 100.0, eegfun.AnalysisInfo())
             @test_throws Exception eegfun.channel_summary(empty_epochs)
         end
 
         @testset "channel_summary statistical properties" begin
             dat = create_test_data(n_channels = 4)
+            dat.data[!, :Ch4] .= 1.0
             result = eegfun.channel_summary(dat)
 
             # Test that constant channel has zero variance
@@ -238,7 +231,7 @@ end # eegfun testset
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_test_erp_data_batch(2)
+                erps = create_batch_test_erp_data(2)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 save(filename, "erps", erps)
                 @test isfile(filename)
@@ -445,7 +438,7 @@ end # eegfun testset
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_test_erp_data_batch(2)
+            erps = create_batch_test_erp_data(2)
             save(joinpath(partial_dir, "1_erps_cleaned.jld2"), "erps", erps)
 
             # Create one malformed file (wrong variable name)
@@ -562,7 +555,7 @@ end # eegfun testset
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = create_test_erp_data_batch(2)
+            erps = create_batch_test_erp_data(2)
             save(joinpath(pattern_dir, "1_erps_original.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "2_erps_cleaned.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "3_custom_erps.jld2"), "erps", erps)

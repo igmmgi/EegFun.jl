@@ -230,7 +230,7 @@ using DataFrames
 
     @testset "Integration with plot_erp" begin
         # Test that the layout system works with actual plotting
-        erp_data = create_test_erp_data(1, 1, 501, 4)
+        erp_data = create_test_erp_data(1, 1)
 
         # Test single layout
         fig, axes = eegfun.plot_erp(erp_data, layout = :single)
@@ -238,15 +238,15 @@ using DataFrames
 
         # Test grid layout
         fig, axes = eegfun.plot_erp(erp_data, layout = :grid)
-        @test length(axes) == 4  # 4 channels
+        @test length(axes) == 3  # 4 channels
 
         # Test topo layout
         fig, axes = eegfun.plot_erp(erp_data, layout = :topo)
-        @test length(axes) == 4  # 4 channels
+        @test length(axes) == 3  # 4 channels
 
         # Test custom grid dimensions
         fig, axes = eegfun.plot_erp(erp_data, layout = [2, 2])
-        @test length(axes) == 4
+        @test length(axes) == 3
     end
 end
 
