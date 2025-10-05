@@ -4,37 +4,12 @@ using Statistics
 using GLMakie
 using eegfun
 
+
 @testset "plot_channel_summary" begin
 
-    # Helper function to create test data for plotting
-    function create_test_summary_data()
-        # Create a DataFrame with channel summary statistics
-        df = DataFrame(
-            channel = [:Fp1, :Fp2, :Cz, :Pz, :Oz],
-            min = [-2.1, -1.8, -0.5, -0.3, -0.2],
-            max = [2.3, 1.9, 0.8, 0.4, 0.3],
-            std = [1.2, 1.1, 0.4, 0.2, 0.15],
-            var = [1.44, 1.21, 0.16, 0.04, 0.0225],
-            range = [4.4, 3.7, 1.3, 0.7, 0.5],
-            zvar = [1.2, 0.8, -0.5, -1.1, -1.4],
-        )
-        return df
-    end
-
-    function create_test_summary_data_with_epochs()
-        # Create a DataFrame with epoch information for testing averaging
-        df = DataFrame(
-            channel = repeat([:Fp1, :Fp2, :Cz], 3),
-            epoch = repeat([1, 2, 3], 3),
-            min = [-2.1, -1.8, -0.5, -2.0, -1.7, -0.4, -2.2, -1.9, -0.6],
-            max = [2.3, 1.9, 0.8, 2.2, 1.8, 0.7, 2.4, 2.0, 0.9],
-            std = [1.2, 1.1, 0.4, 1.1, 1.0, 0.3, 1.3, 1.2, 0.5],
-            var = [1.44, 1.21, 0.16, 1.21, 1.0, 0.09, 1.69, 1.44, 0.25],
-            range = [4.4, 3.7, 1.3, 4.2, 3.5, 1.1, 4.6, 3.9, 1.5],
-            zvar = [1.2, 0.8, -0.5, 0.9, 0.6, -0.8, 1.5, 1.1, -0.2],
-        )
-        return df
-    end
+    # Use generic functions from test_utils.jl
+    # create_test_summary_data()
+    # create_test_summary_data_with_epochs()
 
     @testset "plot_channel_summary! basic functionality" begin
         df = create_test_summary_data()

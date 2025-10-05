@@ -5,46 +5,10 @@ Test suite for src/analysis/lrp.jl
 using Test
 using DataFrames
 
-# Helper function to create test ERP data with lateral channel pairs
-function create_test_lrp_erp(participant::Int, condition::Int, n_timepoints::Int = 100, signal_scale::Float64 = 1.0)
-    # Create time vector
-    time = collect(range(-0.2, 0.8, length = n_timepoints))
+include("../test_utils.jl")
 
-    # Create channel data with lateral pairs (C3/C4, C1/C2, Fp1/Fp2)
-    df = DataFrame()
-    df.time = time
-    df.sample = 1:n_timepoints
-    df.condition = fill(condition, n_timepoints)
-    df.condition_name = fill("condition_$condition", n_timepoints)
-    df.participant = fill(participant, n_timepoints)
-    df.file = fill("test_file", n_timepoints)
-
-    # Add lateral channel pairs with known patterns
-    # Left hemisphere (odd numbers)
-    df.C3 = signal_scale .* sin.(2π * 0.1 * time) .+ 0.01 .* randn(n_timepoints)
-    df.C1 = signal_scale .* cos.(2π * 0.1 * time) .+ 0.01 .* randn(n_timepoints)
-    df.Fp1 = signal_scale .* sin.(2π * 0.2 * time) .+ 0.01 .* randn(n_timepoints)
-
-    # Right hemisphere (even numbers)
-    df.C4 = signal_scale .* sin.(2π * 0.1 * time .+ π / 4) .+ 0.01 .* randn(n_timepoints)
-    df.C2 = signal_scale .* cos.(2π * 0.1 * time .+ π / 4) .+ 0.01 .* randn(n_timepoints)
-    df.Fp2 = signal_scale .* sin.(2π * 0.2 * time .+ π / 4) .+ 0.01 .* randn(n_timepoints)
-
-    # Add midline channel (should not be detected as a pair)
-    df.Fz = signal_scale .* sin.(2π * 0.15 * time) .+ 0.01 .* randn(n_timepoints)
-
-    # Create Layout with lateral channels
-    channel_labels = [:C3, :C4, :C1, :C2, :Fp1, :Fp2, :Fz]
-    layout_df =
-        DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels)))
-    layout = eegfun.Layout(layout_df, nothing, nothing)
-
-    # Create AnalysisInfo
-    analysis_info = eegfun.AnalysisInfo()
-
-    # Create ErpData
-    return eegfun.ErpData(df, layout, 250.0, analysis_info, 10)
-end
+# Use generic create_test_lrp_erp from test_utils.jl
+# create_test_lrp_erp(participant, condition, n_timepoints, signal_scale)
 
 @testset "LRP Calculation" begin
 

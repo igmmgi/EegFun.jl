@@ -10,59 +10,10 @@ using Statistics
     test_dir = mktempdir()
 
     try
-        # Helper to create test ErpData with multiple channels
-        function create_test_erp_data(n_conditions::Int = 2)
-            erps = eegfun.ErpData[]
-            fs = 256.0
-            n_samples = 513
-            t = range(-1.0, 1.0, length = n_samples)
-
-            for cond = 1:n_conditions
-                # Create multiple channels with known relationships
-                # Fp1, Fp2: frontal pair
-                # PO7, PO8: parietal-occipital pair
-                # Fz, Cz, Pz: midline electrodes
-                fp1 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                fp2 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                po7 = cos.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                po8 = cos.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                fz = 0.5 .* (fp1 .+ fp2)
-                cz = randn(n_samples)
-                pz = 0.5 .* (po7 .+ po8)
-
-                df = DataFrame(
-                    time = collect(t),
-                    sample = 1:n_samples,
-                    condition = fill(cond, n_samples),
-                    Fp1 = fp1,
-                    Fp2 = fp2,
-                    PO7 = po7,
-                    PO8 = po8,
-                    Fz = fz,
-                    Cz = cz,
-                    Pz = pz,
-                )
-
-                layout = eegfun.Layout(
-                    DataFrame(
-                        label = [:Fp1, :Fp2, :PO7, :PO8, :Fz, :Cz, :Pz],
-                        inc = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                        azi = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    ),
-                    nothing,
-                    nothing,
-                )
-
-                push!(erps, eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 10))
-            end
-
-            return erps
-        end
-
-        # Create test data files
+                # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_test_erp_data(2)
+                erps = create_test_erp_data_batch(2; n_channels = 7)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 save(filename, "erps", erps)
                 @test isfile(filename)
@@ -75,7 +26,7 @@ using Statistics
             # Combine two channel groups
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -95,15 +46,15 @@ using Statistics
             @test erps[1] isa eegfun.ErpData
 
             # Should have original channels + 2 combined channels
-            @test hasproperty(erps[1].data, :Fp1)
-            @test hasproperty(erps[1].data, :Fp2)
-            @test hasproperty(erps[1].data, :PO7)
-            @test hasproperty(erps[1].data, :PO8)
+            @test hasproperty(erps[1].data, :Ch1)
+            @test hasproperty(erps[1].data, :Ch2)
+            @test hasproperty(erps[1].data, :Ch3)
+            @test hasproperty(erps[1].data, :Ch4)
             @test hasproperty(erps[1].data, :combined_1)  # Default label
             @test hasproperty(erps[1].data, :combined_2)  # Default label
 
             # Verify averaging: combined_1 should be mean of Fp1 and Fp2
-            @test erps[1].data.combined_1 ≈ (erps[1].data.Fp1 .+ erps[1].data.Fp2) ./ 2
+            @test erps[1].data.combined_1 ≈ (erps[1].data.Ch1 .+ erps[1].data.Ch2) ./ 2
         end
 
         @testset "Custom output labels" begin
@@ -111,8 +62,8 @@ using Statistics
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
-                output_labels = [:frontal, :parietal],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -120,8 +71,8 @@ using Statistics
             @test result.success == 2
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
-            @test hasproperty(erps[1].data, :frontal)
-            @test hasproperty(erps[1].data, :parietal)
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
             @test !hasproperty(erps[1].data, :combined_1)
         end
 
@@ -131,8 +82,8 @@ using Statistics
             # With reduce=true, only combined channels should remain
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
-                output_labels = [:frontal, :parietal],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = true,
@@ -144,15 +95,15 @@ using Statistics
 
             # Should have metadata + only combined channels
             @test hasproperty(erps[1].data, :time)
-            @test hasproperty(erps[1].data, :frontal)
-            @test hasproperty(erps[1].data, :parietal)
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
 
             # Original channels should be removed
-            @test !hasproperty(erps[1].data, :Fp1)
-            @test !hasproperty(erps[1].data, :Fp2)
-            @test !hasproperty(erps[1].data, :PO7)
-            @test !hasproperty(erps[1].data, :PO8)
-            @test !hasproperty(erps[1].data, :Fz)
+            @test !hasproperty(erps[1].data, :Ch1)
+            @test !hasproperty(erps[1].data, :Ch2)
+            @test !hasproperty(erps[1].data, :Ch3)
+            @test !hasproperty(erps[1].data, :Ch4)
+            @test !hasproperty(erps[1].data, :Ch5)
         end
 
         @testset "Combine specific participants" begin
@@ -160,7 +111,7 @@ using Statistics
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participants = 1,
@@ -177,7 +128,7 @@ using Statistics
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participants = [1, 2],
@@ -194,7 +145,7 @@ using Statistics
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 conditions = 1,
@@ -213,7 +164,7 @@ using Statistics
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 conditions = [1, 2],
@@ -229,15 +180,15 @@ using Statistics
             # Non-existent directory
             @test_throws Exception eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = "/nonexistent/path",
             )
 
             # Mismatched output labels
             @test_throws Exception eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
-                output_labels = [:frontal],  # Only 1 label for 2 groups
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1],  # Only 1 label for 2 groups
                 input_dir = test_dir,
             )
         end
@@ -246,7 +197,7 @@ using Statistics
             empty_dir = joinpath(test_dir, "empty_match")
             mkpath(empty_dir)
 
-            result = eegfun.combine_channels("erps_cleaned", [eegfun.channels([:Fp1, :Fp2])], input_dir = empty_dir)
+            result = eegfun.combine_channels("erps_cleaned", [eegfun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
 
             @test result === nothing
         end
@@ -256,7 +207,7 @@ using Statistics
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -278,7 +229,7 @@ using Statistics
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -292,7 +243,7 @@ using Statistics
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_test_erp_data(2)
+            erps = create_test_erp_data_batch(2; n_channels = 7)
             save(joinpath(partial_dir, "1_erps_cleaned.jld2"), "erps", erps)
 
             # Create one malformed file
@@ -301,7 +252,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_partial")
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = partial_dir,
                 output_dir = output_dir,
             )
@@ -317,7 +268,7 @@ using Statistics
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -385,7 +336,7 @@ using Statistics
             # Combine without reduce (should append to layout)
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
@@ -406,8 +357,8 @@ using Statistics
             # Combine with reduce (layout should only have combined channels)
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
-                output_labels = [:frontal, :parietal],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = true,
@@ -417,9 +368,9 @@ using Statistics
 
             # Layout should only have 2 channels
             @test nrow(erps[1].layout.data) == 2
-            @test :frontal in erps[1].layout.data.label
-            @test :parietal in erps[1].layout.data.label
-            @test :Fp1 ∉ erps[1].layout.data.label
+            @test :Group1 in erps[1].layout.data.label
+            @test :Group2 in erps[1].layout.data.label
+            @test :Ch1 ∉ erps[1].layout.data.label
         end
 
         @testset "Multiple channel groups" begin
@@ -428,8 +379,8 @@ using Statistics
             # Combine 3 different groups
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8]), eegfun.channels([:Fz, :Cz, :Pz])],
-                output_labels = [:frontal, :parietal, :midline],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
+                output_labels = [:Group1, :Group2, :Group3],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -437,13 +388,12 @@ using Statistics
             @test result.success == 2
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
-            @test hasproperty(erps[1].data, :frontal)
-            @test hasproperty(erps[1].data, :parietal)
-            @test hasproperty(erps[1].data, :midline)
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
+            @test hasproperty(erps[1].data, :Group3)
 
-            # Verify midline is average of Fz, Cz, Pz
-            expected_midline = (erps[1].data.Fz .+ erps[1].data.Cz .+ erps[1].data.Pz) ./ 3
-            @test erps[1].data.midline ≈ expected_midline
+            expected_group3 = (erps[1].data.Ch5 .+ erps[1].data.Ch6 .+ erps[1].data.Ch7) ./ 3
+            @test erps[1].data.Group3 ≈ expected_group3
         end
 
         @testset "Single channel group" begin
@@ -452,8 +402,8 @@ using Statistics
             # Combine just one group
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
-                output_labels = [:frontal],
+                [eegfun.channels([:Ch1, :Ch2])],
+                output_labels = [:Group1],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -461,7 +411,7 @@ using Statistics
             @test result.success == 2
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
-            @test hasproperty(erps[1].data, :frontal)
+            @test hasproperty(erps[1].data, :Group1)
         end
 
         @testset "Combined filters" begin
@@ -470,7 +420,7 @@ using Statistics
             # Combine with participant AND condition filters
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participants = 1,
@@ -488,7 +438,7 @@ using Statistics
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = create_test_erp_data(2)
+            erps = create_test_erp_data_batch(2; n_channels = 7)
             save(joinpath(pattern_dir, "1_erps_original.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "2_erps_cleaned.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "3_custom_erps.jld2"), "erps", erps)
@@ -497,7 +447,7 @@ using Statistics
             output_dir1 = joinpath(test_dir, "combined_original")
             result1 = eegfun.combine_channels(
                 "erps_original",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
                 output_dir = output_dir1,
             )
@@ -507,7 +457,7 @@ using Statistics
             output_dir2 = joinpath(test_dir, "combined_all_erps")
             result2 = eegfun.combine_channels(
                 "erps",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
                 output_dir = output_dir2,
             )
@@ -520,7 +470,7 @@ using Statistics
             # First run
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = overwrite_dir,
             )
@@ -533,7 +483,7 @@ using Statistics
             # Second run (should overwrite)
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = overwrite_dir,
             )
@@ -548,8 +498,8 @@ using Statistics
             # Combine all channels except Fz
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels_not([:Fz])],
-                output_labels = [:not_fz],
+                [eegfun.channels_not([:Ch5])],
+                output_labels = [:not_Ch5],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = true,
@@ -558,9 +508,9 @@ using Statistics
             @test result.success == 2
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
-            @test hasproperty(erps[1].data, :not_fz)
-            @test !hasproperty(erps[1].data, :Fz)
-            @test !hasproperty(erps[1].data, :Fp1)  # All original channels removed in reduce mode
+            @test hasproperty(erps[1].data, :not_Ch5)
+            @test !hasproperty(erps[1].data, :Ch5)
+            @test !hasproperty(erps[1].data, :Ch1)  # All original channels removed in reduce mode
         end
 
         @testset "EpochData support" begin
@@ -568,51 +518,15 @@ using Statistics
             epochs_dir = joinpath(test_dir, "epochs_test")
             mkpath(epochs_dir)
 
-            function create_test_epoch_data()
-                epochs = eegfun.EpochData[]
-                fs = 256
-                n_samples = 101
-                t = range(-0.2, 0.2, length = n_samples)
-
-                for cond = 1:2
-                    dfs = DataFrame[]
-                    for ep = 1:3
-                        fp1 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                        fp2 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-
-                        df = DataFrame(
-                            time = collect(t),
-                            sample = 1:n_samples,
-                            condition = fill(cond, n_samples),
-                            condition_name = fill("condition_$cond", n_samples),
-                            epoch = fill(ep, n_samples),
-                            Fp1 = fp1,
-                            Fp2 = fp2,
-                        )
-                        push!(dfs, df)
-                    end
-
-                    layout = eegfun.Layout(
-                        DataFrame(label = [:Fp1, :Fp2], inc = [0.0, 0.0], azi = [0.0, 0.0]),
-                        nothing,
-                        nothing,
-                    )
-
-                    push!(epochs, eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo()))
-                end
-
-                return epochs
-            end
-
-            epochs = create_test_epoch_data()
-            save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", epochs)
+            epochs = create_test_epoch_data(1, 1)
+            save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", [epochs])
 
             # Combine channels in epoch data
             output_dir = joinpath(test_dir, "combined_epochs")
             result = eegfun.combine_channels(
                 "epochs",
-                [eegfun.channels([:Fp1, :Fp2])],
-                output_labels = [:frontal],
+                [eegfun.channels([:Ch1, :Ch2])],
+                output_labels = [:Group1],
                 input_dir = epochs_dir,
                 output_dir = output_dir,
             )
@@ -621,8 +535,8 @@ using Statistics
 
             epochs_combined = load(joinpath(output_dir, "1_epochs.jld2"), "epochs")
             @test epochs_combined[1] isa eegfun.EpochData
-            @test hasproperty(epochs_combined[1].data[1], :frontal)
-            @test hasproperty(epochs_combined[1].data[1], :Fp1)  # Original channels preserved
+            @test hasproperty(epochs_combined[1].data[1], :Group1)
+            @test hasproperty(epochs_combined[1].data[1], :Ch1)  # Original channels preserved
         end
 
         @testset "Invalid channel selection" begin
@@ -630,7 +544,7 @@ using Statistics
             invalid_dir = joinpath(test_dir, "invalid_channels")
             mkpath(invalid_dir)
 
-            erps = create_test_erp_data(1)
+            erps = create_test_erp_data_batch(1; n_channels = 7)
             save(joinpath(invalid_dir, "1_erps.jld2"), "erps", erps)
 
             output_dir = joinpath(test_dir, "combined_invalid")
@@ -654,8 +568,8 @@ using Statistics
             # Average just one channel (edge case)
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fz])],
-                output_labels = [:fz_avg],
+                [eegfun.channels([:Ch5])],
+                output_labels = [:Ch5_avg],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -663,10 +577,10 @@ using Statistics
             @test result.success == 2
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
-            @test hasproperty(erps[1].data, :fz_avg)
+            @test hasproperty(erps[1].data, :Ch5_avg)
 
             # Single channel average should equal the original
-            @test erps[1].data.fz_avg ≈ erps[1].data.Fz
+            @test erps[1].data.Ch5_avg ≈ erps[1].data.Ch5
         end
 
         @testset "All channels combined" begin
@@ -688,18 +602,18 @@ using Statistics
 
             # Should only have metadata + global_avg
             @test hasproperty(erps[1].data, :global_avg)
-            @test !hasproperty(erps[1].data, :Fp1)
+            @test !hasproperty(erps[1].data, :Ch1)
 
             # Verify it's the average of all original channels
             original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "erps")
             all_ch_data = hcat(
-                original_erps[1].data.Fp1,
-                original_erps[1].data.Fp2,
-                original_erps[1].data.PO7,
-                original_erps[1].data.PO8,
-                original_erps[1].data.Fz,
-                original_erps[1].data.Cz,
-                original_erps[1].data.Pz,
+                original_erps[1].data.Ch1,
+                original_erps[1].data.Ch2,
+                original_erps[1].data.Ch3,
+                original_erps[1].data.Ch4,
+                original_erps[1].data.Ch5,
+                original_erps[1].data.Ch6,
+                original_erps[1].data.Ch7,
             )
             expected_avg = vec(mean(all_ch_data, dims = 2))
             @test erps[1].data.global_avg ≈ expected_avg
@@ -711,8 +625,8 @@ using Statistics
             # Same channel in multiple groups
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2, :Fz]), eegfun.channels([:Fz, :Cz, :Pz])],
-                output_labels = [:frontal_with_fz, :midline],
+                [eegfun.channels([:Ch1, :Ch2, :Ch5]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
+                output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -720,14 +634,14 @@ using Statistics
             @test result.success == 2
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
-            @test hasproperty(erps[1].data, :frontal_with_fz)
-            @test hasproperty(erps[1].data, :midline)
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
 
-            # Verify both averages include Fz
-            expected_frontal = (erps[1].data.Fp1 .+ erps[1].data.Fp2 .+ erps[1].data.Fz) ./ 3
-            expected_midline = (erps[1].data.Fz .+ erps[1].data.Cz .+ erps[1].data.Pz) ./ 3
-            @test erps[1].data.frontal_with_fz ≈ expected_frontal
-            @test erps[1].data.midline ≈ expected_midline
+            # Verify both averages include Ch5
+            expected_group1 = (erps[1].data.Ch1 .+ erps[1].data.Ch2 .+ erps[1].data.Ch5) ./ 3
+            expected_group2 = (erps[1].data.Ch5 .+ erps[1].data.Ch6 .+ erps[1].data.Ch7) ./ 3
+            @test erps[1].data.Group1 ≈ expected_group1
+            @test erps[1].data.Group2 ≈ expected_group2
         end
 
         @testset "Sample rate and analysis info preservation" begin
@@ -739,7 +653,7 @@ using Statistics
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -759,7 +673,7 @@ using Statistics
             # Request condition 5 when only 2 exist
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 conditions = 5,
@@ -802,7 +716,7 @@ using Statistics
                     eegfun.channels(channel_names[11:15]),
                     eegfun.channels(channel_names[16:20]),
                 ],
-                output_labels = [:group1, :group2, :group3, :group4],
+                output_labels = [:Group1, :Group2, :Group3, :Group4],
                 input_dir = many_ch_dir,
                 output_dir = output_dir,
             )
@@ -810,10 +724,10 @@ using Statistics
             @test result.success == 1
 
             erps_combined = load(joinpath(output_dir, "1_erps_many.jld2"), "erps")
-            @test hasproperty(erps_combined[1].data, :group1)
-            @test hasproperty(erps_combined[1].data, :group2)
-            @test hasproperty(erps_combined[1].data, :group3)
-            @test hasproperty(erps_combined[1].data, :group4)
+            @test hasproperty(erps_combined[1].data, :Group1)
+            @test hasproperty(erps_combined[1].data, :Group2)
+            @test hasproperty(erps_combined[1].data, :Group3)
+            @test hasproperty(erps_combined[1].data, :Group4)
         end
 
         @testset "Metadata columns preserved" begin
@@ -821,7 +735,7 @@ using Statistics
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
@@ -840,8 +754,8 @@ using Statistics
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
-                output_labels = [:frontal],
+                [eegfun.channels([:Ch1, :Ch2])],
+                output_labels = [:Group1],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = true,
@@ -854,8 +768,8 @@ using Statistics
             @test hasproperty(erps[1].data, :condition)
 
             # Only combined channel and metadata
-            @test hasproperty(erps[1].data, :frontal)
-            @test !hasproperty(erps[1].data, :Fp1)
+            @test hasproperty(erps[1].data, :Group1)
+            @test !hasproperty(erps[1].data, :Ch1)
         end
 
         @testset "Empty result handling" begin
@@ -863,7 +777,7 @@ using Statistics
             mkpath(empty_dir)
 
             # Create file but select channels that result in empty selection
-            erps = create_test_erp_data(1)
+            erps = create_test_erp_data_batch(1; n_channels = 7)
             save(joinpath(empty_dir, "1_erps.jld2"), "erps", erps)
 
             # Use a predicate that selects nothing
@@ -893,59 +807,11 @@ end
     test_dir = mktempdir()
 
     try
-        # Helper to create test ErpData with multiple channels
-        function create_test_erp_data(n_conditions::Int = 2)
-            erps = eegfun.ErpData[]
-            fs = 256.0
-            n_samples = 513
-            t = range(-1.0, 1.0, length = n_samples)
-
-            for cond = 1:n_conditions
-                # Create multiple channels with known relationships
-                # Fp1, Fp2: frontal pair
-                # PO7, PO8: parietal-occipital pair
-                # Fz, Cz, Pz: midline electrodes
-                fp1 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                fp2 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                po7 = cos.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                po8 = cos.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                fz = 0.5 .* (fp1 .+ fp2)
-                cz = randn(n_samples)
-                pz = 0.5 .* (po7 .+ po8)
-
-                df = DataFrame(
-                    time = collect(t),
-                    sample = 1:n_samples,
-                    condition = fill(cond, n_samples),
-                    Fp1 = fp1,
-                    Fp2 = fp2,
-                    PO7 = po7,
-                    PO8 = po8,
-                    Fz = fz,
-                    Cz = cz,
-                    Pz = pz,
-                )
-
-                layout = eegfun.Layout(
-                    DataFrame(
-                        label = [:Fp1, :Fp2, :PO7, :PO8, :Fz, :Cz, :Pz],
-                        inc = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                        azi = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    ),
-                    nothing,
-                    nothing,
-                )
-
-                push!(erps, eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 10))
-            end
-
-            return erps
-        end
 
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_test_erp_data(2)
+                erps = create_test_erp_data_batch(2; n_channels = 7)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 save(filename, "erps", erps)
                 @test isfile(filename)
@@ -958,7 +824,7 @@ end
             # Combine two channel groups
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -978,15 +844,15 @@ end
             @test erps[1] isa eegfun.ErpData
 
             # Should have original channels + 2 combined channels
-            @test hasproperty(erps[1].data, :Fp1)
-            @test hasproperty(erps[1].data, :Fp2)
-            @test hasproperty(erps[1].data, :PO7)
-            @test hasproperty(erps[1].data, :PO8)
+            @test hasproperty(erps[1].data, :Ch1)
+            @test hasproperty(erps[1].data, :Ch2)
+            @test hasproperty(erps[1].data, :Ch3)
+            @test hasproperty(erps[1].data, :Ch4)
             @test hasproperty(erps[1].data, :combined_1)  # Default label
             @test hasproperty(erps[1].data, :combined_2)  # Default label
 
             # Verify averaging: combined_1 should be mean of Fp1 and Fp2
-            @test erps[1].data.combined_1 ≈ (erps[1].data.Fp1 .+ erps[1].data.Fp2) ./ 2
+            @test erps[1].data.combined_1 ≈ (erps[1].data.Ch1 .+ erps[1].data.Ch2) ./ 2
         end
 
         @testset "Custom output labels" begin
@@ -994,8 +860,8 @@ end
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
-                output_labels = [:frontal, :parietal],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -1003,8 +869,8 @@ end
             @test result.success == 2
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
-            @test hasproperty(erps[1].data, :frontal)
-            @test hasproperty(erps[1].data, :parietal)
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
             @test !hasproperty(erps[1].data, :combined_1)
         end
 
@@ -1014,8 +880,8 @@ end
             # With reduce=true, only combined channels should remain
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
-                output_labels = [:frontal, :parietal],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = true,
@@ -1027,15 +893,15 @@ end
 
             # Should have metadata + only combined channels
             @test hasproperty(erps[1].data, :time)
-            @test hasproperty(erps[1].data, :frontal)
-            @test hasproperty(erps[1].data, :parietal)
+            @test hasproperty(erps[1].data, :Group1)
+            @test hasproperty(erps[1].data, :Group2)
 
             # Original channels should be removed
-            @test !hasproperty(erps[1].data, :Fp1)
-            @test !hasproperty(erps[1].data, :Fp2)
-            @test !hasproperty(erps[1].data, :PO7)
-            @test !hasproperty(erps[1].data, :PO8)
-            @test !hasproperty(erps[1].data, :Fz)
+            @test !hasproperty(erps[1].data, :Ch1)
+            @test !hasproperty(erps[1].data, :Ch2)
+            @test !hasproperty(erps[1].data, :Ch3)
+            @test !hasproperty(erps[1].data, :Ch4)
+            @test !hasproperty(erps[1].data, :Ch5)
         end
 
         @testset "Combine specific participants" begin
@@ -1043,7 +909,7 @@ end
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participants = 1,
@@ -1060,7 +926,7 @@ end
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participants = [1, 2],
@@ -1077,7 +943,7 @@ end
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 conditions = 1,
@@ -1096,7 +962,7 @@ end
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 conditions = [1, 2],
@@ -1112,14 +978,14 @@ end
             # Non-existent directory
             @test_throws Exception eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = "/nonexistent/path",
             )
 
             # Mismatched output labels
             @test_throws Exception eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 output_labels = [:frontal],  # Only 1 label for 2 groups
                 input_dir = test_dir,
             )
@@ -1129,7 +995,7 @@ end
             empty_dir = joinpath(test_dir, "empty_match")
             mkpath(empty_dir)
 
-            result = eegfun.combine_channels("erps_cleaned", [eegfun.channels([:Fp1, :Fp2])], input_dir = empty_dir)
+            result = eegfun.combine_channels("erps_cleaned", [eegfun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
 
             @test result === nothing
         end
@@ -1139,7 +1005,7 @@ end
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -1161,7 +1027,7 @@ end
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -1175,7 +1041,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_test_erp_data(2)
+            erps = create_test_erp_data_batch(2; n_channels = 7)
             save(joinpath(partial_dir, "1_erps_cleaned.jld2"), "erps", erps)
 
             # Create one malformed file
@@ -1184,7 +1050,7 @@ end
             output_dir = joinpath(test_dir, "combined_partial")
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = partial_dir,
                 output_dir = output_dir,
             )
@@ -1200,7 +1066,7 @@ end
 
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -1268,7 +1134,7 @@ end
             # Combine without reduce (should append to layout)
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
@@ -1289,7 +1155,7 @@ end
             # Combine with reduce (layout should only have combined channels)
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8])],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 output_labels = [:frontal, :parietal],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -1302,7 +1168,7 @@ end
             @test nrow(erps[1].layout.data) == 2
             @test :frontal in erps[1].layout.data.label
             @test :parietal in erps[1].layout.data.label
-            @test :Fp1 ∉ erps[1].layout.data.label
+            @test :Ch1 ∉ erps[1].layout.data.label
         end
 
         @testset "Multiple channel groups" begin
@@ -1311,7 +1177,7 @@ end
             # Combine 3 different groups
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2]), eegfun.channels([:PO7, :PO8]), eegfun.channels([:Fz, :Cz, :Pz])],
+                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:frontal, :parietal, :midline],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -1324,8 +1190,8 @@ end
             @test hasproperty(erps[1].data, :parietal)
             @test hasproperty(erps[1].data, :midline)
 
-            # Verify midline is average of Fz, Cz, Pz
-            expected_midline = (erps[1].data.Fz .+ erps[1].data.Cz .+ erps[1].data.Pz) ./ 3
+            # Verify midline is average of Ch5, Ch6, Ch7
+            expected_midline = (erps[1].data.Ch5 .+ erps[1].data.Ch6 .+ erps[1].data.Ch7) ./ 3
             @test erps[1].data.midline ≈ expected_midline
         end
 
@@ -1335,7 +1201,7 @@ end
             # Combine just one group
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 output_labels = [:frontal],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -1353,7 +1219,7 @@ end
             # Combine with participant AND condition filters
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 participants = 1,
@@ -1371,7 +1237,7 @@ end
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = create_test_erp_data(2)
+            erps = create_test_erp_data_batch(2; n_channels = 7)
             save(joinpath(pattern_dir, "1_erps_original.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "2_erps_cleaned.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "3_custom_erps.jld2"), "erps", erps)
@@ -1380,7 +1246,7 @@ end
             output_dir1 = joinpath(test_dir, "combined_original")
             result1 = eegfun.combine_channels(
                 "erps_original",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
                 output_dir = output_dir1,
             )
@@ -1390,7 +1256,7 @@ end
             output_dir2 = joinpath(test_dir, "combined_all_erps")
             result2 = eegfun.combine_channels(
                 "erps",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
                 output_dir = output_dir2,
             )
@@ -1403,7 +1269,7 @@ end
             # First run
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = overwrite_dir,
             )
@@ -1416,7 +1282,7 @@ end
             # Second run (should overwrite)
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = overwrite_dir,
             )
@@ -1431,7 +1297,7 @@ end
             # Combine all channels except Fz
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels_not([:Fz])],
+                [eegfun.channels_not([:Ch5])],
                 output_labels = [:not_fz],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -1442,8 +1308,8 @@ end
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
             @test hasproperty(erps[1].data, :not_fz)
-            @test !hasproperty(erps[1].data, :Fz)
-            @test !hasproperty(erps[1].data, :Fp1)  # All original channels removed in reduce mode
+            @test !hasproperty(erps[1].data, :Ch5)
+            @test !hasproperty(erps[1].data, :Ch1)  # All original channels removed in reduce mode
         end
 
         @testset "EpochData support" begin
@@ -1451,50 +1317,14 @@ end
             epochs_dir = joinpath(test_dir, "epochs_test")
             mkpath(epochs_dir)
 
-            function create_test_epoch_data()
-                epochs = eegfun.EpochData[]
-                fs = 256
-                n_samples = 101
-                t = range(-0.2, 0.2, length = n_samples)
-
-                for cond = 1:2
-                    dfs = DataFrame[]
-                    for ep = 1:3
-                        fp1 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-                        fp2 = sin.(2π .* 5 .* t) .+ 0.1 .* randn(n_samples)
-
-                        df = DataFrame(
-                            time = collect(t),
-                            sample = 1:n_samples,
-                            condition = fill(cond, n_samples),
-                            condition_name = fill("condition_$cond", n_samples),
-                            epoch = fill(ep, n_samples),
-                            Fp1 = fp1,
-                            Fp2 = fp2,
-                        )
-                        push!(dfs, df)
-                    end
-
-                    layout = eegfun.Layout(
-                        DataFrame(label = [:Fp1, :Fp2], inc = [0.0, 0.0], azi = [0.0, 0.0]),
-                        nothing,
-                        nothing,
-                    )
-
-                    push!(epochs, eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo()))
-                end
-
-                return epochs
-            end
-
-            epochs = create_test_epoch_data()
-            save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", epochs)
+            epochs = create_test_epoch_data(1, 1)
+            save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", [epochs])
 
             # Combine channels in epoch data
             output_dir = joinpath(test_dir, "combined_epochs")
             result = eegfun.combine_channels(
                 "epochs",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 output_labels = [:frontal],
                 input_dir = epochs_dir,
                 output_dir = output_dir,
@@ -1505,7 +1335,7 @@ end
             epochs_combined = load(joinpath(output_dir, "1_epochs.jld2"), "epochs")
             @test epochs_combined[1] isa eegfun.EpochData
             @test hasproperty(epochs_combined[1].data[1], :frontal)
-            @test hasproperty(epochs_combined[1].data[1], :Fp1)  # Original channels preserved
+            @test hasproperty(epochs_combined[1].data[1], :Ch1)  # Original channels preserved
         end
 
         @testset "Invalid channel selection" begin
@@ -1513,7 +1343,7 @@ end
             invalid_dir = joinpath(test_dir, "invalid_channels")
             mkpath(invalid_dir)
 
-            erps = create_test_erp_data(1)
+            erps = create_test_erp_data_batch(1; n_channels = 7)
             save(joinpath(invalid_dir, "1_erps.jld2"), "erps", erps)
 
             output_dir = joinpath(test_dir, "combined_invalid")
@@ -1537,7 +1367,7 @@ end
             # Average just one channel (edge case)
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fz])],
+                [eegfun.channels([:Ch5])],
                 output_labels = [:fz_avg],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -1549,7 +1379,7 @@ end
             @test hasproperty(erps[1].data, :fz_avg)
 
             # Single channel average should equal the original
-            @test erps[1].data.fz_avg ≈ erps[1].data.Fz
+            @test erps[1].data.fz_avg ≈ erps[1].data.Ch5
         end
 
         @testset "All channels combined" begin
@@ -1571,18 +1401,18 @@ end
 
             # Should only have metadata + global_avg
             @test hasproperty(erps[1].data, :global_avg)
-            @test !hasproperty(erps[1].data, :Fp1)
+            @test !hasproperty(erps[1].data, :Ch1)
 
             # Verify it's the average of all original channels
             original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "erps")
             all_ch_data = hcat(
-                original_erps[1].data.Fp1,
-                original_erps[1].data.Fp2,
-                original_erps[1].data.PO7,
-                original_erps[1].data.PO8,
-                original_erps[1].data.Fz,
-                original_erps[1].data.Cz,
-                original_erps[1].data.Pz,
+                original_erps[1].data.Ch1,
+                original_erps[1].data.Ch2,
+                original_erps[1].data.Ch3,
+                original_erps[1].data.Ch4,
+                original_erps[1].data.Ch5,
+                original_erps[1].data.Ch6,
+                original_erps[1].data.Ch7,
             )
             expected_avg = vec(mean(all_ch_data, dims = 2))
             @test erps[1].data.global_avg ≈ expected_avg
@@ -1594,7 +1424,7 @@ end
             # Same channel in multiple groups
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2, :Fz]), eegfun.channels([:Fz, :Cz, :Pz])],
+                [eegfun.channels([:Ch1, :Ch2, :Ch5]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:frontal_with_fz, :midline],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -1607,8 +1437,8 @@ end
             @test hasproperty(erps[1].data, :midline)
 
             # Verify both averages include Fz
-            expected_frontal = (erps[1].data.Fp1 .+ erps[1].data.Fp2 .+ erps[1].data.Fz) ./ 3
-            expected_midline = (erps[1].data.Fz .+ erps[1].data.Cz .+ erps[1].data.Pz) ./ 3
+            expected_frontal = (erps[1].data.Ch1 .+ erps[1].data.Ch2 .+ erps[1].data.Ch5) ./ 3
+            expected_midline = (erps[1].data.Ch5 .+ erps[1].data.Ch6 .+ erps[1].data.Ch7) ./ 3
             @test erps[1].data.frontal_with_fz ≈ expected_frontal
             @test erps[1].data.midline ≈ expected_midline
         end
@@ -1622,7 +1452,7 @@ end
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -1642,7 +1472,7 @@ end
             # Request condition 5 when only 2 exist
             result = eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 conditions = 5,
@@ -1704,7 +1534,7 @@ end
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
@@ -1723,7 +1553,7 @@ end
 
             eegfun.combine_channels(
                 "erps_cleaned",
-                [eegfun.channels([:Fp1, :Fp2])],
+                [eegfun.channels([:Ch1, :Ch2])],
                 output_labels = [:frontal],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -1738,7 +1568,7 @@ end
 
             # Only combined channel and metadata
             @test hasproperty(erps[1].data, :frontal)
-            @test !hasproperty(erps[1].data, :Fp1)
+            @test !hasproperty(erps[1].data, :Ch1)
         end
 
         @testset "Empty result handling" begin
@@ -1746,7 +1576,7 @@ end
             mkpath(empty_dir)
 
             # Create file but select channels that result in empty selection
-            erps = create_test_erp_data(1)
+            erps = create_test_erp_data_batch(1; n_channels = 7)
             save(joinpath(empty_dir, "1_erps.jld2"), "erps", erps)
 
             # Use a predicate that selects nothing

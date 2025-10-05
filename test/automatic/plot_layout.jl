@@ -1,21 +1,13 @@
+ using DataFrames
+ using Makie: Figure, Axis, Axis3
+    
 @testset "Plot Layout Tests" begin
-    using DataFrames
-    using Makie: Figure, Axis, Axis3
+   
 
-    # Create test layout data
-    function create_test_layout()
-        df = DataFrame(
-            label = [:Fp1, :Fp2, :Cz, :Pz, :O1, :O2],
-            x2 = [0.0, 0.0, 0.0, 0.0, -0.5, 0.5],
-            y2 = [1.0, 1.0, 0.0, -1.0, -1.0, -1.0],
-            x3 = [0.0, 0.0, 0.0, 0.0, -0.5, 0.5],
-            y3 = [1.0, 1.0, 0.0, -1.0, -1.0, -1.0],
-            z3 = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        )
-        return eegfun.Layout(df, nothing, nothing)
-    end
+    # Use generic create_test_layout from test_utils.jl
+    # create_test_layout(; n_channels::Int = 6, layout_type::Symbol = :topo)
 
-    layout = create_test_layout()
+    layout = create_test_layout(; n_channels = 6, layout_type = :topo)
 
     @testset "plot_layout_2d! basic functionality" begin
         fig = Figure()

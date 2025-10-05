@@ -185,12 +185,12 @@ function plot_ica_topoplot(ica; kwargs...)
         row, col = divrem(i - 1, dims[2]) .+ (1, 1)
         grids[i] = fig[row, col] = GridLayout()
 
-        # Add spacing between subplots
-        if i > 1
-            rowgap!(fig.layout, row, subplot_spacing)
+        # Add spacing between subplots (only between rows and columns, not for every subplot)
+        if row > 1
+            rowgap!(fig.layout, row - 1, subplot_spacing)
         end
         if col > 1
-            colgap!(fig.layout, col, subplot_spacing)
+            colgap!(fig.layout, col - 1, subplot_spacing)
         end
 
         # grid layout and axis

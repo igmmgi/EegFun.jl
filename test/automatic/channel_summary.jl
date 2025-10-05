@@ -9,46 +9,12 @@ using CSV
 @testset "eegfun" begin
     @testset "channel_summary" begin
 
-        # Helper function to create test data
-        function create_continuous_test_data()
-            fs = 100.0
-            t = 0.0:(1/fs):1.0  # 1 second of data
-            n_samples = length(t)
-
-            # Create test signals with known properties
-            A = 2.0 .* sin.(2π .* 5 .* t) .+ randn(n_samples) * 0.1  # 5 Hz sine + noise
-            B = 3.0 .* cos.(2π .* 10 .* t) .+ randn(n_samples) * 0.2  # 10 Hz cosine + noise  
-            C = ones(n_samples) * 1.5  # Constant signal
-            triggers = vcat(fill(0, 30), fill(1, 20), fill(0, 51))  # Simple trigger pattern
-
-            df = DataFrame(time = collect(t), triggers = triggers, A = A, B = B, C = C)
-            layout = eegfun.Layout(
-                DataFrame(label = [:A, :B, :C], inc = [0.0, 0.0, 0.0], azi = [0.0, 90.0, 180.0]),
-                nothing,
-                nothing,
-            )
-            dat = eegfun.ContinuousData(copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
-            return dat
-        end
-
-        function create_epoch_test_data()
-            # Create continuous data first
-            continuous_dat = create_continuous_test_data()
-
-            # Create epoch condition
-            ec = eegfun.EpochCondition(name = "test", trigger_sequences = [[1]], reference_index = 1)
-
-            # Extract epochs
-            epoch_dat = eegfun.extract_epochs(continuous_dat, 1, ec, -0.1, 0.2)
-            return epoch_dat
-        end
-
         @testset "_channel_summary_impl core function" begin
-            dat = create_continuous_test_data()
+            dat = create_test_data()
 
             # Test basic functionality
             sample_indices = 1:50  # First half of data
-            channel_names = [:A, :B]
+            channel_names = [:Ch1, :Ch2]
             result = eegfun._channel_summary_impl(dat.data, collect(sample_indices), channel_names)
 
             @test result isa DataFrame
@@ -77,10 +43,10 @@ using CSV
         end
 
         @testset "_channel_summary_impl input validation" begin
-            dat = create_continuous_test_data()
+            dat = create_test_data(n_channels = 4)
 
             # Test empty samples
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, Int[], [:A, :B])
+            @test_throws Exception eegfun._channel_summary_impl(dat.data, Int[], [:Ch1, :Ch2])
 
             # Test empty channels
             @test_throws Exception eegfun._channel_summary_impl(dat.data, [1, 2, 3], Symbol[])
@@ -89,46 +55,46 @@ using CSV
             @test_throws Exception eegfun._channel_summary_impl(dat.data, [1, 2, 3], [:NonExistent])
 
             # Test invalid sample indices
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, [1000], [:A])  # Out of bounds
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, [0], [:A])     # Below bounds
+            @test_throws Exception eegfun._channel_summary_impl(dat.data, [3000], [:Ch1])  # Out of bounds
+            @test_throws Exception eegfun._channel_summary_impl(dat.data, [0], [:Ch1])     # Below bounds
         end
 
         @testset "_channel_summary_impl edge cases" begin
-            dat = create_continuous_test_data()
+            dat = create_test_data(n_channels = 4)
 
             # Test single sample
-            result = eegfun._channel_summary_impl(dat.data, [1], [:A])
+            result = eegfun._channel_summary_impl(dat.data, [1], [:Ch1])
             @test nrow(result) == 1
             @test result.range[1] == 0.0  # min == max for single sample
             @test isnan(result.std[1]) || result.std[1] == 0.0  # std is NaN for single sample in Julia
 
             # Test single channel
-            result = eegfun._channel_summary_impl(dat.data, collect(1:10), [:A])
+            result = eegfun._channel_summary_impl(dat.data, collect(1:10), [:Ch1])
             @test nrow(result) == 1
-            @test result.channel[1] == :A
+            @test result.channel[1] == :Ch1
 
             # Test with constant signal (zero variance case)
-            result = eegfun._channel_summary_impl(dat.data, collect(1:50), [:C])  # C is constant
+            result = eegfun._channel_summary_impl(dat.data, collect(1:50), [:Ch4])  # Ch4 is constant
             @test result.var[1] ≈ 0.0
             @test result.zvar[1] == 0.0  # Should handle zero variance case
         end
 
         @testset "channel_summary SingleDataFrameEeg" begin
-            dat = create_continuous_test_data()
+            dat = create_test_data(n_channels = 4)
 
             # Test basic functionality with defaults
             result = eegfun.channel_summary(dat)
             @test result isa DataFrame
-            @test nrow(result) == 3  # Three layout channels (A, B, C)
+            @test nrow(result) == 4  # Four layout channels (Ch1, Ch2, Ch3, Ch4)
             @test :channel in propertynames(result)
 
             # Test that all layout channels are included by default
-            @test Set(result.channel) == Set([:A, :B, :C])
+            @test Set(result.channel) == Set([:Ch1, :Ch2, :Ch3, :Ch4])
 
             # Test specific channel selection
-            result_subset = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:A, :B]))
+            result_subset = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Ch1, :Ch2]))
             @test nrow(result_subset) == 2
-            @test Set(result_subset.channel) == Set([:A, :B])
+            @test Set(result_subset.channel) == Set([:Ch1, :Ch2])
 
             # Test sample selection (first half)
             n_samples = nrow(dat.data)
@@ -175,15 +141,15 @@ using CSV
             @test Set(result_epoch_numbers) == Set(original_epoch_numbers)
 
             # Test channel selection works across epochs
-            result_subset = eegfun.channel_summary(epoch_dat, channel_selection = eegfun.channels([:A]))
+            result_subset = eegfun.channel_summary(epoch_dat, channel_selection = eegfun.channels([:Ch1]))
             @test nrow(result_subset) == n_epochs  # One channel per epoch
-            @test all(result_subset.channel .== :A)
+            @test all(result_subset.channel .== :Ch1)
 
             # Test that statistics vary across epochs (should be different)
-            epochs_A = result[result.channel .== :A, :]
-            if nrow(epochs_A) > 1
+            epochs_Ch1 = result[result.channel .== :Ch1, :]
+            if nrow(epochs_Ch1) > 1
                 # Should have some variation across epochs (unless data is identical)
-                @test length(unique(epochs_A.var)) > 1 || all(epochs_A.var .== 0)
+                @test length(unique(epochs_Ch1.var)) > 1 || all(epochs_Ch1.var .== 0)
             end
         end
 
@@ -196,18 +162,18 @@ using CSV
         end
 
         @testset "channel_summary statistical properties" begin
-            dat = create_continuous_test_data()
+            dat = create_test_data(n_channels = 4)
             result = eegfun.channel_summary(dat)
 
             # Test that constant channel has zero variance
-            constant_row = result[result.channel .== :C, :]
+            constant_row = result[result.channel .== :Ch4, :]
             @test nrow(constant_row) == 1
             @test constant_row.var[1] ≈ 0.0 atol=1e-10
             @test constant_row.std[1] ≈ 0.0 atol=1e-10
             @test constant_row.range[1] ≈ 0.0 atol=1e-10
 
             # Test that varying channels have non-zero variance
-            varying_rows = result[result.channel .!= :C, :]
+            varying_rows = result[result.channel .!= :Ch4, :]
             @test all(varying_rows.var .> 0)
             @test all(varying_rows.std .> 0)
             @test all(varying_rows.range .> 0)
@@ -220,7 +186,7 @@ using CSV
         end
 
         @testset "channel_summary consistency" begin
-            dat = create_continuous_test_data()
+            dat = create_test_data()
 
             # Test that results are consistent between calls
             result1 = eegfun.channel_summary(dat)
@@ -229,10 +195,10 @@ using CSV
 
             # Test that subsetting gives expected results
             full_result = eegfun.channel_summary(dat)
-            subset_result = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:A, :B]))
+            subset_result = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Ch1, :Ch2]))
 
             # The subset should match the corresponding rows from the full result
-            full_subset = full_result[in([:A, :B]).(full_result.channel), :]
+            full_subset = full_result[in([:Ch1, :Ch2]).(full_result.channel), :]
             @test subset_result.channel == full_subset.channel
             @test subset_result.min ≈ full_subset.min
             @test subset_result.max ≈ full_subset.max
@@ -240,22 +206,22 @@ using CSV
         end
 
         @testset "channel_summary integration with selection functions" begin
-            dat = create_continuous_test_data()
+            dat = create_test_data(n_channels = 4)
 
             # Test with different selection functions
             # Note: These functions are defined in the eegfun package
             result_all = eegfun.channel_summary(dat, channel_selection = eegfun.channels())
-            @test nrow(result_all) == 3
+            @test nrow(result_all) == 4
 
             # Test channel selection by name
-            result_specific = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:A]))
+            result_specific = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Ch1]))
             @test nrow(result_specific) == 1
-            @test result_specific.channel[1] == :A
+            @test result_specific.channel[1] == :Ch1
 
             # Test sample selection by range
             result_half = eegfun.channel_summary(dat, sample_selection = x -> 1:nrow(x) .<= div(nrow(x), 2))
             @test result_half isa DataFrame
-            @test nrow(result_half) == 3  # Same number of channels
+            @test nrow(result_half) == 4  # Same number of channels
         end
 
     end # channel_summary testset
@@ -268,47 +234,11 @@ end # eegfun testset
     test_dir = mktempdir()
 
     try
-        # Helper to create test ErpData with known statistics
-        function create_test_erp_data(n_conditions::Int = 2)
-            erps = eegfun.ErpData[]
-            fs = 256.0
-            n_samples = 513
-            t = range(-1.0, 1.0, length = n_samples)
-
-            for cond = 1:n_conditions
-                # Create channels with different characteristics
-                # Fz: mean=0, std=1 (standard normal)
-                # Cz: mean=0, std=2 (higher variance)
-                # Pz: mean=5, std=0.5 (shifted, lower variance)
-                fz = randn(n_samples)
-                cz = 2.0 .* randn(n_samples)
-                pz = 5.0 .+ 0.5 .* randn(n_samples)
-
-                df = DataFrame(
-                    time = collect(t),
-                    sample = 1:n_samples,
-                    condition = fill(cond, n_samples),
-                    Fz = fz,
-                    Cz = cz,
-                    Pz = pz,
-                )
-
-                layout = eegfun.Layout(
-                    DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
-                    nothing,
-                    nothing,
-                )
-
-                push!(erps, eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 10))
-            end
-
-            return erps
-        end
-
+        
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_test_erp_data(2)
+                erps = create_test_erp_data_batch(2)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 save(filename, "erps", erps)
                 @test isfile(filename)
@@ -345,9 +275,9 @@ end # eegfun testset
             @test hasproperty(results, :zvar)
 
             # Verify channels are present (CSV reads them as strings)
-            @test "Fz" in results.channel
-            @test "Cz" in results.channel
-            @test "Pz" in results.channel
+            @test "Ch1" in results.channel
+            @test "Ch2" in results.channel
+            @test "Ch3" in results.channel
         end
 
         @testset "Summary specific participants" begin
@@ -408,12 +338,12 @@ end # eegfun testset
         @testset "Channel selection predicate" begin
             output_dir = joinpath(test_dir, "summary_channel_select")
 
-            # Select only Fz and Cz
+            # Select only Ch1 and Ch2
             eegfun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                channel_selection = eegfun.channels([:Fz, :Cz]),
+                channel_selection = eegfun.channels([:Ch1, :Ch2]),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -421,20 +351,20 @@ end # eegfun testset
 
             # 2 files × 2 conditions × 2 channels = 8 rows
             @test nrow(results) == 8
-            @test "Fz" in results.channel
-            @test "Cz" in results.channel
-            @test "Pz" ∉ results.channel
+            @test "Ch1" in results.channel
+            @test "Ch2" in results.channel
+            @test "Ch3" ∉ results.channel
         end
 
         @testset "Channel exclusion predicate" begin
             output_dir = joinpath(test_dir, "summary_channel_exclude")
 
-            # Exclude Pz
+            # Exclude Ch3
             eegfun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                channel_selection = eegfun.channels_not([:Pz]),
+                channel_selection = eegfun.channels_not([:Ch3]),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -442,7 +372,7 @@ end # eegfun testset
 
             # 2 files × 2 conditions × 2 channels = 8 rows
             @test nrow(results) == 8
-            @test "Pz" ∉ results.channel
+            @test "Ch3" ∉ results.channel
         end
 
         @testset "Custom output filename" begin
@@ -515,7 +445,7 @@ end # eegfun testset
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_test_erp_data(2)
+            erps = create_test_erp_data_batch(2)
             save(joinpath(partial_dir, "1_erps_cleaned.jld2"), "erps", erps)
 
             # Create one malformed file (wrong variable name)
@@ -615,7 +545,7 @@ end # eegfun testset
                 output_dir = output_dir,
                 participants = 1,
                 conditions = 1,
-                channel_selection = eegfun.channels([:Fz, :Cz]),
+                channel_selection = eegfun.channels([:Ch1, :Ch2]),
             )
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
@@ -624,7 +554,7 @@ end # eegfun testset
             @test nrow(results) == 2
             @test all(results.file .== "1_erps_cleaned")
             @test all(results.condition .== 1)
-            @test "Pz" ∉ results.channel
+            @test "Ch3" ∉ results.channel
         end
 
         @testset "Pattern matching variants" begin
@@ -632,7 +562,7 @@ end # eegfun testset
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = create_test_erp_data(2)
+            erps = create_test_erp_data_batch(2)
             save(joinpath(pattern_dir, "1_erps_original.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "2_erps_cleaned.jld2"), "erps", erps)
             save(joinpath(pattern_dir, "3_custom_erps.jld2"), "erps", erps)

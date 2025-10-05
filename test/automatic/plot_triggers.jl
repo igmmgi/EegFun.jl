@@ -4,6 +4,7 @@ using OrderedCollections
 using eegfun
 using Makie
 
+
 @testset "plot_triggers" begin
 
     # =============================================================================
@@ -13,48 +14,9 @@ using Makie
     # Note: BioSemiDataFormat tests removed due to type complexity
     # Focus on ContinuousData tests which are more straightforward
 
-    function create_test_continuous_data(; n_samples::Int = 1000, fs::Int = 1000)
-        """Create mock ContinuousData for testing"""
-        time = collect(0:(n_samples-1)) ./ fs
-
-        # Create trigger pattern: [0,1,0,0,2,2,0,0,3,0,0,1,0,0]
-        triggers = zeros(Int16, n_samples)
-        triggers[100] = 1              # Single trigger 1
-        triggers[200:201] = [2, 2]     # Sustained trigger 2
-        triggers[300] = 3              # Single trigger 3
-        triggers[400] = 1              # Single trigger 1
-
-        # Create channel data
-        channel_data = randn(n_samples, 2)
-
-        df = DataFrame(time = time, triggers = triggers, channel1 = channel_data[:, 1], channel2 = channel_data[:, 2])
-
-        layout = eegfun.Layout(
-            DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]),
-            nothing,
-            nothing,
-        )
-
-        dat = eegfun.ContinuousData(df, layout, fs, eegfun.AnalysisInfo())
-        return dat
-    end
-
-    function create_empty_trigger_data(; n_samples::Int = 1000, fs::Int = 1000)
-        """Create data with no triggers for edge case testing"""
-        time = collect(0:(n_samples-1)) ./ fs
-        triggers = zeros(Int16, n_samples)
-
-        df = DataFrame(time = time, triggers = triggers, channel1 = randn(n_samples), channel2 = randn(n_samples))
-
-        layout = eegfun.Layout(
-            DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]),
-            nothing,
-            nothing,
-        )
-
-        dat = eegfun.ContinuousData(df, layout, fs, eegfun.AnalysisInfo())
-        return dat
-    end
+    # Use generic functions from test_utils.jl
+    # create_test_continuous_data(; n_samples::Int = 1000, fs::Int = 1000)
+    # create_empty_trigger_data(; n_samples::Int = 1000, fs::Int = 1000)
 
     # =============================================================================
     # HELPER FUNCTION TESTS

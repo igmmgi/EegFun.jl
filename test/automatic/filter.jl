@@ -9,17 +9,6 @@ using JLD2
 
 @testset "filter" begin
 
-    # Helper to create simple ContinuousData for filtering tests
-    function create_test_data(; n::Int = 2000, fs::Int = 1000)
-        t = collect(0:(n-1)) ./ fs
-        # Signal: DC offset + 5 Hz + 100 Hz components
-        x = 0.5 .+ sin.(2π .* 5 .* t) .+ 0.2 .* sin.(2π .* 100 .* t)
-        y = 2 .* x .+ 0.1 .* randn(length(x))
-        df = DataFrame(time = t, triggers = zeros(Int, n), A = x, B = y)
-        layout = eegfun.Layout(DataFrame(label = [:A, :B], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        dat = eegfun.ContinuousData(copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
-        return dat
-    end
 
     @testset "create_filter" begin
         fs = 1000.0
@@ -179,39 +168,10 @@ end
     test_dir = mktempdir()
 
     try
-        # Helper to create test ERP data
-        function create_test_erp_data(n_conditions::Int = 2)
-            erps = eegfun.ErpData[]
-            fs = 256.0
-            n_samples = 513
-            t = range(-1.0, 1.0, length = n_samples)
-
-            for cond = 1:n_conditions
-                # Create signal with low and high frequency components
-                ch1 = sin.(2π .* 5 .* t) .+ 0.2 .* sin.(2π .* 50 .* t) .+ 0.1 .* randn(n_samples)
-                ch2 = cos.(2π .* 5 .* t) .+ 0.2 .* cos.(2π .* 50 .* t) .+ 0.1 .* randn(n_samples)
-
-                df = DataFrame(
-                    time = collect(t),
-                    sample = 1:n_samples,
-                    condition = fill(cond, n_samples),
-                    Fz = ch1,
-                    Cz = ch2,
-                )
-
-                layout =
-                    eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-
-                push!(erps, eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 50))
-            end
-
-            return erps
-        end
-
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_test_erp_data(2)
+                erps = create_test_erp_data_batch(2)
                 # Use filename format consistent with codebase (numeric participant ID)
                 filename = joinpath(test_dir, "$(participant)_erps.jld2")
                 save(filename, "erps", erps)
@@ -238,11 +198,11 @@ end
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
             @test length(filtered_data) == 2  # 2 conditions
             @test filtered_data[1] isa eegfun.ErpData
-            @test hasproperty(filtered_data[1].data, :Fz)
-            @test hasproperty(filtered_data[1].data, :Cz)
+            @test hasproperty(filtered_data[1].data, :Ch1)
+            @test hasproperty(filtered_data[1].data, :Ch2)
 
             # Verify high frequencies are attenuated (not a rigorous test, just sanity check)
-            @test std(filtered_data[1].data.Fz) < 2.0  # Should be reduced
+            @test std(filtered_data[1].data.Ch1) < 2.0  # Should be reduced
         end
 
         @testset "Filter specific participants" begin
@@ -350,45 +310,11 @@ end
             epochs_dir = joinpath(test_dir, "epochs_test")
             mkpath(epochs_dir)
 
-            function create_test_epoch_data()
-                epochs = eegfun.EpochData[]
-                fs = 256  # Int64, not Float64
-                n_samples = 513
-                t = range(-1.0, 1.0, length = n_samples)
+            # Use generic create_test_epoch_data from test_utils.jl
+            # create_test_epoch_data(participant, condition, n_timepoints, n_channels)
 
-                for cond = 1:2
-                    # Create multiple epochs per condition
-                    dfs = DataFrame[]
-                    for ep = 1:3
-                        ch1 = sin.(2π .* 5 .* t) .+ 0.2 .* sin.(2π .* 50 .* t) .+ 0.1 .* randn(n_samples)
-                        ch2 = cos.(2π .* 5 .* t) .+ 0.2 .* cos.(2π .* 50 .* t) .+ 0.1 .* randn(n_samples)
-
-                        df = DataFrame(
-                            time = collect(t),
-                            sample = 1:n_samples,
-                            condition = fill(cond, n_samples),
-                            epoch = fill(ep, n_samples),
-                            Fz = ch1,
-                            Cz = ch2,
-                        )
-                        push!(dfs, df)
-                    end
-
-                    layout = eegfun.Layout(
-                        DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]),
-                        nothing,
-                        nothing,
-                    )
-
-                    # EpochData constructor: (data, layout, sample_rate, analysis_info)
-                    push!(epochs, eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo()))
-                end
-
-                return epochs
-            end
-
-            # Save epoch data
-            epochs = create_test_epoch_data()
+            # Save epoch data - create a vector of EpochData for batch processing
+            epochs = [create_test_epoch_data(1, 1), create_test_epoch_data(1, 2)]
             save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", epochs)
 
             # Filter epoch data
@@ -402,7 +328,7 @@ end
             # Load and verify
             filtered_epochs = load(joinpath(output_dir, "1_epochs.jld2"), "epochs")
             @test filtered_epochs[1] isa eegfun.EpochData
-            @test length(filtered_epochs[1].data) == 3  # 3 epochs
+            @test length(filtered_epochs) == 2  # 2 conditions
         end
 
         @testset "Existing output directory" begin
@@ -426,7 +352,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_test_erp_data(2)
+            erps = create_test_erp_data_batch(2)
             save(joinpath(partial_dir, "1_erps.jld2"), "erps", erps)
 
             # Create one malformed file (wrong variable name)
@@ -482,14 +408,14 @@ end
 
             # Get original data statistics
             original_data = load(joinpath(test_dir, "1_erps.jld2"), "erps")
-            original_signal = original_data[1].data.Fz
+            original_signal = original_data[1].data.Ch1
 
             # Apply low-pass filter
             eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             # Load filtered data
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
-            filtered_signal = filtered_data[1].data.Fz
+            filtered_signal = filtered_data[1].data.Ch1
 
             # Check that high-frequency noise is reduced (lower std deviation)
             @test std(filtered_signal) < std(original_signal)
@@ -524,7 +450,7 @@ end
         end
 
     finally
-        # Cleanup
+        # CleanCh1
         rm(test_dir, recursive = true, force = true)
     end
 end

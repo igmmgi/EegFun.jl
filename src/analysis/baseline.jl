@@ -65,6 +65,7 @@ function baseline!(
     # Apply baseline correction (dispatch handles DataFrame vs Vector{DataFrame})
     @info "Applying baseline correction to $(length(selected_channels)) channels over interval: $(baseline_interval.interval_start) to $(baseline_interval.interval_end)"
     _apply_baseline!(dat.data, selected_channels, baseline_interval)
+    return nothing
 end
 
 """
@@ -83,6 +84,7 @@ Apply baseline correction in-place to EEG data using the entire time range.
 function baseline!(dat::EegData; channel_selection::Function = channels())
     baseline_interval = IntervalIdx(1, n_samples(dat))
     baseline!(dat, baseline_interval; channel_selection = channel_selection)
+    return nothing
 end
 
 # generates all non-mutating versions

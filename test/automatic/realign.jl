@@ -6,56 +6,6 @@ using Test
 using JLD2
 using DataFrames
 
-# Helper function to create test epoched data with realignment times
-function create_test_epoch_data_with_rt(
-    n_epochs::Int = 10,
-    n_timepoints::Int = 200,
-    n_channels::Int = 3;
-    epoch_start::Float64 = -0.5,
-    epoch_end::Float64 = 1.5,
-    rt_range::Tuple{Float64,Float64} = (0.3, 0.7),
-)
-    # Create time vector (stimulus-locked)
-    time = collect(range(epoch_start, epoch_end, length = n_timepoints))
-    sample_rate = Int(round(n_timepoints / (epoch_end - epoch_start)))
-
-    # Generate random RTs for each epoch
-    rts = sort(rand(rt_range[1]:0.01:rt_range[2], n_epochs))
-
-    # Create epochs
-    epochs = DataFrame[]
-    for i = 1:n_epochs
-        epoch_df = DataFrame()
-        epoch_df.time = copy(time)
-        epoch_df.trial = fill(i, n_timepoints)
-        epoch_df.condition = fill(1, n_timepoints)
-        epoch_df.rt = fill(rts[i], n_timepoints)  # RT constant within epoch
-
-        # Add EEG channels with some pattern
-        for ch_idx = 1:n_channels
-            ch_name = Symbol("Ch$ch_idx")
-            # Simple signal that peaks around RT
-            signal = exp.(-((time .- rts[i]) .^ 2) ./ 0.05) .* 10.0 .+ randn(n_timepoints) .* 0.5
-            epoch_df[!, ch_name] = signal
-        end
-
-        push!(epochs, epoch_df)
-    end
-
-    # Create layout
-    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
-    layout = eegfun.Layout(
-        DataFrame(
-            label = channel_labels,
-            inc = zeros(n_channels),
-            azi = collect(range(0, 2π, length = n_channels + 1))[1:n_channels],
-        ),
-        nothing,
-        nothing,
-    )
-
-    return eegfun.EpochData(epochs, layout, sample_rate, eegfun.AnalysisInfo())
-end
 
 @testset "Realignment" begin
     @testset "Basic realignment (non-mutating)" begin
@@ -190,12 +140,12 @@ end
 
         # Check that metadata columns are preserved
         for i = 1:length(realigned.data)
-            @test hasproperty(realigned.data[i], :trial)
+            @test hasproperty(realigned.data[i], :epoch)
             @test hasproperty(realigned.data[i], :condition)
             @test hasproperty(realigned.data[i], :rt)
 
             # Trial numbers should be preserved
-            @test all(realigned.data[i].trial .== epoch_data.data[i].trial[1])
+            @test all(realigned.data[i].epoch .== epoch_data.data[i].epoch[1])
         end
 
         # Layout and other metadata should be preserved
@@ -250,7 +200,7 @@ end
 
     @testset "Multiple channels preserved" begin
         # Create data with more channels
-        epoch_data = create_test_epoch_data_with_rt(5, 100, 10)
+        epoch_data = create_test_epoch_data_with_rt(5, 100, 10, 100, 10)
 
         # Realign
         realigned = eegfun.realign(epoch_data, :rt)

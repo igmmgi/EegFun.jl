@@ -6,51 +6,15 @@ using Test
 using JLD2
 using DataFrames
 
-# Helper function to create test ERP data
-function create_test_jackknife_erp_data(participant::Int, condition::Int, n_timepoints::Int = 100, n_channels::Int = 3)
-    # Create time vector
-    time = collect(range(-0.2, 0.8, length = n_timepoints))
 
-    # Create channel data with participant and condition-specific patterns
-    channel_data = Dict{Symbol,Any}()
-    channel_data[:time] = time
-
-    # Add metadata columns
-    channel_data[:condition] = fill(condition, n_timepoints)
-    channel_data[:condition_name] = fill("condition_$condition", n_timepoints)
-    channel_data[:participant] = fill(participant, n_timepoints)
-
-    # Add EEG channels with participant-specific patterns
-    for (i, ch) in enumerate([:C3, :C4, :Cz][1:min(n_channels, 3)])
-        # Create signal with participant-specific amplitude
-        signal = sin.(2π * 0.1 * time) .* (participant * 0.5) .+ randn(n_timepoints) * 0.1
-        channel_data[ch] = signal
-    end
-
-    # Create DataFrame with columns in correct order
-    df = DataFrame()
-    df.time = channel_data[:time]
-    df.condition = channel_data[:condition]
-    df.condition_name = channel_data[:condition_name]
-    df.participant = channel_data[:participant]
-    for ch in [:C3, :C4, :Cz][1:min(n_channels, 3)]
-        df[!, ch] = channel_data[ch]
-    end
-
-    # Create ErpData
-    layout = eegfun.Layout(
-        DataFrame(label = [:C3, :C4, :Cz][1:min(n_channels, 3)], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
-        nothing,
-        nothing,
-    )
-    return eegfun.ErpData(df, layout, 250.0, eegfun.AnalysisInfo(), 10)
-end
+# Use generic create_test_erp_data from test_utils.jl
+# create_test_erp_data(participant, condition, n_timepoints, n_channels)
 
 @testset "Jackknife Average" begin
     @testset "In-memory jackknife_average function" begin
         @testset "Basic jackknife averaging" begin
             # Create test ERP data for 4 participants
-            erps = [create_test_jackknife_erp_data(i, 1) for i = 1:4]
+            erps = [create_test_erp_data(i, 1) for i = 1:4]
 
             # Create jackknife averages
             jackknife_results = eegfun.jackknife_average(erps)
@@ -68,7 +32,7 @@ end
 
         @testset "Jackknife calculation verification" begin
             # Create simple test data with known values
-            erps = [create_test_jackknife_erp_data(i, 1, 50) for i = 1:3]
+            erps = [create_test_erp_data(i, 1, 50) for i = 1:3]
 
             jackknife_results = eegfun.jackknife_average(erps)
 
@@ -78,44 +42,44 @@ end
 
             # Verify first jackknife (excluding participant 1)
             jk1 = jackknife_results[1]
-            expected_ch = (erps[2].data.C3 .+ erps[3].data.C3) ./ 2
-            @test all(abs.(jk1.data.C3 .- expected_ch) .< 1e-10)
+            expected_ch = (erps[2].data.Ch1 .+ erps[3].data.Ch1) ./ 2
+            @test all(abs.(jk1.data.Ch1 .- expected_ch) .< 1e-10)
 
             # Verify second jackknife (excluding participant 2)
             jk2 = jackknife_results[2]
-            expected_ch = (erps[1].data.C3 .+ erps[3].data.C3) ./ 2
-            @test all(abs.(jk2.data.C3 .- expected_ch) .< 1e-10)
+            expected_ch = (erps[1].data.Ch1 .+ erps[3].data.Ch1) ./ 2
+            @test all(abs.(jk2.data.Ch1 .- expected_ch) .< 1e-10)
 
             # Verify third jackknife (excluding participant 3)
             jk3 = jackknife_results[3]
-            expected_ch = (erps[1].data.C3 .+ erps[2].data.C3) ./ 2
-            @test all(abs.(jk3.data.C3 .- expected_ch) .< 1e-10)
+            expected_ch = (erps[1].data.Ch1 .+ erps[2].data.Ch1) ./ 2
+            @test all(abs.(jk3.data.Ch1 .- expected_ch) .< 1e-10)
         end
 
         @testset "Jackknife with different channels" begin
             # Test that all channels are processed correctly
-            erps = [create_test_jackknife_erp_data(i, 1, 50, 3) for i = 1:3]
+            erps = [create_test_erp_data(i, 1, 50, 3) for i = 1:3]
 
             jackknife_results = eegfun.jackknife_average(erps)
 
             # Verify all channels are present in jackknife results
             for jk in jackknife_results
-                @test hasproperty(jk.data, :C3)
-                @test hasproperty(jk.data, :C4)
-                @test hasproperty(jk.data, :Cz)
+                @test hasproperty(jk.data, :Ch1)
+                @test hasproperty(jk.data, :Ch2)
+                @test hasproperty(jk.data, :Ch3)
             end
         end
 
         @testset "Error handling: insufficient participants" begin
             # Only 1 participant - should throw error
-            erps = [create_test_jackknife_erp_data(1, 1)]
+            erps = [create_test_erp_data(1, 1)]
             @test_throws Exception eegfun.jackknife_average(erps)
         end
 
         @testset "Error handling: mismatched sample rates" begin
             # Create ERPs with different sample rates
-            erp1 = create_test_jackknife_erp_data(1, 1)
-            erp2 = create_test_jackknife_erp_data(2, 1)
+            erp1 = create_test_erp_data(1, 1)
+            erp2 = create_test_erp_data(2, 1)
             erp2 = eegfun.ErpData(erp2.data, erp2.layout, 500.0, erp2.analysis_info, erp2.n_epochs)  # Different sample rate
 
             @test_throws Exception eegfun.jackknife_average([erp1, erp2])
@@ -123,14 +87,14 @@ end
 
         @testset "Error handling: mismatched time points" begin
             # Create ERPs with different numbers of time points
-            erp1 = create_test_jackknife_erp_data(1, 1, 100)
-            erp2 = create_test_jackknife_erp_data(2, 1, 50)
+            erp1 = create_test_erp_data(1, 1, 100)
+            erp2 = create_test_erp_data(2, 1, 50)
 
             @test_throws Exception eegfun.jackknife_average([erp1, erp2])
         end
 
         @testset "Metadata preservation" begin
-            erps = [create_test_jackknife_erp_data(i, 1) for i = 1:3]
+            erps = [create_test_erp_data(i, 1) for i = 1:3]
 
             jackknife_results = eegfun.jackknife_average(erps)
 
@@ -145,7 +109,7 @@ end
 
         @testset "n_epochs calculation" begin
             # Create ERPs with specific n_epochs
-            erps = [create_test_jackknife_erp_data(i, 1) for i = 1:4]
+            erps = [create_test_erp_data(i, 1) for i = 1:4]
             for (i, erp) in enumerate(erps)
                 erps[i] = eegfun.ErpData(erp.data, erp.layout, erp.sample_rate, erp.analysis_info, i * 10)
             end
@@ -173,7 +137,7 @@ end
         @testset "Basic batch processing" begin
             # Create test LRP files for multiple participants
             for participant = 1:4
-                lrp_data = create_test_jackknife_erp_data(participant, 1)
+                lrp_data = create_test_erp_data(participant, 1)
                 file_path = joinpath(test_dir, "$(participant)_lrp.jld2")
                 save(file_path, "lrp", lrp_data)
             end
@@ -203,7 +167,7 @@ end
             # Create test LRP files with multiple conditions
             for participant = 1:4
                 lrp_data =
-                    [create_test_jackknife_erp_data(participant, 1), create_test_jackknife_erp_data(participant, 2)]
+                    [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
                 file_path = joinpath(test_dir, "$(participant)_multi_lrp.jld2")
                 save(file_path, "lrp", lrp_data)
             end
@@ -270,7 +234,7 @@ end
         @testset "Custom data variable" begin
             # Create test ERP files (not LRP)
             for participant = 1:3
-                erp_data = [create_test_jackknife_erp_data(participant, 1)]
+                erp_data = [create_test_erp_data(participant, 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps.jld2")
                 save(file_path, "erps", erp_data)
             end
@@ -294,7 +258,7 @@ end
 
             # Create test files with specific known values
             for participant = 1:3
-                lrp_data = create_test_jackknife_erp_data(participant, 1)
+                lrp_data = create_test_erp_data(participant, 1)
                 file_path = joinpath(verify_dir, "$(participant)_verify.jld2")
                 save(file_path, "lrp", lrp_data)
             end
@@ -315,8 +279,8 @@ end
             @test jk1 isa eegfun.ErpData
 
             # Verify: jackknife 1 should be average of participants 2 and 3
-            expected_ch = (lrp2.data.C3 .+ lrp3.data.C3) ./ 2
-            @test all(abs.(jk1.data.C3 .- expected_ch) .< 1e-10)
+            expected_ch = (lrp2.data.Ch1 .+ lrp3.data.Ch1) ./ 2
+            @test all(abs.(jk1.data.Ch1 .- expected_ch) .< 1e-10)
 
             # Cleanup
             rm(verify_dir, recursive = true)
@@ -325,7 +289,7 @@ end
         @testset "Error handling: insufficient files" begin
             # Create directory with only 1 file
             single_dir = mktempdir()
-            save(joinpath(single_dir, "1_lrp.jld2"), "lrp", create_test_jackknife_erp_data(1, 1))
+            save(joinpath(single_dir, "1_lrp.jld2"), "lrp", create_test_erp_data(1, 1))
 
             output_dir = joinpath(single_dir, "jackknife_insufficient")
 
@@ -385,9 +349,9 @@ end
                 @test "time" in names(jk1_cond.data)
                 @test "condition" in names(jk1_cond.data)
                 @test "condition_name" in names(jk1_cond.data)
-                @test "C3" in names(jk1_cond.data)
-                @test "C4" in names(jk1_cond.data)
-                @test "Cz" in names(jk1_cond.data)
+                @test "Ch1" in names(jk1_cond.data)
+                @test "Ch2" in names(jk1_cond.data)
+                @test "Ch3" in names(jk1_cond.data)
             else
                 # Single condition case
                 @test jk1 isa eegfun.ErpData
@@ -399,9 +363,9 @@ end
                 @test "time" in names(jk1.data)
                 @test "condition" in names(jk1.data)
                 @test "condition_name" in names(jk1.data)
-                @test "C3" in names(jk1.data)
-                @test "C4" in names(jk1.data)
-                @test "Cz" in names(jk1.data)
+                @test "Ch1" in names(jk1.data)
+                @test "Ch2" in names(jk1.data)
+                @test "Ch3" in names(jk1.data)
             end
         end
 
