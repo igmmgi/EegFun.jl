@@ -316,11 +316,11 @@ function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [
 
     # Handle single trigger case
     if length(sequence) == 1
-        return _search_single_trigger(array, sequence[1])
+        return _search_single_trigger(array, sequence[1], ignore_values)
     end
 
     # Find starting positions for the first trigger
-    idx_start_positions = _search_single_trigger(array, sequence[1])
+    idx_start_positions = _search_single_trigger(array, sequence[1], ignore_values)
 
     idx_positions = Int[]
     seq_len = length(sequence)
@@ -338,13 +338,14 @@ function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [
 end
 
 """
-    search_sequence(array, value::Int)
+    search_sequence(array, value::Integer; ignore_values::Vector{Int} = [0])
 
 Return indices of a single integer value within an array (onset detection).
 
 # Arguments
 - `array`: Array to search within
-- `value::Int`: Integer value to find
+- `value::Integer`: Integer value to find
+- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
 
 # Returns
 - `Vector{Int}`: Indices where the value starts (onsets only)
@@ -355,10 +356,10 @@ idx = search_sequence([0, 1, 1, 0, 2, 2], 1)  # Returns [2]
 idx = search_sequence([0, 1, 0, 2, 0, 1], 1)  # Returns [2, 6]
 ```
 """
-function search_sequence(array, value::Int)
+function search_sequence(array, value::Integer; ignore_values::Vector{Int} = [0])
     indices = Int[]
     for (i, val) in enumerate(array)
-        if val == value && (i == 1 || array[i-1] != value)
+        if val == value && (i == 1 || array[i-1] != value) && !(val in ignore_values)
             push!(indices, i)
         end
     end
@@ -415,22 +416,41 @@ function search_sequence(array, ranges::Vector{UnitRange}; sort_indices::Bool = 
 end
 
 # Helper function to search for a single trigger using dispatch
-_search_single_trigger(array, trigger::Int) = search_sequence(array, trigger)
-_search_single_trigger(array, trigger::UnitRange) = search_sequence(array, [trigger])
-_search_single_trigger(array, trigger::Symbol) = error("Single wildcard sequences not supported")
+function _search_single_trigger(array, trigger::Integer, ignore_values::Vector{Int} = [0])
+    indices = Int[]
+    for (i, val) in enumerate(array)
+        if val == trigger && (i == 1 || array[i-1] != trigger) && !(val in ignore_values)
+            push!(indices, i)
+        end
+    end
+    return indices
+end
+_search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) = search_sequence(array, [trigger])
+_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = error("Single wildcard sequences not supported")
 
 # Helper function to check if a sequence matches at a given position
 function _matches_sequence(array, sequence, start_idx, ignore_values)
-    @inbounds for (i, expected) in enumerate(sequence[2:end])
-        actual = array[start_idx + i]
-        _matches_expected(actual, expected) || return false
+    current_idx = start_idx
+    @inbounds for expected in sequence[2:end]
+        current_idx += 1
+        # Skip over ignored values
+        while current_idx <= length(array) && array[current_idx] in ignore_values
+            current_idx += 1
+        end
+        # Check if we've gone beyond the array bounds
+        current_idx > length(array) && return false
+        # Check if the current value matches the expected value
+        _matches_expected(array[current_idx], expected) || return false
     end
     return true
 end
 
 # Dispatch-based pattern matching
-_matches_expected(actual::Int, expected::Int) = actual == expected
-_matches_expected(actual::Int, expected::Symbol) = expected == :any  # Wildcard matches anything
-_matches_expected(actual::Int, expected::UnitRange) = actual in expected
+_matches_expected(actual::Integer, expected::Integer) = actual == expected
+_matches_expected(actual::Real, expected::Integer) = actual == expected
+_matches_expected(actual::Integer, expected::Real) = actual == expected
+_matches_expected(actual::Real, expected::Real) = actual == expected
+_matches_expected(actual::Real, expected::Symbol) = expected == :any  # Wildcard matches anything
+_matches_expected(actual::Real, expected::UnitRange) = actual in expected
 _matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
 
