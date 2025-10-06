@@ -9,41 +9,45 @@ using Statistics
 @testset "rereference" begin
 
     dat = create_test_data(n_channels = 2)
-   # 1) Average reference (:avg) subtracts mean of A,B,M1,M2 from each selected channel
+   # 1) Average reference (:avg) subtracts mean of all channels from each selected channel
     eegfun.rereference!(dat, :avg)
-    avg_ref = (dat.data.Ch1 .+ dat.data.Ch2) ./ 2
-    @test all(dat.data.Ch1 .== dat.data.Ch1 .- avg_ref)
-    @test all(dat.data.Ch2 .== dat.data.Ch2 .- avg_ref)
+    # After average reference, the mean of all channels should be approximately zero
+    mean_of_channels = mean([dat.data.Ch1, dat.data.Ch2])
+    @test all(abs.(mean_of_channels) .< 1e-10)
     @test eegfun.reference(dat.analysis_info) == :avg
 
-    # 2) Mastoid reference uses M1 and M2
+    # 2) Single channel reference uses Ch1 as reference
     dat = create_test_data(n_channels = 2)
-    dat_ref = eegfun.rereference(dat_mast, :Ch1)
-    ref = dat_ref.data.Ch1
-    @test all(dat_ref.data.Ch1 .== dat.Ch1 .- ref)
-    @test all(dat_ref.data.Ch2 .== dat.Ch2 .- ref)
-    @test eegfun.reference(dat_mast.analysis_info) == :Ch1
+    dat_ref = eegfun.rereference(dat, :Ch1)
+    # After single channel reference, the reference channel should be zero
+    @test all(dat_ref.data.Ch1 .== 0.0)
+    # Other channels should be original minus reference
+    @test all(dat_ref.data.Ch2 .== dat.data.Ch2 .- dat.data.Ch1)
+    @test eegfun.reference(dat_ref.analysis_info) == :Ch1
 
     # 4) EpochData: per-epoch reference computed independently
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
     eegfun.rereference!(dat, :avg)
-    @test all(dat.data[1].Ch1 .== dat.data[1].Ch1 .- ((dat.data[1].Ch1 .+ dat.data[1].Ch2) ./ 2))
-    @test all(dat.data[2].Ch1 .== dat.data[2].Ch1 .- ((dat.data[2].Ch1 .+ dat.data[2].Ch2) ./ 2))
+    # After average reference, the mean of all channels should be approximately zero for each epoch
+    for epoch in dat.data
+        mean_of_channels = mean([epoch.Ch1, epoch.Ch2])
+        @test all(abs.(mean_of_channels) .< 1e-10)
+    end
 
     # 5) Non-mutating version returns a new object; original unchanged
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
     dat_ref = eegfun.rereference(dat, :Ch1)
-    @test :Ch1 ∈ propertynames(dat_ref.data) && :Ch1 ∈ propertynames(dat.data)
-    @test !all(dat_ref.data.Ch1 .== dat.data.Ch1)
+    @test :Ch1 ∈ propertynames(dat_ref.data[1]) && :Ch1 ∈ propertynames(dat.data[1])
+    @test !all(dat_ref.data[1].Ch1 .== dat.data[1].Ch1)
 
 
     # 7) Channel included in both reference and selection becomes zero
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
     eegfun.rereference!(dat, [:Ch1], eegfun.channels([:Ch1]))
-    @test all(dat.data.Ch1 .== 0.0)
+    @test all(dat.data[1].Ch1 .== 0.0)
 
     # 9) Missing reference channel should throw
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
     @test_throws Any eegfun.rereference!(copy(dat), [:Z], eegfun.channels([:A]))
 
 end
@@ -88,12 +92,12 @@ end
         # Verify data structure is preserved
         for erp in rereferenced_erps
             @test erp isa eegfun.ErpData
-            @test nrow(erp.data) == 100  # n_timepoints
+            @test nrow(erp.data) == 2501  # n_timepoints (-0.5 to 2.0s at 1000Hz)
             @test "time" in names(erp.data)
             @test "condition" in names(erp.data)
-            @test "Fz" in names(erp.data)
-            @test "Cz" in names(erp.data)
-            @test "Pz" in names(erp.data)
+            @test "Ch1" in names(erp.data)
+            @test "Ch2" in names(erp.data)
+            @test "Ch3" in names(erp.data)
         end
     end
 
@@ -118,14 +122,14 @@ end
             result = eegfun.rereference(
                 "erps_cleaned",
                 input_dir = test_dir,
-                reference_selection = :mastoid,
+                reference_selection = :Ch2,
                 output_dir = output_dir,
             )
 
-            # Mastoid reference should fail because test data doesn't have M1, M2 channels
+            # Ch2 reference should work
             @test result !== nothing
-            @test result.success == 0  # No successful files
-            @test result.errors > 0    # Should have errors
+            @test result.success > 0  # Should have successful files
+            @test result.errors == 0  # Should have no errors
         end
 
         @testset "Single channel reference" begin
@@ -134,7 +138,7 @@ end
             result = eegfun.rereference(
                 "erps_cleaned",
                 input_dir = test_dir,
-                reference_selection = [:Cz],
+                reference_selection = [:Ch1],
                 output_dir = output_dir,
             )
 
@@ -148,7 +152,7 @@ end
             result = eegfun.rereference(
                 "erps_cleaned",
                 input_dir = test_dir,
-                reference_selection = [:Fz, :Pz],
+                reference_selection = [:Ch1, :Ch2],
                 output_dir = output_dir,
             )
 
@@ -160,7 +164,7 @@ end
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = [create_test_epoch_data(participant, 1, 3), create_test_epoch_data(participant, 2, 3)]
+            epochs = create_test_epoch_data(conditions=2, n_channels=3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             save(file_path, "epochs", epochs)
@@ -186,7 +190,7 @@ end
 
         for epoch_data in rereferenced_epochs
             @test epoch_data isa eegfun.EpochData
-            @test length(epoch_data.data) == 3  # 3 epochs per condition
+            @test length(epoch_data.data) == 10  # 10 epochs per condition (default)
         end
     end
 
@@ -409,11 +413,11 @@ end
 
         # Verify average reference calculation
         # Average reference should make the mean of all channels zero
-        for ch in [:Fz, :Cz, :Pz]
+        for ch in [:Ch1, :Ch2, :Ch3]
             if hasproperty(rereferenced_erp.data, ch)
                 # The mean across all channels at each time point should be approximately zero
                 all_channels =
-                    [rereferenced_erp.data[!, :Fz], rereferenced_erp.data[!, :Cz], rereferenced_erp.data[!, :Pz]]
+                    [rereferenced_erp.data[!, :Ch1], rereferenced_erp.data[!, :Ch2], rereferenced_erp.data[!, :Ch3]]
                 mean_across_channels = mean.(zip(all_channels...))
                 @test all(abs.(mean_across_channels) .< 1e-10)
             end
