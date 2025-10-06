@@ -242,85 +242,85 @@ function create_continuous_with_triggers(; n::Int = 1000, fs::Int = 1000)
 end
 
 # Helper function to create test epochs with artifacts
-function create_test_epochs_with_artifacts(
-    participant::Int,
-    condition::Int,
-    n_epochs::Int = 5,
-    n_timepoints::Int = 100,
-    n_channels::Int = 3;
-    n_bad_epochs::Int = 2,
-)
-    # Create time vector
-    time = collect(range(-0.2, 0.8, length = n_timepoints))
-
-    # Create channel data with some condition-specific patterns
-    channel_data = Dict{Symbol,Any}()
-    channel_data[:time] = time
-
-    # Add metadata columns
-    channel_data[:condition] = fill(condition, n_timepoints)
-    channel_data[:condition_name] = fill("condition_$condition", n_timepoints)
-    channel_data[:participant] = fill(participant, n_timepoints)
-
-    # Generate channel labels based on n_channels
-    channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
-    
-    # Add EEG channels with condition-specific patterns
-    for (i, ch) in enumerate(channel_labels)
-        # Create some signal with condition-specific amplitude
-        signal = sin.(2π * 0.1 * time) .* (condition * 0.5) .+ randn(n_timepoints) * 0.1
-        channel_data[ch] = signal
-    end
-
-    # Create multiple epochs with some containing artifacts
-    dfs = DataFrame[]
-    bad_indices = Int[]
-    
-    for epoch in 1:n_epochs
-        df = DataFrame()
-        df.time = channel_data[:time]
-        df.condition = channel_data[:condition]
-        df.condition_name = channel_data[:condition_name]
-        df.participant = channel_data[:participant]
-        df.epoch = fill(epoch, n_timepoints)
-        
-        # Determine if this epoch should have artifacts
-        is_bad_epoch = epoch <= n_bad_epochs
-        if is_bad_epoch
-            push!(bad_indices, epoch)
-        end
-        
-        for ch in channel_labels
-            signal = copy(channel_data[ch])
-            
-            # Add artifacts to bad epochs
-            if is_bad_epoch && ch == channel_labels[1]  # Add artifacts to first channel
-                signal[20:25] .= 50.0  # Large positive artifact
-                signal[60:65] .= -40.0  # Large negative artifact
-            end
-            
-            df[!, ch] = signal .+ randn(n_timepoints) * 0.05  # Add some epoch-specific noise
-        end
-        
-        push!(dfs, df)
-    end
-
-    # Create layout
-    layout = eegfun.Layout(
-        DataFrame(
-            label = channel_labels,
-            inc = zeros(length(channel_labels)),
-            azi = zeros(length(channel_labels)),
-        ),
-        nothing,
-        nothing,
-    )
-
-    # Create analysis info
-    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
-
-    return eegfun.EpochData(dfs, layout, 1000, analysis_info), bad_indices
-end
+# function create_test_epochs_with_artifacts(
+#     participant::Int,
+#     condition::Int,
+#     n_epochs::Int = 5,
+#     n_timepoints::Int = 100,
+#     n_channels::Int = 3;
+#     n_bad_epochs::Int = 2,
+# )
+#     # Create time vector
+#     time = collect(range(-0.2, 0.8, length = n_timepoints))
+# 
+#     # Create channel data with some condition-specific patterns
+#     channel_data = Dict{Symbol,Any}()
+#     channel_data[:time] = time
+# 
+#     # Add metadata columns
+#     channel_data[:condition] = fill(condition, n_timepoints)
+#     channel_data[:condition_name] = fill("condition_$condition", n_timepoints)
+#     channel_data[:participant] = fill(participant, n_timepoints)
+# 
+#     # Generate channel labels based on n_channels
+#     channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
+#     
+#     # Add EEG channels with condition-specific patterns
+#     for (i, ch) in enumerate(channel_labels)
+#         # Create some signal with condition-specific amplitude
+#         signal = sin.(2π * 0.1 * time) .* (condition * 0.5) .+ randn(n_timepoints) * 0.1
+#         channel_data[ch] = signal
+#     end
+# 
+#     # Create multiple epochs with some containing artifacts
+#     dfs = DataFrame[]
+#     bad_indices = Int[]
+#     
+#     for epoch in 1:n_epochs
+#         df = DataFrame()
+#         df.time = channel_data[:time]
+#         df.condition = channel_data[:condition]
+#         df.condition_name = channel_data[:condition_name]
+#         df.participant = channel_data[:participant]
+#         df.epoch = fill(epoch, n_timepoints)
+#         
+#         # Determine if this epoch should have artifacts
+#         is_bad_epoch = epoch <= n_bad_epochs
+#         if is_bad_epoch
+#             push!(bad_indices, epoch)
+#         end
+#         
+#         for ch in channel_labels
+#             signal = copy(channel_data[ch])
+#             
+#             # Add artifacts to bad epochs
+#             if is_bad_epoch && ch == channel_labels[1]  # Add artifacts to first channel
+#                 signal[20:25] .= 50.0  # Large positive artifact
+#                 signal[60:65] .= -40.0  # Large negative artifact
+#             end
+#             
+#             df[!, ch] = signal .+ randn(n_timepoints) * 0.05  # Add some epoch-specific noise
+#         end
+#         
+#         push!(dfs, df)
+#     end
+# 
+#     # Create layout
+#     layout = eegfun.Layout(
+#         DataFrame(
+#             label = channel_labels,
+#             inc = zeros(length(channel_labels)),
+#             azi = zeros(length(channel_labels)),
+#         ),
+#         nothing,
+#         nothing,
+#     )
+# 
+#     # Create analysis info
+#     analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+# 
+#     return eegfun.EpochData(dfs, layout, 1000, analysis_info), bad_indices
+# end
 
 
 # Helper functions for trigger testing
