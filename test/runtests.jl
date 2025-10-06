@@ -47,9 +47,9 @@ println("=" ^ 40)
     # include("automatic/ica.jl")
     # include("automatic/resample.jl")
     # include("automatic/erp_measurements.jl")
+    # include("automatic/rereference.jl")
 
     
-    include("automatic/rereference.jl")
 
 
     # include("automatic/epochs.jl")
