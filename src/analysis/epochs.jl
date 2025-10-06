@@ -341,7 +341,7 @@ function mark_epoch_windows!(
     # For each epoch condition
     for condition in epoch_conditions
         # Find all occurrences of the trigger sequences (unified approach)
-        sequence_indices = search_sequences(dat.data.triggers, condition.trigger_sequences)
+        sequence_indices = search_sequence(dat.data.triggers, condition.trigger_sequences)
         if isempty(sequence_indices)
             @minimal_warning "No triggers found for condition '$(condition.name)'"
             continue
@@ -479,7 +479,7 @@ condition = EpochCondition(
 function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::EpochCondition, start_time, end_time)
     # Find t==0 positions based on trigger_sequences (unified approach)
     zero_idx =
-        search_sequences(dat.data.triggers, epoch_condition.trigger_sequences) .+ (epoch_condition.reference_index - 1)
+        search_sequence(dat.data.triggers, epoch_condition.trigger_sequences) .+ (epoch_condition.reference_index - 1)
     isempty(zero_idx) && error("None of the trigger sequences $(epoch_condition.trigger_sequences) found!")
 
     # Apply after/before filtering if specified

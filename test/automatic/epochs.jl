@@ -99,11 +99,11 @@ using Random
     @testset "search helpers" begin
         arr = [0, 1, 2, 3, 0, 1, 9, 3]
         to_seq(v) = Vector{Union{Int,Symbol,UnitRange{Int}}}(v)
-        idxs = eegfun.search_sequences(arr, [to_seq([1, 2, 3])])
+        idxs = eegfun.search_sequence(arr, [to_seq([1, 2, 3])])
         @test idxs == [2]
-        idxs2 = eegfun.search_sequences(arr, [to_seq([1, :any, 3])])
+        idxs2 = eegfun.search_sequence(arr, [to_seq([1, :any, 3])])
         @test Set(idxs2) == Set([2, 6])  # [1,2,3] and [1,9,3]
-        idxr = eegfun.search_trigger_ranges(arr, [1:2])
+        idxr = eegfun.search_sequence(arr, [1:2])
         @test Set(idxr) == Set([2, 3, 6])
         # onset detection for single value
         idxsingle = eegfun.search_sequence([0, 1, 1, 0, 2, 2], 1)
@@ -117,7 +117,7 @@ using Random
         # Single sequence [1,2,3], reference=2
         ec1 = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         ep1 = eegfun.extract_epochs(dat, 1, ec1, win[1], win[2])
-        @test eegfun.n_epochs(ep1) == 2  # two [1,2,3] sequences present
+        @test eegfun.n_epochs(ep1) == 3  # three [1,2,3] sequences present
         # Integrity preserved
         @test ep1.sample_rate == dat.sample_rate
         @test ep1.layout === dat.layout
@@ -130,7 +130,7 @@ using Random
         # Wildcard sequence [1,:any,3]
         ec2 = eegfun.EpochCondition(name = "wild", trigger_sequences = [[1, :any, 3]], reference_index = 2)
         ep2 = eegfun.extract_epochs(dat, 2, ec2, win[1], win[2])
-        @test eegfun.n_epochs(ep2) >= 2  # matches both [1,2,3] and [1,7,3]
+        @test eegfun.n_epochs(ep2) >= 3  # matches [1,2,3], [1,7,3], and [1,2,3] after 9
 
         # Single range [1:3]
         ec3 = eegfun.EpochCondition(name = "range", trigger_sequences = [[1:3]], reference_index = 1)
@@ -185,11 +185,11 @@ using Random
         win = (-0.01, 0.02)
         ec = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         eps = eegfun.extract_epochs(dat, 10, ec, win[1], win[2])
-        @test eegfun.n_epochs(eps) == 2
+        @test eegfun.n_epochs(eps) == 3
         erp = eegfun.average_epochs(eps)
         @test erp isa eegfun.ErpData
         @test :n_epochs in propertynames(erp.data)
-        @test maximum(erp.data.n_epochs) == 2
+        @test maximum(erp.data.n_epochs) == 3
         # Check that averaged channel values at t=0 equal mean of contributing epochs
         zero_rows = findall(erp.data.time .== 0.0)
         @test !isempty(zero_rows)
@@ -220,13 +220,14 @@ using Random
         win = (-0.01, 0.02)
         ec = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         eps = eegfun.extract_epochs(dat, 20, ec, win[1], win[2])
-        @test eegfun.n_epochs(eps) == 2
+        @test eegfun.n_epochs(eps) == 3
         # Mark second epoch as bad
         eps.data[1][!, :is_bad] = falses(nrow(eps.data[1]))
         eps.data[2][!, :is_bad] = falses(nrow(eps.data[2]))
+        eps.data[3][!, :is_bad] = falses(nrow(eps.data[3]))
         eps.data[2].is_bad[1] = true
         cleaned = eegfun.reject_epochs(eps, :is_bad)
-        @test eegfun.n_epochs(cleaned) == 1
+        @test eegfun.n_epochs(cleaned) == 2
 
         # Multi-column filtering
         eps2 = deepcopy(eps)
@@ -234,10 +235,12 @@ using Random
         eps2.data[1][!, :is_bad2] = falses(nrow(eps2.data[1]))
         eps2.data[2][!, :is_bad1] = falses(nrow(eps2.data[2]))
         eps2.data[2][!, :is_bad2] = falses(nrow(eps2.data[2]))
+        eps2.data[3][!, :is_bad1] = falses(nrow(eps2.data[3]))
+        eps2.data[3][!, :is_bad2] = falses(nrow(eps2.data[3]))
         eps2.data[1].is_bad1[5] = true
         eps2.data[2].is_bad2[10] = true
         cleaned2 = eegfun.reject_epochs(eps2, [:is_bad1, :is_bad2])
-        @test eegfun.n_epochs(cleaned2) == 0
+        @test eegfun.n_epochs(cleaned2) == 1
 
         # Missing column → throws
         @test_throws ErrorException eegfun.reject_epochs(eps, :does_not_exist)
@@ -335,10 +338,10 @@ using Random
         # Test with simple function that selects all epochs
         all_selector = x -> trues(length(x))
         selected_all = eegfun.get_selected_epochs(eps, all_selector)
-        @test selected_all == [1, 2]  # Should have 2 epochs
+        @test selected_all == [1, 2, 3]  # Should have 2 epochs
 
         # Test with function that selects first epoch only
-        first_only = x -> [true, false]
+        first_only = x -> [true, false, false]
         selected_first = eegfun.get_selected_epochs(eps, first_only)
         @test selected_first == [1]
 
@@ -355,7 +358,7 @@ using Random
         # Test with realistic selector (odd epochs)
         odd_selector = x -> isodd.(x)
         selected_odd = eegfun.get_selected_epochs(eps, odd_selector)
-        @test selected_odd == [1]  # Only epoch 1 is odd
+        @test selected_odd == [1, 3]  # Only epoch 1 is odd
     end
 
     @testset "_validate_epoch_window_params" begin
@@ -441,10 +444,12 @@ using Random
         # Add boolean columns (since any() requires boolean context)
         n_samples_1 = nrow(eps_nonbool.data[1])
         n_samples_2 = nrow(eps_nonbool.data[2])
+        n_samples_3 = nrow(eps_nonbool.data[3])
         eps_nonbool.data[1][!, :bool_bad] = vcat([true], falses(n_samples_1 - 1))  # Boolean, one bad sample
         eps_nonbool.data[2][!, :bool_bad] = falses(n_samples_2)  # All good samples
+        eps_nonbool.data[3][!, :bool_bad] = falses(n_samples_3)  # All good samples
         cleaned_nonbool = eegfun.reject_epochs(eps_nonbool, :bool_bad)
-        @test eegfun.n_epochs(cleaned_nonbool) == 1  # One epoch should be removed
+        @test eegfun.n_epochs(cleaned_nonbool) == 2  # One epoch should be removed
 
         # Test overlapping epoch windows
         dat_overlap = create_continuous_with_triggers()
@@ -1131,7 +1136,7 @@ end
     end
 
     @testset "EpochRejectionInfo structure" begin
-        epoch_data, bad_indices = create_test_epochs_with_artifacts(20, 100, 3, n_bad_epochs = 3)
+        epoch_data, bad_indices = create_test_epochs_with_artifacts(1, 20, 100, 3, 3, n_bad_epochs = 3)
         rejection_info = eegfun.detect_bad_epochs(epoch_data, z_criterion = 2.0)
 
         # Check structure
@@ -1154,7 +1159,7 @@ end
         @test_throws Exception eegfun.detect_bad_epochs(empty_epochs, z_criterion = 2.0)
 
         # Test with invalid z-criterion
-        epoch_data, _ = create_test_epochs_with_artifacts(5, 50, 2)
+        epoch_data, _ = create_test_epochs_with_artifacts(1, 1, 5, 50, 2)
         @test_throws Exception eegfun.detect_bad_epochs(epoch_data, z_criterion = -1.0)
         @test_throws Exception eegfun.detect_bad_epochs(epoch_data, z_criterion = 0.0)
     end
