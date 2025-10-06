@@ -93,7 +93,7 @@ using CSV
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = [create_test_epoch_data(participant, 1, 3), create_test_epoch_data(participant, 2, 3)]
+            epochs = create_test_epoch_data(conditions=2, n_channels=3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             save(file_path, "epochs", epochs)
@@ -110,7 +110,7 @@ using CSV
         )
 
         @test result isa DataFrame
-        @test nrow(result) == 12  # 2 participants × 2 conditions × 3 epochs each
+        @test nrow(result) == 40  # 2 participants × 2 conditions × 10 epochs each
 
         # Verify epoch column is present
         @test "epoch" in names(result)
@@ -252,7 +252,7 @@ using CSV
 
             result = eegfun.erp_measurements(
                 "erps_cleaned",
-                (2.0, 3.0),
+                (2.1, 3.0),
                 "mean_amp",
                 input_dir = test_dir,
                 output_dir = output_dir,
