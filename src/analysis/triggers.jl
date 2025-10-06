@@ -226,64 +226,64 @@ end
 # =============================================================================
 
 """
-    search_sequences(array, sequences)
+    search_sequence(array, sequences; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
 
 Return indices of any of the specified sequences within an array, handling wildcards and ranges.
 
 # Arguments
 - `array`: Array to search within
 - `sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}}`: Vector of sequences to find
+- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
+- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
 
 # Returns
 - `Vector{Int}`: Indices where any of the sequences start
 
 # Examples
 ```julia
-# Single sequence
-
-using eegfun
-idx = eegfun.search_sequences([1, 2, 3, 4, 5], [[1, 2, 3]])
-
 # Multiple sequences (OR logic)
-idx = eegfun.search_sequences([1, 2, 1, 3, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])
+idx = search_sequence([1, 2, 1, 3, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])
 
 # Wildcards
-idx = eegfun.search_sequences([1, 2, 3, 4, 5, 1, 4, 1], [[1, :any, 3]])
+idx = search_sequence([1, 2, 3, 4, 5, 1, 4, 1], [[1, :any, 3]])
 
 # Ranges
-idx = search_sequences([1, 2, 3, 4, 5], [[1:3], [5:5]])
+idx = search_sequence([1, 2, 3, 4, 5], [[1:3], [5:5]])
 
 # Mixed sequences
-idx = search_sequences([1, 2, 3, 4, 5], [[1, 2:4, 5]])
+idx = search_sequence([1, 2, 3, 4, 5], [[1, 2:4, 5]])
 ```
 """
-function search_sequences(array, sequences)
+function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
     isempty(array) && return Int[]
     isempty(sequences) && return Int[]
 
     # Optimize common case of single sequence
     if length(sequences) == 1
-        return search_single_sequence(array, sequences[1])
+        return search_sequence(array, sequences[1]; ignore_values=ignore_values, sort_indices=sort_indices)
     end
 
     all_indices = Int[]
     for sequence in sequences
-        indices = search_single_sequence(array, sequence)
+        # Use sort_indices=false for individual calls since will be sorted at end if true
+        indices = search_sequence(array, sequence; ignore_values=ignore_values, sort_indices=false)
         append!(all_indices, indices)
     end
 
-    return unique(all_indices)
+    result = unique(all_indices)
+    return sort_indices ? sort(result) : result
 end
 
 """
-    search_single_sequence(array, sequence; ignore_values::Vector{Int} = Int[])
+    search_sequence(array, sequence; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
 
 Return indices of a single sequence within an array, handling wildcards and ranges.
 
 # Arguments
 - `array`: Array to search within
 - `sequence::Vector{Union{Int,Symbol,UnitRange{Int}}}`: Sequence pattern to find
-- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: empty)
+- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: [0])
+- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
 
 # Returns
 - `Vector{Int}`: Indices where the sequence starts
@@ -296,159 +296,141 @@ Return indices of a single sequence within an array, handling wildcards and rang
 
 # Examples
 ```julia
-idx = search_single_sequence([1,0,2,3,1,0,2,3], [1,2]; ignore_values=[0])  # Returns [1, 5]
+idx = search_sequence([1,0,2,3,1,0,2,3], [1,2]; ignore_values=[0])  # Returns [1, 5]
 ```
 """
-function search_single_sequence(array, sequence; ignore_values::Vector{Int} = Int[])
+function search_sequence(array, sequence::Vector; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
     isempty(array) && return Int[]
-    isempty(sequence) && @minimal_error_throw("Sequence cannot be empty")
+    isempty(sequence) && return Int[]
+
+    # Handle case where sequence is all UnitRanges (treat as range search)
+    if all(x -> x isa UnitRange, sequence)
+        # Call the Vector{UnitRange} method directly
+        all_indices = Int[]
+        for value in union(sequence...)
+            indices = search_sequence(array, value)
+            append!(all_indices, indices)
+        end
+        return sort_indices ? sort(all_indices) : all_indices
+    end
 
     # Handle single trigger case
     if length(sequence) == 1
-        if sequence[1] isa Int
-            return search_sequence(array, sequence[1]; ignore_values=ignore_values)
-        elseif sequence[1] isa UnitRange
-            return search_trigger_ranges(array, [sequence[1]]; ignore_values=ignore_values)
-        else
-            @minimal_error_throw("Single wildcard sequences not supported")
-        end
+        return _search_single_trigger(array, sequence[1])
     end
 
     # Find starting positions for the first trigger
-    first_trigger = sequence[1]
-    if first_trigger isa Symbol
-        @minimal_error_throw("First element in sequence cannot be a wildcard")
-    elseif first_trigger isa UnitRange
-        # For ranges, find all possible starting positions
-        idx_start_positions = search_trigger_ranges(array, [first_trigger]; ignore_values=ignore_values)
-    else
-        # Use search_sequence to find sequence starts
-        idx_start_positions = search_sequence(array, first_trigger; ignore_values=ignore_values)
-    end
+    idx_start_positions = _search_single_trigger(array, sequence[1])
 
-    # sequence of values - search for consecutive sequences
     idx_positions = Int[]
+    seq_len = length(sequence)
+    max_idx = length(array) - seq_len + 1
     for idx in idx_start_positions
-        good_sequence = true
-        
-        for seq = 1:(length(sequence)-1)
-            if (idx + seq) > length(array)
-                good_sequence = false
-                break
-            end
-
-            expected_trigger = sequence[seq+1]
-            actual_trigger = array[idx+seq]
-
-            if expected_trigger isa Int
-                # Exact match required
-                if actual_trigger != expected_trigger
-                    good_sequence = false
-                    break
-                end
-            elseif expected_trigger == :any
-                # Wildcard - matches any value
-                continue
-            elseif expected_trigger isa UnitRange
-                # Range - check if actual trigger is in range
-                if !(actual_trigger in expected_trigger)
-                    good_sequence = false
-                    break
-                end
-            else
-                @minimal_error_throw("Unsupported trigger type: $expected_trigger")
-            end
+        if idx > max_idx
+            continue
         end
-        
-        if good_sequence
+        if _matches_sequence(array, sequence, idx, ignore_values)
             push!(idx_positions, idx)
         end
     end
 
-    return idx_positions
+    return sort_indices ? sort(idx_positions) : idx_positions
 end
 
 """
-    search_trigger_ranges(array, trigger_ranges; ignore_values::Vector{Int} = Int[])
+    search_sequence(array, value::Int)
 
-Return indices where triggers match any of the specified ranges.
+Return indices of a single integer value within an array (onset detection).
 
 # Arguments
 - `array`: Array to search within
-- `trigger_ranges::Vector{UnitRange{Int}}`: Vector of integer ranges to match
-- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: empty)
+- `value::Int`: Integer value to find
 
 # Returns
-- `Vector{Int}`: Indices where triggers match any of the ranges
-
-# Examples
-```julia
-idx = search_trigger_ranges([1, 2, 3, 4, 5, 6], [1:3, 5:6])  # Returns indices of 1,2,3,5,6
-idx = search_trigger_ranges([0, 1, 0, 2, 0, 3], [1:3]; ignore_values=[0])  # Returns [2, 4, 6]
-```
-"""
-function search_trigger_ranges(array, trigger_ranges::Vector{UnitRange{Int}}; ignore_values::Vector{Int} = Int[])
-    isempty(array) && return Int[]
-    isempty(trigger_ranges) && return Int[]
-
-    # Use search_sequence for each trigger value in the ranges to get onset detection
-    all_indices = Int[]
-    for range in trigger_ranges
-        for trigger_value in range
-            indices = search_sequence(array, trigger_value; ignore_values=ignore_values)
-            append!(all_indices, indices)
-        end
-    end
-
-    # Remove duplicates and sort
-    return all_indices
-end
-
-"""
-    search_sequence(array::AbstractVector, sequence::Int; ignore_values::Vector{Int} = Int[]) -> Vector{Int}
-
-Find starting indices of a sequence in an array (onset detection).
-
-# Arguments
-- `array::AbstractVector`: Array to search within
-- `sequence::Int`: Trigger value to find (onset detection)
-- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: empty)
-
-# Returns
-- `Vector{Int}`: Indices where sequence starts (onsets only)
-
-# Notes
-- Uses onset detection (finds only first occurrence of sustained triggers)
-- Returns intersection of value matches and onset positions
-- Ignores specified values when detecting onsets
+- `Vector{Int}`: Indices where the value starts (onsets only)
 
 # Examples
 ```julia
 idx = search_sequence([0, 1, 1, 0, 2, 2], 1)  # Returns [2]
-idx = search_sequence([0, 1, 0, 2, 0, 1], 1; ignore_values=[0])  # Returns [2, 6]
+idx = search_sequence([0, 1, 0, 2, 0, 1], 1)  # Returns [2, 6]
 ```
 """
-function search_sequence(array::AbstractVector, sequence::Int; ignore_values::Vector{Int} = Int[])
-    isempty(array) && return Int[]
-
-    # Find all positions where the trigger value matches
-    value_matches = findall(array .== sequence)
-
-    # Find all positions where there's an onset (value increases from previous)
-    # but ignore transitions to ignore_values
-    padded_array = vcat(0, array)
-    onset_positions = Int[]
-    
-    for i in 2:length(padded_array)
-        current_val = padded_array[i]
-        previous_val = padded_array[i-1]
-        
-        # Check if this is an onset (value changed) and we're not transitioning to an ignored value
-        if current_val != previous_val && !(current_val in ignore_values)
-            push!(onset_positions, i-1)  # Convert back to 1-based indexing
+function search_sequence(array, value::Int)
+    indices = Int[]
+    for (i, val) in enumerate(array)
+        if val == value && (i == 1 || array[i-1] != value)
+            push!(indices, i)
         end
     end
-
-    # Return intersection (positions that are both value matches and onsets)
-    return intersect(value_matches, onset_positions)
+    return indices
 end
+
+"""
+    search_sequence(array, range::UnitRange; sort_indices::Bool = true)
+
+Return indices where array values match any value within the specified range.
+
+# Arguments
+- `array`: Array to search within
+- `range::UnitRange`: Integer range to match
+- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
+
+# Returns
+- `Vector{Int}`: Indices where values in range match
+
+# Examples
+```julia
+idx = search_sequence([1, 2, 3, 4, 5, 6], 1:3)  # Returns indices of 1,2,3
+```
+"""
+function search_sequence(array, range::UnitRange; sort_indices::Bool = true)
+    return search_sequence(array, [range]; sort_indices=sort_indices)
+end
+
+"""
+    search_sequence(array, ranges::Vector{UnitRange}; sort_indices::Bool = true)
+
+Return indices where array values match any of the values within specified ranges.
+
+# Arguments
+- `array`: Array to search within
+- `ranges::Vector{UnitRange}`: Vector of integer ranges to match
+- `sort_indices::Bool`: Whether to sort the returned indices (default: true)
+
+# Returns
+- `Vector{Int}`: Indices where values in ranges match
+
+# Examples
+```julia
+idx = search_sequence([1, 2, 3, 4, 5, 6], [1:3, 5:6])  # Returns indices of 1,2,3,5,6
+```
+"""
+function search_sequence(array, ranges::Vector{UnitRange}; sort_indices::Bool = true)
+    all_indices = Int[]
+    for value in union(ranges...)
+        indices = search_sequence(array, value; sort_indices=false)
+        append!(all_indices, indices)
+    end
+    return sort_indices ? sort(all_indices) : all_indices
+end
+
+# Helper function to search for a single trigger using dispatch
+_search_single_trigger(array, trigger::Int) = search_sequence(array, trigger)
+_search_single_trigger(array, trigger::UnitRange) = search_sequence(array, [trigger])
+_search_single_trigger(array, trigger::Symbol) = error("Single wildcard sequences not supported")
+
+# Helper function to check if a sequence matches at a given position
+function _matches_sequence(array, sequence, start_idx, ignore_values)
+    @inbounds for (i, expected) in enumerate(sequence[2:end])
+        actual = array[start_idx + i]
+        _matches_expected(actual, expected) || return false
+    end
+    return true
+end
+
+# Dispatch-based pattern matching
+_matches_expected(actual::Int, expected::Int) = actual == expected
+_matches_expected(actual::Int, expected::Symbol) = expected == :any  # Wildcard matches anything
+_matches_expected(actual::Int, expected::UnitRange) = actual in expected
+_matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
+
