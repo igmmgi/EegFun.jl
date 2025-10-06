@@ -52,9 +52,9 @@ println("=" ^ 40)
     # include("automatic/gfp.jl")
     # include("automatic/jackknife_average.jl")
     # include("automatic/grand_average.jl")
-
-    # include("automatic/epochs.jl")
     include("automatic/realign.jl")
+
+    include("automatic/epochs.jl")
 
 end
 
