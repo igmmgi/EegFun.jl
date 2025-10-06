@@ -46,8 +46,8 @@ using DataFrames
             condition_num = grand_avg.data.condition[1]
             @test condition_num in [1, 2, 3]
             @test grand_avg.data.condition_name[1] == "grand_average_condition_$condition_num"
-            @test grand_avg.sample_rate == 250.0
-            @test nrow(grand_avg.data) == 100  # n_timepoints
+            @test grand_avg.sample_rate == 1000.0
+            @test nrow(grand_avg.data) == 2501  # n_timepoints
         end
     end
 
@@ -223,13 +223,13 @@ using DataFrames
 
         # Verify ErpData structure
         @test grand_avg isa eegfun.ErpData
-        @test grand_avg.sample_rate == 250.0
+        @test grand_avg.sample_rate == 1000.0
         @test grand_avg.layout isa eegfun.Layout
         @test grand_avg.analysis_info isa eegfun.AnalysisInfo
 
         # Verify DataFrame structure
         @test grand_avg.data isa DataFrame
-        @test nrow(grand_avg.data) == 100  # n_timepoints
+        @test nrow(grand_avg.data) == 2501  # n_timepoints
         @test "time" in names(grand_avg.data)
         @test "condition" in names(grand_avg.data)
         @test "condition_name" in names(grand_avg.data)
