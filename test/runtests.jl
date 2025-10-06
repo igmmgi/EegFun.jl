@@ -48,13 +48,10 @@ println("=" ^ 40)
     # include("automatic/resample.jl")
     # include("automatic/erp_measurements.jl")
     # include("automatic/rereference.jl")
-
-    
-
+    # include("automatic/filter.jl")
 
     # include("automatic/epochs.jl")
-    # include("automatic/filter.jl")
-    # include("automatic/gfp.jl")
+    include("automatic/gfp.jl")
     # include("automatic/grand_average.jl")
     # include("automatic/jackknife_average.jl")
     # include("automatic/realign.jl")

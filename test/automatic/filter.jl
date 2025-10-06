@@ -50,12 +50,12 @@ using JLD2
         dat = create_test_data()
         dat_orig = copy(dat)
 
-        # High-pass to remove DC; check mean is reduced towards ~0 for channel A
-        eegfun.filter_data!(dat, "hp", 1.0; order = 1, filter_method = "iir", channel_selection = eegfun.channels([:A]))
-        @test abs(mean(dat.data.A)) < abs(mean(dat_orig.data.A))
+        # High-pass to remove DC; check mean is reduced towards ~0 for channel Ch1
+        eegfun.filter_data!(dat, "hp", 1.0; order = 1, filter_method = "iir", channel_selection = eegfun.channels([:Ch1]))
+        @test abs(mean(dat.data.Ch1)) < abs(mean(dat_orig.data.Ch1))
         # Only selected channel modified
-        @test !all(dat.data.A .== dat_orig.data.A)
-        @test all(dat.data.B .== dat_orig.data.B)
+        @test !all(dat.data.Ch1 .== dat_orig.data.Ch1)
+        @test all(dat.data.Ch2 .== dat_orig.data.Ch2)
         # Analysis info updated
         @test dat.analysis_info.hp_filter == 1.0
 
@@ -66,19 +66,20 @@ using JLD2
             30.0;
             order = 3,
             filter_method = "iir",
-            channel_selection = eegfun.channels([:A, :B]),
+            channel_selection = eegfun.channels([:Ch1, :Ch2]),
         )
         @test dat.analysis_info.lp_filter == 30.0
-        @test !all(dat.data.B .== dat_orig.data.B)
+        @test !all(dat.data.Ch2 .== dat_orig.data.Ch2)
     end
 
     @testset "non-mutating filter_data" begin
         dat = create_test_data()
+        dat_orig = copy(dat)
         dat2 = eegfun.filter_data(dat, "hp", 1.0; order = 1)
         # Original unchanged
-        @test all(dat.data.A .== create_test_data().data.A)
+        @test all(dat.data.Ch1 .== dat_orig.data.Ch1)
         # Copy modified
-        @test !all(dat2.data.A .== dat.data.A)
+        @test !all(dat2.data.Ch1 .== dat.data.Ch1)
     end
 
     @testset "no channels selected returns early" begin
@@ -88,7 +89,7 @@ using JLD2
         result = eegfun.filter_data!(dat, "hp", 1.0; channel_selection = eegfun.channels(Symbol[]))
         @test result === nothing
         # Data and analysis_info unchanged
-        @test all(dat.data.A .== dat_orig.data.A)
+        @test all(dat.data.Ch1 .== dat_orig.data.Ch1)
         @test dat.analysis_info.hp_filter == dat_orig.analysis_info.hp_filter
         @test dat.analysis_info.lp_filter == dat_orig.analysis_info.lp_filter
     end
@@ -99,7 +100,7 @@ using JLD2
         # Single-pass introduces phase; zero-phase differs from single-pass
         eegfun.filter_data!(dat1, "lp", 20.0; filter_func = "filt")
         eegfun.filter_data!(dat2, "lp", 20.0; filter_func = "filtfilt")
-        @test !all(dat1.data.A .== dat2.data.A)
+        @test !all(dat1.data.Ch1 .== dat2.data.Ch1)
     end
 
     @testset "EpochData filtering" begin
@@ -116,19 +117,19 @@ using JLD2
         ep = eegfun.EpochData([df1, df2], base.layout, base.sample_rate, eegfun.AnalysisInfo())
         eegfun.filter_data!(ep, "hp", 0.5)
         @test ep.analysis_info.hp_filter == 0.5
-        @test !all(ep.data[1].A .== df1o.A)
-        @test !all(ep.data[2].B .== df2o.B)
+        @test !all(ep.data[1].Ch1 .== df1o.Ch1)
+        @test !all(ep.data[2].Ch1 .== df2o.Ch1)
     end
 
     @testset "ErpData filtering" begin
         # Build ERP from base
         base = create_test_data(; n = 2000, fs = 1000)
-        erp_df = select(base.data, [:time, :A, :B])
+        erp_df = select(base.data, [:time, :Ch1, :Ch2])
         erp = eegfun.ErpData(copy(erp_df, copycols = true), base.layout, base.sample_rate, eegfun.AnalysisInfo(), 25)
         erp_orig = copy(erp)
         eegfun.filter_data!(erp, "lp", 30.0; order = 3)
         @test erp.analysis_info.lp_filter == 30.0
-        @test !all(erp.data.A .== erp_orig.data.A)
+        @test !all(erp.data.Ch1 .== erp_orig.data.Ch1)
         # Non-mutating path
         erp2 = eegfun.filter_data(erp_orig, "hp", 0.5)
         @test erp_orig.analysis_info.hp_filter == 0.0  # unchanged
@@ -171,7 +172,7 @@ end
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_test_erp_data_batch(2)
+                erps = create_batch_test_erp_data(2)
                 # Use filename format consistent with codebase (numeric participant ID)
                 filename = joinpath(test_dir, "$(participant)_erps.jld2")
                 save(filename, "erps", erps)
@@ -314,7 +315,7 @@ end
             # create_test_epoch_data(participant, condition, n_timepoints, n_channels)
 
             # Save epoch data - create a vector of EpochData for batch processing
-            epochs = [create_test_epoch_data(1, 1), create_test_epoch_data(1, 2)]
+            epochs = [create_test_epoch_data(conditions=1), create_test_epoch_data(conditions=1)]
             save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", epochs)
 
             # Filter epoch data
@@ -352,7 +353,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_test_erp_data_batch(2)
+            erps = create_batch_test_erp_data(2)
             save(joinpath(partial_dir, "1_erps.jld2"), "erps", erps)
 
             # Create one malformed file (wrong variable name)
