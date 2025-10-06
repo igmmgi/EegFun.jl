@@ -219,19 +219,21 @@ function create_continuous_with_triggers(; n::Int = 1000, fs::Int = 1000)
     # Create some test signal
     x = sin.(2π .* 10 .* t) .+ 0.1 .* randn(length(t))
     
-    # Create triggers at specific points - create sequences [1,2,3] with sustained triggers
+    # Create triggers at specific points - create exactly 2 sequences [1,2,3]
     triggers = zeros(Int, n)
-    # First sequence [1,2,3] starting at sample 100 - sustained for 5 samples each
-    triggers[100:104] .= 1  # Sustained trigger 1
-    triggers[150:154] .= 2  # Sustained trigger 2  
-    triggers[200:204] .= 3  # Sustained trigger 3
-    # Second sequence [1,2,3] starting at sample 400 - sustained for 5 samples each
-    triggers[400:404] .= 1  # Sustained trigger 1
-    triggers[450:454] .= 2  # Sustained trigger 2
-    triggers[500:504] .= 3  # Sustained trigger 3
+    # First sequence [1,2,3] starting at sample 400 - consecutive
+    triggers[400:402] .= [1, 2, 3]  # Consecutive sequence [1,2,3]
+    # Second sequence [1,2,3] starting at sample 750 - consecutive
+    triggers[750:752] .= [1, 2, 3]  # Consecutive sequence [1,2,3]
     # Some individual triggers for other tests
-    triggers[700:704] .= 1  # Sustained trigger 1
-    triggers[800:804] .= 2  # Sustained trigger 2
+    # triggers[700] = 1  # Individual trigger 1 (removed to avoid sequence conflicts)
+    # triggers[800] = 2  # Individual trigger 2 (removed to avoid sequence conflicts)
+    triggers[850] = 8  # Individual trigger 8 (for position constraints test)
+    triggers[900] = 9  # Individual trigger 9 (for position constraints test)
+    # Add some wildcard sequences [1,7,3] for testing - consecutive
+    # triggers[300:302] .= [1, 7, 3]  # Consecutive sequence [1,7,3] (removed to avoid sequence conflicts)
+    # Add another sequence [1,2,3] after trigger 9 for position constraints test
+    # triggers[950:952] .= [1, 2, 3]  # Consecutive sequence [1,2,3] after trigger 9 (removed to have only 2 sequences)
     
     df = DataFrame(time = t, triggers = triggers, A = x)
     layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
@@ -520,4 +522,71 @@ function create_epoch_test_data()
     
     # Create EpochData
     return eegfun.EpochData(dfs, layout, 1000, analysis_info)
+end
+
+"""
+    create_test_epochs_with_artifacts(participant::Int, condition::Int, n_epochs::Int, n_timepoints::Int, n_channels::Int; n_bad_epochs::Int = 1)
+
+Create test epoch data with artifacts for testing artifact detection.
+"""
+function create_test_epochs_with_artifacts(participant::Int, condition::Int, n_epochs::Int, n_timepoints::Int, n_channels::Int; n_bad_epochs::Int = 1)
+    dfs = DataFrame[]
+    bad_indices = Int[]
+    
+    # Create time vector
+    time = collect(0:(n_timepoints-1)) ./ 1000  # Convert to seconds
+    
+    for epoch in 1:n_epochs
+        df = DataFrame()
+        df.time = time
+        df.epoch = fill(epoch, n_timepoints)
+        df.participant = fill(participant, n_timepoints)
+        df.condition = fill(condition, n_timepoints)
+        
+        # Add artifacts to some epochs (only the first n_bad_epochs)
+        is_bad_epoch = epoch <= n_bad_epochs
+        if is_bad_epoch
+            push!(bad_indices, epoch)
+        end
+        
+        # Create channels with different patterns
+        for ch in 1:n_channels
+            channel_name = Symbol("Ch$ch")
+            
+            # Create base signal
+            base_signal = sin.(2π * 0.1 * time) .+ 0.1 .* randn(n_timepoints)
+            
+            # Add artifacts to bad epochs
+            if is_bad_epoch
+                # Create extremely strong artifacts that will definitely be detected
+                base_signal .+= 50.0 .* randn(n_timepoints)  # Very high amplitude noise
+                base_signal[1:20] .+= 200.0  # Extremely high amplitude at start
+                base_signal[end-19:end] .+= 200.0  # Extremely high amplitude at end
+                base_signal[50:70] .+= 300.0  # Extremely high amplitude in middle
+            end
+            
+            df[!, channel_name] = base_signal
+        end
+        
+        push!(dfs, df)
+    end
+    
+    # Create layout
+    layout = eegfun.Layout(
+        DataFrame(
+            label = [Symbol("Ch$i") for i in 1:n_channels],
+            inc = fill(0.0, n_channels),
+            azi = fill(0.0, n_channels),
+        ),
+        nothing,
+        nothing,
+    )
+    
+    # Create analysis info
+    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+    
+    # Create EpochData
+    epoch_data = eegfun.EpochData(dfs, layout, 1000, analysis_info)
+    
+    return epoch_data, bad_indices
 end

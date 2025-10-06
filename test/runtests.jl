@@ -38,7 +38,7 @@ println("=" ^ 40)
     # include("automatic/difference_conditions.jl")
     # include("automatic/layout.jl")
     # include("automatic/layout_system.jl")
-    # include("automatic/triggers.jl")
+    include("automatic/triggers.jl")
     # include("automatic/plot_channel_summary.jl")
     # include("automatic/plot_layout.jl")
     # include("automatic/plot_triggers.jl")
@@ -53,7 +53,7 @@ println("=" ^ 40)
     # include("automatic/jackknife_average.jl")
     # include("automatic/grand_average.jl")
 
-    include("automatic/epochs.jl")
+    # include("automatic/epochs.jl")
     # include("automatic/realign.jl")
 
 end

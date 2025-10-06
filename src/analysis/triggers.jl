@@ -240,13 +240,15 @@ Return indices of any of the specified sequences within an array, handling wildc
 # Examples
 ```julia
 # Single sequence
-idx = search_sequences([1, 2, 3, 4, 5], [[1, 2, 3]])
+
+using eegfun
+idx = eegfun.search_sequences([1, 2, 3, 4, 5], [[1, 2, 3]])
 
 # Multiple sequences (OR logic)
-idx = search_sequences([1, 2, 1, 3, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])
+idx = eegfun.search_sequences([1, 2, 1, 3, 1, 3, 1], [[1, 2, 1], [1, 3, 1]])
 
 # Wildcards
-idx = search_sequences([1, 2, 3, 4, 5], [[1, :any, 3]])
+idx = eegfun.search_sequences([1, 2, 3, 4, 5, 1, 4, 1], [[1, :any, 3]])
 
 # Ranges
 idx = search_sequences([1, 2, 3, 4, 5], [[1:3], [5:5]])
@@ -255,7 +257,7 @@ idx = search_sequences([1, 2, 3, 4, 5], [[1:3], [5:5]])
 idx = search_sequences([1, 2, 3, 4, 5], [[1, 2:4, 5]])
 ```
 """
-function search_sequences(array, sequences::Vector{Vector{Union{Int,Symbol,UnitRange{Int}}}})
+function search_sequences(array, sequences)
     isempty(array) && return Int[]
     isempty(sequences) && return Int[]
 
@@ -274,13 +276,14 @@ function search_sequences(array, sequences::Vector{Vector{Union{Int,Symbol,UnitR
 end
 
 """
-    search_single_sequence(array, sequence)
+    search_single_sequence(array, sequence; ignore_values::Vector{Int} = Int[])
 
 Return indices of a single sequence within an array, handling wildcards and ranges.
 
 # Arguments
 - `array`: Array to search within
 - `sequence::Vector{Union{Int,Symbol,UnitRange{Int}}}`: Sequence pattern to find
+- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: empty)
 
 # Returns
 - `Vector{Int}`: Indices where the sequence starts
@@ -289,17 +292,23 @@ Return indices of a single sequence within an array, handling wildcards and rang
 - Supports wildcards (`:any`) and ranges (`1:3`)
 - First element cannot be a wildcard
 - Single wildcard sequences are not supported
+- Ignores specified values when detecting onsets
+
+# Examples
+```julia
+idx = search_single_sequence([1,0,2,3,1,0,2,3], [1,2]; ignore_values=[0])  # Returns [1, 5]
+```
 """
-function search_single_sequence(array, sequence::Vector{Union{Int,Symbol,UnitRange{Int}}})
+function search_single_sequence(array, sequence; ignore_values::Vector{Int} = Int[])
     isempty(array) && return Int[]
     isempty(sequence) && @minimal_error_throw("Sequence cannot be empty")
 
     # Handle single trigger case
     if length(sequence) == 1
         if sequence[1] isa Int
-            return search_sequence(array, sequence[1])
+            return search_sequence(array, sequence[1]; ignore_values=ignore_values)
         elseif sequence[1] isa UnitRange
-            return search_trigger_ranges(array, [sequence[1]])
+            return search_trigger_ranges(array, [sequence[1]]; ignore_values=ignore_values)
         else
             @minimal_error_throw("Single wildcard sequences not supported")
         end
@@ -311,16 +320,17 @@ function search_single_sequence(array, sequence::Vector{Union{Int,Symbol,UnitRan
         @minimal_error_throw("First element in sequence cannot be a wildcard")
     elseif first_trigger isa UnitRange
         # For ranges, find all possible starting positions
-        idx_start_positions = search_trigger_ranges(array, [first_trigger])
+        idx_start_positions = search_trigger_ranges(array, [first_trigger]; ignore_values=ignore_values)
     else
         # Use search_sequence to find sequence starts
-        idx_start_positions = search_sequence(array, first_trigger)
+        idx_start_positions = search_sequence(array, first_trigger; ignore_values=ignore_values)
     end
 
-    # sequence of values
+    # sequence of values - search for consecutive sequences
     idx_positions = Int[]
     for idx in idx_start_positions
         good_sequence = true
+        
         for seq = 1:(length(sequence)-1)
             if (idx + seq) > length(array)
                 good_sequence = false
@@ -349,6 +359,7 @@ function search_single_sequence(array, sequence::Vector{Union{Int,Symbol,UnitRan
                 @minimal_error_throw("Unsupported trigger type: $expected_trigger")
             end
         end
+        
         if good_sequence
             push!(idx_positions, idx)
         end
@@ -358,13 +369,14 @@ function search_single_sequence(array, sequence::Vector{Union{Int,Symbol,UnitRan
 end
 
 """
-    search_trigger_ranges(array, trigger_ranges)
+    search_trigger_ranges(array, trigger_ranges; ignore_values::Vector{Int} = Int[])
 
 Return indices where triggers match any of the specified ranges.
 
 # Arguments
 - `array`: Array to search within
 - `trigger_ranges::Vector{UnitRange{Int}}`: Vector of integer ranges to match
+- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: empty)
 
 # Returns
 - `Vector{Int}`: Indices where triggers match any of the ranges
@@ -372,33 +384,35 @@ Return indices where triggers match any of the specified ranges.
 # Examples
 ```julia
 idx = search_trigger_ranges([1, 2, 3, 4, 5, 6], [1:3, 5:6])  # Returns indices of 1,2,3,5,6
+idx = search_trigger_ranges([0, 1, 0, 2, 0, 3], [1:3]; ignore_values=[0])  # Returns [2, 4, 6]
 ```
 """
-function search_trigger_ranges(array, trigger_ranges::Vector{UnitRange{Int}})
+function search_trigger_ranges(array, trigger_ranges::Vector{UnitRange{Int}}; ignore_values::Vector{Int} = Int[])
     isempty(array) && return Int[]
     isempty(trigger_ranges) && return Int[]
 
-    idx_positions = Int[]
-    for (i, trigger) in enumerate(array)
-        for range in trigger_ranges
-            if trigger in range
-                push!(idx_positions, i)
-                break  # Only add each position once
-            end
+    # Use search_sequence for each trigger value in the ranges to get onset detection
+    all_indices = Int[]
+    for range in trigger_ranges
+        for trigger_value in range
+            indices = search_sequence(array, trigger_value; ignore_values=ignore_values)
+            append!(all_indices, indices)
         end
     end
 
-    return idx_positions
+    # Remove duplicates and sort
+    return all_indices
 end
 
 """
-    search_sequence(array::AbstractVector, sequence::Int) -> Vector{Int}
+    search_sequence(array::AbstractVector, sequence::Int; ignore_values::Vector{Int} = Int[]) -> Vector{Int}
 
 Find starting indices of a sequence in an array (onset detection).
 
 # Arguments
 - `array::AbstractVector`: Array to search within
 - `sequence::Int`: Trigger value to find (onset detection)
+- `ignore_values::Vector{Int}`: Values to ignore when detecting onsets (default: empty)
 
 # Returns
 - `Vector{Int}`: Indices where sequence starts (onsets only)
@@ -406,15 +420,34 @@ Find starting indices of a sequence in an array (onset detection).
 # Notes
 - Uses onset detection (finds only first occurrence of sustained triggers)
 - Returns intersection of value matches and onset positions
+- Ignores specified values when detecting onsets
+
+# Examples
+```julia
+idx = search_sequence([0, 1, 1, 0, 2, 2], 1)  # Returns [2]
+idx = search_sequence([0, 1, 0, 2, 0, 1], 1; ignore_values=[0])  # Returns [2, 6]
+```
 """
-function search_sequence(array::AbstractVector, sequence::Int)
+function search_sequence(array::AbstractVector, sequence::Int; ignore_values::Vector{Int} = Int[])
     isempty(array) && return Int[]
 
     # Find all positions where the trigger value matches
     value_matches = findall(array .== sequence)
 
     # Find all positions where there's an onset (value increases from previous)
-    onset_positions = findall(diff(vcat(0, array)) .>= 1)
+    # but ignore transitions to ignore_values
+    padded_array = vcat(0, array)
+    onset_positions = Int[]
+    
+    for i in 2:length(padded_array)
+        current_val = padded_array[i]
+        previous_val = padded_array[i-1]
+        
+        # Check if this is an onset (value changed) and we're not transitioning to an ignored value
+        if current_val != previous_val && !(current_val in ignore_values)
+            push!(onset_positions, i-1)  # Convert back to 1-based indexing
+        end
+    end
 
     # Return intersection (positions that are both value matches and onsets)
     return intersect(value_matches, onset_positions)

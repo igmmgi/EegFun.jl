@@ -242,6 +242,62 @@ using OrderedCollections
             # All same trigger
             @test eegfun.search_sequence([1, 1, 1], 1) == [1]  # Only first onset
         end
+
+        @testset "onset detection correctness" begin
+            # Test the specific case that was failing
+            @test eegfun.search_sequence([1,2,3,1,0,1], 1) == [1, 4, 6]  
+            
+            # Test various onset patterns
+            @test eegfun.search_sequence([0,1,1,0,2,2,0,1], 1) == [2, 8]  # Two onsets of trigger 1
+            @test eegfun.search_sequence([0,1,1,0,2,2,0,1], 2) == [5]     # One onset of trigger 2
+            
+            # Test consecutive different triggers
+            @test eegfun.search_sequence([0,1,2,3,0,1,2,3], 1) == [2, 6]  # Two onsets
+            @test eegfun.search_sequence([0,1,2,3,0,1,2,3], 2) == [3, 7]  # Two onsets
+            @test eegfun.search_sequence([0,1,2,3,0,1,2,3], 3) == [4, 8]  # Two onsets
+            
+            # Test sustained triggers
+            @test eegfun.search_sequence([0,1,1,1,0,2,2,0], 1) == [2]  # Only onset, not sustained
+            @test eegfun.search_sequence([0,1,1,1,0,2,2,0], 2) == [6]  # Only onset, not sustained
+            
+            # Test mixed patterns
+            @test eegfun.search_sequence([1,0,1,0,1,0], 1) == [1, 3, 5]  # All onsets
+            @test eegfun.search_sequence([1,1,0,1,1,0], 1) == [1, 4]    # Only first of each sustained block
+        end
+
+        @testset "boundary conditions" begin
+            # Start with trigger
+            @test eegfun.search_sequence([1,0,1,0], 1) == [1, 3]
+            
+            # End with trigger
+            @test eegfun.search_sequence([0,1,0,1], 1) == [2, 4]
+            
+            # Start and end with same trigger
+            @test eegfun.search_sequence([1,0,0,1], 1) == [1, 4]
+            
+            # All zeros
+            @test eegfun.search_sequence([0,0,0,0], 1) == Int[]
+            
+            # Single non-zero element
+            @test eegfun.search_sequence([5], 5) == [1]
+            @test eegfun.search_sequence([5], 1) == Int[]
+        end
+
+        @testset "complex patterns" begin
+            # Alternating pattern
+            @test eegfun.search_sequence([1,2,1,2,1,2], 1) == [1, 3, 5]
+            @test eegfun.search_sequence([1,2,1,2,1,2], 2) == [2, 4, 6]
+            
+            # Multiple different triggers
+            @test eegfun.search_sequence([1,2,3,1,2,3,1,2,3], 1) == [1, 4, 7]
+            @test eegfun.search_sequence([1,2,3,1,2,3,1,2,3], 2) == [2, 5, 8]
+            @test eegfun.search_sequence([1,2,3,1,2,3,1,2,3], 3) == [3, 6, 9]
+            
+            # Sustained blocks of different lengths
+            @test eegfun.search_sequence([0,1,1,0,2,2,2,0,3], 1) == [2]
+            @test eegfun.search_sequence([0,1,1,0,2,2,2,0,3], 2) == [5]
+            @test eegfun.search_sequence([0,1,1,0,2,2,2,0,3], 3) == [9]
+        end
     end
 
     @testset "search_trigger_ranges" begin
