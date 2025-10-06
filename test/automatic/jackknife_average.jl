@@ -25,14 +25,14 @@ using DataFrames
             # Each jackknife should be an ErpData object
             for jk in jackknife_results
                 @test jk isa eegfun.ErpData
-                @test jk.sample_rate == 250.0
-                @test nrow(jk.data) == 100
+                @test jk.sample_rate == 1000.0
+                @test nrow(jk.data) == 2501
             end
         end
 
         @testset "Jackknife calculation verification" begin
             # Create simple test data with known values
-            erps = [create_test_erp_data(i, 1, 50) for i = 1:3]
+            erps = [create_test_erp_data(i, 1, fs=50) for i = 1:3]
 
             jackknife_results = eegfun.jackknife_average(erps)
 
@@ -58,7 +58,7 @@ using DataFrames
 
         @testset "Jackknife with different channels" begin
             # Test that all channels are processed correctly
-            erps = [create_test_erp_data(i, 1, 50, 3) for i = 1:3]
+            erps = [create_test_erp_data(i, 1, fs=50, n_channels=3) for i = 1:3]
 
             jackknife_results = eegfun.jackknife_average(erps)
 
@@ -87,8 +87,8 @@ using DataFrames
 
         @testset "Error handling: mismatched time points" begin
             # Create ERPs with different numbers of time points
-            erp1 = create_test_erp_data(1, 1, 100)
-            erp2 = create_test_erp_data(2, 1, 50)
+            erp1 = create_test_erp_data(1, 1, fs=100)
+            erp2 = create_test_erp_data(2, 1, fs=50)
 
             @test_throws Exception eegfun.jackknife_average([erp1, erp2])
         end
@@ -160,7 +160,7 @@ using DataFrames
             # Load and verify jackknife data
             jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "jackknife")
             @test jk1 isa eegfun.ErpData
-            @test nrow(jk1.data) == 100
+            @test nrow(jk1.data) == 2501
         end
 
         @testset "Multiple conditions" begin
@@ -341,11 +341,11 @@ using DataFrames
 
                 # Test first condition
                 jk1_cond = jk1[1]
-                @test jk1_cond.sample_rate == 250.0
+                @test jk1_cond.sample_rate == 1000.0
                 @test jk1_cond.layout isa eegfun.Layout
                 @test jk1_cond.analysis_info isa eegfun.AnalysisInfo
                 @test jk1_cond.data isa DataFrame
-                @test nrow(jk1_cond.data) == 100
+                @test nrow(jk1_cond.data) == 2501
                 @test "time" in names(jk1_cond.data)
                 @test "condition" in names(jk1_cond.data)
                 @test "condition_name" in names(jk1_cond.data)
@@ -355,11 +355,11 @@ using DataFrames
             else
                 # Single condition case
                 @test jk1 isa eegfun.ErpData
-                @test jk1.sample_rate == 250.0
+                @test jk1.sample_rate == 1000.0
                 @test jk1.layout isa eegfun.Layout
                 @test jk1.analysis_info isa eegfun.AnalysisInfo
                 @test jk1.data isa DataFrame
-                @test nrow(jk1.data) == 100
+                @test nrow(jk1.data) == 2501
                 @test "time" in names(jk1.data)
                 @test "condition" in names(jk1.data)
                 @test "condition_name" in names(jk1.data)
