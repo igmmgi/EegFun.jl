@@ -231,9 +231,9 @@ function create_continuous_with_triggers(; n::Int = 1000, fs::Int = 1000)
     triggers[850] = 8  # Individual trigger 8 (for position constraints test)
     triggers[900] = 9  # Individual trigger 9 (for position constraints test)
     # Add some wildcard sequences [1,7,3] for testing - consecutive
-    # triggers[300:302] .= [1, 7, 3]  # Consecutive sequence [1,7,3] (removed to avoid sequence conflicts)
+    triggers[300:302] .= [1, 7, 3]  # Consecutive sequence [1,7,3]
     # Add another sequence [1,2,3] after trigger 9 for position constraints test
-    # triggers[950:952] .= [1, 2, 3]  # Consecutive sequence [1,2,3] after trigger 9 (removed to have only 2 sequences)
+    triggers[950:952] .= [1, 2, 3]  # Consecutive sequence [1,2,3] after trigger 9
     
     df = DataFrame(time = t, triggers = triggers, A = x)
     layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
@@ -560,9 +560,15 @@ function create_test_epochs_with_artifacts(participant::Int, condition::Int, n_e
             if is_bad_epoch
                 # Create extremely strong artifacts that will definitely be detected
                 base_signal .+= 50.0 .* randn(n_timepoints)  # Very high amplitude noise
-                base_signal[1:20] .+= 200.0  # Extremely high amplitude at start
-                base_signal[end-19:end] .+= 200.0  # Extremely high amplitude at end
-                base_signal[50:70] .+= 300.0  # Extremely high amplitude in middle
+                base_signal[1:min(20, n_timepoints)] .+= 200.0  # Extremely high amplitude at start
+                if n_timepoints > 19
+                    base_signal[end-19:end] .+= 200.0  # Extremely high amplitude at end
+                end
+                if n_timepoints >= 70
+                    base_signal[50:70] .+= 300.0  # Extremely high amplitude in middle
+                elseif n_timepoints >= 50
+                    base_signal[50:end] .+= 300.0  # Extremely high amplitude in middle
+                end
             end
             
             df[!, channel_name] = base_signal
