@@ -72,7 +72,7 @@ function run_ica(
 
     # Create data matrix and run ICA
     dat_for_ica = create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
-    ica_result = infomax_ica(dat_for_ica, ica_layout, n_components, params = params)
+    ica_result = infomax_ica(dat_for_ica, ica_layout, n_components = n_components, params = params)
 
     return ica_result
 end
@@ -111,14 +111,15 @@ function create_ica_data_matrix(dat::DataFrame, channels, samples)
     existing_channels = intersect(propertynames(dat), channels)
     n_channels = length(existing_channels)
     n_samples = length(samples)
-
+    
     # Pre-allocate result matrix
     result = Matrix{Float64}(undef, n_channels, n_samples)
-
+    
+    # Use direct column access for better performance
     for (i, ch) in enumerate(existing_channels)
         result[i, :] = dat[samples, ch]
     end
-
+    
     return result
 end
 
@@ -134,8 +135,8 @@ mutable struct WorkArrays
     y_temp::Matrix{Float64}
     bi_weights::Matrix{Float64}
     wu_term::Matrix{Float64}
-    delta::Vector{Float64}
-    olddelta::Vector{Float64}
+    delta::Matrix{Float64}
+    olddelta::Matrix{Float64}
 end
 
 function create_work_arrays(n_components::Int, block_size::Int)
@@ -152,12 +153,17 @@ function create_work_arrays(n_components::Int, block_size::Int)
         zeros(n_components, block_size),  # y_temp
         zeros(n_components, n_components),  # bi_weights
         zeros(n_components, n_components),  # wu_term
-        zeros(n_components^2),  # delta
-        zeros(n_components^2),   # olddelta
+        zeros(1, n_components^2),  # delta
+        zeros(1, n_components^2),   # olddelta
     )
 end
 
-function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, n_components::Int; params::IcaPrms = IcaPrms())
+function infomax_ica(
+    dat_ica::Matrix{Float64},
+    layout::Layout;
+    n_components::Int,
+    params::IcaPrms = IcaPrms(),
+)
 
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
@@ -179,6 +185,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, n_components::Int
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
+    # Keep original Infomax block size formula for algorithmic correctness
     block = min(Int(floor(sqrt(n_samples / 3.0))), 512)
     work = create_work_arrays(n_channels, block)
 
@@ -191,32 +198,25 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, n_components::Int
     # pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
 
-    while step < params.max_iter
-
+    @inbounds while step < params.max_iter
         randperm!(permute_indices)
 
         for t = 1:block:n_samples
-            block_size = min(block, n_samples - t + 1)
-            perm_view = view(permute_indices, t:(t+block_size-1))
+            block_end = min(t + block - 1, n_samples)
+            block_size = block_end - t + 1
 
-            @inbounds for i = 1:n_channels
-                @simd for j = 1:block_size
-                    work.data_block[i, j] = dat_ica[i, perm_view[j]]
-                end
-            end
+            # extract data block
+            copyto!(view(work.data_block, :, 1:block_size), view(dat_ica, :, view(permute_indices, t:block_end)))
 
-            # Forward pass: compute weighted inputs
+            # forward pass
             mul!(work.u, work.weights, work.data_block)
+            @. work.y = 1 / (1 + exp(-work.u))
+            @. work.y_temp = 1 - 2 * work.y
 
-            @. work.y = 1 / (1 + exp(-work.u)) # Sigmoid activation
-            @. work.y_temp = 1 - 2 * work.y    # Sigmoid derivative
-
+            # update weights 
             mul!(work.wu_term, work.y_temp, transpose(work.u))
-
             work.bi_weights .= work.BI .+ work.wu_term
             mul!(work.weights_temp, work.bi_weights, work.weights)
-
-            # Weight update - keep it simple
             @. work.weights += params.l_rate * work.weights_temp
 
             # boom?
@@ -230,11 +230,10 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, n_components::Int
         if !wts_blowup
             work.oldweights .-= work.weights
             step += 1
-            work.delta .= vec(work.oldweights)
+            work.delta .= reshape(work.oldweights, 1, :)
             change = dot(work.delta, work.delta)
         end
 
-        # Check for any error conditions that require restart
         if wts_blowup || isnan(change) || isinf(change)
             step = 0
             change = NaN
@@ -245,20 +244,20 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, n_components::Int
             continue
         end
 
-        # Always update tracking variables
-        work.olddelta .= work.delta
-        work.oldweights .= work.weights
-        oldchange = change
-
-        # Only compute angles after we have enough history (step > 2)
         if step > 2
             angledelta = acos(clamp(dot(work.delta, work.olddelta) / sqrt(change * oldchange), -1, 1))
             if params.degconst * angledelta > params.anneal_deg
                 params.l_rate *= params.anneal_step
+                work.olddelta .= work.delta
+                oldchange = change
             end
+        elseif step == 1
+            work.olddelta .= work.delta
+            oldchange = change
         end
 
-        # stopping/adapting learning rate?
+        work.oldweights .= work.weights
+
         if step > 2 && change < params.w_change
             break
         elseif change > params.blowup
@@ -278,7 +277,6 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, n_components::Int
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
 
-    # this is the ICA result object that is used in the rest of the package
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
@@ -372,7 +370,7 @@ cleaned_data, ica_updated = remove_ica_components(dat.data, ica_result, [1, 3, 5
 """
 function remove_ica_components(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
-    ica_out = copy(ica)  # Use custom copy method
+    ica_out = copy(ica)  # Use our custom copy method
     remove_ica_components!(dat_out, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end
@@ -397,7 +395,7 @@ cleaned_dat, ica_updated = remove_ica_components(dat, ica_result, [1, 3, 5])
 """
 function remove_ica_components(dat::ContinuousData, ica::InfoIca; component_selection::Function = components())
     dat_out = copy(dat)
-    ica_out = copy(ica)  # Use custom copy method
+    ica_out = copy(ica)  # Use our custom copy method
     remove_ica_components!(dat_out.data, ica_out, component_selection = component_selection)
     return dat_out, ica_out
 end

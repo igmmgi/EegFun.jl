@@ -51,7 +51,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :point_color => (:black, "Color of electrode points."),
 
     # Electrode label parameters
-    :label_plot => (true, "Whether to plot electrode labels."),
+    :label_plot => (false, "Whether to plot electrode labels."),
     :label_fontsize => (20, "Font size for electrode labels."),
     :label_color => (:black, "Color of electrode labels."),
     :label_xoffset => (0, "X-axis offset for electrode labels."),
@@ -65,6 +65,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout; kwargs...)
     # ensure coordinates are 2d and 3d
+    print(layout)
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 

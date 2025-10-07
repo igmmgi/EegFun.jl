@@ -19,12 +19,12 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :num_levels => (20, "Number of contour levels"),
     :nan_color => (:transparent, "Color for NaN values"),
 
-    # Head shape parameters
-    :head_color => (:black, "Color of the head shape outline"),
-    :head_linewidth => (2, "Line width of the head shape outline"),
-    :head_radius => (88.0, "Radius of the head shape in mm"),
-    :head_ear_ratio => (1/7, "Ratio of ear size to head radius"),
-    :head_nose_scale => (4.0, "Scale factor for nose size"),
+    # Head shape parameters (reusing layout kwargs)
+    :head_color => (:black, "Color of the head shape outline."),
+    :head_linewidth => (2, "Line width of the head shape outline."),
+    :head_radius => (1.0, "Radius of the head shape in mm."),
+    :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
+    :head_nose_scale => (4.0, "Scale factor for nose size."),
 
     # Electrode point parameters
     :plot_points => (false, "Whether to plot electrode points"),
@@ -109,11 +109,8 @@ function plot_ica_topoplot(ica; kwargs...)
     figure_padding = plot_kwargs[:figure_padding]
     subplot_spacing = plot_kwargs[:subplot_spacing]
 
-
-    # ensure coordinates are 2d and 3d
+    # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
-    _ensure_coordinates_3d!(ica.layout)
-
 
     # Create individual kwargs dictionaries for sub-functions
     head_kwargs = Dict(
@@ -445,7 +442,7 @@ const PLOT_ICA_COMPONENT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Head shape parameters
     :head_color => (:black, "Color of the head shape outline"),
     :head_linewidth => (2, "Line width of the head shape outline"),
-    :head_radius => (88.0, "Radius of the head shape in mm"),
+    :head_radius => (1.0, "Radius of the head shape in mm"),
     :head_ear_ratio => (1/7, "Ratio of ear size to head radius"),
     :head_nose_scale => (4.0, "Scale factor for nose size"),
 
@@ -682,7 +679,7 @@ function _plot_topo_on_axis!(
 
     # Calculate contour/coord range based on interpolation method
     contour_range_multiplier = method == :spherical_spline ? 4.0 : 2.0
-    contour_range = 88.0 * contour_range_multiplier
+    contour_range = 0.5 * contour_range_multiplier
     coord_range = range(-contour_range, contour_range, length = gridscale)
 
     co = contourf!(ax, coord_range, coord_range, data; levels = levels, kwargs...)
@@ -1338,13 +1335,14 @@ function _plot_ica_topo_on_axis!(
     data::Matrix{Float64},
     ica::InfoIca,
     levels;
-    gridscale::Int = 100,
-    colormap::Symbol = :jet,
-    nan_color::Symbol = :transparent,
-    head_kwargs::Dict = Dict(),
-    point_kwargs::Dict = Dict(),
-    label_kwargs::Dict = Dict(),
-    method::Symbol = :spherical_spline,
+    kwargs
+    # gridscale::Int = 100,
+    # colormap::Symbol = :jet,
+    # nan_color::Symbol = :transparent,
+    # head_kwargs::Dict = Dict(),
+    # point_kwargs::Dict = Dict(),
+    # label_kwargs::Dict = Dict(),
+    # method::Symbol = :spherical_spline,
 )
     # Clear the axis
     empty!(topo_ax)
