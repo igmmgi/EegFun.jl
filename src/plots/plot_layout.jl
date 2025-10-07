@@ -5,8 +5,6 @@ const PLOT_LAYOUT_HEAD_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :head_color => (:black, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
     :head_radius => (1, "Radius of the head shape (normalized units)."),
-    :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
-    :head_nose_scale => (4.0, "Scale factor for nose size."),
 )
 
 const PLOT_LAYOUT_POINT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -26,7 +24,8 @@ const PLOT_LAYOUT_LABEL_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 const PLOT_LAYOUT_ROI_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    :roi_color => (:black, "Color of ROI outline."),
+    :roi_bordersize => (10, "Size of the border around ROI points."),
+    :roi_linecolor => (:black, "Color of ROI outline."),
     :roi_linewidth => (2, "Line width of ROI outline."),
     :roi_fill => (false, "Whether to fill the ROI area."),
     :roi_fillcolor => (:gray, "Color of ROI fill."),
@@ -82,7 +81,7 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
     arc!(
         ax,
         Point2f(radius, 0),
-        radius * head_kwargs[:head_ear_ratio],
+        radius * (1/7),
         -π / 2,
         π / 2;
         color = head_kwargs[:head_color],
@@ -91,7 +90,7 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
     arc!(
         ax,
         Point2f(-radius, 0),
-        -radius * head_kwargs[:head_ear_ratio],
+        - radius * (1/7),
         π / 2,
         -π / 2;
         color = head_kwargs[:head_color],
@@ -250,7 +249,6 @@ Uses Graham's Scan algorithm to create convex hulls around electrode groups.
 - `ax`: The axis to add ROIs to
 - `layout`: DataFrame containing electrode positions (needs x2, y2)
 - `rois`: Array of arrays, where each inner array contains electrode labels for a ROI
-- `border_size`: Size of the border around ROI points (default: 10)
 
 $(generate_kwargs_doc(PLOT_LAYOUT_ROI_KWARGS))
 
@@ -259,11 +257,11 @@ $(generate_kwargs_doc(PLOT_LAYOUT_ROI_KWARGS))
     polar_to_cartesian_xy!(layout)
     fig, ax = plot_layout_2d(layout)
     # Add simple ROI
-    add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1]], border_size=10)
+    add_topo_rois!(ax, layout, [[:PO7, :PO3, :P1]], roi_border_size=10)
     # Add filled ROI
-    add_topo_rois!(ax, layout, [[:Fp1]], border_size=5, fill=true, fillcolor=:red, fillalpha=0.2)
+    add_topo_rois!(ax, layout, [[:Fp1]], roi_border_size=5, fill=true, roi_fillcolor=:red, roi_fillalpha=0.2)
 """
-function add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbol}}; border_size::Real = 10, kwargs...)
+function add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}; kwargs...)
     # Merge user kwargs with defaults for ROI component only
     roi_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_ROI_KWARGS, kwargs; validate = false)
 
@@ -286,14 +284,14 @@ function add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbo
     # Create ROIs
     for (i, roi) in enumerate(rois)
         # Get coordinates for ROI electrodes
-        roi_idx = findall(in(roi), layout.label)
+        roi_idx = findall(in(roi), layout.data.label)
         if isempty(roi_idx)
             @minimal_warning "No electrodes found for ROI $i"
             continue
         end
 
         # Create convex hull
-        hull_points = _create_convex_hull_graham(layout.x2[roi_idx], layout.y2[roi_idx], border_size)
+        hull_points = _create_convex_hull_graham(layout.data.x2[roi_idx], layout.data.y2[roi_idx], merged_kwargs[:roi_border_size][i])
         xs = [p[1] for p in hull_points]
         ys = [p[2] for p in hull_points]
 
@@ -304,11 +302,11 @@ function add_topo_rois!(ax::Axis, layout::DataFrame, rois::Vector{<:Vector{Symbo
                 xs,
                 ys;
                 color = (merged_kwargs[:roi_fillcolor][i], merged_kwargs[:roi_fillalpha][i]),
-                strokecolor = merged_kwargs[:roi_color][i],
+                strokecolor = merged_kwargs[:roi_linecolor][i],
                 strokewidth = merged_kwargs[:roi_linewidth][i],
             )
         else
-            lines!(ax, xs, ys; color = merged_kwargs[:roi_color][i], linewidth = merged_kwargs[:roi_linewidth][i])
+            lines!(ax, xs, ys; color = merged_kwargs[:roi_linecolor][i], linewidth = merged_kwargs[:roi_linewidth][i])
         end
     end
 end
