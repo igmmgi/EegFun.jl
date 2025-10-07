@@ -16,7 +16,7 @@ ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extre
 
 # some ICA plots
 eegfun.plot_ica_topoplot(ica_result)
-eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:10));
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), plot_labels = false);
 
 
 
@@ -28,7 +28,8 @@ eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:1
 
 
 
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15));
-eegfun.plot_ica_topoplot(ica_result, dat.layout, component_selection = eegfun.components(1:15), use_global_scale = true);
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15));
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15), use_global_scale = true);
 
 
+GLMakie.closeall()

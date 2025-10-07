@@ -23,8 +23,6 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :head_color => (:black, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
     :head_radius => (1.0, "Radius of the head shape in mm."),
-    :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
-    :head_nose_scale => (4.0, "Scale factor for nose size."),
 
     # Electrode point parameters
     :plot_points => (false, "Whether to plot electrode points"),
@@ -443,7 +441,6 @@ const PLOT_ICA_COMPONENT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :head_color => (:black, "Color of the head shape outline"),
     :head_linewidth => (2, "Line width of the head shape outline"),
     :head_radius => (1.0, "Radius of the head shape in mm"),
-    :head_ear_ratio => (1/7, "Ratio of ear size to head radius"),
     :head_nose_scale => (4.0, "Scale factor for nose size"),
 
     # Electrode point parameters
@@ -510,8 +507,6 @@ function plot_ica_component_activation(dat::ContinuousData, ica_result::InfoIca;
         :color => plot_kwargs[:head_color],
         :linewidth => plot_kwargs[:head_linewidth],
         :radius => plot_kwargs[:head_radius],
-        :ear_ratio => plot_kwargs[:head_ear_ratio],
-        :nose_scale => plot_kwargs[:head_nose_scale],
     )
 
     point_kwargs = Dict(
@@ -715,6 +710,7 @@ function _plot_ica_topo_in_viewer!(
     label_kwargs = Dict(),
     method = :spherical_spline,
     pre_calculated_levels = nothing,
+    kwargs...,
 )
     # Prepare data using the new internal function
     data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
@@ -740,6 +736,7 @@ function _plot_ica_topo_in_viewer!(
         point_kwargs = point_kwargs,
         label_kwargs = label_kwargs,
         method = method,
+        kwargs...,
     )
 
     return co
@@ -1335,9 +1332,15 @@ function _plot_ica_topo_on_axis!(
     data::Matrix{Float64},
     ica::InfoIca,
     levels;
+    gridscale = 100,
+    colormap = :jet,
+    nan_color = :transparent,
+    head_kwargs = Dict(),
+    point_kwargs = Dict(),
+    label_kwargs = Dict(),
+    method = :multiquadratic,
     kwargs...)
     
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
     # Clear the axis
     empty!(topo_ax)
 
@@ -1349,12 +1352,12 @@ function _plot_ica_topo_on_axis!(
         ica.layout,
         method,
         levels;
-        gridscale = plot_kwargs[:gridscale],
-        colormap = plot_kwargs[:colormap],
-        nan_color = plot_kwargs[:nan_color],
-        head_kwargs = plot_kwargs[:head_kwargs],
-        point_kwargs = plot_kwargs[:point_kwargs],
-        label_kwargs = plot_kwargs[:label_kwargs],
+        gridscale = gridscale,
+        colormap = colormap,
+        nan_color = nan_color,
+        head_kwargs = head_kwargs,
+        point_kwargs = point_kwargs,
+        label_kwargs = label_kwargs,
     )
 
     hidedecorations!(topo_ax, grid = false)
