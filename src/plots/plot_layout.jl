@@ -24,7 +24,7 @@ const PLOT_LAYOUT_LABEL_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 const PLOT_LAYOUT_ROI_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    :roi_bordersize => (10, "Size of the border around ROI points."),
+    :roi_border_size => (10, "Size of the border around ROI points."),
     :roi_linecolor => (:black, "Color of ROI outline."),
     :roi_linewidth => (2, "Line width of ROI outline."),
     :roi_fill => (false, "Whether to fill the ROI area."),
