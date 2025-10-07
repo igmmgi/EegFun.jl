@@ -1,4 +1,34 @@
 # =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+"""
+    _filter_topo_kwargs(plot_kwargs::Dict)
+
+Filter kwargs to only include those relevant for topography plotting.
+"""
+function _filter_topo_kwargs(plot_kwargs::Dict)
+    return Dict(
+        :method => plot_kwargs[:method],
+        :gridscale => plot_kwargs[:gridscale],
+        :colormap => plot_kwargs[:colormap],
+        :nan_color => plot_kwargs[:nan_color],
+        :head_color => plot_kwargs[:head_color],
+        :head_linewidth => plot_kwargs[:head_linewidth],
+        :head_radius => plot_kwargs[:head_radius],
+        :plot_points => plot_kwargs[:plot_points],
+        :point_marker => plot_kwargs[:point_marker],
+        :point_markersize => plot_kwargs[:point_markersize],
+        :point_color => plot_kwargs[:point_color],
+        :plot_labels => plot_kwargs[:plot_labels],
+        :label_fontsize => plot_kwargs[:label_fontsize],
+        :label_color => plot_kwargs[:label_color],
+        :label_xoffset => plot_kwargs[:label_xoffset],
+        :label_yoffset => plot_kwargs[:label_yoffset],
+    )
+end
+
+# =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -110,32 +140,8 @@ function plot_ica_topoplot(ica; kwargs...)
     # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
 
-    # Create individual kwargs dictionaries for sub-functions
-    head_kwargs = Dict(
-        :color => plot_kwargs[:head_color],
-        :linewidth => plot_kwargs[:head_linewidth],
-        :radius => plot_kwargs[:head_radius],
-        :ear_ratio => plot_kwargs[:head_ear_ratio],
-        :nose_scale => plot_kwargs[:head_nose_scale],
-    )
-
-    point_kwargs = Dict(
-        :plot_points => plot_kwargs[:plot_points],
-        :marker => plot_kwargs[:point_marker],
-        :markersize => plot_kwargs[:point_markersize],
-        :color => plot_kwargs[:point_color],
-    )
-
-    label_kwargs = Dict(
-        :plot_labels => plot_kwargs[:plot_labels],
-        :fontsize => plot_kwargs[:label_fontsize],
-        :color => plot_kwargs[:label_color],
-        :xoffset => plot_kwargs[:label_xoffset],
-        :yoffset => plot_kwargs[:label_yoffset],
-    )
-
+    # Extract specific kwargs for sub-functions
     topo_kwargs = Dict(:colormap => plot_kwargs[:colormap], :nan_color => plot_kwargs[:nan_color])
-
     colorbar_kwargs = Dict(:width => plot_kwargs[:colorbar_width])
 
     # Get selected components using the helper function
@@ -201,13 +207,7 @@ function plot_ica_topoplot(ica; kwargs...)
             data,
             ica,
             levels_to_use;
-            gridscale = gridscale,
-            colormap = topo_kwargs[:colormap],
-            nan_color = topo_kwargs[:nan_color],
-            head_kwargs = head_kwargs,
-            point_kwargs = point_kwargs,
-            label_kwargs = label_kwargs,
-            method = method,
+            _filter_topo_kwargs(plot_kwargs)...
         )
 
         # Do we want to add a colourbar?
@@ -663,9 +663,20 @@ function _plot_topo_on_axis!(
     method::Symbol,
     levels;
     gridscale = 200,
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
+    colormap = :jet,
+    nan_color = :transparent,
+    head_color = :black,
+    head_linewidth = 2,
+    head_radius = 1.0,
+    plot_points = false,
+    point_marker = :circle,
+    point_markersize = 12,
+    point_color = :black,
+    plot_labels = false,
+    label_fontsize = 20,
+    label_color = :black,
+    label_xoffset = 0,
+    label_yoffset = 0,
     kwargs...,
 )
 
@@ -677,14 +688,23 @@ function _plot_topo_on_axis!(
     contour_range = 0.5 * contour_range_multiplier
     coord_range = range(-contour_range, contour_range, length = gridscale)
 
-    co = contourf!(ax, coord_range, coord_range, data; levels = levels, kwargs...)
+    co = contourf!(ax, coord_range, coord_range, data; levels = levels, colormap = colormap, nan_color = nan_color)
     plot_layout_2d!(
         fig,
         ax,
         layout;
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
+        head_color = head_color,
+        head_linewidth = head_linewidth,
+        head_radius = head_radius,
+        point_plot = plot_points,
+        point_marker = point_marker,
+        point_markersize = point_markersize,
+        point_color = point_color,
+        label_plot = plot_labels,
+        label_fontsize = label_fontsize,
+        label_color = label_color,
+        label_xoffset = label_xoffset,
+        label_yoffset = label_yoffset,
     )
 
     hidedecorations!(ax, grid = false)
@@ -1332,14 +1352,10 @@ function _plot_ica_topo_on_axis!(
     data::Matrix{Float64},
     ica::InfoIca,
     levels;
-    gridscale = 100,
-    colormap = :jet,
-    nan_color = :transparent,
-    head_kwargs = Dict(),
-    point_kwargs = Dict(),
-    label_kwargs = Dict(),
-    method = :multiquadratic,
     kwargs...)
+    
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
     
     # Clear the axis
     empty!(topo_ax)
@@ -1350,14 +1366,9 @@ function _plot_ica_topo_on_axis!(
         fig,
         data,
         ica.layout,
-        method,
+        plot_kwargs[:method],
         levels;
-        gridscale = gridscale,
-        colormap = colormap,
-        nan_color = nan_color,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
+        plot_kwargs...
     )
 
     hidedecorations!(topo_ax, grid = false)
