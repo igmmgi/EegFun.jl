@@ -1,7 +1,5 @@
 # Default parameters for databrowser plots with descriptions
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    # Display parameters
-    :display_plot => (true, "Whether to display the plot"),
 
     # Figure and layout
     :figure_size => (nothing, "Figure size as (width, height). If nothing, uses default size"),
@@ -398,13 +396,13 @@ function create_labels_menu(fig, ax, state)
         elseif s == "Central"
             state.channels.visible .= occursin.(r"z$", String.(state.channels.labels))
         elseif s == "BioSemi16"
-            tmp_layout = read_layout("./data/layouts/biosemi16.csv")
+            tmp_layout = read_layout("./data/layouts/biosemi/biosemi16.csv")
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         elseif s == "BioSemi32"
-            tmp_layout = read_layout("./data/layouts/biosemi32.csv")
+            tmp_layout = read_layout("./data/layouts/biosemi/biosemi32.csv")
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         elseif s == "BioSemi64"
-            tmp_layout = read_layout("./data/layouts/biosemi64.csv")
+            tmp_layout = read_layout("./data/layouts/biosemi/biosemi64.csv")
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         else
             state.channels.visible .= (state.channels.labels .== Symbol(s))
@@ -508,6 +506,7 @@ function show_additional_menu(state)
     for btn in menu_buttons
         on(btn.clicks) do n
             selected_data = subset_selected_data(state)
+            println(selected_data)
             if btn.label[] == "Topoplot (multiquadratic)"
                 plot_topography(selected_data, method = :multiquadratic)
             elseif btn.label[] == "Topoplot (spherical_spline)"
@@ -1356,9 +1355,7 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     draw(ax, state)
     draw_extra_channel!(ax, state)
 
-    if plot_kwargs[:display_plot]
-        display(fig)
-    end
+    display(fig)
     return fig, ax
 end
 
