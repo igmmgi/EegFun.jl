@@ -1,11 +1,7 @@
  using DataFrames
- using Makie: Figure, Axis, Axis3
+ using Makie
     
 @testset "Plot Layout Tests" begin
-   
-
-    # Use generic create_test_layout from test_utils.jl
-    # create_test_layout(; n_channels::Int = 6, layout_type::Symbol = :topo)
 
     layout = create_test_layout(; n_channels = 6, layout_type = :topo)
 
@@ -102,10 +98,10 @@
         fig, ax = eegfun.plot_layout_2d(layout, display_plot = false)
 
         # Test basic ROI
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Fp1, :Fp2]], border_size = 10) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2]], topo_border_size = 10) === nothing
 
         # Test multiple ROIs
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Fp1, :Fp2], [:O1, :O2]], border_size = 5) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2], [:O1, :O2]], roi_border_size = 5) === nothing
     end
 
     @testset "add_topo_rois! with prefixed kwargs" begin
@@ -114,10 +110,10 @@
         # Test with custom ROI styling
         @test eegfun.add_topo_rois!(
             ax,
-            layout.data,
+            layout,
             [[:Fp1, :Fp2]],
-            border_size = 10,
-            roi_color = :red,
+            roi_border_size = 10,
+            roi_linecolor = :red,
             roi_linewidth = 3,
             roi_fill = true,
             roi_fillcolor = :blue,
@@ -131,9 +127,9 @@
         # Test multiple ROIs with different styles
         @test eegfun.add_topo_rois!(
             ax,
-            layout.data,
+            layout,
             [[:Fp1, :Fp2], [:O1, :O2]],
-            border_size = 8,
+            roi_border_size = 8,
             roi_color = [:red, :blue],
             roi_linewidth = [2, 4],
             roi_fill = [true, false],
@@ -146,14 +142,14 @@
         fig, ax = eegfun.plot_layout_2d(layout, display_plot = false)
 
         # Test with non-existent electrodes (should warn but not fail)
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:NonExistent]], border_size = 10) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:NonExistent]], roi_border_size = 10) === nothing
 
         # Test with mismatched array lengths (should throw error)
         @test_throws ArgumentError eegfun.add_topo_rois!(
             ax,
-            layout.data,
+            layout,
             [[:Fp1], [:Fp2]],
-            border_size = 10,
+            roi_border_size = 10,
             roi_color = [:red],  # Only one color for two ROIs
         )
     end
@@ -207,13 +203,13 @@
 
         # Test with very large border_size
         fig, ax = eegfun.plot_layout_2d(layout, display_plot = false)
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Fp1, :Fp2]], border_size = 1000) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2]], roi_border_size = 1000) === nothing
 
         # Test with zero border_size
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Fp1, :Fp2]], border_size = 0) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2]], roi_border_size = 0) === nothing
 
         # Test with negative border_size (should handle gracefully)
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Fp1, :Fp2]], border_size = -5) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2]], roi_border_size = -5) === nothing
     end
 
     @testset "component control parameters" begin
@@ -288,32 +284,32 @@
         fig, ax = eegfun.plot_layout_2d(layout, display_plot = false)
 
         # Test with empty ROI list
-        @test eegfun.add_topo_rois!(ax, layout.data, Vector{Symbol}[], border_size = 10) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, Vector{Symbol}[], roi_border_size = 10) === nothing
 
         # Test with single electrode ROI
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Cz]], border_size = 10) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Cz]], roi_border_size = 10) === nothing
 
         # Test with all electrodes in one ROI
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Fp1, :Fp2, :Cz, :Pz, :O1, :O2]], border_size = 10) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Fp1, :Fp2, :Cz, :Pz, :O1, :O2]], roi_border_size = 10) === nothing
 
         # Test with overlapping ROIs
-        @test eegfun.add_topo_rois!(ax, layout.data, [[:Fp1, :Cz], [:Cz, :Pz]], border_size = 10) === nothing
+        @test eegfun.add_topo_rois!(ax, layout, [[:Fp1, :Cz], [:Cz, :Pz]], roi_border_size = 10) === nothing
 
         # Test with extreme alpha values
         @test eegfun.add_topo_rois!(
             ax,
-            layout.data,
+            layout,
             [[:Fp1, :Fp2]],
-            border_size = 10,
+            roi_border_size = 10,
             roi_fill = true,
             roi_fillalpha = 0.0,  # Completely transparent
         ) === nothing
 
         @test eegfun.add_topo_rois!(
             ax,
-            layout.data,
+            layout,
             [[:Fp1, :Fp2]],
-            border_size = 10,
+            roi_border_size = 10,
             roi_fill = true,
             roi_fillalpha = 1.0,  # Completely opaque
         ) === nothing
@@ -327,7 +323,7 @@
         @test haskey(eegfun.PLOT_LAYOUT_POINT_KWARGS, :point_color)
         @test haskey(eegfun.PLOT_LAYOUT_LABEL_KWARGS, :label_plot)
         @test haskey(eegfun.PLOT_LAYOUT_LABEL_KWARGS, :label_fontsize)
-        @test haskey(eegfun.PLOT_LAYOUT_ROI_KWARGS, :roi_color)
+        @test haskey(eegfun.PLOT_LAYOUT_ROI_KWARGS, :roi_linecolor)
         @test haskey(eegfun.PLOT_LAYOUT_ROI_KWARGS, :roi_fill)
 
         # Test default values
