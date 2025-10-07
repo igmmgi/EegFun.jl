@@ -197,6 +197,7 @@ function plot_topography!(
     kwargs...,
 )
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
+    println(kwargs)
     plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
 end
 

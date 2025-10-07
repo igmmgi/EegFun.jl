@@ -1335,15 +1335,9 @@ function _plot_ica_topo_on_axis!(
     data::Matrix{Float64},
     ica::InfoIca,
     levels;
-    kwargs
-    # gridscale::Int = 100,
-    # colormap::Symbol = :jet,
-    # nan_color::Symbol = :transparent,
-    # head_kwargs::Dict = Dict(),
-    # point_kwargs::Dict = Dict(),
-    # label_kwargs::Dict = Dict(),
-    # method::Symbol = :spherical_spline,
-)
+    kwargs...)
+    
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
     # Clear the axis
     empty!(topo_ax)
 
@@ -1355,12 +1349,12 @@ function _plot_ica_topo_on_axis!(
         ica.layout,
         method,
         levels;
-        gridscale = gridscale,
-        colormap = colormap,
-        nan_color = nan_color,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
+        gridscale = plot_kwargs[:gridscale],
+        colormap = plot_kwargs[:colormap],
+        nan_color = plot_kwargs[:nan_color],
+        head_kwargs = plot_kwargs[:head_kwargs],
+        point_kwargs = plot_kwargs[:point_kwargs],
+        label_kwargs = plot_kwargs[:label_kwargs],
     )
 
     hidedecorations!(topo_ax, grid = false)
