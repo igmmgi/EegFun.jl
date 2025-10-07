@@ -1,34 +1,4 @@
 # =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
-
-"""
-    _filter_topo_kwargs(plot_kwargs::Dict)
-
-Filter kwargs to only include those relevant for topography plotting.
-"""
-function _filter_topo_kwargs(plot_kwargs::Dict)
-    return Dict(
-        :method => plot_kwargs[:method],
-        :gridscale => plot_kwargs[:gridscale],
-        :colormap => plot_kwargs[:colormap],
-        :nan_color => plot_kwargs[:nan_color],
-        :head_color => plot_kwargs[:head_color],
-        :head_linewidth => plot_kwargs[:head_linewidth],
-        :head_radius => plot_kwargs[:head_radius],
-        :plot_points => plot_kwargs[:plot_points],
-        :point_marker => plot_kwargs[:point_marker],
-        :point_markersize => plot_kwargs[:point_markersize],
-        :point_color => plot_kwargs[:point_color],
-        :plot_labels => plot_kwargs[:plot_labels],
-        :label_fontsize => plot_kwargs[:label_fontsize],
-        :label_color => plot_kwargs[:label_color],
-        :label_xoffset => plot_kwargs[:label_xoffset],
-        :label_yoffset => plot_kwargs[:label_yoffset],
-    )
-end
-
-# =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -70,6 +40,8 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Colorbar parameters
     :plot_colorbar => (true, "Whether to display colorbars"),
     :colorbar_width => (30, "Width of the colorbar"),
+    :colorbar_height => (Relative(0.8), "Height of the colorbar"),
+    :colorbar_ticklabelsize => (10, "Font size for colorbar tick labels"),
     :colorbar_plot_numbers => (Int[], "Plot indices (1-based) that should have visible colorbars"),
 
     # Layout parameters
@@ -124,25 +96,28 @@ function plot_ica_topoplot(ica; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
 
-    # Extract commonly used values
-    component_selection = plot_kwargs[:component_selection]
-    dims = plot_kwargs[:dims]
-    display_plot = plot_kwargs[:display_plot]
-    use_global_scale = plot_kwargs[:use_global_scale]
-    method = plot_kwargs[:method]
-    gridscale = plot_kwargs[:gridscale]
-    num_levels = plot_kwargs[:num_levels]
-    plot_colorbar = plot_kwargs[:plot_colorbar]
-    colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
-    figure_padding = plot_kwargs[:figure_padding]
-    subplot_spacing = plot_kwargs[:subplot_spacing]
+    # Extract commonly used values and remove them from plot_kwargs
+    component_selection = pop!(plot_kwargs, :component_selection)
+    dims = pop!(plot_kwargs, :dims)
+    display_plot = pop!(plot_kwargs, :display_plot)
+    use_global_scale = pop!(plot_kwargs, :use_global_scale)
+    method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
+    num_levels = pop!(plot_kwargs, :num_levels)
+    figure_padding = pop!(plot_kwargs, :figure_padding)
+    subplot_spacing = pop!(plot_kwargs, :subplot_spacing)
+
+    # Extract colorbar-specific kwargs
+    colorbar_kwargs = Dict(
+        :plot_colorbar => pop!(plot_kwargs, :plot_colorbar), 
+        :colorbar_plot_numbers => pop!(plot_kwargs, :colorbar_plot_numbers), 
+        :width => pop!(plot_kwargs, :colorbar_width),
+        :height => pop!(plot_kwargs, :colorbar_height),
+        :ticklabelsize => pop!(plot_kwargs, :colorbar_ticklabelsize)
+    )
 
     # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
-
-    # Extract specific kwargs for sub-functions
-    topo_kwargs = Dict(:colormap => plot_kwargs[:colormap], :nan_color => plot_kwargs[:nan_color])
-    colorbar_kwargs = Dict(:width => plot_kwargs[:colorbar_width])
 
     # Get selected components using the helper function
     comps = get_selected_components(ica, component_selection)
@@ -207,27 +182,26 @@ function plot_ica_topoplot(ica; kwargs...)
             data,
             ica,
             levels_to_use;
-            _filter_topo_kwargs(plot_kwargs)...
+            plot_kwargs...
         )
 
         # Do we want to add a colourbar?
-        if plot_colorbar
-
-            width = get(colorbar_kwargs, :width, 10)
-            height = get(colorbar_kwargs, :height, Relative(0.8))
-            ticksize = get(colorbar_kwargs, :ticklabelsize, 10)
+        if colorbar_kwargs[:plot_colorbar]
+            # Extract colorbar parameters
+            width = colorbar_kwargs[:width]
+            height = colorbar_kwargs[:height]
+            ticklabelsize = colorbar_kwargs[:ticklabelsize]
 
             # Create colorbar or placeholder in second column
             # TODO: I do not really follow colourbar logic in Makie
             # This seems a bit awkward!
-            if i in colorbar_plot_numbers # Use accessed list
+            if i in colorbar_kwargs[:colorbar_plot_numbers] || isempty(colorbar_kwargs[:colorbar_plot_numbers]) # Use accessed list
                 Colorbar(
                     grids[i][1, 2],
                     co;
                     width = width,
                     height = height,
-                    ticklabelsize = ticksize,
-                    colorbar_kwargs...,
+                    ticklabelsize = ticklabelsize,
                 )
             else
                 Box(
@@ -236,7 +210,6 @@ function plot_ica_topoplot(ica; kwargs...)
                     height = height,
                     color = :transparent,
                     strokewidth = 0,
-                    colorbar_kwargs...,
                 )
             end
 
