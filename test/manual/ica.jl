@@ -28,7 +28,7 @@ eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4
 
 
 
-eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15));
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15), plot_labels = true);
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:15), use_global_scale = true);
 
 
