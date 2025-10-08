@@ -5,6 +5,7 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :sort_values => (false, "If true, sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
     :display_plot => (true, "Whether to display the plot."),
+    :dims => (nothing, "Tuple (rows, cols) for grid layout when plotting multiple columns. If nothing, uses best_rect."),
     :bar_color => (:steelblue, "Color of the bars."),
     :bar_width => (0.8, "Width of bars."),
     :bar_alpha => (0.7, "Transparency of bars."),
@@ -114,29 +115,7 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
     end
 
     # Configure the axis
-    # Set ylabel - use custom if provided, otherwise use dynamic default
-    if plot_kwargs[:ylabel] != ""
-        ax.ylabel = plot_kwargs[:ylabel]
-    else
-        ax.ylabel = plot_kwargs[:average_over] !== nothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
-    end
-    ax.xticks = (1:length(channel_names), channel_names)
-    ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
-    ax.xlabel = plot_kwargs[:xlabel]
-    ax.title = plot_kwargs[:title]
-    ax.titlesize = plot_kwargs[:title_fontsize]
-    ax.xlabelsize = plot_kwargs[:label_fontsize]
-    ax.ylabelsize = plot_kwargs[:label_fontsize]
-    ax.xticklabelsize = plot_kwargs[:tick_fontsize]
-    ax.yticklabelsize = plot_kwargs[:tick_fontsize]
-
-    # Configure grid
-    ax.xgridvisible = plot_kwargs[:grid_visible]
-    ax.ygridvisible = plot_kwargs[:grid_visible]
-    ax.xgridwidth = plot_kwargs[:xgridwidth]
-    ax.ygridwidth = plot_kwargs[:ygridwidth]
-    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
-    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
+    _configure_axis!(ax, channel_names, col, plot_kwargs, n_epochs)
 
     # Create the bar plot
     barplot!(
@@ -168,18 +147,160 @@ function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
 
-    # Check if required columns exist - throw error for non-mutating version
-    if :channel ∉ propertynames(dat) || col ∉ propertynames(dat)
-        @minimal_error_throw("DataFrame must contain :channel and :$col columns.")
-    end
-
-    # Create the figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_channel_summary!(fig, ax, dat, col; plot_kwargs...)
 
-    if plot_kwargs[:display_plot]
-        display_figure(fig)
-    end
+    plot_kwargs[:display_plot] && display_figure(fig)
     return fig, ax
+end
+
+
+"""
+    plot_channel_summary!(fig, ax, dat::DataFrame, col::Vector{Symbol}; kwargs...)
+    plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
+
+Plot multiple bar charts summarizing different metrics per channel from a DataFrame.
+
+Creates a grid layout with one subplot per column specified in `col`. Each subplot shows
+a bar chart for that specific metric across all channels.
+
+# Arguments
+- `fig`: The Makie Figure object to plot on (mutating version only)
+- `ax`: The Makie Axis object to plot on (mutating version only) - **Note**: This parameter is ignored in the multiple column version as each subplot gets its own axis
+- `dat::DataFrame`: DataFrame containing channel summary data
+- `col::Vector{Symbol}`: Vector of column symbols to plot, each will get its own subplot
+
+# Keyword Arguments
+$(generate_kwargs_doc(PLOT_CHANNEL_SUMMARY_KWARGS))
+
+# Returns
+- **Mutating version**: `nothing` (modifies the provided figure in-place)
+- **Non-mutating version**: `fig::Figure` - The created figure object
+
+# Examples
+```julia
+# Plot multiple metrics in a grid
+fig = plot_channel_summary(summary_df, [:kurtosis, :variance, :range])
+
+# Custom grid layout
+fig = plot_channel_summary(summary_df, [:min, :max, :std], dims = (2, 2))
+
+# With averaging and error bars
+fig = plot_channel_summary(summary_df, [:kurtosis, :variance], 
+    average_over = :epoch,
+    sort_values = true)
+```
+"""
+function plot_channel_summary!(fig, ax, dat::DataFrame, col::Vector{Symbol}; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    _plot_multiple_columns!(fig, dat, col, plot_kwargs)
+end
+
+# Share documentation with the non-mutating version
+@doc (@doc plot_channel_summary!) plot_channel_summary
+function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
+    fig = Figure()
+    _plot_multiple_columns!(fig, dat, col, plot_kwargs)
+    plot_kwargs[:display_plot] && display_figure(fig)
+    return fig
+end
+
+
+"""
+    _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict)
+
+Internal helper function to plot multiple channel summary columns in a grid layout.
+
+Creates a grid of subplots where each column in `col` gets its own subplot showing
+a bar chart of that metric across all channels.
+
+# Arguments
+- `fig::Figure`: The Makie Figure object to plot on
+- `dat::DataFrame`: DataFrame containing channel summary data
+- `col::Vector{Symbol}`: Vector of column symbols to plot
+- `plot_kwargs::Dict`: Dictionary containing plotting parameters
+
+# Grid Layout
+- If `plot_kwargs[:dims]` is `nothing`, uses `best_rect()` to determine optimal grid dimensions
+- If `plot_kwargs[:dims]` is provided, uses the specified (rows, cols) tuple
+- Plots are arranged in row-major order (left to right, top to bottom)
+- Stops plotting when all columns are processed, even if grid has empty spaces
+"""
+function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict)
+    n_cols = length(col)
+    
+    if plot_kwargs[:dims] === nothing
+        rs, cs = best_rect(n_cols)
+    else
+        dims = plot_kwargs[:dims]
+        if !isa(dims, Tuple) || length(dims) != 2 || !all(isa.(dims, Int)) || any(dims .<= 0)
+            @minimal_error("dims must be a tuple of two positive integers (rows, cols), got: $dims")
+        end
+        rs, cs = dims
+    end
+    
+    count = 1
+    for r in 1:rs
+        for c in 1:cs
+            ax = Axis(fig[r, c])
+            plot_channel_summary!(fig, ax, dat, col[count]; plot_kwargs...)
+            count += 1
+            if count > n_cols
+                break
+            end
+        end
+    end
+end
+
+
+"""
+    _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, plot_kwargs::Dict, n_epochs::Union{Int,Nothing})
+
+Internal helper function to configure axis properties for channel summary plots.
+
+Sets up all axis properties including labels, ticks, titles, fonts, and grid styling
+based on the provided plotting parameters.
+
+# Arguments
+- `ax::Axis`: The Makie Axis object to configure
+- `channel_names::Vector{String}`: Names of channels for x-axis tick labels
+- `col::Symbol`: Column name being plotted (used for y-axis label)
+- `plot_kwargs::Dict`: Dictionary containing plotting parameters
+- `n_epochs::Union{Int,Nothing}`: Number of epochs (used for error bar labels when averaging)
+
+# Configuration Details
+- **Y-axis label**: Uses custom label if provided, otherwise generates dynamic label based on column name and averaging settings
+- **X-axis ticks**: Sets channel names as tick labels
+- **Fonts**: Configures title, axis label, and tick label font sizes
+- **Grid**: Sets grid visibility, width, and transparency
+- **Rotation**: Applies x-axis tick label rotation
+"""
+function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, plot_kwargs::Dict, n_epochs::Union{Int,Nothing})
+    # Set ylabel - use custom if provided, otherwise use dynamic default
+    if plot_kwargs[:ylabel] != ""
+        ax.ylabel = plot_kwargs[:ylabel]
+    else
+        ax.ylabel = plot_kwargs[:average_over] !== nothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
+    end
+    
+    # Configure ticks and labels
+    ax.xticks = (1:length(channel_names), channel_names)
+    ax.xticklabelrotation = plot_kwargs[:xtick_rotation]
+    ax.xlabel = plot_kwargs[:xlabel]
+    ax.title = plot_kwargs[:title]
+    ax.titlesize = plot_kwargs[:title_fontsize]
+    ax.xlabelsize = plot_kwargs[:label_fontsize]
+    ax.ylabelsize = plot_kwargs[:label_fontsize]
+    ax.xticklabelsize = plot_kwargs[:tick_fontsize]
+    ax.yticklabelsize = plot_kwargs[:tick_fontsize]
+
+    # Configure grid
+    ax.xgridvisible = plot_kwargs[:grid_visible]
+    ax.ygridvisible = plot_kwargs[:grid_visible]
+    ax.xgridwidth = plot_kwargs[:xgridwidth]
+    ax.ygridwidth = plot_kwargs[:ygridwidth]
+    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
+    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
 end
