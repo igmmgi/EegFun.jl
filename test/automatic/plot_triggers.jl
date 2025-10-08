@@ -7,21 +7,6 @@ using Makie
 
 @testset "plot_triggers" begin
 
-    # =============================================================================
-    # TEST DATA CREATION HELPERS
-    # =============================================================================
-
-    # Note: BioSemiDataFormat tests removed due to type complexity
-    # Focus on ContinuousData tests which are more straightforward
-
-    # Use generic functions from test_utils.jl
-    # create_test_continuous_data(; n_samples::Int = 1000, fs::Int = 1000)
-    # create_empty_trigger_data(; n_samples::Int = 1000, fs::Int = 1000)
-
-    # =============================================================================
-    # HELPER FUNCTION TESTS
-    # =============================================================================
-
     @testset "_filter_triggers" begin
         @testset "basic filtering" begin
             trigger_times = [1.0, 2.0, 3.0, 4.0, 5.0]

@@ -383,13 +383,9 @@ fig, ax = plot_trigger_overview(dat; ignore_triggers=[1, 255])
 """
 function plot_trigger_overview(dat::ContinuousData; kwargs...)
     @info "Plotting trigger (cleaned) overview for ContinuousData"
-    # Merge user kwargs with defaults
+
     plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, kwargs)
-
-    # Extract trigger data (now always returns trigger_info)
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
-
-    # Check if we have any non-empty trigger info
     has_info = any(!isempty, trigger_info)
 
     if has_info
@@ -684,7 +680,7 @@ fig, ax = plot_trigger_timing(dat; ignore_triggers=[1, 255])
 ```
 """
 function plot_trigger_timing(dat::ContinuousData; kwargs...)
-    plot_kwargs = merge(PLOT_TRIGGERS_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_TRIGGERS_KWARGS, Dict(kwargs))
     trigger_codes, trigger_times, trigger_info = _extract_trigger_data(dat, plot_kwargs[:ignore_triggers])
     return _create_interactive_trigger_plot(trigger_codes, trigger_times, trigger_info; kwargs...)
 end
