@@ -6,25 +6,11 @@ using eegfun
 
     dat = create_test_data(n=500)
 
-    # # Build a tiny fake layout with minimal polar (inc/azi)
-    # layout_df = DataFrame(label = [:A, :B, :C], inc = [30.0, 40.0, 50.0], azi = [0.0, 90.0, 180.0])
-    # layout = eegfun.Layout(layout_df, nothing, nothing)
-
-    # # Build tiny ContinuousData with 3 channels + meta
-    # n = 5
-    # time = collect(range(0, step = 0.001, length = n))
-    # df = DataFrame(time = time, sample = 1:n)
-    # df[!, :A] = 1.0 .* collect(1:n)
-    # df[!, :B] = 3.0 .* collect(1:n)
-    # df[!, :C] = 5.0 .* collect(1:n)
-    # dat = eegfun.ContinuousData(df, layout, 1000, eegfun.AnalysisInfo())
-
     # 1) Append averaged columns only (Symbols input)
     eegfun.channel_average!(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])])
 
     @test :Ch1_Ch2 ∈ propertynames(dat.data)
     @test all(dat.data.Ch1_Ch2 .== (dat.data.Ch1 .+ dat.data.Ch2) ./ 2)
-
 
     # 2) Reduce to only averages and create averaged layout
     dat = create_test_data(n=500)
