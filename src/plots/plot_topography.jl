@@ -19,30 +19,18 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :title_fontsize => (16, "Font size for the title"),
     :show_title => (true, "Whether to show the title"),
 
-    # Axis labels and styling
-    :xlabel => ("", "Label for x-axis"),
-    :ylabel => ("", "Label for y-axis"),
-    :label_fontsize => (14, "Font size for axis labels"),
-    :tick_fontsize => (12, "Font size for tick labels"),
-
     # Colorbar parameters
-    :plot_colorbar => (true, "Whether to display the colorbar"),
+    :colorbar_plot => (true, "Whether to display the colorbar"),
+    :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
     :colorbar_width => (30, "Width of the colorbar"),
     :colorbar_label => ("μV", "Label for the colorbar"),
-    :colorbar_fontsize => (12, "Font size for colorbar labels"),
-
-    # Grid parameters
-    :grid_visible => (false, "Whether to show grid"),
-    :grid_alpha => (0.3, "Transparency of grid"),
-    :xgrid => (false, "Whether to show x-axis grid"),
-    :ygrid => (false, "Whether to show y-axis grid"),
+    :colorbar_label_fontsize => (12, "Font size for colorbar label"),
+    :colorbar_tick_fontsize => (12, "Font size for colorbar tick labels"),
 
     # Head shape parameters (reusing layout kwargs)
     :head_color => (:black, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
     :head_radius => (1.0, "Radius of the head shape in mm."),
-    :head_ear_ratio => (1/7, "Ratio of ear size to head radius."),
-    :head_nose_scale => (4.0, "Scale factor for nose size."),
 
     # Electrode point parameters
     :point_plot => (true, "Whether to plot electrode points."),
@@ -51,36 +39,33 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :point_color => (:black, "Color of electrode points."),
 
     # Electrode label parameters
-    :label_plot => (false, "Whether to plot electrode labels."),
+    :label_plot => (true, "Whether to plot electrode labels."),
     :label_fontsize => (20, "Font size for electrode labels."),
     :label_color => (:black, "Color of electrode labels."),
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
 )
 
+# TODO: would something like this be useful to access ALL attributes?
+# const COLORBAR_KWARGS = Makie.attribute_default_expressions(Colorbar)
+# TODO: What exactly do Recipes offer?
 
 ##########################################
 # 2D topographic plot
 ##########################################
 
 function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout; kwargs...)
+
     # ensure coordinates are 2d and 3d
-    print(layout)
     _ensure_coordinates_2d!(layout)
     _ensure_coordinates_3d!(layout)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
-    # Extract specific values
-    method = plot_kwargs[:method]
-    gridscale = plot_kwargs[:gridscale]
-    ylim = plot_kwargs[:ylim]
-    plot_colorbar = plot_kwargs[:plot_colorbar]
-    colorrange = plot_kwargs[:colorrange]
-    nan_color = plot_kwargs[:nan_color]
-
     # actual data interpolation
+    method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
     if method == :spherical_spline
         data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
@@ -88,6 +73,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
     end
 
+    ylim = pop!(plot_kwargs, :ylim)
     if isnothing(ylim)
         # Make ylim symmetric around 0 for balanced topographic visualization
         data_min, data_max = extrema(data[.!isnan.(data)])
@@ -113,16 +99,19 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     empty!(ax)
 
     # Use normalized coordinate ranges since layout coordinates are normalized to [-1, 1]
-    contour_range = 1.0  # Since coordinates are normalized to [-1, 1]
+    contour_range = 1.0  
 
     # Set contour parameters
     contour_kwargs = Dict{Symbol,Any}(:extendlow => :auto, :extendhigh => :auto, :colormap => plot_kwargs[:colormap])
 
+    nan_color = pop!(plot_kwargs, :nan_color)
     if !isnothing(nan_color)
         contour_kwargs[:nan_color] = nan_color
     end
 
+    colorrange = pop!(plot_kwargs, :colorrange)
     co = contourf!(
+        ax,
         range(-contour_range, contour_range, length = gridscale),
         range(-contour_range, contour_range, length = gridscale),
         data,
@@ -135,42 +124,20 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         co.colorrange = colorrange
     end
 
-    if plot_colorbar
+    if pop!(plot_kwargs, :colorbar_plot)
+        colorbar_position = pop!(plot_kwargs, :colorbar_position)
         Colorbar(
-            fig[1, 2],
+            fig[colorbar_position...],
             co;
-            width = plot_kwargs[:colorbar_width],
-            label = plot_kwargs[:colorbar_label],
-            labelsize = plot_kwargs[:colorbar_fontsize],
+            width = pop!(plot_kwargs, :colorbar_width),
+            label = pop!(plot_kwargs, :colorbar_label),
+            labelsize = pop!(plot_kwargs, :colorbar_label_fontsize),
+            ticklabelsize = pop!(plot_kwargs, :colorbar_tick_fontsize),
         )
     end
 
     # head shape
     plot_layout_2d!(fig, ax, layout; plot_kwargs...)
-
-    # Apply axis styling
-    if plot_kwargs[:xlabel] != ""
-        ax.xlabel = plot_kwargs[:xlabel]
-    end
-    if plot_kwargs[:ylabel] != ""
-        ax.ylabel = plot_kwargs[:ylabel]
-    end
-
-    # Set font sizes
-    ax.xlabelsize = plot_kwargs[:label_fontsize]
-    ax.ylabelsize = plot_kwargs[:label_fontsize]
-    ax.xticklabelsize = plot_kwargs[:tick_fontsize]
-    ax.yticklabelsize = plot_kwargs[:tick_fontsize]
-
-    # Set grid properties
-    ax.xgridvisible = plot_kwargs[:xgrid]
-    ax.ygridvisible = plot_kwargs[:ygrid]
-    if plot_kwargs[:grid_visible]
-        ax.xgridvisible = true
-        ax.ygridvisible = true
-    end
-    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
-    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
 
     return fig, ax
 
@@ -188,19 +155,6 @@ Add a topographic plot to existing figure/axis from single DataFrame EEG data.
 - `dat`: SingleDataFrameEeg object (ContinuousData or ErpData)
 - `kwargs...`: Additional keyword arguments
 """
-function plot_topography!(
-    fig,
-    ax,
-    dat::SingleDataFrameEeg;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
-    kwargs...,
-)
-    dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
-    println(kwargs)
-    plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; kwargs...)
-end
-
 function plot_topography(
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
@@ -209,26 +163,30 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    plot_topography!(fig, ax, dat; channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
+
+    interactive && _setup_topo_interactivity!(fig, ax, dat)
+    display_plot && display_figure(fig)
+
+    return fig, ax
+end
+
+function plot_topography!(
+    fig, 
+    ax,
+    dat::SingleDataFrameEeg;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    kwargs...,
+)
     # Merge user kwargs with defaults to get all parameters
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
-    # Override with function parameters if provided
-    plot_kwargs[:display_plot] = display_plot
-    plot_kwargs[:interactive] = interactive
-
-    fig = Figure()
-    ax = Axis(fig[1, 1])
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
-
-    if plot_kwargs[:interactive]
-        _setup_topo_interactivity!(fig, ax, dat)
-    end
-
-    if plot_kwargs[:display_plot]
-        display_figure(fig)
-    end
-    return fig, ax
+    
 end
 
 """
@@ -241,7 +199,7 @@ Create topographic plots from a vector of ERP datasets by broadcasting across co
 - `kwargs...`: Additional keyword arguments passed to plot_topography
 """
 function plot_topography(
-    dat::Vector{ErpData};
+    dat::Vector{<:SingleDataFrameEeg};
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
@@ -259,11 +217,10 @@ function plot_topography(
 end
 
 
-
 function plot_topography!(
     fig,
     ax,
-    dat::EpochData,
+    dat::MultiDataFrameEeg,
     epoch::Int;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
@@ -272,7 +229,7 @@ function plot_topography!(
     plot_topography!(
         fig,
         ax,
-        convert(epoch_data, epoch);
+        convert(dat, epoch);
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         kwargs...,
@@ -280,7 +237,7 @@ function plot_topography!(
 end
 
 function plot_topography(
-    dat::EpochData,
+    dat::MultiDataFrameEeg,
     epoch::Int;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
@@ -288,31 +245,20 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
-    # Merge user kwargs with defaults to get all parameters
-    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
-
-    # Override with function parameters if provided
-    plot_kwargs[:display_plot] = display_plot
-    plot_kwargs[:interactive] = interactive
-
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_topography!(
         fig,
         ax,
-        convert(epoch_data, epoch);
+        convert(dat, epoch);
         channel_selection = channel_selection,
         sample_selection = sample_selection,
-        plot_kwargs...,
+        kwargs...,
     )
 
-    if plot_kwargs[:interactive]
-        _setup_topo_interactivity!(fig, ax, dat)
-    end
+    interactive && _setup_topo_interactivity!(fig, ax, dat)
+    display_plot && display_figure(fig)
 
-    if plot_kwargs[:display_plot]
-        display_figure(fig)
-    end
     return fig, ax
 end
 
@@ -333,7 +279,6 @@ the circle to NaN.
 - `DimensionMismatch`: If matrix is not square
 """
 function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
-
     if grid_scale <= 0
         throw(ArgumentError("grid_scale must be positive"))
     end
@@ -341,13 +286,14 @@ function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
         throw(DimensionMismatch("Data matrix must be $(grid_scale)×$(grid_scale)"))
     end
 
-    center = grid_scale / 2
-    radius = grid_scale / 2  # For normalized coordinates, the radius is half the grid size
-    @inbounds for col = 1:grid_scale
-        for row = 1:grid_scale
-            x_dist = center - col
-            y_dist = center - row
-            if sqrt(x_dist^2 + y_dist^2) > radius
+    center = (grid_scale + 1) / 2  
+    radius_squared = (grid_scale / 2)^2  
+    
+    @inbounds for col in 1:grid_scale
+        x_dist_squared = (center - col)^2
+        for row in 1:grid_scale
+            y_dist_squared = (center - row)^2
+            if x_dist_squared + y_dist_squared > radius_squared
                 dat[col, row] = NaN
             end
         end
@@ -619,39 +565,45 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothi
 end
 
 """
+    _scale_topo_levels!(ax::Axis, scale_factor::Float64)
+
+Scale the topographic plot levels by the given factor.
+- scale_factor < 1.0: zoom in (compress range)
+- scale_factor > 1.0: zoom out (expand range)
+"""
+function _scale_topo_levels!(ax::Axis, scale_factor::Float64)
+    # Find the Contourf plot in the axis
+    for plot in ax.scene.plots
+        if plot isa Makie.Contourf
+            # Get current levels
+            current_levels = plot.levels[]
+            if !isnothing(current_levels)
+                # Calculate new range while keeping it centered
+                level_min, level_max = extrema(current_levels)
+                center = (level_min + level_max) / 2
+                range_size = level_max - level_min
+
+                # Scale the range by the factor but keep it centered
+                new_range = range_size * scale_factor
+                new_min = center - new_range / 2
+                new_max = center + new_range / 2
+
+                # Create new levels with the same density but scaled range
+                new_levels = range(new_min, new_max, length = length(current_levels))
+                plot.levels[] = new_levels
+                break
+            end
+        end
+    end
+end
+
+"""
     _topo_scale_up!(ax::Axis)
 
 Increase the scale of the topographic plot (zoom in on color range).
 """
 function _topo_scale_up!(ax::Axis)
-
-    # Find the Contourf plot in the axis
-    for plot in ax.scene.plots
-        if plot isa Makie.Contourf
-
-            # Get current levels
-            current_levels = plot.levels[]
-            if !isnothing(current_levels)
-
-                # For zoom in: compress the range around 0 for better contrast
-                level_min, level_max = extrema(current_levels)
-                center = (level_min + level_max) / 2
-                range_size = level_max - level_min
-
-                # Compress the range by 20% but keep it centered
-                new_range = range_size * 0.8
-                new_min = center - new_range / 2
-                new_max = center + new_range / 2
-
-                # Create new levels with the same density but compressed range
-                new_levels = range(new_min, new_max, length = length(current_levels))
-                plot.levels[] = new_levels
-
-                break
-            else
-            end
-        end
-    end
+    _scale_topo_levels!(ax, 0.8)  # Compress range by 20%
 end
 
 """
@@ -660,33 +612,7 @@ end
 Decrease the scale of the topographic plot (zoom out from color range).
 """
 function _topo_scale_down!(ax::Axis)
-
-    # Find the Contourf plot in the axis
-    for plot in ax.scene.plots
-        if plot isa Makie.Contourf
-
-            # Get current levels
-            current_levels = plot.levels[]
-            if !isnothing(current_levels)
-
-                # For zoom out: expand the range around 0 for less contrast
-                level_min, level_max = extrema(current_levels)
-                center = (level_min + level_max) / 2
-                range_size = level_max - level_min
-
-                # Expand the range by 25% but keep it centered
-                new_range = range_size * 1.25
-                new_min = center - new_range / 2
-                new_max = center + new_range / 2
-
-                # Create new levels with the same density but expanded range
-                new_levels = range(new_min, new_max, length = length(current_levels))
-                plot.levels[] = new_levels
-
-                break
-            end
-        end
-    end
+    _scale_topo_levels!(ax, 1.25)  # Expand range by 25%
 end
 
 # =============================================================================

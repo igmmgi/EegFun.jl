@@ -86,7 +86,7 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
         π / 2;
         color = head_kwargs[:head_color],
         linewidth = head_kwargs[:head_linewidth],
-    ) # ear right
+    ) 
     arc!(
         ax,
         Point2f(-radius, 0),
@@ -95,13 +95,13 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
         -π / 2;
         color = head_kwargs[:head_color],
         linewidth = head_kwargs[:head_linewidth],
-    ) # ear left
+    ) 
     lines!(
         ax,
         Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius;
         color = head_kwargs[:head_color],
         linewidth = head_kwargs[:head_linewidth],
-    ) # nose
+    ) 
 
     # Regular points
     if plot_points

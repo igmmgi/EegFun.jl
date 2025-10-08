@@ -36,6 +36,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Colorbar
     :plot_colorbar => (true, "Whether to show the colorbar"),
+    :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
     :colorbar_width => (30, "Width of the colorbar in pixels"),
     :colorbar_label => ("μV", "Label for the colorbar"),
 
@@ -215,7 +216,8 @@ function plot_erp_image(
 
         # Add colorbar if requested (only for single layout)
         if plot_kwargs[:plot_colorbar] && plot_layout.type == :single
-            Colorbar(fig[1, 2], hm, width = plot_kwargs[:colorbar_width], label = plot_kwargs[:colorbar_label])
+            colorbar_position = plot_kwargs[:colorbar_position]
+            Colorbar(fig[colorbar_position...], hm, width = plot_kwargs[:colorbar_width], label = plot_kwargs[:colorbar_label])
         end
     end
 

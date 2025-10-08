@@ -617,7 +617,13 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     return EpochData(epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
-
+function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, start_time, end_time)
+    epochs = EpochData[]
+    for (idx, epoch_condition) in enumerate(epoch_conditions)
+        push!(epochs, extract_epochs(dat, idx, epoch_condition, start_time, end_time))
+    end
+    return epochs
+end
 
 
 """
@@ -689,6 +695,12 @@ function average_epochs(dat::EpochData)
         @minimal_error_throw("Failed to average epochs: $(e)")
     end
 end
+
+
+function average_epochs(dat::Vector{EpochData})
+    return average_epochs.(dat)
+end
+
 
 
 """

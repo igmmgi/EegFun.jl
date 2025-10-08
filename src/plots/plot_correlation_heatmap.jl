@@ -31,7 +31,8 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :grid_alpha => (0.3, "Transparency of grid lines"),
 
     # Colorbar parameters
-    :plot_colorbar => (true, "Whether to display the colorbar"),
+    :colorbar_plot => (true, "Whether to display the colorbar"),
+    :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
     :colorbar_width => (30, "Width of the colorbar"),
     :colorbar_label => ("Correlation", "Label for the colorbar"),
     :colorbar_fontsize => (12, "Font size for colorbar label"),
@@ -139,6 +140,21 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
         nan_color = plot_kwargs[:nan_color],
     )
 
+    # Add a colorbar if requested
+    if plot_kwargs[:colorbar_plot]
+        # Use the specified colorrange for colorbar
+        colorbar_range = plot_kwargs[:colorrange]
+        colorbar_position = plot_kwargs[:colorbar_position]
+
+        Colorbar(
+            fig[colorbar_position...],
+            limits = colorbar_range,
+            label = plot_kwargs[:colorbar_label],
+            width = plot_kwargs[:colorbar_width],
+            labelsize = plot_kwargs[:colorbar_fontsize],
+        )
+    end
+
     return nothing
 end
 
@@ -154,23 +170,7 @@ function plot_correlation_heatmap(corr_df::DataFrame; kwargs...)
     # Use the mutating version to plot
     plot_correlation_heatmap!(fig, ax, corr_df; kwargs...)
 
-    # Add a colorbar if requested
-    if plot_kwargs[:plot_colorbar]
-        # Use the specified colorrange for colorbar
-        colorbar_range = plot_kwargs[:colorrange]
-
-        Colorbar(
-            fig[1, 2],
-            limits = colorbar_range,
-            label = plot_kwargs[:colorbar_label],
-            width = plot_kwargs[:colorbar_width],
-            labelsize = plot_kwargs[:colorbar_fontsize],
-        )
-    end
-
-    if plot_kwargs[:display_plot]
-        display_figure(fig)
-    end
+    plot_kwargs[:display_plot] && display_figure(fig)
 
     return fig, ax
 end
