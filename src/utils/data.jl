@@ -937,12 +937,12 @@ single_dat = convert(dat, 3)
 summary = channel_summary(single_dat)
 ```
 """
-function convert(dat::MultiDataFrameEeg, epoch_idx::Int)::SingleDataFrameEeg
+function convert(dat::T, epoch_idx::Int)::ContinuousData where  {T<:MultiDataFrameEeg}
     # Validate epoch index
     if epoch_idx < 1 || epoch_idx > length(dat.data)
         @minimal_error "Epoch index $epoch_idx out of range (1:$(length(dat.data)))"
     end
-    return ContinuousData(dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info)
+    return ContinuousData(dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info) # TODO: should we use SingleDataFrameEeg?
 end
 
 

@@ -67,27 +67,27 @@ $(generate_kwargs_doc(PLOT_ICA_TOPOPLOT_KWARGS))
 ## Basic Usage
 ```julia
 # Plot first 10 components (default)
-fig = plot_ica_topoplot(ica_result)
+fig = plot_ica_topoplot(ica)
 
 # Plot specific range of components
-fig = plot_ica_topoplot(ica_result, component_selection = components(5:15))
+fig = plot_ica_topoplot(ica, component_selection = components(5:15))
 
 # Plot specific components
-fig = plot_ica_topoplot(ica_result, component_selection = components([1, 3, 5, 7]))
+fig = plot_ica_topoplot(ica, component_selection = components([1, 3, 5, 7]))
 
 # Plot all components (if screen can handle it)
-fig = plot_ica_topoplot(ica_result, component_selection = components())
+fig = plot_ica_topoplot(ica, component_selection = components())
 ```
 
 ## Advanced Selection
 ```julia
 # Plot components with custom selection
-fig = plot_ica_topoplot(ica_result, 
+fig = plot_ica_topoplot(ica, 
     component_selection = components(1:10)  # First 10 components
 )
 
 # Plot even-numbered components
-fig = plot_ica_topoplot(ica_result, 
+fig = plot_ica_topoplot(ica, 
     component_selection = components(2:2:20)  # Even components 2, 4, 6, ..., 20
 )
 ```
@@ -96,7 +96,7 @@ function plot_ica_topoplot(ica; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
 
-    # Extract commonly used values and remove them from plot_kwargs
+    # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
     component_selection = pop!(plot_kwargs, :component_selection)
     dims = pop!(plot_kwargs, :dims)
     display_plot = pop!(plot_kwargs, :display_plot)
@@ -234,7 +234,7 @@ end
 mutable struct IcaComponentState
     # Data
     dat::ContinuousData
-    ica_result::InfoIca
+    ica::InfoIca
     component_data::Matrix{Float64}
 
     # View settings
@@ -254,15 +254,8 @@ mutable struct IcaComponentState
     # Components to display
     components::Vector{Int}
 
-    #  Topoplot Kwargs 
-    topo_gridscale::Int
-    topo_colormap::Symbol
-    topo_num_levels::Int
-    topo_nan_color::Union{Symbol,Makie.Colorant}
-    topo_method::Symbol  # :multiquadratic or :spherical_spline
-    topo_head_kwargs::Dict
-    topo_point_kwargs::Dict
-    topo_label_kwargs::Dict
+    # Plot parameters
+    plot_kwargs::Dict{Symbol,Any}
 
     # Plot elements
     axs::Vector{Axis}
@@ -276,23 +269,20 @@ mutable struct IcaComponentState
     # Constructor updated to accept and store topo_kwargs
     function IcaComponentState(
         dat,
-        ica_result,
+        ica,
         component_selection,
         n_visible_components,
         window_size;
-        topo_kwargs = Dict(),
-        head_kwargs = Dict(),
-        point_kwargs = Dict(),
-        label_kwargs = Dict(),
         method = :multiquadratic,  # :multiquadratic or :spherical_spline
+        kwargs...,
     )
         # Prepare data matrix
-        dat_matrix = prepare_ica_data_matrix(dat, ica_result)
-        component_data = ica_result.unmixing * dat_matrix
+        dat_matrix = prepare_ica_data_matrix(dat, ica)
+        component_data = ica.unmixing * dat_matrix
         total_components = size(component_data, 1)
 
         # Use the layout from the ICA result (already subsetted to match the channels used in ICA)
-        subsetted_layout = ica_result.layout
+        subsetted_layout = ica.layout
 
         # Create observables
         comp_start = Observable(1)
@@ -332,26 +322,8 @@ mutable struct IcaComponentState
         show_channel = Observable(false)
         channel_yscale = Observable(1.0)
 
-        # --- Process and store Topo Kwargs ---
-        topo_defaults = Dict(:gridscale => 300, :colormap => :jet, :num_levels => 20, :nan_color => :transparent)
-        processed_topo_kwargs = merge(topo_defaults, topo_kwargs)
-
-        head_defaults = Dict(:color => :black, :linewidth => 2)
-        processed_head_kwargs = merge(head_defaults, head_kwargs)
-
-        point_defaults = Dict(:plot_points => false)
-        processed_point_kwargs = merge(point_defaults, point_kwargs)
-
-        label_defaults = Dict(:plot_labels => false)
-        processed_label_kwargs = merge(label_defaults, label_kwargs)
-
-        # Store processed values
-        topo_gridscale = processed_topo_kwargs[:gridscale]
-        topo_colormap = processed_topo_kwargs[:colormap]
-        topo_num_levels = processed_topo_kwargs[:num_levels]
-        topo_nan_color = processed_topo_kwargs[:nan_color]
-        topo_method = method
-        # --- End Process and store ---
+        # Store plot kwargs directly
+        plot_kwargs = copy(kwargs)
 
         # Initialize empty plot element arrays
         axs = Vector{Axis}()
@@ -360,9 +332,10 @@ mutable struct IcaComponentState
         lines_obs = Vector{Observable{Vector{Float64}}}()
         channel_bool_indicators = Dict{Int,Any}()
 
+
         new(
             dat,
-            ica_result,
+            ica,
             component_data,
             n_visible_components,
             window_size,
@@ -375,15 +348,8 @@ mutable struct IcaComponentState
             use_global_scale,
             invert_scale,
             comps_to_use,
-            # Pass stored kwargs
-            topo_gridscale,
-            topo_colormap,
-            topo_num_levels,
-            topo_nan_color,
-            topo_method,
-            processed_head_kwargs,
-            processed_point_kwargs,
-            processed_label_kwargs,
+            # Plot parameters
+            plot_kwargs,
             # Plot elements
             axs,
             channel_axs,
@@ -415,7 +381,6 @@ const PLOT_ICA_COMPONENT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :head_color => (:black, "Color of the head shape outline"),
     :head_linewidth => (2, "Line width of the head shape outline"),
     :head_radius => (1.0, "Radius of the head shape in mm"),
-    :head_nose_scale => (4.0, "Scale factor for nose size"),
 
     # Electrode point parameters
     :plot_points => (false, "Whether to plot electrode points"),
@@ -436,7 +401,7 @@ const PLOT_ICA_COMPONENT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 """
-    plot_ica_component_activation(dat::ContinuousData, ica_result::InfoIca; ...)
+    plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; ...)
 
 Create an interactive visualization of ICA components with topographic maps and time series plots.
 
@@ -444,7 +409,7 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 
 # Arguments
 - `dat::ContinuousData`: Continuous EEG data (must contain a `layout`).
-- `ica_result::InfoIca`: ICA result object (must match `dat`).
+- `ica::InfoIca`: ICA result object (must match `dat`).
 
 # Keyword Arguments
 - `component_selection=components()`: Component selection predicate (see `components()`). Defaults to all available components.
@@ -458,61 +423,35 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 # Returns
 - `fig::Figure`: The Makie Figure object containing the interactive plot.
 """
-function plot_ica_component_activation(dat::ContinuousData, ica_result::InfoIca; kwargs...)
+function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_COMPONENT_KWARGS, kwargs)
 
-    # Extract commonly used values
-    component_selection = plot_kwargs[:component_selection]
-    n_visible_components = plot_kwargs[:n_visible_components]
-    window_size = plot_kwargs[:window_size]
-    method = plot_kwargs[:method]
-    display_plot = plot_kwargs[:display_plot]
+    # ensure coordinates are 2d
+    _ensure_coordinates_2d!(ica.layout)
+    _ensure_coordinates_3d!(ica.layout)
 
-    # Create individual kwargs dictionaries for sub-functions
-    topo_kwargs = Dict(
-        :colormap => plot_kwargs[:colormap],
-        :gridscale => plot_kwargs[:gridscale],
-        :num_levels => plot_kwargs[:num_levels],
-        :nan_color => plot_kwargs[:nan_color],
-    )
+    # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
+    component_selection = pop!(plot_kwargs, :component_selection)
+    n_visible_components = pop!(plot_kwargs, :n_visible_components)
+    window_size = pop!(plot_kwargs, :window_size)
+    method = pop!(plot_kwargs, :method)
+    display_plot = pop!(plot_kwargs, :display_plot)
+    figure_padding = pop!(plot_kwargs, :figure_padding)
 
-    head_kwargs = Dict(
-        :color => plot_kwargs[:head_color],
-        :linewidth => plot_kwargs[:head_linewidth],
-        :radius => plot_kwargs[:head_radius],
-    )
-
-    point_kwargs = Dict(
-        :plot_points => plot_kwargs[:plot_points],
-        :marker => plot_kwargs[:point_marker],
-        :markersize => plot_kwargs[:point_markersize],
-        :color => plot_kwargs[:point_color],
-    )
-
-    label_kwargs = Dict(
-        :plot_labels => plot_kwargs[:plot_labels],
-        :fontsize => plot_kwargs[:label_fontsize],
-        :color => plot_kwargs[:label_color],
-        :xoffset => plot_kwargs[:label_xoffset],
-        :yoffset => plot_kwargs[:label_yoffset],
-    )
     # Pass kwargs to constructor
     state = IcaComponentState(
         dat,
-        ica_result,
+        ica,
         component_selection,
         n_visible_components,
         window_size;
-        topo_kwargs = topo_kwargs,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
         method = method,
+        plot_kwargs...,
     )
 
     # Create figure with padding on the right for margin
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure(figure_padding = figure_padding)
 
     # Setup GUI interface
     create_component_plots!(fig, state)
@@ -532,21 +471,21 @@ function plot_ica_component_activation(dat::ContinuousData, ica_result::InfoIca;
 end
 
 """
-    prepare_ica_data_matrix(dat::ContinuousData, ica_result::InfoIca)
+    prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
 
 Selects, centers, scales, and transposes data for ICA unmixing.
 
 # Arguments
 - `dat::ContinuousData`: Input EEG data.
-- `ica_result::InfoIca`: Corresponding ICA result containing labels and scaling factors.
+- `ica::InfoIca`: Corresponding ICA result containing labels and scaling factors.
 
 # Returns
-- `Matrix{Float64}`: Data matrix ready for `ica_result.unmixing * dat_matrix`. (channels x samples)
+- `Matrix{Float64}`: Data matrix ready for `ica.unmixing * dat_matrix`. (channels x samples)
 """
-function prepare_ica_data_matrix(dat::ContinuousData, ica_result::InfoIca)
-    dat_matrix = permutedims(Matrix(dat.data[!, ica_result.layout.data.label]))
+function prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
+    dat_matrix = permutedims(Matrix(dat.data[!, ica.layout.data.label]))
     dat_matrix .-= mean(dat_matrix, dims = 2) # TODO: check if this is correct
-    dat_matrix ./= ica_result.scale
+    dat_matrix ./= ica.scale
     return dat_matrix
 end
 
@@ -653,12 +592,13 @@ function _plot_topo_on_axis!(
     label_yoffset = 0,
     kwargs...,
 )
-
+    println("plot_topo_on_axis!")
     # Validate gridscale
     gridscale <= 0 && throw(ArgumentError("gridscale must be positive, got $gridscale"))
 
+    println(method)
     # Calculate contour/coord range based on interpolation method
-    contour_range_multiplier = method == :spherical_spline ? 4.0 : 2.0
+    contour_range_multiplier = method == :spherical_spline ? 4.0 : 1.0
     contour_range = 0.5 * contour_range_multiplier
     coord_range = range(-contour_range, contour_range, length = gridscale)
 
@@ -706,6 +646,7 @@ function _plot_ica_topo_in_viewer!(
     pre_calculated_levels = nothing,
     kwargs...,
 )
+    println("plot_ica_topo_in_viewer!")
     # Prepare data using the new internal function
     data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
 
@@ -715,6 +656,22 @@ function _plot_ica_topo_in_viewer!(
     else
         levels = pre_calculated_levels
     end
+
+    # Convert dictionary kwargs to individual parameters
+    head_color = get(head_kwargs, :head_color, :black)
+    head_linewidth = get(head_kwargs, :head_linewidth, 2)
+    head_radius = get(head_kwargs, :head_radius, 1.0)
+    
+    plot_points = get(point_kwargs, :plot_points, false)
+    point_marker = get(point_kwargs, :point_marker, :circle)
+    point_markersize = get(point_kwargs, :point_markersize, 12)
+    point_color = get(point_kwargs, :point_color, :black)
+    
+    plot_labels = get(label_kwargs, :plot_labels, false)
+    label_fontsize = get(label_kwargs, :label_fontsize, 20)
+    label_color = get(label_kwargs, :label_color, :black)
+    label_xoffset = get(label_kwargs, :label_xoffset, 0)
+    label_yoffset = get(label_kwargs, :label_yoffset, 0)
 
     # Plot using the new internal function
     co = _plot_ica_topo_on_axis!(
@@ -726,9 +683,18 @@ function _plot_ica_topo_in_viewer!(
         gridscale = gridscale,
         colormap = colormap,
         nan_color = nan_color,
-        head_kwargs = head_kwargs,
-        point_kwargs = point_kwargs,
-        label_kwargs = label_kwargs,
+        head_color = head_color,
+        head_linewidth = head_linewidth,
+        head_radius = head_radius,
+        plot_points = plot_points,
+        point_marker = point_marker,
+        point_markersize = point_markersize,
+        point_color = point_color,
+        plot_labels = plot_labels,
+        label_fontsize = label_fontsize,
+        label_color = label_color,
+        label_xoffset = label_xoffset,
+        label_yoffset = label_yoffset,
         method = method,
         kwargs...,
     )
@@ -835,19 +801,12 @@ function create_component_plots!(fig, state)
             _plot_ica_topo_in_viewer!(
                 fig,
                 topo_ax,
-                state.ica_result,
+                state.ica,
                 comp_idx;
                 use_global_scale = state.use_global_scale[],
-                gridscale = state.topo_gridscale,
-                colormap = state.topo_colormap,
-                num_levels = state.topo_num_levels,
-                nan_color = state.topo_nan_color,
-                head_kwargs = state.topo_head_kwargs,
-                point_kwargs = state.topo_point_kwargs,
-                label_kwargs = state.topo_label_kwargs,
-                method = state.topo_method,
+                state.plot_kwargs...,
             )
-            topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
+            topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
         else
             empty!(topo_ax) # Clear axis if comp_idx is invalid
             topo_ax.title = @sprintf("Invalid IC %d", comp_idx)
@@ -927,7 +886,7 @@ function add_navigation_controls!(fig, state)
                 use_global = state.use_global_scale[]
                 invert = state.invert_scale[]
                 new_fig =
-                    plot_ica_component_activation(state.dat, state.ica_result, component_selection = components(comps))
+                    plot_ica_component_activation(state.dat, state.ica, component_selection = components(comps))
             end
         end
     end
@@ -1227,7 +1186,7 @@ function update_components!(state)
         if comp_idx <= size(state.component_data, 1)
             data_count += 1
             all_data[data_count] =
-                _prepare_ica_topo_data(state.ica_result, comp_idx, state.topo_method, state.topo_gridscale)
+                _prepare_ica_topo_data(state.ica, comp_idx, state.plot_kwargs[:method], state.plot_kwargs[:gridscale])
         end
     end
 
@@ -1235,7 +1194,7 @@ function update_components!(state)
     resize!(all_data, data_count)
 
     # Calculate levels using the simplified function
-    levels_result = _calculate_ica_topo_levels(all_data, state.use_global_scale[], state.topo_num_levels)
+    levels_result = _calculate_ica_topo_levels(all_data, state.use_global_scale[], state.plot_kwargs[:num_levels])
 
     for i = 1:num_plots
 
@@ -1267,21 +1226,14 @@ function update_components!(state)
                 _plot_ica_topo_in_viewer!(
                     topo_ax.parent, # Pass the figure associated with the axis
                     topo_ax,
-                    state.ica_result,
+                    state.ica,
                     comp_idx;
                     use_global_scale = state.use_global_scale[],
-                    gridscale = state.topo_gridscale,
-                    colormap = state.topo_colormap,
-                    num_levels = state.topo_num_levels,
-                    nan_color = state.topo_nan_color,
-                    method = state.topo_method,
-                    head_kwargs = state.topo_head_kwargs,
-                    point_kwargs = state.topo_point_kwargs,
-                    label_kwargs = state.topo_label_kwargs,
                     pre_calculated_levels = level_to_use,
+                    state.plot_kwargs...,
                 )
                 # Update title
-                topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica_result.variance[comp_idx] * 100)
+                topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
             else
                 @warn "Trying to update non-existent topo_axs at index $i"
             end
@@ -1327,9 +1279,11 @@ function _plot_ica_topo_on_axis!(
     ica::InfoIca,
     levels;
     kwargs...)
-    
+    println("plot_ica_topo_on_axis!")
+
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
+    println(plot_kwargs)
     
     # Clear the axis
     empty!(topo_ax)
@@ -1573,14 +1527,14 @@ end
 
 
 """
-    plot_spatial_kurtosis_components(ica_result::InfoIca, dat::ContinuousData;
+    plot_spatial_kurtosis_components(ica::InfoIca, dat::ContinuousData;
                                    exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
                                    z_threshold::Float64 = 3.0)
 
 Plot spatial kurtosis z-scores for all ICA components and highlight those exceeding the threshold.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object.
+- `ica::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data.
 
 # Keyword Arguments
@@ -1769,7 +1723,7 @@ end
 
 
 """
-    plot_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
+    plot_line_noise_components(ica::InfoIca, dat::ContinuousData;
                              exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
                              line_freq::Real=50.0,
                              freq_bandwidth::Real=1.0,
@@ -1779,7 +1733,7 @@ end
 Plot spectral metrics used for line noise component identification.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object.
+- `ica::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data.
 
 # Keyword Arguments

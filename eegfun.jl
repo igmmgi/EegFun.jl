@@ -84,24 +84,12 @@ eegfun.filter_data!(dat_ica, "hp", 1)
 
 # load data
 # package
-using eegfun
-using GLMakie
 # using CairoMakie
-using DataFrames
 # using BenchmarkTools
-dat = eegfun.read_bdf("../Flank_C_3.bdf");
-layout = eegfun.read_layout("./data/layouts/biosemi72.csv");
 # define neighbours 2D/3D defined by distance (mm)
-eegfun.polar_to_cartesian_xy!(layout);
-eegfun.get_layout_neighbours_xy!(layout, 40);
-eegfun.polar_to_cartesian_xyz!(layout);
-eegfun.get_layout_neighbours_xyz!(layout, 40);
 
 
 # create our eeg ContinuousData type
-dat = eegfun.create_eeg_dataframe(dat, layout);
-eegfun.filter_data!(dat, "hp", 1)
-eegfun.rereference!(dat, :avg)
 # eegfun.plot_databrowser(dat)
 # eegfun.plot_channel_spectrum(dat)
 # eegfun.plot_channel_spectrum(dat)

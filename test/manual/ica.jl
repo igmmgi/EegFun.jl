@@ -11,7 +11,7 @@ dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.is_extreme_value!(dat, 100);
-@btime ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 
 # plot_ica_topoplot
 eegfun.plot_ica_topoplot(ica_result)
@@ -41,7 +41,7 @@ eegfun.plot_ica_topoplot(
 
 
 # plot_ica_component_activation
-eegfun.plot_ica_component_activation(dat, ica_result)
+eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
 
 
 

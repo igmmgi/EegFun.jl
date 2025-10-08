@@ -215,9 +215,7 @@ function plot_filter_response(
     # Add zero line for reference
     hlines!(ax3, [0], color = plot_kwargs[:reference_color], linestyle = plot_kwargs[:reference_linestyle], alpha = 0.5)
 
-    if plot_kwargs[:display_plot]
-        display_figure(fig)
-    end
+    plot_kwargs[:display_plot] && display_figure(fig)
 
     return fig, (ax1, ax2, ax3)
 end
