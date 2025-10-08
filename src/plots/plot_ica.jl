@@ -38,10 +38,10 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_yoffset => (0, "Y-axis offset for electrode labels"),
 
     # Colorbar parameters
-    :plot_colorbar => (true, "Whether to display colorbars"),
-    :colorbar_width => (30, "Width of the colorbar"),
+    :plot_colorbar => (false, "Whether to display colorbars"),
+    :colorbar_width => (20, "Width of the colorbar"),
     :colorbar_height => (Relative(0.8), "Height of the colorbar"),
-    :colorbar_ticklabelsize => (10, "Font size for colorbar tick labels"),
+    :colorbar_ticklabelsize => (12, "Font size for colorbar tick labels"),
     :colorbar_plot_numbers => (Int[], "Plot indices (1-based) that should have visible colorbars"),
 
     # Layout parameters
@@ -118,6 +118,7 @@ function plot_ica_topoplot(ica; kwargs...)
 
     # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
+    _ensure_coordinates_3d!(ica.layout)
 
     # Get selected components using the helper function
     comps = get_selected_components(ica, component_selection)
