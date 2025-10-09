@@ -16,6 +16,8 @@ eegfun.filter_data!(dat, "hp", 1)
 #################################
 eegfun.plot_topography(dat)
 eegfun.plot_topography(dat, method = :spherical_spline)
+eegfun.plot_topography(dat, method = :multiquadratic)
+eegfun.plot_topography(dat, method = :multiquadratic, head_radius = 0.5)
 eegfun.plot_topography(dat, gridscale = 50)
 eegfun.plot_topography(dat, gridscale = 1000)
 eegfun.plot_topography(dat, colormap = :inferno)
