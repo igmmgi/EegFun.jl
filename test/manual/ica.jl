@@ -11,9 +11,11 @@ dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.is_extreme_value!(dat, 100);
+
+# ICA on continuous data
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 
-
+# ICA Plots
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :multiquadratic);
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
 
@@ -47,6 +49,28 @@ eegfun.plot_ica_topoplot(
 # plot_ica_component_activation
 eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
+
+
+
+
+#################################
+# Epoched DataFrameEeg
+#################################
+# some epoched data
+epoch_cfg = [
+    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]), 
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]])
+]
+epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
+
+
+# ICA on epoched data
+ica_result = eegfun.run_ica(epochs[1]; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+ica_result = eegfun.run_ica(epochs; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+
+# ICA Plots
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :multiquadratic);
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
 
 
 

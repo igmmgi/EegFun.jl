@@ -77,6 +77,184 @@ function run_ica(
     return ica_result
 end
 
+"""
+    run_ica(epoched_data::Vector{EpochData};
+            n_components::Union{Nothing,Int} = nothing,
+            sample_selection::Function = samples(),
+            channel_selection::Function = channels(),
+            include_extra::Bool = false,
+            remove_duplicates::Bool = true,
+            params::IcaPrms = IcaPrms())
+
+Runs Independent Component Analysis (ICA) on concatenated epoched EEG data.
+
+This method concatenates all epochs from all EpochData objects into a continuous 
+data matrix before running ICA. This is the standard approach since ICA benefits 
+from more data points and temporal structure is not critical for decomposition.
+
+Automatically checks for duplicate samples (same original data appearing in multiple epochs)
+and removes them by default, as duplicates can bias ICA decomposition.
+
+# Arguments
+- `epoched_data::Vector{EpochData}`: Vector of epoched EEG data objects to concatenate
+- `n_components::Union{Nothing,Int}`: Number of ICA components (default: number of channels - 1)
+- `sample_selection::Function`: Sample selector applied to each epoch (default: include all samples)
+- `channel_selection::Function`: Channel selector (default: layout channels)
+- `include_extra::Bool`: Whether to allow channels outside the layout (e.g., EOG) in selection
+- `remove_duplicates::Bool`: Automatically remove duplicate samples based on samples column (default: true)
+- `params::IcaPrms`: ICA parameters
+
+# Returns
+`InfoIca` with unmixing, mixing, sphere, variance, and metadata.
+
+# Examples
+```julia
+# Basic ICA on concatenated epochs
+epochs = extract_epochs(dat, epoch_conditions, -1, 2)
+ica_result = run_ica(epochs)
+
+# Excluding artifact samples from each epoch
+ica_result = run_ica(epochs, sample_selection = samples_not(:is_extreme_value_100))
+
+# Keep duplicate samples (not recommended for ICA)
+ica_result = run_ica(epochs, remove_duplicates = false)
+```
+"""
+function run_ica(
+    epoched_data::Vector{EpochData};
+    n_components::Union{Nothing,Int} = nothing,
+    sample_selection::Function = samples(),
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+    remove_duplicates::Bool = true,
+    params::IcaPrms = IcaPrms(),
+)
+    if isempty(epoched_data)
+        error("Empty epoched_data vector provided")
+    end
+    
+    # Use the first EpochData object as reference for some meta-like data
+    reference_epoch_data = epoched_data[1]
+    for (i, epoch_data) in enumerate(epoched_data)
+        if epoch_data.sample_rate != reference_epoch_data.sample_rate
+            error("Inconsistent sample rates: EpochData $i has $(epoch_data.sample_rate) Hz, expected $(reference_epoch_data.sample_rate) Hz")
+        end
+    end
+    
+    # Get channel information from reference
+    selected_channels = get_selected_channels(
+        reference_epoch_data, channel_selection; 
+        include_meta = false, include_extra = include_extra
+    )
+    if isempty(selected_channels)
+        error("No channels available after applying channel filter")
+    end
+    
+    # Concatenate all epoched data and check for duplicates
+    concatenated_df = all_data(epoched_data)
+    _check_epoched_data_uniqueness!(concatenated_df; remove_duplicates = remove_duplicates)
+    
+    sample_indices = get_selected_samples(concatenated_df, sample_selection)
+    if isempty(sample_indices)
+        error("No samples available after applying sample filter to epoched data")
+    end
+    
+    # Create data matrix for ICA
+    concatenated_matrix = create_ica_data_matrix(concatenated_df, selected_channels, sample_indices)
+    
+    # Set n_components if not specified
+    if isnothing(n_components)
+        n_components = length(selected_channels) - 1
+    elseif n_components > length(selected_channels)
+        @warn "Requested $n_components components but only $(length(selected_channels)) channels available. Using $(length(selected_channels) - 1) components instead."
+        n_components = length(selected_channels) - 1
+    end
+    
+    total_samples = size(concatenated_matrix, 2)
+    total_epochs = sum(length(epoch_data.data) for epoch_data in epoched_data)
+    
+    @info "Running ICA on concatenated epochs: $(length(selected_channels)) channels x $total_samples samples (from $total_epochs epochs) -> $n_components components"
+    
+    # Create subsetted layout that matches the selected channels  
+    ica_layout = subset_layout(reference_epoch_data.layout, channel_selection = channels(selected_channels))
+    
+    # Run ICA on concatenated data
+    ica_result = infomax_ica(concatenated_matrix, ica_layout, n_components = n_components, params = params)
+    
+    return ica_result
+end
+
+"""
+    _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_duplicates::Bool = false)
+
+Check for duplicate samples in concatenated epoched data using the samples column.
+
+The `samples` column contains the original sample indices from the continuous data.
+When epochs have overlapping time windows, the same original samples appear multiple 
+times in the concatenated data, which can bias ICA decomposition.
+
+# Arguments
+- `concatenated_df::DataFrame`: Concatenated epoch DataFrame
+- `remove_duplicates::Bool`: Whether to remove duplicate samples (default: false)
+
+# Effects
+- Warns user if duplicates are found based on samples column
+- Modifies DataFrame in place if remove_duplicates=true
+"""
+function _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_duplicates::Bool = false)
+    
+    # Check if samples column exists
+    if !hasproperty(concatenated_df, :samples)
+        @debug "No samples column found - cannot check for duplicate samples"
+        return nothing
+    end
+    
+    # Check for duplicate sample indices
+    n_original = nrow(concatenated_df)
+    unique_samples = length(unique(concatenated_df.samples))
+    n_duplicates = n_original - unique_samples
+    
+    if n_duplicates > 0
+        duplicate_percentage = round(100 * n_duplicates / n_original, digits=1)
+        
+        @warn """
+        Found $n_duplicates duplicate samples ($duplicate_percentage%) in concatenated epoched data.
+        This occurs when epochs have overlapping time windows - the same original data samples 
+        appear multiple times. Duplicate samples may bias ICA decomposition.
+        
+        Total rows: $n_original
+        Unique samples: $unique_samples  
+        Duplicates: $n_duplicates ($duplicate_percentage%)
+        """
+        
+        if remove_duplicates
+            unique!(concatenated_df, :samples)
+            @info "Automatically removed $n_duplicates duplicate samples based on samples column. Using $unique_samples unique samples for ICA."
+        end
+    end
+    
+    return nothing
+end
+
+function run_ica(
+    epoched_data::EpochData;
+    n_components::Union{Nothing,Int} = nothing,
+    sample_selection::Function = samples(),
+    channel_selection::Function = channels(),
+    include_extra::Bool = false,
+    remove_duplicates::Bool = true,
+    params::IcaPrms = IcaPrms(),
+)
+    run_ica(
+        [epoched_data];
+        n_components = n_components,
+        sample_selection = sample_selection,
+        channel_selection = channel_selection,
+        include_extra = include_extra,
+        remove_duplicates = remove_duplicates,
+        params = params,
+    )
+end
 
 function IcaPrms(;
     l_rate = 0.001,
@@ -122,6 +300,7 @@ function create_ica_data_matrix(dat::DataFrame, channels, samples)
     
     return result
 end
+
 
 mutable struct WorkArrays
     weights::Matrix{Float64}

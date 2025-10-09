@@ -74,6 +74,7 @@ Get the complete DataFrame with all columns.
 """
 all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data # single data frame
 all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat) # single data frame with all epochs
+all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat) # single data frame with all epochs from all objects
 
 """
     all_labels(dat::EegData) -> Vector{Symbol}
