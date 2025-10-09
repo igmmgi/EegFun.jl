@@ -10,13 +10,16 @@ dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
+# eegfun.resample!(dat, 4)
 eegfun.is_extreme_value!(dat, 100);
 
 # ICA on continuous data
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+@time ica_result1 = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+@time ica_result2 = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 
 # ICA Plots
-eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :multiquadratic);
+eegfun.plot_ica_topoplot(ica_result1, component_selection = eegfun.components(1:10), method = :multiquadratic);
+eegfun.plot_ica_topoplot(ica_result2, component_selection = eegfun.components(1:10), method = :multiquadratic);
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
 
 # plot_ica_topoplot
