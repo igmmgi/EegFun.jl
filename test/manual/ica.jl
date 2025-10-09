@@ -13,6 +13,10 @@ eegfun.filter_data!(dat, "hp", 1)
 eegfun.is_extreme_value!(dat, 100);
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 
+
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :multiquadratic);
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
+
 # plot_ica_topoplot
 eegfun.plot_ica_topoplot(ica_result)
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), plot_labels = false);
@@ -42,6 +46,7 @@ eegfun.plot_ica_topoplot(
 
 # plot_ica_component_activation
 eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
+eegfun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
 
 
 

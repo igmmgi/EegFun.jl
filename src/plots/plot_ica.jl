@@ -573,7 +573,6 @@ function _plot_topo_on_axis!(
     fig::Figure,
     data::AbstractMatrix{<:Real},
     layout::Layout,
-    method::Symbol,
     levels;
     gridscale = 200,
     colormap = :jet,
@@ -592,16 +591,10 @@ function _plot_topo_on_axis!(
     label_yoffset = 0,
     kwargs...,
 )
-    println("plot_topo_on_axis!")
     # Validate gridscale
     gridscale <= 0 && throw(ArgumentError("gridscale must be positive, got $gridscale"))
 
-    println(method)
-    # Calculate contour/coord range based on interpolation method
-    contour_range_multiplier = method == :spherical_spline ? 4.0 : 1.0
-    contour_range = 0.5 * contour_range_multiplier
-    coord_range = range(-contour_range, contour_range, length = gridscale)
-
+    coord_range = range(-1.0, 1.0, length = gridscale)
     co = contourf!(ax, coord_range, coord_range, data; levels = levels, colormap = colormap, nan_color = nan_color)
     plot_layout_2d!(
         fig,
@@ -646,7 +639,6 @@ function _plot_ica_topo_in_viewer!(
     pre_calculated_levels = nothing,
     kwargs...,
 )
-    println("plot_ica_topo_in_viewer!")
     # Prepare data using the new internal function
     data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
 
@@ -695,7 +687,6 @@ function _plot_ica_topo_in_viewer!(
         label_color = label_color,
         label_xoffset = label_xoffset,
         label_yoffset = label_yoffset,
-        method = method,
         kwargs...,
     )
 
@@ -1279,11 +1270,9 @@ function _plot_ica_topo_on_axis!(
     ica::InfoIca,
     levels;
     kwargs...)
-    println("plot_ica_topo_on_axis!")
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
-    println(plot_kwargs)
     
     # Clear the axis
     empty!(topo_ax)
@@ -1294,7 +1283,6 @@ function _plot_ica_topo_on_axis!(
         fig,
         data,
         ica.layout,
-        plot_kwargs[:method],
         levels;
         plot_kwargs...
     )
