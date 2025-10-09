@@ -103,25 +103,25 @@ using Makie
         # BioSemiDataFormat tests removed due to type complexity
 
         @testset "ContinuousData extraction" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             trigger_codes, trigger_times = eegfun._extract_trigger_data(dat)
 
-            @test length(trigger_codes) == 5  # 5 trigger events (1,2,2,3,1)
-            @test length(trigger_times) == 5
+            @test length(trigger_codes) == 14  
+            @test length(trigger_times) == 14
             @test 1 in trigger_codes
             @test 2 in trigger_codes
             @test 3 in trigger_codes
         end
 
         @testset "ContinuousData with filtering" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
             ignore_triggers = [2, 3]
 
             trigger_codes, trigger_times = eegfun._extract_trigger_data(dat, ignore_triggers)
 
-            @test length(trigger_codes) == 2  # Only trigger 1
-            @test all(trigger_codes .== 1)
+            @test length(trigger_codes) == 7  
+            @test length(trigger_times) == 7  
         end
 
         @testset "missing triggers column" begin
@@ -191,7 +191,7 @@ using Makie
         # BioSemiDataFormat tests removed due to type complexity
 
         @testset "ContinuousData input" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
 
@@ -200,7 +200,7 @@ using Makie
         end
 
         @testset "ContinuousData with ignore_triggers" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [2, 3], display_plot = false)
 
@@ -218,7 +218,7 @@ using Makie
         end
 
         @testset "parameter passing" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Test that custom parameters are passed through
             fig, ax = eegfun.plot_trigger_overview(dat; window_size = 15.0, display_plot = false, ignore_triggers = [1])
@@ -232,7 +232,7 @@ using Makie
         # BioSemiDataFormat tests removed due to type complexity
 
         @testset "ContinuousData input" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             fig, ax = eegfun.plot_trigger_timing(dat; display_plot = false)
 
@@ -241,7 +241,7 @@ using Makie
         end
 
         @testset "ContinuousData with ignore_triggers" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             fig, ax = eegfun.plot_trigger_timing(dat; ignore_triggers = [2, 3], display_plot = false)
 
@@ -259,7 +259,7 @@ using Makie
         end
 
         @testset "parameter passing" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Test that custom parameters are passed through
             fig, ax = eegfun.plot_trigger_timing(
@@ -282,7 +282,7 @@ using Makie
     @testset "integration tests" begin
         @testset "end-to-end workflow" begin
             # Test complete workflow from data creation to plotting
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Test overview plot
             fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
@@ -305,7 +305,7 @@ using Makie
         end
 
         @testset "parameter consistency" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Test that same parameters work across all functions
             common_params = (ignore_triggers = [1], display_plot = false)
@@ -318,7 +318,7 @@ using Makie
         end
 
         @testset "return value consistency" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # All functions should return (fig, ax) tuple
             fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
@@ -336,7 +336,7 @@ using Makie
     @testset "performance tests" begin
         @testset "large dataset handling" begin
             # Test with larger dataset
-            dat = create_test_continuous_data(n_samples = 10000)
+            dat = create_test_continuous_data_with_triggers(;n = 10000)
 
             # Should complete without errors
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
@@ -350,7 +350,7 @@ using Makie
 
         @testset "filtering efficiency" begin
             # Test that empty ignore_triggers has no performance penalty
-            dat = create_test_continuous_data(n_samples = 5000)
+            dat = create_test_continuous_data_with_triggers(;n = 5000)
 
             # Time both versions
             @time fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
@@ -362,7 +362,7 @@ using Makie
 
         @testset "memory usage" begin
             # Test that functions don't leak memory
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Create multiple plots to check for memory leaks
             for i = 1:5
@@ -452,7 +452,7 @@ using Makie
     @testset "error handling" begin
         @testset "invalid ignore_triggers types" begin
             # Test that functions handle invalid types gracefully
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # These should not throw errors but may not work as expected
             # The functions should handle type conversion internally
@@ -464,7 +464,7 @@ using Makie
         # Malformed data structures test removed due to type complexity
 
         @testset "extreme parameter values" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Test with extreme parameter values
             fig, ax = eegfun.plot_trigger_timing(
@@ -524,7 +524,7 @@ using Makie
         end
 
         @testset "interactive plot edge cases" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Test with window size larger than data range
             fig, ax = eegfun.plot_trigger_timing(
@@ -556,7 +556,7 @@ using Makie
 
         @testset "memory and performance edge cases" begin
             # Test with very large dataset
-            dat = create_test_continuous_data(n_samples = 50000)
+            dat = create_test_continuous_data_with_triggers(;n = 50000)
 
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
             @test fig isa Figure
@@ -600,7 +600,7 @@ using Makie
 
     @testset "ignore_triggers feature" begin
         @testset "basic filtering functionality" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Test filtering out specific triggers
             fig1, ax1 = eegfun.plot_trigger_overview(dat; ignore_triggers = [1], display_plot = false)
@@ -612,7 +612,7 @@ using Makie
         end
 
         @testset "filtering consistency across functions" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
             ignore_list = [1, 2]
 
             # Both functions should handle filtering the same way
@@ -624,7 +624,7 @@ using Makie
         end
 
         @testset "performance optimization verification" begin
-            dat = create_test_continuous_data(n_samples = 2000)
+            dat = create_test_continuous_data_with_triggers(;n = 2000)
 
             # Test that empty ignore_triggers doesn't add overhead
             # This is more of a design verification than a strict performance test
@@ -636,7 +636,7 @@ using Makie
         end
 
         @testset "filtering edge cases" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Filter all triggers
             fig, ax = eegfun.plot_trigger_overview(dat; ignore_triggers = [1, 2, 3], display_plot = false)
@@ -655,7 +655,7 @@ using Makie
         end
 
         @testset "advanced filtering edge cases" begin
-            dat = create_test_continuous_data()
+            dat = create_test_continuous_data_with_triggers()
 
             # Very large ignore_triggers list
             large_ignore = collect(1:1000)

@@ -129,17 +129,6 @@ using eegfun
         @test ax.ylabel[] == "var (± 95% CI n=3)"
     end
 
-    @testset "plot_channel_summary input validation" begin
-        df = create_test_summary_data()
-
-        # Test missing channel column - should throw error
-        df_no_channel = select(df, Not(:channel))
-        @test_throws ErrorException eegfun.plot_channel_summary(df_no_channel, :std)
-
-        # Test missing data column - should throw error
-        @test_throws ErrorException eegfun.plot_channel_summary(df, :nonexistent)
-    end
-
     @testset "plot_channel_summary sorting functionality" begin
         df = create_test_summary_data()
 

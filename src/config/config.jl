@@ -163,8 +163,12 @@ function load_config(config_file::String)
         return nothing
     end
 
-    # Merge and validate
+    # Merge, convert types, and validate
     config = _merge_configs(default_config, user_config)
+    
+    # Convert Any arrays to proper types (fixes Julia 1.12 TOML parsing issue)
+    _convert_any_arrays!(config)
+    
     validation_result = _validate_config(config)
     if !validation_result.success
         @minimal_error validation_result.error
@@ -174,6 +178,57 @@ function load_config(config_file::String)
     return config
 end
 
+
+# =============================================================================
+# TYPE CONVERSION FUNCTIONS
+# =============================================================================
+
+"""
+    _convert_any_arrays!(config::Dict)
+
+Convert Any arrays in the config to their proper types based on parameter specifications.
+This fixes the issue where TOML.jl in Julia 1.12 returns Any arrays instead of typed arrays.
+"""
+function _convert_any_arrays!(config::Dict; path = "")
+    for (key, value) in config
+        new_path = isempty(path) ? key : "$path.$key"
+        
+        if isa(value, Dict)
+            # Recursively process nested dictionaries
+            _convert_any_arrays!(value; path = new_path)
+        elseif haskey(PARAMETERS, new_path)
+            # Convert this parameter if we have type information
+            param_spec = PARAMETERS[new_path]
+            param_type = typeof(param_spec).parameters[1]
+            
+            # Handle Vector{Vector{String}} case (like hEOG_channels, vEOG_channels)
+            if param_type == Vector{Vector{String}} && isa(value, Vector) && eltype(value) == Any
+                try
+                    # Convert Any[["F9"], ["F10"]] -> Vector{Vector{String}}
+                    converted_value = Vector{Vector{String}}()
+                    for item in value
+                        if isa(item, Vector)
+                            push!(converted_value, String.(item))
+                        else
+                            push!(converted_value, [String(item)])
+                        end
+                    end
+                    config[key] = converted_value
+                catch e
+                    @warn "Failed to convert $new_path from Any array to $param_type: $e"
+                end
+            elseif param_type <: Vector && isa(value, Vector) && eltype(value) == Any
+                # Handle other Vector types
+                try
+                    inner_type = param_type.parameters[1]
+                    config[key] = inner_type.(value)
+                catch e
+                    @warn "Failed to convert $new_path from Any array to $param_type: $e"
+                end
+            end
+        end
+    end
+end
 
 # =============================================================================
 # CONFIGURATION MERGING FUNCTIONS
@@ -272,6 +327,7 @@ function _validate_parameter(value, parameter_spec::ConfigParameter, parameter_n
     if param_type <: Number
         value isa Number || return validation_error("$parameter_name must be a number, got $(typeof(value))")
     else
+        # Check type compatibility (fixed for Julia 1.12 TOML parsing)
         value isa param_type ||
             return validation_error("$parameter_name must be of type $param_type, got $(typeof(value))")
     end

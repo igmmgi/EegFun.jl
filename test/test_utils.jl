@@ -102,6 +102,8 @@ function create_test_erp_data(participant::Int, condition::Int; fs::Int = 1000, 
         condition_name = fill("condition_$condition", length(time)), 
         participant = fill(participant, length(time))
         )
+
+    # chanel labels
     channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
     for ch in channel_labels
         df[!, ch] = sin.(2π * 0.1 * time) .* (condition * 0.5) .+ randn(length(time)) * 0.1
@@ -214,7 +216,7 @@ function create_test_epoch_data_with_rt(
 end
 
 # Helper function to create continuous data with triggers
-function create_continuous_with_triggers(; n::Int = 1000, fs::Int = 1000)
+function create_test_continuous_data_with_triggers(; n::Int = 1000, fs::Int = 1000)
     t = collect(0:(n-1)) ./ fs
     # Create some test signal
     x = sin.(2π .* 10 .* t) .+ 0.1 .* randn(length(t))
@@ -241,114 +243,6 @@ function create_continuous_with_triggers(; n::Int = 1000, fs::Int = 1000)
     return dat
 end
 
-# Helper function to create test epochs with artifacts
-# function create_test_epochs_with_artifacts(
-#     participant::Int,
-#     condition::Int,
-#     n_epochs::Int = 5,
-#     n_timepoints::Int = 100,
-#     n_channels::Int = 3;
-#     n_bad_epochs::Int = 2,
-# )
-#     # Create time vector
-#     time = collect(range(-0.2, 0.8, length = n_timepoints))
-# 
-#     # Create channel data with some condition-specific patterns
-#     channel_data = Dict{Symbol,Any}()
-#     channel_data[:time] = time
-# 
-#     # Add metadata columns
-#     channel_data[:condition] = fill(condition, n_timepoints)
-#     channel_data[:condition_name] = fill("condition_$condition", n_timepoints)
-#     channel_data[:participant] = fill(participant, n_timepoints)
-# 
-#     # Generate channel labels based on n_channels
-#     channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
-#     
-#     # Add EEG channels with condition-specific patterns
-#     for (i, ch) in enumerate(channel_labels)
-#         # Create some signal with condition-specific amplitude
-#         signal = sin.(2π * 0.1 * time) .* (condition * 0.5) .+ randn(n_timepoints) * 0.1
-#         channel_data[ch] = signal
-#     end
-# 
-#     # Create multiple epochs with some containing artifacts
-#     dfs = DataFrame[]
-#     bad_indices = Int[]
-#     
-#     for epoch in 1:n_epochs
-#         df = DataFrame()
-#         df.time = channel_data[:time]
-#         df.condition = channel_data[:condition]
-#         df.condition_name = channel_data[:condition_name]
-#         df.participant = channel_data[:participant]
-#         df.epoch = fill(epoch, n_timepoints)
-#         
-#         # Determine if this epoch should have artifacts
-#         is_bad_epoch = epoch <= n_bad_epochs
-#         if is_bad_epoch
-#             push!(bad_indices, epoch)
-#         end
-#         
-#         for ch in channel_labels
-#             signal = copy(channel_data[ch])
-#             
-#             # Add artifacts to bad epochs
-#             if is_bad_epoch && ch == channel_labels[1]  # Add artifacts to first channel
-#                 signal[20:25] .= 50.0  # Large positive artifact
-#                 signal[60:65] .= -40.0  # Large negative artifact
-#             end
-#             
-#             df[!, ch] = signal .+ randn(n_timepoints) * 0.05  # Add some epoch-specific noise
-#         end
-#         
-#         push!(dfs, df)
-#     end
-# 
-#     # Create layout
-#     layout = eegfun.Layout(
-#         DataFrame(
-#             label = channel_labels,
-#             inc = zeros(length(channel_labels)),
-#             azi = zeros(length(channel_labels)),
-#         ),
-#         nothing,
-#         nothing,
-#     )
-# 
-#     # Create analysis info
-#     analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
-# 
-#     return eegfun.EpochData(dfs, layout, 1000, analysis_info), bad_indices
-# end
-
-
-# Helper functions for trigger testing
-function create_test_continuous_data(; n_samples::Int = 1000, fs::Int = 1000)
-    """Create mock ContinuousData for testing with specific trigger patterns"""
-    time = collect(0:(n_samples-1)) ./ fs
-
-    # Create trigger pattern: [0,1,0,0,2,2,0,0,3,0,0,1,0,0]
-    triggers = zeros(Int16, n_samples)
-    triggers[100] = 1              # Single trigger 1
-    triggers[200:201] = [2, 2]     # Sustained trigger 2
-    triggers[300] = 3              # Single trigger 3
-    triggers[400] = 1              # Single trigger 1
-
-    # Create channel data
-    channel_data = randn(n_samples, 2)
-
-    df = DataFrame(time = time, triggers = triggers, channel1 = channel_data[:, 1], channel2 = channel_data[:, 2])
-
-    layout = eegfun.Layout(
-        DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]),
-        nothing,
-        nothing,
-    )
-
-    dat = eegfun.ContinuousData(df, layout, fs, eegfun.AnalysisInfo())
-    return dat
-end
 
 function create_empty_trigger_data(; n_samples::Int = 1000, fs::Int = 1000)
     """Create data with no triggers for edge case testing"""
