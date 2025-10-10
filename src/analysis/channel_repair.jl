@@ -311,27 +311,116 @@ function repair_channels_spherical_spline!(
     m::Int = 4,
     lambda::Float64 = 1e-5,
 )
-    # Extract channels vector
-    channels = Symbol.(data.layout.label)
-
-    # Get column indices for each channel name in the dataframe
-    channel_indices = [findfirst(==(ch), names(data.data)) for ch in String.(channels)]
-
-    # Filter out any channels not found in the data
-    valid_channels = channels[.!isnothing.(channel_indices)]
-    valid_indices = Base.filter(x -> !isnothing(x), channel_indices)
-
-    # Create the data matrix (channels × time points)
-    data_matrix = Matrix(data.data[:, valid_indices])'
-
-    # Call the spherical spline implementation
-    repair_channels_spherical_spline!(data_matrix, bad_channels, valid_channels, data.layout; m = m, lambda = lambda)
-
-    # Update the data in the ContinuousData object
-    data.data[:, valid_indices] = data_matrix'
-
+    channels = Symbol.(data.layout.data.label)
+    data_matrix = Matrix(data.data[:, channels])'
+    
+    repair_channels_spherical_spline!(data_matrix, bad_channels, channels, data.layout; m = m, lambda = lambda)
+    
+    # Update the data
+    data.data[:, channels] = data_matrix'
+    
     return nothing
 end
 
-# Add non-mutating version
-@add_nonmutating repair_channels_spherical_spline!
+"""
+    repair_bad_channels!(data::EpochData, bad_channels::Vector{Symbol}; epoch_selection::Function=epochs(), neighbours_dict::Union{OrderedDict, Nothing}=nothing)
+
+Repair bad channels in epoched EEG data using weighted neighbor interpolation.
+
+# Arguments
+- `data::EpochData`: The epoched EEG data to repair (modified in-place)
+- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
+- `epoch_selection::Function`: Predicate to select which epochs to repair (default: all epochs)
+- `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (default: auto-generate from layout)
+
+# Examples
+```julia
+# Repair channels in all epochs
+repair_bad_channels!(epochs, [:Fp1, :Fp2])
+
+# Repair only in specific epochs  
+repair_bad_channels!(epochs, [:Fp1], epoch_selection = epochs(1:10))
+
+# With custom neighbors
+repair_bad_channels!(epochs, [:Fp1], neighbours_dict = my_neighbors)
+```
+"""
+function repair_bad_channels!(
+    data::EpochData, 
+    bad_channels::Vector{Symbol};
+    epoch_selection::Function = epochs(), 
+    neighbours_dict::Union{OrderedDict, Nothing} = nothing
+)
+    # Get neighbor information
+    if isnothing(neighbours_dict)
+        get_layout_neighbours_xyz!(data.layout, 0.5)
+        neighbours_dict = data.layout.neighbours
+    end
+    
+    # Get selected epochs
+    selected_epochs = get_selected_epochs(data, epoch_selection)
+    
+    # Get channels vector
+    channels = Symbol.(data.layout.data.label)
+    
+    # Repair each selected epoch
+    for epoch_idx in selected_epochs
+        epoch = data.data[epoch_idx]
+        epoch_matrix = Matrix(epoch[:, channels])'
+        
+        repair_bad_channels!(epoch_matrix, bad_channels, channels, neighbours_dict)
+        
+        # Update the epoch data
+        epoch[:, channels] = epoch_matrix'
+    end
+    
+    return nothing
+end
+
+"""
+    repair_channels_spherical_spline!(data::EpochData, bad_channels::Vector{Symbol}; epoch_selection::Function=epochs(), m::Int=4, lambda::Float64=1e-5)
+
+Repair bad channels in epoched EEG data using spherical spline interpolation.
+
+# Arguments
+- `data::EpochData`: The epoched EEG data to repair (modified in-place)  
+- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
+- `epoch_selection::Function`: Predicate to select which epochs to repair (default: all epochs)
+- `m::Int`: Order of Legendre polynomials (default: 4)
+- `lambda::Float64`: Regularization parameter (default: 1e-5)
+
+# Examples
+```julia
+# Repair channels in all epochs
+repair_channels_spherical_spline!(epochs, [:Fp1, :Fp2])
+
+# Repair only in specific epochs with custom parameters
+repair_channels_spherical_spline!(epochs, [:Fp1], epoch_selection = epochs(1:10), m = 6, lambda = 1e-6)
+```
+"""
+function repair_channels_spherical_spline!(
+    data::EpochData,
+    bad_channels::Vector{Symbol}; 
+    epoch_selection::Function = epochs(),
+    m::Int = 4,
+    lambda::Float64 = 1e-5,
+)
+    # Get selected epochs
+    selected_epochs = get_selected_epochs(data, epoch_selection)
+    
+    # Get channels vector  
+    channels = Symbol.(data.layout.data.label)
+    
+    # Repair each selected epoch
+    for epoch_idx in selected_epochs
+        epoch = data.data[epoch_idx]
+        epoch_matrix = Matrix(epoch[:, channels])'
+        
+        repair_channels_spherical_spline!(epoch_matrix, bad_channels, channels, data.layout; m = m, lambda = lambda)
+        
+        # Update the epoch data
+        epoch[:, channels] = epoch_matrix'
+    end
+    
+    return nothing
+end

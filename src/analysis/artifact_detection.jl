@@ -568,7 +568,7 @@ function detect_bad_epochs(
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    println("Selected channels: $(print_vector(selected_channels))")
+    @info "Selected channels: $(print_vector(selected_channels))"
     isempty(selected_channels) && @minimal_error_throw("No channels selected for epoch rejection")
 
     # Calculate metrics and identify rejected epochs
@@ -852,21 +852,7 @@ end
 
 
 """
-    ArtifactRepairMethod
-
-Enumeration of available artifact repair methods.
-
-# Values
-- `:neighbor_interpolation` - Weighted neighbor interpolation (default)
-- `:spherical_spline` - Spherical spline interpolation
-- `:reject` - Remove bad epochs entirely
-"""
-@enum ArtifactRepairMethod neighbor_interpolation spherical_spline reject
-
-
-
-"""
-    repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo, method::Symbol=:neighbor_interpolation; kwargs...)
+    repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol=:neighbor_interpolation, kwargs...)
 
 Repair detected artifacts using the specified method.
 
@@ -874,6 +860,11 @@ Repair detected artifacts using the specified method.
 - `dat::EpochData`: The epoch data to repair (modified in-place)
 - `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
 - `method::Symbol`: Repair method to use
+
+# Available Methods
+- `:neighbor_interpolation` - Weighted neighbor interpolation (default)
+- `:spherical_spline` - Spherical spline interpolation
+- `:reject` - Remove bad epochs entirely
 
 # Keyword Arguments (for :neighbor_interpolation method)
 - `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (default: auto-generate)
@@ -887,17 +878,16 @@ Repair detected artifacts using the specified method.
 """
 function repair_artifacts!(
     dat::EpochData,
-    artifacts::EpochRejectionInfo,
-    method::Symbol = :neighbor_interpolation;
+    artifacts::EpochRejectionInfo;
+    method::Symbol = :neighbor_interpolation,
     kwargs...,
 )
-    # Convert symbol to enum
-    repair_method = if method == :neighbor_interpolation
-        neighbor_interpolation
+    if method == :neighbor_interpolation
+        return repair_artifacts_neighbor!(dat, artifacts; kwargs...)
     elseif method == :spherical_spline
-        spherical_spline
+        return repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
     elseif method == :reject
-        reject
+        return repair_artifacts_reject!(dat, artifacts; kwargs...)
     else
         throw(
             ArgumentError(
@@ -905,20 +895,45 @@ function repair_artifacts!(
             ),
         )
     end
-
-    return repair_artifacts!(dat, artifacts, repair_method; kwargs...)
 end
 
-function repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo, method::ArtifactRepairMethod; kwargs...)
-    if method == neighbor_interpolation
-        return repair_artifacts_neighbor!(dat, artifacts; kwargs...)
-    elseif method == spherical_spline
-        return repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
-    elseif method == reject
-        return repair_artifacts_reject!(dat, artifacts; kwargs...)
-    else
-        throw(ArgumentError("Unknown repair method: $method"))
-    end
+"""
+    repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol=:neighbor_interpolation, kwargs...)
+
+Non-mutating version of repair_artifacts!. Creates a copy of the data and repairs artifacts without modifying the original.
+
+# Arguments
+- `dat::EpochData`: The epoch data to repair (NOT modified)
+- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
+- `method::Symbol`: Repair method to use (default: :neighbor_interpolation)
+
+# Keyword Arguments
+Same as repair_artifacts! for the respective methods.
+
+# Returns
+- `EpochData`: A new EpochData object with repaired artifacts
+
+# Examples
+```julia
+# Basic artifact repair (creates new object)
+repaired_epochs = repair_artifacts(epochs, artifacts)
+
+# Using spherical spline method
+repaired_epochs = repair_artifacts(epochs, artifacts, :spherical_spline, m=4, lambda=1e-5)
+
+# Rejecting bad epochs entirely
+clean_epochs = repair_artifacts(epochs, artifacts, :reject)
+```
+"""
+function repair_artifacts(
+    dat::EpochData,
+    artifacts::EpochRejectionInfo;
+    method::Symbol = :neighbor_interpolation,
+    kwargs...,
+)
+    dat_copy = copy(dat)
+    repair_artifacts!(dat_copy, artifacts; method, kwargs...)
+    return dat_copy
 end
 
 """
@@ -939,62 +954,23 @@ function repair_artifacts_neighbor!(
     artifacts::EpochRejectionInfo;
     neighbours_dict::Union{OrderedDict,Nothing} = nothing,
 )
-    # Get neighbor information
-    if isnothing(neighbours_dict)
-        neighbours_dict = get_electrode_neighbours_xyz(dat.layout)
-    end
-
-    # Get all rejected epochs
+    # Get all rejected epochs with their bad channels
     rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
-
+    
     for epoch_idx in rejected_epochs
         # Get bad channels for this epoch
         bad_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
         isempty(bad_channels) && continue
-
-        # Get current epoch data
-        epoch = dat.data[epoch_idx]
-
-        # Repair each bad channel
-        for bad_ch in bad_channels
-            # Get neighbor information
-            neighbours = get(neighbours_dict, bad_ch, nothing)
-            if isnothing(neighbours) || isempty(neighbours.electrodes)
-                @warn "No neighbors found for channel $bad_ch, skipping"
-                continue
-            end
-
-            # Find good neighbors (not in bad_channels)
-            good_neighbors = setdiff(neighbours.electrodes, bad_channels)
-            if length(good_neighbors) < 2
-                @warn "Not enough good neighbors for channel $bad_ch, skipping"
-                continue
-            end
-
-            # Calculate weights based on distance
-            weights = Float64[]
-            for neighbor in good_neighbors
-                neighbor_idx = findfirst(==(neighbor), neighbours.electrodes)
-                if !isnothing(neighbor_idx)
-                    weight = 1.0 / neighbours.distances[neighbor_idx]
-                    push!(weights, weight)
-                end
-            end
-
-            # Normalize weights
-            weights ./= sum(weights)
-
-            # Interpolate using weighted average
-            interpolated = zeros(nrow(epoch))
-            for (weight, neighbor) in zip(weights, good_neighbors)
-                if hasproperty(epoch, neighbor)
-                    interpolated .+= weight .* epoch[!, neighbor]
-                end
-            end
-
-            # Update the bad channel data
-            epoch[!, bad_ch] = interpolated
-        end
+        
+        @info "Repairing epoch $epoch_idx channels $(bad_channels) using neighbor interpolation"
+        
+        # Use unified channel repair function with epoch selection
+        repair_bad_channels!(
+            dat, 
+            bad_channels; 
+            epoch_selection = epochs([epoch_idx]),
+            neighbours_dict = neighbours_dict
+        )
     end
 
     return dat
@@ -1020,27 +996,24 @@ function repair_artifacts_spherical_spline!(
     m::Int = 4,
     lambda::Float64 = 1e-5,
 )
-    # Get all rejected epochs
+    # Get all rejected epochs with their bad channels
     rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
-
+    
     for epoch_idx in rejected_epochs
         # Get bad channels for this epoch
         bad_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
         isempty(bad_channels) && continue
-
-        # Get current epoch data
-        epoch = dat.data[epoch_idx]
-
-        # Use the spherical spline repair function from channel_repair.jl
-        # We need to convert the epoch data to the format expected by the repair function
-        channels = Symbol.(dat.layout.data.label)
-        data_matrix = Matrix(epoch[:, channels])'
-
-        # Call the spherical spline repair
-        repair_channels_spherical_spline!(data_matrix, bad_channels, channels, dat.layout; m = m, lambda = lambda)
-
-        # Update the epoch data
-        epoch[:, channels] = data_matrix'
+        
+        @info "Repairing epoch $epoch_idx channels $(bad_channels) using spherical spline interpolation"
+        
+        # Use unified channel repair function with epoch selection
+        repair_channels_spherical_spline!(
+            dat,
+            bad_channels;
+            epoch_selection = epochs([epoch_idx]),
+            m = m,
+            lambda = lambda
+        )
     end
 
     return dat
@@ -1136,10 +1109,22 @@ function plot_artifact_detection(
     # Create observable for epoch index
     epoch_idx = Observable(1)
     
+    # Keep reference to legend for cleanup
+    current_legend = Ref{Union{Nothing, Legend}}(nothing)
+    
+    # Track selected channels for highlighting
+    selected_channels_set = Set{Symbol}()
+    
     # Function to update plot based on epoch
     function update_plot!(ax, epoch_idx_val)
         # Clear the axis
         empty!(ax)
+        
+        # Delete existing legend if present
+        if current_legend[] !== nothing
+            delete!(current_legend[])
+            current_legend[] = nothing
+        end
         
         # Get current epoch data
         epoch = epochs.data[epoch_idx_val]
@@ -1154,9 +1139,28 @@ function plot_artifact_detection(
         # Plot each channel
         for ch in selected_channels
             if hasproperty(epoch, ch)
-                color = ch in rejected_channels ? :red : :black
-                alpha = ch in rejected_channels ? 0.8 : 0.6
-                linewidth = ch in rejected_channels ? 2 : 1
+                # Determine styling based on rejection and selection status
+                is_rejected = ch in rejected_channels
+                is_selected = ch in selected_channels_set
+                
+                color = is_rejected ? :red : :black
+                alpha = is_rejected ? 0.8 : 0.6
+                linewidth = if is_selected
+                    is_rejected ? 4 : 3  # Thicker for selected
+                else
+                    is_rejected ? 2 : 1  # Normal thickness
+                end
+                
+                # Create label with bold formatting for selected channels
+                label_text = if is_rejected
+                    "$ch (rejected)"
+                else
+                    "$ch"
+                end
+                
+                if is_selected
+                    label_text = rich(label_text, font = :bold)
+                end
                 
                 lines!(
                     ax,
@@ -1165,13 +1169,69 @@ function plot_artifact_detection(
                     color = color,
                     alpha = alpha,
                     linewidth = linewidth,
-                    label = ch in rejected_channels ? "$ch (rejected)" : "$ch",
+                    label = label_text,
                 )
             end
         end
         
-        # Add legend
-        axislegend(ax, position = (:right, :top))
+        # Add legend and store reference with multiple columns for many channels
+        n_channels = length(selected_channels)
+        n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
+        current_legend[] = axislegend(ax, position = (:right, :top), nbanks = n_cols)
+    end
+    
+    # Add shift+click functionality to select/deselect channels
+    on(events(ax).mousebutton, priority = 0) do event
+        if event.button == Mouse.left && event.action == Mouse.press
+            # Check if shift is held
+            if Keyboard.left_shift in events(fig).keyboardstate || Keyboard.right_shift in events(fig).keyboardstate
+                # Get mouse position in data coordinates
+                pos = mouseposition(ax.scene)
+                if pos[1] !== nothing && pos[2] !== nothing
+                    mouse_time = pos[1]
+                    mouse_amp = pos[2]
+                    
+                    # Get current epoch data
+                    current_epoch = epochs.data[epoch_idx[]]
+                    time_points = current_epoch.time
+                    
+                    # Find the closest time point
+                    if !isempty(time_points)
+                        closest_time_idx = argmin(abs.(time_points .- mouse_time))
+                        
+                        # Check which channel line is closest to mouse position
+                        min_distance = Inf
+                        closest_channel = nothing
+                        
+                        for ch in selected_channels
+                            if hasproperty(current_epoch, ch)
+                                channel_amp = current_epoch[closest_time_idx, ch]
+                                distance = abs(channel_amp - mouse_amp)
+                                if distance < min_distance
+                                    min_distance = distance
+                                    closest_channel = ch
+                                end
+                            end
+                        end
+                        
+                        # Toggle selection if we found a close channel
+                        if closest_channel !== nothing && min_distance < 50  # Threshold for selection
+                            if closest_channel in selected_channels_set
+                                delete!(selected_channels_set, closest_channel)
+                                @info "Deselected channel: $closest_channel"
+                            else
+                                push!(selected_channels_set, closest_channel)
+                                @info "Selected channel: $closest_channel"
+                            end
+                            
+                            # Refresh the plot
+                            update_plot!(ax, epoch_idx[])
+                        end
+                    end
+                end
+            end
+        end
+        return Consume(false)
     end
     
     # Button click handlers
@@ -1271,11 +1331,28 @@ function plot_repair_comparison(
     # Create observable for epoch index
     epoch_idx = Observable(1)
     
+    # Keep references to legends for cleanup
+    current_legend1 = Ref{Union{Nothing, Legend}}(nothing)
+    current_legend2 = Ref{Union{Nothing, Legend}}(nothing)
+    
+    # Track selected channels for highlighting
+    selected_channels_set = Set{Symbol}()
+    
     # Function to update plot based on epoch
     function update_comparison_plot!(ax1, ax2, epoch_idx_val)
         # Clear both axes
         empty!(ax1)
         empty!(ax2)
+        
+        # Delete existing legends if present
+        if current_legend1[] !== nothing
+            delete!(current_legend1[])
+            current_legend1[] = nothing
+        end
+        if current_legend2[] !== nothing
+            delete!(current_legend2[])
+            current_legend2[] = nothing
+        end
         
         # Get epoch data
         epoch_orig = epochs_original.data[epoch_idx_val]
@@ -1292,40 +1369,118 @@ function plot_repair_comparison(
         # Plot each channel
         for ch in selected_channels
             if hasproperty(epoch_orig, ch) && hasproperty(epoch_repaired, ch)
-                # Original plot
-                color = ch in rejected_channels ? :red : :blue
-                alpha = ch in rejected_channels ? 0.8 : 0.6
-                linewidth = ch in rejected_channels ? 2 : 1
+                # Determine styling based on rejection and selection status
+                is_rejected = ch in rejected_channels
+                is_selected = ch in selected_channels_set
+                
+                # Original plot styling
+                orig_color = is_rejected ? :red : :black
+                orig_alpha = is_rejected ? 1.0 : 0.2
+                orig_linewidth = if is_selected
+                    is_rejected ? 4 : 3  # Thicker for selected
+                else
+                    is_rejected ? 2 : 1  # Normal thickness
+                end
+                
+                # Repaired plot styling  
+                rep_linewidth = is_selected ? 3 : 1
+                
+                # Create labels with bold formatting for selected channels
+                orig_label_text = is_rejected ? "$ch (rejected)" : "$ch"
+                rep_label_text = is_rejected ? "$ch (repaired)" : "$ch"
+                
+                if is_selected
+                    orig_label_text = rich(orig_label_text, font = :bold)
+                    rep_label_text = rich(rep_label_text, font = :bold)
+                end
                 
                 lines!(
                     ax1,
                     time_points,
                     epoch_orig[!, ch],
-                    color = color,
-                    alpha = alpha,
-                    linewidth = linewidth,
-                    label = ch in rejected_channels ? "$ch (rejected)" : "$ch",
+                    color = orig_color,
+                    alpha = orig_alpha,
+                    linewidth = orig_linewidth,
+                    label = orig_label_text,
                 )
-                
+
                 # Repaired plot
                 lines!(
                     ax2,
                     time_points,
                     epoch_repaired[!, ch],
-                    color = :green,
-                    alpha = 0.8,
-                    linewidth = 1,
-                    label = "$ch (repaired)",
+                    color = orig_color,
+                    alpha = orig_alpha,
+                    linewidth = orig_linewidth,
+                    label = rep_label_text,
                 )
             end
         end
         
-        # Add legends
-        axislegend(ax1, position = (:right, :top))
-        axislegend(ax2, position = (:right, :top))
+        # Add legends and store references with multiple columns for many channels
+        n_channels = length(selected_channels)
+        n_cols = n_channels > 10 ? cld(n_channels, 10) : 1
+        current_legend1[] = axislegend(ax1, position = (:right, :top), nbanks = n_cols)
+        current_legend2[] = axislegend(ax2, position = (:right, :top), nbanks = n_cols)
         
         # Link axes
         linkaxes!(ax1, ax2)
+    end
+    
+    # Add shift+click functionality to both axes for channel selection
+    for current_ax in [ax1, ax2]
+        on(events(current_ax).mousebutton, priority = 0) do event
+            if event.button == Mouse.left && event.action == Mouse.press
+                # Check if shift is held
+                if Keyboard.left_shift in events(fig).keyboardstate || Keyboard.right_shift in events(fig).keyboardstate
+                    # Get mouse position in data coordinates
+                    pos = mouseposition(current_ax.scene)
+                    if pos[1] !== nothing && pos[2] !== nothing
+                        mouse_time = pos[1]
+                        mouse_amp = pos[2]
+                        
+                        # Get current epoch data
+                        current_epoch = epochs_original.data[epoch_idx[]]
+                        time_points = current_epoch.time
+                        
+                        # Find the closest time point
+                        if !isempty(time_points)
+                            closest_time_idx = argmin(abs.(time_points .- mouse_time))
+                            
+                            # Check which channel line is closest to mouse position
+                            min_distance = Inf
+                            closest_channel = nothing
+                            
+                            for ch in selected_channels
+                                if hasproperty(current_epoch, ch)
+                                    channel_amp = current_epoch[closest_time_idx, ch]
+                                    distance = abs(channel_amp - mouse_amp)
+                                    if distance < min_distance
+                                        min_distance = distance
+                                        closest_channel = ch
+                                    end
+                                end
+                            end
+                            
+                            # Toggle selection if we found a close channel
+                            if closest_channel !== nothing && min_distance < 50  # Threshold for selection
+                                if closest_channel in selected_channels_set
+                                    delete!(selected_channels_set, closest_channel)
+                                    @info "Deselected channel: $closest_channel"
+                                else
+                                    push!(selected_channels_set, closest_channel)
+                                    @info "Selected channel: $closest_channel"
+                                end
+                                
+                                # Refresh the plot
+                                update_comparison_plot!(ax1, ax2, epoch_idx[])
+                            end
+                        end
+                    end
+                end
+            end
+            return Consume(false)
+        end
     end
     
     # Button click handlers

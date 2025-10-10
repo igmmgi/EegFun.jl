@@ -43,15 +43,20 @@ bad_epochs = eegfun.detect_bad_epochs(epochs)
 eegfun.get_rejected_epochs(bad_epochs[1])
 eegfun.get_rejected_epochs(bad_epochs)
 
+
 bad_epochs = eegfun.detect_bad_epochs(epochs[1])
 eegfun.get_rejected_epochs(bad_epochs)
+bad_epochs = eegfun.detect_bad_epochs(epochs)
 
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
-eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], epoch_idx = 2)
-
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
-eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], epoch_idx = 2)
 
+# repair
+epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :neighbor_interpolation)
+epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :spherical_spline)
+epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :reject)
+
+eegfun.plot_repair_comparison(epochs[1], epochs_repaired, bad_epochs[1])
 
 
 
