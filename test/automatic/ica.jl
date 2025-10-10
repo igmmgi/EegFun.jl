@@ -82,9 +82,6 @@ using eegfun
         # Error when no samples selected
         @test_throws Any eegfun.run_ica(dat; sample_selection = x -> falses(nrow(x)))
 
-        # Alias ica()
-        ica_res_alias = eegfun.ica(dat)
-        @test ica_res_alias isa eegfun.InfoIca
     end
 
     @testset "create_ica_data_matrix" begin

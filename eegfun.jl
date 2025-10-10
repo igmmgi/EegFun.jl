@@ -6,12 +6,6 @@
 # global_logger(ConsoleLogger(stderr, Logging.Warn))
 
 
-# package
-using eegfun
-using GLMakie
-# eegfupn.signal_example_1()
-# eegfun.signal_example_2()
-eegfun.plot_gui()
 
 # using CairoMakie
 # using BenchmarkTools

@@ -54,7 +54,6 @@ include("layouts/layout.jl")
 include("config/config.jl")
 
 # Analysis functions
-include("analysis/analyse.jl")
 include("analysis/artifact_detection.jl")
 include("analysis/baseline.jl")
 include("analysis/channel_average.jl")

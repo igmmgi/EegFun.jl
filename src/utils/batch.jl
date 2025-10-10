@@ -59,14 +59,11 @@ Tries common variable names: "erps", "epochs".
 """
 function _load_eeg_data(filepath::String)
     file_data = load(filepath)
-
-    # Try common variable names
     for var_name in ["erps", "epochs"]
         if haskey(file_data, var_name)
             return (file_data[var_name], var_name)
         end
     end
-
     return nothing
 end
 
