@@ -3,8 +3,6 @@ using GLMakie
 layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout);
 
-eegfun.plot_layout_2d(layout)
-
 eegfun.plot_layout_2d(layout; head_color = :blue)
 eegfun.plot_layout_2d(layout; head_linewidth = 5)
 eegfun.plot_layout_2d(layout; head_radius = 0.8)

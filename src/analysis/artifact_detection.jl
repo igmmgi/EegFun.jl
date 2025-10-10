@@ -667,6 +667,15 @@ function detect_bad_epochs(
     return rejection_info
 end
 
+function detect_bad_epochs(dat::Vector{EpochData}; kwargs...)
+    return detect_bad_epochs.(dat; kwargs...)
+end
+
+
+
+
+
+
 """
     get_rejected_epochs(state::EpochRejectionState)::Vector{Int}
 
@@ -679,9 +688,21 @@ state = reject_epochs_interactive(epochs)
 rejected_indices = get_rejected_epochs(state)
 ```
 """
-function get_rejected_epochs(info::EpochRejectionInfo)::Vector{Int}
-    return info.rejected_epochs
-end
+get_rejected_epochs(info::EpochRejectionInfo)::Vector{Rejection} = info.rejected_epochs
+
+"""
+    get_rejected_epochs(state::Vector{EpochRejectionState})::Vector{Int}
+
+Get indices of rejected epochs from the rejection state.
+
+# Examples
+```julia
+state = reject_epochs_interactive(epochs)
+# ... after review ...
+rejected_indices = get_rejected_epochs(state)
+```
+"""
+get_rejected_epochs(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected_epochs.(info) 
 
 #=============================================================================
     INTERNAL HELPER FUNCTIONS
@@ -1053,268 +1074,289 @@ end
     VISUALIZATION FUNCTIONS
 =============================================================================#
 
-"""
-    plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; epoch_idx::Int=1, channels::Vector{Symbol}=Symbol[])
 
-Plot artifact detection results showing original data with rejected channels/epochs highlighted.
+"""
+    plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels())
+
+Interactive plot of artifact detection results with Previous/Next buttons for epoch navigation.
 
 # Arguments
 - `epochs::EpochData`: The epoch data
 - `artifacts::EpochRejectionInfo`: Artifact detection results
-- `epoch_idx::Int`: Epoch index to plot (default: 1)
-- `channels::Vector{Symbol}`: Specific channels to plot (default: all channels)
+- `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
 
 # Returns
-- `Figure`: Makie figure showing the plot
+- `Figure`: Interactive Makie figure with navigation buttons
+
+# Examples
+```julia
+# Basic interactive plot
+fig = plot_artifact_detection_interactive(epochs, artifacts)
+
+# With specific channels
+fig = plot_artifact_detection_interactive(epochs, artifacts, 
+                                        channel_selection = channels([:Fp1, :Fp2, :Cz]))
+```
 """
 function plot_artifact_detection(
     epochs::EpochData,
     artifacts::EpochRejectionInfo;
-    epoch_idx::Int = 1,
-    channels::Vector{Symbol} = Symbol[],
+    channel_selection::Function = channels(),
 )
-
     # Get channels to plot
-    if isempty(channels)
-        channels = Symbol.(epochs.layout.data.label)
+    selected_channels = get_selected_channels(epochs, channel_selection, include_meta = false, include_extra = false)
+    
+    # Create figure with space for controls
+    fig = Figure()
+    
+    # Create axis for the plot (full width)
+    ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
+    
+    # Create horizontal layout for controls 
+    n_epochs = length(epochs.data)
+    controls_layout = GridLayout(fig[2, 1], tellheight = false, tellwidth = false)
+    
+    # Add controls with simpler centering
+    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = 100)
+    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = 150, justification = :center)
+    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = 100)
+    
+    # Center the entire control group
+    colsize!(controls_layout, 1, Auto())
+    colsize!(controls_layout, 2, Auto()) 
+    colsize!(controls_layout, 3, Auto())
+    
+    # Set row height to minimum
+    rowsize!(controls_layout, 1, Auto())
+    
+    # Set row sizes AFTER creating content: 90% for plot, 10% for controls
+    rowsize!(fig.layout, 1, Relative(0.9))  # Plot area
+    rowsize!(fig.layout, 2, Relative(0.1))  # Controls area
+    
+    # Create observable for epoch index
+    epoch_idx = Observable(1)
+    
+    # Function to update plot based on epoch
+    function update_plot!(ax, epoch_idx_val)
+        # Clear the axis
+        empty!(ax)
+        
+        # Get current epoch data
+        epoch = epochs.data[epoch_idx_val]
+        time_points = epoch.time
+        
+        # Find rejected channels for this epoch
+        rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
+        
+        # Update title
+        ax.title = "Artifact Detection - Epoch $(epoch_idx_val)"
+        
+        # Plot each channel
+        for ch in selected_channels
+            if hasproperty(epoch, ch)
+                color = ch in rejected_channels ? :red : :black
+                alpha = ch in rejected_channels ? 0.8 : 0.6
+                linewidth = ch in rejected_channels ? 2 : 1
+                
+                lines!(
+                    ax,
+                    time_points,
+                    epoch[!, ch],
+                    color = color,
+                    alpha = alpha,
+                    linewidth = linewidth,
+                    label = ch in rejected_channels ? "$ch (rejected)" : "$ch",
+                )
+            end
+        end
+        
+        # Add legend
+        axislegend(ax, position = (:right, :top))
     end
-
-    # Get epoch data
-    epoch = epochs.data[epoch_idx]
-    time_points = epoch.time
-
-    # Find rejected channels for this epoch
-    rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
-
-    # Create figure
-    fig = Figure(size = (800, 600))
-    ax =
-        Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)", title = "Artifact Detection - Epoch $epoch_idx")
-
-    # Plot each channel
-    for (i, ch) in enumerate(channels)
-        if hasproperty(epoch, ch)
-            color = ch in rejected_channels ? :red : :blue
-            alpha = ch in rejected_channels ? 0.8 : 0.6
-            linewidth = ch in rejected_channels ? 2 : 1
-
-            lines!(
-                ax,
-                time_points,
-                epoch[!, ch],
-                color = color,
-                alpha = alpha,
-                linewidth = linewidth,
-                label = ch in rejected_channels ? "$ch (rejected)" : "$ch",
-            )
+    
+    # Button click handlers
+    on(back_button.clicks) do _
+        if epoch_idx[] > 1
+            epoch_idx[] = epoch_idx[] - 1
         end
     end
-
-    # Add legend
-    axislegend(ax, position = :topright)
-
+    
+    on(forward_button.clicks) do _
+        if epoch_idx[] < n_epochs
+            epoch_idx[] = epoch_idx[] + 1
+        end
+    end
+    
+    # Update plot and controls when epoch changes
+    on(epoch_idx) do idx
+        update_plot!(ax, idx)
+        epoch_label.text = "Epoch $idx / $n_epochs"
+        
+        # Update button states
+        back_button.buttoncolor = (idx > 1) ? :lightblue : :lightgray
+        forward_button.buttoncolor = (idx < n_epochs) ? :lightblue : :lightgray
+    end
+    
+    # Initialize plot and controls
+    update_plot!(ax, epoch_idx[])
+    epoch_label.text = "Epoch 1 / $n_epochs"
+    back_button.buttoncolor = :lightgray  # Disabled at start
+    forward_button.buttoncolor = (n_epochs > 1) ? :lightblue : :lightgray
+    
     return fig
 end
 
 """
-    plot_repair_comparison(epochs_original::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; 
-                          epoch_idx::Int=1, channels::Vector{Symbol}=Symbol[])
+    plot_repair_comparison(epochs_original::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels())
 
-Plot comparison between original and repaired epochs.
+Interactive plot comparison between original and repaired epochs with navigation buttons.
 
 # Arguments
 - `epochs_original::EpochData`: Original epoch data
 - `epochs_repaired::EpochData`: Repaired epoch data  
 - `artifacts::EpochRejectionInfo`: Artifact detection results
-- `epoch_idx::Int`: Epoch index to plot (default: 1)
-- `channels::Vector{Symbol}`: Specific channels to plot (default: all channels)
+- `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
 
 # Returns
-- `Figure`: Makie figure showing before/after comparison
+- `Figure`: Interactive Makie figure with navigation buttons showing before/after comparison
+
+# Examples
+```julia
+# Basic interactive repair comparison
+fig = plot_repair_comparison_interactive(epochs_orig, epochs_repaired, artifacts)
+
+# With specific channels
+fig = plot_repair_comparison_interactive(epochs_orig, epochs_repaired, artifacts,
+                                       channel_selection = channels([:Fp1, :Fp2, :Cz]))
+```
 """
 function plot_repair_comparison(
     epochs_original::EpochData,
     epochs_repaired::EpochData,
     artifacts::EpochRejectionInfo;
-    epoch_idx::Int = 1,
-    channels::Vector{Symbol} = Symbol[],
+    channel_selection::Function = channels(),
 )
-
     # Get channels to plot
-    if isempty(channels)
-        channels = Symbol.(epochs_original.layout.data.label)
+    selected_channels = get_selected_channels(epochs_original, channel_selection, include_meta = false, include_extra = false)
+    
+    # Create figure with space for controls
+    fig = Figure()
+    
+    # Create axes for original and repaired data (full width)
+    ax1 = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
+    ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
+    
+    # Create horizontal layout for controls
+    n_epochs = length(epochs_original.data)
+    controls_layout = GridLayout(fig[3, 1], tellheight = false, tellwidth = false)
+    
+    # Add controls with simpler centering
+    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = 100)
+    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = 150, justification = :center)
+    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = 100)
+    
+    # Center the entire control group
+    colsize!(controls_layout, 1, Auto())
+    colsize!(controls_layout, 2, Auto()) 
+    colsize!(controls_layout, 3, Auto())
+    
+    # Set row height to minimum
+    rowsize!(controls_layout, 1, Auto())
+    
+    # Set row sizes AFTER creating content: 45% + 45% for plots, 10% for controls
+    rowsize!(fig.layout, 1, Relative(0.45))  # Original plot
+    rowsize!(fig.layout, 2, Relative(0.45))  # Repaired plot
+    rowsize!(fig.layout, 3, Relative(0.1))   # Controls area
+    
+    # Create observable for epoch index
+    epoch_idx = Observable(1)
+    
+    # Function to update plot based on epoch
+    function update_comparison_plot!(ax1, ax2, epoch_idx_val)
+        # Clear both axes
+        empty!(ax1)
+        empty!(ax2)
+        
+        # Get epoch data
+        epoch_orig = epochs_original.data[epoch_idx_val]
+        epoch_repaired = epochs_repaired.data[epoch_idx_val]
+        time_points = epoch_orig.time
+        
+        # Find rejected channels for this epoch
+        rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
+        
+        # Update titles
+        ax1.title = "Original Data - Epoch $(epoch_idx_val)"
+        ax2.title = "Repaired Data - Epoch $(epoch_idx_val)"
+        
+        # Plot each channel
+        for ch in selected_channels
+            if hasproperty(epoch_orig, ch) && hasproperty(epoch_repaired, ch)
+                # Original plot
+                color = ch in rejected_channels ? :red : :blue
+                alpha = ch in rejected_channels ? 0.8 : 0.6
+                linewidth = ch in rejected_channels ? 2 : 1
+                
+                lines!(
+                    ax1,
+                    time_points,
+                    epoch_orig[!, ch],
+                    color = color,
+                    alpha = alpha,
+                    linewidth = linewidth,
+                    label = ch in rejected_channels ? "$ch (rejected)" : "$ch",
+                )
+                
+                # Repaired plot
+                lines!(
+                    ax2,
+                    time_points,
+                    epoch_repaired[!, ch],
+                    color = :green,
+                    alpha = 0.8,
+                    linewidth = 1,
+                    label = "$ch (repaired)",
+                )
+            end
+        end
+        
+        # Add legends
+        axislegend(ax1, position = (:right, :top))
+        axislegend(ax2, position = (:right, :top))
+        
+        # Link axes
+        linkaxes!(ax1, ax2)
     end
-
-    # Get epoch data
-    epoch_orig = epochs_original.data[epoch_idx]
-    epoch_repaired = epochs_repaired.data[epoch_idx]
-    time_points = epoch_orig.time
-
-    # Find rejected channels for this epoch
-    rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
-
-    # Create figure with subplots
-    fig = Figure(size = (1000, 800))
-
-    # Original data
-    ax1 = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)", title = "Original Data - Epoch $epoch_idx")
-
-    # Repaired data  
-    ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)", title = "Repaired Data - Epoch $epoch_idx")
-
-    # Plot each channel
-    for (i, ch) in enumerate(channels)
-        if hasproperty(epoch_orig, ch) && hasproperty(epoch_repaired, ch)
-            # Original plot
-            color = ch in rejected_channels ? :red : :blue
-            alpha = ch in rejected_channels ? 0.8 : 0.6
-            linewidth = ch in rejected_channels ? 2 : 1
-
-            lines!(
-                ax1,
-                time_points,
-                epoch_orig[!, ch],
-                color = color,
-                alpha = alpha,
-                linewidth = linewidth,
-                label = ch in rejected_channels ? "$ch (rejected)" : "$ch",
-            )
-
-            # Repaired plot
-            lines!(
-                ax2,
-                time_points,
-                epoch_repaired[!, ch],
-                color = :green,
-                alpha = 0.8,
-                linewidth = 1,
-                label = "$ch (repaired)",
-            )
+    
+    # Button click handlers
+    on(back_button.clicks) do _
+        if epoch_idx[] > 1
+            epoch_idx[] = epoch_idx[] - 1
         end
     end
-
-    # Add legends
-    axislegend(ax1, position = :topright)
-    axislegend(ax2, position = :topright)
-
-    # Link axes
-    linkaxes!(ax1, ax2)
-
+    
+    on(forward_button.clicks) do _
+        if epoch_idx[] < n_epochs
+            epoch_idx[] = epoch_idx[] + 1
+        end
+    end
+    
+    # Update plot and controls when epoch changes
+    on(epoch_idx) do idx
+        update_comparison_plot!(ax1, ax2, idx)
+        epoch_label.text = "Epoch $idx / $n_epochs"
+        
+        # Update button states
+        back_button.buttoncolor = (idx > 1) ? :lightblue : :lightgray
+        forward_button.buttoncolor = (idx < n_epochs) ? :lightblue : :lightgray
+    end
+    
+    # Initialize plot and controls
+    update_comparison_plot!(ax1, ax2, epoch_idx[])
+    epoch_label.text = "Epoch 1 / $n_epochs"
+    back_button.buttoncolor = :lightgray  # Disabled at start
+    forward_button.buttoncolor = (n_epochs > 1) ? :lightblue : :lightgray
+    
     return fig
 end
 
-# """
-#     plot_erp_comparison(epochs_original::EpochData, epochs_repaired::EpochData; 
-#                        channels::Vector{Symbol}=Symbol[], condition::Symbol=:all)
-# 
-# Plot ERP comparison between original and repaired data.
-# 
-# # Arguments
-# - `epochs_original::EpochData`: Original epoch data
-# - `epochs_repaired::EpochData`: Repaired epoch data
-# - `channels::Vector{Symbol}`: Specific channels to plot (default: all channels)
-# - `condition::Symbol`: Condition to plot (default: :all)
-# 
-# # Returns
-# - `Figure`: Makie figure showing ERP comparison
-# """
-# function plot_erp_comparison(
-#     epochs_original::EpochData, 
-#     epochs_repaired::EpochData;
-#     channels::Vector{Symbol}=Symbol[],
-#     condition::Symbol=:all
-# )
-#     using Makie
-#     
-#     # Get channels to plot
-#     if isempty(channels)
-#         channels = Symbol.(epochs_original.layout.data.label)
-#     end
-#     
-#     # Calculate ERPs
-#     erp_orig = grandaverage(epochs_original, condition=condition)
-#     erp_repaired = grandaverage(epochs_repaired, condition=condition)
-#     
-#     time_points = erp_orig.time
-#     
-#     # Create figure
-#     fig = Figure(size=(1200, 800))
-#     
-#     # Plot each channel
-#     n_channels = length(channels)
-#     n_cols = min(4, n_channels)
-#     n_rows = ceil(Int, n_channels / n_cols)
-#     
-#     for (i, ch) in enumerate(channels)
-#         if hasproperty(erp_orig, ch) && hasproperty(erp_repaired, ch)
-#             row = ((i-1) ÷ n_cols) + 1
-#             col = ((i-1) % n_cols) + 1
-#             
-#             ax = Axis(fig[row, col], xlabel="Time (s)", ylabel="Amplitude (μV)", title="$ch")
-#             
-#             # Plot original and repaired ERPs
-#             lines!(ax, time_points, erp_orig[!, ch], color=:blue, linewidth=2, label="Original")
-#             lines!(ax, time_points, erp_repaired[!, ch], color=:green, linewidth=2, label="Repaired")
-#             
-#             # Add legend for first subplot
-#             if i == 1
-#                 axislegend(ax, position=:topright)
-#             end
-#         end
-#     end
-#     
-#     return fig
-# end
-
-# """
-#     plot_artifact_summary(artifacts::EpochRejectionInfo)
-# 
-# Plot summary of artifact detection results.
-# 
-# # Arguments
-# - `artifacts::EpochRejectionInfo`: Artifact detection results
-# 
-# # Returns
-# - `Figure`: Makie figure showing artifact summary
-# """
-# function plot_artifact_summary(artifacts::EpochRejectionInfo)
-#     using Makie
-#     
-#     # Create figure
-#     fig = Figure(size=(800, 600))
-#     
-#     # Artifact counts by type
-#     ax1 = Axis(fig[1, 1], xlabel="Detection Method", ylabel="Number of Rejections", title="Artifact Detection Summary")
-#     
-#     methods = ["Z-Variance", "Z-Max", "Z-Min", "Z-Abs", "Z-Range", "Z-Kurtosis"]
-#     counts = [length(artifacts.z_variance), length(artifacts.z_max), length(artifacts.z_min), 
-#               length(artifacts.z_abs), length(artifacts.z_range), length(artifacts.z_kurtosis)]
-#     
-#     if artifacts.abs_criterion !== nothing
-#         push!(methods, "Abs-Threshold")
-#         push!(counts, length(artifacts.absolute_threshold))
-#     end
-#     
-#     barplot!(ax1, 1:length(methods), counts, color=:steelblue)
-#     ax1.xticks = (1:length(methods), methods)
-#     
-#     # Overall statistics
-#     ax2 = Axis(fig[1, 2], title="Overall Statistics")
-#     
-#     stats_text = """
-#     Total Epochs: $(artifacts.n_epochs)
-#     Rejected Epochs: $(artifacts.n_artifacts)
-#     Rejection Rate: $(round(100 * artifacts.n_artifacts / artifacts.n_epochs, digits=1))%
-#     
-#     Z-Criterion: $(artifacts.z_criterion)
-#     Abs-Criterion: $(artifacts.abs_criterion === nothing ? "None" : "$(artifacts.abs_criterion) μV")
-#     """
-#     
-#     text!(ax2, 0.1, 0.5, text=stats_text, fontsize=12, align=(:left, :center))
-#     xlims!(ax2, 0, 1)
-#     ylims!(ax2, 0, 1)
-#     hidespines!(ax2)
-#     hidedecorations!(ax2)
-#     
-#     return fig
-# end
