@@ -1,5 +1,35 @@
+# =============================================================================
+# DEFAULT KEYWORD ARGUMENTS
+# =============================================================================
+const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    :colormap_name => (:Set1_9, "Colormap name for artifact channel colors (e.g., :Set1_9, :tab20)."),
+    :display_plot => (true, "Whether to display the plot."),
+    :plot_height => (600, "Height of the plot area in pixels."),
+    :controls_height => (80, "Height of the controls area in pixels."),
+    :button_width => (100, "Width of navigation buttons."),
+    :artifact_button_width => (130, "Width of artifact navigation buttons."),
+    :label_width => (100, "Width of epoch/artifact labels."),
+    :artifact_label_width => (130, "Width of artifact label."),
+    :linewidth_normal => (1, "Line width for normal channels."),
+    :linewidth_rejected => (2, "Line width for rejected channels."),
+    :linewidth_selected => (3, "Line width for selected channels."),
+    :linewidth_selected_rejected => (4, "Line width for selected rejected channels."),
+    :alpha_normal => (0.2, "Transparency for normal channels."),
+    :alpha_rejected => (1.0, "Transparency for rejected channels."),
+    :legend_position => ((:right, :top), "Position of the legend."),
+    :legend_nbanks => (5, "Number of columns in legend for many channels."),
+    :selection_threshold => (50, "Distance threshold for channel selection via mouse click."),
+    # Grid
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
+    # Origin lines
+    :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
+)
+
 """
-    plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels())
+    plot_artifact_detection(epochs::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels(), kwargs...)
 
 Interactive plot of artifact detection results with Previous/Next buttons for epoch navigation.
 
@@ -7,6 +37,9 @@ Interactive plot of artifact detection results with Previous/Next buttons for ep
 - `epochs::EpochData`: The epoch data
 - `artifacts::EpochRejectionInfo`: Artifact detection results
 - `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
+
+# Keyword Arguments
+$(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
 
 # Returns
 - `Figure`: Interactive Makie figure with navigation buttons
@@ -25,7 +58,10 @@ function plot_artifact_detection(
     epochs::EpochData,
     artifacts::EpochRejectionInfo;
     channel_selection::Function = channels(),
+    kwargs...
 )
+    # Merge user kwargs with defaults and validate
+    plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
     # Get channels to plot
     selected_channels = get_selected_channels(epochs, channel_selection, include_meta = false, include_extra = false)
     
@@ -42,14 +78,14 @@ function plot_artifact_detection(
     sort!(epochs_with_artifacts)
     
     # Add controls with artifact navigation
-    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = 100)
-    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = 100, justification = :center)
-    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = 100)
+    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = plot_kwargs[:button_width])
+    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = plot_kwargs[:button_width], justification = :center)
+    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = plot_kwargs[:button_width])
     
     # Add artifact navigation buttons
-    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = 130)
-    artifact_label = Label(controls_layout[1, 5], "Artifact 1 / $(length(epochs_with_artifacts))", width = 130, justification = :center)
-    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 130)
+    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = plot_kwargs[:artifact_button_width])
+    artifact_label = Label(controls_layout[1, 5], "Artifact 1 / $(length(epochs_with_artifacts))", width = plot_kwargs[:artifact_button_width], justification = :center)
+    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = plot_kwargs[:artifact_button_width])
     
     # Center the entire control group
     for i in 1:6
@@ -93,9 +129,10 @@ function plot_artifact_detection(
         rejected_color_map = Dict{Symbol, Any}()
         if !isempty(rejected_channels)
             # Use a colormap that cycles for any number of channels
-            colormap_name = :Set1_9  # Will be user-configurable later
+            colormap_name = plot_kwargs[:colormap_name]
             # Get the actual number of colors in the colormap
-            max_colors = length(grad(colormap_name))
+            colormap = cgrad(colormap_name)
+            max_colors = length(colormap.colors)
             
             for (i, ch) in enumerate(rejected_channels)
                 color_idx = ((i - 1) % max_colors) + 1
@@ -106,6 +143,18 @@ function plot_artifact_detection(
         # Update title
         ax.title = "Artifact Detection - Epoch $(epoch_idx_val)"
         
+        # Configure grid and axes
+        ax.xgridvisible = plot_kwargs[:xgrid]
+        ax.ygridvisible = plot_kwargs[:ygrid]
+        ax.xminorgridvisible = plot_kwargs[:xminorgrid]
+        ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+        
+        # Add origin lines if requested
+        if plot_kwargs[:axes_through_origin]
+            hlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
+            vlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
+        end
+        
         # Plot each channel
         for ch in selected_channels
             if hasproperty(epoch, ch)
@@ -114,8 +163,8 @@ function plot_artifact_detection(
                 is_selected = ch in selected_channels_set
                 
                 color = is_rejected ? rejected_color_map[ch] : :black
-                alpha = is_rejected ? 1.0 : 0.2
-                linewidth = is_selected ? is_rejected ? 4 : 3 : is_rejected ? 2 : 1
+                alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
+                linewidth = is_selected ? is_rejected ? plot_kwargs[:linewidth_selected_rejected] : plot_kwargs[:linewidth_selected] : is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
                 
                 # Create label with bold formatting for selected channels
                 label_text = is_rejected ? "$ch (rejected)" : "$ch"
@@ -136,7 +185,7 @@ function plot_artifact_detection(
         # Add legend and store reference with multiple columns for many channels
         n_channels = length(selected_channels)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
-        current_legend[] = axislegend(ax, position = (:right, :top), nbanks = n_cols)
+        current_legend[] = axislegend(ax, position = plot_kwargs[:legend_position], nbanks = plot_kwargs[:legend_nbanks])
     end
     
     # Add shift+click functionality to select/deselect channels
@@ -218,11 +267,12 @@ function plot_artifact_detection(
     epoch_label.text = "Epoch 1 / $n_epochs"
     artifact_label.text = !isempty(epochs_with_artifacts) ? "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
     
+    plot_kwargs[:display_plot] && display_figure(fig)
     return fig
 end
 
 """
-    plot_artifact_repair(epochs_original::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels())
+    plot_artifact_repair(epochs_original::EpochData, epochs_repaired::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels(), kwargs...)
 
 Interactive plot comparison between original and repaired epochs with navigation buttons.
 
@@ -231,6 +281,9 @@ Interactive plot comparison between original and repaired epochs with navigation
 - `epochs_repaired::EpochData`: Repaired epoch data  
 - `artifacts::EpochRejectionInfo`: Artifact detection results
 - `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
+
+# Keyword Arguments
+$(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
 
 # Returns
 - `Figure`: Interactive Makie figure with navigation buttons showing before/after comparison
@@ -250,7 +303,10 @@ function plot_artifact_repair(
     epochs_repaired::EpochData,
     artifacts::EpochRejectionInfo;
     channel_selection::Function = channels(),
+    kwargs...
 )
+    # Merge user kwargs with defaults and validate
+    plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
     # Get channels to plot
     selected_channels = get_selected_channels(epochs_original, channel_selection, include_meta = false, include_extra = false)
     
@@ -270,14 +326,14 @@ function plot_artifact_repair(
     sort!(epochs_with_artifacts)
     
     # Add controls with artifact navigation
-    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = 100)
-    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = 100, justification = :center)
-    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = 100)
+    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = plot_kwargs[:button_width])
+    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = plot_kwargs[:button_width], justification = :center)
+    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = plot_kwargs[:button_width])
     
     # Add artifact navigation buttons
-    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = 130)
-    artifact_label = Label(controls_layout[1, 5], "Artifact 1 / $(length(epochs_with_artifacts))", width = 130, justification = :center)
-    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 130)
+    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = plot_kwargs[:artifact_button_width])
+    artifact_label = Label(controls_layout[1, 5], "Artifact 1 / $(length(epochs_with_artifacts))", width = plot_kwargs[:artifact_button_width], justification = :center)
+    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = plot_kwargs[:artifact_button_width])
     
     # Center the entire control group
     for i in 1:6
@@ -329,7 +385,7 @@ function plot_artifact_repair(
         rejected_color_map = Dict{Symbol, Any}()
         if !isempty(rejected_channels)
             # Use a colormap that cycles for any number of channels
-            colormap_name = :Set1_9  # Will be user-configurable later
+            colormap_name = plot_kwargs[:colormap_name]
             # Get the actual number of colors in the colormap
             colormap = cgrad(colormap_name)
             max_colors = length(colormap.colors)
@@ -343,6 +399,20 @@ function plot_artifact_repair(
         # Update titles
         ax1.title = "Original Data - Epoch $(epoch_idx_val)"
         ax2.title = "Repaired Data - Epoch $(epoch_idx_val)"
+        
+        # Configure grid and axes for both plots
+        for ax in [ax1, ax2]
+            ax.xgridvisible = plot_kwargs[:xgrid]
+            ax.ygridvisible = plot_kwargs[:ygrid]
+            ax.xminorgridvisible = plot_kwargs[:xminorgrid]
+            ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+            
+            # Add origin lines if requested
+            if plot_kwargs[:axes_through_origin]
+                hlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
+                vlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
+            end
+        end
         
         # Plot each channel
         for ch in selected_channels
@@ -435,7 +505,7 @@ function plot_artifact_repair(
                             end
                             
                             # Toggle selection if we found a close channel
-                            if closest_channel !== nothing && min_distance < 50  # Threshold for selection
+                            if closest_channel !== nothing && min_distance < plot_kwargs[:selection_threshold]  # Threshold for selection
                                 if closest_channel in selected_channels_set
                                     delete!(selected_channels_set, closest_channel)
                                     @info "Deselected channel: $closest_channel"
@@ -486,6 +556,7 @@ function plot_artifact_repair(
         artifact_label.text = "No artifacts found"
     end
     
+    plot_kwargs[:display_plot] && display_figure(fig)
     return fig
 end
 
