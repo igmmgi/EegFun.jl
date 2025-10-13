@@ -30,6 +30,35 @@ eegfun.n_extreme_value(dat, 100)
 eegfun.n_extreme_value(dat, 100, mode = :separate)
 
 
+# add bool columns to the data frame
+eegfun.is_extreme_value!(dat, 100);
+eegfun.is_extreme_value!(dat, 100; include_extra = true);
+eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1, :Fp2]));
+eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
+eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
+eegfun.is_extreme_value!(
+    dat,
+    100;
+    channel_selection = x -> .!(endswith.(string.(x), "z")),
+    sample_selection = x -> x.sample .> 1000,
+);
+
+# retrun count of extreme values at specific electrodes at different thresholds
+eegfun.n_extreme_value(dat, 100)
+eegfun.n_extreme_value(dat, 100, include_extra = true)
+eegfun.n_extreme_value(dat, 100, channel_selection = eegfun.channels([:Fp1, :Fp2])) # count extreme values at Fp1 at 100 uV threshold
+eegfun.n_extreme_value(dat, 100, channel_selection = x -> endswith.(string.(x), "z"))
+eegfun.n_extreme_value(
+    dat,
+    100,
+    channel_selection = x -> .!(endswith.(string.(x), "z")),
+    sample_selection = x -> x.sample .< 10,
+)
+
+
+
+
+
 # artifact detection in epochs
 # some epoched data
 epoch_cfg = [
@@ -48,24 +77,24 @@ eegfun.unique_channels(bad_epochs[1].rejected_epochs)
 eegfun.unique_epochs(bad_epochs[1].rejected_epochs)
 
 
-bad_epochs = eegfun.detect_bad_epochs_automatic(epochs[1])
-eegfun.get_rejected_epochs(bad_epochs)
-
+bad_epochs_automatic = eegfun.detect_bad_epochs_automatic(epochs[1])
+eegfun.get_rejected_epochs(bad_epochs_automatic)
+eegfun.plot_artifact_detection(epochs[1], bad_epochs)
 
 bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4))
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_info = bad_epochs, dims = (4, 4))
+
 
 eegfun.unique_rejections(bad_epochs.rejected_epochs)
 eegfun.unique_channels(bad_epochs.rejected_epochs)
 eegfun.unique_epochs(bad_epochs.rejected_epochs)
 
-
-bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
-eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
-
 # repair
-epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :neighbor_interpolation)
-# epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :spherical_spline)
-# epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :reject)
+bad_epochs_automatic = eegfun.detect_bad_epochs_automatic(epochs)
+
+epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method = :neighbor_interpolation)
+epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method = :spherical_spline)
+epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method = :reject)
 
 eegfun.plot_artifact_repair(epochs[1], epochs_repaired, bad_epochs[1])
 

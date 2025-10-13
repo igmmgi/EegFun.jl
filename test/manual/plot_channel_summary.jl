@@ -12,6 +12,16 @@ eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
 cs = eegfun.channel_summary(dat)
+
+# # basic channel summary statistics
+# eegfun.channel_summary(dat)
+# eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]))
+# eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> x.sample .< 2000)
+# eegfun.channel_summary(dat, channel_selection = x -> endswith.(string.(x), "z")) # all midline channels 
+# eegfun.channel_summary(dat, channel_selection = x -> .!(endswith.(string.(x), "z"))) # all non-midline channels 
+# eegfun.channel_summary(dat, include_extra = true) # include additional channels (e.g. vEOG, hEOG)
+
+
 eegfun.plot_channel_summary(cs, :range)
 eegfun.plot_channel_summary(cs, :min, grid_visible = false)
 eegfun.plot_channel_summary(cs, :min, bar_color = :red)
