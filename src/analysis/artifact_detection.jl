@@ -864,7 +864,6 @@ Repair detected artifacts using the specified method.
 # Available Methods
 - `:neighbor_interpolation` - Weighted neighbor interpolation (default)
 - `:spherical_spline` - Spherical spline interpolation
-- `:reject` - Remove bad epochs entirely
 
 # Keyword Arguments (for :neighbor_interpolation method)
 - `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (default: auto-generate)
@@ -886,12 +885,10 @@ function repair_artifacts!(
         return repair_artifacts_neighbor!(dat, artifacts; kwargs...)
     elseif method == :spherical_spline
         return repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
-    elseif method == :reject
-        return repair_artifacts_reject!(dat, artifacts; kwargs...)
     else
         throw(
             ArgumentError(
-                "Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline, :reject",
+                "Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline",
             ),
         )
     end
@@ -921,8 +918,8 @@ repaired_epochs = repair_artifacts(epochs, artifacts)
 # Using spherical spline method
 repaired_epochs = repair_artifacts(epochs, artifacts, :spherical_spline, m=4, lambda=1e-5)
 
-# Rejecting bad epochs entirely
-clean_epochs = repair_artifacts(epochs, artifacts, :reject)
+# Rejecting bad epochs entirely (use reject_epochs instead)
+clean_epochs = reject_epochs(epochs, artifacts)
 ```
 """
 function repair_artifacts(
@@ -935,6 +932,15 @@ function repair_artifacts(
     repair_artifacts!(dat_copy, artifacts; method, kwargs...)
     return dat_copy
 end
+
+function repair_artifacts(dat::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; kwargs...)
+    return repair_artifacts.(dat, artifacts; kwargs...)
+end
+
+function repair_artifacts!(dat::Vector{EpochData}, artifacts::Vector{EpochRejectionInfo}; kwargs...)
+    return repair_artifacts!.(dat, artifacts; kwargs...)
+end
+
 
 """
     repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInfo; neighbours_dict::Union{OrderedDict, Nothing}=nothing)
@@ -996,6 +1002,9 @@ function repair_artifacts_spherical_spline!(
     m::Int = 4,
     lambda::Float64 = 1e-5,
 )
+
+    _ensure_coordinates_3d!(dat.layout)
+    
     # Get all rejected epochs with their bad channels
     rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
     
@@ -1019,27 +1028,4 @@ function repair_artifacts_spherical_spline!(
     return dat
 end
 
-"""
-    repair_artifacts_reject!(dat::EpochData, artifacts::EpochRejectionInfo)
-
-Remove epochs that contain artifacts entirely.
-
-# Arguments
-- `dat::EpochData`: The epoch data to repair (modified in-place)
-- `artifacts::EpochRejectionInfo`: Artifact information from detect_artifacts
-
-# Returns
-- `EpochData`: The repaired epoch data (same object, modified in-place)
-"""
-function repair_artifacts_reject!(dat::EpochData, artifacts::EpochRejectionInfo)
-    # Get all rejected epochs
-    rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
-
-    # Remove rejected epochs (in reverse order to maintain indices)
-    for epoch_idx in sort(rejected_epochs, rev = true)
-        deleteat!(dat.data, epoch_idx)
-    end
-
-    return dat
-end
 

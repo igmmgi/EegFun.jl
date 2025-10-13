@@ -47,4 +47,13 @@ eegfun.plot_layout_2d(layout, neighbours = true)
 eegfun.get_layout_neighbours_xyz!(layout, 0.5);
 eegfun.plot_layout_3d(layout, neighbours = true)
 
+# how to print neighbours to a file
+eegfun.print_layout_neighbours(layout, "electrode_neighbours_1.toml")
+eegfun.print_layout_neighbours(layout.neighbours, "electrode_neighbours_2.toml")
+
 GLMakie.closeall()
+
+# save a basic figure
+# NB. for vector graphics, use CairoMakie
+# save("topo_roi.png", fig)
+

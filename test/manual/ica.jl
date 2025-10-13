@@ -78,3 +78,48 @@ eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4
 
 
 GLMakie.closeall()
+
+
+
+
+
+eegfun.plot_ica_topoplot(ica_result)
+fig, ax = eegfun.plot_ica_component_activation(dat, ica_result)
+fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components(1))
+eegfun.plot_databrowser(dat, ica_result)
+# dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
+# dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
+eog_comps, eog_comps_metrics_df =
+    eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+ecg_comps, ecg_comps_metrics_df =
+    eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
+channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
+# Method 1: Combine existing results
+artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+all_comps = eegfun.get_all_ica_components(artifacts)
+dat_ica_removed, ica_result_updated =
+    eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components(all_comps))
+dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(
+    dat_ica_removed,
+    ica_result_updated,
+    component_selection = eegfun.components(all_comps),
+)
+dat.data ≈ dat_ica_reconstructed.data
+eegfun.plot_databrowser(dat_ica_removed)
+fig, ax = eegfun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
+fig, ax = eegfun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
+fig, ax = eegfun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
+fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
+
+# @time ica_result = eegfun.run_ica(dat_ica; sample_selection = eegfun.samples_not(:is_extreme_value))
+# automatically identify components that are likely to be artifacts
+# eog_comps, eog_comps_metrics_df = eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value)) 
+# ecg_comps, ecg_comps_metrics_df = eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+# line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components( ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+# channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
+# # Combine above component artifact results into a single structure
+# component_artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+# 
+# eegfun.plot_ica_topoplot(ica_result)
+# eegfun.plot_ica_component_activation(dat, ica_result)

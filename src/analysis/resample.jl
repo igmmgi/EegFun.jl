@@ -256,6 +256,31 @@ function resample(data_vec::Vector{T}, factor::Int)::Vector{T} where {T<:EegData
     return [resample(dat, factor) for dat in data_vec]
 end
 
+"""
+    resample!(data_vec::Vector{T}, factor::Int)::Nothing where {T<:EegData}
+
+Mutating version of resample for vector of EEG data objects.
+
+# Arguments
+- `data_vec::Vector{T}`: Vector of EEG data objects to resample (modified in-place)
+- `factor::Int`: Downsampling factor (must be positive integer)
+
+# Returns
+- `Nothing`: All objects in the vector are modified in-place
+
+# Examples
+```julia
+# Resample multiple EpochData objects
+resample!(epochs_vector, 2)  # Downsample by factor of 2
+```
+"""
+function resample!(data_vec::Vector{T}, factor::Int)::Nothing where {T<:EegData}
+    for dat in data_vec
+        resample!(dat, factor)
+    end
+    return nothing
+end
+
 
 
 

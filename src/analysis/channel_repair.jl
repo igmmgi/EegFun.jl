@@ -416,7 +416,7 @@ function repair_channels_spherical_spline!(
         epoch = data.data[epoch_idx]
         epoch_matrix = Matrix(epoch[:, channels])'
         
-        repair_channels_spherical_spline!(epoch_matrix, bad_channels, channels, data.layout; m = m, lambda = lambda)
+        repair_channels_spherical_spline!(epoch_matrix, bad_channels, channels, data.layout.data; m = m, lambda = lambda)
         
         # Update the epoch data
         epoch[:, channels] = epoch_matrix'

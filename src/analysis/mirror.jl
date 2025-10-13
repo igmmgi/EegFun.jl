@@ -135,6 +135,55 @@ function mirror(dat::ErpData, side::Symbol = :both)::ErpData
 end
 
 
+"""
+    mirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
+
+Mutating version of mirror for vector of EpochData objects.
+
+# Arguments
+- `data_vec::Vector{EpochData}`: Vector of EpochData objects to mirror (modified in-place)
+- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Nothing`: All objects in the vector are modified in-place
+
+# Examples
+```julia
+# Mirror multiple EpochData objects
+mirror!(epochs_vector, :both)  # Mirror both sides
+```
+"""
+function mirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
+    for dat in data_vec
+        mirror!(dat, side)
+    end
+    return nothing
+end
+
+
+"""
+    mirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
+
+Non-mutating version of mirror for vector of EpochData objects.
+
+# Arguments
+- `data_vec::Vector{EpochData}`: Vector of EpochData objects to mirror (NOT modified)
+- `side::Symbol`: Which side to mirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Vector{EpochData}`: New vector with mirrored EpochData objects
+
+# Examples
+```julia
+# Mirror multiple EpochData objects (creates new objects)
+mirrored_epochs = mirror(epochs_vector, :both)
+```
+"""
+function mirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
+    return [mirror(dat, side) for dat in data_vec]
+end
+
+
 #=============================================================================
     UNMIRRORING FUNCTIONS
 =============================================================================#
@@ -215,6 +264,55 @@ function unmirror(dat::ErpData, side::Symbol = :both)::ErpData
     dat_copy = deepcopy(dat)
     unmirror!(dat_copy, side)
     return dat_copy
+end
+
+
+"""
+    unmirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
+
+Mutating version of unmirror for vector of EpochData objects.
+
+# Arguments
+- `data_vec::Vector{EpochData}`: Vector of EpochData objects to unmirror (modified in-place)
+- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Nothing`: All objects in the vector are modified in-place
+
+# Examples
+```julia
+# Unmirror multiple EpochData objects
+unmirror!(epochs_vector, :both)  # Unmirror both sides
+```
+"""
+function unmirror!(data_vec::Vector{EpochData}, side::Symbol = :both)::Nothing
+    for dat in data_vec
+        unmirror!(dat, side)
+    end
+    return nothing
+end
+
+
+"""
+    unmirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
+
+Non-mutating version of unmirror for vector of EpochData objects.
+
+# Arguments
+- `data_vec::Vector{EpochData}`: Vector of EpochData objects to unmirror (NOT modified)
+- `side::Symbol`: Which side to unmirror (`:left`, `:right`, or `:both`, default: `:both`)
+
+# Returns
+- `Vector{EpochData}`: New vector with unmirrored EpochData objects
+
+# Examples
+```julia
+# Unmirror multiple EpochData objects (creates new objects)
+unmirrored_epochs = unmirror(epochs_vector, :both)
+```
+"""
+function unmirror(data_vec::Vector{EpochData}, side::Symbol = :both)::Vector{EpochData}
+    return [unmirror(dat, side) for dat in data_vec]
 end
 
 
