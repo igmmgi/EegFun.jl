@@ -6,6 +6,12 @@
 # TODO: Would it be useful to keep basefile name somewhere?
 # Base.basename(splitext(dat.filename)[1]) 
 
+# # save / load
+# save_object("$(subject)_continuous.jld2", dat)
+# dat1 = load_object("3_continuous.jld2")
+
+
+
 
 # older implementation
 # function tf_morlet(signal, times, sample_rate, freqs, cycles; tois = nothing)

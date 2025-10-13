@@ -5,10 +5,8 @@ using GLMakie
 data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
-
 dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
-
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
@@ -27,7 +25,7 @@ eegfun.is_extreme_value!(dat, 100);
 sum(dat.data[!, :is_extreme_value_100])
 
 eegfun.n_extreme_value(dat, 100)
-eegfun.n_extreme_value(dat, 100, mode = :separate)
+eegfun.n_extreme_value(dat, 50, mode = :separate)
 
 
 # add bool columns to the data frame
