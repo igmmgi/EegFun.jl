@@ -44,13 +44,10 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
-
-    # Origin lines
-    :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
-
-    # Minor grid
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
+    # Origin lines
+    :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
 
     # Interactive features
     :interactive => (true, "Whether to enable interactive features"),
