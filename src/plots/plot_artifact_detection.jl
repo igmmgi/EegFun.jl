@@ -92,10 +92,14 @@ function plot_artifact_detection(
         # Create color mapping for rejected channels using Makie categorical colors
         rejected_color_map = Dict{Symbol, Any}()
         if !isempty(rejected_channels)
-            # Use categorical colors for distinct channel colors
-            channel_colors = categorical_colors(:Set1_9, length(rejected_channels))
+            # Use a colormap that cycles for any number of channels
+            colormap_name = :Set1_9  # Will be user-configurable later
+            # Get the actual number of colors in the colormap
+            max_colors = length(grad(colormap_name))
+            
             for (i, ch) in enumerate(rejected_channels)
-                rejected_color_map[ch] = channel_colors[i]
+                color_idx = ((i - 1) % max_colors) + 1
+                rejected_color_map[ch] = colormap.colors[color_idx]
             end
         end
         
@@ -271,19 +275,17 @@ function plot_artifact_repair(
     forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = 100)
     
     # Add artifact navigation buttons
-    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Prev Artifact", width = 120)
-    artifact_label = Label(controls_layout[1, 5], "Artifact 1 / $(length(epochs_with_artifacts))", width = 150, justification = :center)
-    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 120)
+    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = 130)
+    artifact_label = Label(controls_layout[1, 5], "Artifact 1 / $(length(epochs_with_artifacts))", width = 130, justification = :center)
+    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 130)
     
     # Center the entire control group
     for i in 1:6
         colsize!(controls_layout, i, Auto())
     end
     
-    # Set row height to minimum
+    # Set row sizes
     rowsize!(controls_layout, 1, Auto())
-    
-    # Set row sizes AFTER creating content: 45% + 45% for plots, 10% for controls
     rowsize!(fig.layout, 1, Relative(0.45))  # Original plot
     rowsize!(fig.layout, 2, Relative(0.45))  # Repaired plot
     rowsize!(fig.layout, 3, Relative(0.1))   # Controls area
@@ -326,10 +328,15 @@ function plot_artifact_repair(
         # Create color mapping for rejected channels using Makie categorical colors
         rejected_color_map = Dict{Symbol, Any}()
         if !isempty(rejected_channels)
-            # Use categorical colors for distinct channel colors
-            channel_colors = categorical_colors(:Set1_9, length(rejected_channels))
+            # Use a colormap that cycles for any number of channels
+            colormap_name = :Set1_9  # Will be user-configurable later
+            # Get the actual number of colors in the colormap
+            colormap = cgrad(colormap_name)
+            max_colors = length(colormap.colors)
+            
             for (i, ch) in enumerate(rejected_channels)
-                rejected_color_map[ch] = channel_colors[i]
+                color_idx = ((i - 1) % max_colors) + 1
+                rejected_color_map[ch] = colormap.colors[color_idx]
             end
         end
         
@@ -345,19 +352,9 @@ function plot_artifact_repair(
                 is_selected = ch in selected_channels_set
                 
                 # Original plot styling
-                orig_color = if is_rejected
-                    rejected_color_map[ch]
-                else
-                    :black
-                end
+                orig_color = is_rejected ? rejected_color_map[ch] : :black
                 orig_alpha = is_rejected ? 1.0 : 0.2
-                orig_linewidth = if is_selected
-                    is_rejected ? 4 : 3  # Thicker for selected
-                else
-                    is_rejected ? 2 : 1  # Normal thickness
-                end
-                
-                # Repaired plot styling  
+                orig_linewidth = is_selected ? is_rejected ? 4 : 3 : is_rejected ? 2 : 1
                 rep_linewidth = is_selected ? 3 : 1
                 
                 # Create labels with bold formatting for selected channels
@@ -461,8 +458,6 @@ function plot_artifact_repair(
     # Button click handlers
     on(back_button.clicks) do _; epoch_idx[] = max(1, epoch_idx[] - 1) end
     on(forward_button.clicks) do _; epoch_idx[] = min(n_epochs, epoch_idx[] + 1) end
-    
-    # Artifact navigation button handlers
     on(back_artifact_button.clicks) do _; artifact_idx[] = max(1, artifact_idx[] - 1) end
     on(forward_artifact_button.clicks) do _; artifact_idx[] = min(length(epochs_with_artifacts), artifact_idx[] + 1) end
     
@@ -470,10 +465,6 @@ function plot_artifact_repair(
     on(epoch_idx) do idx
         update_comparison_plot!(ax1, ax2, idx)
         epoch_label.text = "Epoch $idx / $n_epochs"
-        
-        # Update button states
-        back_button.buttoncolor = (idx > 1) ? :lightblue : :lightgray
-        forward_button.buttoncolor = (idx < n_epochs) ? :lightblue : :lightgray
     end
     
     # Update plot and controls when artifact changes
@@ -482,27 +473,17 @@ function plot_artifact_repair(
             epoch_idx[] = epochs_with_artifacts[idx]
             artifact_label.text = "Artifact $idx / $(length(epochs_with_artifacts))"
         end
-        
-        # Update artifact button states
-        back_artifact_button.buttoncolor = (idx > 1) ? :lightblue : :lightgray
-        forward_artifact_button.buttoncolor = (idx < length(epochs_with_artifacts)) ? :lightblue : :lightgray
     end
     
     # Initialize plot and controls
     update_comparison_plot!(ax1, ax2, epoch_idx[])
     epoch_label.text = "Epoch 1 / $n_epochs"
-    back_button.buttoncolor = :lightgray  # Disabled at start
-    forward_button.buttoncolor = (n_epochs > 1) ? :lightblue : :lightgray
     
     # Initialize artifact controls
     if !isempty(epochs_with_artifacts)
         artifact_label.text = "Artifact 1 / $(length(epochs_with_artifacts))"
-        back_artifact_button.buttoncolor = :lightgray  # Disabled at start
-        forward_artifact_button.buttoncolor = (length(epochs_with_artifacts) > 1) ? :lightblue : :lightgray
     else
         artifact_label.text = "No artifacts found"
-        back_artifact_button.buttoncolor = :lightgray
-        forward_artifact_button.buttoncolor = :lightgray
     end
     
     return fig
