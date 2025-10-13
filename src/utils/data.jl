@@ -76,6 +76,25 @@ all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data # single data frame
 all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat) # single data frame with all epochs
 all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat) # single data frame with all epochs from all objects
 
+function all_data(dat::Union{MultiDataFrameEeg, Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
+    return to_data_frame(subset(dat, epoch_selection = epoch_selection))
+end
+
+function meta_data(dat::Union{MultiDataFrameEeg, Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
+    meta_cols = get_cols_by_group(dat, :metadata)
+    return isempty(meta_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, meta_cols]
+end
+
+function channel_data(dat::Union{MultiDataFrameEeg, Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
+    channel_cols = get_cols_by_group(dat, :channels)
+    return isempty(channel_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, channel_cols]
+end
+
+function extra_data(dat::Union{MultiDataFrameEeg, Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
+    extra_cols = get_cols_by_group(dat, :extra)
+    return isempty(extra_cols) ? DataFrame() : all_data(dat, epoch_selection = epoch_selection)[:, extra_cols]
+end
+
 """
     all_labels(dat::EegData) -> Vector{Symbol}
 

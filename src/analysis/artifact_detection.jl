@@ -370,8 +370,7 @@ function n_extreme_value(
         # Create result DataFrame
         result_df = DataFrame(
             channel = selected_channels,
-            n_extreme = counts,
-            threshold = fill(threshold, length(selected_channels)),
+            n_extreme = counts
         )
 
         return result_df
