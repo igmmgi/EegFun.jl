@@ -955,29 +955,5 @@ epochs_resampled = eegfun.resample(epochs, 2)
 epochs[1].data
 epochs_resampled[1].data[1]
 
-
-
 # test mirror
 epochs_mirrored = eegfun.mirror(epochs[1], :both)
-
-
-# is_extreme_value
-extreme_values = eegfun.is_extreme_value(dat, 10)
-extreme_values = eegfun.is_extreme_value(dat, 1000, mode = :separate)
-eegfun.is_extreme_value!(dat, 10)
-eegfun.is_extreme_value!(dat, 1000, mode = :separate)
-
-# n_extreme_values
-eegfun.n_extreme_value(dat, 10)
-eegfun.n_extreme_value(dat, 10, mode = :separate)
-
-layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-# define neighbours 2D/3D defined by distance (mm)
-eegfun.polar_to_cartesian_xy!(layout);
-eegfun.get_layout_neighbours_xy!(layout, 0.5);
-eegfun.polar_to_cartesian_xyz!(layout);
-eegfun.get_layout_neighbours_xyz!(layout, 0.5);
-
-eegfun.plot_layout_2d(layout)
-eegfun.plot_layout_2d(layout, neighbours = true)
-eegfun.plot_layout_3d(layout, neighbours = true)

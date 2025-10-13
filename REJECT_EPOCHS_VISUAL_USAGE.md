@@ -4,7 +4,7 @@
 
 ## Overview
 
-The `reject_epochs_interactive()` function provides an interactive graphical interface for manually rejecting epochs based on visual inspection. It displays epochs in a grid layout with checkboxes for marking each epoch as good or bad, along with navigation buttons for scrolling through pages of data.
+The `detect_bad_epochs_interactive()` function provides an interactive graphical interface for manually rejecting epochs based on visual inspection. It displays epochs in a grid layout with checkboxes for marking each epoch as good or bad, along with navigation buttons for scrolling through pages of data.
 
 ## Why Visual Rejection?
 
@@ -27,7 +27,7 @@ using eegfun, JLD2
 epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Launch interactive rejection interface
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 
 # GUI window opens - review epochs:
 # ✓ CHECK boxes to mark epochs for REJECTION
@@ -76,7 +76,7 @@ The interactive window displays:
 
 ```julia
 epochs = load("participant_1_epochs.jld2", "epochs")
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 ```
 
 ### 2. Review Epochs
@@ -173,7 +173,7 @@ epochs = load("participant_05_epochs.jld2", "epochs")
 println("Starting with $(length(epochs.data)) epochs")
 
 # Launch GUI
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 
 # ... review epochs visually ...
 # ... mark bad ones ...

@@ -39,15 +39,27 @@ epoch_cfg = [
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 
-bad_epochs = eegfun.detect_bad_epochs(epochs)
+bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
 eegfun.get_rejected_epochs(bad_epochs[1])
 eegfun.get_rejected_epochs(bad_epochs)
 
+eegfun.unique_rejections(bad_epochs[1].rejected_epochs)
+eegfun.unique_channels(bad_epochs[1].rejected_epochs)
+eegfun.unique_epochs(bad_epochs[1].rejected_epochs)
 
-bad_epochs = eegfun.detect_bad_epochs(epochs[1])
+
+bad_epochs = eegfun.detect_bad_epochs_automatic(epochs[1])
 eegfun.get_rejected_epochs(bad_epochs)
-bad_epochs = eegfun.detect_bad_epochs(epochs)
 
+
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4))
+
+eegfun.unique_rejections(bad_epochs.rejected_epochs)
+eegfun.unique_channels(bad_epochs.rejected_epochs)
+eegfun.unique_epochs(bad_epochs.rejected_epochs)
+
+
+bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 
 # repair
@@ -62,3 +74,11 @@ eegfun.plot_artifact_repair(epochs[1], epochs_repaired, bad_epochs[1])
 
 
 
+
+
+
+
+
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4))
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4), artifact_info = bad_epochs_automatic) 
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4), artifact_info = bad_epochs_automatic, colormap = :seaborn_colorblind) 

@@ -78,7 +78,7 @@ end
 =============================================================================#
 
 """
-    reject_epochs_interactive(dat::EpochData;
+    detect_bad_epochs_interactive(dat::EpochData;
                              channel_selection::Function = channels(),
                              epochs_per_page::Int = 12,
                              grid_size::Tuple{Int,Int} = (3, 4))::EpochRejectionState
@@ -104,7 +104,7 @@ $(generate_kwargs_doc(PLOT_EPOCHS_REJECTION_KWARGS))
 After reviewing all epochs and marking bad ones, extract the results:
 ```julia
 # Create interactive interface
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 
 # After closing the window or finishing review:
 rejected_indices = findall(state.rejected)
@@ -119,7 +119,7 @@ using eegfun, JLD2
 epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Launch interactive rejection interface
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 
 # Review epochs by:
 # 1. Checking/unchecking boxes for each epoch
@@ -157,7 +157,7 @@ save("participant_1_epochs_cleaned.jld2", "epochs", clean_data)
 - Close the window when done reviewing
 - Bad channels filter only appears when artifact_info is provided and contains rejected channels
 """
-function reject_epochs_interactive(
+function detect_bad_epochs_interactive(
     dat::EpochData;
     channel_selection::Function = channels(),
     artifact_info::Union{Nothing,EpochRejectionInfo} = nothing,
@@ -542,7 +542,7 @@ Get indices of rejected epochs from the rejection state.
 
 # Examples
 ```julia
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 # ... after review ...
 rejected_indices = get_rejected_epochs(state)
 ```
