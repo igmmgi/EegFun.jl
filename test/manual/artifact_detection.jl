@@ -52,8 +52,8 @@ eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 
 # repair
 epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :neighbor_interpolation)
-epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :spherical_spline)
-epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :reject)
+# epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :spherical_spline)
+# epochs_repaired = eegfun.repair_artifacts(epochs[1], bad_epochs[1], method = :reject)
 
 eegfun.plot_artifact_repair(epochs[1], epochs_repaired, bad_epochs[1])
 
