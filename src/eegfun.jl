@@ -91,7 +91,7 @@ include("plots/utils/layout_system.jl")
 # Shared interactivity (must be included before plot_erp and plot_epochs)
 include("plots/utils/shared_interactivity.jl")
 
-include("plots/plot_artifact_detection.jl")
+include("plots/plot_artifacts.jl")
 include("plots/plot_channel_summary.jl")
 include("plots/plot_correlation_heatmap.jl")
 include("plots/plot_databrowser.jl")

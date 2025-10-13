@@ -484,7 +484,7 @@ end
 =============================================================================#
 
 """
-    detect_bad_epochs(dat::EpochData; z_criterion::Real = 3,
+    detect_bad_epochs_automatic(dat::EpochData; z_criterion::Real = 3,
                      abs_criterion::Real = 100,
                      channel_selection::Function = channels())::EpochRejectionInfo
 
@@ -518,22 +518,22 @@ using eegfun, JLD2
 epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Use default criteria (z_criterion=3.0, abs_criterion=100.0)
-rejection_info = detect_bad_epochs(epochs)
+rejection_info = detect_bad_epochs_automatic(epochs)
 
 # Customize z-score criterion only
-rejection_info = detect_bad_epochs(epochs, z_criterion = 2.0)
+rejection_info = detect_bad_epochs_automatic(epochs, z_criterion = 2.0)
 
 # Customize absolute voltage threshold only
-rejection_info = detect_bad_epochs(epochs, abs_criterion = 80.0)  # 80 μV
+rejection_info = detect_bad_epochs_automatic(epochs, abs_criterion = 80.0)  # 80 μV
 
 # Use both criteria with custom values
-rejection_info = detect_bad_epochs(epochs, z_criterion = 2.5, abs_criterion = 80.0)
+rejection_info = detect_bad_epochs_automatic(epochs, z_criterion = 2.5, abs_criterion = 80.0)
 
 # Disable z-score rejection (use only absolute threshold)
-rejection_info = detect_bad_epochs(epochs, z_criterion = 0, abs_criterion = 100.0)
+rejection_info = detect_bad_epochs_automatic(epochs, z_criterion = 0, abs_criterion = 100.0)
 
 # Disable absolute threshold rejection (use only z-score)
-rejection_info = detect_bad_epochs(epochs, z_criterion = 3.0, abs_criterion = 0)
+rejection_info = detect_bad_epochs_automatic(epochs, z_criterion = 3.0, abs_criterion = 0)
 
 # Check results
 println("Original epochs: \$(rejection_info.n_epochs)")
@@ -551,7 +551,7 @@ println("Rejected epochs: \$(rejection_info.rejected_epochs)")
 - Uses maximum across channels to identify global artifacts
 - All metrics are calculated independently and combined with OR logic
 """
-function detect_bad_epochs(
+function detect_bad_epochs_automatic(
     dat::EpochData;
     z_criterion::Real = 3,
     abs_criterion::Real = 100,
@@ -667,8 +667,8 @@ function detect_bad_epochs(
     return rejection_info
 end
 
-function detect_bad_epochs(dat::Vector{EpochData}; kwargs...)
-    return detect_bad_epochs.(dat; kwargs...)
+function detect_bad_epochs_automatic(dat::Vector{EpochData}; kwargs...)
+    return detect_bad_epochs_automatic.(dat; kwargs...)
 end
 
 
@@ -683,7 +683,7 @@ Get indices of rejected epochs from the rejection state.
 
 # Examples
 ```julia
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 # ... after review ...
 rejected_indices = get_rejected_epochs(state)
 ```
@@ -697,7 +697,7 @@ Get indices of rejected epochs from the rejection state.
 
 # Examples
 ```julia
-state = reject_epochs_interactive(epochs)
+state = detect_bad_epochs_interactive(epochs)
 # ... after review ...
 rejected_indices = get_rejected_epochs(state)
 ```
