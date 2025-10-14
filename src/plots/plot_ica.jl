@@ -38,6 +38,11 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_yoffset => (0, "Y-axis offset for electrode labels"),
 
     # Colorbar parameters
+    # Automatically add all Colorbar attributes with their actual defaults
+    # This allows users to control any Colorbar parameter
+    [Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") 
+     for attr in propertynames(Colorbar)]...,
+
     :plot_colorbar => (false, "Whether to display colorbars"),
     :colorbar_width => (20, "Width of the colorbar"),
     :colorbar_height => (Relative(0.8), "Height of the colorbar"),
@@ -93,7 +98,7 @@ fig = plot_ica_topoplot(ica,
 ```
 """
 function plot_ica_topoplot(ica; kwargs...)
-    # Merge user kwargs with defaults
+
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
 
     # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
@@ -108,13 +113,8 @@ function plot_ica_topoplot(ica; kwargs...)
     subplot_spacing = pop!(plot_kwargs, :subplot_spacing)
 
     # Extract colorbar-specific kwargs
-    colorbar_kwargs = Dict(
-        :plot_colorbar => pop!(plot_kwargs, :plot_colorbar), 
-        :colorbar_plot_numbers => pop!(plot_kwargs, :colorbar_plot_numbers), 
-        :width => pop!(plot_kwargs, :colorbar_width),
-        :height => pop!(plot_kwargs, :colorbar_height),
-        :ticklabelsize => pop!(plot_kwargs, :colorbar_ticklabelsize)
-    )
+    plot_colorbar = pop!(plot_kwargs, :plot_colorbar)
+    colorbar_plot_numbers = pop!(plot_kwargs, :colorbar_plot_numbers)
 
     # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
@@ -124,15 +124,9 @@ function plot_ica_topoplot(ica; kwargs...)
     comps = get_selected_components(ica, component_selection)
 
     # Create figure with reduced margins
-    fig = Figure(
-        figure_padding = figure_padding, # Keep padding for right margin
-        backgroundcolor = :white,
-    )
-
+    fig = Figure( figure_padding = figure_padding) # Keep padding for right margin
     # Deal with plot dimensions
-    if isnothing(dims)
-        dims = best_rect(length(comps))
-    end
+    isnothing(dims) && (dims = best_rect(length(comps)))
 
     # Validate dimensions
     if length(dims) != 2 || any(dims .<= 0)
@@ -163,12 +157,8 @@ function plot_ica_topoplot(ica; kwargs...)
         grids[i] = fig[row, col] = GridLayout()
 
         # Add spacing between subplots (only between rows and columns, not for every subplot)
-        if row > 1
-            rowgap!(fig.layout, row - 1, subplot_spacing)
-        end
-        if col > 1
-            colgap!(fig.layout, col - 1, subplot_spacing)
-        end
+        row > 1 && rowgap!(fig.layout, row - 1, subplot_spacing)
+        col > 1 && colgap!(fig.layout, col - 1, subplot_spacing)
 
         # grid layout and axis
         ax = Axis(grids[i][1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
@@ -187,36 +177,34 @@ function plot_ica_topoplot(ica; kwargs...)
         )
 
         # Do we want to add a colourbar?
-        if colorbar_kwargs[:plot_colorbar]
-            # Extract colorbar parameters
-            width = colorbar_kwargs[:width]
-            height = colorbar_kwargs[:height]
-            ticklabelsize = colorbar_kwargs[:ticklabelsize]
+        if plot_colorbar
+            # Extract all colorbar-related parameters from plot_kwargs
+            ica_colorbar_kwargs = Dict{Symbol, Any}()
+            colorbar_attrs = propertynames(Colorbar)
+            for attr in colorbar_attrs
+                colorbar_key = Symbol("colorbar_$(attr)")
+                if haskey(plot_kwargs, colorbar_key)
+                    value = pop!(plot_kwargs, colorbar_key)
+                    if value !== nothing  # Only add if not the default nothing
+                        ica_colorbar_kwargs[attr] = value
+                    end
+                end
+            end
+
+            # these cannot be passed to colorbar kwargs
+            pop!(ica_colorbar_kwargs, :colormap, nothing)
+            pop!(ica_colorbar_kwargs, :limits, nothing)
+            pop!(ica_colorbar_kwargs, :highclip, nothing)
+            pop!(ica_colorbar_kwargs, :lowclip, nothing)
 
             # Create colorbar or placeholder in second column
-            # TODO: I do not really follow colourbar logic in Makie
-            # This seems a bit awkward!
-            if i in colorbar_kwargs[:colorbar_plot_numbers] || isempty(colorbar_kwargs[:colorbar_plot_numbers]) # Use accessed list
+            if i in colorbar_plot_numbers || isempty(colorbar_plot_numbers) # Use accessed list
                 Colorbar(
                     grids[i][1, 2],
                     co;
-                    width = width,
-                    height = height,
-                    ticklabelsize = ticklabelsize,
-                )
-            else
-                Box(
-                    grids[i][1, 2];
-                    width = width,
-                    height = height,
-                    color = :transparent,
-                    strokewidth = 0,
+                    ica_colorbar_kwargs...
                 )
             end
-
-            # Set column sizes after creating the colorbar column
-            colsize!(grids[i], 1, Relative(0.85))  # Plot column
-            colsize!(grids[i], 2, Relative(0.15))  # Colorbar column
 
         end
 
