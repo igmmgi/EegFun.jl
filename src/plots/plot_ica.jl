@@ -179,23 +179,7 @@ function plot_ica_topoplot(ica; kwargs...)
         # Do we want to add a colourbar?
         if plot_colorbar
             # Extract all colorbar-related parameters from plot_kwargs
-            ica_colorbar_kwargs = Dict{Symbol, Any}()
-            colorbar_attrs = propertynames(Colorbar)
-            for attr in colorbar_attrs
-                colorbar_key = Symbol("colorbar_$(attr)")
-                if haskey(plot_kwargs, colorbar_key)
-                    value = pop!(plot_kwargs, colorbar_key)
-                    if value !== nothing  # Only add if not the default nothing
-                        ica_colorbar_kwargs[attr] = value
-                    end
-                end
-            end
-
-            # these cannot be passed to colorbar kwargs
-            pop!(ica_colorbar_kwargs, :colormap, nothing)
-            pop!(ica_colorbar_kwargs, :limits, nothing)
-            pop!(ica_colorbar_kwargs, :highclip, nothing)
-            pop!(ica_colorbar_kwargs, :lowclip, nothing)
+            ica_colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
 
             # Create colorbar or placeholder in second column
             if i in colorbar_plot_numbers || isempty(colorbar_plot_numbers) # Use accessed list
