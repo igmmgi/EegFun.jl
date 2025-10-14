@@ -274,6 +274,7 @@ mutable struct IcaComponentState
         n_visible_components,
         window_size;
         method = :multiquadratic,  # :multiquadratic or :spherical_spline
+        gridscale = 100,  # Grid resolution for interpolation
         kwargs...,
     )
         # Prepare data matrix
@@ -322,8 +323,10 @@ mutable struct IcaComponentState
         show_channel = Observable(false)
         channel_yscale = Observable(1.0)
 
-        # Store plot kwargs directly
+        # Store plot kwargs directly, including the extracted parameters
         plot_kwargs = copy(kwargs)
+        plot_kwargs[:method] = method
+        plot_kwargs[:gridscale] = gridscale
 
         # Initialize empty plot element arrays
         axs = Vector{Axis}()
@@ -436,6 +439,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
     n_visible_components = pop!(plot_kwargs, :n_visible_components)
     window_size = pop!(plot_kwargs, :window_size)
     method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
     display_plot = pop!(plot_kwargs, :display_plot)
     figure_padding = pop!(plot_kwargs, :figure_padding)
 
@@ -447,6 +451,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
         n_visible_components,
         window_size;
         method = method,
+        gridscale = gridscale,
         plot_kwargs...,
     )
 

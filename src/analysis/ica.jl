@@ -768,7 +768,7 @@ end
 
 
 """
-    identify_eog_components(ica_result::InfoIca, dat::ContinuousData;
+    identify_eog_components(dat::ContinuousData, ica::InfoIca;
                           vEOG_channel::Symbol=:vEOG,
                           hEOG_channel::Symbol=:hEOG,
                           z_threshold::Float64=3.0,
@@ -777,8 +777,8 @@ end
 Identify ICA components potentially related to eye movements based on z-scored correlation.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data containing EOG channels.
+- `ica::InfoIca`: The ICA result object.
 
 # Keyword Arguments
 - `vEOG_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG).
@@ -793,8 +793,8 @@ Identify ICA components potentially related to eye movements based on z-scored c
 - `DataFrame`: DataFrame containing detailed correlation metrics per component.
 """
 function identify_eog_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
+    dat::ContinuousData,
+    ica::InfoIca;
     vEOG_channel::Symbol = :vEOG,
     hEOG_channel::Symbol = :hEOG,
     sample_selection::Function = samples(),
@@ -821,14 +821,14 @@ function identify_eog_components(
     hEOG = dat.data[selected_samples, hEOG_channel]
 
     # Prepare data matrix for valid samples
-    relevant_cols = vcat(ica_result.layout.data.label)
+    relevant_cols = vcat(ica.layout.data.label)
     data_subset_df = dat.data[selected_samples, relevant_cols]
     dat_matrix = permutedims(Matrix(data_subset_df))
     dat_matrix .-= mean(dat_matrix, dims = 2)
-    dat_matrix ./= ica_result.scale
+    dat_matrix ./= ica.scale
 
     # Calculate components for valid samples
-    components = ica_result.unmixing * dat_matrix
+    components = ica.unmixing * dat_matrix
     n_components = size(components, 1)
 
     # Function to calculate correlations for all components
@@ -875,7 +875,7 @@ end
 
 
 """
-    identify_ecg_components(ica_result::InfoIca, dat::ContinuousData;
+    identify_ecg_components(dat::ContinuousData, ica::InfoIca;
                               min_bpm::Real=40, max_bpm::Real=120,
                               min_prominence_std::Real=2.5,
                               min_peaks::Int=10,
@@ -887,8 +887,8 @@ Identify ICA components potentially related to EKG artifacts based on peak detec
 and interval regularity, using only samples consistent with ICA calculation.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data (needed for sampling rate `fs` and sample selection columns).
+- `ica::InfoIca`: The ICA result object.
 
 # Keyword Arguments
 - `min_bpm::Real`: Minimum plausible heart rate in beats per minute (default: 40).
@@ -910,8 +910,8 @@ and interval regularity, using only samples consistent with ICA calculation.
   - `:is_ekg_artifact`: Boolean flag indicating if component met the criteria.
 """
 function identify_ecg_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
+    dat::ContinuousData,
+    ica::InfoIca;
     min_bpm::Real = 40,
     max_bpm::Real = 130,
     min_prominence_std::Real = 5,
@@ -930,14 +930,14 @@ function identify_ecg_components(
     end
 
     # Process data
-    relevant_cols = ica_result.layout.data.label
+    relevant_cols = ica.layout.data.label
     data_subset_df = dat.data[selected_samples, relevant_cols]
     dat_matrix_subset = permutedims(Matrix(data_subset_df))
     dat_matrix_subset .-= mean(dat_matrix_subset, dims = 2)
-    dat_matrix_subset ./= ica_result.scale
+    dat_matrix_subset ./= ica.scale
 
-    components_subset = ica_result.unmixing * dat_matrix_subset
-    n_components = size(ica_result.unmixing, 1)
+    components_subset = ica.unmixing * dat_matrix_subset
+    n_components = size(ica.unmixing, 1)
 
     # Convert BPM to plausible IBI range
     min_ibi_s = 60.0 / max_bpm
@@ -1035,15 +1035,15 @@ function identify_ecg_components(
 end
 
 """
-    identify_spatial_kurtosis_components(ica_result::InfoIca, dat::ContinuousData;
+    identify_spatial_kurtosis_components(dat::ContinuousData, ica::InfoIca;
                                       exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
                                       z_threshold::Float64 = 3.0)
 
 Identify ICA components with high spatial kurtosis (localized, spot-like activity).
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data.
+- `ica::InfoIca`: The ICA result object.
 
 # Keyword Arguments
 - `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
@@ -1053,14 +1053,14 @@ Identify ICA components with high spatial kurtosis (localized, spot-like activit
 - `Vector{Int}`: Indices of components with high spatial kurtosis.
 - `DataFrame`: DataFrame containing spatial kurtosis values and z-scores for all components.
 """
-function identify_spatial_kurtosis_components(ica_result::InfoIca, dat::ContinuousData; z_threshold::Float64 = 3.0)
+function identify_spatial_kurtosis_components(dat::ContinuousData, ica::InfoIca; z_threshold::Float64 = 3.0)
     # Calculate spatial kurtosis for each component's weights
-    n_components = size(ica_result.mixing, 2)
+    n_components = size(ica.mixing, 2)
     spatial_kurtosis = Float64[]
 
     for i = 1:n_components
         # Get component weights
-        weights = ica_result.mixing[:, i]
+        weights = ica.mixing[:, i]
         # Calculate kurtosis of the weights
         k = kurtosis(weights)
         push!(spatial_kurtosis, k)
@@ -1085,7 +1085,7 @@ end
 
 
 """
-    identify_line_noise_components(ica_result::InfoIca, dat::ContinuousData;
+    identify_line_noise_components(dat::ContinuousData, ica::InfoIca;
                                  exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
                                  line_freq::Real=50.0,
                                  freq_bandwidth::Real=1.0,
@@ -1095,8 +1095,8 @@ end
 Identify ICA components with strong line noise characteristics.
 
 # Arguments
-- `ica_result::InfoIca`: The ICA result object.
 - `dat::ContinuousData`: The continuous data.
+- `ica::InfoIca`: The ICA result object.
 
 # Keyword Arguments
 - `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
@@ -1110,8 +1110,8 @@ Identify ICA components with strong line noise characteristics.
 - `DataFrame`: DataFrame containing spectral metrics for all components.
 """
 function identify_line_noise_components(
-    ica_result::InfoIca,
-    dat::ContinuousData;
+    dat::ContinuousData,
+    ica::InfoIca;
     sample_selection::Function = samples(),
     line_freq::Real = 50.0,
     freq_bandwidth::Real = 1.0,
@@ -1127,14 +1127,14 @@ function identify_line_noise_components(
     end
 
     # Prepare data matrix for valid samples
-    relevant_cols = vcat(ica_result.layout.data.label)
+    relevant_cols = vcat(ica.layout.data.label)
     data_subset_df = dat.data[samples_to_use, relevant_cols]
     dat_matrix = permutedims(Matrix(data_subset_df))
     dat_matrix .-= mean(dat_matrix, dims = 2)
-    dat_matrix ./= ica_result.scale
+    dat_matrix ./= ica.scale
 
     # Calculate components for valid samples
-    components = ica_result.unmixing * dat_matrix
+    components = ica.unmixing * dat_matrix
     n_components = size(components, 1)
     fs = dat.sample_rate
 
