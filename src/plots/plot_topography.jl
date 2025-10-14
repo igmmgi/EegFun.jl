@@ -118,23 +118,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
 
     if pop!(plot_kwargs, :colorbar_plot)
         # Extract all colorbar-related parameters from plot_kwargs
-        colorbar_kwargs = Dict{Symbol, Any}()
-        colorbar_attrs = propertynames(Colorbar)
-        for attr in colorbar_attrs
-            colorbar_key = Symbol("colorbar_$(attr)")
-            if haskey(plot_kwargs, colorbar_key)
-                value = pop!(plot_kwargs, colorbar_key)
-                if value !== nothing  # Only add if not the default nothing
-                    colorbar_kwargs[attr] = value
-                end
-            end
-        end
-
-        # these cannot be passes to colorbar kwargs
-        pop!(colorbar_kwargs, :colormap)
-        pop!(colorbar_kwargs, :limits)
-        pop!(colorbar_kwargs, :highclip)
-        pop!(colorbar_kwargs, :lowclip)
+        colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
 
         # Create the colorbar with all available parameters
         Colorbar(
