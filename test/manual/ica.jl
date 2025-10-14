@@ -107,6 +107,10 @@ channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_ku
 
 # Method 1: Combine existing results
 artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+
+eegfun.plot_artifact_components(ica_result, artifacts; gridscale = 500)
+
+
 all_comps = eegfun.get_all_ica_components(artifacts)
 
 

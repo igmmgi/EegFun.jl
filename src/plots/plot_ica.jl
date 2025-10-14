@@ -2010,3 +2010,130 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
 
     return fig
 end
+
+"""
+    plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
+
+Plot topoplots for all artifact components organized by type (vEOG, hEOG, ECG, Line Noise, Channel Noise).
+
+This is a convenience function that takes the output of `combine_artifact_components` and creates
+a comprehensive visualization showing all identified artifact components with clear labels.
+
+# Arguments
+- `ica::InfoIca`: The ICA result object
+- `artifacts::ArtifactComponents`: The artifact components structure from `combine_artifact_components`
+
+# Keyword Arguments
+All keyword arguments from `plot_ica_topoplot` are supported, including:
+- `method::Symbol`: Interpolation method (:multiquadratic or :spherical_spline)
+- `gridscale::Int`: Grid resolution for interpolation
+- `colormap`: Colormap for the topography
+- `display_plot::Bool`: Whether to display the plot
+
+# Returns
+- `Figure`: The Makie Figure containing all topoplots
+
+# Examples
+```julia
+# Identify artifact components
+eog_comps, _ = identify_eog_components(dat, ica)
+ecg_comps, _ = identify_ecg_components(dat, ica)
+line_noise_comps, _ = identify_line_noise_components(dat, ica)
+channel_noise_comps, _ = identify_spatial_kurtosis_components(dat, ica)
+
+# Combine them
+artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+
+# Plot all artifact components
+fig = plot_artifact_components(ica, artifacts)
+```
+"""
+function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
+    # Merge user kwargs with defaults
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
+    
+    # Extract commonly used kwargs
+    method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
+    colormap = pop!(plot_kwargs, :colormap)
+    display_plot = pop!(plot_kwargs, :display_plot)
+    num_levels = pop!(plot_kwargs, :num_levels)
+    nan_color = pop!(plot_kwargs, :nan_color)
+    
+    # Get all component types and their components
+    component_data = [
+        ("vEOG", artifacts.eog[:vEOG]),
+        ("hEOG", artifacts.eog[:hEOG]),
+        ("ECG", artifacts.ecg),
+        ("Line Noise", artifacts.line_noise),
+        ("Channel Noise", artifacts.channel_noise)
+    ]
+    
+    # Filter out empty component lists
+    component_types = [name for (name, comps) in component_data if !isempty(comps)]
+    component_lists = [comps for (name, comps) in component_data if !isempty(comps)]
+    
+    # If no components, return empty figure
+    if isempty(component_types)
+        @warn "No artifact components found to plot"
+        fig = Figure()
+        Label(fig[1, 1], "No artifact components found", fontsize = 16)
+        return fig
+    end
+    
+    # Calculate total number of components to plot
+    total_comps = sum(length(comps) for comps in component_lists)
+    n_cols = min(4, total_comps)  # Max 4 columns
+    n_rows = ceil(Int, total_comps / n_cols)
+    
+    # Create figure
+    fig = Figure(size = (n_cols * 200, n_rows * 200))
+    
+    # Plot each component individually
+    plot_idx = 1
+    for (comp_type, comps) in zip(component_types, component_lists)
+        for comp_idx in comps
+            row = ((plot_idx - 1) ÷ n_cols) + 1
+            col = ((plot_idx - 1) % n_cols) + 1
+            
+            # Create subplot for this component
+            ax = Axis(fig[row, col], aspect = DataAspect())
+            ax.title = "$comp_type $comp_idx"
+            ax.titlesize = 12
+            
+            # Create topoplot data
+            topo_data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
+            
+            # Plot the topoplot
+            contourf!(
+                ax,
+                topo_data,
+                levels = num_levels,
+                colormap = colormap,
+                nan_color = nan_color
+            )
+            
+            # Remove axes
+            hidedecorations!(ax)
+            hidespines!(ax)
+            
+            plot_idx += 1
+        end
+    end
+    
+    # Add overall title
+    total_comps = sum(length(comps) for comps in component_lists)
+    Label(
+        fig[0, :],
+        "ICA Artifact Components",
+        fontsize = 18,
+        font = :bold
+    )
+    
+    # Display plot if requested
+    if display_plot
+        display_figure(fig)
+    end
+    
+    return fig
+end
