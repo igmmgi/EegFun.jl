@@ -41,6 +41,7 @@ eegfun.plot_ica_topoplot(
     plot_colorbar = true,
     colorbar_plot_numbers = [2],
 )
+
 eegfun.plot_ica_topoplot(
     ica_result,
     component_selection = eegfun.components([1, 3, 5, 7, 9]);
@@ -108,7 +109,7 @@ channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_ku
 # Method 1: Combine existing results
 artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
 
-eegfun.plot_artifact_components(ica_result, artifacts; gridscale = 500)
+eegfun.plot_artifact_components(ica_result, artifacts; gridscale = 500, plot_points = true)
 
 
 all_comps = eegfun.get_all_ica_components(artifacts)

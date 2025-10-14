@@ -2060,6 +2060,15 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     num_levels = pop!(plot_kwargs, :num_levels)
     nan_color = pop!(plot_kwargs, :nan_color)
     
+    # Extract head shape parameters
+    head_color = pop!(plot_kwargs, :head_color)
+    head_linewidth = pop!(plot_kwargs, :head_linewidth)
+    head_radius = pop!(plot_kwargs, :head_radius)
+    
+    # Extract electrode plotting parameters
+    plot_points = pop!(plot_kwargs, :plot_points)
+    plot_labels = pop!(plot_kwargs, :plot_labels)
+    
     # Get all component types and their components
     component_data = [
         ("vEOG", artifacts.eog[:vEOG]),
@@ -2097,25 +2106,29 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
             col = ((plot_idx - 1) % n_cols) + 1
             
             # Create subplot for this component
-            ax = Axis(fig[row, col], aspect = DataAspect())
+            ax = Axis(fig[row, col])
             ax.title = "$comp_type $comp_idx"
             ax.titlesize = 12
             
             # Create topoplot data
             topo_data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
             
-            # Plot the topoplot
-            contourf!(
+            # Use the same plotting function as the working plot_ica_topoplot
+            _plot_ica_topo_on_axis!(
                 ax,
+                fig,
                 topo_data,
-                levels = num_levels,
+                ica,
+                num_levels;
+                gridscale = gridscale,
                 colormap = colormap,
-                nan_color = nan_color
+                nan_color = nan_color,
+                head_color = head_color,
+                head_linewidth = head_linewidth,
+                head_radius = head_radius,
+                plot_points = plot_points,
+                plot_labels = plot_labels
             )
-            
-            # Remove axes
-            hidedecorations!(ax)
-            hidespines!(ax)
             
             plot_idx += 1
         end
