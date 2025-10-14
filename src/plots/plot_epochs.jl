@@ -380,7 +380,7 @@ function _plot_epochs_layout!(
     dat::EpochData,
     erp_dat,
     all_plot_channels::Vector{Symbol},
-    kwargs::Dict,
+    plot_kwargs::Dict,
 )
     # Ensure 2D coordinates exist
     if !all(in.([:x2, :y2], Ref(propertynames(dat.layout.data))))
@@ -404,9 +404,9 @@ function _plot_epochs_layout!(
     xrange = xrange == 0 ? 1.0 : xrange
     yrange = yrange == 0 ? 1.0 : yrange
 
-    plot_w = get(kwargs, :layout_plot_width, 0.12)
-    plot_h = get(kwargs, :layout_plot_height, 0.12)
-    margin = get(kwargs, :layout_margin, 0.02)
+    plot_w = get(plot_kwargs, :layout_plot_width, 0.12)
+    plot_h = get(plot_kwargs, :layout_plot_height, 0.12)
+    margin = get(plot_kwargs, :layout_margin, 0.02)
 
     # Map channel -> position
     pos_map = Dict{Symbol,Tuple{Float64,Float64}}()
@@ -437,7 +437,7 @@ function _plot_epochs_layout!(
         end
 
         # Suppress axis labels on all but the final axis; set only limits and title for now
-        axis_kwargs = merge(kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
+        axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
         _set_axis_properties!(ax, axis_kwargs, string(ch))
         ax.xticklabelsvisible = false
         ax.yticklabelsvisible = false
@@ -447,15 +447,15 @@ function _plot_epochs_layout!(
     end
 
     # Optional extra scale axis in bottom-right
-    if get(kwargs, :layout_show_scale, true)
-        sp = get(kwargs, :layout_scale_position, [0.95, 0.05])
-        sw = get(kwargs, :layout_scale_width, 0.14)
-        sh = get(kwargs, :layout_scale_height, 0.14)
+    if get(plot_kwargs, :layout_show_scale, true)
+        sp = get(plot_kwargs, :layout_scale_position, [0.95, 0.05])
+        sw = get(plot_kwargs, :layout_scale_width, 0.14)
+        sh = get(plot_kwargs, :layout_scale_height, 0.14)
         scale_ax = Axis(fig[1, 1], width = Relative(sw), height = Relative(sh), halign = sp[1], valign = sp[2])
         push!(axes, scale_ax)
         # No data in this axis; just show labels and limits
         tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
-        axis_kwargs = merge(kwargs, Dict(:ylim => ylim, :xlim => (tmin, tmax)))
+        axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlim => (tmin, tmax)))
         _set_axis_properties!(scale_ax, axis_kwargs, "")
         scale_ax.xticklabelsvisible = true
         scale_ax.yticklabelsvisible = true
@@ -475,7 +475,7 @@ function _plot_epochs_grid!(
     all_plot_channels::Vector{Symbol},
     rows::Int,
     cols::Int,
-    kwargs::Dict,
+    plot_kwargs::Dict,
 )
     n_channels = length(all_plot_channels)
 
@@ -501,7 +501,7 @@ function _plot_epochs_grid!(
         end
 
         # Set axis properties with ylim
-        axis_kwargs = merge(kwargs, Dict(:ylim => ylim))
+        axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim))
 
         # Only add x and y labels to outer left column and bottom row
         if col != 1
