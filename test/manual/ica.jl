@@ -1,6 +1,6 @@
 using eegfun
 using GLMakie
-using BenchmarkTools
+# using BenchmarkTools
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
@@ -13,9 +13,12 @@ eegfun.filter_data!(dat, "hp", 1)
 # eegfun.resample!(dat, 4)
 eegfun.is_extreme_value!(dat, 100);
 
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+
 # ICA on continuous data
-@time ica_result1 = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-@time ica_result2 = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 
 # ICA Plots
 eegfun.plot_ica_topoplot(ica_result1, component_selection = eegfun.components(1:10), method = :multiquadratic);
@@ -38,7 +41,6 @@ eegfun.plot_ica_topoplot(
     plot_colorbar = true,
     colorbar_plot_numbers = [2],
 )
-
 eegfun.plot_ica_topoplot(
     ica_result,
     component_selection = eegfun.components([1, 3, 5, 7, 9]);
@@ -50,7 +52,7 @@ eegfun.plot_ica_topoplot(
 
 
 # plot_ica_component_activation
-eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
+eegfun.plot_ica_component_activation(dat, ica_result2, method = :multiquadratic)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
 
 
@@ -84,20 +86,30 @@ GLMakie.closeall()
 
 
 eegfun.plot_ica_topoplot(ica_result)
-fig, ax = eegfun.plot_ica_component_activation(dat, ica_result)
-fig, ax = eegfun.plot_ica_component_spectrum(ica_result, dat, component_selection = eegfun.components(1))
+eegfun.plot_ica_component_activation(dat, ica_result)
+
+eegfun.plot_component_spectrum(ica_result, dat, component_selection = eegfun.components(1))
+
 eegfun.plot_databrowser(dat, ica_result)
+
 # dat_ica_removed, removed_activations = remove_ica_components(dat, ica_result, [1])
 # dat_ica_reconstructed =  restore_original_data(dat_ica_removed, ica_result, [1], removed_activations)
 eog_comps, eog_comps_metrics_df =
-    eegfun.identify_eog_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
+    eegfun.identify_eog_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_100))
+
 ecg_comps, ecg_comps_metrics_df =
-    eegfun.identify_ecg_components(ica_result, dat, sample_selection = eegfun.samples_not(:is_extreme_value))
-line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(ica_result, dat)
-channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result, dat)
+    eegfun.identify_ecg_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_100))
+
+line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(dat, ica_result)
+
+channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(dat, ica_result)
+
+
 # Method 1: Combine existing results
 artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
 all_comps = eegfun.get_all_ica_components(artifacts)
+
+
 dat_ica_removed, ica_result_updated =
     eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components(all_comps))
 dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(
