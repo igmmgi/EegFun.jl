@@ -40,8 +40,6 @@ eegfun.is_extreme_value!(dat, 100);
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 eegfun.plot_databrowser(dat, ica_result)
 
-
-
 # EPOCHS
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = []
@@ -49,6 +47,6 @@ for (idx, epoch) in enumerate(epoch_cfg)
     push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
 end
 
-plot_databrowser(epochs[1])
-plot_databrowser(epochs[2])
-plot_databrowser(epochs[2], ica_result)
+eegfun.plot_databrowser(epochs[1])
+eegfun.plot_databrowser(epochs[2])
+eegfun.plot_databrowser(epochs[2], ica_result)
