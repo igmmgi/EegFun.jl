@@ -1,29 +1,7 @@
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
-
-"""
-    _get_colorbar_defaults()
-
-Get all default values for Colorbar attributes by creating a single Colorbar instance.
-Returns a dictionary mapping attribute names to their default values.
-"""
-function _get_colorbar_defaults()
-    # Create a minimal figure
-    fig = Figure()
-    cb = Colorbar(fig)
-    
-    # Get all attribute values at once
-    defaults = Dict{Symbol, Any}()
-    for attr in propertynames(Colorbar)
-        defaults[attr] = getproperty(cb, attr)
-    end
-    
-    return defaults
-end
-
-# Cache the colorbar defaults
-const COLORBAR_DEFAULTS = _get_colorbar_defaults()
+# (Colorbar defaults are now in plot_misc.jl)
 
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
@@ -36,7 +14,6 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Topography-specific parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
     :gridscale => (200, "Grid resolution for interpolation"),
-    :radius => (1.0, "Radius for the topography plot (controls the extent of the coordinate range)"),
     :colormap => (:jet, "Colormap for the topography"),
     :ylim => (nothing, "Y-axis limits (nothing for auto)"),
     :colorrange => (nothing, "Color range for the topography. If nothing, automatically determined"),
@@ -112,10 +89,8 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     # Set title based on user preferences and data
     if plot_kwargs[:show_title]
         if plot_kwargs[:title] != ""
-            # Use user-provided title
-            ax.title = plot_kwargs[:title]
+            ax.title = plot_kwargs[:title] # Use user-provided title
         elseif hasproperty(dat, :time) && !isempty(dat.time)
-            # Set default title showing time range if data has time column
             time_min, time_max = extrema(dat.time)
             time_title = @sprintf("%.3f to %.3f s", time_min, time_max)
             ax.title = time_title
@@ -123,11 +98,10 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         ax.titlesize = plot_kwargs[:title_fontsize]
     end
 
-    radius = pop!(plot_kwargs, :radius)
     co = contourf!(
         ax,
-        range(-radius, radius, length = gridscale),
-        range(-radius, radius, length = gridscale),
+        range(-1.0, 1.0, length = gridscale),
+        range(-1.0, 1.0, length = gridscale),
         data,
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
         extendlow = :auto,
