@@ -1,4 +1,31 @@
 # =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+"""
+    _get_colorbar_defaults()
+
+Get all default values for Colorbar attributes by creating a single Colorbar instance.
+Returns a dictionary mapping attribute names to their default values.
+"""
+function _get_colorbar_defaults()
+    # Create a minimal figure
+    fig = Figure()
+    cb = Colorbar(fig)
+    
+    # Get all attribute values at once
+    defaults = Dict{Symbol, Any}()
+    for attr in propertynames(Colorbar)
+        defaults[attr] = getproperty(cb, attr)
+    end
+    
+    return defaults
+end
+
+# Cache the colorbar defaults
+const COLORBAR_DEFAULTS = _get_colorbar_defaults()
+
+# =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -9,6 +36,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Topography-specific parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
     :gridscale => (200, "Grid resolution for interpolation"),
+    :radius => (1.0, "Radius for the topography plot (controls the extent of the coordinate range)"),
     :colormap => (:jet, "Colormap for the topography"),
     :ylim => (nothing, "Y-axis limits (nothing for auto)"),
     :colorrange => (nothing, "Color range for the topography. If nothing, automatically determined"),
@@ -19,13 +47,15 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :title_fontsize => (16, "Font size for the title"),
     :show_title => (true, "Whether to show the title"),
 
-    # Colorbar parameters
+    # Colorbar parameters - get all Colorbar attributes with their actual defaults
+    # This allows users to control any Colorbar parameter
+    [Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") 
+     for attr in propertynames(Colorbar)]...,
+    
+    # Override specific colorbar parameters with custom defaults
     :colorbar_plot => (true, "Whether to display the colorbar"),
     :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
-    :colorbar_width => (30, "Width of the colorbar"),
     :colorbar_label => ("μV", "Label for the colorbar"),
-    :colorbar_label_fontsize => (12, "Font size for colorbar label"),
-    :colorbar_tick_fontsize => (12, "Font size for colorbar tick labels"),
 
     # Head shape parameters (reusing layout kwargs)
     :head_color => (:black, "Color of the head shape outline."),
@@ -46,8 +76,6 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
 )
 
-# TODO: would something like this be useful to access ALL attributes?
-# const COLORBAR_KWARGS = Makie.attribute_default_expressions(Colorbar)
 # TODO: What exactly do Recipes offer?
 
 ##########################################
@@ -95,44 +123,50 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         ax.titlesize = plot_kwargs[:title_fontsize]
     end
 
-    # Clear the axis 
-    empty!(ax)
-
-    # Use normalized coordinate ranges since layout coordinates are normalized to [-1, 1]
-    contour_range = 1.0  
-
-    # Set contour parameters
-    contour_kwargs = Dict{Symbol,Any}(:extendlow => :auto, :extendhigh => :auto, :colormap => plot_kwargs[:colormap])
-
-    nan_color = pop!(plot_kwargs, :nan_color)
-    if !isnothing(nan_color)
-        contour_kwargs[:nan_color] = nan_color
-    end
-
-    colorrange = pop!(plot_kwargs, :colorrange)
+    radius = pop!(plot_kwargs, :radius)
     co = contourf!(
         ax,
-        range(-contour_range, contour_range, length = gridscale),
-        range(-contour_range, contour_range, length = gridscale),
+        range(-radius, radius, length = gridscale),
+        range(-radius, radius, length = gridscale),
         data,
         levels = range(ylim[1], ylim[2], div(gridscale, 2));
-        contour_kwargs...,
+        extendlow = :auto,
+        extendhigh = :auto,
+        colormap = pop!(plot_kwargs, :colormap),
+        nan_color = pop!(plot_kwargs, :nan_color),
     )
 
     # Set color range on the contour plot if specified
+    colorrange = pop!(plot_kwargs, :colorrange)
     if !isnothing(colorrange)
         co.colorrange = colorrange
     end
 
     if pop!(plot_kwargs, :colorbar_plot)
-        colorbar_position = pop!(plot_kwargs, :colorbar_position)
+        # Extract all colorbar-related parameters from plot_kwargs
+        colorbar_kwargs = Dict{Symbol, Any}()
+        colorbar_attrs = propertynames(Colorbar)
+        for attr in colorbar_attrs
+            colorbar_key = Symbol("colorbar_$(attr)")
+            if haskey(plot_kwargs, colorbar_key)
+                value = pop!(plot_kwargs, colorbar_key)
+                if value !== nothing  # Only add if not the default nothing
+                    colorbar_kwargs[attr] = value
+                end
+            end
+        end
+
+        # these cannot be passes to colorbar kwargs
+        pop!(colorbar_kwargs, :colormap)
+        pop!(colorbar_kwargs, :limits)
+        pop!(colorbar_kwargs, :highclip)
+        pop!(colorbar_kwargs, :lowclip)
+
+        # Create the colorbar with all available parameters
         Colorbar(
-            fig[colorbar_position...],
+            fig[pop!(plot_kwargs, :colorbar_position)...],
             co;
-            width = pop!(plot_kwargs, :colorbar_width),
-            label = pop!(plot_kwargs, :colorbar_label),
-            labelsize = pop!(plot_kwargs, :colorbar_label_fontsize),
-            ticklabelsize = pop!(plot_kwargs, :colorbar_tick_fontsize),
+            colorbar_kwargs...
         )
     end
 

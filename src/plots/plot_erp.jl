@@ -317,3 +317,61 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
 
     return ax
 end
+
+"""
+    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+
+Plot ERP data on an existing axis, mutating the figure and axis.
+
+# Arguments
+- `fig::Figure`: The figure to plot on
+- `ax::Axis`: The axis to plot on  
+- `dat::ErpData`: The ERP data to plot
+- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
+
+# Returns
+- `ax::Axis`: The axis that was plotted on
+"""
+function plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+    return plot_erp!(fig, ax, [dat]; kwargs...)
+end
+
+"""
+    plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+
+Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
+
+# Arguments
+- `fig::Figure`: The figure to plot on
+- `ax::Axis`: The axis to plot on
+- `datasets::Vector{ErpData}`: The ERP datasets to plot
+- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
+
+# Returns
+- `ax::Axis`: The axis that was plotted on
+"""
+function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+    # Merge user kwargs and default kwargs
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
+
+    # data subsetting
+    dat_subset = subset(
+        datasets;
+        channel_selection = get(plot_kwargs, :channel_selection, channels()),
+        sample_selection = get(plot_kwargs, :sample_selection, samples()),
+        include_extra = true,
+    )
+
+    if plot_kwargs[:average_channels]
+        dat_subset = channel_average(dat_subset, reduce = true)
+    end
+
+    selected_channels = channel_labels(dat_subset)
+    extra_channels = extra_labels(dat_subset)
+    all_plot_channels = vcat(selected_channels, extra_channels)
+
+    # Plot on the axis
+    _plot_erp!(ax, dat_subset, all_plot_channels; plot_kwargs...)
+
+    return ax
+end

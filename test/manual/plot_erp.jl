@@ -1,102 +1,55 @@
+using eegfun
+using GLMakie
 
+# Get some basic data with initial preprocessing steps (high-pass filter, epoch)
+data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
+layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+eegfun.polar_to_cartesian_xy!(layout_file)
+dat = eegfun.read_bdf(data_file);
+dat = eegfun.create_eeg_dataframe(dat, layout_file);
+eegfun.rereference!(dat, :avg)
+eegfun.filter_data!(dat, "hp", 1)
 
-# TODO
+# EPOCHS
+epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
+
+epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
+erps = eegfun.average_epochs(epochs)
 
 # ERP Plot
-fig, ax = eegfun.plot_erp(erps, average_channels = true, title = "Custom Title")
-display(fig)
-
+fig, ax = eegfun.plot_erp(erps, average_channels = false)
+fig, ax = eegfun.plot_erp(erps, average_channels = true)
 
 # ERP Plot
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = true)
-display(fig)
 
 
 # ERP Plot
-fig, ax = eegfun.plot_erp(erps[1], layout = [2, 2])
-display(fig)
-
-
+fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :C1]), layout = [2, 2])
 fig, ax = eegfun.plot_erp([erps[1], copy(erps[1])])
-display(fig)
-
 fig, ax = eegfun.plot_erp(erps[1], layout = :grid)
-display(fig)
-
 fig, ax = eegfun.plot_erp(erps, layout = :grid, title = "Custom Title")
-display(fig)
-
 fig, ax = eegfun.plot_erp(erps[1], layout = :topo)
-display(fig)
-
 fig, ax = eegfun.plot_erp(erps, layout = :topo, channel_selection = eegfun.channels([:Fp1, :Fp2, :PO8]))
-display(fig)
-
 fig, ax = eegfun.plot_erp(erps, layout = :grid, channel_selection = x -> startswith.(string.(x), "F"))
-display(fig)
-
-
-
-
 fig, ax = eegfun.plot_erp([erps[1], copy(erps[1])], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :grid)
-display(fig)
-
 fig, ax = eegfun.plot_erp(erps[1], linewidth = 2)
 fig, ax = eegfun.plot_erp(erps[1], layout = :grid)
 fig, ax = eegfun.plot_erp(erps[1], layout = :topo)
 
+# Combined plots
+fig = Figure(size = (800, 800))
+ax1 = Axis(fig[1, 1])
+ax2 = Axis(fig[1, 1], width = Relative(0.2), height = Relative(0.2), halign = 0, valign = 0)
+eegfun.plot_erp!(fig, ax1, erps, average_channels = true)
+eegfun.plot_topography!(fig, ax2, erps[1]; point_plot = false, label_plot = false, colorbar_plot = true, colorbar_width = Relative(0.03),
+colorbar_height = Relative(0.2), colorbar_tellheight = false, colorbar_tellwidth = false, colorbar_position = (1, 1), 
+colorbar_halign = 0.25, colorbar_valign = 0, colorbar_flipaxis = true, radius = 1.5)
+# eegfun.plot_topography!(fig, ax2, erps[1]; point_plot = false, label_plot = false)
+fig
+
+
+GLMakie.closeall()
 
 
 
-
-# ERP Plot
-fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2]))
-display(fig)
-
-
-fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :grid)
-display(fig)
-
-fig, ax = eegfun.plot_erp(erps[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :O1]), layout = :topo)
-display(fig)
-
-
-
-
-
-
-
-
-# ERP Plot
-fig, ax = eegfun.plot_erp(erps)
-display(fig)
-
-fig, ax = eegfun.plot_erp(erps[1]; layout = :grid)
-display(fig)
-
-fig, ax = eegfun.plot_erp(erps[1]; layout = :topo)
-display(fig)
-
-
-
-
-# ERP Plot
-fig, ax = eegfun.plot_erp(erps[1]; channel_selection = eegfun.channels([:Fp1, :Fp2]), sample_selection = x -> -1 .< x.time .< 1.5)
-display(fig)
-
-# ERP Plot
-@time fig, ax = eegfun.plot_erp(erps; channel_selection = eegfun.channels([:Fp1, :P08]), sample_selection = x -> -1 .< x.time .< 1.5); display(fig);
-
-fig, ax = eegfun.plot_erp(erps); display(fig);
-
-
-# ERP Plot
-plot_erp(erps[1])
-plot_erp(erps[1], :Fp1)
-plot_erp(erps[1], [:Fp1, :Fp2])
-plot_erp(erps[2], [:Fp1, :Fp2, :Cz])
-plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => true))
-plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => true))
-plot_erp(erps[1], [:Fp1, :Fp2], kwargs = Dict(:average_channels => false, :add_topoplot => true))
-plot_erp(erps[1], erps[3], [:PO7, :PO8])
-plot_erp([erps[1], erps[2], erps[3]], [:PO7, :PO8], kwargs = Dict(:average_channels => true, :add_topoplot => true))
