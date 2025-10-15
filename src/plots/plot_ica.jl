@@ -1,14 +1,12 @@
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+
+# Base ICA plotting parameters (common to all ICA plots)
+const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Component selection
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
-    :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
-
-    # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    :use_global_scale => (false, "Do topoplots share the same color scale based on min/max across all components?"),
 
     # Topography parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
@@ -17,10 +15,10 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :num_levels => (20, "Number of contour levels"),
     :nan_color => (:transparent, "Color for NaN values"),
 
-    # Head shape parameters (reusing layout kwargs)
-    :head_color => (:black, "Color of the head shape outline."),
-    :head_linewidth => (2, "Line width of the head shape outline."),
-    :head_radius => (1.0, "Radius of the head shape in mm."),
+    # Head shape parameters
+    :head_color => (:black, "Color of the head shape outline"),
+    :head_linewidth => (2, "Line width of the head shape outline"),
+    :head_radius => (1.0, "Radius of the head shape in mm"),
 
     # Electrode point parameters
     :plot_points => (false, "Whether to plot electrode points"),
@@ -34,6 +32,13 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_color => (:black, "Color of electrode labels"),
     :label_xoffset => (0, "X-axis offset for electrode labels"),
     :label_yoffset => (0, "Y-axis offset for electrode labels"),
+)
+
+# Topoplot-specific parameters (extends base ICA kwargs)
+const PLOT_ICA_TOPOPLOT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,String}}(
+    # Grid layout parameters
+    :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
+    :use_global_scale => (false, "Do topoplots share the same color scale based on min/max across all components?"),
 
     # Colorbar parameters
     # Automatically add all Colorbar attributes with their actual defaults
@@ -54,7 +59,7 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Layout parameters
     :figure_padding => ((0, 30, 0, 0), "Figure padding as (left, right, bottom, top)"),
     :subplot_spacing => (20, "Spacing between subplots"),
-)
+))
 
 """
     plot_ica_topoplot(ica; ...)
@@ -371,45 +376,16 @@ mutable struct IcaComponentState
     end
 end
 
-# Default parameters for ICA component activation plots with descriptions
-const PLOT_ICA_COMPONENT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    # Component selection
-    :component_selection => (components(), "Function that returns boolean vector for component filtering"),
+# Component activation-specific parameters (extends base ICA kwargs)
+const PLOT_ICA_COMPONENT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,String}}(
+    # Time series parameters
     :n_visible_components => (10, "Number of components to display simultaneously"),
     :window_size => (2000, "Size of the time window to display"),
-
-    # Display parameters
-    :display_plot => (true, "Whether to display the plot"),
-
-    # Topography parameters
-    :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
-    :colormap => (:jet, "Colormap for the topography"),
-    :gridscale => (100, "Grid resolution for interpolation"),
-    :num_levels => (20, "Number of contour levels"),
-    :nan_color => (:transparent, "Color for NaN values"),
-
-    # Head shape parameters
-    :head_color => (:black, "Color of the head shape outline"),
-    :head_linewidth => (2, "Line width of the head shape outline"),
-    :head_radius => (1.0, "Radius of the head shape in mm"),
-
-    # Electrode point parameters
-    :plot_points => (false, "Whether to plot electrode points"),
-    :point_marker => (:circle, "Marker style for electrode points"),
-    :point_markersize => (12, "Size of electrode point markers"),
-    :point_color => (:black, "Color of electrode points"),
-
-    # Electrode label parameters
-    :plot_labels => (false, "Whether to plot electrode labels"),
-    :label_fontsize => (20, "Font size for electrode labels"),
-    :label_color => (:black, "Color of electrode labels"),
-    :label_xoffset => (0, "X-axis offset for electrode labels"),
-    :label_yoffset => (0, "Y-axis offset for electrode labels"),
 
     # Layout parameters
     :figure_padding => ((0, 0, 0, 0), "Figure padding as (left, right, bottom, top)"),
     :subplot_spacing => (5, "Spacing between subplots"),
-)
+))
 
 """
     plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; ...)
