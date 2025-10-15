@@ -43,15 +43,19 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     [Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") 
      for attr in propertynames(Colorbar)]...,
 
+     # TODO: see note below with Colorbar, as some of these values seem a bit hacky (e.g., width)
     :plot_colorbar => (false, "Whether to display colorbars"),
-    :colorbar_width => (20, "Width of the colorbar"),
+    # :colorbar_width => (Relative(6.0), "Width of the colorbar"),
+    :colorbar_width => (Relative(0.1), "Width of the colorbar"),
     :colorbar_height => (Relative(0.8), "Height of the colorbar"),
+    :colorbar_halign => (1.1, "Horizontal alignment of the colorbar"),
+    :colorbar_valign => (0.5, "Vertical alignment of the colorbar"),
     :colorbar_ticklabelsize => (12, "Font size for colorbar tick labels"),
     :colorbar_plot_numbers => (Int[], "Plot indices (1-based) that should have visible colorbars"),
 
     # Layout parameters
-    :figure_padding => ((0, 60, 0, 0), "Figure padding as (left, right, bottom, top)"),
-    :subplot_spacing => (5, "Spacing between subplots"),
+    :figure_padding => ((0, 30, 0, 0), "Figure padding as (left, right, bottom, top)"),
+    :subplot_spacing => (20, "Spacing between subplots"),
 )
 
 """
@@ -114,6 +118,7 @@ function plot_ica_topoplot(ica; kwargs...)
 
     # Extract colorbar-specific kwargs
     plot_colorbar = pop!(plot_kwargs, :plot_colorbar)
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     colorbar_plot_numbers = pop!(plot_kwargs, :colorbar_plot_numbers)
 
     # ensure coordinates are 2d
@@ -156,9 +161,11 @@ function plot_ica_topoplot(ica; kwargs...)
         row, col = divrem(i - 1, dims[2]) .+ (1, 1)
         grids[i] = fig[row, col] = GridLayout()
 
-        # Add spacing between subplots (only between rows and columns, not for every subplot)
-        row > 1 && rowgap!(fig.layout, row - 1, subplot_spacing)
-        col > 1 && colgap!(fig.layout, col - 1, subplot_spacing)
+        row, col = divrem(i - 1, dims[2]) .+ (1, 1)
+        grids[i] = fig[row, col] = GridLayout()
+        
+        row > 1 && (rowgap!(fig.layout, row - 1, subplot_spacing))
+        col > 1 && (colgap!(fig.layout, col - 1, subplot_spacing))
 
         # grid layout and axis
         ax = Axis(grids[i][1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
@@ -178,19 +185,28 @@ function plot_ica_topoplot(ica; kwargs...)
 
         # Do we want to add a colourbar?
         if plot_colorbar
-            # Extract all colorbar-related parameters from plot_kwargs
-            ica_colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
 
             # Create colorbar or placeholder in second column
             if i in colorbar_plot_numbers || isempty(colorbar_plot_numbers) # Use accessed list
                 Colorbar(
-                    grids[i][1, 2],
+                    grids[i][1, 1],
                     co;
-                    ica_colorbar_kwargs...
+                    colorbar_kwargs...,
                 )
             end
 
+        else
+            # this feels like a hack, but it works(?)
+            # Needed to keep plot size somewhat consistent with/without Colorbar=true
+            # TODO: find a better way to do this
+            Box(
+                grids[i][1, 1];
+                color = :transparent,
+                strokewidth = 0,
+            )
+
         end
+
 
     end
 
@@ -371,7 +387,7 @@ const PLOT_ICA_COMPONENT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_yoffset => (0, "Y-axis offset for electrode labels"),
 
     # Layout parameters
-    :figure_padding => ((0, 20, 0, 0), "Figure padding as (left, right, bottom, top)"),
+    :figure_padding => ((0, 0, 0, 0), "Figure padding as (left, right, bottom, top)"),
     :subplot_spacing => (5, "Spacing between subplots"),
 )
 
