@@ -47,9 +47,9 @@ const PLOT_ICA_TOPOPLOT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,St
      for attr in propertynames(Colorbar)]...,
 
      # TODO: see note below with Colorbar, as some of these values seem a bit hacky (e.g., width)
-    :plot_colorbar => (false, "Whether to display colorbars"),
+    :colorbar_plot => (false, "Whether to display colorbars"),
     # :colorbar_width => (Relative(6.0), "Width of the colorbar"),
-    :colorbar_width => (Relative(0.075), "Width of the colorbar"),
+    :colorbar_width => (Relative(1.0), "Width of the colorbar"),
     :colorbar_height => (Relative(0.8), "Height of the colorbar"),
     :colorbar_halign => (1.05, "Horizontal alignment of the colorbar"),
     :colorbar_valign => (0.5, "Vertical alignment of the colorbar"),
@@ -120,7 +120,7 @@ function plot_ica_topoplot(ica; kwargs...)
     subplot_spacing = pop!(plot_kwargs, :subplot_spacing)
 
     # Extract colorbar-specific kwargs
-    plot_colorbar = pop!(plot_kwargs, :plot_colorbar)
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     colorbar_plot_numbers = pop!(plot_kwargs, :colorbar_plot_numbers)
 
@@ -187,29 +187,26 @@ function plot_ica_topoplot(ica; kwargs...)
         )
         hidedecorations!(ax, grid = false)
 
-        # Do we want to add a colourbar?
-        if plot_colorbar
-
-            # Create colorbar or placeholder in second column
-            if i in colorbar_plot_numbers || isempty(colorbar_plot_numbers) # Use accessed list
-                Colorbar(
-                    grids[i][1, 1],
-                    co;
-                    colorbar_kwargs...,
-                )
-            end
-
+        # Always create consistent grid layout for colorbar
+        if colorbar_plot && (i in colorbar_plot_numbers || isempty(colorbar_plot_numbers))
+            # Create colorbar in second column
+            Colorbar(
+                grids[i][1, 2],
+                co;
+                colorbar_kwargs...,
+            )
         else
-            # this feels like a hack, but it works(?)
-            # Needed to keep plot size somewhat consistent with/without Colorbar=true
-            # TODO: find a better way to do this
+            # Create transparent placeholder to maintain consistent sizing
             Box(
-                grids[i][1, 1];
+                grids[i][1, 2];
                 color = :transparent,
                 strokewidth = 0,
             )
-
         end
+        
+        # Set consistent column widths for this grid
+        colsize!(grids[i], 1, Relative(0.99))
+        colsize!(grids[i], 2, Relative(0.01))
 
 
     end

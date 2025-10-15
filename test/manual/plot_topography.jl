@@ -15,6 +15,8 @@ eegfun.filter_data!(dat, "hp", 1)
 # Single DataFrameEeg
 #################################
 eegfun.plot_topography(dat)
+eegfun.plot_topography(dat, plot_colorbar = false)
+
 eegfun.plot_topography(dat, method = :spherical_spline)
 eegfun.plot_topography(dat, method = :multiquadratic)
 eegfun.plot_topography(dat, method = :multiquadratic, radius = 1.1)

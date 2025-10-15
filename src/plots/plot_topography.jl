@@ -116,17 +116,34 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         co.colorrange = colorrange
     end
 
+    # Always create a grid layout to maintain consistent sizing
+    grid = fig[1, 1] = GridLayout()
+    
+    # Place the existing axis in the first column
+    grid[1, 1] = ax
+    
     if pop!(plot_kwargs, :colorbar_plot)
         # Extract all colorbar-related parameters from plot_kwargs
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
 
-        # Create the colorbar with all available parameters
+        # Create the colorbar in the second column
         Colorbar(
-            fig[pop!(plot_kwargs, :colorbar_position)...],
+            grid[1, 2],
             co;
             colorbar_kwargs...
         )
+    else
+        # Create a transparent placeholder to maintain consistent sizing
+        Box(
+            grid[1, 2];
+            color = :transparent,
+            strokewidth = 0,
+        )
     end
+    
+    # Set consistent column widths
+    colsize!(grid, 1, Relative(0.99))
+    colsize!(grid, 2, Relative(0.01))
 
     # head shape
     plot_layout_2d!(fig, ax, layout; plot_kwargs...)
