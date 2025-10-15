@@ -152,7 +152,7 @@ using eegfun
         ica_res = eegfun.run_ica(dat)
 
         # EOG components (presence of vEOG and hEOG columns)
-        eog_dict, eog_df = eegfun.identify_eog_components(ica_res, dat)
+        eog_dict, eog_df = eegfun.identify_eog_components(dat, ica_res)
         @test eog_dict isa Dict
         @test all(haskey(eog_dict, k) for k in [:vEOG, :hEOG])
         @test eog_df isa DataFrame
@@ -160,14 +160,14 @@ using eegfun
         # Missing EOG columns -> returns nothing
         dat_no_eog = copy(dat)
         select!(dat_no_eog.data, Not([:vEOG, :hEOG]))
-        @test eegfun.identify_eog_components(ica_res, dat_no_eog) === nothing
+        @test eegfun.identify_eog_components(dat_no_eog, ica_res) === nothing
         # No samples selected -> returns empty dict and empty df
-        empty_eog, empty_eog_df = eegfun.identify_eog_components(ica_res, dat; sample_selection = x -> falses(nrow(x)))
+        empty_eog, empty_eog_df = eegfun.identify_eog_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
         @test empty_eog == Dict(:vEOG => Int[], :hEOG => Int[])
         @test size(empty_eog_df) == (0, 0)
 
         # ECG components
-        ecg_vec, ecg_df = eegfun.identify_ecg_components(ica_res, dat)
+        ecg_vec, ecg_df = eegfun.identify_ecg_components(dat, ica_res)
         @test ecg_vec isa Vector{Int}
         @test ecg_df isa DataFrame
         @test all(
@@ -183,17 +183,17 @@ using eegfun
             ]
         )
         # No samples selected -> empty results
-        ecg_vec0, ecg_df0 = eegfun.identify_ecg_components(ica_res, dat; sample_selection = x -> falses(nrow(x)))
+        ecg_vec0, ecg_df0 = eegfun.identify_ecg_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
         @test isempty(ecg_vec0) && size(ecg_df0) == (0, 0)
 
         # Spatial kurtosis components
-        sk_vec, sk_df = eegfun.identify_spatial_kurtosis_components(ica_res, dat)
+        sk_vec, sk_df = eegfun.identify_spatial_kurtosis_components(dat, ica_res)
         @test sk_vec isa Vector{Int}
         @test sk_df isa DataFrame
         @test all(c in propertynames(sk_df) for c in [:Component, :SpatialKurtosis, :SpatialKurtosisZScore])
 
         # Line noise components
-        ln_vec, ln_df = eegfun.identify_line_noise_components(ica_res, dat)
+        ln_vec, ln_df = eegfun.identify_line_noise_components(dat, ica_res)
         @test ln_vec isa Vector{Int}
         @test ln_df isa DataFrame
         @test all(
@@ -208,7 +208,7 @@ using eegfun
             ]
         )
         # No samples selected -> empty results
-        ln_vec0, ln_df0 = eegfun.identify_line_noise_components(ica_res, dat; sample_selection = x -> falses(nrow(x)))
+        ln_vec0, ln_df0 = eegfun.identify_line_noise_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
         @test isempty(ln_vec0) && size(ln_df0) == (0, 0)
     end
 

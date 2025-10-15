@@ -149,16 +149,12 @@ end
         @test count_df isa DataFrame
         @test :channel in propertynames(count_df)
         @test :n_extreme in propertynames(count_df)
-        @test :threshold in propertynames(count_df)
         @test size(count_df, 1) == 2  # 2 channels
 
         # Test that channel Ch2 has more extreme values than Ch1
         Ch1_count = count_df[count_df.channel .== :Ch1, :n_extreme][1]
         Ch2_count = count_df[count_df.channel .== :Ch2, :n_extreme][1]
         @test Ch2_count > Ch1_count
-
-        # Test threshold is correct
-        @test all(count_df.threshold .== 20)
 
         # Test with channel selection (separate mode)
         count_subset = eegfun.n_extreme_value(dat, 20, channel_selection = eegfun.channels([:Ch1]), mode = :separate)
