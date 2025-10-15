@@ -209,6 +209,27 @@ function plot_ica_topoplot(ica; kwargs...)
 
     end
 
+    # Add keyboard event handling for scaling
+    on(events(fig).keyboardbutton) do event
+        if event.action == Keyboard.press
+            if event.key == Keyboard.up
+                # Scale up all axes in the figure
+                for ax in fig.content
+                    if ax isa Axis
+                        _topo_scale_up!(ax)
+                    end
+                end
+            elseif event.key == Keyboard.down
+                # Scale down all axes in the figure
+                for ax in fig.content
+                    if ax isa Axis
+                        _topo_scale_down!(ax)
+                    end
+                end
+            end
+        end
+    end
+
     if display_plot
         display_figure(fig)
     end
