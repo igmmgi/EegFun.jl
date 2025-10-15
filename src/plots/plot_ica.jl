@@ -4,6 +4,7 @@
 
 # Base ICA plotting parameters (common to all ICA plots)
 const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+
     # Component selection
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
     :display_plot => (true, "Whether to display the plot"),
@@ -32,10 +33,7 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_color => (:black, "Color of electrode labels"),
     :label_xoffset => (0, "X-axis offset for electrode labels"),
     :label_yoffset => (0, "Y-axis offset for electrode labels"),
-)
 
-# Topoplot-specific parameters (extends base ICA kwargs)
-const PLOT_ICA_TOPOPLOT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,String}}(
     # Grid layout parameters
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
     :use_global_scale => (false, "Do topoplots share the same color scale based on min/max across all components?"),
@@ -45,31 +43,131 @@ const PLOT_ICA_TOPOPLOT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,St
     # This allows users to control any Colorbar parameter
     [Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") 
      for attr in propertynames(Colorbar)]...,
-
-     # TODO: see note below with Colorbar, as some of these values seem a bit hacky (e.g., width)
     :colorbar_plot => (false, "Whether to display colorbars"),
-    # :colorbar_width => (Relative(6.0), "Width of the colorbar"),
-    :colorbar_width => (Relative(1.0), "Width of the colorbar"),
-    :colorbar_height => (Relative(0.8), "Height of the colorbar"),
-    :colorbar_halign => (1.05, "Horizontal alignment of the colorbar"),
-    :colorbar_valign => (0.5, "Vertical alignment of the colorbar"),
     :colorbar_ticklabelsize => (12, "Font size for colorbar tick labels"),
     :colorbar_plot_numbers => (Int[], "Plot indices (1-based) that should have visible colorbars"),
 
-    # Layout parameters
-    :figure_padding => ((0, 30, 0, 0), "Figure padding as (left, right, bottom, top)"),
-    :subplot_spacing => (20, "Spacing between subplots"),
-))
+    # Time series parameters
+    :n_visible_components => (10, "Number of components to display simultaneously"),
+    :window_size => (2000, "Size of the time window to display"),
+
+)
+
 
 """
-    plot_ica_topoplot(ica; ...)
+    _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; kwargs...)
+
+Internal function to plot a single ICA component topography on existing figure/axis.
+
+# Arguments
+- `fig::Figure`: The Figure object
+- `ax::Axis`: The Axis object  
+- `ica::InfoIca`: The ICA result object (contains layout information).
+- `component::Int`: The component index to plot (1-based).
+
+# Keyword Arguments
+$(generate_kwargs_doc(PLOT_ICA_KWARGS))
+
+# Returns
+- `co`: The contour plot object returned by `contourf!`.
+"""
+function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
+    
+    # Extract commonly used kwargs
+    method = pop!(plot_kwargs, :method)
+    gridscale = pop!(plot_kwargs, :gridscale)
+    
+    # Ensure coordinates are 2d and 3d
+    _ensure_coordinates_2d!(ica.layout)
+    _ensure_coordinates_3d!(ica.layout)
+    
+    # Prepare data for this component
+    data = _prepare_ica_topo_data(ica, component, method, gridscale)
+    
+    # Calculate levels
+    levels = _calculate_topo_levels(data; num_levels = pop!(plot_kwargs, :num_levels))
+    
+    # Create contour plot
+    co = contourf!(
+        ax,
+        range(-1.0, 1.0, length = size(data, 1)),
+        range(-1.0, 1.0, length = size(data, 2)),
+        data,
+        levels = levels;
+        colormap = pop!(plot_kwargs, :colormap),
+        nan_color = :transparent,
+    )
+    
+    # Add colorbar if requested
+    if pop!(plot_kwargs, :colorbar_plot)
+        colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
+        Colorbar(fig[1, 2], co; colorbar_kwargs...)
+    end
+    
+    # Add head shape and electrode markers
+    plot_layout_2d!(fig, ax, ica.layout; plot_kwargs...)
+    
+    return co
+end
+
+"""
+    plot_topography(ica::InfoIca, component::Int; ...)
+
+Plot a single ICA component topography.
+
+# Arguments
+- `ica::InfoIca`: The ICA result object (contains layout information).
+- `component::Int`: The component index to plot (1-based).
+
+# Keyword Arguments
+$(generate_kwargs_doc(PLOT_ICA_KWARGS))
+
+# Returns
+- `fig::Figure`: The generated Makie Figure containing the topoplot.
+- `ax::Axis`: The Axis containing the plot.
+
+# Examples
+
+## Basic Usage
+```julia
+# Plot component 1
+fig, ax = plot_topography(ica, 1)
+
+# Plot component 5 with colorbar
+fig, ax = plot_topography(ica, 5, colorbar_plot = true)
+
+# Plot with different method
+fig, ax = plot_topography(ica, 1, method = :spherical_spline)
+```
+"""
+function plot_topography(ica::InfoIca, component::Int; kwargs...)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
+    display_plot = pop!(plot_kwargs, :display_plot)
+    
+    # Create figure and axis
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    
+    # Use the internal plotting function
+    _plot_topography!(fig, ax, ica, component; plot_kwargs...)
+    
+    if display_plot
+        display_figure(fig)
+    end
+    
+    return fig, ax
+end
+
+"""
+    plot_topography(ica::InfoIca; ...)
 
 Plot multiple ICA component topographies in a grid layout within a new Figure.
 
 # Arguments
 - `ica::InfoIca`: The ICA result object (contains layout information).
 
-$(generate_kwargs_doc(PLOT_ICA_TOPOPLOT_KWARGS))
+$(generate_kwargs_doc(PLOT_ICA_KWARGS))
 
 # Returns
 - `fig::Figure`: The generated Makie Figure containing the grid of topoplots.
@@ -79,34 +177,34 @@ $(generate_kwargs_doc(PLOT_ICA_TOPOPLOT_KWARGS))
 ## Basic Usage
 ```julia
 # Plot first 10 components (default)
-fig = plot_ica_topoplot(ica)
+fig = plot_topography(ica)
 
 # Plot specific range of components
-fig = plot_ica_topoplot(ica, component_selection = components(5:15))
+fig = plot_topography(ica, component_selection = components(5:15))
 
 # Plot specific components
-fig = plot_ica_topoplot(ica, component_selection = components([1, 3, 5, 7]))
+fig = plot_topography(ica, component_selection = components([1, 3, 5, 7]))
 
 # Plot all components (if screen can handle it)
-fig = plot_ica_topoplot(ica, component_selection = components())
+fig = plot_topography(ica, component_selection = components())
 ```
 
 ## Advanced Selection
 ```julia
 # Plot components with custom selection
-fig = plot_ica_topoplot(ica, 
+fig = plot_topography(ica, 
     component_selection = components(1:10)  # First 10 components
 )
 
 # Plot even-numbered components
-fig = plot_ica_topoplot(ica, 
+fig = plot_topography(ica, 
     component_selection = components(2:2:20)  # Even components 2, 4, 6, ..., 20
 )
 ```
 """
-function plot_ica_topoplot(ica; kwargs...)
+function plot_topography(ica::InfoIca; kwargs...)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
 
     # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
     component_selection = pop!(plot_kwargs, :component_selection)
@@ -116,8 +214,6 @@ function plot_ica_topoplot(ica; kwargs...)
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     num_levels = pop!(plot_kwargs, :num_levels)
-    figure_padding = pop!(plot_kwargs, :figure_padding)
-    subplot_spacing = pop!(plot_kwargs, :subplot_spacing)
 
     # Extract colorbar-specific kwargs
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
@@ -132,7 +228,7 @@ function plot_ica_topoplot(ica; kwargs...)
     comps = get_selected_components(ica, component_selection)
 
     # Create figure with reduced margins
-    fig = Figure( figure_padding = figure_padding) # Keep padding for right margin
+    fig = Figure() # Keep padding for right margin
     # Deal with plot dimensions
     isnothing(dims) && (dims = best_rect(length(comps)))
 
@@ -167,9 +263,6 @@ function plot_ica_topoplot(ica; kwargs...)
         row, col = divrem(i - 1, dims[2]) .+ (1, 1)
         grids[i] = fig[row, col] = GridLayout()
         
-        row > 1 && (rowgap!(fig.layout, row - 1, subplot_spacing))
-        col > 1 && (colgap!(fig.layout, col - 1, subplot_spacing))
-
         # grid layout and axis
         ax = Axis(grids[i][1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
 
@@ -374,15 +467,13 @@ mutable struct IcaComponentState
 end
 
 # Component activation-specific parameters (extends base ICA kwargs)
-const PLOT_ICA_COMPONENT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,String}}(
-    # Time series parameters
-    :n_visible_components => (10, "Number of components to display simultaneously"),
-    :window_size => (2000, "Size of the time window to display"),
-
-    # Layout parameters
-    :figure_padding => ((0, 0, 0, 0), "Figure padding as (left, right, bottom, top)"),
-    :subplot_spacing => (5, "Spacing between subplots"),
-))
+# const PLOT_ICA_COMPONENT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,String}}(
+#     # Time series parameters
+#     :n_visible_components => (10, "Number of components to display simultaneously"),
+#     :window_size => (2000, "Size of the time window to display"),
+# 
+#     # Layout parameters
+# ))
 
 """
     plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; ...)
@@ -409,7 +500,7 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 """
 function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_COMPONENT_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
 
     # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
@@ -422,7 +513,6 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     display_plot = pop!(plot_kwargs, :display_plot)
-    figure_padding = pop!(plot_kwargs, :figure_padding)
 
     # Pass kwargs to constructor
     state = IcaComponentState(
@@ -437,7 +527,7 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
     )
 
     # Create figure with padding on the right for margin
-    fig = Figure(figure_padding = figure_padding)
+    fig = Figure()
 
     # Setup GUI interface
     create_component_plots!(fig, state)
@@ -1335,8 +1425,6 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :rejected_color => (:red, "Color for rejected components"),
 
     # Layout parameters
-    :figure_padding => ((10, 10, 10, 10), "Figure padding as (left, right, bottom, top)"),
-    :subplot_spacing => (20, "Spacing between subplots"),
 )
 
 """
@@ -1379,7 +1467,7 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
     n_components = nrow(metrics_df)
 
     # Plot vEOG/hEOG Correlation Z-Scores
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure()
     ax_v = Axis(fig[1, 1], xlabel = "Component Number", ylabel = "Z-Score", title = "vEOG Correlation Z-Scores")
     # Use component indices from DataFrame for x-axis
     scatter!(ax_v, metrics_df.Component, vEOG_corr_z, color = :gray, markersize = 5)
@@ -1501,7 +1589,7 @@ function plot_spatial_kurtosis_components(kurtosis_comps::Vector{Int}, metrics_d
     display_plot = plot_kwargs[:display_plot]
 
     # Create figure
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure()
 
     # Plot spatial kurtosis z-scores
     ax = Axis(
@@ -1575,7 +1663,7 @@ function plot_ecg_component_features_(
     min_peak_ratio = plot_kwargs[:min_peak_ratio]
     display_plot = plot_kwargs[:display_plot]
     # Create figure with two panels
-    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure()
 
     # Calculate heart rates
     heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
@@ -1710,7 +1798,7 @@ function plot_line_noise_components(
     display_plot = plot_kwargs[:display_plot]
 
     # Create figure with two subplots
-    fig = Figure(size = (1000, 400), figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure(size = (1000, 400))
 
     # Plot 1: Power Ratio Z-Scores
     ax1 = Axis(
@@ -1810,7 +1898,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     # Extract commonly used values
     display_plot = plot_kwargs[:display_plot]
     # Create figure with two panels
-    fig = Figure(size = (1000, 600), figure_padding = plot_kwargs[:figure_padding])
+    fig = Figure(size = (1000, 600))
 
     # Calculate heart rates
     heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
@@ -1979,7 +2067,7 @@ a comprehensive visualization showing all identified artifact components with cl
 - `artifacts::ArtifactComponents`: The artifact components structure from `combine_artifact_components`
 
 # Keyword Arguments
-All keyword arguments from `plot_ica_topoplot` are supported, including:
+All keyword arguments from `plot_topography` are supported, including:
 - `method::Symbol`: Interpolation method (:multiquadratic or :spherical_spline)
 - `gridscale::Int`: Grid resolution for interpolation
 - `colormap`: Colormap for the topography
@@ -2005,7 +2093,7 @@ fig = plot_artifact_components(ica, artifacts)
 """
 function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
     
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)
