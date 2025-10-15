@@ -17,11 +17,22 @@ eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2
 eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 
 # ICA on continuous data
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
+# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 
 
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1), method = :multiquadratic);
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, plot_points = true);
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, plot_points = true, plot_labels = true);
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, plot_points = true, plot_labels = true, 
+point_color = :red, point_marker = :x, point_markersize = 30, head_color = :blue, head_linewidth = 5, head_radius = 1.1);
+
+eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, plot_points = true, plot_labels = true, 
+point_color = :red, point_marker = :x, point_markersize = 30, head_color = :blue, head_linewidth = 5, plot_colorbar = true);
+
+
+
+
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, plot_colorbar = true);
 
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:2), method = :spherical_spline);
@@ -37,6 +48,7 @@ eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:10), method = :multiquadratic);
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:10), method = :multiquadratic);
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
+eegfun.plot_ica_topoplot(ica_result)
 eegfun.plot_ica_topoplot(ica_result, plot_colorbar = true, use_global_scale = true);
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:4), plot_labels = false);
 eegfun.plot_ica_topoplot(ica_result, component_selection = eegfun.components(1:10), plot_colorbar = true);
