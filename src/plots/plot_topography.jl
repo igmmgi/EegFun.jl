@@ -71,6 +71,8 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     # actual data interpolation
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
+    colorbar_position = pop!(plot_kwargs, :colorbar_position)
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
     if method == :spherical_spline
         data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
@@ -116,34 +118,13 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         co.colorrange = colorrange
     end
 
-    # Always create a grid layout to maintain consistent sizing
-    grid = fig[1, 1] = GridLayout()
-    
-    # Place the existing axis in the first column
-    grid[1, 1] = ax
-    
     if pop!(plot_kwargs, :colorbar_plot)
-        # Extract all colorbar-related parameters from plot_kwargs
-        colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-
-        # Create the colorbar in the second column
         Colorbar(
-            grid[1, 2],
+           fig[colorbar_position...],
             co;
             colorbar_kwargs...
         )
-    else
-        # Create a transparent placeholder to maintain consistent sizing
-        Box(
-            grid[1, 2];
-            color = :transparent,
-            strokewidth = 0,
-        )
     end
-    
-    # Set consistent column widths
-    colsize!(grid, 1, Relative(0.99))
-    colsize!(grid, 2, Relative(0.01))
 
     # head shape
     plot_layout_2d!(fig, ax, layout; plot_kwargs...)
