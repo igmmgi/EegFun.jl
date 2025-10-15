@@ -4,13 +4,11 @@
 const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Component selection
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
-    :dims =>
-        (nothing, "Tuple specifying grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
+    :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
 
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    :use_global_scale =>
-        (false, "If true, all topoplots share the same color scale based on min/max across all components"),
+    :use_global_scale => (false, "Do topoplots share the same color scale based on min/max across all components?"),
 
     # Topography parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
@@ -46,9 +44,9 @@ const PLOT_ICA_TOPOPLOT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
      # TODO: see note below with Colorbar, as some of these values seem a bit hacky (e.g., width)
     :plot_colorbar => (false, "Whether to display colorbars"),
     # :colorbar_width => (Relative(6.0), "Width of the colorbar"),
-    :colorbar_width => (Relative(0.1), "Width of the colorbar"),
+    :colorbar_width => (Relative(0.075), "Width of the colorbar"),
     :colorbar_height => (Relative(0.8), "Height of the colorbar"),
-    :colorbar_halign => (1.1, "Horizontal alignment of the colorbar"),
+    :colorbar_halign => (1.05, "Horizontal alignment of the colorbar"),
     :colorbar_valign => (0.5, "Vertical alignment of the colorbar"),
     :colorbar_ticklabelsize => (12, "Font size for colorbar tick labels"),
     :colorbar_plot_numbers => (Int[], "Plot indices (1-based) that should have visible colorbars"),
@@ -174,14 +172,15 @@ function plot_ica_topoplot(ica; kwargs...)
         data = all_data[i]
         levels_to_use = use_global_scale ? levels_result : levels_result[i]
 
-        co = _plot_ica_topo_on_axis!(
+        co = _plot_topo_on_axis!(
             ax,
             fig,
             data,
-            ica,
+            ica.layout,
             levels_to_use;
             plot_kwargs...
         )
+        hidedecorations!(ax, grid = false)
 
         # Do we want to add a colourbar?
         if plot_colorbar
@@ -587,7 +586,8 @@ function _plot_topo_on_axis!(
     # Validate gridscale
     gridscale <= 0 && throw(ArgumentError("gridscale must be positive, got $gridscale"))
 
-    coord_range = range(-1.0, 1.0, length = gridscale)
+    # Ensure coordinate ranges match data dimensions
+    coord_range = range(-1.0, 1.0, length = size(data, 1))
     co = contourf!(ax, coord_range, coord_range, data; levels = levels, colormap = colormap, nan_color = nan_color)
     plot_layout_2d!(
         fig,
@@ -658,12 +658,12 @@ function _plot_ica_topo_in_viewer!(
     label_xoffset = get(label_kwargs, :label_xoffset, 0)
     label_yoffset = get(label_kwargs, :label_yoffset, 0)
 
-    # Plot using the new internal function
-    co = _plot_ica_topo_on_axis!(
+    # Plot using the generic topo function
+    co = _plot_topo_on_axis!(
         topo_ax,
         fig,
         data,
-        ica,
+        ica.layout,
         levels;
         gridscale = gridscale,
         colormap = colormap,
@@ -682,6 +682,7 @@ function _plot_ica_topo_in_viewer!(
         label_yoffset = label_yoffset,
         kwargs...,
     )
+    hidedecorations!(topo_ax, grid = false)
 
     return co
 end
@@ -1256,34 +1257,6 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
 end
 
 # Internal function to plot ICA topoplot on an axis
-function _plot_ica_topo_on_axis!(
-    topo_ax,
-    fig,
-    data::Matrix{Float64},
-    ica::InfoIca,
-    levels;
-    kwargs...)
-
-    # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_TOPOPLOT_KWARGS, kwargs)
-    
-    # Clear the axis
-    empty!(topo_ax)
-
-    # Plot using the existing low-level function
-    co = _plot_topo_on_axis!(
-        topo_ax,
-        fig,
-        data,
-        ica.layout,
-        levels;
-        plot_kwargs...
-    )
-
-    hidedecorations!(topo_ax, grid = false)
-
-    return co
-end
 
 # Internal function to calculate ICA topoplot levels (global or local)
 function _calculate_ica_topo_levels(
@@ -2101,12 +2074,12 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
             # Create topoplot data
             topo_data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
             
-            # Use the same plotting function as the working plot_ica_topoplot
-            _plot_ica_topo_on_axis!(
+            # Use the generic topo plotting function
+            _plot_topo_on_axis!(
                 ax,
                 fig,
                 topo_data,
-                ica,
+                ica.layout,
                 num_levels;
                 gridscale = gridscale,
                 colormap = colormap,
@@ -2117,6 +2090,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
                 plot_points = plot_points,
                 plot_labels = plot_labels
             )
+            hidedecorations!(ax, grid = false)
             
             plot_idx += 1
         end
