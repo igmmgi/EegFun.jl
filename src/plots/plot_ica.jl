@@ -1,12 +1,11 @@
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
-
-# Base ICA plotting parameters (common to all ICA plots)
 const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Component selection
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
+    :use_global_scale => (false, "Do multiple topoplots share the same color scale based on min/max across all components?"),
     :display_plot => (true, "Whether to display the plot"),
 
     # Topography parameters
@@ -14,7 +13,6 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colormap => (:jet, "Colormap for the topography"),
     :gridscale => (100, "Grid resolution for interpolation"),
     :num_levels => (20, "Number of contour levels"),
-    :nan_color => (:transparent, "Color for NaN values"),
 
     # Head shape parameters
     :head_color => (:black, "Color of the head shape outline"),
@@ -22,13 +20,13 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :head_radius => (1.0, "Radius of the head shape in mm"),
 
     # Electrode point parameters
-    :plot_points => (false, "Whether to plot electrode points"),
+    :point_plot => (false, "Whether to plot electrode points"),
     :point_marker => (:circle, "Marker style for electrode points"),
     :point_markersize => (12, "Size of electrode point markers"),
     :point_color => (:black, "Color of electrode points"),
 
     # Electrode label parameters
-    :plot_labels => (false, "Whether to plot electrode labels"),
+    :label_plot => (false, "Whether to plot electrode labels"),
     :label_fontsize => (20, "Font size for electrode labels"),
     :label_color => (:black, "Color of electrode labels"),
     :label_xoffset => (0, "X-axis offset for electrode labels"),
@@ -36,7 +34,6 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Grid layout parameters
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
-    :use_global_scale => (false, "Do topoplots share the same color scale based on min/max across all components?"),
 
     # Colorbar parameters
     # Automatically add all Colorbar attributes with their actual defaults
@@ -44,12 +41,7 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     [Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") 
      for attr in propertynames(Colorbar)]...,
     :colorbar_plot => (false, "Whether to display colorbars"),
-    :colorbar_ticklabelsize => (12, "Font size for colorbar tick labels"),
-    :colorbar_plot_numbers => (Int[], "Plot indices (1-based) that should have visible colorbars"),
-
-    # Time series parameters
-    :n_visible_components => (10, "Number of components to display simultaneously"),
-    :window_size => (2000, "Size of the time window to display"),
+    :colorbar_position => (:right, "Position for colorbar: :right, :below, or :same"),
 
 )
 
@@ -102,7 +94,8 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     # Add colorbar if requested
     if pop!(plot_kwargs, :colorbar_plot)
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-        Colorbar(fig[1, 2], co; colorbar_kwargs...)
+        colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
+        Colorbar(fig[colorbar_position...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
     end
     
     # Add head shape and electrode markers
@@ -206,29 +199,25 @@ function plot_topography(ica::InfoIca; kwargs...)
 
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
 
-    # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
+    # Extract commonly used kwargs
     component_selection = pop!(plot_kwargs, :component_selection)
     dims = pop!(plot_kwargs, :dims)
     display_plot = pop!(plot_kwargs, :display_plot)
-    use_global_scale = pop!(plot_kwargs, :use_global_scale)
-    method = pop!(plot_kwargs, :method)
-    gridscale = pop!(plot_kwargs, :gridscale)
-    num_levels = pop!(plot_kwargs, :num_levels)
 
-    # Extract colorbar-specific kwargs
-    colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-    colorbar_plot_numbers = pop!(plot_kwargs, :colorbar_plot_numbers)
-
-    # ensure coordinates are 2d
+    # ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(ica.layout)
     _ensure_coordinates_3d!(ica.layout)
 
     # Get selected components using the helper function
     comps = get_selected_components(ica, component_selection)
 
-    # Create figure with reduced margins
-    fig = Figure() # Keep padding for right margin
+    # Get colorbar settings to adjust grid if needed
+    colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
+    colorbar_position = get(plot_kwargs, :colorbar_position, (1, 2))
+    
+    # Create figure
+    fig = Figure()
+    
     # Deal with plot dimensions
     isnothing(dims) && (dims = best_rect(length(comps)))
 
@@ -243,65 +232,55 @@ function plot_topography(ica::InfoIca; kwargs...)
         throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $(length(comps))."))
     end
 
-    # Calculate all topo data first
-    n_components = length(comps)
-    all_data = Vector{Matrix{Float64}}(undef, n_components)
+    # Create axes and plot each component
     for i in eachindex(comps)
-        all_data[i] = _prepare_ica_topo_data(ica, comps[i], method, gridscale)
-    end
-
-    # Calculate levels for all plots (global or local)
-    levels_result = _calculate_ica_topo_levels(all_data, use_global_scale, num_levels)
-
-    # Create grid layouts and add plots in a single pass
-    grids = Vector{GridLayout}(undef, n_components)
-    for i in eachindex(comps)
-
-        row, col = divrem(i - 1, dims[2]) .+ (1, 1)
-        grids[i] = fig[row, col] = GridLayout()
-
-        row, col = divrem(i - 1, dims[2]) .+ (1, 1)
-        grids[i] = fig[row, col] = GridLayout()
+        # Calculate base row/col indices
+        base_row, base_col = divrem(i - 1, dims[2]) .+ (1, 1)
         
-        # grid layout and axis
-        ax = Axis(grids[i][1, 1], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
-
-        # Get pre-calculated data and levels
-        data = all_data[i]
-        levels_to_use = use_global_scale ? levels_result : levels_result[i]
-
-        co = _plot_topo_on_axis!(
-            ax,
-            fig,
-            data,
-            ica.layout,
-            levels_to_use;
-            plot_kwargs...
-        )
-        hidedecorations!(ax, grid = false)
-
-        # Always create consistent grid layout for colorbar
-        if colorbar_plot && (i in colorbar_plot_numbers || isempty(colorbar_plot_numbers))
-            # Create colorbar in second column
-            Colorbar(
-                grids[i][1, 2],
-                co;
-                colorbar_kwargs...,
-            )
+        # Get colorbar position for this component
+        colorbar_position = get(plot_kwargs, :colorbar_position, :right)
+        
+        # Convert symbol to tuple
+        if colorbar_position == :right
+            colorbar_offset = (1, 2)
+        elseif colorbar_position == :below
+            colorbar_offset = (2, 1)
+        elseif colorbar_position == :same
+            colorbar_offset = (1, 1)
         else
-            # Create transparent placeholder to maintain consistent sizing
-            Box(
-                grids[i][1, 2];
-                color = :transparent,
-                strokewidth = 0,
-            )
+            throw(ArgumentError("colorbar_position must be :right, :below, or :same, got: $colorbar_position"))
         end
         
-        # Set consistent column widths for this grid
-        colsize!(grids[i], 1, Relative(0.99))
-        colsize!(grids[i], 2, Relative(0.01))
-
-
+        # Calculate plot and colorbar positions
+        if colorbar_plot
+            if colorbar_offset[1] < colorbar_offset[2]
+                # Colorbars to the right: each component needs 2 columns
+                plot_row = base_row
+                plot_col = (base_col - 1) * 2 + 1
+                colorbar_row = plot_row + colorbar_offset[1] - 1
+                colorbar_col = plot_col + colorbar_offset[2] - 1
+            else
+                # Colorbars below: each component needs 2 rows
+                plot_row = (base_row - 1) * 2 + 1
+                plot_col = base_col
+                colorbar_row = plot_row + colorbar_offset[1] - 1
+                colorbar_col = plot_col + colorbar_offset[2] - 1
+            end
+        else
+            plot_col = base_col
+            colorbar_row = base_row
+            colorbar_col = base_col
+        end
+        
+        # Create axis with title
+        if colorbar_plot
+            ax = Axis(fig[plot_row, plot_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+        else
+            ax = Axis(fig[base_row, base_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+        end
+        
+        # Use the internal plotting function with colorbar position
+        _plot_topography!(fig, ax, ica, comps[i]; plot_kwargs..., colorbar_plot = colorbar_plot, colorbar_position = (colorbar_row, colorbar_col))
     end
 
     # Add keyboard event handling for scaling
@@ -466,14 +445,6 @@ mutable struct IcaComponentState
     end
 end
 
-# Component activation-specific parameters (extends base ICA kwargs)
-# const PLOT_ICA_COMPONENT_KWARGS = merge(PLOT_ICA_KWARGS, Dict{Symbol,Tuple{Any,String}}(
-#     # Time series parameters
-#     :n_visible_components => (10, "Number of components to display simultaneously"),
-#     :window_size => (2000, "Size of the time window to display"),
-# 
-#     # Layout parameters
-# ))
 
 """
     plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; ...)
@@ -508,8 +479,8 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
 
     # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
     component_selection = pop!(plot_kwargs, :component_selection)
-    n_visible_components = pop!(plot_kwargs, :n_visible_components)
-    window_size = pop!(plot_kwargs, :window_size)
+    n_visible_components = min(10, length(ica.ica_label))
+    window_size = min(2000, n_samples(dat))
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     display_plot = pop!(plot_kwargs, :display_plot)
@@ -636,7 +607,6 @@ Draws the topographic contour plot and head shape onto a specified `Axis`.
 # Keyword Arguments
 - `gridscale::Int=300`: Resolution of the interpolation grid.
 - `colormap=:jet`: Colormap for the contour plot.
-- `nan_color=:transparent`: Color for NaN values in the data.
 - `head_kwargs=Dict()`: Keyword arguments passed to `plot_layout_2d!` for the head outline.
 - `point_kwargs=Dict()`: Keyword arguments passed to `plot_layout_2d!` for channel points.
 - `label_kwargs=Dict()`: Keyword arguments passed to `plot_layout_2d!` for channel labels.
@@ -652,15 +622,14 @@ function _plot_topo_on_axis!(
     levels;
     gridscale = 200,
     colormap = :jet,
-    nan_color = :transparent,
     head_color = :black,
     head_linewidth = 2,
     head_radius = 1.0,
-    plot_points = false,
+    point_plot = false,
     point_marker = :circle,
     point_markersize = 12,
     point_color = :black,
-    plot_labels = false,
+    label_plot = false,
     label_fontsize = 20,
     label_color = :black,
     label_xoffset = 0,
@@ -672,7 +641,7 @@ function _plot_topo_on_axis!(
 
     # Ensure coordinate ranges match data dimensions
     coord_range = range(-1.0, 1.0, length = size(data, 1))
-    co = contourf!(ax, coord_range, coord_range, data; levels = levels, colormap = colormap, nan_color = nan_color)
+    co = contourf!(ax, coord_range, coord_range, data; levels = levels, colormap = colormap, nan_color = :transparent)
     plot_layout_2d!(
         fig,
         ax,
@@ -680,11 +649,11 @@ function _plot_topo_on_axis!(
         head_color = head_color,
         head_linewidth = head_linewidth,
         head_radius = head_radius,
-        point_plot = plot_points,
+        point_plot = point_plot,
         point_marker = point_marker,
         point_markersize = point_markersize,
         point_color = point_color,
-        label_plot = plot_labels,
+        label_plot = label_plot,
         label_fontsize = label_fontsize,
         label_color = label_color,
         label_xoffset = label_xoffset,
@@ -708,7 +677,6 @@ function _plot_ica_topo_in_viewer!(
     gridscale = 100,
     colormap = :jet,
     num_levels = 20,
-    nan_color = :transparent,
     head_kwargs = Dict(),
     point_kwargs = Dict(),
     label_kwargs = Dict(),
@@ -731,12 +699,12 @@ function _plot_ica_topo_in_viewer!(
     head_linewidth = get(head_kwargs, :head_linewidth, 2)
     head_radius = get(head_kwargs, :head_radius, 1.0)
     
-    plot_points = get(point_kwargs, :plot_points, false)
+    point_plot = get(point_kwargs, :point_plot, false)
     point_marker = get(point_kwargs, :point_marker, :circle)
     point_markersize = get(point_kwargs, :point_markersize, 12)
     point_color = get(point_kwargs, :point_color, :black)
     
-    plot_labels = get(label_kwargs, :plot_labels, false)
+    label_plot = get(label_kwargs, :label_plot, false)
     label_fontsize = get(label_kwargs, :label_fontsize, 20)
     label_color = get(label_kwargs, :label_color, :black)
     label_xoffset = get(label_kwargs, :label_xoffset, 0)
@@ -751,15 +719,14 @@ function _plot_ica_topo_in_viewer!(
         levels;
         gridscale = gridscale,
         colormap = colormap,
-        nan_color = nan_color,
         head_color = head_color,
         head_linewidth = head_linewidth,
         head_radius = head_radius,
-        plot_points = plot_points,
+        point_plot = point_plot,
         point_marker = point_marker,
         point_markersize = point_markersize,
         point_color = point_color,
-        plot_labels = plot_labels,
+        label_plot = label_plot,
         label_fontsize = label_fontsize,
         label_color = label_color,
         label_xoffset = label_xoffset,
@@ -2101,7 +2068,6 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     colormap = pop!(plot_kwargs, :colormap)
     display_plot = pop!(plot_kwargs, :display_plot)
     num_levels = pop!(plot_kwargs, :num_levels)
-    nan_color = pop!(plot_kwargs, :nan_color)
     
     # Extract head shape parameters
     head_color = pop!(plot_kwargs, :head_color)
@@ -2109,8 +2075,8 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
     head_radius = pop!(plot_kwargs, :head_radius)
     
     # Extract electrode plotting parameters
-    plot_points = pop!(plot_kwargs, :plot_points)
-    plot_labels = pop!(plot_kwargs, :plot_labels)
+    point_plot = pop!(plot_kwargs, :point_plot)
+    label_plot = pop!(plot_kwargs, :label_plot)
     
     # Get all component types and their components
     component_data = [
@@ -2165,12 +2131,11 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
                 num_levels;
                 gridscale = gridscale,
                 colormap = colormap,
-                nan_color = nan_color,
                 head_color = head_color,
                 head_linewidth = head_linewidth,
                 head_radius = head_radius,
-                plot_points = plot_points,
-                plot_labels = plot_labels
+                point_plot = point_plot,
+                label_plot = label_plot
             )
             hidedecorations!(ax, grid = false)
             

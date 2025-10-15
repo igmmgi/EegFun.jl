@@ -21,10 +21,17 @@ eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),    
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 
 
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = (3, 1), colorbar_vertical=false);
+
+
+
+
 # Test single component plotting (simplified approach)
 eegfun.plot_topography(ica_result, method = :multiquadratic);
 eegfun.plot_topography(ica_result, 1, method = :multiquadratic);
-eegfun.plot_topography(ica_result, 1, method = :multiquadratic, colorbar_plot = true);
+eegfun.plot_topography(ica_result, 1, method = :multiquadratic, colorbar_plot = true, colorbar_position = (1, 2), colorbar_vertical=true);
+eegfun.plot_topography(ica_result, 1, method = :multiquadratic, colorbar_plot = true, colorbar_position = (3, 1), colorbar_vertical=false);
 
 # Test multiple components (original approach)
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic);
@@ -37,6 +44,9 @@ eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), m
 point_color = :red, point_marker = :x, point_markersize = 30, head_color = :blue, head_linewidth = 5, colorbar_plot = true);
 
 
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, colorbar_plot = true);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, 
+colorbar_plot = true, colorbar_position = (3, 1));
 
 
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, colorbar_plot = true);
@@ -44,9 +54,13 @@ eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), m
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:2), method = :spherical_spline);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:2), method = :spherical_spline, colorbar_plot = true);
 
+
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = (2, 1), colorbar_vertical=false);
+
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, dims = (4, 1));
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = false);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_plot_numbers = [2]);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_plot_numbers = [1, 3]);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_plot_numbers = [1]);
@@ -58,6 +72,7 @@ eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4),
 eegfun.plot_topography(ica_result)
 eegfun.plot_topography(ica_result, colorbar_plot = true, use_global_scale = true);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), plot_labels = false);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), plot_labels = false, colorbar_plot = true);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10), colorbar_plot = true);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10), colorbar_plot = true, colorbar_plot_numbers = [5, 10]);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10), colorbar_plot = true, colorbar_plot_numbers = [1, 5, 10]);
