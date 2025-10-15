@@ -243,7 +243,7 @@ function preprocess_eeg_data(config::String)
                     component_artifacts =
                         combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
                     println(component_artifacts)
-                    # plot_ica_topoplot(ica_result)
+                    # plot_topography(ica_result)
                     plot_ica_component_activation(dat, ica_result)
 
                     remove_ica_components!(
