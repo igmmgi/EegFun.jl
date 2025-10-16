@@ -868,6 +868,49 @@ cleaned_epochs = reject_epochs(epochs, :is_vEOG)
 """
 reject_epochs(dat::EpochData, bad_column::Symbol) = reject_epochs(dat, [bad_column])
 
+"""
+    reject_epochs(dat::Vector{EpochData}, bad_column::Symbol)
+
+Remove epochs that contain any true values in the specified boolean column for each EpochData in the vector.
+
+# Arguments
+- `dat::Vector{EpochData}`: Vector of epoched data to filter
+- `bad_column::Symbol`: Column name to check for true values
+
+# Returns
+- `Vector{EpochData}`: Vector of new EpochData objects with bad epochs removed
+
+# Examples
+```julia
+# Remove epochs with extreme values from multiple datasets
+cleaned_epochs = reject_epochs(epochs_list, :is_extreme_value_100)
+
+# Remove epochs with EOG artifacts from multiple datasets
+cleaned_epochs = reject_epochs(epochs_list, :is_vEOG)
+```
+"""
+reject_epochs(dat::Vector{EpochData}, bad_column::Symbol) = reject_epochs.(dat, bad_column)
+
+"""
+    reject_epochs(dat::Vector{EpochData}, bad_columns::Vector{Symbol})
+
+Remove epochs that contain any true values in the specified boolean columns for each EpochData in the vector.
+
+# Arguments
+- `dat::Vector{EpochData}`: Vector of epoched data to filter
+- `bad_columns::Vector{Symbol}`: Vector of column names to check for true values
+
+# Returns
+- `Vector{EpochData}`: Vector of new EpochData objects with bad epochs removed
+
+# Examples
+```julia
+# Remove epochs with multiple artifact types from multiple datasets
+cleaned_epochs = reject_epochs(epochs_list, [:is_extreme_value_100, :is_vEOG, :is_hEOG])
+```
+"""
+reject_epochs(dat::Vector{EpochData}, bad_columns::Vector{Symbol}) = reject_epochs.(dat, bad_columns)
+
 
 # ============================================================================ #
 #                           EPOCH TABLE FUNCTIONS                             #

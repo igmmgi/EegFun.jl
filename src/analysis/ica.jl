@@ -1262,6 +1262,66 @@ end
 
 
 """
+    identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(), kwargs...)
+
+Identify all types of artifact components in one unified call.
+
+# Arguments
+- `dat::ContinuousData`: The continuous data
+- `ica::InfoIca`: The ICA result object
+- `sample_selection::Function`: Sample selection function (default: samples())
+- `kwargs...`: Additional keyword arguments passed to individual identification functions
+
+# Returns
+- `ArtifactComponents`: Combined structure containing all identified artifact components
+- `Dict{Symbol, DataFrame}`: Dictionary containing metrics DataFrames for each component type:
+  - `:eog_metrics`: EOG component metrics
+  - `:ecg_metrics`: ECG component metrics  
+  - `:line_noise_metrics`: Line noise component metrics
+  - `:channel_noise_metrics`: Channel noise component metrics
+
+# Examples
+```julia
+# Basic usage
+artifacts, metrics = identify_components(dat, ica_result)
+
+# With custom sample selection
+artifacts, metrics = identify_components(dat, ica_result, 
+    sample_selection = samples_not(:is_extreme_value_100))
+
+# Access specific metrics
+eog_metrics = metrics[:eog_metrics]
+ecg_metrics = metrics[:ecg_metrics]
+```
+"""
+function identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(), kwargs...)
+    # Identify EOG components
+    eog_comps, eog_metrics_df = identify_eog_components(dat, ica; sample_selection = sample_selection, kwargs...)
+    
+    # Identify ECG components  
+    ecg_comps, ecg_metrics_df = identify_ecg_components(dat, ica; sample_selection = sample_selection, kwargs...)
+    
+    # Identify line noise components
+    line_noise_comps, line_noise_metrics_df = identify_line_noise_components(dat, ica; kwargs...)
+    
+    # Identify channel noise components (spatial kurtosis)
+    channel_noise_comps, channel_noise_metrics_df = identify_spatial_kurtosis_components(dat, ica; kwargs...)
+    
+    # Combine all components
+    artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+    
+    # Combine all metrics
+    metrics = Dict{Symbol, DataFrame}(
+        :eog_metrics => eog_metrics_df,
+        :ecg_metrics => ecg_metrics_df,
+        :line_noise_metrics => line_noise_metrics_df,
+        :channel_noise_metrics => channel_noise_metrics_df
+    )
+    
+    return artifacts, metrics
+end
+
+"""
     get_all_components(artifacts::ArtifactComponents)
 
 Get all unique artifact component indices as a single vector.

@@ -114,6 +114,5 @@ include("examples/signal_example_1.jl")
 include("examples/signal_example_2.jl")
 include("examples/plot_gui.jl")
 include("examples/simulate_erp.jl")
-include("examples/lrp_example.jl")
 
 end # module eegfun 

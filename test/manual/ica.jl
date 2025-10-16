@@ -9,7 +9,8 @@ eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
-eegfun.filter_data!(dat, "hp", 1)
+eegfun.filter_data!(dat, "hp", 0.5)
+#eegfun.filter_data!(dat, "hp", 1)
 # eegfun.resample!(dat, 4)
 eegfun.is_extreme_value!(dat, 100);
 
@@ -18,6 +19,7 @@ eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),    
 
 # ICA on continuous data
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 
 

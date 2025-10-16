@@ -97,75 +97,37 @@ function preprocess_eeg_data(config::String)
                 # read raw data file and create our Julia DataFrame
                 dat = create_eeg_dataframe(read_bdf(data_file), layout)
 
-                # rereference the data
-                rereference!(dat, Symbol(cfg["preprocess"]["reference_channel"]))
-
-                # Save the results
+                # Save the original data in Julia format
                 if cfg["files"]["output"]["save_continuous_data"]
                     @info "Saving continuous data"
                     jldsave(make_output_filename(output_directory, data_file, "_continuous"); dat = dat)
                 end
 
-                # initial high-pass filter to remove DC offset/slow drifts
-                if cfg["filter"]["highpass"]["apply"]
-                    filter_data!(
-                        dat,
-                        "hp",
-                        cfg["filter"]["highpass"]["freq"];
-                        order = cfg["filter"]["highpass"]["order"],
-                        filter_method = cfg["filter"]["highpass"]["method"],
-                        filter_func = cfg["filter"]["highpass"]["func"],
-                    )
-                end
+                # Create comprehensive preprocessing configuration
+                preprocess_cfg = PreprocessConfig(cfg["preprocess"])
+                
+                # rereference the data
+                @info "Rereferencing with channel: $(preprocess_cfg.reference_channel)"
+                rereference!(dat, Symbol(preprocess_cfg.reference_channel))
 
-                # initial low-pass filter 
-                if cfg["filter"]["lowpass"]["apply"]
-                    filter_data!(
-                        dat,
-                        "lp",
-                        cfg["filter"]["lowpass"]["freq"];
-                        order = cfg["filter"]["lowpass"]["order"],
-                        filter_method = cfg["filter"]["lowpass"]["method"],
-                        filter_func = cfg["filter"]["lowpass"]["func"],
-                    )
-                end
+                # Apply filters based on configuration
+                @info "Filtering data with configuration: $(preprocess_cfg.filter)"
+                filter_data!(dat, preprocess_cfg.filter)
 
-                # caculate vEOG and hEOG channels
-                channel_difference!(
-                    dat,
-                    channel_selection1 = channels(Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][1])),
-                    channel_selection2 = channels(Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][2])),
-                    channel_out        = Symbol.(cfg["preprocess"]["eog"]["vEOG_channels"][3][1]),
-                )
-                channel_difference!(
-                    dat,
-                    channel_selection1 = channels(Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][1])),
-                    channel_selection2 = channels(Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][2])),
-                    channel_out        = Symbol.(cfg["preprocess"]["eog"]["hEOG_channels"][3][1]),
-                )
+                # Calculate EOG channels based on configuration
+                @info "Calculating EOG channels based on configuration: $(preprocess_cfg.eog)"
+                calculate_eog_channels!(dat, preprocess_cfg.eog)
 
-                # autodetect EOG signals
-                detect_eog_onsets!(
-                    dat,
-                    cfg["preprocess"]["eog"]["vEOG_criterion"],
-                    Symbol(cfg["preprocess"]["eog"]["vEOG_channels"][3][1]),
-                    Symbol("is_" * cfg["preprocess"]["eog"]["vEOG_channels"][3][1]),
-                )
-                detect_eog_onsets!(
-                    dat,
-                    cfg["preprocess"]["eog"]["hEOG_criterion"],
-                    Symbol(cfg["preprocess"]["eog"]["hEOG_channels"][3][1]),
-                    Symbol("is_" * cfg["preprocess"]["eog"]["hEOG_channels"][3][1]),
-                )
+                # Autodetect EOG signals
+                @info "Autodetecting EOG signals based on configuration: $(preprocess_cfg.eog)"
+                detect_eog_signals!(dat, preprocess_cfg.eog)
 
                 # detect extreme values
+                @info "Detecting extreme values based on configuration: $(preprocess_cfg.eeg["artifact_value_criterion"])"
                 is_extreme_value!(
                     dat,
-                    cfg["preprocess"]["eeg"]["extreme_value_criterion"],
-                    mode = :combined,
-                    channel_out = Symbol(
-                        "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
-                    ),
+                    preprocess_cfg.eeg["artifact_value_criterion"],
+                    channel_out = Symbol( "is_extreme_value" * "_" * string(preprocess_cfg.eeg["artifact_value_criterion"])),
                 )
 
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
@@ -175,76 +137,38 @@ function preprocess_eeg_data(config::String)
                     dat_ica = copy(dat)
                     dat_cleaned = copy(dat)
 
-                    if cfg["filter"]["ica_highpass"]["apply"]
-                        # apply high-pass filter to data
-                        filter_data!(
-                            dat_ica,
-                            "hp",
-                            cfg["filter"]["ica_highpass"]["freq"];
-                            order = cfg["filter"]["ica_highpass"]["order"],
-                            filter_method = cfg["filter"]["ica_highpass"]["method"],
-                            filter_func = cfg["filter"]["ica_highpass"]["func"],
-                        )
-                    end
-
-                    if cfg["filter"]["ica_lowpass"]["apply"]
-                        # apply low-pass filter to data
-                        filter_data!(
-                            dat_ica,
-                            "lp",
-                            cfg["filter"]["ica_lowpass"]["freq"];
-                            order = cfg["filter"]["ica_lowpass"]["order"],
-                            filter_method = cfg["filter"]["ica_lowpass"]["method"],
-                            filter_func = cfg["filter"]["ica_lowpass"]["func"],
-                        )
-                    end
+                    # Apply ICA-specific filters
+                    filter_data!(dat_ica, preprocess_cfg.filter, filter_sections = ["ica_highpass", "ica_lowpass"])
 
                     ica_result = run_ica(
                         dat_ica;
                         sample_selection = samples_not(
                             Symbol(
-                                "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                                "is_extreme_value" * "_" * string(preprocess_cfg.eeg["artifact_value_criterion"]),
                             ),
                         ),
                     )
 
-                    # automatically identify components that are likely to be artifacts
-                    eog_comps, eog_comps_metrics_df = identify_eog_components(
-                        ica_result,
+                    # Identify all artifact components in one unified call
+                    component_artifacts, component_metrics = identify_components(
                         dat_ica,
+                        ica_result,
                         sample_selection = samples_not(
                             Symbol(
-                                "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
+                                "is_extreme_value" * "_" * string(preprocess_cfg.eeg["artifact_value_criterion"]),
                             ),
                         ),
                     )
-                    ecg_comps, ecg_comps_metrics_df = identify_ecg_components(
-                        ica_result,
-                        dat_ica,
-                        sample_selection = samples_not(
-                            Symbol(
-                                "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
-                            ),
-                        ),
-                    )
-                    line_noise_comps, line_noise_comps_metrics_df = identify_line_noise_components(
-                        ica_result,
-                        dat_ica,
-                        sample_selection = samples_not(
-                            Symbol(
-                                "is_extreme_value" * "_" * string(cfg["preprocess"]["eeg"]["extreme_value_criterion"]),
-                            ),
-                        ),
-                    )
-                    channel_noise_comps, channel_noise_comps_metrics_df =
-                        identify_spatial_kurtosis_components(ica_result, dat_ica)
 
-                    # Combine above component artifact results into a single structure
-                    component_artifacts =
-                        combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
-                    println(component_artifacts)
-                    # plot_topography(ica_result)
-                    plot_ica_component_activation(dat, ica_result)
+                    # Print component metrics to log files
+                    @info "EOG Component Metrics:"
+                    log_pretty_table(component_metrics[:eog_metrics], title = "EOG Component Metrics")
+                    @info "ECG Component Metrics:"
+                    log_pretty_table(component_metrics[:ecg_metrics], title = "ECG Component Metrics")
+                    @info "Line Noise Component Metrics:"
+                    log_pretty_table(component_metrics[:line_noise_metrics], title = "Line Noise Component Metrics")
+                    @info "Channel Noise Component Metrics:"
+                    log_pretty_table(component_metrics[:channel_noise_metrics], title = "Channel Noise Component Metrics")
 
                     remove_ica_components!(
                         dat_cleaned,
@@ -263,42 +187,24 @@ function preprocess_eeg_data(config::String)
                 end
 
                 # epoch data
-                epochs_original = [
-                    extract_epochs(
-                        dat,
-                        idx,
-                        epoch_cfg,
-                        cfg["preprocess"]["epoch_start"],
-                        cfg["preprocess"]["epoch_end"],
-                    ) for (idx, epoch_cfg) in enumerate(epoch_cfgs)
-                ]
+                epochs_original = extract_epochs(dat, epoch_cfgs, preprocess_cfg.eeg["epoch_start"], preprocess_cfg.eeg["epoch_end"])
 
                 # detect standard artifact values
                 is_extreme_value!(
                     dat_cleaned,
-                    cfg["preprocess"]["eeg"]["artifact_value_criterion"],
-                    mode = :combined,
+                    preprocess_cfg.eeg["artifact_value_criterion"],
                     channel_out = Symbol(
-                        "is_artifact_value" * "_" * string(cfg["preprocess"]["eeg"]["artifact_value_criterion"]),
+                        "is_artifact_value" * "_" * string(preprocess_cfg.eeg["artifact_value_criterion"]),
                     ),
                 )
 
-                epochs_cleaned = [
-                    extract_epochs(
-                        dat_cleaned,
-                        idx,
-                        epoch_cfg,
-                        cfg["preprocess"]["epoch_start"],
-                        cfg["preprocess"]["epoch_end"],
-                    ) for (idx, epoch_cfg) in enumerate(epoch_cfgs)
-                ]
+                epochs_cleaned = extract_epochs(dat_cleaned, epoch_cfgs, preprocess_cfg.eeg["epoch_start"], preprocess_cfg.eeg["epoch_end"])
 
-                epochs_cleaned = reject_epochs.(
+
+                epochs_cleaned = reject_epochs(
                     epochs_cleaned,
-                    Ref(
-                        Symbol(
-                            "is_artifact_value" * "_" * string(cfg["preprocess"]["eeg"]["artifact_value_criterion"]),
-                        ),
+                    Symbol(
+                        "is_artifact_value" * "_" * string(preprocess_cfg.eeg["artifact_value_criterion"]),
                     ),
                 );
 
@@ -325,13 +231,13 @@ function preprocess_eeg_data(config::String)
 
                 # save erp data
                 if cfg["files"]["output"]["save_erp_data_original"]
-                    erps_original = [average_epochs(epoch) for epoch in epochs_original]
+                    erps_original = average_epochs(epochs_original)
                     @info "Saving erp data (original)"
                     jldsave(make_output_filename(output_directory, data_file, "_erps_original"); erps = erps_original)
                 end
 
                 if cfg["files"]["output"]["save_erp_data_cleaned"]
-                    erps_cleaned = [average_epochs(epoch) for epoch in epochs_cleaned]
+                    erps_cleaned = average_epochs(epochs_cleaned)
                     @info "Saving erp data (cleaned)"
                     jldsave(make_output_filename(output_directory, data_file, "_erps_cleaned"); erps = erps_cleaned)
                 end

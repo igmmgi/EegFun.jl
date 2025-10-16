@@ -98,3 +98,101 @@ end
 
 # generates all non-mutating versions
 @add_nonmutating channel_difference!
+
+"""
+    calculate_eog_channels!(dat::EegData, eog_cfg::Dict)
+
+Calculate EOG channels based on configuration dictionary. Modifies the data in place.
+
+# Arguments
+- `dat::EegData`: EegData object to modify
+- `eog_cfg::Dict`: Configuration dictionary containing EOG channel settings
+
+# Configuration Structure
+The `eog_cfg` should contain:
+- `"vEOG_channels"`: Vector of 3 elements: [channels1, channels2, output_name]
+- `"hEOG_channels"`: Vector of 3 elements: [channels1, channels2, output_name]
+
+# Examples
+```julia
+# Calculate EOG channels based on config
+calculate_eog_channels!(dat, cfg["preprocess"]["eog"])
+
+# Manual configuration
+eog_cfg = Dict(
+    "vEOG_channels" => [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
+    "hEOG_channels" => [["F9"], ["F10"], ["hEOG"]]
+)
+calculate_eog_channels!(dat, eog_cfg)
+```
+"""
+function calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
+    # Calculate vertical EOG channels
+    vEOG_cfg = eog_cfg.vEOG_channels
+    channel_difference!(
+        dat,
+        channel_selection1 = channels(Symbol.(vEOG_cfg[1])),
+        channel_selection2 = channels(Symbol.(vEOG_cfg[2])),
+        channel_out = Symbol(vEOG_cfg[3][1])
+    )
+
+    # Calculate horizontal EOG channels
+    hEOG_cfg = eog_cfg.hEOG_channels
+    channel_difference!(
+        dat,
+        channel_selection1 = channels(Symbol.(hEOG_cfg[1])),
+        channel_selection2 = channels(Symbol.(hEOG_cfg[2])),
+        channel_out = Symbol(hEOG_cfg[3][1])
+    )
+end
+
+# Convenience method for Dict input
+function calculate_eog_channels!(dat::EegData, eog_cfg::Dict)
+    calculate_eog_channels!(dat, EogConfig(eog_cfg))
+end
+
+"""
+    detect_eog_signals!(dat::EegData, eog_cfg::EogConfig)
+
+Detect EOG onsets for both vertical and horizontal EOG channels based on configuration.
+
+# Arguments
+- `dat::EegData`: The EEG data object
+- `eog_cfg::EogConfig`: EOG configuration object containing vEOG and hEOG settings
+
+# Example
+```julia
+eog_cfg = EogConfig(
+    vEOG_criterion = 50.0,
+    hEOG_criterion = 50.0,
+    vEOG_channels = [["Fp1"], ["Fp2"], ["vEOG"]],
+    hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
+)
+detect_eog_signals!(dat, eog_cfg)
+```
+"""
+function detect_eog_signals!(dat::EegData, eog_cfg::EogConfig)
+    # Detect vertical EOG onsets
+    vEOG_cfg = eog_cfg.vEOG_channels
+    detect_eog_onsets!(
+        dat,
+        eog_cfg.vEOG_criterion,
+        Symbol(vEOG_cfg[3][1]),
+        Symbol("is_" * vEOG_cfg[3][1])
+    )
+    
+    # Detect horizontal EOG onsets
+    hEOG_cfg = eog_cfg.hEOG_channels
+    detect_eog_onsets!(
+        dat,
+        eog_cfg.hEOG_criterion,
+        Symbol(hEOG_cfg[3][1]),
+        Symbol("is_" * hEOG_cfg[3][1])
+    )
+end
+
+# Convenience method for Dict input
+function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
+    detect_eog_signals!(dat, EogConfig(eog_cfg))
+end
+

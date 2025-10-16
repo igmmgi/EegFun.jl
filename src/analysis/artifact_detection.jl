@@ -62,6 +62,48 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
 end
 
 """
+    detect_eog_signals!(dat::EegData, eog_cfg::Dict)
+
+Detect EOG onsets for both vertical and horizontal EOG channels based on configuration.
+
+# Arguments
+- `dat::EegData`: The EEG data object
+- `eog_cfg::Dict`: EOG configuration dictionary containing vEOG and hEOG settings
+
+# Example
+```julia
+eog_cfg = Dict(
+    "vEOG_criterion" => 50.0,
+    "hEOG_criterion" => 50.0,
+    "vEOG_channels" => [["Fp1"], ["Fp2"], ["vEOG"]],
+    "hEOG_channels" => [["F9"], ["F10"], ["hEOG"]]
+)
+detect_eog_signals!(dat, eog_cfg)
+```
+"""
+function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
+    # Detect vertical EOG onsets
+    vEOG_cfg = eog_cfg["vEOG_channels"]
+    detect_eog_onsets!(
+        dat,
+        eog_cfg["vEOG_criterion"],
+        Symbol(vEOG_cfg[3][1]),
+        Symbol("is_" * vEOG_cfg[3][1])
+    )
+    
+    # Detect horizontal EOG onsets
+    hEOG_cfg = eog_cfg["hEOG_channels"]
+    detect_eog_onsets!(
+        dat,
+        eog_cfg["hEOG_criterion"],
+        Symbol(hEOG_cfg[3][1]),
+        Symbol("is_" * hEOG_cfg[3][1])
+    )
+end
+
+
+
+"""
     _is_extreme_value(signal::AbstractVector{Float64}, threshold::Float64)
 
 Detect extreme values in a signal using threshold crossing.
