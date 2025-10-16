@@ -6,12 +6,6 @@ Preprocess EEG data according to the specified configuration file.
 
 # Arguments
 - `config::String`: Path to the configuration file in TOML format
-
-# Suggested improvements:
-# TODO: Break into smaller functions:
-#   - setup_preprocessing(config) -> (config_data, layout, epoch_conditions, output_dir)
-#   - process_single_file(file, config_data, layout, epoch_conditions, output_dir)
-#   - generate_preprocessing_report(results, output_dir)
 """
 function preprocess_eeg_data(config::String)
 
@@ -23,14 +17,11 @@ function preprocess_eeg_data(config::String)
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
 
     try
+
+        # logging start of preprocessing, load user config, default config and merge
         @info "EEG Preprocessing started at $(now()) ..."
         @info "Configuration file: $config"
-
-        # check if config file exists and load
-        if !isfile(config)
-            error_msg = "Config file does not exist: $config"
-            @minimal_error error_msg
-        end
+        !isfile(config) && @minimal_error "Config file does not exist: $config"
         cfg = load_config(config)
 
         # try and merge user config above with default config
@@ -42,51 +33,41 @@ function preprocess_eeg_data(config::String)
         @info "Checking if raw data file(s) exist ..."
         raw_data_files = get_files(cfg["files"]["input"]["directory"], cfg["files"]["input"]["raw_data_files"])
         raw_data_files_exist = check_files_exist(raw_data_files)
-        if !raw_data_files_exist
-            @minimal_error "Missing raw data files requested within TOML file!"
-        end
+        !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
         @info "Found $(length(raw_data_files)) raw data files: $(join(raw_data_files, ", "))"
 
-        # We now need some code to read the epoch conditions defined within the toml file
-        # For ease, these are defined in a separate toml file
-        # See XXX for examples
-        @info "Reading epoch conditions from $(cfg["files"]["input"]["epoch_condition_file"])"
-        if !isfile(cfg["files"]["input"]["epoch_condition_file"])
-            @minimal_error "Epoch definition file does not exist: $(cfg["files"]["input"]["epoch_condition_file"])"
-        end
+        # Read the epoch conditions defined within the toml file (See XXX for examples)
+        !isfile(cfg["files"]["input"]["epoch_condition_file"]) && @minimal_error "File missing: $(cfg["files"]["input"]["epoch_condition_file"])"
         epoch_cfgs = parse_epoch_conditions(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
-        @info "Epoch conditions loaded successfully"
+        @info "Epoch conditions file: $(cfg["files"]["input"]["epoch_condition_file"]) loaded successfully"
 
         # Find and load layout file
         layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
-        if layout_file === nothing
-            @minimal_error "Electrode configuration file not found: $layout_name"
-        end
+        layout_file === nothing && @minimal_error "Electrode configuration file not found: $layout_name"
         layout = read_layout(layout_file)
-        @info "Electrode layout loaded from $layout_file"
+        @info "Layout file: $layout_file loaded successfully"
 
         # Check if requested output directory exists and if not, create it
         output_directory = cfg["files"]["output"]["directory"]
-        if !isdir(output_directory)
-            mkdir(output_directory)
-            @info "Created output directory: $output_directory"
-        end
+        !isdir(output_directory) && mkdir(output_directory)
+        @info "Output directory: $output_directory"
 
         # print config to output directory
         print_config(cfg, joinpath(output_directory, "config.toml"))
+        @info "Configuration printed to output directory: $output_directory"
 
-        # take layout file and add in 2D and 3D coordinates
+        # Layout coordinates and calculation of channel neighbours (2D)
         polar_to_cartesian_xy!(layout)
         polar_to_cartesian_xyz!(layout)
-
         get_layout_neighbours_xy!(layout, cfg["preprocess"]["layout"]["neighbour_criterion"])
         print_layout_neighbours(layout, joinpath(output_directory, "neighbours_xy.toml"))
+        @info "Layout neighbours printed to output directory: $output_directory"
 
+        # Actual start of preprocessing pipeline!
         # Track processing results
         processed_files = 0
         failed_files = String[]
-
-        # Process files in parallel
+        # TODO: embarrasingly parallel? use Threads.@threads?
         for data_file in raw_data_files
             try
                 @info "Processing $data_file"
@@ -95,6 +76,7 @@ function preprocess_eeg_data(config::String)
                 setup_logging(joinpath(output_directory, "$(basename_without_ext(data_file)).log"))
 
                 # read raw data file and create our Julia DataFrame
+                # TODO: update for different file types!
                 dat = create_eeg_dataframe(read_bdf(data_file), layout)
 
                 # Save the original data in Julia format
@@ -254,10 +236,8 @@ function preprocess_eeg_data(config::String)
         end
 
         # Write final summary
-        @info "Preprocessing complete: $processed_files files processed successfully, $(length(failed_files)) files failed"
-        if !isempty(failed_files)
-            @info "Failed files: $(join(failed_files, ", "))"
-        end
+        @info "Preprocessing complete: $processed_files success, $(length(failed_files)) fail"
+        !isempty(failed_files) && @info "Failed files: $(join(failed_files, ", "))"
 
         # Print combined epoch counts
         if !isempty(all_epoch_counts)
@@ -267,12 +247,11 @@ function preprocess_eeg_data(config::String)
         end
 
     finally
-        # close global logging and move log file to output directory
         close_global_logging()
         log_source = "preprocess_eeg_data.log"
-        log_dest = joinpath(output_directory, "preprocess_eeg_data.log")
-        if log_source != log_dest
-            mv(log_source, log_dest, force = true)
+        log_destination = joinpath(output_directory, "preprocess_eeg_data.log")
+        if log_source != log_destination
+            mv(log_source, log_destination, force = true)
         end
     end
 
