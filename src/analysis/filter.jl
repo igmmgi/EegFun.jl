@@ -259,6 +259,60 @@ end
 # generates all non-mutating versions
 @add_nonmutating filter_data!
 
+"""
+    filter_data!(dat::EegData, filter_cfg::Dict)
+
+Apply filters to EEG data based on configuration dictionary. Modifies the data in place.
+
+# Arguments
+- `dat::EegData`: EegData object to filter
+- `filter_cfg::Dict`: Configuration dictionary containing filter settings
+
+# Configuration Structure
+The `filter_cfg` should contain filter sections with keys like:
+- `"highpass"`, `"lowpass"`: Standard filters
+- `"ica_highpass"`, `"ica_lowpass"`: ICA-specific filters
+- Any other filter section with keys `"apply"`, `"freq"`, `"order"`, `"method"`, `"func"`
+
+# Examples
+```julia
+# Apply standard filters
+filter_data!(dat, cfg["filter"])
+
+# Apply ICA-specific filters
+filter_data!(dat, cfg["filter"], filter_sections = ["ica_highpass", "ica_lowpass"])
+
+# Apply only highpass filter
+filter_data!(dat, Dict("highpass" => Dict("apply" => true, "freq" => 1.0, "order" => 2, "method" => "iir", "func" => "filtfilt")))
+```
+"""
+function filter_data!(dat::EegData, filter_cfg::Dict; filter_sections::Vector{String} = ["highpass", "lowpass"])
+    for section in filter_sections
+        if haskey(filter_cfg, section) && filter_cfg[section]["apply"]
+            section_cfg = filter_cfg[section]
+            
+            # Map section names to filter types
+            filter_type = if startswith(section, "ica_")
+                # Remove "ica_" prefix and map to filter type
+                base_section = section[5:end]
+                base_section == "highpass" ? "hp" : base_section == "lowpass" ? "lp" : base_section
+            else
+                # Map section names to filter types
+                section == "highpass" ? "hp" : section == "lowpass" ? "lp" : section
+            end
+            
+            filter_data!(
+                dat,
+                filter_type,
+                section_cfg["freq"];
+                order = section_cfg["order"],
+                filter_method = section_cfg["method"],
+                filter_func = section_cfg["func"],
+            )
+        end
+    end
+end
+
 
 # =============================================================================
 # FILTER ANALYSIS AND CHARACTERIZATION

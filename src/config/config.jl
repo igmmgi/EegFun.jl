@@ -53,7 +53,7 @@ function _filter_param_spec(prefix, apply, freq, min_freq, max_freq, order, min_
     # fmt: off
     Dict(
         "$prefix.apply"  => bool_param("Apply: true/false", apply),
-        "$prefix.method" => string_param("Filter type", "fir", allowed = ["fir", "iir"]),
+        "$prefix.method" => string_param("Filter type", "iir", allowed = ["fir", "iir"]),
         "$prefix.func"   => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
         "$prefix.freq"   => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
         "$prefix.order"  => number_param("Filter order", order, min_order, max_order),
