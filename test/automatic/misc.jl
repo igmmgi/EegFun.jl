@@ -149,14 +149,14 @@ using eegfun
         time = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
         # Test with IntervalTime
-        interval_time = eegfun.IntervalTime(0.1, 0.4)
+        interval_time = eegfun.IntervalTime(start=0.1, stop=0.4)
         interval_idx = eegfun.validate_baseline_interval(time, interval_time)
-        @test interval_idx isa eegfun.IntervalIdx
-        @test interval_idx.interval_start == 2  # 0.1 corresponds to index 2
-        @test interval_idx.interval_end == 5    # 0.4 corresponds to index 5
+        @test interval_idx isa eegfun.IntervalIndex
+        @test interval_idx.start == 2  # 0.1 corresponds to index 2
+        @test interval_idx.stop == 5    # 0.4 corresponds to index 5
 
-        # Test with IntervalIdx
-        interval_idx = eegfun.IntervalIdx(2, 5)
+        # Test with IntervalIndex
+        interval_idx = eegfun.IntervalIndex(start=2, stop=5)
         validated = eegfun.validate_baseline_interval(time, interval_idx)
         @test validated == interval_idx
 

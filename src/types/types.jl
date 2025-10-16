@@ -191,13 +191,34 @@ defining analysis windows, artifact rejection periods, or other
 time-based operations.
 
 # Fields
-- `interval_start::Float64`: Start time of the interval in seconds
-- `interval_end::Float64`: End time of the interval in seconds
+- `start::Float64`: Start time of the interval in seconds
+- `stop::Float64`: End time of the interval in seconds
 """
-struct IntervalTime
-    interval_start::Float64
-    interval_end::Float64
+@kwdef struct IntervalTime
+    start::Float64
+    stop::Float64
 end
+
+
+"""
+    IntervalIndex
+
+Defines a time interval using sample indices.
+
+This type represents a time window or interval using sample indices rather
+than time values. This is useful for operations that work directly with
+sample positions, such as data slicing, artifact detection, or epoch
+extraction.
+
+# Fields
+- `start::Int`: Start sample index (1-based)
+- `stop::Int`: End sample index (inclusive)
+"""
+@kwdef struct IntervalIndex
+    start::Int
+    stop::Int
+end
+
 
 """
     EpochCondition
@@ -229,24 +250,6 @@ It supports complex trigger patterns and timing relationships between events.
     before::Union{Nothing,Int} = nothing
 end
 
-"""
-    IntervalIdx
-
-Defines a time interval using sample indices.
-
-This type represents a time window or interval using sample indices rather
-than time values. This is useful for operations that work directly with
-sample positions, such as data slicing, artifact detection, or epoch
-extraction.
-
-# Fields
-- `interval_start::Int`: Start sample index (1-based)
-- `interval_end::Int`: End sample index (inclusive)
-"""
-struct IntervalIdx
-    interval_start::Int
-    interval_end::Int
-end
 
 # === ICA TYPES ===
 """
@@ -385,63 +388,42 @@ end
 
 # === DISPLAY FUNCTIONS ===
 function Base.show(io::IO, layout::Layout)
-    # Show metadata first
     n_electrodes = size(layout.data, 1)
     has_2d = has_2d_coords(layout)
     has_3d = has_3d_coords(layout)
     has_neigh = has_neighbours(layout)
 
     println(io, "Layout ($n_electrodes channels)")
-    println(
-        io,
-        "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")",
-    )
+    println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")")
+    
     if has_neigh
         avg_neighbours = average_number_of_neighbours(layout.neighbours)
         println(io, "Criterion: $(layout.criterion), Avg neighbours: $(round(avg_neighbours, digits=1))")
     end
     println(io)
 
-    # Format the data for display
+    # Format numeric columns for display
     display_data = copy(layout.data)
-
-    # Format numeric columns with different precision based on column type
     for col in names(display_data)
         if eltype(display_data[!, col]) <: Number
-            # Coordinate columns - always show exactly 2 decimal places
             display_data[!, col] = [@sprintf("%.2f", val) for val in display_data[!, col]]
         end
     end
 
-    # Create a combined view with first and last rows
+    # Don't print too much noise!
     if n_electrodes <= 10
-        # Show all rows if 10 or fewer
-        PrettyTables.pretty_table(
-            io,
-            display_data,
-            alignment = :r,  # Right align all columns
-        )
+        PrettyTables.pretty_table(io, display_data, alignment = :r)
     else
-        # Show first 5 and last 5 rows with ellipsis
-        first_rows = display_data[1:5, :]
-        last_rows = display_data[(end-4):end, :]
-
-        # Create ellipsis row
-        ellipsis_row = DataFrame()
-        for col in names(display_data)
-            ellipsis_row[!, col] = ["..."]
-        end
-
-        # Combine the data
+        # Show first 3, ellipsis, last 3
+        first_rows = display_data[1:3, :]
+        last_rows = display_data[(end-2):end, :]
+        
+        # Create ellipsis row more concisely
+        ellipsis_row = DataFrame([col => ["..."] for col in names(display_data)])
         combined_data = vcat(first_rows, ellipsis_row, last_rows)
-
-        PrettyTables.pretty_table(
-            io,
-            combined_data,
-            alignment = :r,  # Right align all columns
-        )
-
-        println(io, "\n[showing first 5 and last 5 of $n_electrodes electrodes]")
+        
+        PrettyTables.pretty_table(io, combined_data, alignment = :r)
+        println(io, "\n[showing first 3 and last 3 of $n_electrodes electrodes]")
     end
 end
 
@@ -452,7 +434,6 @@ end
 
 # Custom show method for neighbours OrderedDict
 function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
-    # Use the text/plain MIME type to ensure our custom method is used
     show(io, MIME"text/plain"(), neighbours_dict)
 end
 
@@ -472,23 +453,21 @@ function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symb
     )
     println(io)
 
-    # Show entries based on size
+    # Don't print too much noise!
     if n_electrodes <= 6
-        # Show all entries
         for (electrode, neighbours) in neighbours_dict
             _format_electrode(io, electrode, neighbours)
         end
     else
         entries = collect(neighbours_dict)
-        # First/last 3 entries
-        for i = 1:3
-            _format_electrode(io, entries[i][1], entries[i][2])
+        # Show first 3, ellipsis, last 3
+        for entry in entries[1:3]
+            _format_electrode(io, entry[1], entry[2])
         end
         println(io, "⋮")
-        for i = (n_electrodes-2):n_electrodes
-            _format_electrode(io, entries[i][1], entries[i][2])
+        for entry in entries[(end-2):end]
+            _format_electrode(io, entry[1], entry[2])
         end
-
         println(io, "[showing first 3 and last 3 of $n_electrodes electrodes]")
     end
 end

@@ -194,7 +194,7 @@ function _process_measurements_file(
 
                 if !isempty(eeg_channels)
                     # Use existing baseline infrastructure from baseline.jl
-                    interval = IntervalIdx(baseline_start_idx, baseline_end_idx)
+                    interval = IntervalIndex(start=baseline_start_idx, stop=baseline_end_idx)
                     @info "Applying baseline correction to $(length(eeg_channels)) channels over interval: $(baseline_start_idx) to $(baseline_end_idx)"
                     _apply_baseline!(dfs_to_process, eeg_channels, interval)
                 else

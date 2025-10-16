@@ -10,17 +10,17 @@ dat = eegfun.create_eeg_dataframe(dat, layout_file);
 
 eegfun.baseline!(dat)
 
-eegfun.baseline!(dat, eegfun.IntervalIdx(1, 1)); 
+eegfun.baseline!(dat, eegfun.IntervalIndex(start=1, stop=1)); 
 dat.data
 
-eegfun.baseline!(dat, eegfun.IntervalIdx(1, 2)); 
+eegfun.baseline!(dat, eegfun.IntervalIndex(start=1, stop=2)); 
 dat.data
 
-eegfun.baseline!(dat, eegfun.IntervalIdx(1, 10)); 
+eegfun.baseline!(dat, eegfun.IntervalIndex(start=1, stop=10)); 
 dat.data
 
-eegfun.baseline!(dat, eegfun.IntervalTime(0.0, 0.0)); 
+eegfun.baseline!(dat, eegfun.IntervalTime(start=0.0, stop=0.0)); 
 dat.data
 
-eegfun.baseline!(dat, eegfun.IntervalTime(0.0, 0.004)); 
+eegfun.baseline!(dat, eegfun.IntervalTime(start=0.0, stop=0.004)); 
 dat.data

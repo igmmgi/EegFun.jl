@@ -138,12 +138,12 @@ using eegfun
 
     @testset "IntervalTime" begin
         # Test constructor
-        interval = eegfun.IntervalTime(0.1, 0.5)
-        @test interval.interval_start == 0.1
-        @test interval.interval_end == 0.5
+        interval = eegfun.IntervalTime(start=0.1, stop=0.5)
+        @test interval.start == 0.1
+        @test interval.stop == 0.5
 
         # Test immutability
-        @test_throws ErrorException interval.interval_start = 0.2
+        @test_throws ErrorException interval.start = 0.2
     end
 
     @testset "EpochCondition" begin
@@ -179,14 +179,14 @@ using eegfun
         @test condition.before == 20
     end
 
-    @testset "IntervalIdx" begin
+    @testset "IntervalIndex" begin
         # Test constructor
-        interval = eegfun.IntervalIdx(10, 50)
-        @test interval.interval_start == 10
-        @test interval.interval_end == 50
+        interval = eegfun.IntervalIndex(start=10, stop=50)
+        @test interval.start == 10
+        @test interval.stop == 50
 
         # Test immutability
-        @test_throws ErrorException interval.interval_start = 20
+        @test_throws ErrorException interval.start = 20
     end
 
     @testset "IcaPrms" begin
