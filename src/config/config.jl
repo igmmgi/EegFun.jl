@@ -215,7 +215,7 @@ function _convert_any_arrays!(config::Dict; path = "")
                     end
                     config[key] = converted_value
                 catch e
-                    @warn "Failed to convert $new_path from Any array to $param_type: $e"
+                    @minimal_warning "Failed to convert $new_path from Any array to $param_type: $e"
                 end
             elseif param_type <: Vector && isa(value, Vector) && eltype(value) == Any
                 # Handle other Vector types
@@ -223,7 +223,7 @@ function _convert_any_arrays!(config::Dict; path = "")
                     inner_type = param_type.parameters[1]
                     config[key] = inner_type.(value)
                 catch e
-                    @warn "Failed to convert $new_path from Any array to $param_type: $e"
+                    @minimal_warning "Failed to convert $new_path from Any array to $param_type: $e"
                 end
             end
         end

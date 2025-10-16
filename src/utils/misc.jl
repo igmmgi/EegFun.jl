@@ -88,32 +88,32 @@ end
 
 
 """
-    validate_baseline_interval(time::AbstractVector, baseline_interval::Union{IntervalIdx,IntervalTime}) -> IntervalIdx
+    validate_baseline_interval(time::AbstractVector, baseline_interval::Union{IntervalIndex,IntervalTime}) -> IntervalIndex
 
 Validate and convert baseline interval to index format.
 
 # Arguments
 - `time::AbstractVector`: Time points vector
-- `baseline_interval::Union{IntervalIdx,IntervalTime}`: Interval to validate
+- `baseline_interval::Union{IntervalIndex,IntervalTime}`: Interval to validate
 
 # Returns
-- `IntervalIdx`: Validated interval in index format
+- `IntervalIndex`: Validated interval in index format
 
 # Throws
 - `ArgumentError`: If interval is invalid
 """
 function validate_baseline_interval(
     time::AbstractVector,
-    baseline_interval::Union{IntervalIdx,IntervalTime},
-)::IntervalIdx
+    baseline_interval::Union{IntervalIndex,IntervalTime},
+)::IntervalIndex
     if baseline_interval isa IntervalTime
         baseline_interval =
-            IntervalIdx(find_idx_start_end(time, baseline_interval.interval_start, baseline_interval.interval_end)...)
+            IntervalIndex(start=find_idx_start_end(time, baseline_interval.start, baseline_interval.stop)...)
     end
 
-    if !(1 <= baseline_interval.interval_start <= length(time)) ||
-       !(1 <= baseline_interval.interval_end <= length(time)) ||
-       !(baseline_interval.interval_start <= baseline_interval.interval_end)
+    if !(1 <= baseline_interval.start <= length(time)) ||
+       !(1 <= baseline_interval.stop <= length(time)) ||
+       !(baseline_interval.start <= baseline_interval.stop)
         @minimal_error "Invalid baseline_interval: $baseline_interval"
     end
 
@@ -122,15 +122,15 @@ end
 
 function validate_baseline_interval(
     dat::MultiDataFrameEeg,
-    baseline_interval::Union{IntervalIdx,IntervalTime},
-)::IntervalIdx
+    baseline_interval::Union{IntervalIndex,IntervalTime},
+)::IntervalIndex
     return validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
 end
 
 function validate_baseline_interval(
     dat::SingleDataFrameEeg,
-    baseline_interval::Union{IntervalIdx,IntervalTime},
-)::IntervalIdx
+    baseline_interval::Union{IntervalIndex,IntervalTime},
+)::IntervalIndex
     return validate_baseline_interval(dat.data.time, baseline_interval)
 end
 
