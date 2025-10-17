@@ -107,8 +107,8 @@ function validate_baseline_interval(
     baseline_interval::Union{IntervalIndex,IntervalTime},
 )::IntervalIndex
     if baseline_interval isa IntervalTime
-        baseline_interval =
-            IntervalIndex(start=find_idx_start_end(time, baseline_interval.start, baseline_interval.stop)...)
+        start_idx, stop_idx = find_idx_start_end(time, baseline_interval.start, baseline_interval.stop)
+        baseline_interval = IntervalIndex(start=start_idx, stop=stop_idx)
     end
 
     if !(1 <= baseline_interval.start <= length(time)) ||

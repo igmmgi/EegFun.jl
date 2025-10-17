@@ -36,7 +36,8 @@ using PrettyTables
 # using Base.Threads
 
 # Core types
-include("types/types.jl")
+include("types/core.jl")
+include("types/preprocess.jl")
 
 # Utility functions
 include("utils/error.jl")

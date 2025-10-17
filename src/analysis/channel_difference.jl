@@ -191,8 +191,4 @@ function detect_eog_signals!(dat::EegData, eog_cfg::EogConfig)
     )
 end
 
-# Convenience method for Dict input
-function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
-    detect_eog_signals!(dat, EogConfig(eog_cfg))
-end
 

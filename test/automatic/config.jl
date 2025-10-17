@@ -52,7 +52,7 @@ using eegfun
         @test haskey(eegfun.PARAMETERS, "preprocess.epoch_end")
 
         # Test parameter types
-        @test eegfun.PARAMETERS["files.input.directory"] isa eegfun.ConfigParameter{Union{Vector{String},String}}
+        @test eegfun.PARAMETERS["files.input.directory"] isa eegfun.ConfigParameter{String}
         @test eegfun.PARAMETERS["filter.highpass.freq"] isa eegfun.ConfigParameter{Real}
         @test eegfun.PARAMETERS["filter.highpass.order"] isa eegfun.ConfigParameter{Real}
         @test eegfun.PARAMETERS["files.output.save_continuous_data"] isa eegfun.ConfigParameter{Bool}
@@ -411,7 +411,7 @@ using eegfun
             config = eegfun.load_config(custom_config_path)
             @test config !== nothing
             @test config["filter"]["highpass"]["freq"] == 0.5
-            @test config["filter"]["highpass"]["method"] == "fir"  # Default value
+            @test config["filter"]["highpass"]["method"] == "iir"  # Default value
             @test config["filter"]["highpass"]["order"] == 1     # Default value
 
             # Test nested merging
@@ -705,9 +705,10 @@ using eegfun
 
     @testset "_filter_param_spec Tests" begin
         # Test filter parameter specification creation
-        filter_spec = eegfun._filter_param_spec("test.prefix", true, 1.0, 0.1, 10.0, 2, 1, 5)
+        filter_spec = eegfun._filter_param_spec("test.prefix", true, "hp", 1.0, 0.1, 10.0, 2, 1, 5)
 
         @test haskey(filter_spec, "test.prefix.apply")
+        @test haskey(filter_spec, "test.prefix.type")
         @test haskey(filter_spec, "test.prefix.method")
         @test haskey(filter_spec, "test.prefix.func")
         @test haskey(filter_spec, "test.prefix.freq")
@@ -715,10 +716,12 @@ using eegfun
 
         # Test parameter types
         @test filter_spec["test.prefix.apply"] isa eegfun.ConfigParameter{Bool}
+        @test filter_spec["test.prefix.type"] isa eegfun.ConfigParameter{Union{Vector{String},String}}
         @test filter_spec["test.prefix.method"] isa eegfun.ConfigParameter{Union{Vector{String},String}}
         @test filter_spec["test.prefix.freq"] isa eegfun.ConfigParameter{Real}
 
         # Test parameter values
+        @test filter_spec["test.prefix.type"].default == "hp"
         @test filter_spec["test.prefix.freq"].default == 1.0
         @test filter_spec["test.prefix.freq"].min == 0.1
         @test filter_spec["test.prefix.freq"].max == 10.0
