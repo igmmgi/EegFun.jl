@@ -37,7 +37,7 @@ using PrettyTables
 
 # Core types
 include("types/core.jl")
-include("types/preprocess.jl")
+include("types/pipeline.jl")
 
 # Utility functions
 include("utils/error.jl")
@@ -74,10 +74,8 @@ include("analysis/ica.jl")
 include("analysis/jackknife_average.jl")
 include("analysis/lrp.jl")
 include("analysis/mirror.jl")
-include("analysis/preprocess.jl")
+include("analysis/pipeline.jl")
 include("analysis/realign.jl")
-# include("analysis/detect_bad_epochs.jl")
-# include("analysis/epoch_rejection.jl")
 include("analysis/rereference.jl")
 include("analysis/resample.jl")
 include("analysis/tf.jl")

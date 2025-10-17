@@ -1,8 +1,5 @@
-
-
-
 """
-    preprocess_eeg_data(config::String; log_level::String = "info")
+    preprocess(config::String; log_level::String = "info")
 
 Preprocess EEG data according to the specified configuration file.
 
@@ -10,7 +7,7 @@ Preprocess EEG data according to the specified configuration file.
 - `config::String`: Path to the configuration file in TOML format
 - `log_level::String`: Log level for preprocessing ("debug", "info", "warn", "error")
 """
-function preprocess_eeg_data(config::String; log_level::String = "info")
+function preprocess(config::String; log_level::String = "info")
 
     # set up the global log for overall processing
     global_log = setup_global_logging("preprocess_eeg_data.log", log_level = log_level)
@@ -226,13 +223,13 @@ function preprocess_eeg_data(config::String; log_level::String = "info")
                 # save erp data
                 if cfg["files"]["output"]["save_erp_data_original"]
                     erps_original = average_epochs(epochs_original)
-                    @info "Saving erp data (original)"
+                    @info "Saving ERP data (original)"
                     jldsave(make_output_filename(output_directory, data_file, "_erps_original"); erps = erps_original)
                 end
 
                 if cfg["files"]["output"]["save_erp_data_cleaned"]
                     erps_cleaned = average_epochs(epochs_cleaned)
-                    @info "Saving erp data (cleaned)"
+                    @info "Saving ERP data (cleaned)"
                     jldsave(make_output_filename(output_directory, data_file, "_erps_cleaned"); erps = erps_cleaned)
                 end
 
@@ -291,28 +288,21 @@ function _eog_config_string(eog_cfg::EogConfig)
 end
 
 # Helper functions for section headers
-function section(title::String; width::Int = 80)
-    # Calculate padding to center the title
+function _center_title(title::String, width::Int)
     title_length = length(title)
     total_dashes = width - title_length - 2  # 2 spaces around title
     left_dashes = div(total_dashes, 2)
     right_dashes = total_dashes - left_dashes
-    
-    # Create the section header with blank line above
-    top_line = "-" ^ width
-    middle_line = "-" ^ left_dashes * " $title " * "-" ^ right_dashes
-    bottom_line = "-" ^ width
-    
-    return "\n$top_line\n$middle_line\n$bottom_line"
+    return "-" ^ left_dashes * " $title " * "-" ^ right_dashes
+end
+
+function section(title::String; width::Int = 80)
+    dash_line = "-" ^ width
+    middle_line = _center_title(title, width)
+    return "\n$dash_line\n$middle_line\n$dash_line"
 end
 
 function subsection(title::String; width::Int = 80)
-    # Calculate padding to center the title
-    title_length = length(title)
-    total_dashes = width - title_length - 2  # 2 spaces around title
-    left_dashes = div(total_dashes, 2)
-    right_dashes = total_dashes - left_dashes
-    
-    # Create the subsection header with blank line above
-    return "\n" * "-" ^ left_dashes * " $title " * "-" ^ right_dashes
+    return "\n" * _center_title(title, width)
 end
+
