@@ -240,7 +240,7 @@ function filter_data!(
         @minimal_warning "No channels selected for filtering"
         return nothing
     end
-    @info "filter_data! applying $filter_type filter to $(length(selected_channels)) channels"
+    @debug "filter_data! applying $filter_type filter to $(length(selected_channels)) channels"
 
     # Create and apply filter
     filter_info = create_filter(
@@ -286,30 +286,25 @@ filter_data!(dat, cfg["filter"], filter_sections = ["ica_highpass", "ica_lowpass
 filter_data!(dat, Dict("highpass" => Dict("apply" => true, "freq" => 1.0, "order" => 2, "method" => "iir", "func" => "filtfilt")))
 ```
 """
-function filter_data!(dat::EegData, filter_cfg::Dict; filter_sections::Vector{String} = ["highpass", "lowpass"])
+# Wrapper method that works directly with FilterSection
+function filter_data!(dat::EegData, section_filter::FilterSection)
+    if section_filter.apply
+        filter_data!(
+            dat,
+            section_filter.type,
+            section_filter.freq;
+            order = section_filter.order,
+            filter_method = section_filter.method,
+            filter_func = section_filter.func,
+        )
+    end
+end
+
+# Main method for FilterConfig
+function filter_data!(dat::EegData, filter_cfg::FilterConfig; filter_sections::Vector{Symbol} = [:highpass, :lowpass])
     for section in filter_sections
-        if haskey(filter_cfg, section) && filter_cfg[section]["apply"]
-            section_cfg = filter_cfg[section]
-            
-            # Map section names to filter types
-            filter_type = if startswith(section, "ica_")
-                # Remove "ica_" prefix and map to filter type
-                base_section = section[5:end]
-                base_section == "highpass" ? "hp" : base_section == "lowpass" ? "lp" : base_section
-            else
-                # Map section names to filter types
-                section == "highpass" ? "hp" : section == "lowpass" ? "lp" : section
-            end
-            
-            filter_data!(
-                dat,
-                filter_type,
-                section_cfg["freq"];
-                order = section_cfg["order"],
-                filter_method = section_cfg["method"],
-                filter_func = section_cfg["func"],
-            )
-        end
+        section_filter = getfield(filter_cfg, section)
+        filter_data!(dat, section_filter)
     end
 end
 

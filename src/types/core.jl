@@ -321,70 +321,7 @@ struct InfoIca
 end
 
 # === CONFIGURATION TYPES ===
-"""
-    EogConfig
-
-Configuration for EOG (Electrooculogram) channel calculation and detection.
-
-This type contains all the parameters needed to configure EOG channel calculation
-and artifact detection, including channel selections and detection criteria.
-
-# Fields
-- `vEOG_criterion::Float64`: Detection threshold for vertical EOG artifacts (in μV)
-- `hEOG_criterion::Float64`: Detection threshold for horizontal EOG artifacts (in μV)
-- `vEOG_channels::Vector{Vector{String}}`: Channel configuration for vertical EOG [channels1, channels2, output_channel]
-- `hEOG_channels::Vector{Vector{String}}`: Channel configuration for horizontal EOG [channels1, channels2, output_channel]
-"""
-@kwdef struct EogConfig
-    vEOG_criterion::Float64
-    hEOG_criterion::Float64
-    vEOG_channels::Vector{Vector{String}}
-    hEOG_channels::Vector{Vector{String}}
-end
-
-# Constructor from dictionary
-function EogConfig(cfg::Dict)
-    return EogConfig(
-        vEOG_criterion = cfg["vEOG_criterion"],
-        hEOG_criterion = cfg["hEOG_criterion"],
-        vEOG_channels = cfg["vEOG_channels"],
-        hEOG_channels = cfg["hEOG_channels"]
-    )
-end
-
-"""
-    PreprocessConfig
-
-Comprehensive configuration for EEG data preprocessing.
-
-This type contains all the parameters needed to configure the complete preprocessing
-pipeline, including filtering, referencing, artifact detection, and ICA settings.
-
-# Fields
-- `reference_channel::String`: Reference channel for rereferencing
-- `filter::Dict`: Filter configuration dictionary
-- `eog::EogConfig`: EOG channel calculation and detection settings
-- `eeg::Dict`: EEG-specific preprocessing settings (artifact detection, etc.)
-- `ica::Dict`: ICA configuration settings
-"""
-@kwdef struct PreprocessConfig
-    reference_channel::String
-    filter::Dict
-    eog::EogConfig
-    eeg::Dict
-    ica::Dict
-end
-
-# Constructor from dictionary
-function PreprocessConfig(cfg::Dict)
-    return PreprocessConfig(
-        reference_channel = cfg["reference_channel"],
-        filter = cfg["filter"],
-        eog = EogConfig(cfg["eog"]),
-        eeg = cfg["eeg"],
-        ica = cfg["ica"]
-    )
-end
+# Preprocessing configuration types are now in preprocess_config.jl
 
 # === DISPLAY FUNCTIONS ===
 function Base.show(io::IO, layout::Layout)

@@ -6,6 +6,7 @@ const global_log_start_time = Ref{Union{Nothing,DateTime}}(nothing)
 const saved_logger = Ref{Any}(ConsoleLogger(stdout))
 const is_file_logging = Ref{Bool}(false)
 const is_global_logging = Ref{Bool}(false)
+const current_log_level = Ref{Logging.LogLevel}(Logging.Info)
 
 """
     format_duration(duration::Millisecond)
@@ -48,7 +49,23 @@ global_log = setup_global_logging("global_analysis.log")
 write(global_log, "Direct write to global log\\n")
 ```
 """
-function setup_global_logging(log_file::String)
+function setup_global_logging(log_file::String; log_level::String = "info")
+    # Convert string log level to LogLevel
+    level = if log_level == "debug"
+        Logging.Debug
+    elseif log_level == "info"
+        Logging.Info
+    elseif log_level == "warn"
+        Logging.Warn
+    elseif log_level == "error"
+        Logging.Error
+    else
+        Logging.Info  # Default fallback
+    end
+    
+    # Store the current log level
+    current_log_level[] = level
+    
     # Close any existing global log file
     if !isnothing(global_log_handle[])
         close(global_log_handle[])
@@ -61,14 +78,16 @@ function setup_global_logging(log_file::String)
     global_log_start_time[] = now()
 
     # Write timestamp as first line
-    println(global_log_handle[], "Global Log Started: ", Dates.format(global_log_start_time[], "dd-mm-yyyy HH:MM:SS\n"))
+    println(global_log_handle[], "Start time: ", Dates.format(global_log_start_time[], "dd-mm-yyyy HH:MM:SS\n"))
 
     # Set up the global logger, but only if we're not already file logging
     if !is_file_logging[]
         # Create a logger that writes to both stdout and file
-        console_logger = ConsoleLogger(stdout)
-        file_logger = FormatLogger(global_log_handle[]) do io, args
-            println(io, args.message)
+        console_logger = ConsoleLogger(stdout, level)
+        file_logger = FormatLogger(global_log_handle[]) do io, log
+            if log.level >= level
+                println(io, log.message)
+            end
         end
 
         # Save current logger before replacing
@@ -93,7 +112,7 @@ Close the global log file and add a closing timestamp with duration.
 function close_global_logging()
     if !isnothing(global_log_handle[])
         duration = now() - global_log_start_time[]
-        println(global_log_handle[], "\nGlobal Log Duration: ", format_duration(duration))
+        println(global_log_handle[], "\nDuration: ", format_duration(duration))
         close(global_log_handle[])
         global_log_handle[] = nothing
         global_log_start_time[] = nothing
@@ -125,7 +144,23 @@ setup_logging("my_analysis.log")
 @info "This will be logged to both stdout and the file"
 ```
 """
-function setup_logging(log_file::String)
+function setup_logging(log_file::String; log_level::String = "info")
+    # Convert string log level to LogLevel
+    level = if log_level == "debug"
+        Logging.Debug
+    elseif log_level == "info"
+        Logging.Info
+    elseif log_level == "warn"
+        Logging.Warn
+    elseif log_level == "error"
+        Logging.Error
+    else
+        Logging.Info  # Default fallback
+    end
+    
+    # Store the current log level
+    current_log_level[] = level
+    
     # Close any existing log file
     if !isnothing(log_file_handle[])
         close(log_file_handle[])
@@ -146,12 +181,14 @@ function setup_logging(log_file::String)
     end
 
     # Create a logger that writes to both stdout and file
-    console_logger = ConsoleLogger(stdout)
-    file_logger = FormatLogger(log_file_handle[]) do io, args
-        println(io, args.message)
-        if !isempty(args.kwargs)
-            for (key, val) in args.kwargs
-                println(io, "$key = $val")
+    console_logger = ConsoleLogger(stdout, level)
+    file_logger = FormatLogger(log_file_handle[]) do io, log
+        if log.level >= level
+            println(io, log.message)
+            if !isempty(log.kwargs)
+                for (key, val) in log.kwargs
+                    println(io, "$key = $val")
+                end
             end
         end
     end
@@ -186,9 +223,11 @@ function close_logging()
         # Restore the appropriate logger
         if is_global_logging[]
             # Recreate global logger
-            console_logger = ConsoleLogger(stdout)
-            file_logger = FormatLogger(global_log_handle[]) do io, args
-                println(io, args.message)
+            console_logger = ConsoleLogger(stdout, current_log_level[])
+            file_logger = FormatLogger(global_log_handle[]) do io, log
+                if log.level >= current_log_level[]
+                    println(io, log.message)
+                end
             end
             global_logger(TeeLogger(console_logger, file_logger))
         else

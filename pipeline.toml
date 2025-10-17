@@ -1,6 +1,6 @@
 [files.input]
 directory = ".."
-raw_data_files = "Flank_C_3.bdf"
+# raw_data_files = "Flank_C_3.bdf"
 # raw_data_files = ["Flank_C_3.bdf"]
 raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf"]
 # raw_data_files = "\\.bdf$"
@@ -9,14 +9,53 @@ raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf"]
 layout_file = "biosemi72.csv"
 epoch_condition_file = "epochs.toml"
 
+[preprocess]
+reference_channel = "avg"
+epoch_start = -1.0
+epoch_end = 1.0
+
+[preprocess.filter]
+highpass.apply = true
+highpass.type = "hp"
+highpass.freq = 0.5
+highpass.method = "iir"
+highpass.func = "filtfilt"
+highpass.order = 1
+
+lowpass.apply = true
+lowpass.type = "lp"
+lowpass.freq = 30.0
+lowpass.method = "iir"
+lowpass.func = "filtfilt"
+lowpass.order = 3
+
+ica_highpass.apply = true
+ica_highpass.type = "hp"
+ica_highpass.freq = 1.0
+ica_highpass.method = "iir"
+ica_highpass.func = "filtfilt"
+ica_highpass.order = 1
+
+ica_lowpass.apply = false
+ica_lowpass.type = "lp"
+ica_lowpass.freq = 30.0
+ica_lowpass.method = "iir"
+ica_lowpass.func = "filtfilt"
+ica_lowpass.order = 3
+
+[preprocess.eog]
+vEOG_criterion = 50.0
+hEOG_criterion = 30.0
+vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
+hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
+
 [preprocess.eeg]
 artifact_value_criterion = 100
+extreme_value_criterion = 100
 
-[filter]
-highpass.freq = 0.5
-
-[ica]
+[preprocess.ica]
 apply = true
+percentage_of_data = 25.0
 
 [files.output]
 directory = "../output_data"

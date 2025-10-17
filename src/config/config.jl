@@ -44,15 +44,18 @@ end
 
 string_param(desc, default = ""; allowed = nothing) =
     _param(Union{Vector{String},String}, desc, default, allowed = allowed)
+simple_string_param(desc, default = ""; allowed = nothing) =
+    _param(String, desc, default, allowed = allowed)
 bool_param(desc, default = false) = _param(Bool, desc, default)
 number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
 channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, default)
 
 # Helper function to create filter parameter specifications
-function _filter_param_spec(prefix, apply, freq, min_freq, max_freq, order, min_order, max_order)
+function _filter_param_spec(prefix, apply, type, freq, min_freq, max_freq, order, min_order, max_order)
     # fmt: off
     Dict(
         "$prefix.apply"  => bool_param("Apply: true/false", apply),
+        "$prefix.type"   => string_param("Filter type identifier", type, allowed = ["hp", "lp"]),
         "$prefix.method" => string_param("Filter type", "iir", allowed = ["fir", "iir"]),
         "$prefix.func"   => string_param("Filter function", "filtfilt", allowed = ["filt", "filtfilt"]),
         "$prefix.freq"   => number_param("Cutoff frequency (Hz)", freq, min_freq, max_freq),
@@ -70,11 +73,11 @@ end
 const PARAMETERS = Dict{String,ConfigParameter}(
 
     # File paths and settings
-    "files.input.directory"            => string_param("Directory containing raw data files.", "."),
+    "files.input.directory"            => simple_string_param("Directory containing raw data files.", "."),
     "files.input.raw_data_files"       => string_param("Pattern (regex or explicit list) for raw data files to process.", "\\.bdf"),
-    "files.input.layout_file"          => string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
-    "files.input.epoch_condition_file" => string_param("TOML file that defines the condition epochs.", ""),
-    "files.output.directory"           => string_param("Directory for processed output files", "./preprocessed_files"),
+    "files.input.layout_file"          => simple_string_param("Electrode layout file name (\"*.csv\")", "biosemi72.csv"),
+    "files.input.epoch_condition_file" => simple_string_param("TOML file that defines the condition epochs.", ""),
+    "files.output.directory"           => simple_string_param("Directory for processed output files", "./preprocessed_files"),
 
     # What data should we save?
     "files.output.save_continuous_data"     => bool_param("Save continuous data?", false),
@@ -88,7 +91,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     # Preprocessing settings
     "preprocess.epoch_start"                  => number_param("Epoch start (seconds).", -1),
     "preprocess.epoch_end"                    => number_param("Epoch end (seconds).", 1),
-    "preprocess.reference_channel"            => string_param("Channels(s) to use as reference", "avg"),
+        "preprocess.reference_channel"            => simple_string_param("Channels(s) to use as reference", "avg"),
     "preprocess.layout.neighbour_criterion"   => number_param("Distance criterion (in mm) for channel neighbour definition.", 0.5, 0),
     "preprocess.eog.vEOG_channels"            => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]),
     "preprocess.eog.hEOG_channels"            => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
@@ -98,13 +101,14 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.eeg.artifact_value_criterion" => number_param("Value (mV) for defining data section as an artifact value.", 100),
 
     # ICA settings
-    "ica.apply" => bool_param("Independent Component Analysis (ICA) true/false."),
+    "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false."),
+    "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
 
     # Filtering settings - using helper function
-    _filter_param_spec("filter.highpass", true, 0.1, 0.01, 20.0, 1, 1, 4)...,
-    _filter_param_spec("filter.lowpass", false, 30.0, 5.00, 500.0, 3, 1, 8)...,
-    _filter_param_spec("filter.ica_highpass", true, 1.0, 1.00, 20.0, 1, 1, 4)...,
-    _filter_param_spec("filter.ica_lowpass", false, 30.0, 5.00, 500.0, 3, 1, 4)...,
+    _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("preprocess.filter.ica_highpass", true, "hp", 1.0, 1.00, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.ica_lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 4)...,
 )
 # fmt: on
 

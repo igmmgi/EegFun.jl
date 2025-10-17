@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-10-09 10:04:56
+# Generated on 2025-10-17 09:57:48
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -13,17 +13,17 @@
 [files.input]
 
 # Directory containing raw data files.
-# Type: Union{String, Vector{String}}
+# Type: String
 # Default: .
 directory = "."
 
 # TOML file that defines the condition epochs.
-# Type: Union{String, Vector{String}}
+# Type: String
 # Default: 
 epoch_condition_file = ""
 
 # Electrode layout file name ("*.csv")
-# Type: Union{String, Vector{String}}
+# Type: String
 # Default: biosemi72.csv
 layout_file = "biosemi72.csv"
 
@@ -36,7 +36,7 @@ raw_data_files = "\\.bdf"
 [files.output]
 
 # Directory for processed output files
-# Type: Union{String, Vector{String}}
+# Type: String
 # Default: ./preprocessed_files
 directory = "./preprocessed_files"
 
@@ -75,145 +75,6 @@ save_erp_data_original = true
 # Default: true
 save_ica_data = true
 
-# filter Settings
-[filter]
-
-# highpass Settings
-[filter.highpass]
-
-# Apply: true/false
-# Type: Bool
-# Default: true
-apply = true
-
-# Cutoff frequency (Hz)
-# Type: Real
-# Range: 0.01 ≤ value ≤ 20.0
-# Default: 0.1
-freq = 0.1
-
-# Filter function
-# Type: Union{String, Vector{String}}
-# Allowed values: filt, filtfilt
-# Default: filtfilt
-func = "filtfilt"
-
-# Filter type
-# Type: Union{String, Vector{String}}
-# Allowed values: fir, iir
-# Default: iir
-method = "iir"
-
-# Filter order
-# Type: Real
-# Range: 1 ≤ value ≤ 4
-# Default: 1
-order = 1
-
-# ica_highpass Settings
-[filter.ica_highpass]
-
-# Apply: true/false
-# Type: Bool
-# Default: true
-apply = true
-
-# Cutoff frequency (Hz)
-# Type: Real
-# Range: 1.0 ≤ value ≤ 20.0
-# Default: 1.0
-freq = 1.0
-
-# Filter function
-# Type: Union{String, Vector{String}}
-# Allowed values: filt, filtfilt
-# Default: filtfilt
-func = "filtfilt"
-
-# Filter type
-# Type: Union{String, Vector{String}}
-# Allowed values: fir, iir
-# Default: iir
-method = "iir"
-
-# Filter order
-# Type: Real
-# Range: 1 ≤ value ≤ 4
-# Default: 1
-order = 1
-
-# ica_lowpass Settings
-[filter.ica_lowpass]
-
-# Apply: true/false
-# Type: Bool
-# Default: false
-apply = false
-
-# Cutoff frequency (Hz)
-# Type: Real
-# Range: 5.0 ≤ value ≤ 500.0
-# Default: 30.0
-freq = 30.0
-
-# Filter function
-# Type: Union{String, Vector{String}}
-# Allowed values: filt, filtfilt
-# Default: filtfilt
-func = "filtfilt"
-
-# Filter type
-# Type: Union{String, Vector{String}}
-# Allowed values: fir, iir
-# Default: iir
-method = "iir"
-
-# Filter order
-# Type: Real
-# Range: 1 ≤ value ≤ 4
-# Default: 3
-order = 3
-
-# lowpass Settings
-[filter.lowpass]
-
-# Apply: true/false
-# Type: Bool
-# Default: false
-apply = false
-
-# Cutoff frequency (Hz)
-# Type: Real
-# Range: 5.0 ≤ value ≤ 500.0
-# Default: 30.0
-freq = 30.0
-
-# Filter function
-# Type: Union{String, Vector{String}}
-# Allowed values: filt, filtfilt
-# Default: filtfilt
-func = "filtfilt"
-
-# Filter type
-# Type: Union{String, Vector{String}}
-# Allowed values: fir, iir
-# Default: iir
-method = "iir"
-
-# Filter order
-# Type: Real
-# Range: 1 ≤ value ≤ 8
-# Default: 3
-order = 3
-
-# ica Settings
-[ica]
-
-# Independent Component Analysis (ICA) true/false.
-# Type: Bool
-# Default: false
-apply = false
-
 # preprocess Settings
 [preprocess]
 
@@ -228,7 +89,7 @@ epoch_end = 1
 epoch_start = -1
 
 # Channels(s) to use as reference
-# Type: Union{String, Vector{String}}
+# Type: String
 # Default: avg
 reference_channel = "avg"
 
@@ -269,6 +130,172 @@ vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
 # Range: 0 ≤ value
 # Default: 50
 vEOG_criterion = 50
+
+# filter.highpass Settings
+[preprocess.filter.highpass]
+
+# Apply: true/false
+# Type: Bool
+# Default: true
+apply = true
+
+# Cutoff frequency (Hz)
+# Type: Real
+# Range: 0.01 ≤ value ≤ 20.0
+# Default: 0.1
+freq = 0.1
+
+# Filter function
+# Type: Union{String, Vector{String}}
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+func = "filtfilt"
+
+# Filter type
+# Type: Union{String, Vector{String}}
+# Allowed values: fir, iir
+# Default: iir
+method = "iir"
+
+# Filter order
+# Type: Real
+# Range: 1 ≤ value ≤ 4
+# Default: 1
+order = 1
+
+# Filter type identifier
+# Type: Union{String, Vector{String}}
+# Allowed values: hp, lp
+# Default: hp
+type = "hp"
+
+# filter.ica_highpass Settings
+[preprocess.filter.ica_highpass]
+
+# Apply: true/false
+# Type: Bool
+# Default: true
+apply = true
+
+# Cutoff frequency (Hz)
+# Type: Real
+# Range: 1.0 ≤ value ≤ 20.0
+# Default: 1.0
+freq = 1.0
+
+# Filter function
+# Type: Union{String, Vector{String}}
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+func = "filtfilt"
+
+# Filter type
+# Type: Union{String, Vector{String}}
+# Allowed values: fir, iir
+# Default: iir
+method = "iir"
+
+# Filter order
+# Type: Real
+# Range: 1 ≤ value ≤ 4
+# Default: 1
+order = 1
+
+# Filter type identifier
+# Type: Union{String, Vector{String}}
+# Allowed values: hp, lp
+# Default: hp
+type = "hp"
+
+# filter.ica_lowpass Settings
+[preprocess.filter.ica_lowpass]
+
+# Apply: true/false
+# Type: Bool
+# Default: false
+apply = false
+
+# Cutoff frequency (Hz)
+# Type: Real
+# Range: 5.0 ≤ value ≤ 500.0
+# Default: 30.0
+freq = 30.0
+
+# Filter function
+# Type: Union{String, Vector{String}}
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+func = "filtfilt"
+
+# Filter type
+# Type: Union{String, Vector{String}}
+# Allowed values: fir, iir
+# Default: iir
+method = "iir"
+
+# Filter order
+# Type: Real
+# Range: 1 ≤ value ≤ 4
+# Default: 3
+order = 3
+
+# Filter type identifier
+# Type: Union{String, Vector{String}}
+# Allowed values: hp, lp
+# Default: lp
+type = "lp"
+
+# filter.lowpass Settings
+[preprocess.filter.lowpass]
+
+# Apply: true/false
+# Type: Bool
+# Default: false
+apply = false
+
+# Cutoff frequency (Hz)
+# Type: Real
+# Range: 5.0 ≤ value ≤ 500.0
+# Default: 30.0
+freq = 30.0
+
+# Filter function
+# Type: Union{String, Vector{String}}
+# Allowed values: filt, filtfilt
+# Default: filtfilt
+func = "filtfilt"
+
+# Filter type
+# Type: Union{String, Vector{String}}
+# Allowed values: fir, iir
+# Default: iir
+method = "iir"
+
+# Filter order
+# Type: Real
+# Range: 1 ≤ value ≤ 8
+# Default: 3
+order = 3
+
+# Filter type identifier
+# Type: Union{String, Vector{String}}
+# Allowed values: hp, lp
+# Default: lp
+type = "lp"
+
+# ica Settings
+[preprocess.ica]
+
+# Independent Component Analysis (ICA) true/false.
+# Type: Bool
+# Default: false
+apply = false
+
+# Percentage of data to use for ICA (0-100).
+# Type: Real
+# Range: 0.0 ≤ value ≤ 100.0
+# Default: 100.0
+percentage_of_data = 100.0
 
 # layout Settings
 [preprocess.layout]

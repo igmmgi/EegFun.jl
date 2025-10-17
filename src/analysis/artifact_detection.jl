@@ -47,7 +47,7 @@ detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
 """
 
 function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
-    @info "detect_eog_onsets!: Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion)"
+    @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
     if channel_in ∉ propertynames(dat.data)
         @minimal_error_throw("channel $(channel_in) not found in data")
     end
@@ -81,6 +81,9 @@ eog_cfg = Dict(
 detect_eog_signals!(dat, eog_cfg)
 ```
 """
+
+
+
 function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
     # Detect vertical EOG onsets
     vEOG_cfg = eog_cfg["vEOG_channels"]
@@ -100,8 +103,6 @@ function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
         Symbol("is_" * hEOG_cfg[3][1])
     )
 end
-
-
 
 """
     _is_extreme_value(signal::AbstractVector{Float64}, threshold::Float64)
