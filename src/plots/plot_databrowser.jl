@@ -1,3 +1,4 @@
+
 # Default parameters for databrowser plots with descriptions
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
@@ -880,7 +881,10 @@ end
 
 function handle_keyboard_events!(fig, ax, state)
     on(events(fig).keyboardbutton) do event
-        if event.action in (Keyboard.press, Keyboard.repeat) && haskey(KEYBOARD_ACTIONS, event.key)
+        if event.action == Keyboard.press && event.key == Keyboard.i
+            # Show help for databrowser
+            show_plot_help(:databrowser)
+        elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(KEYBOARD_ACTIONS, event.key)
             action = KEYBOARD_ACTIONS[event.key]
             if state.selection.visible[]
                 handle_selection_movement!(ax, state, action)

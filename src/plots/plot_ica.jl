@@ -1,3 +1,4 @@
+
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
@@ -1090,7 +1091,10 @@ end
 # Setup keyboard interactions
 function setup_keyboard_interactions!(fig, state)
     on(events(fig).keyboardbutton) do event
-        if event.action in (Keyboard.press, Keyboard.repeat)
+        if event.action == Keyboard.press && event.key == Keyboard.i
+            # Show help for ICA
+            show_plot_help(:ica)
+        elseif event.action in (Keyboard.press, Keyboard.repeat)
             if event.key == Keyboard.left || event.key == Keyboard.right
                 # Handle x-axis scrolling
                 current_range = state.xrange[]

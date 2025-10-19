@@ -1,5 +1,3 @@
-# Shared interactivity functions for plot_erp and plot_epochs
-
 # =============================================================================
 # SHARED CONSTANTS
 # =============================================================================
@@ -67,6 +65,19 @@ function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, keyboard_
             _handle_shared_navigation!(axes, action)
         end
     end
+end
+
+"""
+    _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, plot_type::Symbol, keyboard_actions::Dict)
+
+Set up keyboard interactivity for plots with help system.
+"""
+function _setup_shared_interactivity!(fig::Figure, axes::Vector{Axis}, plot_type::Symbol, keyboard_actions::Dict = SHARED_KEYBOARD_ACTIONS)
+    # Set up basic navigation
+    _setup_shared_interactivity!(fig, axes, keyboard_actions)
+    
+    # Set up help system
+    setup_help_interaction!(fig, plot_type)
 end
 
 """

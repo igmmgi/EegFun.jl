@@ -1,7 +1,3 @@
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
-# (Colorbar defaults are now in plot_misc.jl)
 
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
@@ -543,7 +539,10 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothi
     # Handle keyboard events at the figure level
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
-            if event.key == Keyboard.up
+            if event.key == Keyboard.i
+                # Show help for topography
+                show_plot_help(:topography)
+            elseif event.key == Keyboard.up
                 _topo_scale_up!(ax)
             elseif event.key == Keyboard.down
                 _topo_scale_down!(ax)
