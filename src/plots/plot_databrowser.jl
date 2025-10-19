@@ -77,10 +77,13 @@ mutable struct SelectionState
     bounds::Observable{Tuple{Float64,Float64}}
     visible::Observable{Bool}
     rectangle::Makie.Poly
+    selected_regions::Observable{Vector{Tuple{Float64,Float64}}}  # Store multiple regions
+    region_plots::Vector{Makie.Poly}  # Store plot objects for each region
     function SelectionState(ax, plot_kwargs)
         initial_points = [Point2f(0.0, 0.0)]
         poly_element = poly!(ax, initial_points, color = plot_kwargs[:selection_color], visible = false)
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element)
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, 
+            Observable(Tuple{Float64,Float64}[]), Makie.Poly[])
     end
 end
 
@@ -500,20 +503,38 @@ function show_additional_menu(state)
 
     # Create the menu figure
     menu_fig = Figure()
-    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)", "Spectrum"]
+    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)", "Spectrum", "Get Selected Regions"]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
     for btn in menu_buttons
         on(btn.clicks) do n
-            selected_data = subset_selected_data(state)
-            println(selected_data)
-            if btn.label[] == "Topoplot (multiquadratic)"
-                plot_topography(selected_data, method = :multiquadratic)
-            elseif btn.label[] == "Topoplot (spherical_spline)"
-                plot_topography(selected_data, method = :spherical_spline)
-            elseif btn.label[] == "Spectrum"
-                plot_channel_spectrum(selected_data)
+            if btn.label[] == "Get Selected Regions"
+                # Get the boolean vector of selected regions
+                selected_regions_bool = get_selected_regions_bool(state)
+                println("Selected regions boolean vector:")
+                println("Length: $(length(selected_regions_bool))")
+                println("Number of selected samples: $(sum(selected_regions_bool))")
+                println("Selected regions: $(state.selection.selected_regions[])")
+                println()
+                println("To access this data programmatically:")
+                println("  fig, ax, state = plot_databrowser(dat)  # if not already done")
+                println("  selected_info = get_selected_regions_info(state)")
+                println("  bool_vector = selected_info.bool_vector")
+                println("  regions = selected_info.regions")
+                println()
+                println("Or directly:")
+                println("  bool_vector = get_selected_regions_bool(state)")
+            else
+                selected_data = subset_selected_data(state)
+                println(selected_data)
+                if btn.label[] == "Topoplot (multiquadratic)"
+                    plot_topography(selected_data, method = :multiquadratic)
+                elseif btn.label[] == "Topoplot (spherical_spline)"
+                    plot_topography(selected_data, method = :spherical_spline)
+                elseif btn.label[] == "Spectrum"
+                    plot_channel_spectrum(selected_data)
+                end
             end
         end
     end
@@ -748,6 +769,38 @@ function is_within_selection(state, mouse_x)
     return mouse_x >= min(bounds[1], bounds[2]) && mouse_x <= max(bounds[1], bounds[2])
 end
 
+function find_clicked_region(state, mouse_x)
+    # Check if click is within any of the selected regions
+    regions = state.selection.selected_regions[]
+    for (i, (start_time, end_time)) in enumerate(regions)
+        if mouse_x >= min(start_time, end_time) && mouse_x <= max(start_time, end_time)
+            return i
+        end
+    end
+    return nothing
+end
+
+function remove_region_from_selection!(ax, state, region_idx)
+    # Remove the region from the list
+    regions = state.selection.selected_regions[]
+    if 1 <= region_idx <= length(regions)
+        # Remove the region plot
+        plot_to_remove = state.selection.region_plots[region_idx]
+        delete!(ax.scene, plot_to_remove)
+        deleteat!(state.selection.region_plots, region_idx)
+        
+        # Remove the region from the list
+        deleteat!(regions, region_idx)
+        state.selection.selected_regions[] = regions
+        
+        # Call the global callback function if provided
+        if _region_callback[] !== nothing
+            bool_vector = get_selected_regions_bool(state)
+            _region_callback[](bool_vector, regions)
+        end
+    end
+end
+
 # Selection management functions
 function start_selection!(ax, state, mouse_x)
     state.selection.active[] = true
@@ -761,6 +814,12 @@ function finish_selection!(ax, state, mouse_x)
     state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
     update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
     state.selection.rectangle.visible[] = true
+    
+    # Add this selection to the list of selected regions
+    add_region_to_selection!(ax, state, state.selection.bounds[][1], mouse_x)
+    
+    # Clear the temporary selection rectangle after adding to permanent regions
+    clear_x_region_selection!(state)
 end
 
 function handle_mouse_events!(ax, state)
@@ -817,9 +876,13 @@ end
 
 function handle_left_click!(ax, state, event, mouse_x)
     if event.action == Mouse.press
-        if state.selection.visible[] && is_within_selection(state, mouse_x)
-            clear_x_region_selection!(state)
+        # Check if click is within any existing selected region
+        clicked_region_idx = find_clicked_region(state, mouse_x)
+        if clicked_region_idx !== nothing
+            # Remove the clicked region
+            remove_region_from_selection!(ax, state, clicked_region_idx)
         else
+            # Start a new selection
             start_selection!(ax, state, mouse_x)
         end
     elseif event.action == Mouse.release && state.selection.active[]
@@ -828,7 +891,9 @@ function handle_left_click!(ax, state, event, mouse_x)
 end
 
 function handle_right_click!(ax, state, mouse_x)
-    if state.selection.visible[] && is_within_selection(state, mouse_x)
+    # Check if right-click is within any selected region
+    clicked_region_idx = find_clicked_region(state, mouse_x)
+    if clicked_region_idx !== nothing
         show_additional_menu(state)
     end
 end
@@ -884,6 +949,9 @@ function handle_keyboard_events!(fig, ax, state)
         if event.action == Keyboard.press && event.key == Keyboard.i
             # Show help for databrowser
             show_plot_help(:databrowser)
+        elseif event.action == Keyboard.press && event.key == Keyboard.c
+            # Clear all selected regions
+            clear_all_selected_regions!(ax, state)
         elseif event.action in (Keyboard.press, Keyboard.repeat) && haskey(KEYBOARD_ACTIONS, event.key)
             action = KEYBOARD_ACTIONS[event.key]
             if state.selection.visible[]
@@ -938,12 +1006,111 @@ function update_x_region_selection!(ax, state, x1, x2)
     state.selection.rectangle.visible[] = true
 end
 
+function add_region_to_selection!(ax, state, x1, x2)
+    # Ensure x1 <= x2
+    if x1 > x2
+        x1, x2 = x2, x1
+    end
+    
+    # Add to selected regions
+    current_regions = state.selection.selected_regions[]
+    new_region = (x1, x2)
+    push!(current_regions, new_region)
+    state.selection.selected_regions[] = current_regions
+    
+    # Create a permanent region plot
+    ylims = ax.limits[][2]
+    region_points = Point2f[
+        Point2f(Float64(x1), Float64(ylims[1])),
+        Point2f(Float64(x2), Float64(ylims[1])),
+        Point2f(Float64(x2), Float64(ylims[2])),
+        Point2f(Float64(x1), Float64(ylims[2])),
+    ]
+    region_plot = poly!(ax, region_points, color = (:blue, 0.3), strokecolor = :transparent)
+    push!(state.selection.region_plots, region_plot)
+    
+    # Call the global callback function if provided
+    if _region_callback[] !== nothing
+        bool_vector = get_selected_regions_bool(state)
+        _region_callback[](bool_vector, current_regions)
+    end
+end
+
 function clear_x_region_selection!(state)
     # Set to a single point instead of empty vector to avoid CairoMakie issues
     state.selection.rectangle[1] = [Point2f(0.0, 0.0)]
     state.selection.bounds[] = (0.0, 0.0)
     state.selection.visible[] = false
     state.selection.rectangle.visible[] = false
+end
+
+function clear_all_selected_regions!(ax, state)
+    # Clear all region plots
+    for plot in state.selection.region_plots
+        delete!(ax.scene, plot)
+    end
+    empty!(state.selection.region_plots)
+    
+    # Clear the selected regions list
+    state.selection.selected_regions[] = Tuple{Float64,Float64}[]
+    
+    # Call the global callback function if provided
+    if _region_callback[] !== nothing
+        bool_vector = get_selected_regions_bool(state)
+        _region_callback[](bool_vector, Tuple{Float64,Float64}[])
+    end
+end
+
+"""
+    get_selected_regions_bool(state::DataBrowserState) -> Vector{Bool}
+
+Returns a boolean vector indicating which samples are within the selected regions.
+The vector has the same length as the total number of samples in the data.
+"""
+function get_selected_regions_bool(state::DataBrowserState)
+    current_data = get_current_data(state.data)
+    total_samples = nrow(current_data)
+    time_data = current_data.time
+    bool_vector = falses(total_samples)
+    
+    for (start_time, end_time) in state.selection.selected_regions[]
+        # Find the closest sample indices
+        start_idx = argmin(abs.(time_data .- start_time))
+        end_idx = argmin(abs.(time_data .- end_time))
+        
+        # Ensure indices are within bounds and start <= end
+        start_idx = max(1, min(start_idx, total_samples))
+        end_idx = max(1, min(end_idx, total_samples))
+        if start_idx > end_idx
+            start_idx, end_idx = end_idx, start_idx
+        end
+        
+        # Mark the region as selected
+        bool_vector[start_idx:end_idx] .= true
+    end
+    
+    return bool_vector
+end
+
+"""
+    get_selected_regions_info(state::DataBrowserState) -> NamedTuple
+
+Returns detailed information about the selected regions including:
+- `bool_vector`: Boolean vector of selected samples
+- `regions`: List of (start_time, end_time) tuples
+- `n_samples`: Number of selected samples
+- `n_regions`: Number of selected regions
+"""
+function get_selected_regions_info(state::DataBrowserState)
+    bool_vector = get_selected_regions_bool(state)
+    regions = state.selection.selected_regions[]
+    
+    return (
+        bool_vector = bool_vector,
+        regions = regions,
+        n_samples = sum(bool_vector),
+        n_regions = length(regions)
+    )
 end
 
 function subset_selected_data(state::ContinuousDataBrowserState)
@@ -1338,7 +1505,19 @@ get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
-function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
+# Global variable to store the region callback
+const _region_callback = Ref{Union{Nothing,Function}}(nothing)
+
+# Force recompilation of DataBrowserState
+function _force_recompile()
+    # This function forces Julia to recompile the DataBrowserState type
+    return nothing
+end
+
+function plot_databrowser(dat::EegData, ica = nothing; region_callback = nothing, kwargs...)
+    # Store the callback globally
+    _region_callback[] = region_callback
+    
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
 
@@ -1353,6 +1532,7 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = get_title(dat))
     state = create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
+    # Call setup_ui directly - method dispatch should work
     setup_ui(fig, ax, state, dat, ica, plot_kwargs)
 
     # Render and return
@@ -1360,7 +1540,7 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     draw_extra_channel!(ax, state)
 
     display(fig)
-    return fig, ax
+    return fig, ax, state
 end
 
 function plot_vertical_lines!(ax, marker, active)
