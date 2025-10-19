@@ -499,7 +499,7 @@ function create_epoch_menu(fig, ax, state)
     return hcat(slider_epoch, label)
 end
 
-function show_additional_menu(state)
+function show_additional_menu(state, clicked_region_idx = nothing)
 
     # Create the menu figure
     menu_fig = Figure()
@@ -526,7 +526,7 @@ function show_additional_menu(state)
                 println("Or directly:")
                 println("  bool_vector = get_selected_regions_bool(state)")
             else
-                selected_data = subset_selected_data(state)
+                selected_data = subset_selected_data(state, clicked_region_idx)
                 println(selected_data)
                 if btn.label[] == "Topoplot (multiquadratic)"
                     plot_topography(selected_data, method = :multiquadratic)
@@ -894,7 +894,7 @@ function handle_right_click!(ax, state, mouse_x)
     # Check if right-click is within any selected region
     clicked_region_idx = find_clicked_region(state, mouse_x)
     if clicked_region_idx !== nothing
-        show_additional_menu(state)
+        show_additional_menu(state, clicked_region_idx)
     end
 end
 
@@ -1113,8 +1113,19 @@ function get_selected_regions_info(state::DataBrowserState)
     )
 end
 
-function subset_selected_data(state::ContinuousDataBrowserState)
-    x_min, x_max = minmax(state.selection.bounds[]...)
+function subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
+    # Use the clicked region if specified, otherwise use the most recent region, or fall back to bounds
+    if clicked_region_idx !== nothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
+        # Use the specific clicked region
+        x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
+    elseif !isempty(state.selection.selected_regions[])
+        # Use the last (most recent) selected region
+        x_min, x_max = state.selection.selected_regions[][end]
+    else
+        # Fall back to the old bounds format for backward compatibility
+        x_min, x_max = minmax(state.selection.bounds[]...)
+    end
+    
     selected_channels = state.channels.labels[state.channels.visible]
     return subset(
         state.data.current[],
@@ -1123,8 +1134,19 @@ function subset_selected_data(state::ContinuousDataBrowserState)
     )
 end
 
-function subset_selected_data(state::EpochedDataBrowserState)
-    x_min, x_max = minmax(state.selection.bounds[]...)
+function subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
+    # Use the clicked region if specified, otherwise use the most recent region, or fall back to bounds
+    if clicked_region_idx !== nothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
+        # Use the specific clicked region
+        x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
+    elseif !isempty(state.selection.selected_regions[])
+        # Use the last (most recent) selected region
+        x_min, x_max = state.selection.selected_regions[][end]
+    else
+        # Fall back to the old bounds format for backward compatibility
+        x_min, x_max = minmax(state.selection.bounds[]...)
+    end
+    
     selected_channels = state.channels.labels[state.channels.visible]
     current_epoch = state.data.current_epoch[]
 
@@ -1152,7 +1174,10 @@ end
 # Filtering
 ############
 function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:AbstractDataState}
-    filter_data!(state.data.current[], String(filter_type), freq;)
+    # Get the current data, apply filter, then update the observable
+    current_data = state.data.current[]
+    filter_data!(current_data, String(filter_type), freq;)
+    state.data.current[] = current_data  # Explicitly update the observable
 end
 
 function apply_filters!(state)
@@ -1164,11 +1189,9 @@ function apply_filters!(state)
         return
     end
 
-    # Start with fresh data if changing filter configuration
-    if state.data.filter_state.active[].hp != state.data.filter_state.active[].lp
-        reset_to_original!(state.data)
-        rereference!(state.data, state.reference_state)
-    end
+    # Always start with fresh data when applying filters to ensure clean filtering
+    reset_to_original!(state.data)
+    rereference!(state.data, state.reference_state)
 
     # Apply active filters
     for (filter_type, freq) in zip([:hp, :lp], [state.data.filter_state.hp_freq[], state.data.filter_state.lp_freq[]])
