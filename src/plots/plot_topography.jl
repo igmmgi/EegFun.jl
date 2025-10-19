@@ -59,7 +59,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
 
     # ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(layout)
-    # _ensure_coordinates_3d!(layout)
+    _ensure_coordinates_3d!(layout)
 
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
@@ -789,6 +789,9 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
 
     unique_electrodes = unique(all_selected_electrodes)
     @info "N selections: $(length(selection_state.bounds_list[])); Electrodes found: $unique_electrodes"
+    
+    # Reset active state
+    selection_state.active[] = false
 end
 
 """
