@@ -107,6 +107,8 @@ include("plots/plot_topography.jl")
 include("plots/plot_triggers.jl")
 include("plots/plot_filter.jl")
 
+# Plot utilities
+include("plots/utils/help_system.jl")
 
 # Examples
 include("examples/signal_example_1.jl")
