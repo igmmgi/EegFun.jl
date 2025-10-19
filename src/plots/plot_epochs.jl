@@ -253,7 +253,7 @@ function plot_epochs(
             deregister_interaction!(ax, :rectanglezoom)
         end
 
-        _setup_shared_interactivity!(fig, axes)
+        _setup_shared_interactivity!(fig, axes, :epochs)
     end
 
     # Add unified selection functionality (time + channel selection)

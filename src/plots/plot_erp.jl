@@ -183,7 +183,7 @@ function plot_erp(
 
     # Add keyboard interactivity if enabled
     if plot_kwargs[:interactive]
-        _setup_shared_interactivity!(fig, axes)
+        _setup_shared_interactivity!(fig, axes, :erp)
 
         # Disable default interactions that conflict with our custom selection
         # Need to disable on ALL axes for grid layouts to work properly
