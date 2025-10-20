@@ -10,6 +10,8 @@ dat = eegfun.create_eeg_dataframe(dat, layout_file);
 
 eegfun.rereference!(dat, :avg)
 # TODO: tidy up region selection
+eegfun.plot_databrowser(dat)
+
 fig, ax, state = eegfun.plot_databrowser(dat)
 
 eegfun.filter_data!(dat, "hp", 1)

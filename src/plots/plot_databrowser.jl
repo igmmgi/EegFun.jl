@@ -793,11 +793,6 @@ function remove_region_from_selection!(ax, state, region_idx)
         deleteat!(regions, region_idx)
         state.selection.selected_regions[] = regions
         
-        # Call the global callback function if provided
-        if _region_callback[] !== nothing
-            bool_vector = get_selected_regions_bool(state)
-            _region_callback[](bool_vector, regions)
-        end
     end
 end
 
@@ -1029,11 +1024,6 @@ function add_region_to_selection!(ax, state, x1, x2)
     region_plot = poly!(ax, region_points, color = (:blue, 0.3), strokecolor = :transparent)
     push!(state.selection.region_plots, region_plot)
     
-    # Call the global callback function if provided
-    if _region_callback[] !== nothing
-        bool_vector = get_selected_regions_bool(state)
-        _region_callback[](bool_vector, current_regions)
-    end
 end
 
 function clear_x_region_selection!(state)
@@ -1054,11 +1044,6 @@ function clear_all_selected_regions!(ax, state)
     # Clear the selected regions list
     state.selection.selected_regions[] = Tuple{Float64,Float64}[]
     
-    # Call the global callback function if provided
-    if _region_callback[] !== nothing
-        bool_vector = get_selected_regions_bool(state)
-        _region_callback[](bool_vector, Tuple{Float64,Float64}[])
-    end
 end
 
 """
@@ -1528,19 +1513,9 @@ get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
-# Global variable to store the region callback
-const _region_callback = Ref{Union{Nothing,Function}}(nothing)
 
-# Force recompilation of DataBrowserState
-function _force_recompile()
-    # This function forces Julia to recompile the DataBrowserState type
-    return nothing
-end
 
-function plot_databrowser(dat::EegData, ica = nothing; region_callback = nothing, kwargs...)
-    # Store the callback globally
-    _region_callback[] = region_callback
-    
+function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
 
