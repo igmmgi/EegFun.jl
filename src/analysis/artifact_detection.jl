@@ -1013,9 +1013,10 @@ function repair_artifacts_neighbor!(
         @info "Repairing epoch $epoch_idx channels $(bad_channels) using neighbor interpolation"
         
         # Use unified channel repair function with epoch selection
-        repair_bad_channels!(
+        repair_channels!(
             dat, 
             bad_channels; 
+            method = :neighbor_interpolation,
             epoch_selection = epochs([epoch_idx]),
             neighbours_dict = neighbours_dict
         )
@@ -1058,9 +1059,10 @@ function repair_artifacts_spherical_spline!(
         @info "Repairing epoch $epoch_idx channels $(bad_channels) using spherical spline interpolation"
         
         # Use unified channel repair function with epoch selection
-        repair_channels_spherical_spline!(
+        repair_channels!(
             dat,
             bad_channels;
+            method = :spherical_spline,
             epoch_selection = epochs([epoch_idx]),
             m = m,
             lambda = lambda

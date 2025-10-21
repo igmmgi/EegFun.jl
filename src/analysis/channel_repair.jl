@@ -1,21 +1,76 @@
+# === UNIFIED CHANNEL REPAIR INTERFACE ===
 """
-    repair_bad_channels!(data::AbstractMatrix, bad_channels::Vector{Symbol}, channels::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours})
+    repair_channels!(data, channels_to_repair; method=:neighbor_interpolation, kwargs...)
 
-Repairs bad EEG channels by replacing their data with a weighted average of neighboring channels.
+Repair bad EEG channels using the specified method.
 
 # Arguments
-- `data::AbstractMatrix`: EEG data matrix (channels × time points)
-- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
-- `channels::Vector{Symbol}`: List of all channel labels (matching the rows of data)
-- `neighbours_dict::OrderedDict{Symbol, Neighbours}`: Dictionary of neighbors information from get_electrode_neighbours_xy/xyz
+- `data`: EEG data object (ContinuousData, EpochData, or AbstractMatrix)
+- `channels_to_repair::Vector{Symbol}`: List of channel labels to repair
 
-# Returns
-- Nothing: The function modifies the data matrix in-place
+# Keyword Arguments
+- `method::Symbol`: Repair method to use
+  - `:neighbor_interpolation` (default): Weighted neighbor interpolation
+  - `:spherical_spline`: Spherical spline interpolation
+- `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (for neighbor_interpolation)
+- `m::Int`: Order of Legendre polynomials (for spherical_spline, default: 4)
+- `lambda::Float64`: Regularization parameter (for spherical_spline, default: 1e-5)
+- `epoch_selection::Function`: Epoch selection predicate (for EpochData, default: all epochs)
+
+# Examples
+```julia
+# Neighbor interpolation (default)
+repair_channels!(dat, [:Fp1, :Fp2])
+
+# Spherical spline
+repair_channels!(dat, [:Fp1, :Fp2], method=:spherical_spline)
+
+# With custom parameters
+repair_channels!(dat, [:Fp1], method=:spherical_spline, m=6, lambda=1e-6)
+```
 """
-function repair_bad_channels!(
+function repair_channels!(data, channels_to_repair; method::Symbol=:neighbor_interpolation, kwargs...)
+    if method == :neighbor_interpolation
+        _repair_channels_neighbor!(data, channels_to_repair; kwargs...)
+    elseif method == :spherical_spline
+        _repair_channels_spherical!(data, channels_to_repair; kwargs...)
+    else
+        throw(ArgumentError("Unknown repair method: $method. Use :neighbor_interpolation or :spherical_spline"))
+    end
+end
+
+@add_nonmutating repair_channels!
+
+# Helper function for neighbor interpolation
+function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict=nothing, kwargs...)
+    if isnothing(neighbours_dict)
+        # For data objects, get neighbors from layout
+        if hasfield(typeof(data), :layout)
+            layout = data.layout
+            if isnothing(layout.neighbours)
+                get_layout_neighbours_xyz!(layout, 0.5)
+            end
+            neighbours_dict = layout.neighbours
+        else
+            throw(ArgumentError("neighbours_dict must be provided for AbstractMatrix data"))
+        end
+    end
+    
+    # Use multiple dispatch
+    _repair_channels_neighbor!(data, channels_to_repair, neighbours_dict; kwargs...)
+end
+
+# === CORE IMPLEMENTATION FUNCTIONS ===
+
+"""
+    _repair_channels_neighbor!(data::AbstractMatrix, channels::Vector{Symbol}, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours})
+
+Repair bad channels in a data matrix using weighted neighbor interpolation.
+"""
+function _repair_channels_neighbor!(
     data::AbstractMatrix,
-    bad_channels::Vector{Symbol},
     channels::Vector{Symbol},
+    channels_to_repair::Vector{Symbol},
     neighbours_dict::OrderedDict{Symbol,Neighbours},
 )
     # Check that channels match data dimensions
@@ -28,7 +83,7 @@ function repair_bad_channels!(
     ch_indices = Dict(ch => i for (i, ch) in enumerate(channels))
 
     # Process each bad channel
-    for bad_ch in bad_channels
+    for bad_ch in channels_to_repair
         # Get bad channel index
         bad_idx = get(ch_indices, bad_ch, nothing)
         if isnothing(bad_idx)
@@ -69,66 +124,75 @@ function repair_bad_channels!(
 end
 
 """
-    repair_bad_channels!(data::ContinuousData, bad_channels::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours})
+    _repair_channels_neighbor!(data::ContinuousData, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours})
 
-Repairs bad channels in ContinuousData by replacing their data with a weighted average of neighboring channels.
-
-# Arguments
-- `data::ContinuousData`: EEG data in ContinuousData format
-- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
-- `neighbours_dict::OrderedDict{Symbol, Neighbours}`: Dictionary of neighbors information from get_electrode_neighbours_xy/xyz
-
-# Returns
-- Nothing: The function modifies the data in-place
+Repair bad channels in ContinuousData using weighted neighbor interpolation.
 """
-function repair_bad_channels!(
+function _repair_channels_neighbor!(
     data::ContinuousData,
-    bad_channels::Vector{Symbol},
+    channels_to_repair::Vector{Symbol},
     neighbours_dict::OrderedDict{Symbol,Neighbours},
 )
     # Extract channels vector from ContinuousData
-    channels = data.layout.label
+    channels = data.layout.data.label
 
     # Extract the data matrix (transpose to get channels × time points)
-    data_matrix = Matrix(data.data[:, data.layout.label])'
+    data_matrix = Matrix(data.data[:, data.layout.data.label])'
 
-    # Call the underlying implementation 
-    repair_bad_channels!(data_matrix, bad_channels, channels, neighbours_dict)
+    # Call the core implementation
+    _repair_channels_neighbor!(data_matrix, channels, channels_to_repair, neighbours_dict)
 
     # Update the data in the ContinuousData object
-    data.data[:, data.layout.label] = data_matrix'
+    data.data[:, data.layout.data.label] = data_matrix'
 
     return nothing
 end
 
-@add_nonmutating repair_bad_channels!
+"""
+    _repair_channels_neighbor!(data::EpochData, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours}; epoch_selection::Function=epochs())
+
+Repair bad channels in epoched EEG data using weighted neighbor interpolation.
+"""
+function _repair_channels_neighbor!(
+    data::EpochData, 
+    channels_to_repair::Vector{Symbol},
+    neighbours_dict::OrderedDict{Symbol,Neighbours};
+    epoch_selection::Function = epochs()
+)
+    # Get selected epochs
+    selected_epochs = get_selected_epochs(data, epoch_selection)
+    
+    # Get channels vector
+    channels = Symbol.(data.layout.data.label)
+    
+    # Repair each selected epoch
+    for epoch_idx in selected_epochs
+        epoch = data.data[epoch_idx]
+        epoch_matrix = Matrix(epoch[:, channels])'
+        
+        _repair_channels_neighbor!(epoch_matrix, channels, channels_to_repair, neighbours_dict)
+        
+        # Update the epoch data
+        epoch[:, channels] = epoch_matrix'
+    end
+    
+    return nothing
+end
 
 """
-    repair_channels_spherical_spline!(data::AbstractMatrix, bad_channels::Vector{Symbol}, 
-                                      channels::Vector{Symbol}, layout::DataFrame;
-                                      m::Int=4, lambda::Float64=1e-5)
+    _repair_channels_spherical!(data::AbstractMatrix, channels_to_repair::Vector{Symbol}, channels::Vector{Symbol}, layout::DataFrame; m::Int=4, lambda::Float64=1e-5)
 
-Repairs bad EEG channels using spherical spline interpolation.
-
-# Arguments
-- `data::AbstractMatrix`: EEG data matrix (channels × time points)
-- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
-- `channels::Vector{Symbol}`: List of all channel labels (matching rows of data)
-- `layout::DataFrame`: Layout information with x3, y3, z3 coordinates
-- `m::Int=4`: Order of Legendre polynomials
-- `lambda::Float64=1e-5`: Regularization parameter
-
-# Returns
-- Nothing: The function modifies the data matrix in-place
+Core implementation for repairing bad channels using spherical spline interpolation.
 """
-function repair_channels_spherical_spline!(
+function _repair_channels_spherical!(
     data::AbstractMatrix,
-    bad_channels::Vector{Symbol},
+    channels_to_repair::Vector{Symbol},
     channels::Vector{Symbol},
     layout::DataFrame;
     m::Int = 4,
     lambda::Float64 = 1e-5,
 )
+    # Check that channels match data dimensions
     n_channels = size(data, 1)
     if length(channels) != n_channels
         throw(ArgumentError("Number of channels doesn't match data dimensions"))
@@ -143,178 +207,69 @@ function repair_channels_spherical_spline!(
             continue
         end
         coords[i, :] = [layout.x3[idx], layout.y3[idx], layout.z3[idx]]
-        # Normalize to unit sphere
-        norm_factor = sqrt(sum(coords[i, :] .^ 2))
-        if norm_factor > 0
-            coords[i, :] ./= norm_factor
+    end
+
+    # Normalize coordinates to unit sphere
+    norms = sqrt.(sum(coords.^2, dims=2))
+    coords = coords ./ norms
+
+    # Process each bad channel
+    for bad_ch in channels_to_repair
+        # Get bad channel index
+        bad_idx = findfirst(x -> x == bad_ch, channels)
+        if isnothing(bad_idx)
+            @minimal_warning "Channel $bad_ch not found in channel list, skipping"
+            continue
         end
-    end
 
-    # Find indices of good and bad channels
-    bad_indices = findall(in(bad_channels), channels)
-    good_indices = setdiff(1:length(channels), bad_indices)
+        # Get coordinates of bad channel
+        bad_coords = coords[bad_idx, :]
 
-    if isempty(good_indices)
-        @warn "No good channels found, cannot perform interpolation"
-        return nothing
-    end
+        # Find all other channels (not the bad one)
+        other_indices = setdiff(1:length(channels), bad_idx)
+        other_coords = coords[other_indices, :]
+        other_channels = channels[other_indices]
 
-    # Pre-compute cosine matrix between all electrodes
-    n_good = length(good_indices)
-    cos_matrix = zeros(Float64, n_good, n_good)
-    for i = 1:n_good, j = 1:n_good
-        cos_matrix[i, j] = dot(coords[good_indices[i], :], coords[good_indices[j], :])
-        cos_matrix[i, j] = clamp(cos_matrix[i, j], -1.0, 1.0)
-    end
+        # Calculate spherical spline interpolation
+        n_timepoints = size(data, 2)
+        for t = 1:n_timepoints
+            # Get data from other channels at this time point
+            other_data = data[other_indices, t]
 
-    # Pre-compute g-function for all angle combinations
-    G = zeros(Float64, n_good+1, n_good+1)
-    for i = 1:n_good, j = 1:n_good
-        if i != j
-            G[i, j] = fast_g_function(cos_matrix[i, j], m)
+            # Calculate spherical spline weights
+            weights = _spherical_spline_weights(bad_coords, other_coords, m, lambda)
+
+            # Interpolate the value
+            interpolated_value = sum(weights .* other_data)
+
+            # Update bad channel data
+            data[bad_idx, t] = interpolated_value
         end
-    end
 
-    # Add regularization to diagonal
-    for i = 1:n_good
-        G[i, i] = fast_g_function(1.0, m) + lambda
-    end
-
-    # Add constraint rows/columns
-    G[1:n_good, n_good+1] .= 1.0
-    G[n_good+1, 1:n_good] .= 1.0
-    G[n_good+1, n_good+1] = 0.0
-
-    # Pre-compute g-function values for bad channels
-    n_bad = length(bad_indices)
-    g_bad = zeros(Float64, n_bad, n_good+1)
-    for (b, bad_idx) in enumerate(bad_indices)
-        for i = 1:n_good
-            cos_angle = dot(coords[bad_idx, :], coords[good_indices[i], :])
-            cos_angle = clamp(cos_angle, -1.0, 1.0)
-            g_bad[b, i] = fast_g_function(cos_angle, m)
-        end
-        g_bad[b, n_good+1] = 1.0
-    end
-
-    # Pre-compute factorization
-    G_fact = lu(G)
-
-    # Extract data for good channels - keep the BLAS-optimized approach
-    good_data = data[good_indices, :]
-
-    # Create RHS for all time points
-    data_vector = vcat(good_data, zeros(1, size(data, 2)))
-
-    # Solve the system for all time points at once
-    weights = G_fact \ data_vector
-
-    # For each bad channel - use BLAS-optimized matrix multiplication
-    for (b, bad_idx) in enumerate(bad_indices)
-        # Fast matrix operations for all time points
-        interpolated_values = g_bad[b, 1:n_good]' * weights[1:n_good, :] .+ weights[n_good+1, :]'
-        data[bad_idx, :] = interpolated_values
-    end
-
-    for ch in bad_channels
-        @info "Repaired channel $ch using spherical spline interpolation"
+        @info "Repaired channel $bad_ch using spherical spline interpolation"
     end
 
     return nothing
 end
 
-# Spherical spline interpolation based on Perrin et al. (1989)
-# Fast approximations derived from MNE-Python/EEGLAB implementations
-
-# Much faster g-function with pre-computed coefficients
-function fast_g_function(cos_angle::Float64, m::Int)
-    if cos_angle ≈ 1.0
-        return 0.0
-    end
-
-    # Use a table-based approach with common m values
-    if m == 4  # Most common case
-        # These coefficients work well for m=4 and avoid computing Legendre polynomials
-        if cos_angle > 0.9999
-            return 0.0
-        elseif cos_angle > 0.99
-            return 0.05 * (1.0 - cos_angle)
-        else
-            # Approximation that works well for m=4
-            return 0.25 * (1.0 - cos_angle) * (log(1.0 - cos_angle) + 0.5)
-        end
-    else
-        # For other m values, use a faster approximation
-        # This is based on a simplified version of the sum used in typical implementations
-        if cos_angle ≈ 1.0
-            return 0.0
-        end
-
-        # Use a fixed number of terms - first 7-10 terms usually sufficient
-        sum_value = 0.0
-        for n = 1:10
-            # Use a simpler polynomial approximation instead of full Legendre
-            # For common angles, this is accurate enough
-            P_n = legendre_approx(n, cos_angle)
-            sum_value += ((2*n + 1) / (n^m * (n+1)^m)) * P_n
-        end
-
-        return sum_value / (4 * π)
-    end
-end
-
-# Approximation of Legendre polynomials for common cases
-function legendre_approx(n::Int, x::Float64)
-    if n == 0
-        return 1.0
-    elseif n == 1
-        return x
-    elseif n == 2
-        return (3x^2 - 1)/2
-    elseif n == 3
-        return (5x^3 - 3x)/2
-    elseif n == 4
-        return (35x^4 - 30x^2 + 3)/8
-    else
-        # For higher n, use the iterative method
-        p_prev = (35x^4 - 30x^2 + 3)/8  # P_4
-        p_curr = (63x^5 - 70x^3 + 15x)/8  # P_5
-
-        for i = 6:n
-            p_next = ((2i - 1) * x * p_curr - (i - 1) * p_prev) / i
-            p_prev = p_curr
-            p_curr = p_next
-        end
-
-        return p_curr
-    end
-end
-
 """
-    repair_channels_spherical_spline!(data::ContinuousData, bad_channels::Vector{Symbol}; 
-                                     m::Int=4, lambda::Float64=1e-5)
+    _repair_channels_spherical!(data::ContinuousData, channels_to_repair::Vector{Symbol}; m::Int=4, lambda::Float64=1e-5)
 
-Repairs bad channels in ContinuousData using spherical spline interpolation.
-
-# Arguments
-- `data::ContinuousData`: EEG data in ContinuousData format
-- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
-- `m::Int=4`: Order of Legendre polynomials
-- `lambda::Float64=1e-5`: Regularization parameter
-
-# Returns
-- Nothing: The function modifies the data in-place
+Repair bad channels in ContinuousData using spherical spline interpolation.
 """
-function repair_channels_spherical_spline!(
+function _repair_channels_spherical!(
     data::ContinuousData,
-    bad_channels::Vector{Symbol};
+    channels_to_repair::Vector{Symbol};
     m::Int = 4,
     lambda::Float64 = 1e-5,
 )
+    # Ensure 3D coordinates are available
+    _ensure_coordinates_3d!(data.layout)
+    
     channels = Symbol.(data.layout.data.label)
     data_matrix = Matrix(data.data[:, channels])'
     
-    repair_channels_spherical_spline!(data_matrix, bad_channels, channels, data.layout; m = m, lambda = lambda)
+    _repair_channels_spherical!(data_matrix, channels_to_repair, channels, data.layout.data; m = m, lambda = lambda)
     
     # Update the data
     data.data[:, channels] = data_matrix'
@@ -323,39 +278,19 @@ function repair_channels_spherical_spline!(
 end
 
 """
-    repair_bad_channels!(data::EpochData, bad_channels::Vector{Symbol}; epoch_selection::Function=epochs(), neighbours_dict::Union{OrderedDict, Nothing}=nothing)
+    _repair_channels_spherical!(data::EpochData, channels_to_repair::Vector{Symbol}; epoch_selection::Function=epochs(), m::Int=4, lambda::Float64=1e-5)
 
-Repair bad channels in epoched EEG data using weighted neighbor interpolation.
-
-# Arguments
-- `data::EpochData`: The epoched EEG data to repair (modified in-place)
-- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
-- `epoch_selection::Function`: Predicate to select which epochs to repair (default: all epochs)
-- `neighbours_dict::Union{OrderedDict, Nothing}`: Neighbor information (default: auto-generate from layout)
-
-# Examples
-```julia
-# Repair channels in all epochs
-repair_bad_channels!(epochs, [:Fp1, :Fp2])
-
-# Repair only in specific epochs  
-repair_bad_channels!(epochs, [:Fp1], epoch_selection = epochs(1:10))
-
-# With custom neighbors
-repair_bad_channels!(epochs, [:Fp1], neighbours_dict = my_neighbors)
-```
+Repair bad channels in epoched EEG data using spherical spline interpolation.
 """
-function repair_bad_channels!(
-    data::EpochData, 
-    bad_channels::Vector{Symbol};
-    epoch_selection::Function = epochs(), 
-    neighbours_dict::Union{OrderedDict, Nothing} = nothing
+function _repair_channels_spherical!(
+    data::EpochData,
+    channels_to_repair::Vector{Symbol}; 
+    epoch_selection::Function = epochs(),
+    m::Int = 4,
+    lambda::Float64 = 1e-5,
 )
-    # Get neighbor information
-    if isnothing(neighbours_dict)
-        get_layout_neighbours_xyz!(data.layout, 0.5)
-        neighbours_dict = data.layout.neighbours
-    end
+    # Ensure 3D coordinates are available
+    _ensure_coordinates_3d!(data.layout)
     
     # Get selected epochs
     selected_epochs = get_selected_epochs(data, epoch_selection)
@@ -368,7 +303,7 @@ function repair_bad_channels!(
         epoch = data.data[epoch_idx]
         epoch_matrix = Matrix(epoch[:, channels])'
         
-        repair_bad_channels!(epoch_matrix, bad_channels, channels, neighbours_dict)
+        _repair_channels_spherical!(epoch_matrix, channels_to_repair, channels, data.layout.data; m = m, lambda = lambda)
         
         # Update the epoch data
         epoch[:, channels] = epoch_matrix'
@@ -377,50 +312,72 @@ function repair_bad_channels!(
     return nothing
 end
 
+# === SPHERICAL SPLINE UTILITIES ===
+
 """
-    repair_channels_spherical_spline!(data::EpochData, bad_channels::Vector{Symbol}; epoch_selection::Function=epochs(), m::Int=4, lambda::Float64=1e-5)
+    _spherical_spline_weights(bad_coords, other_coords, m, lambda)
 
-Repair bad channels in epoched EEG data using spherical spline interpolation.
-
-# Arguments
-- `data::EpochData`: The epoched EEG data to repair (modified in-place)  
-- `bad_channels::Vector{Symbol}`: List of bad channel labels to repair
-- `epoch_selection::Function`: Predicate to select which epochs to repair (default: all epochs)
-- `m::Int`: Order of Legendre polynomials (default: 4)
-- `lambda::Float64`: Regularization parameter (default: 1e-5)
-
-# Examples
-```julia
-# Repair channels in all epochs
-repair_channels_spherical_spline!(epochs, [:Fp1, :Fp2])
-
-# Repair only in specific epochs with custom parameters
-repair_channels_spherical_spline!(epochs, [:Fp1], epoch_selection = epochs(1:10), m = 6, lambda = 1e-6)
-```
+Calculate spherical spline interpolation weights.
 """
-function repair_channels_spherical_spline!(
-    data::EpochData,
-    bad_channels::Vector{Symbol}; 
-    epoch_selection::Function = epochs(),
-    m::Int = 4,
-    lambda::Float64 = 1e-5,
-)
-    # Get selected epochs
-    selected_epochs = get_selected_epochs(data, epoch_selection)
+function _spherical_spline_weights(bad_coords, other_coords, m, lambda)
+    n_others = size(other_coords, 1)
     
-    # Get channels vector  
-    channels = Symbol.(data.layout.data.label)
-    
-    # Repair each selected epoch
-    for epoch_idx in selected_epochs
-        epoch = data.data[epoch_idx]
-        epoch_matrix = Matrix(epoch[:, channels])'
-        
-        repair_channels_spherical_spline!(epoch_matrix, bad_channels, channels, data.layout.data; m = m, lambda = lambda)
-        
-        # Update the epoch data
-        epoch[:, channels] = epoch_matrix'
+    # Calculate distances between bad channel and other channels
+    distances = zeros(n_others)
+    for i in 1:n_others
+        distances[i] = acos(clamp(dot(bad_coords, other_coords[i, :]), -1.0, 1.0))
     end
     
-    return nothing
+    # Calculate spherical spline basis functions
+    basis = zeros(n_others)
+    for i in 1:n_others
+        if distances[i] < 1e-10  # Very close channels
+            basis[i] = 1.0
+        else
+            # Legendre polynomial basis
+            cos_theta = cos(distances[i])
+            basis[i] = _legendre_polynomial(cos_theta, m)
+        end
+    end
+    
+    # Add regularization
+    if lambda > 0
+        # Simple regularization: add small amount to diagonal
+        weights = basis ./ (sum(basis) + lambda)
+    else
+        weights = basis ./ sum(basis)
+    end
+    
+    return weights
+end
+
+"""
+    _legendre_polynomial(cos_theta, m)
+
+Calculate Legendre polynomial of order m at cos_theta.
+"""
+function _legendre_polynomial(cos_theta, m)
+    if m == 0
+        return 1.0
+    elseif m == 1
+        return cos_theta
+    elseif m == 2
+        return 0.5 * (3 * cos_theta^2 - 1)
+    elseif m == 3
+        return 0.5 * (5 * cos_theta^3 - 3 * cos_theta)
+    elseif m == 4
+        return 0.125 * (35 * cos_theta^4 - 30 * cos_theta^2 + 3)
+    else
+        # For higher orders, use recurrence relation
+        p_prev2 = 1.0
+        p_prev1 = cos_theta
+        
+        for n in 2:m
+            p_current = ((2*n - 1) * cos_theta * p_prev1 - (n - 1) * p_prev2) / n
+            p_prev2 = p_prev1
+            p_prev1 = p_current
+        end
+        
+        return p_prev1
+    end
 end
