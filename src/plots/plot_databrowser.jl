@@ -702,6 +702,7 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     # Store repair in history
     push!(state.channel_repair_history, (selected_channels, method, original_data))
     
+    
     # Notify that data has been updated
     notify_data_update(state.data)
     
@@ -725,6 +726,7 @@ function undo_last_repair!(state, ax)
     
     # Restore original data
     restore_channel_data!(state.data.current[], channels, original_data)
+    
     
     # Notify that data has been updated
     notify_data_update(state.data)
@@ -758,6 +760,7 @@ function restore_channel_data!(data, channels, original_data)
         throw(ArgumentError("Unsupported data type for channel repair"))
     end
 end
+
 
 # Create common sliders for both continuous and epoched data
 function create_common_sliders(fig, state, dat)
@@ -1595,10 +1598,27 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             channel_data_with_offset =
                 @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
 
+            # Check if channel is repaired
+            is_repaired = false
+            for (repaired_channels, _, _) in state.channel_repair_history
+                if col in repaired_channels
+                    is_repaired = true
+                    break
+                end
+            end
+            
             # Line properties (reuse channel_data_obs for efficiency)
-            line_color = is_selected ? :black : @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
-            line_colormap = is_selected ? [:black] : [:darkgrey, :darkgrey, :red]
-            line_width = is_selected ? 4 : 2
+            if is_repaired || is_selected
+                # Repaired channels get black color and thicker lines
+                line_color = :black
+                line_colormap = [:black]
+                line_width = 4
+            else
+                # Normal channels
+                line_color = @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
+                line_colormap = [:darkgrey, :darkgrey, :red]
+                line_width = 2
+            end
 
             # Update or create line
             update_or_create_line!(
