@@ -542,12 +542,9 @@ function show_channel_repair_menu(state, selected_channels, ax)
     all_channels = state.channels.labels
     n_channels = length(all_channels)
     
-    # Create a scrollable area using pagination
-    channels_per_page = 30  # 5 rows × 6 columns = 30 channels per page
-    cols = 6
-    rows_per_page = ceil(Int, channels_per_page / cols)
-    total_pages = ceil(Int, n_channels / channels_per_page)
-    current_page = Observable(1)
+    # Create a scrollable area with all channels visible
+    cols = 7  # 7 columns
+    rows = ceil(Int, n_channels / cols)  # Calculate rows needed for all channels
     
     # Create the repair menu figure
     menu_fig = Figure(size = (700, 800))
@@ -556,96 +553,58 @@ function show_channel_repair_menu(state, selected_channels, ax)
     title_text = "Channel Repair Interface"
     Label(menu_fig[1, 1], title_text, fontsize = 18, halign = :center)
     
+    # Create a scrollable area for channels
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    
     # Create checkboxes and labels arrays
     channel_checkboxes = []
     channel_labels = []
     
-    # Create a scrollable area for channels
-    scroll_area = menu_fig[2, 1] = GridLayout()
-    
-    # Function to update the displayed channels
-    function update_channel_display()
-        # Clear existing elements
-        empty!(channel_checkboxes)
-        empty!(channel_labels)
+    # Add all channels in 7-column layout
+    for (i, ch) in enumerate(all_channels)
+        row = ((i - 1) ÷ cols) + 1
+        col = ((i - 1) % cols) + 1
         
-        # Calculate which channels to show
-        start_idx = (current_page[] - 1) * channels_per_page + 1
-        end_idx = min(start_idx + channels_per_page - 1, n_channels)
-        visible_channels = all_channels[start_idx:end_idx]
-        
-        # Add channels for current page in 4-column layout
-        for (i, ch) in enumerate(visible_channels)
-            row = ((i - 1) ÷ cols) + 1
-            col = ((i - 1) % cols) + 1
-            
-            # Check if channel has been repaired
-            is_repaired = false
-            for (repaired_channels, _, _) in state.channel_repair_history
-                if ch in repaired_channels
-                    is_repaired = true
-                    break
-                end
+        # Check if channel has been repaired
+        is_repaired = false
+        for (repaired_channels, _, _) in state.channel_repair_history
+            if ch in repaired_channels
+                is_repaired = true
+                break
             end
-            
-            # Create a horizontal layout for checkbox and label
-            channel_cell = scroll_area[row, col] = GridLayout()
-            
-            # Create checkbox
-            checkbox = Checkbox(channel_cell[1, 1], checked = ch in selected_channels, width = 20, height = 20)
-            push!(channel_checkboxes, checkbox)
-            
-            # Create label with repair status (with more space)
-            label_text = is_repaired ? "$(string(ch)) ✓" : string(ch)
-            label_color = is_repaired ? :green : :black
-            label = Label(channel_cell[1, 2], label_text, fontsize = 11, color = label_color, halign = :left)
-            push!(channel_labels, label)
         end
+        
+        # Create a horizontal layout for checkbox and label
+        channel_cell = scroll_area[row, col] = GridLayout()
+        
+        # Create checkbox
+        checkbox = Checkbox(channel_cell[1, 1], checked = ch in selected_channels, width = 20, height = 20)
+        push!(channel_checkboxes, checkbox)
+        
+        # Create label with repair status
+        label_text = is_repaired ? "$(string(ch)) ✓" : string(ch)
+        label_color = is_repaired ? :green : :black
+        label = Label(channel_cell[1, 2], label_text, fontsize = 11, color = label_color, halign = :left)
+        push!(channel_labels, label)
     end
     
-    # Initial display
-    update_channel_display()
+    # No navigation needed - all channels visible
     
-    # Navigation buttons
-    nav_area = menu_fig[3, 1] = GridLayout()
-    prev_button = Button(nav_area[1, 1], label = "◀ Prev", width = 80, height = 25)
-    page_label = Label(nav_area[1, 2], "Page 1 of $total_pages", fontsize = 12, halign = :center)
-    next_button = Button(nav_area[1, 3], label = "Next ▶", width = 80, height = 25)
-    
-    # Add repair method selection with 6-column grid to match channels
-    method_label = Label(menu_fig[4, 1], "Repair Method:", fontsize = 14)
-    method_area = menu_fig[5, 1] = GridLayout()
+    # Add repair method selection
+    method_label = Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
+    method_area = menu_fig[4, 1] = GridLayout()
     method_buttons = [
         Button(method_area[1, 1], label = "Neighbor Interpolation", width = 200),
         Button(method_area[1, 2], label = "Spherical Spline", width = 200)
     ]
     
-    # Add action buttons with 6-column grid to match channels
-    action_area = menu_fig[6, 1] = GridLayout()
+    # Add action buttons
+    action_area = menu_fig[5, 1] = GridLayout()
     action_buttons = [
         Button(action_area[1, 1], label = "Apply Repair", width = 200),
         Button(action_area[1, 2], label = "Undo Last Repair", width = 200)
     ]
     
-    
-    # Update page label when page changes
-    on(current_page) do page
-        page_label.text[] = "Page $page of $total_pages"
-        update_channel_display()
-    end
-    
-    # Navigation button handlers
-    on(prev_button.clicks) do n
-        if current_page[] > 1
-            current_page[] = current_page[] - 1
-        end
-    end
-    
-    on(next_button.clicks) do n
-        if current_page[] < total_pages
-            current_page[] = current_page[] + 1
-        end
-    end
     
     # Method selection (radio button behavior)
     selected_method = Observable(:neighbor_interpolation)
@@ -669,13 +628,8 @@ function show_channel_repair_menu(state, selected_channels, ax)
     
     # Apply repair
     on(action_buttons[1].clicks) do n
-        # Get visible channels for current page
-        start_idx = (current_page[] - 1) * channels_per_page + 1
-        end_idx = min(start_idx + channels_per_page - 1, n_channels)
-        visible_channels = all_channels[start_idx:end_idx]
-        
-        # Get selected channels from current page
-        selected_channels = visible_channels[findall(cb -> cb.checked[], channel_checkboxes)]
+        # Get selected channels from all channels
+        selected_channels = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
         if !isempty(selected_channels)
             repair_selected_channels!(state, selected_channels, selected_method[], ax)
         else
