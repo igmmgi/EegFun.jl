@@ -539,32 +539,133 @@ end
 
 function show_channel_repair_menu(state, selected_channels, ax)
     # Create the repair menu figure
-    menu_fig = Figure(size = (400, 350))
+    menu_fig = Figure(size = (700, 800))
     
-    # Add title showing selected channels
-    channel_list = join(string.(selected_channels), ", ")
-    title_text = "Repair Channels: $channel_list"
-    Label(menu_fig[1, 1], title_text, fontsize = 16, halign = :center)
+    # Add title
+    title_text = "Channel Repair Interface"
+    Label(menu_fig[1, 1], title_text, fontsize = 18, halign = :center)
     
-    # Add repair method buttons
-    repair_methods = ["Neighbor Interpolation", "Spherical Spline", "Undo Last Repair"]
-    menu_buttons = [Button(menu_fig[idx+2, 1], label = method) for (idx, method) in enumerate(repair_methods)]
+    # Get all available channels
+    all_channels = state.channels.labels
+    n_channels = length(all_channels)
     
+    # Create checkboxes for each channel
+    channel_checkboxes = []
+    channel_labels = []
     
-    for btn in menu_buttons
-        on(btn.clicks) do n
-            if btn.label[] == "Neighbor Interpolation"
-                repair_selected_channels!(state, selected_channels, :neighbor_interpolation, ax)
-            elseif btn.label[] == "Spherical Spline"
-                repair_selected_channels!(state, selected_channels, :spherical_spline, ax)
-            elseif btn.label[] == "Undo Last Repair"
-                if !isempty(state.channel_repair_history)
-                    undo_last_repair!(state, ax)
-                else
-                    println("No repairs to undo")
+    # Create a scrollable area for channels
+    scroll_area = menu_fig[2, 1] = GridLayout()
+    
+    # Add channels in a simple grid (4 columns for better space usage)
+    cols = 4
+    rows = ceil(Int, n_channels / cols)
+    
+    for (i, ch) in enumerate(all_channels)
+        row = ((i - 1) ÷ cols) + 1
+        col = ((i - 1) % cols) + 1
+        
+        # Check if channel has been repaired
+        is_repaired = false
+        for (repaired_channels, _, _) in state.channel_repair_history
+            if ch in repaired_channels
+                is_repaired = true
+                break
+            end
+        end
+        
+        # Create checkbox
+        checkbox = Checkbox(scroll_area[row, col], checked = ch in selected_channels, width = 20, height = 20)
+        push!(channel_checkboxes, checkbox)
+        
+        # Create label with repair status
+        label_text = is_repaired ? "$(string(ch)) ✓" : string(ch)
+        label_color = is_repaired ? :green : :black
+        label = Label(scroll_area[row, col], label_text, fontsize = 11, color = label_color, halign = :left)
+        push!(channel_labels, label)
+    end
+    
+    # Add repair method selection
+    method_label = Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
+    method_buttons = [
+        Button(menu_fig[4, 1], label = "Neighbor Interpolation", width = 200),
+        Button(menu_fig[4, 2], label = "Spherical Spline", width = 200)
+    ]
+    
+    # Add action buttons
+    action_buttons = [
+        Button(menu_fig[5, 1], label = "Apply Repair", width = 200),
+        Button(menu_fig[5, 2], label = "Undo Last Repair", width = 200)
+    ]
+    
+    # Add select all/none buttons
+    select_buttons = [
+        Button(menu_fig[6, 1], label = "Select All", width = 100),
+        Button(menu_fig[6, 2], label = "Select None", width = 100),
+        Button(menu_fig[6, 3], label = "Select Repaired", width = 100)
+    ]
+    
+    # Method selection (radio button behavior)
+    selected_method = Observable(:neighbor_interpolation)
+    
+    on(method_buttons[1].clicks) do n
+        selected_method[] = :neighbor_interpolation
+        method_buttons[1].buttoncolor[] = :lightblue
+        method_buttons[2].buttoncolor[] = :white
+    end
+    
+    on(method_buttons[2].clicks) do n
+        selected_method[] = :spherical_spline
+        method_buttons[1].buttoncolor[] = :white
+        method_buttons[2].buttoncolor[] = :lightblue
+    end
+    
+    # Initialize with neighbor interpolation selected
+    method_buttons[1].buttoncolor[] = :lightblue
+    method_buttons[2].buttoncolor[] = :white
+    
+    # Select all/none functionality
+    on(select_buttons[1].clicks) do n
+        for checkbox in channel_checkboxes
+            checkbox.checked[] = true
+        end
+    end
+    
+    on(select_buttons[2].clicks) do n
+        for checkbox in channel_checkboxes
+            checkbox.checked[] = false
+        end
+    end
+    
+    on(select_buttons[3].clicks) do n
+        for (i, checkbox) in enumerate(channel_checkboxes)
+            ch = all_channels[i]
+            is_repaired = false
+            for (repaired_channels, _, _) in state.channel_repair_history
+                if ch in repaired_channels
+                    is_repaired = true
+                    break
                 end
             end
-            # Menu will close automatically when user clicks a button
+            checkbox.checked[] = is_repaired
+        end
+    end
+    
+    # Apply repair
+    on(action_buttons[1].clicks) do n
+        selected_channels = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
+        if !isempty(selected_channels)
+            repair_selected_channels!(state, selected_channels, selected_method[], ax)
+        else
+            println("No channels selected for repair")
+        end
+    end
+    
+    # Undo last repair
+    on(action_buttons[2].clicks) do n
+        if !isempty(state.channel_repair_history)
+            undo_last_repair!(state, ax)
+        else
+            println("No repairs to undo")
         end
     end
     
@@ -1006,11 +1107,9 @@ function handle_right_click!(ax, state, mouse_x)
     if clicked_region_idx !== nothing
         show_additional_menu(state, clicked_region_idx)
     else
-        # Check if any channels are selected for repair menu
+        # Always show channel repair menu on right-click
         selected_channels = get_selected_channels(state)
-        if !isempty(selected_channels)
-            show_channel_repair_menu(state, selected_channels, ax)
-        end
+        show_channel_repair_menu(state, selected_channels, ax)
     end
 end
 
