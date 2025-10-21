@@ -547,16 +547,9 @@ function show_channel_repair_menu(state, selected_channels, ax)
     Label(menu_fig[1, 1], title_text, fontsize = 16, halign = :center)
     
     # Add repair method buttons
-    repair_methods = ["Neighbor Interpolation", "Spherical Spline", "Undo Last Repair", "Cancel"]
+    repair_methods = ["Neighbor Interpolation", "Spherical Spline", "Undo Last Repair"]
     menu_buttons = [Button(menu_fig[idx+2, 1], label = method) for (idx, method) in enumerate(repair_methods)]
     
-    # Style undo button based on repair history availability
-    undo_button = menu_buttons[3]  # "Undo Last Repair" button
-    has_history = !isempty(state.channel_repair_history)
-    if !has_history
-        undo_button.labelcolor[] = :gray
-        undo_button.buttoncolor[] = :lightgray
-    end
     
     for btn in menu_buttons
         on(btn.clicks) do n
