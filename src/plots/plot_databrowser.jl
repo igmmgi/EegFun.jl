@@ -516,15 +516,6 @@ function show_additional_menu(state, clicked_region_idx = nothing)
                 println("Length: $(length(selected_regions_bool))")
                 println("Number of selected samples: $(sum(selected_regions_bool))")
                 println("Selected regions: $(state.selection.selected_regions[])")
-                println()
-                println("To access this data programmatically:")
-                println("  fig, ax, state = plot_databrowser(dat)  # if not already done")
-                println("  selected_info = get_selected_regions_info(state)")
-                println("  bool_vector = selected_info.bool_vector")
-                println("  regions = selected_info.regions")
-                println()
-                println("Or directly:")
-                println("  bool_vector = get_selected_regions_bool(state)")
             else
                 selected_data = subset_selected_data(state, clicked_region_idx)
                 println(selected_data)
@@ -1538,7 +1529,7 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     draw_extra_channel!(ax, state)
 
     display(fig)
-    return fig, ax, state
+    return fig, ax
 end
 
 function plot_vertical_lines!(ax, marker, active)
