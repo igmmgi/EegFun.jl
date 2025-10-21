@@ -186,6 +186,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     ica_current::Union{Nothing,InfoIca}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
+    channel_repair_history::Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}  # (channels, method, original_data)
 
     # Constructor
     function DataBrowserState{T}(;
@@ -206,6 +207,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             isnothing(ica_original) ? nothing : copy(ica_original),
             extra_channel,
             data.original.analysis_info.reference,
+            Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}(),  # empty repair history
         )
     end
 end
@@ -356,6 +358,7 @@ function create_toggles(fig, ax, state)
     if state.data.original.analysis_info.lp_filter == 0.0
         push!(configs, ToggleConfig("LP-Filter On/Off", (_) -> apply_lp_filter!(state)))
     end
+    
 
     # Create toggles
     toggles = [(config.label, Toggle(fig), config.action) for config in configs]
@@ -532,6 +535,115 @@ function show_additional_menu(state, clicked_region_idx = nothing)
 
     new_screen = getfield(Main, :GLMakie).Screen()
     display(new_screen, menu_fig)
+end
+
+function show_channel_repair_menu(state, selected_channels, ax)
+    # Create the repair menu figure
+    menu_fig = Figure(size = (400, 350))
+    
+    # Add title showing selected channels
+    channel_list = join(string.(selected_channels), ", ")
+    title_text = "Repair Channels: $channel_list"
+    Label(menu_fig[1, 1], title_text, fontsize = 16, halign = :center)
+    
+    # Add repair method buttons
+    repair_methods = ["Neighbor Interpolation", "Spherical Spline", "Undo Last Repair", "Cancel"]
+    menu_buttons = [Button(menu_fig[idx+2, 1], label = method) for (idx, method) in enumerate(repair_methods)]
+    
+    # Style undo button based on repair history availability
+    undo_button = menu_buttons[3]  # "Undo Last Repair" button
+    has_history = !isempty(state.channel_repair_history)
+    if !has_history
+        undo_button.labelcolor[] = :gray
+        undo_button.buttoncolor[] = :lightgray
+    end
+    
+    for btn in menu_buttons
+        on(btn.clicks) do n
+            if btn.label[] == "Neighbor Interpolation"
+                repair_selected_channels!(state, selected_channels, :neighbor_interpolation, ax)
+            elseif btn.label[] == "Spherical Spline"
+                repair_selected_channels!(state, selected_channels, :spherical_spline, ax)
+            elseif btn.label[] == "Undo Last Repair"
+                if !isempty(state.channel_repair_history)
+                    undo_last_repair!(state, ax)
+                else
+                    println("No repairs to undo")
+                end
+            end
+            # Menu will close automatically when user clicks a button
+        end
+    end
+    
+    new_screen = getfield(Main, :GLMakie).Screen()
+    display(new_screen, menu_fig)
+end
+
+function repair_selected_channels!(state, selected_channels, method, ax)
+    # Store original data before repair
+    original_data = copy(get_channel_data_matrix(state.data.current[], selected_channels))
+    
+    # Perform the repair
+    if method == :neighbor_interpolation
+        repair_channels!(state.data.current[], selected_channels, method=:neighbor_interpolation)
+    elseif method == :spherical_spline
+        repair_channels!(state.data.current[], selected_channels, method=:spherical_spline)
+    end
+    
+    # Store repair in history
+    push!(state.channel_repair_history, (selected_channels, method, original_data))
+    
+    # Notify that data has been updated
+    notify_data_update(state.data)
+    
+    # Clear and redraw the plot
+    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    draw(ax, state)
+    
+    println("Successfully repaired channels: $(join(string.(selected_channels), ", ")) using $method")
+end
+
+function undo_last_repair!(state, ax)
+    if isempty(state.channel_repair_history)
+        println("No repairs to undo")
+        return
+    end
+    
+    # Get the last repair
+    channels, method, original_data = pop!(state.channel_repair_history)
+    
+    # Restore original data
+    restore_channel_data!(state.data.current[], channels, original_data)
+    
+    # Notify that data has been updated
+    notify_data_update(state.data)
+    
+    # Clear and redraw the plot
+    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+    draw(ax, state)
+    
+    println("Undid repair of channels: $(join(string.(channels), ", ")) (was $method)")
+end
+
+# Helper function to get channel data matrix
+function get_channel_data_matrix(data, channels)
+    if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
+        # ContinuousData or EpochData
+        channel_data = data.data[:, channels]
+        return Matrix(channel_data)
+    else
+        throw(ArgumentError("Unsupported data type for channel repair"))
+    end
+end
+
+# Helper function to restore channel data
+function restore_channel_data!(data, channels, original_data)
+    if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
+        # ContinuousData or EpochData
+        data.data[:, channels] = original_data
+    else
+        throw(ArgumentError("Unsupported data type for channel repair"))
+    end
 end
 
 # Create common sliders for both continuous and epoched data
@@ -881,7 +993,19 @@ function handle_right_click!(ax, state, mouse_x)
     clicked_region_idx = find_clicked_region(state, mouse_x)
     if clicked_region_idx !== nothing
         show_additional_menu(state, clicked_region_idx)
+    else
+        # Check if any channels are selected for repair menu
+        selected_channels = get_selected_channels(state)
+        if !isempty(selected_channels)
+            show_channel_repair_menu(state, selected_channels, ax)
+        end
     end
+end
+
+# Helper function to get selected channels
+function get_selected_channels(state)
+    selected_indices = findall(state.channels.selected)
+    return state.channels.labels[selected_indices]
 end
 
 # Helper function to find the closest channel to a click
