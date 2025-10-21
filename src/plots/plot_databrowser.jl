@@ -186,7 +186,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     ica_current::Union{Nothing,InfoIca}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
-    channel_repair_history::Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}  # (channels, method, original_data)
+    channel_repair_history::Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
 
     # Constructor
     function DataBrowserState{T}(;
@@ -573,6 +573,21 @@ function show_channel_repair_menu(state, selected_channels, ax)
 end
 
 function repair_selected_channels!(state, selected_channels, method, ax)
+    # Check if any of these channels have already been repaired
+    already_repaired = Set{Symbol}()
+    for (repaired_channels, _, _) in state.channel_repair_history
+        for ch in repaired_channels
+            if ch in selected_channels
+                push!(already_repaired, ch)
+            end
+        end
+    end
+    
+    if !isempty(already_repaired)
+        println("Channels $(join(string.(collect(already_repaired)), ", ")) have already been repaired. Please undo first or select different channels.")
+        return
+    end
+    
     # Store original data before repair
     original_data = copy(get_channel_data_matrix(state.data.current[], selected_channels))
     
@@ -593,7 +608,9 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     draw(ax, state)
     
+    total_repairs = length(state.channel_repair_history)
     println("Successfully repaired channels: $(join(string.(selected_channels), ", ")) using $method")
+    println("Total repairs in history: $total_repairs")
 end
 
 function undo_last_repair!(state, ax)
@@ -615,7 +632,9 @@ function undo_last_repair!(state, ax)
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     draw(ax, state)
     
+    remaining_repairs = length(state.channel_repair_history)
     println("Undid repair of channels: $(join(string.(channels), ", ")) (was $method)")
+    println("Remaining repairs in history: $remaining_repairs")
 end
 
 # Helper function to get channel data matrix
