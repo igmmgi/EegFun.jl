@@ -8,14 +8,15 @@ eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
 
+eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 # TODO: tidy up region selection
 eegfun.plot_databrowser(dat)
 
-fig, ax, state = eegfun.plot_databrowser(dat)
+fig, ax = eegfun.plot_databrowser(dat)
 
 eegfun.filter_data!(dat, "hp", 1)
-fig, ax, state = eegfun.plot_databrowser(dat)
+fig, ax = eegfun.plot_databrowser(dat)
 
 eegfun.filter_data!(dat, "lp", 20)
 eegfun.plot_databrowser(dat)
