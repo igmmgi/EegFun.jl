@@ -251,7 +251,8 @@ notify_data_update(state::AbstractDataState) = notify(state.current)
 
 # This single function works for BOTH types
 function reset_to_original!(state::AbstractDataState)
-    state.current[] = copy(state.original)
+    # state.current[] = copy(state.original)
+    state.current[] = state.original
 end
 
 ############
@@ -1406,11 +1407,14 @@ function apply_lp_filter!(state)
     apply_filters!(state)
 end
 
+
+
 ########################
 # Reference
 ########################
 function rereference!(state::AbstractDataState, ref)
     rereference!(state.current[], ref, channels())
+    notify_data_update(state)  # Notify that data has been updated
 end
 
 ########################
@@ -1758,7 +1762,14 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     draw_extra_channel!(ax, state)
 
     display(fig)
-    return fig, ax
+    
+    # Ensure the returned data reflects the current filter state
+    if state.data.filter_state.active[].hp || state.data.filter_state.active[].lp
+        # Apply filters to ensure returned data matches current state
+        apply_filters!(state)
+    end
+    
+    return fig, ax, state.data.current[]
 end
 
 function plot_vertical_lines!(ax, marker, active)
