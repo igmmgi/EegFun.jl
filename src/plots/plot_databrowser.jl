@@ -4,7 +4,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Figure and layout
     :figure_size => (nothing, "Figure size as (width, height). If nothing, uses default size"),
-    :figure_padding => ((10, 10, 10, 10), "Figure padding as (left, right, bottom, top)"),
+    :figure_padding => ((50, 0, 50, 50), "Figure padding as (left, right, bottom, top)"),
 
     # Axis styling
     :xlabel => ("Time (S)", "X-axis label"),
@@ -34,7 +34,6 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Selection styling
     :selection_color => ((:blue, 0.3), "Color and transparency for selection rectangle"),
-    :selection_line_width => (2, "Line width for selection rectangle"),
 
     # Filter parameters
     :default_hp_freq => (0.1, "Default high-pass filter frequency in Hz"),
@@ -1741,8 +1740,6 @@ get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
-
-    @info "plot_databrowser: ..."
 
     # Check if CairoMakie is being used and warn about interactivity
     if string(Makie.current_backend()) == "CairoMakie"
