@@ -1,5 +1,3 @@
-
-# Default parameters for databrowser plots with descriptions
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Figure and layout
@@ -62,10 +60,8 @@ mutable struct SelectionState
     selected_regions::Observable{Vector{Tuple{Float64,Float64}}}  # Store multiple regions
     region_plots::Vector{Makie.Poly}  # Store plot objects for each region
     function SelectionState(ax, plot_kwargs)
-        initial_points = [Point2f(0.0, 0.0)]
-        poly_element = poly!(ax, initial_points, color = plot_kwargs[:selection_color], visible = false)
-        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, 
-            Observable(Tuple{Float64,Float64}[]), Makie.Poly[])
+        poly_element = poly!(ax, [Point2f(0.0, 0.0)], color = plot_kwargs[:selection_color], visible = false)
+        new(Observable(false), Observable((0.0, 0.0)), Observable(false), poly_element, Observable([]), [])
     end
 end
 
@@ -153,8 +149,7 @@ mutable struct ExtraChannelInfo
     visible::Bool
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     data_labels::Dict{Symbol,Makie.Text}
-    ExtraChannelInfo() =
-        new(nothing, false, Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(), Dict{Symbol,Makie.Text}())
+    ExtraChannelInfo() = new(nothing, false, Dict(), Dict())
 end
 
 
@@ -169,7 +164,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
     channel_repair_history::Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
-    plot_kwargs::Dict{Symbol,Any}  # Store plot kwargs for styling
+    plot_kwargs::Dict{Symbol,Any}  
 
     # Constructor
     function DataBrowserState{T}(;
@@ -186,22 +181,22 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             channels,
             data,
             selection,
-            Vector{Marker}(),
+            Marker[],
             ica_original,
             isnothing(ica_original) ? nothing : copy(ica_original),
             extra_channel,
             data.original.analysis_info.reference,
-            Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}(),  # empty repair history
+            [],  # empty repair history
             plot_kwargs,
         )
     end
 end
 
-# Type aliases for code readability and simplified type annotations
+# Type aliases 
 const ContinuousDataBrowserState = DataBrowserState{ContinuousDataState}
 const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
 
-# Single function using multiple dispatch for the data state creation
+# Data browser state creation
 function create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
     state_type = data_state_type(T)
     initial_window = get_initial_window_size(dat)
@@ -217,7 +212,7 @@ end
 
 # Helper function to get initial window size based on data type
 get_initial_window_size(dat::ContinuousData) = min(5000, nrow(dat.data))  # Show reasonable window, not entire dataset
-get_initial_window_size(dat::ErpData) = min(5000, nrow(dat.data))  # Show reasonable window, not entire dataset
+get_initial_window_size(dat::ErpData) = nrow(dat.data)  # Show whole epoch
 get_initial_window_size(dat::EpochData) = nrow(dat.data[1])  # Show entire epoch
 
 # Type mapping
@@ -230,19 +225,17 @@ get_current_data(state::ContinuousDataState) = state.current[].data
 get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
 get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
 get_time_bounds(dat::EpochedDataState) = (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
-has_column(state::ContinuousDataState, col::String) = col in names(state.current[].data)
-has_column(state::EpochedDataState, col::String) = col in names(state.current[].data[state.current_epoch[]])
+has_column(state::ContinuousDataState, col::Symbol) = col in propertynames(state.current[].data)
+has_column(state::EpochedDataState, col::Symbol) = col in propertynames(state.current[].data[state.current_epoch[]])
 notify_data_update(state::AbstractDataState) = notify(state.current)
 reset_to_original!(state::AbstractDataState) = state.current[] = copy(state.original)
 
-############
-# UI
-############
+######
+# UI #
+######
 function setup_ui_base(fig, ax, state, dat, ica = nothing, plot_kwargs = nothing)
-    # Controls
-    deregister_interaction!(ax, :rectanglezoom)
 
-    # Set axes
+    deregister_interaction!(ax, :rectanglezoom) # need to turn this off!
     set_axes!(ax, state)
 
     # Mouse and keyboard events
@@ -282,11 +275,7 @@ function setup_ui(fig, ax, state::DataBrowserState{<:AbstractDataState}, dat, ic
     build_grid_components!(fig, dat, state, toggles, labels_menu, reference_menu, ica_menu, extra_menu, epoch_menu)
 
     # Apply theme
-    if !isnothing(plot_kwargs)
-        update_theme!(Theme(fontsize = plot_kwargs[:ui_fontsize]))
-    else
-        update_theme!(Theme(fontsize = 18))
-    end
+    update_theme!(Theme(fontsize = plot_kwargs[:ui_fontsize]))
     hideydecorations!(ax, label = true)
 
     return state
@@ -295,39 +284,22 @@ end
 function create_toggles(fig, ax, state)
     configs = [ToggleConfig("Butterfly Plot", (active) -> butterfly_plot!(ax, state))]
 
-    # Add toggles for available markers
-    # Find markers by name instead of relying on index positions
-
-    # Trigger toggle
-    if has_column(state.data, "triggers")
-        trigger_marker = findfirst(m -> m.name == :triggers, state.markers)
-        if !isnothing(trigger_marker)
-            push!(
-                configs,
-                ToggleConfig("Trigger", (active) -> plot_vertical_lines!(ax, state.markers[trigger_marker], active)),
-            )
-        end
-    end
-
-    # vEOG toggle
-    if has_column(state.data, "is_vEOG")
-        veog_marker = findfirst(m -> m.name == :is_vEOG, state.markers)
-        if !isnothing(veog_marker)
-            push!(
-                configs,
-                ToggleConfig("vEOG", (active) -> plot_vertical_lines!(ax, state.markers[veog_marker], active)),
-            )
-        end
-    end
-
-    # hEOG toggle
-    if has_column(state.data, "is_hEOG")
-        heog_marker = findfirst(m -> m.name == :is_hEOG, state.markers)
-        if !isnothing(heog_marker)
-            push!(
-                configs,
-                ToggleConfig("hEOG", (active) -> plot_vertical_lines!(ax, state.markers[heog_marker], active)),
-            )
+    # Add marker toggles based on configuration
+    marker_toggle_configs = [
+        (:triggers, "Trigger"),
+        (:is_vEOG, "vEOG"),
+        (:is_hEOG, "hEOG")
+    ]
+    
+    for (marker_symbol, toggle_label) in marker_toggle_configs
+        if has_column(state.data, marker_symbol)
+            marker_index = findfirst(m -> m.name == marker_symbol, state.markers)
+            if !isnothing(marker_index)
+                push!(
+                    configs,
+                    ToggleConfig(toggle_label, (active) -> plot_vertical_lines!(ax, state.markers[marker_index], active)),
+                )
+            end
         end
     end
 
@@ -339,11 +311,10 @@ function create_toggles(fig, ax, state)
         push!(configs, ToggleConfig("LP-Filter On/Off", (_) -> apply_lp_filter!(state)))
     end
     
-
     # Create toggles
     toggles = [(config.label, Toggle(fig), config.action) for config in configs]
 
-    # Setup observers
+    # Setup observers for toggle actions
     for toggle in toggles
         on(toggle[2].active) do active
             toggle[3](active)
@@ -446,9 +417,7 @@ function create_ica_menu(fig, ax, state, ica)
 end
 
 function create_epoch_menu(fig, ax, state)
-    # Create an epoch slider
-    slider_epoch =
-        Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
+    slider_epoch = Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
     label = Label(
         fig,
         @lift("Epoch: $($(slider_epoch.value))/$(n_epochs(state.data.original))"),
@@ -495,13 +464,12 @@ function show_additional_menu(state, clicked_region_idx = nothing)
             if btn.label[] == "Get Selected Regions"
                 # Get the boolean vector of selected regions
                 selected_regions_bool = get_selected_regions_bool(state)
-                println("Selected regions boolean vector:")
-                println("Length: $(length(selected_regions_bool))")
-                println("Number of selected samples: $(sum(selected_regions_bool))")
-                println("Selected regions: $(state.selection.selected_regions[])")
+                @info "Selected regions boolean vector:"
+                @info "Length: $(length(selected_regions_bool))"
+                @info "Number of selected samples: $(sum(selected_regions_bool))"
+                @info "Selected regions: $(state.selection.selected_regions[])"
             else
                 selected_data = subset_selected_data(state, clicked_region_idx)
-                println(selected_data)
                 if btn.label[] == "Topoplot (multiquadratic)"
                     plot_topography(selected_data, method = :multiquadratic)
                 elseif btn.label[] == "Topoplot (spherical_spline)"
@@ -521,8 +489,9 @@ function show_channel_repair_menu(state, selected_channels, ax)
     # Get all available channels
     all_channels = state.channels.labels
     n_channels = length(all_channels)
-    
-    # Create a scrollable area with all channels visible
+   
+    # TODO: this looks ok for my typical 70/72 channel setup but could be improved for other setups
+
     cols = 7  # 7 columns
     rows = ceil(Int, n_channels / cols)  # Calculate rows needed for all channels
     
@@ -564,11 +533,9 @@ function show_channel_repair_menu(state, selected_channels, ax)
         # Create label with repair status
         label_text = is_repaired ? "$(string(ch)) ✓" : string(ch)
         label_color = is_repaired ? :green : :black
-        label = Label(channel_cell[1, 2], label_text, fontsize = 11, color = label_color, halign = :left)
+        label = Label(channel_cell[1, 2], label_text, fontsize = 12, color = label_color, halign = :left)
         push!(channel_labels, label)
     end
-    
-    # No navigation needed - all channels visible
     
     # Add repair method selection
     method_label = Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
@@ -585,7 +552,6 @@ function show_channel_repair_menu(state, selected_channels, ax)
         Button(action_area[1, 2], label = "Undo Last Repair", width = 200)
     ]
     
-    
     # Method selection (radio button behavior)
     selected_method = Observable(:neighbor_interpolation)
     
@@ -601,19 +567,16 @@ function show_channel_repair_menu(state, selected_channels, ax)
         method_buttons[2].buttoncolor[] = :lightblue
     end
     
-    # Initialize with neighbor interpolation selected
-    method_buttons[1].buttoncolor[] = :lightblue
-    method_buttons[2].buttoncolor[] = :white
-    
+    # Initialize with neighbor interpolation selected as default
+    selected_method[] = :neighbor_interpolation
     
     # Apply repair
     on(action_buttons[1].clicks) do n
-        # Get selected channels from all channels
         selected_channels = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
         if !isempty(selected_channels)
             repair_selected_channels!(state, selected_channels, selected_method[], ax)
         else
-            println("No channels selected for repair")
+            @info "No channels selected for repair"
         end
     end
     
@@ -622,7 +585,7 @@ function show_channel_repair_menu(state, selected_channels, ax)
         if !isempty(state.channel_repair_history)
             undo_last_repair!(state, ax)
         else
-            println("No repairs to undo")
+            @info "No repairs to undo"
         end
     end
     
@@ -642,7 +605,7 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     end
     
     if !isempty(already_repaired)
-        println("Channels $(join(string.(collect(already_repaired)), ", ")) have already been repaired. Please undo first or select different channels.")
+        @info "Channels $(join(string.(collect(already_repaired)), ", ")) have already been repaired. Please undo first or select different channels."
         return
     end
     
@@ -659,7 +622,6 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     # Store repair in history
     push!(state.channel_repair_history, (selected_channels, method, original_data))
     
-    
     # Notify that data has been updated
     notify_data_update(state.data)
     
@@ -668,13 +630,14 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     draw(ax, state)
     
     total_repairs = length(state.channel_repair_history)
-    println("Successfully repaired channels: $(join(string.(selected_channels), ", ")) using $method")
-    println("Total repairs in history: $total_repairs")
+    @info "Successfully repaired channels: $(join(string.(selected_channels), ", ")) using $method"
+    @info "Total repairs in history: $total_repairs"
 end
 
 function undo_last_repair!(state, ax)
+
     if isempty(state.channel_repair_history)
-        println("No repairs to undo")
+        @info "No repairs to undo"
         return
     end
     
@@ -684,7 +647,6 @@ function undo_last_repair!(state, ax)
     # Restore original data
     restore_channel_data!(state.data.current[], channels, original_data)
     
-    
     # Notify that data has been updated
     notify_data_update(state.data)
     
@@ -693,14 +655,13 @@ function undo_last_repair!(state, ax)
     draw(ax, state)
     
     remaining_repairs = length(state.channel_repair_history)
-    println("Undid repair of channels: $(join(string.(channels), ", ")) (was $method)")
-    println("Remaining repairs in history: $remaining_repairs")
+    @info "Undid repair of channels: $(join(string.(channels), ", ")) (was $method)"
+    @info "Remaining repairs in history: $remaining_repairs"
 end
 
 # Helper function to get channel data matrix
 function get_channel_data_matrix(data, channels)
     if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
-        # ContinuousData or EpochData
         channel_data = data.data[:, channels]
         return Matrix(channel_data)
     else
@@ -711,7 +672,6 @@ end
 # Helper function to restore channel data
 function restore_channel_data!(data, channels, original_data)
     if hasfield(typeof(data), :data) && hasfield(typeof(data), :layout)
-        # ContinuousData or EpochData
         data.data[:, channels] = original_data
     else
         throw(ArgumentError("Unsupported data type for channel repair"))
@@ -730,22 +690,21 @@ function create_common_sliders(fig, state, dat)
     end
     push!(sliders, hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)))
 
-    # HP filter slider
-    if dat.analysis_info.hp_filter == 0.0
-        slider_hp = Slider(fig[1, 2], range = 0.1:0.1:2, startvalue = 0.5, width = 100)
-        on(slider_hp.value) do val
-            state.data.filter_state.hp_freq[] = val
+    # Define filter slider configurations
+    filter_configs = [
+        (:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"),
+        (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")
+    ]
+    
+    # Create filter sliders based on configuration
+    for (filter_field, freq_field, range, startval, label) in filter_configs
+        if getfield(dat.analysis_info, filter_field) == 0.0
+            slider = Slider(fig[1, 2], range = range, startvalue = startval, width = 100)
+            on(slider.value) do val
+                getfield(state.data.filter_state, freq_field)[] = val
+            end
+            push!(sliders, hcat(slider, Label(fig, @lift("$label: $($(slider.value)) Hz"), fontsize = 22)))
         end
-        push!(sliders, hcat(slider_hp, Label(fig, @lift("HP-Filter: $($(slider_hp.value)) Hz"), fontsize = 22)))
-    end
-
-    # LP filter slider
-    if dat.analysis_info.lp_filter == 0.0
-        slider_lp = Slider(fig[1, 2], range = 5:5:60, startvalue = 20, width = 100)
-        on(slider_lp.value) do val
-            state.data.filter_state.lp_freq[] = val
-        end
-        push!(sliders, hcat(slider_lp, Label(fig, @lift("LP-Filter: $($(slider_lp.value)) Hz"), fontsize = 22)))
     end
 
     return sliders
@@ -855,21 +814,10 @@ function handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, ac
 end
 
 # Type-specific left/right navigation
-function _handle_left_navigation(ax, state, data::ContinuousDataState)
-    xback!(ax, state)
-end
-
-function _handle_left_navigation(ax, state, data::EpochedDataState)
-    step_epoch_backward(ax, state)
-end
-
-function _handle_right_navigation(ax, state, data::ContinuousDataState)
-    xforward!(ax, state)
-end
-
-function _handle_right_navigation(ax, state, data::EpochedDataState)
-    step_epoch_forward(ax, state)
-end
+_handle_left_navigation(ax, state, data::ContinuousDataState) = xback!(ax, state)
+_handle_left_navigation(ax, state, data::EpochedDataState) = step_epoch_backward(ax, state)
+_handle_right_navigation(ax, state, data::ContinuousDataState) = xforward!(ax, state)
+_handle_right_navigation(ax, state, data::EpochedDataState) = step_epoch_forward(ax, state)
 
 function xback!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] - 200 < 1 && return
@@ -891,40 +839,36 @@ function xforward!(ax, state::ContinuousDataBrowserState)
     )
 end
 
-function step_epoch_backward(ax, state::EpochedDataBrowserState)
+step_epoch_backward(ax, state::EpochedDataBrowserState) = step_epoch!(ax, state, -1)
+step_epoch_forward(ax, state::EpochedDataBrowserState) = step_epoch!(ax, state, 1)
+
+function step_epoch!(ax, state::EpochedDataBrowserState, direction::Int)
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-    state.data.current_epoch[] = max(1, state.data.current_epoch[] - 1)
-    ax.title = "Epoch $(state.data.current_epoch[])/$(n_epochs(state.data.original))"
+    current = state.data.current_epoch[]
+    total = n_epochs(state.data.original)
+    state.data.current_epoch[] = clamp(current + direction, 1, total)
+    ax.title = "Epoch $(state.data.current_epoch[])/$total"
     update_markers!(ax, state)
     draw(ax, state)
     draw_extra_channel!(ax, state)
 end
 
-function step_epoch_forward(ax, state::EpochedDataBrowserState)
-    clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-    state.data.current_epoch[] = min(n_epochs(state.data.original), state.data.current_epoch[] + 1)
-    ax.title = "Epoch $(state.data.current_epoch[])/$(n_epochs(state.data.original))"
-    update_markers!(ax, state)
-    draw(ax, state)
-    draw_extra_channel!(ax, state)
-end
+yless!(ax, state) = yzoom!(ax, state, 1.2)
+ymore!(ax, state) = yzoom!(ax, state, 0.8)
 
-function yless!(ax, state)
-    if state.view.butterfly[] 
-        (state.view.yrange.val[1] + 100 >= 0 || state.view.yrange.val[end] - 100 <= 0) && return
-        state.view.yrange[] = (state.view.yrange.val[1]+100):(state.view.yrange.val[end]-100)
+function yzoom!(ax, state, factor::Float64)
+    if state.view.butterfly[]
+        # In butterfly mode: adjust y-range
+        y_min, y_max = state.view.yrange.val[1], state.view.yrange.val[end]
+        if factor > 1.0  # Zoom in (yless)
+            (y_min + 100 >= 0 || y_max - 100 <= 0) && return
+            state.view.yrange[] = (y_min + 100):(y_max - 100)
+        else  # Zoom out (ymore)
+            state.view.yrange[] = (y_min - 100):(y_max + 100)
+        end
         ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
-    else
-        state.view.amplitude_scale[] = state.view.amplitude_scale[] * 1.2
-    end
-end
-
-function ymore!(ax, state)
-    if state.view.butterfly[] 
-        state.view.yrange[] = (state.view.yrange.val[1]-100):(state.view.yrange.val[end]+100)
-        ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
-    else
-        state.view.amplitude_scale[] = state.view.amplitude_scale[] * 0.8
+    else # In non-butterfly mode: adjust amplitude scale
+        state.view.amplitude_scale[] = state.view.amplitude_scale[] * factor
     end
 end
 
@@ -1146,19 +1090,7 @@ function handle_selection_movement!(ax, state, action::Symbol)
     end
 end
 
-function _handle_selection_movement_impl(ax, state::ContinuousDataBrowserState, action::Symbol)
-    width = state.selection.bounds[][2] - state.selection.bounds[][1]
-    time_start, time_end = get_time_bounds(state.data)
-    if action == :left
-        new_start = max(time_start, state.selection.bounds[][1] - width / 5)
-    else  # :right
-        new_start = min(time_end - width, state.selection.bounds[][1] + width / 5)
-    end
-    state.selection.bounds[] = (new_start, new_start + width)
-    update_x_region_selection!(ax, state, state.selection.bounds[][1], state.selection.bounds[][2])
-end
-
-function _handle_selection_movement_impl(ax, state::EpochedDataBrowserState, action::Symbol)
+function _handle_selection_movement_impl(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
     width = state.selection.bounds[][2] - state.selection.bounds[][1]
     time_start, time_end = get_time_bounds(state.data)
     if action == :left
@@ -1421,15 +1353,12 @@ function add_marker!(markers, ax, data, col; label = nothing, trial = nothing, v
         mask = data[trial][!, col] .!= 0
         marker_data = data[trial][mask, [:time, col]]
     end
+
     # if no markers, return
-    if nrow(marker_data) == 0
-        return
-    end
-    if isnothing(label)
-        label = string.(marker_data[!, col])
-    else
-        label = repeat([label], nrow(marker_data))
-    end
+    nrow(marker_data) == 0 && return
+
+    label = isnothing(label) ? string.(marker_data[!, col]) : repeat([label], nrow(marker_data))
+
     push!(
         markers,
         Marker(
@@ -1452,7 +1381,6 @@ end
 function update_channel_offsets!(state)
     nchannels = count(state.channels.visible)
     if nchannels > 1 && !state.view.butterfly[]
-        # More efficient: direct calculation without LinRange slicing
         y_max = state.view.yrange[][end] * 0.9
         y_min = state.view.yrange[][1] * 0.9
         step = (y_min - y_max) / (nchannels - 1)
@@ -1466,7 +1394,6 @@ function update_channel_offsets!(state)
 end
 
 function clear_axes!(ax, datas)
-    # More efficient: avoid nested comprehensions that create temporary arrays
     for data in datas
         for (key, value) in data
             delete!(ax, value)
@@ -1475,7 +1402,6 @@ function clear_axes!(ax, datas)
     end
 end
 
-# Generic set_axes! function that handles both types
 function set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
     @lift ylims!(ax, $(state.view.yrange)[1], $(state.view.yrange)[end])
     set_x_limits!(ax, state, state.data)
@@ -1497,14 +1423,19 @@ end
 function init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     markers = Marker[]
     data = get_current_data(state.data)
-    if has_column(state.data, "triggers")
-        add_marker!(markers, ax, data, :triggers, visible = get(marker_visible, :triggers, false))
-    end
-    if has_column(state.data, "is_vEOG")
-        add_marker!(markers, ax, data, :is_vEOG, label = "v", visible = get(marker_visible, :is_vEOG, false))
-    end
-    if has_column(state.data, "is_hEOG")
-        add_marker!(markers, ax, data, :is_hEOG, label = "h", visible = get(marker_visible, :is_hEOG, false))
+
+    # Define marker configurations
+    marker_configs = [
+        (:triggers, nothing),
+        (:is_vEOG, "v"),
+        (:is_hEOG, "h")
+    ]
+    
+    # Add markers based on configuration
+    for (symbol, label) in marker_configs
+        if has_column(state.data, symbol)
+            add_marker!(markers, ax, data, symbol, label = label, visible = get(marker_visible, symbol, false))
+        end
     end
 
     return markers
@@ -1570,7 +1501,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             end
 
             # Update or create line
-            update_or_create_line!(
+            create_line!(
                 state.channels.data_lines,
                 col,
                 ax,
@@ -1585,7 +1516,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             # Handle labels
             if !state.view.butterfly[]
                 label_y_obs = @lift(get_label_y($(state.data.current), $col, state.view.offset[idx]))
-                update_or_create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
+                create_label!(state.channels.data_labels, col, ax, time_start_obs, label_y_obs, is_selected)
             else
                 hide_channel_label!(state.channels.data_labels, col)
             end
@@ -1611,11 +1542,11 @@ function get_data_accessors(state::EpochedDataState)
 end
 
 # Helper functions for line/label management
-function update_or_create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha)
+function create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha)
     data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha)
 end
 
-function update_or_create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
+function create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
     data_labels[col] = text!(
         ax,
         x_obs,
@@ -1628,18 +1559,12 @@ function update_or_create_label!(data_labels, col, ax, x_obs, y_obs, is_selected
 end
 
 function hide_channel_label!(data_labels, col)
-    if haskey(data_labels, col)
-        hide!(data_labels[col])
-    end
+    haskey(data_labels, col) && hide!(data_labels[col])
 end
 
 function hide_channel_objects!(channels, col)
-    if haskey(channels.data_lines, col)
-        hide!(channels.data_lines[col])
-    end
-    if haskey(channels.data_labels, col)
-        hide!(channels.data_labels[col])
-    end
+    haskey(channels.data_lines, col) && hide!(channels.data_lines[col])
+    haskey(channels.data_labels, col) && hide!(channels.data_labels[col])
 end
 
 # Single function with data access abstraction
@@ -1647,11 +1572,10 @@ function draw_extra_channel!(ax, state::DataBrowserState{<:AbstractDataState})
     clear_axes!(ax, [state.extra_channel.data_lines, state.extra_channel.data_labels])
 
     if state.extra_channel.visible && !isnothing(state.extra_channel.channel)
-        # More efficient: avoid computing mean of diff for every draw
-        current_offset = if length(state.view.offset) > 1
-            state.view.offset[end] + (state.view.offset[end] - state.view.offset[end-1])
+        if length(state.view.offset) > 1
+            current_offset = state.view.offset[end] + (state.view.offset[end] - state.view.offset[end-1])
         else
-            state.view.offset[end] + 100.0  # Default spacing
+            current_offset = state.view.offset[end] + 100.0  # Default spacing
         end
         channel = state.extra_channel.channel
 
@@ -1704,11 +1628,12 @@ end
 
 function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
 
-    # Check if CairoMakie is being used and warn about interactivity
+    # Check if CairoMakie is being used and warn about lack of interactivity
     if string(Makie.current_backend()) == "CairoMakie"
         @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
     end
 
+    # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
 
     # Common fig/ax/state/ui setup
