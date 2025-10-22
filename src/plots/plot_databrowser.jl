@@ -840,6 +840,30 @@ function build_grid_components!(
     !isnothing(extra_menu) && push!(grid_components, extra_menu)
     !isnothing(epoch_menu) && push!(grid_components, epoch_menu)
 
+    # Add Exit button
+    exit_button = Button(fig, label = "Exit", width = 200, height = 40)
+    exit_label = Label(fig, "Close All Windows", fontsize = 22, halign = :left)
+    exit_row = hcat(exit_button, exit_label)
+    push!(grid_components, exit_row)
+    
+    # Set up Exit button action
+    # TODO: suggested  LLM agent hack to close all windows
+    # Is there a better way to do this?
+    on(exit_button.clicks) do n
+        # Suppress warnings during window closing
+        old_stderr = stderr
+        try # Temporarily suppress warnings by redirecting stderr
+            redirect_stderr(devnull)
+            Main.GLMakie.closeall()
+        finally # Restore stderr and apply current filters
+            redirect_stderr(old_stderr)
+            # Apply current filters to ensure returned data reflects current state
+            if state.data.filter_state.active[].hp || state.data.filter_state.active[].lp
+                apply_filters!(state)
+            end
+        end
+    end
+
     # Use a Grid with auto-sizing for better responsiveness
     control_panel = grid!(vcat(grid_components...), tellheight = false)
 
@@ -1741,7 +1765,7 @@ get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
 
 
-function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
+function plot_databrowser!(dat::EegData, ica = nothing; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
 
@@ -1763,14 +1787,13 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
 
     display(fig)
     
-    # Ensure the returned data reflects the current filter state
-    if state.data.filter_state.active[].hp || state.data.filter_state.active[].lp
-        # Apply filters to ensure returned data matches current state
-        apply_filters!(state)
-    end
-    
-    return fig, ax, state.data.current[]
+    return fig, ax
 end
+
+function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
+    return plot_databrowser!(copy(dat), ica; kwargs...)
+end
+
 
 function plot_vertical_lines!(ax, marker, active)
     marker.line.visible = active

@@ -11,9 +11,13 @@ eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
 
 # TODO: tidy up regpion selection
-eegfun.plot_databrowser(dat)
+# eegfun.plot_databrowser(dat)
 
-fig, ax, dat_new = eegfun.plot_databrowser(dat)
+fig, ax = eegfun.plot_databrowser(dat)
+fig, ax = eegfun.plot_databrowser!(dat)
+
+
+
 
 eegfun.filter_data!(dat, "hp", 1)
 fig, ax = eegfun.plot_databrowser(dat)
