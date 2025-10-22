@@ -229,18 +229,11 @@ data_state_type(::Type{ErpData}) = ContinuousDataState
 get_current_data(state::ContinuousDataState) = state.current[].data
 get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
 get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
-get_time_bounds(dat::EpochedDataState) =
-    (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
+get_time_bounds(dat::EpochedDataState) = (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
 has_column(state::ContinuousDataState, col::String) = col in names(state.current[].data)
 has_column(state::EpochedDataState, col::String) = col in names(state.current[].data[state.current_epoch[]])
-
 notify_data_update(state::AbstractDataState) = notify(state.current)
-
-# This single function works for BOTH types
-function reset_to_original!(state::AbstractDataState)
-    # state.current[] = copy(state.original)
-    state.current[] = state.original
-end
+reset_to_original!(state::AbstractDataState) = state.current[] = copy(state.original)
 
 ############
 # UI
@@ -826,31 +819,7 @@ function build_grid_components!(
     !isnothing(ica_menu) && push!(grid_components, ica_menu)
     !isnothing(extra_menu) && push!(grid_components, extra_menu)
     !isnothing(epoch_menu) && push!(grid_components, epoch_menu)
-
-    # Add Exit button
-    exit_button = Button(fig, label = "Exit", width = 200, height = 40)
-    exit_label = Label(fig, "Close All Windows", fontsize = 22, halign = :left)
-    exit_row = hcat(exit_button, exit_label)
-    push!(grid_components, exit_row)
-    
-    # Set up Exit button action
-    # TODO: suggested  LLM agent hack to close all windows
-    # Is there a better way to do this?
-    on(exit_button.clicks) do n
-        # Suppress warnings during window closing
-        old_stderr = stderr
-        try # Temporarily suppress warnings by redirecting stderr
-            redirect_stderr(devnull)
-            Main.GLMakie.closeall()
-        finally # Restore stderr and apply current filters
-            redirect_stderr(old_stderr)
-            # Apply current filters to ensure returned data reflects current state
-            if state.data.filter_state.active[].hp || state.data.filter_state.active[].lp
-                apply_filters!(state)
-            end
-        end
-    end
-
+   
     # Use a Grid with auto-sizing for better responsiveness
     control_panel = grid!(vcat(grid_components...), tellheight = false)
 
@@ -941,27 +910,21 @@ function step_epoch_forward(ax, state::EpochedDataBrowserState)
 end
 
 function yless!(ax, state)
-    if state.view.butterfly[]
-        # In butterfly mode: compress the y-range (zoom in)
+    if state.view.butterfly[] 
         (state.view.yrange.val[1] + 100 >= 0 || state.view.yrange.val[end] - 100 <= 0) && return
         state.view.yrange[] = (state.view.yrange.val[1]+100):(state.view.yrange.val[end]-100)
         ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
     else
-        # In non-butterfly mode: increase amplitude scale (zoom in on waveforms)
         state.view.amplitude_scale[] = state.view.amplitude_scale[] * 1.2
-        # No need to redraw - the reactive observables will update automatically
     end
 end
 
 function ymore!(ax, state)
-    if state.view.butterfly[]
-        # In butterfly mode: expand the y-range (zoom out)
+    if state.view.butterfly[] 
         state.view.yrange[] = (state.view.yrange.val[1]-100):(state.view.yrange.val[end]+100)
         ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
     else
-        # In non-butterfly mode: decrease amplitude scale (zoom out on waveforms)
         state.view.amplitude_scale[] = state.view.amplitude_scale[] * 0.8
-        # No need to redraw - the reactive observables will update automatically
     end
 end
 
@@ -1731,25 +1694,30 @@ get_title(dat::EpochData) = "Epoch 1/$(n_epochs(dat))"
 get_title(dat::ContinuousData) = ""
 get_title(dat::ErpData) = "Epoch Average (n=$(n_epochs(dat)))"
 
+function plot_vertical_lines!(ax, marker, active)
+    marker.line.visible = active
+    marker.text.visible = active
+    marker.visible = active
+    marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
+end
 
 
-function plot_databrowser!(dat::EegData, ica = nothing; kwargs...)
-    # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
+function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
 
     # Check if CairoMakie is being used and warn about interactivity
     if string(Makie.current_backend()) == "CairoMakie"
         @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
     end
 
+    plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
+
     # Common fig/ax/state/ui setup
     fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     ax = Axis(fig[1, 1], xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], title = get_title(dat))
+
     state = create_browser_state(dat, dat.layout.data.label, ax, ica, plot_kwargs)
-    # Call setup_ui directly - method dispatch should work
     setup_ui(fig, ax, state, dat, ica, plot_kwargs)
 
-    # Render and return
     draw(ax, state)
     draw_extra_channel!(ax, state)
 
@@ -1758,14 +1726,3 @@ function plot_databrowser!(dat::EegData, ica = nothing; kwargs...)
     return fig, ax
 end
 
-function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
-    return plot_databrowser!(copy(dat), ica; kwargs...)
-end
-
-
-function plot_vertical_lines!(ax, marker, active)
-    marker.line.visible = active
-    marker.text.visible = active
-    marker.visible = active
-    marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
-end

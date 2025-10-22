@@ -13,8 +13,14 @@ eegfun.rereference!(dat, :avg)
 # TODO: tidy up regpion selection
 # eegfun.plot_databrowser(dat)
 
-fig, ax = eegfun.plot_databrowser(dat; 
-channel_line_width = 1, channel_line_alpha = 0.5)
+eegfun.plot_databrowser(dat)
+
+
+
+; channel_line_width = 1, channel_line_alpha = 0.5)
+
+
+
 
 fig, ax = eegfun.plot_databrowser!(dat)
 
