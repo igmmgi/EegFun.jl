@@ -3,32 +3,22 @@
 const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Figure and layout
-    :figure_size => (nothing, "Figure size as (width, height). If nothing, uses default size"),
     :figure_padding => ((50, 0, 50, 50), "Figure padding as (left, right, bottom, top)"),
 
     # Axis styling
     :xlabel => ("Time (S)", "X-axis label"),
     :ylabel => ("Amplitude (μV)", "Y-axis label"),
-    :title_fontsize => (16, "Font size for plot title"),
-    :label_fontsize => (14, "Font size for axis labels"),
-    :tick_fontsize => (12, "Font size for tick labels"),
 
     # UI styling
     :ui_fontsize => (18, "Font size for UI elements"),
-    :ui_label_fontsize => (22, "Font size for UI labels"),
-    :menu_fontsize => (18, "Font size for menu items"),
-    :menu_width => (200, "Width of dropdown menus"),
 
     # Line styling
-    :line_width => (1, "Line width for data lines"),
-    :line_alpha => (1.0, "Transparency for data lines"),
-    :marker_line_width => (1, "Line width for marker lines"),
-    :marker_line_color => (:grey, "Color for marker lines"),
-
-    # Channel styling
     :channel_line_width => (1, "Line width for channel lines"),
+    :channel_line_alpha => (1, "Transparency for channel lines"),
     :selected_channel_color => (:black, "Color for selected channels"),
     :unselected_channel_color => (:darkgrey, "Color for unselected channels"),
+
+    # TODO: could this be done better?
     :channel_offset_scale => (1500, "Scale factor for channel vertical offset"),
     :channel_offset_margin => (0.9, "Margin factor for channel offset range"),
 
@@ -45,13 +35,6 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :default_amplitude_scale => (1.0, "Default amplitude scaling factor"),
     :default_butterfly => (false, "Default butterfly plot mode"),
 
-    # Marker styling
-    :marker_fontsize => (22, "Font size for marker labels"),
-    :marker_text_offset => (0.98, "Vertical offset factor for marker text"),
-
-    # Extra channel styling
-    :extra_channel_line_width => (2, "Line width for extra channel lines"),
-    :extra_channel_alpha => (0.8, "Transparency for extra channel lines"),
 )
 
 # Base type for data states
@@ -186,6 +169,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
     channel_repair_history::Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
+    plot_kwargs::Dict{Symbol,Any}  # Store plot kwargs for styling
 
     # Constructor
     function DataBrowserState{T}(;
@@ -195,6 +179,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
         selection::SelectionState,
         ica_original::Union{Nothing,InfoIca} = nothing,
         extra_channel::ExtraChannelInfo = ExtraChannelInfo(),
+        plot_kwargs::Dict{Symbol,Any} = Dict{Symbol,Any}(),
     ) where {T<:AbstractDataState}
         return new{T}(
             view,
@@ -207,6 +192,7 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             extra_channel,
             data.original.analysis_info.reference,
             Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}(),  # empty repair history
+            plot_kwargs,
         )
     end
 end
@@ -225,6 +211,7 @@ function create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) wher
         data = state_type(dat, plot_kwargs),  # Pass kwargs to data state constructor
         selection = SelectionState(ax, plot_kwargs),
         ica_original = ica,
+        plot_kwargs = plot_kwargs,
     )
 end
 
@@ -1527,14 +1514,10 @@ end
 
 # Generic set_axes! function that handles both types
 function set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
-    # Set y limits for both types
     @lift ylims!(ax, $(state.view.yrange)[1], $(state.view.yrange)[end])
-
-    # Use type-specific method for setting x limits
     set_x_limits!(ax, state, state.data)
 end
 
-# Type-specific x limit setting for continuous data
 function set_x_limits!(ax, state, data::ContinuousDataState)
     @lift xlims!(
         ax,
@@ -1543,7 +1526,6 @@ function set_x_limits!(ax, state, data::ContinuousDataState)
     )
 end
 
-# Type-specific x limit setting for epoched data
 function set_x_limits!(ax, state, data::EpochedDataState)
     @lift xlims!(ax, $(data.current).data[1].time[1], $(data.current).data[1].time[end])
 end
@@ -1614,14 +1596,14 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             # Line properties (reuse channel_data_obs for efficiency)
             if is_repaired || is_selected
                 # Repaired channels get black color and thicker lines
-                line_color = :black
+                line_color = state.plot_kwargs[:selected_channel_color]
                 line_colormap = [:black]
-                line_width = 4
+                line_width = state.plot_kwargs[:channel_line_width] * 2  # Make repaired channels thicker
             else
                 # Normal channels
                 line_color = @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
-                line_colormap = [:darkgrey, :darkgrey, :red]
-                line_width = 2
+                line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
+                line_width = state.plot_kwargs[:channel_line_width]
             end
 
             # Update or create line
@@ -1634,6 +1616,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
                 line_color,
                 line_colormap,
                 line_width,
+                state.plot_kwargs[:channel_line_alpha],
             )
 
             # Handle labels
@@ -1665,35 +1648,20 @@ function get_data_accessors(state::EpochedDataState)
 end
 
 # Helper functions for line/label management
-function update_or_create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth)
-    if haskey(data_lines, col)
-        data_lines[col].x[] = x_obs[]
-        data_lines[col].y[] = y_obs[]
-        data_lines[col].color[] = color
-        data_lines[col].colormap[] = colormap
-        data_lines[col].linewidth[] = linewidth
-        show!(data_lines[col])
-    else
-        data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth)
-    end
+function update_or_create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewidth, alpha)
+    data_lines[col] = lines!(ax, x_obs, y_obs, color = color, colormap = colormap, linewidth = linewidth, alpha = alpha)
 end
 
 function update_or_create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
-    if haskey(data_labels, col)
-        data_labels[col].position[] = Point2f(x_obs[], y_obs[])
-        data_labels[col].color[] = is_selected ? :red : :black
-        show!(data_labels[col])
-    else
-        data_labels[col] = text!(
-            ax,
-            x_obs,
-            y_obs,
-            text = String(col),
-            align = (:left, :center),
-            fontsize = 18,
-            color = is_selected ? :red : :black,
-        )
-    end
+    data_labels[col] = text!(
+        ax,
+        x_obs,
+        y_obs,
+        text = String(col),
+        align = (:left, :center),
+        fontsize = 18,
+        color = is_selected ? :red : :black,
+    )
 end
 
 function hide_channel_label!(data_labels, col)
