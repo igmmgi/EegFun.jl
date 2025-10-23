@@ -1086,30 +1086,23 @@ function setup_keyboard_interactions!(fig, state)
                     (Keyboard.right_shift in events(fig).keyboardstate)
 
                 if !shift_pressed
-                    # Handle y-axis scaling - scale each component axis individually
                     if !isempty(state.axs)
                         if event.key == Keyboard.up
-                            # Zoom in - same as ymore! in shared_interactivity.jl
                             for ax in state.axs
-                                ylims!(ax, ax.yaxis.attributes.limits[] .* 0.8)
+                                ymore!(ax)
                             end
-                        else  # down
-                            # Zoom out - same as yless! in shared_interactivity.jl  
+                        else  
                             for ax in state.axs
-                                ylims!(ax, ax.yaxis.attributes.limits[] .* 1.25)
+                                yless!(ax)
                             end
                         end
                         
-                        # Channel axes are linked to their corresponding component axes,
-                        # so they should scale automatically, but let's be explicit
                         for ax in state.channel_axs
                             if !isnothing(ax)
-                                # Get the corresponding component axis limits
-                                # Since they're linked, we can just use the channel axis's own limits
                                 if event.key == Keyboard.up
-                                    ylims!(ax, ax.yaxis.attributes.limits[] .* 0.8)
-                                else  # down
-                                    ylims!(ax, ax.yaxis.attributes.limits[] .* 1.25)
+                                    ymore!(ax)
+                                else  
+                                    yless!(ax)
                                 end
                             end
                         end
