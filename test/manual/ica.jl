@@ -23,7 +23,7 @@ ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extre
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 
 
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true, colorbar_plot_numbers = [1, 2]);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true, colorbar_components = [1, 2]);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :below, colorbar_vertical=false);
 
 
