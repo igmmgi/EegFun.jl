@@ -1,3 +1,7 @@
+# TODO: colorbar position seems a bit awkward (+inconsistent) for ICA/standard topoplots
+# Currently I have (hacky?), settings with :right, :below, :same for colorbar_position
+# or offset positions (e.g., 1,2)
+# MUST BE BETTER WAY TO HANDLE THIS!!!
 
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
@@ -43,6 +47,7 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
      for attr in propertynames(Colorbar)]...,
     :colorbar_plot => (false, "Whether to display colorbars"),
     :colorbar_position => (:right, "Position for colorbar: :right, :below, or :same"),
+    :colorbar_components => ([], "Component selection for component colorbar plotting"),
 
 )
 
@@ -93,7 +98,7 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     )
     
     # Add colorbar if requested
-    if pop!(plot_kwargs, :colorbar_plot)
+    if plot_kwargs[:colorbar_plot] && component in plot_kwargs[:colorbar_components]
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
         colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
@@ -1081,28 +1086,36 @@ function setup_keyboard_interactions!(fig, state)
                     (Keyboard.right_shift in events(fig).keyboardstate)
 
                 if !shift_pressed
-                    # Handle y-axis scaling
-                    current_range = state.ylims[][2]  # Just take the positive limit
-                    if event.key == Keyboard.up
-                        # Zoom in - decrease range by 20%
-                        new_range = current_range * 0.8
-                    else  # down
-                        # Zoom out - increase range by 20%
-                        new_range = current_range * 1.2
-                    end
-
-                    # Keep centered on zero
-                    state.ylims[] = (-new_range, new_range)
-
-                    # Update y-axis limits for all axes
-                    for ax in state.axs
-                        ylims!(ax, state.ylims[])
-                    end
-                    # Also update channel axes to maintain alignment
-                    for ax in state.channel_axs
-                        if !isnothing(ax)
-                            ylims!(ax, state.ylims[])
+                    # Handle y-axis scaling - scale each component axis individually
+                    if !isempty(state.axs)
+                        if event.key == Keyboard.up
+                            # Zoom in - same as ymore! in shared_interactivity.jl
+                            for ax in state.axs
+                                ylims!(ax, ax.yaxis.attributes.limits[] .* 0.8)
+                            end
+                        else  # down
+                            # Zoom out - same as yless! in shared_interactivity.jl  
+                            for ax in state.axs
+                                ylims!(ax, ax.yaxis.attributes.limits[] .* 1.25)
+                            end
                         end
+                        
+                        # Channel axes are linked to their corresponding component axes,
+                        # so they should scale automatically, but let's be explicit
+                        for ax in state.channel_axs
+                            if !isnothing(ax)
+                                # Get the corresponding component axis limits
+                                # Since they're linked, we can just use the channel axis's own limits
+                                if event.key == Keyboard.up
+                                    ylims!(ax, ax.yaxis.attributes.limits[] .* 0.8)
+                                else  # down
+                                    ylims!(ax, ax.yaxis.attributes.limits[] .* 1.25)
+                                end
+                            end
+                        end
+                        
+                        # Update the global ylims observable for consistency
+                        state.ylims[] = ylims(state.axs[1])
                     end
 
                     # Force a redraw of the plots with scale inversion

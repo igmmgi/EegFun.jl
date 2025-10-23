@@ -23,59 +23,29 @@ ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extre
 ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
 
 
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true, colorbar_plot_numbers = [1, 2]);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :below, colorbar_vertical=false);
-
-
 
 
 # Test single component plotting (simplified approach)
 eegfun.plot_topography(ica_result, method = :multiquadratic);
 eegfun.plot_topography(ica_result, method = :spherical_spline);
-eegfun.plot_topography(ica_result, 1, method = :multiquadratic);
-eegfun.plot_topography(ica_result, 1, method = :multiquadratic, gridscale = 50);
-eegfun.plot_topography(ica_result, 1, method = :multiquadratic, gridscale = 1000);
-
-eegfun.plot_topography(ica_result, 1, method = :multiquadratic, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true);
-
-# this works
-eegfun.plot_topography(ica_result, 1, method = :multiquadratic)
-
-# this does not works
-eegfun.plot_topography(ica_result, 1, method = :multiquadratic, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true);
-
-# but this works
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, colorbar_plot = true, colorbar_position = :right, colorbar_vertical=true);
-
-
-
-
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, colorbar_plot = true, colorbar_position = :below, colorbar_vertical=false);
 
 # Test multiple components (original approach)
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, point_plot = true);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, point_plot = true, label_plot = true);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, point_plot = true, label_plot = true, 
-point_color = :red, point_marker = :x, point_markersize = 30, head_color = :blue, head_linewidth = 5, head_radius = 1.1);
-
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, point_plot = true, label_plot = true, 
-point_color = :red, point_marker = :x, point_markersize = 30, head_color = :blue, head_linewidth = 5, colorbar_plot = true);
-
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, point_plot = true, label_plot = true, point_color = :red, point_marker = :x, point_markersize = 30, head_color = :blue, head_linewidth = 5, head_radius = 1.1);
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, point_plot = true, label_plot = true, point_color = :red, point_marker = :x, point_markersize = 30, head_color = :blue, head_linewidth = 5, colorbar_plot = true);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, colorbar_plot = true);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, 
-colorbar_plot = true, colorbar_position = (3, 1));
-
-
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, colorbar_plot = true, colorbar_position = :below, colorbar_vertical=false);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic, colorbar_plot = true);
-
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:2), method = :spherical_spline);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:2), method = :spherical_spline, colorbar_plot = true);
-
-
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = (2, 1), colorbar_vertical=false);
-
+eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = true, colorbar_position = :below, colorbar_vertical=false);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, dims = (4, 1));
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline, colorbar_plot = false);
@@ -98,13 +68,16 @@ eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10)
 eegfun.plot_topography(ica_result; component_selection = eegfun.components(1:10), method = :spherical_spline)
 eegfun.plot_topography(ica_result; component_selection = eegfun.components(1:10), method = :multiquadratic)
 
+
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components([1, 3, 5]);
     use_global_scale = true,
     colorbar_plot = true,
-    colorbar_plot_numbers = [2],
+    colorbar_plot_numbers = [5],
 )
+
+
 
 eegfun.plot_topography(
     ica_result,
@@ -112,11 +85,12 @@ eegfun.plot_topography(
     dims = (2, 3),
     use_global_scale = true,
     colorbar_plot = true,
-    colorbar_plot_numbers = [5],
+    colorbar_components = [3, 5],
 )
 
 
 # plot_ica_component_activation
+eegfun.plot_ica_component_activation(dat, ica_result)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
 
