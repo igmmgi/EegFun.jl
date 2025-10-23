@@ -61,6 +61,7 @@ function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Sy
     return nothing
 end
 
+
 """
     detect_eog_signals!(dat::EegData, eog_cfg::Dict)
 
