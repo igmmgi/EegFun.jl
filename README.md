@@ -9,15 +9,16 @@ Alpha level 0.1 :-)
 
 ## ✅ Complete
 
-- ✓ Basic EEG data reading and processing
-- ✓ Interactive databrowser with region selection
-- ✓ Multiple plot types (ERP, topography, spectrum, etc.)
-- ✓ ICA component removal
-- ✓ Filtering (high-pass, low-pass)
-- ✓ Epoching and basic ERP analysis
+- ✓ Basic EEG data reading and processing (currently limited file formats!)
 - ✓ Layout system for different electrode configurations
-- ✓ Initial test suite
+- ✓ Interactive databrowser with analysis options (implemented in Makie)
+- ✓ Multiple plot types (ERP, topography, spectrum, etc., again with some interactivity)
+- ✓ Filtering (high-pass, low-pass)
+- ✓ ICA component calculation/removal
+- ✓ Epoching and basic ERP analysis
+- ✓ Initial batch processing options 
 - ✓ Initial documentation and examples
+- ✓ Initial test suite
 
 ## 📋 TODO
 
