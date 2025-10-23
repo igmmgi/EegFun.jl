@@ -38,6 +38,35 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 # Base type for data states
 abstract type AbstractDataState end
 
+# Analysis step tracking
+"""
+    AnalysisSettings
+
+Stores the final analysis settings applied by the user in the databrowser.
+
+# Fields
+- `hp_filter::Float64`: High-pass filter frequency (0.0 if not applied)
+- `lp_filter::Float64`: Low-pass filter frequency (0.0 if not applied)
+- `reference::Symbol`: Reference type used (:avg, :mastoid, :none, or channel name)
+- `repaired_channels::Vector{Symbol}`: List of channels that were repaired
+- `repair_method::Symbol`: Repair method used for all repaired channels
+- `selected_regions::Vector{Tuple{Float64,Float64}}`: Time regions selected by user
+- `removed_ica_components::Vector{Int}`: ICA components that were removed
+"""
+struct AnalysisSettings
+    hp_filter::Float64
+    lp_filter::Float64
+    reference::Symbol
+    repaired_channels::Vector{Symbol}
+    repair_method::Symbol  # Single repair method for all repaired channels
+    selected_regions::Vector{Tuple{Float64,Float64}}
+    removed_ica_components::Vector{Int}
+end
+
+AnalysisSettings() = AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
+
+# Analysis step recording functions will be defined after DataBrowserState
+
 # Data Browser: Continuous Data
 mutable struct Marker
     data::Any
@@ -164,6 +193,8 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
     channel_repair_history::Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
+    removed_ica_components::Vector{Int}  # Track removed ICA components
+    analysis_settings::Observable{AnalysisSettings}  # Observable analysis settings
     plot_kwargs::Dict{Symbol,Any}  
 
     # Constructor
@@ -187,6 +218,8 @@ mutable struct DataBrowserState{T<:AbstractDataState}
             extra_channel,
             data.original.analysis_info.reference,
             [],  # empty repair history
+            Int[],  # empty removed ICA components
+            Observable(AnalysisSettings()),  # Initialize with empty settings
             plot_kwargs,
         )
     end
@@ -195,6 +228,92 @@ end
 # Type aliases 
 const ContinuousDataBrowserState = DataBrowserState{ContinuousDataState}
 const EpochedDataBrowserState = DataBrowserState{EpochedDataState}
+
+# Analysis settings functions
+"""
+    update_analysis_settings!(state::DataBrowserState)
+
+Update the analysis settings observable with current state.
+"""
+function update_analysis_settings!(state::DataBrowserState)
+    # Get current filter settings
+    hp_freq = state.data.filter_state.active[].hp ? state.data.filter_state.hp_freq[] : 0.0
+    lp_freq = state.data.filter_state.active[].lp ? state.data.filter_state.lp_freq[] : 0.0
+    
+    # Get repaired channels and their method
+    repaired_channels = Symbol[]
+    repair_method = :none
+    for (channels, method, _) in state.channel_repair_history
+        append!(repaired_channels, channels)
+        repair_method = method  # TODO: should we check that same repair method was applied for all channel repairs?
+    end
+    
+    # Get selected regions
+    selected_regions = state.selection.selected_regions[]
+    
+    # Update the observable
+    state.analysis_settings[] = AnalysisSettings(
+        hp_freq,
+        lp_freq,
+        state.reference_state,
+        repaired_channels,
+        repair_method,
+        selected_regions,
+        state.removed_ica_components
+    )
+end
+
+
+"""
+    _add_selected_regions!(data::EegData, selected_regions::Vector{Tuple{Float64,Float64}})
+
+Add a boolean column :selected_region to the data indicating which time points are in selected regions.
+"""
+function _add_selected_regions!(dat::EegData, selected_regions::Vector{Tuple{Float64,Float64}})
+    
+    # Create boolean vector and mark where true
+    selected_mask = falses(n_samples(dat))
+    for (start_time, end_time) in selected_regions
+        region_mask = (dat.data.time .>= start_time) .& (dat.data.time .<= end_time)
+        selected_mask .|= region_mask
+    end
+    dat.data[!, :selected_region] = selected_mask
+    
+end
+
+"""
+    apply_analysis_settings!(data::EegData, settings::AnalysisSettings)
+
+Apply analysis settings to data in-place.
+"""
+function apply_analysis_settings!(data::EegData, settings::AnalysisSettings)
+
+    settings.hp_filter != 0 && filter_data!(data, "hp", settings.hp_filter)
+    settings.lp_filter != 0 && filter_data!(data, "lp", settings.lp_filter)
+    settings.reference != :none && rereference!(data, settings.reference)
+    !isempty(settings.repaired_channels) && repair_channels!(data, settings.repaired_channels, method=settings.repair_method)
+    !isempty(settings.selected_regions) && _add_selected_regions!(data, settings.selected_regions)
+   
+    # TODO: ICA component removal if selected!
+    
+    return data
+end
+apply_analysis_settings!(data::EegData, settings::Observable{AnalysisSettings}) = apply_analysis_settings!(data, settings[])
+
+
+
+"""
+    apply_analysis_settings(data::EegData, settings::AnalysisSettings) -> EegData
+
+Apply analysis settings to data, returning a copy.
+"""
+function apply_analysis_settings(data::EegData, settings::AnalysisSettings)
+    data_copy = copy(data)
+    apply_analysis_settings!(data_copy, settings)
+    return data_copy
+end
+apply_analysis_settings(data::EegData, settings::Observable{AnalysisSettings}) = apply_analysis_settings(data, settings[])
+
 
 # Data browser state creation
 function create_browser_state(dat::T, channel_labels, ax, ica, plot_kwargs) where {T<:EegData}
@@ -381,10 +500,13 @@ function create_reference_menu(fig, state, dat)
     menu = create_menu(fig, options, String(dat.analysis_info.reference), "Reference")
 
     on(menu[1].selection) do s
+        old_reference = state.reference_state
         state.reference_state = s
+        
         s == :none && return
         rereference!(state.data, s)
         notify_data_update(state.data)
+        update_analysis_settings!(state)
     end
 
     return menu
@@ -403,13 +525,20 @@ function create_ica_menu(fig, ax, state, ica)
         if !isnothing(component_to_remove_int)
             apply_ica_removal!(state.data, state.ica_current, [component_to_remove_int])
             state.ica_current = copy(state.ica_current)
+            
+            # Track removed ICA component
+            push!(state.removed_ica_components, component_to_remove_int)
         else # Selected "None" so reset to original ICA state
             state.ica_current = copy(state.ica_original)
             reset_to_original!(state.data)
+            
+            # Clear removed ICA components
+            empty!(state.removed_ica_components)
         end
 
         notify_data_update(state.data)
         draw(ax, state)
+        update_analysis_settings!(state)
     end
 
     return menu
@@ -625,6 +754,9 @@ function repair_selected_channels!(state, selected_channels, method, ax)
     # Notify that data has been updated
     notify_data_update(state.data)
     
+    # Update analysis settings
+    update_analysis_settings!(state)
+    
     # Clear and redraw the plot
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     draw(ax, state)
@@ -703,6 +835,8 @@ function create_common_sliders(fig, state, dat)
             on(slider.value) do val
                 getfield(state.data.filter_state, freq_field)[] = val
             end
+            # Initialize filter state with slider default value
+            getfield(state.data.filter_state, freq_field)[] = startval
             push!(sliders, hcat(slider, Label(fig, @lift("$label: $($(slider.value)) Hz"), fontsize = 22)))
         end
     end
@@ -1136,6 +1270,9 @@ function add_region_to_selection!(ax, state, x1, x2)
     region_plot = poly!(ax, region_points, color = (:blue, 0.3), strokecolor = :transparent)
     push!(state.selection.region_plots, region_plot)
     
+    # Update analysis settings
+    update_analysis_settings!(state)
+    
 end
 
 function clear_x_region_selection!(state)
@@ -1303,14 +1440,18 @@ end
 
 function apply_hp_filter!(state)
     current_state = state.data.filter_state.active[]
-    state.data.filter_state.active[] = (hp = !current_state.hp, lp = current_state.lp)
+    new_state = (hp = !current_state.hp, lp = current_state.lp)
+    state.data.filter_state.active[] = new_state
     apply_filters!(state)
+    update_analysis_settings!(state)
 end
 
 function apply_lp_filter!(state)
     current_state = state.data.filter_state.active[]
-    state.data.filter_state.active[] = (hp = current_state.hp, lp = !current_state.lp)
+    new_state = (hp = current_state.hp, lp = !current_state.lp)
+    state.data.filter_state.active[] = new_state
     apply_filters!(state)
+    update_analysis_settings!(state)
 end
 
 
@@ -1648,6 +1789,7 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
 
     display(fig)
     
-    return fig, ax
+    # Return the observable analysis settings
+    return fig, ax, state.analysis_settings
 end
 
