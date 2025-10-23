@@ -281,38 +281,7 @@ function _add_selected_regions!(dat::EegData, selected_regions::Vector{Tuple{Flo
     
 end
 
-"""
-    apply_analysis_settings!(data::EegData, settings::AnalysisSettings)
 
-Apply analysis settings to data in-place.
-"""
-function apply_analysis_settings!(data::EegData, settings::AnalysisSettings)
-
-    settings.hp_filter != 0 && filter_data!(data, "hp", settings.hp_filter)
-    settings.lp_filter != 0 && filter_data!(data, "lp", settings.lp_filter)
-    settings.reference != :none && rereference!(data, settings.reference)
-    !isempty(settings.repaired_channels) && repair_channels!(data, settings.repaired_channels, method=settings.repair_method)
-    !isempty(settings.selected_regions) && _add_selected_regions!(data, settings.selected_regions)
-   
-    # TODO: ICA component removal if selected!
-    
-    return data
-end
-apply_analysis_settings!(data::EegData, settings::Observable{AnalysisSettings}) = apply_analysis_settings!(data, settings[])
-
-
-
-"""
-    apply_analysis_settings(data::EegData, settings::AnalysisSettings) -> EegData
-
-Apply analysis settings to data, returning a copy.
-"""
-function apply_analysis_settings(data::EegData, settings::AnalysisSettings)
-    data_copy = copy(data)
-    apply_analysis_settings!(data_copy, settings)
-    return data_copy
-end
-apply_analysis_settings(data::EegData, settings::Observable{AnalysisSettings}) = apply_analysis_settings(data, settings[])
 
 
 # Data browser state creation
