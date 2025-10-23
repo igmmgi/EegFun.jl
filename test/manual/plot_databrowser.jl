@@ -23,7 +23,7 @@ dat_new = eegfun.apply_analysis_settings(dat, analysis_settings)
 eegfun.plot_databrowser(dat_new)
 
 fig, ax, analysis_settings = eegfun.plot_databrowser(dat)
-eegfun.apply_analysis_settings!(dat, analysis_settings[])
+eegfun.apply_analysis_settings!(dat, analysis_settings)
 eegfun.plot_databrowser(dat)
 
 
