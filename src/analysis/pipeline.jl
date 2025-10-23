@@ -17,7 +17,7 @@ function preprocess(config::String; log_level::String = "info")
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
 
     try
-        
+
         @info section("Setup")
         !isfile(config) && @minimal_error "Config file does not exist: $config"
         cfg = load_config(config)
@@ -38,7 +38,8 @@ function preprocess(config::String; log_level::String = "info")
         @info "Found $(length(raw_data_files)) files: $(join(raw_data_files, ", "))"
 
         # Read the epoch conditions defined within the toml file (See XXX for examples)
-        !isfile(cfg["files"]["input"]["epoch_condition_file"]) && @minimal_error "File missing: $(cfg["files"]["input"]["epoch_condition_file"])"
+        !isfile(cfg["files"]["input"]["epoch_condition_file"]) &&
+            @minimal_error "File missing: $(cfg["files"]["input"]["epoch_condition_file"])"
         epoch_cfgs = parse_epoch_conditions(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
         @info "Epoch file: $(cfg["files"]["input"]["epoch_condition_file"]) loaded"
 
@@ -72,7 +73,10 @@ function preprocess(config::String; log_level::String = "info")
                 @info "File: $data_file"
 
                 # Set up per-file logging (temporarily replaces global logger)
-                setup_logging(joinpath(output_directory, "$(basename_without_ext(data_file)).log"), log_level = log_level)
+                setup_logging(
+                    joinpath(output_directory, "$(basename_without_ext(data_file)).log"),
+                    log_level = log_level,
+                )
 
                 # read raw data file and create our Julia DataFrame
                 # TODO: update for different file types!
@@ -100,7 +104,7 @@ function preprocess(config::String; log_level::String = "info")
                 calculate_eog_channels!(dat, preprocess_cfg.eog)
 
                 # Autodetect EOG signals
-                @info subsection("Detecting EOG (vEOG/hEOG) onsets") 
+                @info subsection("Detecting EOG (vEOG/hEOG) onsets")
                 detect_eog_signals!(dat, preprocess_cfg.eog)
 
                 # detect extreme values
@@ -109,7 +113,9 @@ function preprocess(config::String; log_level::String = "info")
                 is_extreme_value!(
                     dat,
                     Int(preprocess_cfg.eeg.artifact_value_criterion),
-                    channel_out = Symbol( "is_extreme_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion)),
+                    channel_out = Symbol(
+                        "is_extreme_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion),
+                    ),
                 )
 
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
@@ -121,30 +127,26 @@ function preprocess(config::String; log_level::String = "info")
                     dat_cleaned = copy(dat)
 
                     # Apply ICA-specific filters
-                    @info subsection("ICA filters") 
+                    @info subsection("ICA filters")
                     @info _applied_filters(preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass])
                     filter_data!(dat_ica, preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass])
 
-                    @info subsection("Running ICA") 
+                    @info subsection("Running ICA")
                     ica_result = run_ica(
                         dat_ica;
                         sample_selection = samples_not(
-                            Symbol(
-                                "is_extreme_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion),
-                            ),
+                            Symbol("is_extreme_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion)),
                         ),
                         percentage_of_data = preprocess_cfg.ica.percentage_of_data,
                     )
 
                     # Identify all artifact components in one unified call
-                    @info subsection("Component Identification") 
+                    @info subsection("Component Identification")
                     component_artifacts, component_metrics = identify_components(
                         dat_ica,
                         ica_result,
                         sample_selection = samples_not(
-                            Symbol(
-                                "is_extreme_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion),
-                            ),
+                            Symbol("is_extreme_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion)),
                         ),
                     )
 
@@ -156,9 +158,12 @@ function preprocess(config::String; log_level::String = "info")
                     @info "Line Noise Component Metrics:"
                     log_pretty_table(component_metrics[:line_noise_metrics], title = "Line Noise Component Metrics")
                     @info "Channel Noise Component Metrics:"
-                    log_pretty_table(component_metrics[:channel_noise_metrics], title = "Channel Noise Component Metrics")
+                    log_pretty_table(
+                        component_metrics[:channel_noise_metrics],
+                        title = "Channel Noise Component Metrics",
+                    )
 
-                    @info subsection("Removing ICA components") 
+                    @info subsection("Removing ICA components")
                     remove_ica_components!(
                         dat_cleaned,
                         ica_result,
@@ -180,7 +185,7 @@ function preprocess(config::String; log_level::String = "info")
                 epochs_original = extract_epochs(dat, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
 
                 # detect standard artifact values
-                @info subsection("Detecting artifact values in epoched data") 
+                @info subsection("Detecting artifact values in epoched data")
                 is_extreme_value!(
                     dat_cleaned,
                     Int(preprocess_cfg.eeg.artifact_value_criterion),
@@ -189,13 +194,12 @@ function preprocess(config::String; log_level::String = "info")
                     ),
                 )
 
-                @info subsection("Extracting cleaned epoched data") 
-                epochs_cleaned = extract_epochs(dat_cleaned, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
+                @info subsection("Extracting cleaned epoched data")
+                epochs_cleaned =
+                    extract_epochs(dat_cleaned, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
                 epochs_cleaned = reject_epochs(
                     epochs_cleaned,
-                    Symbol(
-                        "is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion),
-                    ),
+                    Symbol("is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion)),
                 );
 
                 # Log epoch counts and store for summary
@@ -203,7 +207,7 @@ function preprocess(config::String; log_level::String = "info")
                 push!(all_epoch_counts, df)
 
                 # save epochs
-                @info section("Saving data") 
+                @info section("Saving data")
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
                     jldsave(
@@ -274,7 +278,10 @@ function _applied_filters(filter_cfg::FilterConfig; filter_sections::Vector{Symb
     applied_filters = []
     for section in sections
         if section.apply
-            push!(applied_filters, "$(section.freq)Hz $(section.type), $(section.method), $(section.func), order $(section.order)")
+            push!(
+                applied_filters,
+                "$(section.freq)Hz $(section.type), $(section.method), $(section.func), order $(section.order)",
+            )
         end
     end
     return join(applied_filters, "; ")
@@ -282,8 +289,18 @@ end
 
 # Helper function to return EOG configuration string for printing
 function _eog_config_string(eog_cfg::EogConfig)
-    vEOG_channels = join(eog_cfg.vEOG_channels[1], ", ") * " - " * join(eog_cfg.vEOG_channels[2], ", ") * " → " * eog_cfg.vEOG_channels[3][1]
-    hEOG_channels = join(eog_cfg.hEOG_channels[1], ", ") * " - " * join(eog_cfg.hEOG_channels[2], ", ") * " → " * eog_cfg.hEOG_channels[3][1]
+    vEOG_channels =
+        join(eog_cfg.vEOG_channels[1], ", ") *
+        " - " *
+        join(eog_cfg.vEOG_channels[2], ", ") *
+        " → " *
+        eog_cfg.vEOG_channels[3][1]
+    hEOG_channels =
+        join(eog_cfg.hEOG_channels[1], ", ") *
+        " - " *
+        join(eog_cfg.hEOG_channels[2], ", ") *
+        " → " *
+        eog_cfg.hEOG_channels[3][1]
     return "vEOG: $vEOG_channels ($(eog_cfg.vEOG_criterion)μV); hEOG: $hEOG_channels ($(eog_cfg.hEOG_criterion)μV)"
 end
 
@@ -305,4 +322,3 @@ end
 function subsection(title::String; width::Int = 80)
     return "\n" * _center_title(title, width)
 end
-

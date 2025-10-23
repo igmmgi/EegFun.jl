@@ -107,7 +107,7 @@ using Makie
 
             trigger_codes, trigger_times = eegfun._extract_trigger_data(dat)
 
-            @test length(trigger_codes) == 14  
+            @test length(trigger_codes) == 14
             @test length(trigger_times) == 14
             @test 1 in trigger_codes
             @test 2 in trigger_codes
@@ -120,8 +120,8 @@ using Makie
 
             trigger_codes, trigger_times = eegfun._extract_trigger_data(dat, ignore_triggers)
 
-            @test length(trigger_codes) == 7  
-            @test length(trigger_times) == 7  
+            @test length(trigger_codes) == 7
+            @test length(trigger_times) == 7
         end
 
         @testset "missing triggers column" begin
@@ -336,7 +336,7 @@ using Makie
     @testset "performance tests" begin
         @testset "large dataset handling" begin
             # Test with larger dataset
-            dat = create_test_continuous_data_with_triggers(;n = 10000)
+            dat = create_test_continuous_data_with_triggers(; n = 10000)
 
             # Should complete without errors
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
@@ -350,7 +350,7 @@ using Makie
 
         @testset "filtering efficiency" begin
             # Test that empty ignore_triggers has no performance penalty
-            dat = create_test_continuous_data_with_triggers(;n = 5000)
+            dat = create_test_continuous_data_with_triggers(; n = 5000)
 
             # Time both versions
             @time fig1, ax1 = eegfun.plot_trigger_overview(dat; display_plot = false)
@@ -556,7 +556,7 @@ using Makie
 
         @testset "memory and performance edge cases" begin
             # Test with very large dataset
-            dat = create_test_continuous_data_with_triggers(;n = 50000)
+            dat = create_test_continuous_data_with_triggers(; n = 50000)
 
             fig, ax = eegfun.plot_trigger_overview(dat; display_plot = false)
             @test fig isa Figure
@@ -624,7 +624,7 @@ using Makie
         end
 
         @testset "performance optimization verification" begin
-            dat = create_test_continuous_data_with_triggers(;n = 2000)
+            dat = create_test_continuous_data_with_triggers(; n = 2000)
 
             # Test that empty ignore_triggers doesn't add overhead
             # This is more of a design verification than a strict performance test

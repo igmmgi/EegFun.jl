@@ -138,7 +138,7 @@ using eegfun
 
     @testset "IntervalTime" begin
         # Test constructor
-        interval = eegfun.IntervalTime(start=0.1, stop=0.5)
+        interval = eegfun.IntervalTime(start = 0.1, stop = 0.5)
         @test interval.start == 0.1
         @test interval.stop == 0.5
 
@@ -181,7 +181,7 @@ using eegfun
 
     @testset "IntervalIndex" begin
         # Test constructor
-        interval = eegfun.IntervalIndex(start=10, stop=50)
+        interval = eegfun.IntervalIndex(start = 10, stop = 50)
         @test interval.start == 10
         @test interval.stop == 50
 

@@ -148,7 +148,8 @@ using CSV
 
         @testset "channel_summary MultiDataFrameEeg input validation" begin
             # Test empty epoch data
-            empty_layout = eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
+            empty_layout =
+                eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
             empty_epochs = eegfun.EpochData(DataFrame[], empty_layout, 100.0, eegfun.AnalysisInfo())
             @test_throws Exception eegfun.channel_summary(empty_epochs)
         end
@@ -227,7 +228,7 @@ end # eegfun testset
     test_dir = mktempdir()
 
     try
-        
+
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]

@@ -334,7 +334,7 @@ function _create_rejection_interface!(
     # Bad channels filter checkbox (always create to maintain layout)
     bad_channels_toggle = Toggle(nav_gl[1, 3])
     bad_channels_label = Label(nav_gl[1, 4], "Show bad channels only")
-    
+
     on(bad_channels_toggle.active) do active
         # Only show info message when trying to turn ON without artifact_info
         if active && (isnothing(artifact_info) || isempty(artifact_info.rejected_epochs))

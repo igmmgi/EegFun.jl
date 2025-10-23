@@ -8,7 +8,7 @@ using Statistics
 
     @testset "correlation_matrix" begin
 
-        dat = create_test_data(n=1000, n_channels=100)
+        dat = create_test_data(n = 1000, n_channels = 100)
 
         # Test with all channels
         cm = eegfun.correlation_matrix(dat)
@@ -38,7 +38,7 @@ using Statistics
     end
 
     @testset "channel_joint_probability" begin
-        dat = create_test_data(n=1000, n_channels=100)
+        dat = create_test_data(n = 1000, n_channels = 100)
 
         # Test with default parameters
         jp = eegfun.channel_joint_probability(dat)
@@ -66,7 +66,7 @@ using Statistics
     end
 
     @testset "_correlation_matrix" begin
-        dat = create_test_data(n=1000, n_channels=100)
+        dat = create_test_data(n = 1000, n_channels = 100)
 
         # Test internal function
         cm = eegfun._correlation_matrix(dat.data, collect(1:size(dat.data, 1)), [:Ch1, :Ch2, :Ch3])
@@ -77,7 +77,7 @@ using Statistics
     end
 
     @testset "_channel_joint_probability" begin
-        dat = create_test_data(n=1000, n_channels=100)
+        dat = create_test_data(n = 1000, n_channels = 100)
 
         # Test internal function
         jp = eegfun._channel_joint_probability(

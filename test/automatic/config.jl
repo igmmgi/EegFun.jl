@@ -776,7 +776,8 @@ using eegfun
 
     @testset "_group_params_by_subsection Tests" begin
         # Test parameter grouping by subsection
-        matching_params = ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
+        matching_params =
+            ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
         grouped = eegfun._group_params_by_subsection("preprocess.filter", matching_params)
 
         @test haskey(grouped, "highpass")
@@ -943,7 +944,8 @@ using eegfun
 
     @testset "_show_section_overview Tests" begin
         # Test section overview
-        matching_params = ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
+        matching_params =
+            ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
 
         # Test function exists and can be called
         @test typeof(eegfun._show_section_overview) <: Function

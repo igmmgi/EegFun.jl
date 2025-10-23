@@ -40,9 +40,9 @@ end
         @test all(abs.(dat.data.Ch2[dat.data.is_eog_onset]) .>= 75)
 
         # Test that it detects the artifact onset we added
-        @test dat.data.is_eog_onset[100] 
-        @test dat.data.is_eog_onset[500] 
-        @test dat.data.is_eog_onset[800] 
+        @test dat.data.is_eog_onset[100]
+        @test dat.data.is_eog_onset[500]
+        @test dat.data.is_eog_onset[800]
 
     end
 
@@ -142,7 +142,7 @@ end
 
         # Test counting extreme values (default combined mode)
         total_count = eegfun.n_extreme_value(dat, 101)
-        @test total_count == 17 
+        @test total_count == 17
 
         # Test separate mode
         count_df = eegfun.n_extreme_value(dat, 20, mode = :separate)

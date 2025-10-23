@@ -32,7 +32,6 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :default_window_size => (5000, "Default window size in samples"),
     :default_amplitude_scale => (1.0, "Default amplitude scaling factor"),
     :default_butterfly => (false, "Default butterfly plot mode"),
-
 )
 
 # Base type for data states
@@ -192,10 +191,10 @@ mutable struct DataBrowserState{T<:AbstractDataState}
     ica_current::Union{Nothing,InfoIca}
     extra_channel::ExtraChannelInfo
     reference_state::Symbol
-    channel_repair_history::Vector{Tuple{Vector{Symbol}, Symbol, Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
+    channel_repair_history::Vector{Tuple{Vector{Symbol},Symbol,Matrix{Float64}}}  # (channels, method, original_data) - stack for multiple undos
     removed_ica_components::Vector{Int}  # Track removed ICA components
     analysis_settings::Observable{AnalysisSettings}  # Observable analysis settings
-    plot_kwargs::Dict{Symbol,Any}  
+    plot_kwargs::Dict{Symbol,Any}
 
     # Constructor
     function DataBrowserState{T}(;
@@ -239,7 +238,7 @@ function update_analysis_settings!(state::DataBrowserState)
     # Get current filter settings
     hp_freq = state.data.filter_state.active[].hp ? state.data.filter_state.hp_freq[] : 0.0
     lp_freq = state.data.filter_state.active[].lp ? state.data.filter_state.lp_freq[] : 0.0
-    
+
     # Get repaired channels and their method
     repaired_channels = Symbol[]
     repair_method = :none
@@ -247,10 +246,10 @@ function update_analysis_settings!(state::DataBrowserState)
         append!(repaired_channels, channels)
         repair_method = method  # TODO: should we check that same repair method was applied for all channel repairs?
     end
-    
+
     # Get selected regions
     selected_regions = state.selection.selected_regions[]
-    
+
     # Update the observable
     state.analysis_settings[] = AnalysisSettings(
         hp_freq,
@@ -259,7 +258,7 @@ function update_analysis_settings!(state::DataBrowserState)
         repaired_channels,
         repair_method,
         selected_regions,
-        state.removed_ica_components
+        state.removed_ica_components,
     )
 end
 
@@ -270,7 +269,7 @@ end
 Add a boolean column :selected_region to the data indicating which time points are in selected regions.
 """
 function _add_selected_regions!(dat::EegData, selected_regions::Vector{Tuple{Float64,Float64}})
-    
+
     # Create boolean vector and mark where true
     selected_mask = falses(n_samples(dat))
     for (start_time, end_time) in selected_regions
@@ -278,7 +277,7 @@ function _add_selected_regions!(dat::EegData, selected_regions::Vector{Tuple{Flo
         selected_mask .|= region_mask
     end
     dat.data[!, :selected_region] = selected_mask
-    
+
 end
 
 
@@ -312,7 +311,8 @@ data_state_type(::Type{ErpData}) = ContinuousDataState
 get_current_data(state::ContinuousDataState) = state.current[].data
 get_current_data(state::EpochedDataState) = state.current[].data[state.current_epoch[]]
 get_time_bounds(dat::ContinuousDataState) = (dat.current[].data.time[1], dat.current[].data.time[end])
-get_time_bounds(dat::EpochedDataState) = (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
+get_time_bounds(dat::EpochedDataState) =
+    (dat.current[].data[dat.current_epoch[]].time[1], dat.current[].data[dat.current_epoch[]].time[end])
 has_column(state::ContinuousDataState, col::Symbol) = col in propertynames(state.current[].data)
 has_column(state::EpochedDataState, col::Symbol) = col in propertynames(state.current[].data[state.current_epoch[]])
 notify_data_update(state::AbstractDataState) = notify(state.current)
@@ -373,19 +373,18 @@ function create_toggles(fig, ax, state)
     configs = [ToggleConfig("Butterfly Plot", (active) -> butterfly_plot!(ax, state))]
 
     # Add marker toggles based on configuration
-    marker_toggle_configs = [
-        (:triggers, "Trigger"),
-        (:is_vEOG, "vEOG"),
-        (:is_hEOG, "hEOG")
-    ]
-    
+    marker_toggle_configs = [(:triggers, "Trigger"), (:is_vEOG, "vEOG"), (:is_hEOG, "hEOG")]
+
     for (marker_symbol, toggle_label) in marker_toggle_configs
         if has_column(state.data, marker_symbol)
             marker_index = findfirst(m -> m.name == marker_symbol, state.markers)
             if !isnothing(marker_index)
                 push!(
                     configs,
-                    ToggleConfig(toggle_label, (active) -> plot_vertical_lines!(ax, state.markers[marker_index], active)),
+                    ToggleConfig(
+                        toggle_label,
+                        (active) -> plot_vertical_lines!(ax, state.markers[marker_index], active),
+                    ),
                 )
             end
         end
@@ -398,7 +397,7 @@ function create_toggles(fig, ax, state)
     if state.data.original.analysis_info.lp_filter == 0.0
         push!(configs, ToggleConfig("LP-Filter On/Off", (_) -> apply_lp_filter!(state)))
     end
-    
+
     # Create toggles
     toggles = [(config.label, Toggle(fig), config.action) for config in configs]
 
@@ -471,7 +470,7 @@ function create_reference_menu(fig, state, dat)
     on(menu[1].selection) do s
         old_reference = state.reference_state
         state.reference_state = s
-        
+
         s == :none && return
         rereference!(state.data, s)
         notify_data_update(state.data)
@@ -494,13 +493,13 @@ function create_ica_menu(fig, ax, state, ica)
         if !isnothing(component_to_remove_int)
             apply_ica_removal!(state.data, state.ica_current, [component_to_remove_int])
             state.ica_current = copy(state.ica_current)
-            
+
             # Track removed ICA component
             push!(state.removed_ica_components, component_to_remove_int)
         else # Selected "None" so reset to original ICA state
             state.ica_current = copy(state.ica_original)
             reset_to_original!(state.data)
-            
+
             # Clear removed ICA components
             empty!(state.removed_ica_components)
         end
@@ -515,7 +514,8 @@ function create_ica_menu(fig, ax, state, ica)
 end
 
 function create_epoch_menu(fig, ax, state)
-    slider_epoch = Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
+    slider_epoch =
+        Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
     label = Label(
         fig,
         @lift("Epoch: $($(slider_epoch.value))/$(n_epochs(state.data.original))"),
@@ -587,31 +587,31 @@ function show_channel_repair_menu(state, selected_channels, ax)
     # Get all available channels
     all_channels = state.channels.labels
     n_channels = length(all_channels)
-   
+
     # TODO: this looks ok for my typical 70/72 channel setup but could be improved for other setups
 
     cols = 7  # 7 columns
     rows = ceil(Int, n_channels / cols)  # Calculate rows needed for all channels
-    
+
     # Create the repair menu figure
     menu_fig = Figure(size = (700, 800))
-    
+
     # Add title
     title_text = "Channel Repair Interface"
     Label(menu_fig[1, 1], title_text, fontsize = 18, halign = :center)
-    
+
     # Create a scrollable area for channels
     scroll_area = menu_fig[2, 1] = GridLayout()
-    
+
     # Create checkboxes and labels arrays
     channel_checkboxes = []
     channel_labels = []
-    
+
     # Add all channels in 7-column layout
     for (i, ch) in enumerate(all_channels)
         row = ((i - 1) ÷ cols) + 1
         col = ((i - 1) % cols) + 1
-        
+
         # Check if channel has been repaired
         is_repaired = false
         for (repaired_channels, _, _) in state.channel_repair_history
@@ -620,54 +620,54 @@ function show_channel_repair_menu(state, selected_channels, ax)
                 break
             end
         end
-        
+
         # Create a horizontal layout for checkbox and label
         channel_cell = scroll_area[row, col] = GridLayout()
-        
+
         # Create checkbox
         checkbox = Checkbox(channel_cell[1, 1], checked = ch in selected_channels, width = 20, height = 20)
         push!(channel_checkboxes, checkbox)
-        
+
         # Create label with repair status
         label_text = is_repaired ? "$(string(ch)) ✓" : string(ch)
         label_color = is_repaired ? :green : :black
         label = Label(channel_cell[1, 2], label_text, fontsize = 12, color = label_color, halign = :left)
         push!(channel_labels, label)
     end
-    
+
     # Add repair method selection
     method_label = Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
     method_area = menu_fig[4, 1] = GridLayout()
     method_buttons = [
         Button(method_area[1, 1], label = "Neighbor Interpolation", width = 200),
-        Button(method_area[1, 2], label = "Spherical Spline", width = 200)
+        Button(method_area[1, 2], label = "Spherical Spline", width = 200),
     ]
-    
+
     # Add action buttons
     action_area = menu_fig[5, 1] = GridLayout()
     action_buttons = [
         Button(action_area[1, 1], label = "Apply Repair", width = 200),
-        Button(action_area[1, 2], label = "Undo Last Repair", width = 200)
+        Button(action_area[1, 2], label = "Undo Last Repair", width = 200),
     ]
-    
+
     # Method selection (radio button behavior)
     selected_method = Observable(:neighbor_interpolation)
-    
+
     on(method_buttons[1].clicks) do n
         selected_method[] = :neighbor_interpolation
         method_buttons[1].buttoncolor[] = :lightblue
         method_buttons[2].buttoncolor[] = :white
     end
-    
+
     on(method_buttons[2].clicks) do n
         selected_method[] = :spherical_spline
         method_buttons[1].buttoncolor[] = :white
         method_buttons[2].buttoncolor[] = :lightblue
     end
-    
+
     # Initialize with neighbor interpolation selected as default
     selected_method[] = :neighbor_interpolation
-    
+
     # Apply repair
     on(action_buttons[1].clicks) do n
         selected_channels = all_channels[findall(cb -> cb.checked[], channel_checkboxes)]
@@ -677,7 +677,7 @@ function show_channel_repair_menu(state, selected_channels, ax)
             @info "No channels selected for repair"
         end
     end
-    
+
     # Undo last repair
     on(action_buttons[2].clicks) do n
         if !isempty(state.channel_repair_history)
@@ -686,7 +686,7 @@ function show_channel_repair_menu(state, selected_channels, ax)
             @info "No repairs to undo"
         end
     end
-    
+
     new_screen = getfield(Main, :GLMakie).Screen()
     display(new_screen, menu_fig)
 end
@@ -701,35 +701,35 @@ function repair_selected_channels!(state, selected_channels, method, ax)
             end
         end
     end
-    
+
     if !isempty(already_repaired)
         @info "Channels $(join(string.(collect(already_repaired)), ", ")) have already been repaired. Please undo first or select different channels."
         return
     end
-    
+
     # Store original data before repair
     original_data = copy(get_channel_data_matrix(state.data.current[], selected_channels))
-    
+
     # Perform the repair
     if method == :neighbor_interpolation
-        repair_channels!(state.data.current[], selected_channels, method=:neighbor_interpolation)
+        repair_channels!(state.data.current[], selected_channels, method = :neighbor_interpolation)
     elseif method == :spherical_spline
-        repair_channels!(state.data.current[], selected_channels, method=:spherical_spline)
+        repair_channels!(state.data.current[], selected_channels, method = :spherical_spline)
     end
-    
+
     # Store repair in history
     push!(state.channel_repair_history, (selected_channels, method, original_data))
-    
+
     # Notify that data has been updated
     notify_data_update(state.data)
-    
+
     # Update analysis settings
     update_analysis_settings!(state)
-    
+
     # Clear and redraw the plot
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     draw(ax, state)
-    
+
     total_repairs = length(state.channel_repair_history)
     @info "Successfully repaired channels: $(join(string.(selected_channels), ", ")) using $method"
     @info "Total repairs in history: $total_repairs"
@@ -741,20 +741,20 @@ function undo_last_repair!(state, ax)
         @info "No repairs to undo"
         return
     end
-    
+
     # Get the last repair
     channels, method, original_data = pop!(state.channel_repair_history)
-    
+
     # Restore original data
     restore_channel_data!(state.data.current[], channels, original_data)
-    
+
     # Notify that data has been updated
     notify_data_update(state.data)
-    
+
     # Clear and redraw the plot
     clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
     draw(ax, state)
-    
+
     remaining_repairs = length(state.channel_repair_history)
     @info "Undid repair of channels: $(join(string.(channels), ", ")) (was $method)"
     @info "Remaining repairs in history: $remaining_repairs"
@@ -792,11 +792,9 @@ function create_common_sliders(fig, state, dat)
     push!(sliders, hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)))
 
     # Define filter slider configurations
-    filter_configs = [
-        (:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"),
-        (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")
-    ]
-    
+    filter_configs =
+        [(:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"), (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")]
+
     # Create filter sliders based on configuration
     for (filter_field, freq_field, range, startval, label) in filter_configs
         if getfield(dat.analysis_info, filter_field) == 0.0
@@ -881,7 +879,7 @@ function build_grid_components!(
     !isnothing(ica_menu) && push!(grid_components, ica_menu)
     !isnothing(extra_menu) && push!(grid_components, extra_menu)
     !isnothing(epoch_menu) && push!(grid_components, epoch_menu)
-   
+
     # Use a Grid with auto-sizing for better responsiveness
     control_panel = grid!(vcat(grid_components...), tellheight = false)
 
@@ -965,9 +963,9 @@ function yzoom!(ax, state, factor::Float64)
         y_min, y_max = state.view.yrange.val[1], state.view.yrange.val[end]
         if factor > 1.0  # Zoom in (yless)
             (y_min + 100 >= 0 || y_max - 100 <= 0) && return
-            state.view.yrange[] = (y_min + 100):(y_max - 100)
+            state.view.yrange[] = (y_min+100):(y_max-100)
         else  # Zoom out (ymore)
-            state.view.yrange[] = (y_min - 100):(y_max + 100)
+            state.view.yrange[] = (y_min-100):(y_max+100)
         end
         ylims!(ax, state.view.yrange.val[1], state.view.yrange.val[end])
     else # In non-butterfly mode: adjust amplitude scale
@@ -1005,11 +1003,11 @@ function remove_region_from_selection!(ax, state, region_idx)
         plot_to_remove = state.selection.region_plots[region_idx]
         delete!(ax.scene, plot_to_remove)
         deleteat!(state.selection.region_plots, region_idx)
-        
+
         # Remove the region from the list
         deleteat!(regions, region_idx)
         state.selection.selected_regions[] = regions
-        
+
     end
 end
 
@@ -1026,10 +1024,10 @@ function finish_selection!(ax, state, mouse_x)
     state.selection.bounds[] = (state.selection.bounds[][1], mouse_x)
     update_x_region_selection!(ax, state, state.selection.bounds[][1], mouse_x)
     state.selection.rectangle.visible[] = true
-    
+
     # Add this selection to the list of selected regions
     add_region_to_selection!(ax, state, state.selection.bounds[][1], mouse_x)
-    
+
     # Clear the temporary selection rectangle after adding to permanent regions
     clear_x_region_selection!(state)
 end
@@ -1221,13 +1219,13 @@ function add_region_to_selection!(ax, state, x1, x2)
     if x1 > x2
         x1, x2 = x2, x1
     end
-    
+
     # Add to selected regions
     current_regions = state.selection.selected_regions[]
     new_region = (x1, x2)
     push!(current_regions, new_region)
     state.selection.selected_regions[] = current_regions
-    
+
     # Create a permanent region plot
     ylims = ax.limits[][2]
     region_points = Point2f[
@@ -1238,10 +1236,10 @@ function add_region_to_selection!(ax, state, x1, x2)
     ]
     region_plot = poly!(ax, region_points, color = (:blue, 0.3), strokecolor = :transparent)
     push!(state.selection.region_plots, region_plot)
-    
+
     # Update analysis settings
     update_analysis_settings!(state)
-    
+
 end
 
 function clear_x_region_selection!(state)
@@ -1258,10 +1256,10 @@ function clear_all_selected_regions!(ax, state)
         delete!(ax.scene, plot)
     end
     empty!(state.selection.region_plots)
-    
+
     # Clear the selected regions list
     state.selection.selected_regions[] = Tuple{Float64,Float64}[]
-    
+
 end
 
 """
@@ -1275,23 +1273,23 @@ function get_selected_regions_bool(state::DataBrowserState)
     total_samples = nrow(current_data)
     time_data = current_data.time
     bool_vector = falses(total_samples)
-    
+
     for (start_time, end_time) in state.selection.selected_regions[]
         # Find the closest sample indices
         start_idx = argmin(abs.(time_data .- start_time))
         end_idx = argmin(abs.(time_data .- end_time))
-        
+
         # Ensure indices are within bounds and start <= end
         start_idx = max(1, min(start_idx, total_samples))
         end_idx = max(1, min(end_idx, total_samples))
         if start_idx > end_idx
             start_idx, end_idx = end_idx, start_idx
         end
-        
+
         # Mark the region as selected
         bool_vector[start_idx:end_idx] .= true
     end
-    
+
     return bool_vector
 end
 
@@ -1307,13 +1305,8 @@ Returns detailed information about the selected regions including:
 function get_selected_regions_info(state::DataBrowserState)
     bool_vector = get_selected_regions_bool(state)
     regions = state.selection.selected_regions[]
-    
-    return (
-        bool_vector = bool_vector,
-        regions = regions,
-        n_samples = sum(bool_vector),
-        n_regions = length(regions)
-    )
+
+    return (bool_vector = bool_vector, regions = regions, n_samples = sum(bool_vector), n_regions = length(regions))
 end
 
 function subset_selected_data(state::ContinuousDataBrowserState, clicked_region_idx = nothing)
@@ -1328,7 +1321,7 @@ function subset_selected_data(state::ContinuousDataBrowserState, clicked_region_
         # Fall back to the old bounds format for backward compatibility
         x_min, x_max = minmax(state.selection.bounds[]...)
     end
-    
+
     selected_channels = state.channels.labels[state.channels.visible]
     return subset(
         state.data.current[],
@@ -1349,7 +1342,7 @@ function subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx
         # Fall back to the old bounds format for backward compatibility
         x_min, x_max = minmax(state.selection.bounds[]...)
     end
-    
+
     selected_channels = state.channels.labels[state.channels.visible]
     current_epoch = state.data.current_epoch[]
 
@@ -1535,12 +1528,8 @@ function init_markers(ax, state; marker_visible = Dict{Symbol,Bool}())
     data = get_current_data(state.data)
 
     # Define marker configurations
-    marker_configs = [
-        (:triggers, nothing),
-        (:is_vEOG, "v"),
-        (:is_hEOG, "h")
-    ]
-    
+    marker_configs = [(:triggers, nothing), (:is_vEOG, "v"), (:is_hEOG, "h")]
+
     # Add markers based on configuration
     for (symbol, label) in marker_configs
         if has_column(state.data, symbol)
@@ -1596,7 +1585,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
                     break
                 end
             end
-            
+
             # Line properties (reuse channel_data_obs for efficiency)
             if is_repaired || is_selected
                 # Repaired channels get black color and thicker lines
@@ -1606,7 +1595,8 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             else
                 # Normal channels
                 line_color = @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
-                line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
+                line_colormap =
+                    [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
                 line_width = state.plot_kwargs[:channel_line_width]
             end
 
@@ -1757,8 +1747,7 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     draw_extra_channel!(ax, state)
 
     display(fig)
-    
+
     # Return the observable analysis settings
     return fig, ax, state.analysis_settings
 end
-

@@ -81,7 +81,7 @@ function run_ica(
     if percentage_of_data !== 100
         dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data)
     end
-    
+
     ica_result = infomax_ica(dat_for_ica, ica_layout, n_components = n_components, params = params)
 
     return ica_result
@@ -144,39 +144,43 @@ function run_ica(
     if isempty(epoched_data)
         error("Empty epoched_data vector provided")
     end
-    
+
     # Use the first EpochData object as reference for some meta-like data
     reference_epoch_data = epoched_data[1]
     for (i, epoch_data) in enumerate(epoched_data)
         if epoch_data.sample_rate != reference_epoch_data.sample_rate
-            error("Inconsistent sample rates: EpochData $i has $(epoch_data.sample_rate) Hz, expected $(reference_epoch_data.sample_rate) Hz")
+            error(
+                "Inconsistent sample rates: EpochData $i has $(epoch_data.sample_rate) Hz, expected $(reference_epoch_data.sample_rate) Hz",
+            )
         end
     end
-    
+
     # Get channel information from reference
     selected_channels = get_selected_channels(
-        reference_epoch_data, channel_selection; 
-        include_meta = false, include_extra = include_extra
+        reference_epoch_data,
+        channel_selection;
+        include_meta = false,
+        include_extra = include_extra,
     )
     if isempty(selected_channels)
         error("No channels available after applying channel filter")
     end
-    
+
     # Concatenate all epoched data and check for duplicates
     concatenated_df = all_data(epoched_data)
     _check_epoched_data_uniqueness!(concatenated_df; remove_duplicates = remove_duplicates)
-    
+
     sample_indices = get_selected_samples(concatenated_df, sample_selection)
     if isempty(sample_indices)
         error("No samples available after applying sample filter to epoched data")
     end
-    
+
     # Create data matrix for ICA
     concatenated_matrix = create_ica_data_matrix(concatenated_df, selected_channels, sample_indices)
     if percentage_of_data !== 100
         concatenated_matrix = _select_subsample!(concatenated_matrix, percentage_of_data)
     end
-    
+
     # Set n_components if not specified
     if isnothing(n_components)
         n_components = length(selected_channels) - 1
@@ -184,18 +188,18 @@ function run_ica(
         @warn "Requested $n_components components but only $(length(selected_channels)) channels available. Using $(length(selected_channels) - 1) components instead."
         n_components = length(selected_channels) - 1
     end
-    
+
     final_samples = size(concatenated_matrix, 2)
     total_epochs = sum(length(epoch_data.data) for epoch_data in epoched_data)
-    
+
     @info "Running ICA on concatenated epochs: $(length(selected_channels)) channels x $final_samples samples (from $total_epochs epochs) -> $n_components components"
-    
+
     # Create subsetted layout that matches the selected channels  
     ica_layout = subset_layout(reference_epoch_data.layout, channel_selection = channels(selected_channels))
-    
+
     # Run ICA on concatenated data
     ica_result = infomax_ica(concatenated_matrix, ica_layout, n_components = n_components, params = params)
-    
+
     return ica_result
 end
 
@@ -217,37 +221,37 @@ times in the concatenated data, which can bias ICA decomposition.
 - Modifies DataFrame in place if remove_duplicates=true
 """
 function _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_duplicates::Bool = false)
-    
+
     # Check if samples column exists
     if !hasproperty(concatenated_df, :samples)
         @debug "No samples column found - cannot check for duplicate samples"
         return nothing
     end
-    
+
     # Check for duplicate sample indices
     n_original = nrow(concatenated_df)
     unique_samples = length(unique(concatenated_df.samples))
     n_duplicates = n_original - unique_samples
-    
+
     if n_duplicates > 0
-        duplicate_percentage = round(100 * n_duplicates / n_original, digits=1)
-        
+        duplicate_percentage = round(100 * n_duplicates / n_original, digits = 1)
+
         @warn """
         Found $n_duplicates duplicate samples ($duplicate_percentage%) in concatenated epoched data.
         This occurs when epochs have overlapping time windows - the same original data samples 
         appear multiple times. Duplicate samples may bias ICA decomposition.
-        
+
         Total rows: $n_original
         Unique samples: $unique_samples  
         Duplicates: $n_duplicates ($duplicate_percentage%)
         """
-        
+
         if remove_duplicates
             unique!(concatenated_df, :samples)
             @info "Automatically removed $n_duplicates duplicate samples based on samples column. Using $unique_samples unique samples for ICA."
         end
     end
-    
+
     return nothing
 end
 
@@ -288,15 +292,15 @@ function create_ica_data_matrix(dat::DataFrame, channels, samples)
     existing_channels = intersect(propertynames(dat), channels)
     n_channels = length(existing_channels)
     n_samples = length(samples)
-    
+
     # Pre-allocate result matrix
     result = Matrix{Float64}(undef, n_channels, n_samples)
-    
+
     # Use direct column access for better performance
     for (i, ch) in enumerate(existing_channels)
         result[i, :] = dat[samples, ch]
     end
-    
+
     return result
 end
 
@@ -317,16 +321,16 @@ function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
     if percentage <= 0 || percentage > 100
         error("percentage_of_data must be between 0 and 100, got $percentage")
     end
-    
+
     original_samples = size(data_matrix, 2)
     target_samples = round(Int, original_samples * percentage / 100)
-    
+
     # Random sample selection (columns are samples in data_matrix)
     sample_cols = randperm(original_samples)[1:target_samples]
     subsampled_matrix = data_matrix[:, sample_cols]
-    
+
     @info "Random subsampling: using $target_samples of $original_samples samples ($(round(percentage, digits=1))%) for $(round(100/percentage, digits=1))x speedup"
-    
+
     return subsampled_matrix
 end
 
@@ -364,12 +368,7 @@ function create_work_arrays(n_components::Int, block_size::Int)
     )
 end
 
-function infomax_ica(
-    dat_ica::Matrix{Float64},
-    layout::Layout;
-    n_components::Int,
-    params::IcaPrms = IcaPrms(),
-)
+function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
 
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
@@ -383,11 +382,11 @@ function infomax_ica(
     n_channels, n_samples = size(dat_ica)
     F = svd(dat_ica)
     pca_components = F.U[:, 1:n_components]
-    
+
     # PCA projection into workspace
     workspace = Matrix{Float64}(undef, n_components, n_samples)
     mul!(workspace, pca_components', dat_ica)
-    
+
     # Sphering: reuse original dat_ica memory (resize to smaller dimensions)
     sphere = inv(sqrt(cov(workspace, dims = 2)))
     dat_ica = Matrix{Float64}(undef, n_components, n_samples)  # Resize to final dimensions
@@ -421,7 +420,7 @@ function infomax_ica(
 
             # forward pass
             mul!(work.u, work.weights, work.data_block)
-            @. work.y = 1 - 2 / (1 + exp(-work.u))  
+            @. work.y = 1 - 2 / (1 + exp(-work.u))
 
             # update weights 
             mul!(work.wu_term, work.y, transpose(work.u))
@@ -1297,27 +1296,27 @@ ecg_metrics = metrics[:ecg_metrics]
 function identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(), kwargs...)
     # Identify EOG components
     eog_comps, eog_metrics_df = identify_eog_components(dat, ica; sample_selection = sample_selection, kwargs...)
-    
+
     # Identify ECG components  
     ecg_comps, ecg_metrics_df = identify_ecg_components(dat, ica; sample_selection = sample_selection, kwargs...)
-    
+
     # Identify line noise components
     line_noise_comps, line_noise_metrics_df = identify_line_noise_components(dat, ica; kwargs...)
-    
+
     # Identify channel noise components (spatial kurtosis)
     channel_noise_comps, channel_noise_metrics_df = identify_spatial_kurtosis_components(dat, ica; kwargs...)
-    
+
     # Combine all components
     artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
-    
+
     # Combine all metrics
-    metrics = Dict{Symbol, DataFrame}(
+    metrics = Dict{Symbol,DataFrame}(
         :eog_metrics => eog_metrics_df,
         :ecg_metrics => ecg_metrics_df,
         :line_noise_metrics => line_noise_metrics_df,
-        :channel_noise_metrics => channel_noise_metrics_df
+        :channel_noise_metrics => channel_noise_metrics_df,
     )
-    
+
     return artifacts, metrics
 end
 

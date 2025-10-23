@@ -10,7 +10,7 @@ using Statistics
     test_dir = mktempdir()
 
     try
-                # Create test data files
+        # Create test data files
 
         @testset "Setup test files" begin
             for participant in [1, 2]

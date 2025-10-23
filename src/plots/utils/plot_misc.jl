@@ -28,13 +28,13 @@ function _get_colorbar_defaults()
     # Create a minimal figure
     fig = Figure()
     cb = Colorbar(fig)
-    
+
     # Get all attribute values at once
-    defaults = Dict{Symbol, Any}()
+    defaults = Dict{Symbol,Any}()
     for attr in propertynames(Colorbar)
         defaults[attr] = getproperty(cb, attr)
     end
-    
+
     return defaults
 end
 
@@ -53,10 +53,10 @@ suitable for passing to Colorbar constructor.
 # Returns
 - `Dict{Symbol, Any}`: Cleaned colorbar parameters with invalid attributes removed
 """
-function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol, Any})
-    colorbar_kwargs = Dict{Symbol, Any}()
+function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
+    colorbar_kwargs = Dict{Symbol,Any}()
     colorbar_attrs = propertynames(Colorbar)
-    
+
     for attr in colorbar_attrs
         colorbar_key = Symbol("colorbar_$(attr)")
         if haskey(plot_kwargs, colorbar_key)
@@ -72,6 +72,6 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol, Any})
     pop!(colorbar_kwargs, :limits, nothing)
     pop!(colorbar_kwargs, :highclip, nothing)
     pop!(colorbar_kwargs, :lowclip, nothing)
-    
+
     return colorbar_kwargs
 end

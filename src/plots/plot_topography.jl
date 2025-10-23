@@ -22,9 +22,11 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Colorbar parameters - get all Colorbar attributes with their actual defaults
     # This allows users to control any Colorbar parameter
-    [Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") 
-     for attr in propertynames(Colorbar)]...,
-    
+    [
+        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
+        attr in propertynames(Colorbar)
+    ]...,
+
     # Override specific colorbar parameters with custom defaults
     :colorbar_plot => (true, "Whether to display the colorbar"),
     :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
@@ -115,11 +117,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     end
 
     if pop!(plot_kwargs, :colorbar_plot)
-        Colorbar(
-           fig[colorbar_position...],
-            co;
-            colorbar_kwargs...
-        )
+        Colorbar(fig[colorbar_position...], co; colorbar_kwargs...)
     end
 
     # head shape
@@ -151,7 +149,14 @@ function plot_topography(
 )
     fig = Figure()
     ax = Axis(fig[1, 1])
-    plot_topography!(fig, ax, dat; channel_selection = channel_selection, sample_selection = sample_selection, kwargs...)
+    plot_topography!(
+        fig,
+        ax,
+        dat;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        kwargs...,
+    )
 
     interactive && _setup_topo_interactivity!(fig, ax, dat)
     display_plot && display_figure(fig)
@@ -160,7 +165,7 @@ function plot_topography(
 end
 
 function plot_topography!(
-    fig, 
+    fig,
     ax,
     dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
@@ -172,7 +177,7 @@ function plot_topography!(
 
     dat_subset = subset(dat, channel_selection = channel_selection, sample_selection = sample_selection)
     _plot_topography!(fig, ax, dat_subset.data, dat_subset.layout; plot_kwargs...)
-    
+
 end
 
 """
@@ -272,12 +277,12 @@ function _circle_mask!(dat::Matrix{<:AbstractFloat}, grid_scale::Int)
         throw(DimensionMismatch("Data matrix must be $(grid_scale)×$(grid_scale)"))
     end
 
-    center = (grid_scale + 1) / 2  
-    radius_squared = (grid_scale / 2)^2  
-    
-    @inbounds for col in 1:grid_scale
+    center = (grid_scale + 1) / 2
+    radius_squared = (grid_scale / 2)^2
+
+    @inbounds for col = 1:grid_scale
         x_dist_squared = (center - col)^2
-        for row in 1:grid_scale
+        for row = 1:grid_scale
             y_dist_squared = (center - row)^2
             if x_dist_squared + y_dist_squared > radius_squared
                 dat[col, row] = NaN
@@ -789,7 +794,7 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
 
     unique_electrodes = unique(all_selected_electrodes)
     @info "N selections: $(length(selection_state.bounds_list[])); Electrodes found: $unique_electrodes"
-    
+
     # Reset active state
     selection_state.active[] = false
 end

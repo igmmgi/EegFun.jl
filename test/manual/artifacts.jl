@@ -2,7 +2,7 @@ using eegfun
 using GLMakie
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -11,8 +11,18 @@ eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
 # Calculate EOG signals
-eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:Fp1, :Fp2]), channel_selection2 = eegfun.channels([:IO1, :IO2]), channel_out = :vEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.channel_difference!(dat, channel_selection1 = eegfun.channels([:F9]),        channel_selection2 = eegfun.channels([:F10]),       channel_out = :hEOG); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(
+    dat,
+    channel_selection1 = eegfun.channels([:Fp1, :Fp2]),
+    channel_selection2 = eegfun.channels([:IO1, :IO2]),
+    channel_out = :vEOG,
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+eegfun.channel_difference!(
+    dat,
+    channel_selection1 = eegfun.channels([:F9]),
+    channel_selection2 = eegfun.channels([:F10]),
+    channel_out = :hEOG,
+); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
@@ -107,5 +117,10 @@ eegfun.plot_artifact_repair(epochs[1], epochs_repaired, bad_epochs[1])
 
 
 bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4))
-bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4), artifact_info = bad_epochs_automatic) 
-bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4), artifact_info = bad_epochs_automatic, colormap = :seaborn_colorblind) 
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4), artifact_info = bad_epochs_automatic)
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(
+    epochs[1],
+    dims = (4, 4),
+    artifact_info = bad_epochs_automatic,
+    colormap = :seaborn_colorblind,
+)

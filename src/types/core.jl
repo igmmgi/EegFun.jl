@@ -331,8 +331,11 @@ function Base.show(io::IO, layout::Layout)
     has_neigh = has_neighbours(layout)
 
     println(io, "Layout ($n_electrodes channels)")
-    println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")")
-    
+    println(
+        io,
+        "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")",
+    )
+
     if has_neigh
         avg_neighbours = average_number_of_neighbours(layout.neighbours)
         println(io, "Criterion: $(layout.criterion), Avg neighbours: $(round(avg_neighbours, digits=1))")
@@ -354,11 +357,11 @@ function Base.show(io::IO, layout::Layout)
         # Show first 3, ellipsis, last 3
         first_rows = display_data[1:3, :]
         last_rows = display_data[(end-2):end, :]
-        
+
         # Create ellipsis row more concisely
         ellipsis_row = DataFrame([col => ["..."] for col in names(display_data)])
         combined_data = vcat(first_rows, ellipsis_row, last_rows)
-        
+
         PrettyTables.pretty_table(io, combined_data, alignment = :r)
         println(io, "\n[showing first 3 and last 3 of $n_electrodes electrodes]")
     end

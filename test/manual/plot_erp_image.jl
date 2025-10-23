@@ -2,7 +2,7 @@ using eegfun
 using GLMakie
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -21,12 +21,17 @@ eegfun.plot_erp_image(epochs[1], channel_selection = eegfun.channels([:Fp1]))
 eegfun.plot_erp_image(epochs[1], channel_selection = eegfun.channels([:Fp1]), plot_erp = false)
 
 
-eegfun.plot_erp_image(epochs[1], layout = :single) 
+eegfun.plot_erp_image(epochs[1], layout = :single)
 
-fig, axes = eegfun.plot_erp_image(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2]), layout = :single, boxcar_average = 20, colorrange = (-20, 20)) 
+fig, axes = eegfun.plot_erp_image(
+    epochs[1],
+    channel_selection = eegfun.channels([:Fp1, :Fp2]),
+    layout = :single,
+    boxcar_average = 20,
+    colorrange = (-20, 20),
+)
 
 
 # TODO: no electrode labels in title
-eegfun.plot_erp_image(epochs[1], layout = :topo) 
-eegfun.plot_erp_image(epochs[1], layout = :grid) 
-
+eegfun.plot_erp_image(epochs[1], layout = :topo)
+eegfun.plot_erp_image(epochs[1], layout = :grid)

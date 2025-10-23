@@ -78,14 +78,14 @@ function _select_conditions(data, conditions)
     isnothing(conditions) && return data
     isempty(data) && return data
     condition_nums = conditions isa Int ? [conditions] : conditions
-    
+
     # Check if all requested conditions exist
     max_condition = length(data)
     invalid_conditions = condition_nums[condition_nums .> max_condition]
     if !isempty(invalid_conditions)
         throw(ArgumentError("Requested conditions $invalid_conditions exceed available conditions (1:$max_condition)"))
     end
-    
+
     return data[condition_nums]
 end
 

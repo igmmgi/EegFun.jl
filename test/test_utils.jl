@@ -11,15 +11,19 @@ function create_test_data(; n::Int = 2000, fs::Int = 1000, n_channels::Int = 3)
     t = collect(0:(n-1)) ./ fs
     # Create DataFrame with time, triggers, and sample
     df = DataFrame(time = t, sample = 1:n, triggers = zeros(Int, n))
-    
+
     # Add random channel data
-    channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
+    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
     for ch in channel_labels
         df[!, ch] = 0.5 .+ sin.(2π .* (5 + rand() * 10) .* t) .+ 0.1 .* randn(length(t))
     end
-   
+
     # just fake layout
-    layout = eegfun.Layout(DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))), nothing, nothing)
+    layout = eegfun.Layout(
+        DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
+        nothing,
+        nothing,
+    )
 
     dat = eegfun.ContinuousData(copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
     return dat
@@ -35,20 +39,16 @@ function create_test_epoch_data(;
 )
     # Create conditions from 1 to condition
     conditions = 1:conditions
-    
+
     # Create time vector
     t = collect(0:(n-1)) ./ fs
 
     # Generate channel labels based on n_channels
-    channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
+    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
 
     # Create layout (same for all conditions)
     layout = eegfun.Layout(
-        DataFrame(
-            label = channel_labels,
-            inc = zeros(length(channel_labels)),
-            azi = zeros(length(channel_labels)),
-        ),
+        DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
         nothing,
         nothing,
     )
@@ -68,20 +68,20 @@ function create_test_epoch_data(;
                 condition_name = fill("condition_$condition", n),
                 epoch = fill(epoch, n),
             )
-            
+
             # Add EEG channels with some signal structure
             for ch in channel_labels
                 # Create some signal with condition-specific amplitude and epoch-specific noise
                 signal = sin.(2π * 0.1 * t) .* (condition * 0.5) .+ randn(n) * 0.1
                 df[!, ch] = signal
             end
-            
+
             push!(dfs, df)
         end
-        
+
         push!(condition_data, eegfun.EpochData(dfs, layout, fs, analysis_info))
     end
-    
+
     # Return single EpochData if only one condition, otherwise return Vector{EpochData}
     return length(condition_data) == 1 ? condition_data[1] : condition_data
 end
@@ -97,25 +97,21 @@ function create_test_erp_data(participant::Int, condition::Int; fs::Int = 1000, 
     time = collect(-0.5:(1/fs):2.0)
     df = DataFrame(
         time = time,
-        sample = 1:length(time), 
-        condition = fill(condition, length(time)), 
-        condition_name = fill("condition_$condition", length(time)), 
-        participant = fill(participant, length(time))
-        )
+        sample = 1:length(time),
+        condition = fill(condition, length(time)),
+        condition_name = fill("condition_$condition", length(time)),
+        participant = fill(participant, length(time)),
+    )
 
     # chanel labels
-    channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
+    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
     for ch in channel_labels
         df[!, ch] = sin.(2π * 0.1 * time) .* (condition * 0.5) .+ randn(length(time)) * 0.1
     end
 
     # Create layout
     layout = eegfun.Layout(
-        DataFrame(
-        label = channel_labels,
-            inc = zeros(length(channel_labels)),
-            azi = zeros(length(channel_labels)),
-        ),
+        DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
         nothing,
         nothing,
     )
@@ -153,7 +149,7 @@ function create_test_epoch_data_with_rt(
     n_channels::Int = 3;
     epoch_start::Float64 = -0.2,
     epoch_end::Float64 = 0.8,
-    rt_range::Tuple{Float64, Float64} = (0.2, 0.6),
+    rt_range::Tuple{Float64,Float64} = (0.2, 0.6),
 )
     # Create time vector using the provided epoch_start and epoch_end
     time = collect(range(epoch_start, epoch_end, length = n_timepoints))
@@ -168,8 +164,8 @@ function create_test_epoch_data_with_rt(
     channel_data[:participant] = fill(participant, n_timepoints)
 
     # Generate channel labels based on n_channels
-    channel_labels = [Symbol("Ch$i") for i in 1:n_channels]
-    
+    channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
+
     # Add EEG channels with condition-specific patterns
     for (i, ch) in enumerate(channel_labels)
         # Create some signal with condition-specific amplitude
@@ -179,32 +175,28 @@ function create_test_epoch_data_with_rt(
 
     # Create multiple epochs with varying reaction times
     dfs = DataFrame[]
-    for epoch in 1:n_epochs
+    for epoch = 1:n_epochs
         df = DataFrame()
         df.time = channel_data[:time]
         df.condition = channel_data[:condition]
         df.condition_name = channel_data[:condition_name]
         df.participant = channel_data[:participant]
         df.epoch = fill(epoch, n_timepoints)
-        
+
         # Generate random reaction time within the specified range
         rt = rand() * (rt_range[2] - rt_range[1]) + rt_range[1]
         df.rt = fill(rt, n_timepoints)
-        
+
         for ch in channel_labels
             df[!, ch] = channel_data[ch] .+ randn(n_timepoints) * 0.05  # Add some epoch-specific noise
         end
-        
+
         push!(dfs, df)
     end
 
     # Create layout
     layout = eegfun.Layout(
-        DataFrame(
-            label = channel_labels,
-            inc = zeros(length(channel_labels)),
-            azi = zeros(length(channel_labels)),
-        ),
+        DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
         nothing,
         nothing,
     )
@@ -220,7 +212,7 @@ function create_test_continuous_data_with_triggers(; n::Int = 1000, fs::Int = 10
     t = collect(0:(n-1)) ./ fs
     # Create some test signal
     x = sin.(2π .* 10 .* t) .+ 0.1 .* randn(length(t))
-    
+
     # Create triggers at specific points - create exactly 2 sequences [1,2,3]
     triggers = zeros(Int, n)
     # First sequence [1,2,3] starting at sample 400 - consecutive
@@ -236,7 +228,7 @@ function create_test_continuous_data_with_triggers(; n::Int = 1000, fs::Int = 10
     triggers[300:302] .= [1, 7, 3]  # Consecutive sequence [1,7,3]
     # Add another sequence [1,2,3] after trigger 9 for position constraints test
     triggers[950:952] .= [1, 2, 3]  # Consecutive sequence [1,2,3] after trigger 9
-    
+
     df = DataFrame(time = t, triggers = triggers, A = x)
     layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
     dat = eegfun.ContinuousData(copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
@@ -251,11 +243,8 @@ function create_empty_trigger_data(; n_samples::Int = 1000, fs::Int = 1000)
 
     df = DataFrame(time = time, triggers = triggers, channel1 = randn(n_samples), channel2 = randn(n_samples))
 
-    layout = eegfun.Layout(
-        DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]),
-        nothing,
-        nothing,
-    )
+    layout =
+        eegfun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
 
     dat = eegfun.ContinuousData(df, layout, fs, eegfun.AnalysisInfo())
     return dat
@@ -308,12 +297,12 @@ end
 function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
     if layout_type == :grid
         # Create a simple test layout with n_channels
-        channels = [Symbol("Ch$i") for i in 1:n_channels]
+        channels = [Symbol("Ch$i") for i = 1:n_channels]
         # Create grid positions
         rows = ceil(Int, sqrt(n_channels))
         cols = ceil(Int, n_channels / rows)
         positions = []
-        for i in 1:n_channels
+        for i = 1:n_channels
             row = (i - 1) ÷ cols + 1
             col = (i - 1) % cols + 1
             x = (col - 1) / max(1, cols - 1)
@@ -384,36 +373,29 @@ function create_epoch_test_data()
     """Create EpochData with 3 channels (A, B, C) and multiple epochs for channel_summary tests"""
     # Create time vector
     time = collect(range(-0.2, 0.8, length = 100))
-    
+
     # Create multiple epochs
     dfs = DataFrame[]
-    for epoch in 1:3
+    for epoch = 1:3
         df = DataFrame()
         df.time = time
         df.epoch = fill(epoch, 100)
-        
+
         # Create 3 channels with different patterns
         df.A = sin.(2π * 0.1 * time) .+ 0.1 .* randn(100)
         df.B = cos.(2π * 0.1 * time) .+ 0.1 .* randn(100)
         df.C = sin.(2π * 0.2 * time) .+ 0.1 .* randn(100)
-        
+
         push!(dfs, df)
     end
-    
+
     # Create layout
-    layout = eegfun.Layout(
-        DataFrame(
-            label = [:A, :B, :C],
-            inc = [0.0, 0.0, 0.0],
-            azi = [0.0, 0.0, 0.0],
-        ),
-        nothing,
-        nothing,
-    )
-    
+    layout =
+        eegfun.Layout(DataFrame(label = [:A, :B, :C], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+
     # Create analysis info
     analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
-    
+
     # Create EpochData
     return eegfun.EpochData(dfs, layout, 1000, analysis_info)
 end
@@ -423,40 +405,47 @@ end
 
 Create test epoch data with artifacts for testing artifact detection.
 """
-function create_test_epochs_with_artifacts(participant::Int, condition::Int, n_epochs::Int, n_timepoints::Int, n_channels::Int; n_bad_epochs::Int = 1)
+function create_test_epochs_with_artifacts(
+    participant::Int,
+    condition::Int,
+    n_epochs::Int,
+    n_timepoints::Int,
+    n_channels::Int;
+    n_bad_epochs::Int = 1,
+)
     dfs = DataFrame[]
     bad_indices = Int[]
-    
+
     # Create time vector
     time = collect(0:(n_timepoints-1)) ./ 1000  # Convert to seconds
-    
-    for epoch in 1:n_epochs
+
+    for epoch = 1:n_epochs
         df = DataFrame()
         df.time = time
         df.epoch = fill(epoch, n_timepoints)
         df.participant = fill(participant, n_timepoints)
         df.condition = fill(condition, n_timepoints)
-        
+
         # Add artifacts to some epochs (only the first n_bad_epochs)
         is_bad_epoch = epoch <= n_bad_epochs
         if is_bad_epoch
             push!(bad_indices, epoch)
         end
-        
+
         # Create channels with different patterns
-        for ch in 1:n_channels
+        for ch = 1:n_channels
             channel_name = Symbol("Ch$ch")
-            
+
             # Create base signal
             base_signal = sin.(2π * 0.1 * time) .+ 0.1 .* randn(n_timepoints)
-            
+
             # Add artifacts to bad epochs
             if is_bad_epoch
                 # Create extremely strong artifacts that will definitely be detected
                 base_signal .+= 50.0 .* randn(n_timepoints)  # Very high amplitude noise
                 base_signal[1:min(20, n_timepoints)] .+= 200.0  # Extremely high amplitude at start
                 if n_timepoints > 19
-                    base_signal[end-19:end] .+= 200.0  # Extremely high amplitude at end
+                    base_signal[(end-19):end] .+= 200.0  # Extremely high amplitude at end
                 end
                 if n_timepoints >= 70
                     base_signal[50:70] .+= 300.0  # Extremely high amplitude in middle
@@ -464,29 +453,29 @@ function create_test_epochs_with_artifacts(participant::Int, condition::Int, n_e
                     base_signal[50:end] .+= 300.0  # Extremely high amplitude in middle
                 end
             end
-            
+
             df[!, channel_name] = base_signal
         end
-        
+
         push!(dfs, df)
     end
-    
+
     # Create layout
     layout = eegfun.Layout(
         DataFrame(
-            label = [Symbol("Ch$i") for i in 1:n_channels],
+            label = [Symbol("Ch$i") for i = 1:n_channels],
             inc = fill(0.0, n_channels),
             azi = fill(0.0, n_channels),
         ),
         nothing,
         nothing,
     )
-    
+
     # Create analysis info
     analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
-    
+
     # Create EpochData
     epoch_data = eegfun.EpochData(dfs, layout, 1000, analysis_info)
-    
+
     return epoch_data, bad_indices
 end

@@ -32,7 +32,7 @@ using DataFrames
 
         @testset "Jackknife calculation verification" begin
             # Create simple test data with known values
-            erps = [create_test_erp_data(i, 1, fs=50) for i = 1:3]
+            erps = [create_test_erp_data(i, 1, fs = 50) for i = 1:3]
 
             jackknife_results = eegfun.jackknife_average(erps)
 
@@ -58,7 +58,7 @@ using DataFrames
 
         @testset "Jackknife with different channels" begin
             # Test that all channels are processed correctly
-            erps = [create_test_erp_data(i, 1, fs=50, n_channels=3) for i = 1:3]
+            erps = [create_test_erp_data(i, 1, fs = 50, n_channels = 3) for i = 1:3]
 
             jackknife_results = eegfun.jackknife_average(erps)
 
@@ -87,8 +87,8 @@ using DataFrames
 
         @testset "Error handling: mismatched time points" begin
             # Create ERPs with different numbers of time points
-            erp1 = create_test_erp_data(1, 1, fs=100)
-            erp2 = create_test_erp_data(2, 1, fs=50)
+            erp1 = create_test_erp_data(1, 1, fs = 100)
+            erp2 = create_test_erp_data(2, 1, fs = 50)
 
             @test_throws Exception eegfun.jackknife_average([erp1, erp2])
         end
@@ -166,8 +166,7 @@ using DataFrames
         @testset "Multiple conditions" begin
             # Create test LRP files with multiple conditions
             for participant = 1:4
-                lrp_data =
-                    [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+                lrp_data = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
                 file_path = joinpath(test_dir, "$(participant)_multi_lrp.jld2")
                 save(file_path, "lrp", lrp_data)
             end

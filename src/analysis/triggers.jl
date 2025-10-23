@@ -254,19 +254,24 @@ idx = search_sequence([1, 2, 3, 4, 5], [[1:3], [5:5]])
 idx = search_sequence([1, 2, 3, 4, 5], [[1, 2:4, 5]])
 ```
 """
-function search_sequence(array, sequences::Vector{<:Vector}; ignore_values::Vector{Int} = [0], sort_indices::Bool = true)
+function search_sequence(
+    array,
+    sequences::Vector{<:Vector};
+    ignore_values::Vector{Int} = [0],
+    sort_indices::Bool = true,
+)
     isempty(array) && return Int[]
     isempty(sequences) && return Int[]
 
     # Optimize common case of single sequence
     if length(sequences) == 1
-        return search_sequence(array, sequences[1]; ignore_values=ignore_values, sort_indices=sort_indices)
+        return search_sequence(array, sequences[1]; ignore_values = ignore_values, sort_indices = sort_indices)
     end
 
     all_indices = Int[]
     for sequence in sequences
         # Use sort_indices=false for individual calls since will be sorted at end if true
-        indices = search_sequence(array, sequence; ignore_values=ignore_values, sort_indices=false)
+        indices = search_sequence(array, sequence; ignore_values = ignore_values, sort_indices = false)
         append!(all_indices, indices)
     end
 
@@ -385,7 +390,7 @@ idx = search_sequence([1, 2, 3, 4, 5, 6], 1:3)  # Returns indices of 1,2,3
 ```
 """
 function search_sequence(array, range::UnitRange; sort_indices::Bool = true)
-    return search_sequence(array, [range]; sort_indices=sort_indices)
+    return search_sequence(array, [range]; sort_indices = sort_indices)
 end
 
 """
@@ -409,7 +414,7 @@ idx = search_sequence([1, 2, 3, 4, 5, 6], [1:3, 5:6])  # Returns indices of 1,2,
 function search_sequence(array, ranges::Vector{UnitRange}; sort_indices::Bool = true)
     all_indices = Int[]
     for value in union(ranges...)
-        indices = search_sequence(array, value; sort_indices=false)
+        indices = search_sequence(array, value; sort_indices = false)
         append!(all_indices, indices)
     end
     return sort_indices ? sort(all_indices) : all_indices
@@ -426,7 +431,8 @@ function _search_single_trigger(array, trigger::Integer, ignore_values::Vector{I
     return indices
 end
 _search_single_trigger(array, trigger::UnitRange, ignore_values::Vector{Int} = [0]) = search_sequence(array, [trigger])
-_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) = error("Single wildcard sequences not supported")
+_search_single_trigger(array, trigger::Symbol, ignore_values::Vector{Int} = [0]) =
+    error("Single wildcard sequences not supported")
 
 # Helper function to check if a sequence matches at a given position
 function _matches_sequence(array, sequence, start_idx, ignore_values)
@@ -453,4 +459,3 @@ _matches_expected(actual::Real, expected::Real) = actual == expected
 _matches_expected(actual::Real, expected::Symbol) = expected == :any  # Wildcard matches anything
 _matches_expected(actual::Real, expected::UnitRange) = actual in expected
 _matches_expected(actual, expected) = error("Unsupported sequence type: $expected")
-

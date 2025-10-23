@@ -129,7 +129,7 @@ function EogConfig(cfg::Dict)
         vEOG_criterion = cfg["vEOG_criterion"],
         hEOG_criterion = cfg["hEOG_criterion"],
         vEOG_channels = cfg["vEOG_channels"],
-        hEOG_channels = cfg["hEOG_channels"]
+        hEOG_channels = cfg["hEOG_channels"],
     )
 end
 
@@ -140,7 +140,7 @@ function FilterSection(cfg::Dict)
         freq = cfg["freq"],
         func = cfg["func"],
         method = cfg["method"],
-        order = cfg["order"]
+        order = cfg["order"],
     )
 end
 
@@ -149,22 +149,19 @@ function FilterConfig(cfg::Dict)
         highpass = FilterSection(cfg["highpass"]),
         lowpass = FilterSection(cfg["lowpass"]),
         ica_highpass = FilterSection(cfg["ica_highpass"]),
-        ica_lowpass = FilterSection(cfg["ica_lowpass"])
+        ica_lowpass = FilterSection(cfg["ica_lowpass"]),
     )
 end
 
 function EegConfig(cfg::Dict)
     return EegConfig(
         artifact_value_criterion = cfg["artifact_value_criterion"],
-        extreme_value_criterion = cfg["extreme_value_criterion"]
+        extreme_value_criterion = cfg["extreme_value_criterion"],
     )
 end
 
 function IcaConfig(cfg::Dict)
-    return IcaConfig(
-        apply = cfg["apply"],
-        percentage_of_data = cfg["percentage_of_data"]
-    )
+    return IcaConfig(apply = cfg["apply"], percentage_of_data = cfg["percentage_of_data"])
 end
 
 function PreprocessConfig(cfg::Dict)
@@ -175,6 +172,6 @@ function PreprocessConfig(cfg::Dict)
         filter = FilterConfig(cfg["filter"]),
         eog = EogConfig(cfg["eog"]),
         eeg = EegConfig(cfg["eeg"]),
-        ica = IcaConfig(cfg["ica"])
+        ica = IcaConfig(cfg["ica"]),
     )
 end

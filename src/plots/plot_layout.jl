@@ -86,7 +86,7 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
         π / 2;
         color = head_kwargs[:head_color],
         linewidth = head_kwargs[:head_linewidth],
-    ) 
+    )
     arc!(
         ax,
         Point2f(-radius, 0),
@@ -95,13 +95,13 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
         -π / 2;
         color = head_kwargs[:head_color],
         linewidth = head_kwargs[:head_linewidth],
-    ) 
+    )
     lines!(
         ax,
         Point2f[(-0.1, 1.0), (0.0, 1.15), (0.1, 1.0)] .* radius;
         color = head_kwargs[:head_color],
         linewidth = head_kwargs[:head_linewidth],
-    ) 
+    )
 
     # Regular points
     if plot_points
@@ -291,7 +291,11 @@ function add_topo_rois!(ax::Axis, layout::Layout, rois::Vector{<:Vector{Symbol}}
         end
 
         # Create convex hull
-        hull_points = _create_convex_hull_graham(layout.data.x2[roi_idx], layout.data.y2[roi_idx], merged_kwargs[:roi_border_size][i])
+        hull_points = _create_convex_hull_graham(
+            layout.data.x2[roi_idx],
+            layout.data.y2[roi_idx],
+            merged_kwargs[:roi_border_size][i],
+        )
         xs = [p[1] for p in hull_points]
         ys = [p[2] for p in hull_points]
 

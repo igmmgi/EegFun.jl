@@ -2,7 +2,7 @@ using eegfun
 using GLMakie
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 
@@ -44,4 +44,3 @@ dat_subset = eegfun.subset(dat, sample_selection = x -> x.time .<= 10) # first 1
 # test subsetting
 epoch_subset = eegfun.subset(epochs, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 epoch_subset = eegfun.subset(epochs, epoch_selection = eegfun.epochs(1:2))
-

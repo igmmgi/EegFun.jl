@@ -552,7 +552,11 @@ using Statistics
             mkpath(missing_var_dir)
 
             # Create file with wrong variable name
-            save(joinpath(missing_var_dir, "1_epochs_missing.jld2"), "wrong_var", create_test_epoch_data(conditions = 2))
+            save(
+                joinpath(missing_var_dir, "1_epochs_missing.jld2"),
+                "wrong_var",
+                create_test_epoch_data(conditions = 2),
+            )
 
             output_dir = joinpath(test_dir, "combined_missing_var")
             result = eegfun.combine_conditions(
