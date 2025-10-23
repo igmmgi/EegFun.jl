@@ -32,6 +32,9 @@ eegfun.plot_topography(dat, point_markersize=30, point_marker=:x)
 eegfun.plot_topography(dat, ylim = (-10, 10))
 eegfun.plot_topography(dat, ylim = (-1, 1))
 eegfun.plot_topography(dat, colorbar_ticksize=30)
+eegfun.plot_topography(dat, colorbar_labelcolor=:red)
+eegfun.plot_topography(dat, colorbar_size=10)
+eegfun.plot_topography(dat, colorbar_size=20)
 eegfun.plot_topography(dat, title_fontsize=30)
 
 #################################
@@ -56,8 +59,6 @@ eegfun.plot_topography(epochs[1], 1, label_fontsize=30)
 eegfun.plot_topography(epochs[2], 1, point_markersize=30, point_marker=:x)
 eegfun.plot_topography(epochs[1], 1, ylim = (-10, 10))
 eegfun.plot_topography(epochs[2], 1, ylim = (-1, 1))
-eegfun.plot_topography(epochs[1], 1, colorbar_label_fontsize=30)
-eegfun.plot_topography(epochs[2], 1, colorbar_tick_fontsize=30)
 
 
 #################################
