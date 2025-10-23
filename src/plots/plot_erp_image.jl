@@ -218,7 +218,12 @@ function plot_erp_image(
         # Add colorbar if requested (only for single layout)
         if plot_kwargs[:colorbar_plot] && plot_layout.type == :single
             colorbar_position = plot_kwargs[:colorbar_position]
-            Colorbar(fig[colorbar_position...], hm, width = plot_kwargs[:colorbar_width], label = plot_kwargs[:colorbar_label])
+            Colorbar(
+                fig[colorbar_position...],
+                hm,
+                width = plot_kwargs[:colorbar_width],
+                label = plot_kwargs[:colorbar_label],
+            )
         end
     end
 

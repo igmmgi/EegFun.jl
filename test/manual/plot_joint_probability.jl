@@ -11,4 +11,3 @@ eegfun.rereference!(dat, :avg)
 # test plot_channel_summary
 jp = eegfun.channel_joint_probability(dat)
 eegfun.plot_joint_probability(jp)
-

@@ -174,7 +174,14 @@ end
 
 Helper function to add trigger text with consistent styling.
 """
-function _add_trigger_text!(ax::Axis, x::Float64, y::Float64, text_str::String, align::Tuple, fontsize::Int = PLOT_TRIGGERS_KWARGS[:font_size][1])
+function _add_trigger_text!(
+    ax::Axis,
+    x::Float64,
+    y::Float64,
+    text_str::String,
+    align::Tuple,
+    fontsize::Int = PLOT_TRIGGERS_KWARGS[:font_size][1],
+)
     text!(ax, x, y, text = text_str, align = align, color = :black, fontsize = fontsize)
 end
 
@@ -516,13 +523,7 @@ function _plot_trigger_events!(
 
     # Plot horizontal timeline
     timeline_start = 0.0
-    lines!(
-        ax,
-        [timeline_start, trigger_times[end]],
-        [0, 0],
-        color = :black,
-        linewidth = timeline_width,
-    )
+    lines!(ax, [timeline_start, trigger_times[end]], [0, 0], color = :black, linewidth = timeline_width)
 
     # Plot vertical lines for each event
     for (time, code_str, time_str) in zip(trigger_times, code_strings, time_strings)
@@ -533,15 +534,7 @@ function _plot_trigger_events!(
 
     # Plot intervals as text
     for (x, interval_str) in zip(interval_positions, interval_strings)
-        text!(
-            ax,
-            x,
-            0,
-            text = interval_str,
-            align = (:center, :top),
-            color = :black,
-            fontsize = font_size,
-        )
+        text!(ax, x, 0, text = interval_str, align = (:center, :top), color = :black, fontsize = font_size)
     end
 end
 

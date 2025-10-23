@@ -1107,7 +1107,8 @@ end
 
         # Check that some epochs were rejected
         @test length(clean_data.data) < original_n_epochs
-        @test length(clean_data.data) == rejection_info.n_epochs - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
+        @test length(clean_data.data) ==
+              rejection_info.n_epochs - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
         @test length(rejection_info.rejected_epochs) > 0
     end
 
@@ -1121,7 +1122,8 @@ end
 
         # Check that data was modified
         @test length(epoch_data.data) < original_n_epochs
-        @test length(epoch_data.data) == rejection_info.n_epochs - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
+        @test length(epoch_data.data) ==
+              rejection_info.n_epochs - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
     end
 
     @testset "Different z-criteria" begin

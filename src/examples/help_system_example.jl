@@ -11,7 +11,7 @@ println("Creating sample EEG data...")
 n_channels = 32
 n_samples = 1000
 sample_rate = 250.0
-time = collect(0:1/sample_rate:(n_samples-1)/sample_rate)
+time = collect(0:(1/sample_rate):((n_samples-1)/sample_rate))
 
 # Create some realistic-looking EEG data with artifacts
 data = randn(n_channels, n_samples) * 10  # Base noise
@@ -20,10 +20,40 @@ data[5, 200:300] .+= 100  # Artifact in channel 5
 data[10, 400:500] .+= 80   # Another artifact
 
 # Create channel names
-channel_names = ["Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2",
-                 "F7", "F8", "T3", "T4", "T5", "T6", "Fz", "Cz", "Pz", "Oz",
-                 "Fpz", "Fcz", "Cpz", "Poz", "Fc1", "Fc2", "Cp1", "Cp2", "P1", "P2",
-                 "Po1", "Po2"]
+channel_names = [
+    "Fp1",
+    "Fp2",
+    "F3",
+    "F4",
+    "C3",
+    "C4",
+    "P3",
+    "P4",
+    "O1",
+    "O2",
+    "F7",
+    "F8",
+    "T3",
+    "T4",
+    "T5",
+    "T6",
+    "Fz",
+    "Cz",
+    "Pz",
+    "Oz",
+    "Fpz",
+    "Fcz",
+    "Cpz",
+    "Poz",
+    "Fc1",
+    "Fc2",
+    "Cp1",
+    "Cp2",
+    "P1",
+    "P2",
+    "Po1",
+    "Po2",
+]
 
 # Create ContinuousData
 dat = ContinuousData(data, time, channel_names)

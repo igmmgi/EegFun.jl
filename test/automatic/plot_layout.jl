@@ -1,6 +1,6 @@
- using DataFrames
- using Makie
-    
+using DataFrames
+using Makie
+
 @testset "Plot Layout Tests" begin
 
     layout = create_test_layout(; n_channels = 6, layout_type = :topo)

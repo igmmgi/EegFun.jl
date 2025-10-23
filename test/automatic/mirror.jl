@@ -311,6 +311,52 @@ using DataFrames
     end
 
 
+    @testset "Mirroring pattern validation" begin
+        # Test specific mirroring patterns with known data
+        time = [0.0, 0.1, 0.2, 0.3, 0.4]  # 5 samples: [0, 1, 2, 3, 4]
+        data = [1.0, 2.0, 3.0, 4.0, 5.0]  # Simple ascending pattern
+        
+        epoch1 = DataFrame(time = time, Cz = data)
+        epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 10.0, eegfun.AnalysisInfo())
+        
+        # Test :pre mirroring
+        eegfun.mirror!(epochs, :pre)
+        expected_pre = [5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0]  # [5,4,3,2] + [1,2,3,4,5]
+        @test epochs.data[1].Cz ≈ expected_pre
+        
+        # Reset and test :post mirroring  
+        eegfun.unmirror!(epochs, :pre)
+        eegfun.mirror!(epochs, :post)
+        expected_post = [1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 1.0]  # [1,2,3,4,5] + [4,3,2,1]
+        @test epochs.data[1].Cz ≈ expected_post
+        
+        # Reset and test :both mirroring
+        eegfun.unmirror!(epochs, :post)
+        eegfun.mirror!(epochs, :both)
+        expected_both = [5.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0, 1.0]
+        @test epochs.data[1].Cz ≈ expected_both
+        
+        # Test no duplication at boundaries (there should be no duplications)
+        diffs = diff(epochs.data[1].Cz)
+        @test sum(diffs .== 0) == 0  # No duplications
+        
+        # Test symmetry - the mirrored sections should be symmetric around the original data
+        n_orig = 5
+        n_mirrored = length(epochs.data[1].Cz)
+        mid_start = n_orig  # Start of original data in mirrored array (1-indexed)
+        mid_end = mid_start + n_orig - 1  # End of original data
+        
+        # Pre-mirror should be reverse of the original data (excluding first point)
+        pre_mirror = epochs.data[1].Cz[1:(n_orig-1)]  # [5, 4, 3, 2]
+        original_data = epochs.data[1].Cz[mid_start:mid_end]  # [1, 2, 3, 4, 5]
+        @test pre_mirror ≈ reverse(original_data[2:end])  # reverse([2, 3, 4, 5]) = [5, 4, 3, 2]
+        
+        # Post-mirror should be reverse of the original data (excluding last point)
+        post_mirror = epochs.data[1].Cz[(mid_end+1):end]  # [4, 3, 2, 1]
+        @test post_mirror ≈ reverse(original_data[1:end-1])  # reverse([1, 2, 3, 4]) = [4, 3, 2, 1]
+    end
+
+
     @testset "Roundtrip consistency" begin
         # Test that mirror → unmirror → mirror → unmirror works
         time = -0.2:0.05:0.2

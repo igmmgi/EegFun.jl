@@ -133,7 +133,7 @@ function calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
         dat,
         channel_selection1 = channels(Symbol.(vEOG_cfg[1])),
         channel_selection2 = channels(Symbol.(vEOG_cfg[2])),
-        channel_out = Symbol(vEOG_cfg[3][1])
+        channel_out = Symbol(vEOG_cfg[3][1]),
     )
 
     # Calculate horizontal EOG channels
@@ -142,7 +142,7 @@ function calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
         dat,
         channel_selection1 = channels(Symbol.(hEOG_cfg[1])),
         channel_selection2 = channels(Symbol.(hEOG_cfg[2])),
-        channel_out = Symbol(hEOG_cfg[3][1])
+        channel_out = Symbol(hEOG_cfg[3][1]),
     )
 end
 
@@ -174,21 +174,9 @@ detect_eog_signals!(dat, eog_cfg)
 function detect_eog_signals!(dat::EegData, eog_cfg::EogConfig)
     # Detect vertical EOG onsets
     vEOG_cfg = eog_cfg.vEOG_channels
-    detect_eog_onsets!(
-        dat,
-        eog_cfg.vEOG_criterion,
-        Symbol(vEOG_cfg[3][1]),
-        Symbol("is_" * vEOG_cfg[3][1])
-    )
-    
+    detect_eog_onsets!(dat, eog_cfg.vEOG_criterion, Symbol(vEOG_cfg[3][1]), Symbol("is_" * vEOG_cfg[3][1]))
+
     # Detect horizontal EOG onsets
     hEOG_cfg = eog_cfg.hEOG_channels
-    detect_eog_onsets!(
-        dat,
-        eog_cfg.hEOG_criterion,
-        Symbol(hEOG_cfg[3][1]),
-        Symbol("is_" * hEOG_cfg[3][1])
-    )
+    detect_eog_onsets!(dat, eog_cfg.hEOG_criterion, Symbol(hEOG_cfg[3][1]), Symbol("is_" * hEOG_cfg[3][1]))
 end
-
-

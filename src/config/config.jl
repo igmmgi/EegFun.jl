@@ -44,8 +44,7 @@ end
 
 string_param(desc, default = ""; allowed = nothing) =
     _param(Union{Vector{String},String}, desc, default, allowed = allowed)
-simple_string_param(desc, default = ""; allowed = nothing) =
-    _param(String, desc, default, allowed = allowed)
+simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
 bool_param(desc, default = false) = _param(Bool, desc, default)
 number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
 channel_groups_param(desc, default) = _param(Vector{Vector{String}}, desc, default)
@@ -91,7 +90,7 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     # Preprocessing settings
     "preprocess.epoch_start"                  => number_param("Epoch start (seconds).", -1),
     "preprocess.epoch_end"                    => number_param("Epoch end (seconds).", 1),
-        "preprocess.reference_channel"            => simple_string_param("Channels(s) to use as reference", "avg"),
+    "preprocess.reference_channel"            => simple_string_param("Channels(s) to use as reference", "avg"),
     "preprocess.layout.neighbour_criterion"   => number_param("Distance criterion (in mm) for channel neighbour definition.", 0.5, 0),
     "preprocess.eog.vEOG_channels"            => channel_groups_param("Channels used in the calculation of vertical eye movements (vEOG).", [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]),
     "preprocess.eog.hEOG_channels"            => channel_groups_param("Channels used in the calculation of horizontal eye movements (hEOG).", [["F9"], ["F10"], ["hEOG"]]),
@@ -102,7 +101,8 @@ const PARAMETERS = Dict{String,ConfigParameter}(
 
     # ICA settings
     "preprocess.ica.apply" => bool_param("Independent Component Analysis (ICA) true/false."),
-    "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
+    "preprocess.ica.percentage_of_data" =>
+        number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
 
     # Filtering settings - using helper function
     _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,
@@ -169,10 +169,10 @@ function load_config(config_file::String)
 
     # Merge, convert types, and validate
     config = _merge_configs(default_config, user_config)
-    
+
     # Convert Any arrays to proper types (fixes Julia 1.12 TOML parsing issue)
     _convert_any_arrays!(config)
-    
+
     validation_result = _validate_config(config)
     if !validation_result.success
         @minimal_error validation_result.error
@@ -196,7 +196,7 @@ This fixes the issue where TOML.jl in Julia 1.12 returns Any arrays instead of t
 function _convert_any_arrays!(config::Dict; path = "")
     for (key, value) in config
         new_path = isempty(path) ? key : "$path.$key"
-        
+
         if isa(value, Dict)
             # Recursively process nested dictionaries
             _convert_any_arrays!(value; path = new_path)
@@ -204,7 +204,7 @@ function _convert_any_arrays!(config::Dict; path = "")
             # Convert this parameter if we have type information
             param_spec = PARAMETERS[new_path]
             param_type = typeof(param_spec).parameters[1]
-            
+
             # Handle Vector{Vector{String}} case (like hEOG_channels, vEOG_channels)
             if param_type == Vector{Vector{String}} && isa(value, Vector) && eltype(value) == Any
                 try

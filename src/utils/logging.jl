@@ -62,10 +62,10 @@ function setup_global_logging(log_file::String; log_level::String = "info")
     else
         Logging.Info  # Default fallback
     end
-    
+
     # Store the current log level
     current_log_level[] = level
-    
+
     # Close any existing global log file
     if !isnothing(global_log_handle[])
         close(global_log_handle[])
@@ -157,10 +157,10 @@ function setup_logging(log_file::String; log_level::String = "info")
     else
         Logging.Info  # Default fallback
     end
-    
+
     # Store the current log level
     current_log_level[] = level
-    
+
     # Close any existing log file
     if !isnothing(log_file_handle[])
         close(log_file_handle[])

@@ -93,7 +93,7 @@ using CSV
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = create_test_epoch_data(conditions=2, n_channels=3)  # This returns Vector{EpochData}
+            epochs = create_test_epoch_data(conditions = 2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             save(file_path, "epochs", epochs)

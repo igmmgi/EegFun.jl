@@ -12,7 +12,11 @@ Internal function that applies baseline correction to specified channels in a Da
 - Subtracts the mean of the baseline interval from each specified channel
 - Modifies the input DataFrame in-place
 """
-function _apply_baseline!(dat::DataFrame, channels::Vector{Symbol}, baseline_interval::Union{IntervalIndex,IntervalTime})
+function _apply_baseline!(
+    dat::DataFrame,
+    channels::Vector{Symbol},
+    baseline_interval::Union{IntervalIndex,IntervalTime},
+)
     # Compute mean baseline interval and apply to each channel
     baseline_means = mean.(eachcol(dat[baseline_interval.start:baseline_interval.stop, channels]))
     @inbounds for (channel, mean_val) in zip(channels, baseline_means)
@@ -82,7 +86,7 @@ Apply baseline correction in-place to EEG data using the entire time range.
 - Uses the entire time range for baseline calculation
 """
 function baseline!(dat::EegData; channel_selection::Function = channels())
-    baseline_interval = IntervalIndex(start=1, stop=n_samples(dat))
+    baseline_interval = IntervalIndex(start = 1, stop = n_samples(dat))
     baseline!(dat, baseline_interval; channel_selection = channel_selection)
     return nothing
 end

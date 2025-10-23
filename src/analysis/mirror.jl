@@ -28,12 +28,6 @@ at epoch boundaries.
 - Updates time vectors to reflect the extended data
 - Original data is preserved in the middle section
 
-# How it works
-For each epoch with data [1, 2, 3, 4, 5]:
-- `:pre` → [5, 4, 3, 2, 1, 2, 3, 4] (mirror prepended, excluding first point)
-- `:post` → [4, 3, 2, 1, 2, 3, 4, 5] (mirror appended, excluding last point)
-- `:both` → [5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2, 1] (both mirrors)
-
 # Examples
 ```julia
 using eegfun, JLD2
@@ -331,8 +325,8 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
         # Calculate time step
         dt = (df.time[end] - df.time[1]) / (n_samples - 1)
 
-        # Create mirrored section (reversed, excluding last point to avoid duplication)
-        mirror_section = df[(end-1):-1:1, :]
+        # Create mirrored section (reversed, excluding first point to avoid duplication)
+        mirror_section = df[end:-1:2, :]
         n_mirror = nrow(mirror_section)
         mirror_section.time = [df.time[1] - (n_mirror - i + 1) * dt for i = 1:n_mirror]
 
@@ -345,8 +339,8 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
         # Calculate time step
         dt = (df.time[end] - df.time[1]) / (n_samples - 1)
 
-        # Create mirrored section (reversed, excluding first point to avoid duplication)
-        mirror_section = df[end:-1:2, :]
+        # Create mirrored section (reversed, excluding last point to avoid duplication)
+        mirror_section = df[(end-1):-1:1, :]
         n_mirror = nrow(mirror_section)
         mirror_section.time = [df.time[end] + i * dt for i = 1:n_mirror]
 
@@ -359,13 +353,13 @@ function _mirror_dataframe!(df::DataFrame, side::Symbol)
         # Calculate time step
         dt = (df.time[end] - df.time[1]) / (n_samples - 1)
 
-        # Create pre-mirror section (reversed, excluding last point to avoid duplication)
-        pre_mirror = df[(end-1):-1:1, :]
+        # Create pre-mirror section (reversed, excluding first point to avoid duplication)
+        pre_mirror = df[end:-1:2, :]
         n_pre = nrow(pre_mirror)
         pre_mirror.time = [df.time[1] - (n_pre - i + 1) * dt for i = 1:n_pre]
 
-        # Create post-mirror section (reversed, excluding first point to avoid duplication)
-        post_mirror = df[end:-1:2, :]
+        # Create post-mirror section (reversed, excluding last point to avoid duplication)
+        post_mirror = df[(end-1):-1:1, :]
         n_post = nrow(post_mirror)
         post_mirror.time = [df.time[end] + i * dt for i = 1:n_post]
 

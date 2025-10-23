@@ -51,7 +51,14 @@ using JLD2
         dat_orig = copy(dat)
 
         # High-pass to remove DC; check mean is reduced towards ~0 for channel Ch1
-        eegfun.filter_data!(dat, "hp", 1.0; order = 1, filter_method = "iir", channel_selection = eegfun.channels([:Ch1]))
+        eegfun.filter_data!(
+            dat,
+            "hp",
+            1.0;
+            order = 1,
+            filter_method = "iir",
+            channel_selection = eegfun.channels([:Ch1]),
+        )
         @test abs(mean(dat.data.Ch1)) < abs(mean(dat_orig.data.Ch1))
         # Only selected channel modified
         @test !all(dat.data.Ch1 .== dat_orig.data.Ch1)
@@ -315,7 +322,7 @@ end
             # create_test_epoch_data(participant, condition, n_timepoints, n_channels)
 
             # Save epoch data - create a vector of EpochData for batch processing
-            epochs = [create_test_epoch_data(conditions=1), create_test_epoch_data(conditions=1)]
+            epochs = [create_test_epoch_data(conditions = 1), create_test_epoch_data(conditions = 1)]
             save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", epochs)
 
             # Filter epoch data

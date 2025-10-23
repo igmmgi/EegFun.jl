@@ -28,7 +28,10 @@ eegfun.add_topo_rois!(
     layout,
     [[:Fp1]],
     roi_border_size = 0.10,
-    roi_fill = [true], roi_linecolor = [:black], roi_fillcolor = [:red], roi_fillalpha = [0.2],
+    roi_fill = [true],
+    roi_linecolor = [:black],
+    roi_fillcolor = [:red],
+    roi_fillalpha = [0.2],
 )
 eegfun.add_topo_rois!(
     ax,
@@ -36,7 +39,10 @@ eegfun.add_topo_rois!(
     [[:CPz, :C2, :FCz, :C1]],
     roi_border_size = 0.15,
     roi_linewidth = [5],
-    roi_fill = [true], roi_linecolor = [:blue], roi_fillcolor = [:green], roi_fillalpha = [0.5],
+    roi_fill = [true],
+    roi_linecolor = [:blue],
+    roi_fillcolor = [:green],
+    roi_fillalpha = [0.5],
 )
 
 # Plots with neighbours
@@ -56,4 +62,3 @@ GLMakie.closeall()
 # save a basic figure
 # NB. for vector graphics, use CairoMakie
 # save("topo_roi.png", fig)
-

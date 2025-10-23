@@ -46,7 +46,13 @@ detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
 ```
 """
 
-function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
+function detect_eog_onsets!(
+    dat::ContinuousData,
+    criterion::Real,
+    channel_in::Symbol,
+    channel_out::Symbol;
+    step_size::Int = 20,
+)
     @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
     if channel_in ∉ propertynames(dat.data)
         @minimal_error_throw("channel $(channel_in) not found in data")
@@ -88,21 +94,11 @@ detect_eog_signals!(dat, eog_cfg)
 function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
     # Detect vertical EOG onsets
     vEOG_cfg = eog_cfg["vEOG_channels"]
-    detect_eog_onsets!(
-        dat,
-        eog_cfg["vEOG_criterion"],
-        Symbol(vEOG_cfg[3][1]),
-        Symbol("is_" * vEOG_cfg[3][1])
-    )
-    
+    detect_eog_onsets!(dat, eog_cfg["vEOG_criterion"], Symbol(vEOG_cfg[3][1]), Symbol("is_" * vEOG_cfg[3][1]))
+
     # Detect horizontal EOG onsets
     hEOG_cfg = eog_cfg["hEOG_channels"]
-    detect_eog_onsets!(
-        dat,
-        eog_cfg["hEOG_criterion"],
-        Symbol(hEOG_cfg[3][1]),
-        Symbol("is_" * hEOG_cfg[3][1])
-    )
+    detect_eog_onsets!(dat, eog_cfg["hEOG_criterion"], Symbol(hEOG_cfg[3][1]), Symbol("is_" * hEOG_cfg[3][1]))
 end
 
 """
@@ -412,10 +408,7 @@ function n_extreme_value(
         counts = [sum(results[ch]) for ch in selected_channels]
 
         # Create result DataFrame
-        result_df = DataFrame(
-            channel = selected_channels,
-            n_extreme = counts
-        )
+        result_df = DataFrame(channel = selected_channels, n_extreme = counts)
 
         return result_df
     end
@@ -615,31 +608,29 @@ function detect_bad_epochs_automatic(
     isempty(selected_channels) && @minimal_error_throw("No channels selected for epoch rejection")
 
     # Calculate metrics and identify rejected epochs
-    metrics = _calculate_epoch_metrics(
-        dat,
-        selected_channels,
-        Float64(z_criterion),
-        Float64(abs_criterion),
-    )
+    metrics = _calculate_epoch_metrics(dat, selected_channels, Float64(z_criterion), Float64(abs_criterion))
 
     # Combine all rejected epochs
     rejected_epochs_vectors = []
-    
+
     # Add z-score based rejections (z_criterion is always > 0 now)
-    append!(rejected_epochs_vectors, [
-        values(metrics[:z_variance])...,
-        values(metrics[:z_max])...,
-        values(metrics[:z_min])...,
-        values(metrics[:z_abs])...,
-        values(metrics[:z_range])...,
-        values(metrics[:z_kurtosis])...,
-    ])
+    append!(
+        rejected_epochs_vectors,
+        [
+            values(metrics[:z_variance])...,
+            values(metrics[:z_max])...,
+            values(metrics[:z_min])...,
+            values(metrics[:z_abs])...,
+            values(metrics[:z_range])...,
+            values(metrics[:z_kurtosis])...,
+        ],
+    )
 
     # Add absolute threshold rejections if abs_criterion > 0
     if abs_criterion > 0
         append!(rejected_epochs_vectors, [values(metrics[:absolute_threshold])...])
     end
-    
+
     rejected_epochs = sort(unique(vcat(rejected_epochs_vectors...)))
 
     # Create Rejection structs for each rejection
@@ -745,7 +736,7 @@ state = detect_bad_epochs_interactive(epochs)
 rejected_indices = get_rejected_epochs(state)
 ```
 """
-get_rejected_epochs(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected_epochs.(info) 
+get_rejected_epochs(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected_epochs.(info)
 
 #=============================================================================
     INTERNAL HELPER FUNCTIONS
@@ -929,11 +920,7 @@ function repair_artifacts!(
     elseif method == :spherical_spline
         return repair_artifacts_spherical_spline!(dat, artifacts; kwargs...)
     else
-        throw(
-            ArgumentError(
-                "Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline",
-            ),
-        )
+        throw(ArgumentError("Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline"))
     end
 end
 
@@ -1005,21 +992,21 @@ function repair_artifacts_neighbor!(
 )
     # Get all rejected epochs with their bad channels
     rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
-    
+
     for epoch_idx in rejected_epochs
         # Get bad channels for this epoch
         bad_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
         isempty(bad_channels) && continue
-        
+
         @info "Repairing epoch $epoch_idx channels $(bad_channels) using neighbor interpolation"
-        
+
         # Use unified channel repair function with epoch selection
         repair_channels!(
-            dat, 
-            bad_channels; 
+            dat,
+            bad_channels;
             method = :neighbor_interpolation,
             epoch_selection = epochs([epoch_idx]),
-            neighbours_dict = neighbours_dict
+            neighbours_dict = neighbours_dict,
         )
     end
 
@@ -1048,17 +1035,17 @@ function repair_artifacts_spherical_spline!(
 )
 
     _ensure_coordinates_3d!(dat.layout)
-    
+
     # Get all rejected epochs with their bad channels
     rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
-    
+
     for epoch_idx in rejected_epochs
         # Get bad channels for this epoch
         bad_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
         isempty(bad_channels) && continue
-        
+
         @info "Repairing epoch $epoch_idx channels $(bad_channels) using spherical spline interpolation"
-        
+
         # Use unified channel repair function with epoch selection
         repair_channels!(
             dat,
@@ -1066,11 +1053,9 @@ function repair_artifacts_spherical_spline!(
             method = :spherical_spline,
             epoch_selection = epochs([epoch_idx]),
             m = m,
-            lambda = lambda
+            lambda = lambda,
         )
     end
 
     return dat
 end
-
-

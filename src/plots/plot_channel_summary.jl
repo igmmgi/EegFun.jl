@@ -5,7 +5,8 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :sort_values => (false, "If true, sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
     :display_plot => (true, "Whether to display the plot."),
-    :dims => (nothing, "Tuple (rows, cols) for grid layout when plotting multiple columns. If nothing, uses best_rect."),
+    :dims =>
+        (nothing, "Tuple (rows, cols) for grid layout when plotting multiple columns. If nothing, uses best_rect."),
     :bar_color => (:steelblue, "Color of the bars."),
     :bar_width => (0.8, "Width of bars."),
     :bar_alpha => (0.7, "Transparency of bars."),
@@ -230,7 +231,7 @@ a bar chart of that metric across all channels.
 """
 function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol}, plot_kwargs::Dict)
     n_cols = length(col)
-    
+
     if plot_kwargs[:dims] === nothing
         rs, cs = best_rect(n_cols)
     else
@@ -240,10 +241,10 @@ function _plot_multiple_columns!(fig::Figure, dat::DataFrame, col::Vector{Symbol
         end
         rs, cs = dims
     end
-    
+
     count = 1
-    for r in 1:rs
-        for c in 1:cs
+    for r = 1:rs
+        for c = 1:cs
             ax = Axis(fig[r, c])
             plot_channel_summary!(fig, ax, dat, col[count]; plot_kwargs...)
             count += 1
@@ -277,14 +278,20 @@ based on the provided plotting parameters.
 - **Grid**: Sets grid visibility, width, and transparency
 - **Rotation**: Applies x-axis tick label rotation
 """
-function _configure_axis!(ax::Axis, channel_names::Vector{String}, col::Symbol, plot_kwargs::Dict, n_epochs::Union{Int,Nothing})
+function _configure_axis!(
+    ax::Axis,
+    channel_names::Vector{String},
+    col::Symbol,
+    plot_kwargs::Dict,
+    n_epochs::Union{Int,Nothing},
+)
     # Set ylabel - use custom if provided, otherwise use dynamic default
     if plot_kwargs[:ylabel] != ""
         ax.ylabel = plot_kwargs[:ylabel]
     else
         ax.ylabel = plot_kwargs[:average_over] !== nothing ? "$(String(col)) (± 95% CI n=$n_epochs)" : "$(String(col))"
     end
-    
+
     # Configure ticks and labels
     ax.xticks = (1:length(channel_names), channel_names)
     ax.xticklabelrotation = plot_kwargs[:xtick_rotation]

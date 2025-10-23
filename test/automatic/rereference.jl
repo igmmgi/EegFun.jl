@@ -9,7 +9,7 @@ using Statistics
 @testset "rereference" begin
 
     dat = create_test_data(n_channels = 2)
-   # 1) Average reference (:avg) subtracts mean of all channels from each selected channel
+    # 1) Average reference (:avg) subtracts mean of all channels from each selected channel
     eegfun.rereference!(dat, :avg)
     # After average reference, the mean of all channels should be approximately zero
     mean_of_channels = mean([dat.data.Ch1, dat.data.Ch2])
@@ -164,7 +164,7 @@ end
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = create_test_epoch_data(conditions=2, n_channels=3)  # This returns Vector{EpochData}
+            epochs = create_test_epoch_data(conditions = 2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             save(file_path, "epochs", epochs)

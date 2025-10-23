@@ -10,7 +10,8 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Component selection
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
-    :use_global_scale => (false, "Do multiple topoplots share the same color scale based on min/max across all components?"),
+    :use_global_scale =>
+        (false, "Do multiple topoplots share the same color scale based on min/max across all components?"),
     :display_plot => (true, "Whether to display the plot"),
 
     # Topography parameters
@@ -43,12 +44,13 @@ const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Colorbar parameters
     # Automatically add all Colorbar attributes with their actual defaults
     # This allows users to control any Colorbar parameter
-    [Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") 
-     for attr in propertynames(Colorbar)]...,
+    [
+        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
+        attr in propertynames(Colorbar)
+    ]...,
     :colorbar_plot => (false, "Whether to display colorbars"),
     :colorbar_position => (:right, "Position for colorbar: :right, :below, or :same"),
     :colorbar_components => ([], "Component selection for component colorbar plotting"),
-
 )
 
 
@@ -71,21 +73,21 @@ $(generate_kwargs_doc(PLOT_ICA_KWARGS))
 """
 function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
-    
+
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
-    
+
     # Ensure coordinates are 2d and 3d
     _ensure_coordinates_2d!(ica.layout)
     _ensure_coordinates_3d!(ica.layout)
-    
+
     # Prepare data for this component
     data = _prepare_ica_topo_data(ica, component, method, gridscale)
-    
+
     # Calculate levels
     levels = _calculate_topo_levels(data; num_levels = pop!(plot_kwargs, :num_levels))
-    
+
     # Create contour plot
     co = contourf!(
         ax,
@@ -96,17 +98,17 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
         colormap = pop!(plot_kwargs, :colormap),
         nan_color = :transparent,
     )
-    
+
     # Add colorbar if requested
     if plot_kwargs[:colorbar_plot] && component in plot_kwargs[:colorbar_components]
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
         colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
     end
-    
+
     # Add head shape and electrode markers
     plot_layout_2d!(fig, ax, ica.layout; plot_kwargs...)
-    
+
     return co
 end
 
@@ -172,10 +174,10 @@ function plot_topography(ica::InfoIca; kwargs...)
     # Get colorbar settings to adjust grid if needed
     colorbar_plot = pop!(plot_kwargs, :colorbar_plot)
     colorbar_position = get(plot_kwargs, :colorbar_position, (1, 2))
-    
+
     # Create figure
     fig = Figure()
-    
+
     # Deal with plot dimensions
     isnothing(dims) && (dims = best_rect(length(comps)))
 
@@ -194,10 +196,10 @@ function plot_topography(ica::InfoIca; kwargs...)
     for i in eachindex(comps)
         # Calculate base row/col indices
         base_row, base_col = divrem(i - 1, dims[2]) .+ (1, 1)
-        
+
         # Get colorbar position for this component
         colorbar_position = get(plot_kwargs, :colorbar_position, :right)
-        
+
         # Convert symbol to tuple
         if colorbar_position == :right
             colorbar_offset = (1, 2)
@@ -208,7 +210,7 @@ function plot_topography(ica::InfoIca; kwargs...)
         else
             throw(ArgumentError("colorbar_position must be :right, :below, or :same, got: $colorbar_position"))
         end
-        
+
         # Calculate plot and colorbar positions
         if colorbar_plot
             if colorbar_offset[1] < colorbar_offset[2]
@@ -229,16 +231,30 @@ function plot_topography(ica::InfoIca; kwargs...)
             colorbar_row = base_row
             colorbar_col = base_col
         end
-        
+
         # Create axis with title
         if colorbar_plot
-            ax = Axis(fig[plot_row, plot_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+            ax = Axis(
+                fig[plot_row, plot_col],
+                title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100)
+            )
         else
-            ax = Axis(fig[base_row, base_col], title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100))
+            ax = Axis(
+                fig[base_row, base_col],
+                title = @sprintf("IC %d (%.1f%%)", comps[i], ica.variance[comps[i]] * 100)
+            )
         end
-        
+
         # Use the internal plotting function with colorbar position
-        _plot_topography!(fig, ax, ica, comps[i]; plot_kwargs..., colorbar_plot = colorbar_plot, colorbar_position = (colorbar_row, colorbar_col))
+        _plot_topography!(
+            fig,
+            ax,
+            ica,
+            comps[i];
+            plot_kwargs...,
+            colorbar_plot = colorbar_plot,
+            colorbar_position = (colorbar_row, colorbar_col),
+        )
     end
 
     # Add keyboard event handling for scaling
@@ -474,7 +490,7 @@ Selects, centers, scales, and transposes data for ICA unmixing.
 """
 function prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
     dat_matrix = permutedims(Matrix(dat.data[!, ica.layout.data.label]))
-    dat_matrix .-= mean(dat_matrix, dims = 2) 
+    dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica.scale
     return dat_matrix
 end
@@ -641,12 +657,12 @@ function _plot_ica_topo_in_viewer!(
     head_color = get(head_kwargs, :head_color, :black)
     head_linewidth = get(head_kwargs, :head_linewidth, 2)
     head_radius = get(head_kwargs, :head_radius, 1.0)
-    
+
     point_plot = get(point_kwargs, :point_plot, false)
     point_marker = get(point_kwargs, :point_marker, :circle)
     point_markersize = get(point_kwargs, :point_markersize, 12)
     point_color = get(point_kwargs, :point_color, :black)
-    
+
     label_plot = get(label_kwargs, :label_plot, false)
     label_fontsize = get(label_kwargs, :label_fontsize, 20)
     label_color = get(label_kwargs, :label_color, :black)
@@ -705,24 +721,24 @@ function _create_component_activation_plots!(fig, state)
             fig[i, 2],
             ylabel = @sprintf("IC %d", comp_idx),
             yaxisposition = :left,
-            
+
             # Tick visibility
             yticklabelsvisible = false,
             yticksvisible = true,
             xticklabelsvisible = is_last_component,
             xticksvisible = is_last_component,
-            
+
             # Grid settings
             xgridvisible = false,
             ygridvisible = false,
             xminorgridvisible = false,
             yminorgridvisible = false,
-            
+
             # Spacing
             ylabelpadding = 0.0,
             yticklabelpad = 0.0,
             yticklabelspace = 0.0,
-            yautolimitmargin = (0, 0)
+            yautolimitmargin = (0, 0),
         )
         push!(state.axs, ax)
 
@@ -731,19 +747,19 @@ function _create_component_activation_plots!(fig, state)
             fig[i, 2],
             yaxisposition = :right,
             xaxisposition = :top,
-            
+
             # Tick visibility - all hidden
             yticklabelsvisible = false,
             yticksvisible = false,
             xticklabelsvisible = false,
             xticksvisible = false,
-            
+
             # Grid settings - all disabled
             xgridvisible = false,
             ygridvisible = false,
             xminorgridvisible = false,
             yminorgridvisible = false,
-            
+
             # Spine visibility - all hidden for overlay effect
             bottomspinevisible = false,
             topspinevisible = false,
@@ -879,8 +895,7 @@ function _add_navigation_controls!(fig, state)
                 show_channel = state.show_channel[]
                 use_global = state.use_global_scale[]
                 invert = state.invert_scale[]
-                new_fig =
-                    plot_ica_component_activation(state.dat, state.ica, component_selection = components(comps))
+                new_fig = plot_ica_component_activation(state.dat, state.ica, component_selection = components(comps))
             end
         end
     end
@@ -1060,13 +1075,13 @@ function _setup_keyboard_interactions!(fig, state)
                 window_size = state.window_size
                 if event.key == Keyboard.left
                     new_start = max(1, first(current_range) - window_size)
-                elseif event.key == Keyboard.right   
+                elseif event.key == Keyboard.right
                     new_start = min(data_length - window_size + 1, first(current_range) + window_size)
                 end
-                
+
                 # Ensure we don't go beyond data bounds
                 new_start = max(1, min(new_start, data_length - window_size + 1))
-                state.xrange[] = new_start:(new_start + window_size - 1)
+                state.xrange[] = new_start:(new_start+window_size-1)
 
                 # Update x-axis limits for all axes
                 # Ensure the indices are within bounds
@@ -1083,7 +1098,7 @@ function _setup_keyboard_interactions!(fig, state)
                 if !shift_pressed
                     if event.key == Keyboard.up
                         ymore!.(state.axs)
-                    else  
+                    else
                         yless!.(state.axs)
                     end
                     state.ylims[] = state.axs[1].yaxis.attributes.limits[]
@@ -1990,36 +2005,36 @@ fig = plot_artifact_components(ica, artifacts)
 function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
-    
+
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colormap = pop!(plot_kwargs, :colormap)
     display_plot = pop!(plot_kwargs, :display_plot)
     num_levels = pop!(plot_kwargs, :num_levels)
-    
+
     # Extract head shape parameters
     head_color = pop!(plot_kwargs, :head_color)
     head_linewidth = pop!(plot_kwargs, :head_linewidth)
     head_radius = pop!(plot_kwargs, :head_radius)
-    
+
     # Extract electrode plotting parameters
     point_plot = pop!(plot_kwargs, :point_plot)
     label_plot = pop!(plot_kwargs, :label_plot)
-    
+
     # Get all component types and their components
     component_data = [
         ("vEOG", artifacts.eog[:vEOG]),
         ("hEOG", artifacts.eog[:hEOG]),
         ("ECG", artifacts.ecg),
         ("Line Noise", artifacts.line_noise),
-        ("Channel Noise", artifacts.channel_noise)
+        ("Channel Noise", artifacts.channel_noise),
     ]
-    
+
     # Filter out empty component lists
     component_types = [name for (name, comps) in component_data if !isempty(comps)]
     component_lists = [comps for (name, comps) in component_data if !isempty(comps)]
-    
+
     # If no components, return empty figure
     if isempty(component_types)
         @warn "No artifact components found to plot"
@@ -2027,30 +2042,30 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
         Label(fig[1, 1], "No artifact components found", fontsize = 16)
         return fig
     end
-    
+
     # Calculate total number of components to plot
     total_comps = sum(length(comps) for comps in component_lists)
     n_cols = min(4, total_comps)  # Max 4 columns
     n_rows = ceil(Int, total_comps / n_cols)
-    
+
     # Create figure
     fig = Figure(size = (n_cols * 200, n_rows * 200))
-    
+
     # Plot each component individually
     plot_idx = 1
     for (comp_type, comps) in zip(component_types, component_lists)
         for comp_idx in comps
             row = ((plot_idx - 1) ÷ n_cols) + 1
             col = ((plot_idx - 1) % n_cols) + 1
-            
+
             # Create subplot for this component
             ax = Axis(fig[row, col])
             ax.title = "$comp_type $comp_idx"
             ax.titlesize = 12
-            
+
             # Create topoplot data
             topo_data = _prepare_ica_topo_data(ica, comp_idx, method, gridscale)
-            
+
             # Use the generic topo plotting function
             _plot_topo_on_axis!(
                 ax,
@@ -2064,27 +2079,22 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
                 head_linewidth = head_linewidth,
                 head_radius = head_radius,
                 point_plot = point_plot,
-                label_plot = label_plot
+                label_plot = label_plot,
             )
             hidedecorations!(ax, grid = false)
-            
+
             plot_idx += 1
         end
     end
-    
+
     # Add overall title
     total_comps = sum(length(comps) for comps in component_lists)
-    Label(
-        fig[0, :],
-        "ICA Artifact Components",
-        fontsize = 18,
-        font = :bold
-    )
-    
+    Label(fig[0, :], "ICA Artifact Components", fontsize = 18, font = :bold)
+
     # Display plot if requested
     if display_plot
         display_figure(fig)
     end
-    
+
     return fig
 end

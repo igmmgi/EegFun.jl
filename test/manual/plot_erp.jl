@@ -2,7 +2,7 @@ using eegfun
 using GLMakie
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -42,14 +42,25 @@ fig = Figure(size = (800, 800))
 ax1 = Axis(fig[1, 1])
 ax2 = Axis(fig[1, 1], width = Relative(0.2), height = Relative(0.2), halign = 0, valign = 0)
 eegfun.plot_erp!(fig, ax1, erps, average_channels = true)
-eegfun.plot_topography!(fig, ax2, erps[1]; point_plot = false, label_plot = false, colorbar_plot = true, colorbar_width = Relative(0.03),
-colorbar_height = Relative(0.2), colorbar_tellheight = false, colorbar_tellwidth = false, colorbar_position = (1, 1), 
-colorbar_halign = 0.25, colorbar_valign = 0, colorbar_flipaxis = true, radius = 1.5)
+eegfun.plot_topography!(
+    fig,
+    ax2,
+    erps[1];
+    point_plot = false,
+    label_plot = false,
+    colorbar_plot = true,
+    colorbar_width = Relative(0.03),
+    colorbar_height = Relative(0.2),
+    colorbar_tellheight = false,
+    colorbar_tellwidth = false,
+    colorbar_position = (1, 1),
+    colorbar_halign = 0.25,
+    colorbar_valign = 0,
+    colorbar_flipaxis = true,
+    radius = 1.5,
+)
 # eegfun.plot_topography!(fig, ax2, erps[1]; point_plot = false, label_plot = false)
 fig
 
 
 GLMakie.closeall()
-
-
-

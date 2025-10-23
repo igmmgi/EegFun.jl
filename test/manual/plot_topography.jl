@@ -3,7 +3,7 @@ using GLMakie
 using BenchmarkTools
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..",  "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -27,23 +27,23 @@ eegfun.plot_topography(dat, title = "Custom Title", title_fontsize = 30)
 eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, method = :spherical_spline)
 eegfun.plot_topography(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))
-eegfun.plot_topography(dat, label_fontsize=30)
-eegfun.plot_topography(dat, point_markersize=30, point_marker=:x)
+eegfun.plot_topography(dat, label_fontsize = 30)
+eegfun.plot_topography(dat, point_markersize = 30, point_marker = :x)
 eegfun.plot_topography(dat, ylim = (-10, 10))
 eegfun.plot_topography(dat, ylim = (-1, 1))
-eegfun.plot_topography(dat, colorbar_ticksize=30)
-eegfun.plot_topography(dat, colorbar_labelcolor=:red)
-eegfun.plot_topography(dat, colorbar_size=10)
-eegfun.plot_topography(dat, colorbar_size=20)
-eegfun.plot_topography(dat, title_fontsize=30)
+eegfun.plot_topography(dat, colorbar_ticksize = 30)
+eegfun.plot_topography(dat, colorbar_labelcolor = :red)
+eegfun.plot_topography(dat, colorbar_size = 10)
+eegfun.plot_topography(dat, colorbar_size = 20)
+eegfun.plot_topography(dat, title_fontsize = 30)
 
 #################################
 # Epoched DataFrameEeg
 #################################
 # some epoched data
 epoch_cfg = [
-    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]), 
-    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]])
+    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]]),
 ]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
@@ -55,8 +55,8 @@ eegfun.plot_topography(epochs[1], 1, colormap = :inferno)
 eegfun.plot_topography(epochs[2], 1, title = "Custom Title", title_fontsize = 30)
 eegfun.plot_topography(epochs[1], 1, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 eegfun.plot_topography(epochs[2], 1, channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))
-eegfun.plot_topography(epochs[1], 1, label_fontsize=30)
-eegfun.plot_topography(epochs[2], 1, point_markersize=30, point_marker=:x)
+eegfun.plot_topography(epochs[1], 1, label_fontsize = 30)
+eegfun.plot_topography(epochs[2], 1, point_markersize = 30, point_marker = :x)
 eegfun.plot_topography(epochs[1], 1, ylim = (-10, 10))
 eegfun.plot_topography(epochs[2], 1, ylim = (-1, 1))
 
@@ -109,7 +109,3 @@ eegfun.plot_topography!(fig, ax3, epochs[2], 1, display_plot = false, colorbar_p
 fig
 
 GLMakie.closeall()
-
-
-
-
