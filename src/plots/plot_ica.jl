@@ -243,21 +243,12 @@ function plot_topography(ica::InfoIca; kwargs...)
 
     # Add keyboard event handling for scaling
     on(events(fig).keyboardbutton) do event
-        if event.action == Keyboard.press
+        if event.action == Keyboard.press && event.key in (Keyboard.up, Keyboard.down)
+            axes = Base.filter(ax -> ax isa Axis, fig.content)
             if event.key == Keyboard.up
-                # Scale up all axes in the figure
-                for ax in fig.content
-                    if ax isa Axis
-                        _topo_scale_up!(ax)
-                    end
-                end
-            elseif event.key == Keyboard.down
-                # Scale down all axes in the figure
-                for ax in fig.content
-                    if ax isa Axis
-                        _topo_scale_down!(ax)
-                    end
-                end
+                _topo_scale_up!.(axes)
+            else
+                _topo_scale_down!.(axes)
             end
         end
     end
@@ -322,9 +313,6 @@ mutable struct IcaComponentState
         component_data = ica.unmixing * dat_matrix
         total_components = size(component_data, 1)
 
-        # Use the layout from the ICA result (already subsetted to match the channels used in ICA)
-        subsetted_layout = ica.layout
-
         # Create observables
         comp_start = Observable(1)
         use_global_scale = Observable(false)
@@ -375,7 +363,6 @@ mutable struct IcaComponentState
         lines_obs = Vector{Observable{Vector{Float64}}}()
         channel_bool_indicators = Dict{Int,Any}()
 
-
         new(
             dat,
             ica,
@@ -391,9 +378,7 @@ mutable struct IcaComponentState
             use_global_scale,
             invert_scale,
             comps_to_use,
-            # Plot parameters
             plot_kwargs,
-            # Plot elements
             axs,
             channel_axs,
             topo_axs,
@@ -459,11 +444,11 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
     fig = Figure()
 
     # Setup GUI interface
-    create_component_plots!(fig, state)
-    add_navigation_controls!(fig, state)
-    add_navigation_sliders!(fig, state)
-    add_channel_menu!(fig, state)
-    setup_keyboard_interactions!(fig, state)
+    _create_component_activation_plots!(fig, state)
+    _add_navigation_controls!(fig, state)
+    _add_navigation_sliders!(fig, state)
+    _add_channel_menu!(fig, state)
+    _setup_keyboard_interactions!(fig, state)
 
     colsize!(fig.layout, 1, Relative(0.15))
     colsize!(fig.layout, 2, Relative(0.85))
@@ -489,7 +474,7 @@ Selects, centers, scales, and transposes data for ICA unmixing.
 """
 function prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca)
     dat_matrix = permutedims(Matrix(dat.data[!, ica.layout.data.label]))
-    dat_matrix .-= mean(dat_matrix, dims = 2) # TODO: check if this is correct
+    dat_matrix .-= mean(dat_matrix, dims = 2) 
     dat_matrix ./= ica.scale
     return dat_matrix
 end
@@ -696,7 +681,7 @@ function _plot_ica_topo_in_viewer!(
     return co
 end
 
-function create_component_plots!(fig, state)
+function _create_component_activation_plots!(fig, state)
 
     # Number of plots
     if length(state.components) == size(state.component_data, 1)
@@ -714,37 +699,52 @@ function create_component_plots!(fig, state)
         comp_idx = _get_component_index(state, i)
 
         # Time series axis creation (now on the right)
+        is_last_component = (i == state.n_visible_components)
+
         ax = Axis(
             fig[i, 2],
             ylabel = @sprintf("IC %d", comp_idx),
             yaxisposition = :left,
+            
+            # Tick visibility
             yticklabelsvisible = false,
             yticksvisible = true,
-            xticklabelsvisible = (i == state.n_visible_components),
-            xticksvisible = (i == state.n_visible_components),
+            xticklabelsvisible = is_last_component,
+            xticksvisible = is_last_component,
+            
+            # Grid settings
             xgridvisible = false,
             ygridvisible = false,
             xminorgridvisible = false,
             yminorgridvisible = false,
+            
+            # Spacing
             ylabelpadding = 0.0,
             yticklabelpad = 0.0,
             yticklabelspace = 0.0,
+            yautolimitmargin = (0, 0)
         )
         push!(state.axs, ax)
 
         # Always create channel overlay axis (keep spines hidden)
         ax_channel = Axis(
             fig[i, 2],
-            yticklabelsvisible = false,
-            yticksvisible = false,
             yaxisposition = :right,
             xaxisposition = :top,
+            
+            # Tick visibility - all hidden
+            yticklabelsvisible = false,
+            yticksvisible = false,
             xticklabelsvisible = false,
             xticksvisible = false,
+            
+            # Grid settings - all disabled
             xgridvisible = false,
             ygridvisible = false,
             xminorgridvisible = false,
             yminorgridvisible = false,
+            
+            # Spine visibility - all hidden for overlay effect
             bottomspinevisible = false,
             topspinevisible = false,
             rightspinevisible = false,
@@ -809,7 +809,7 @@ function create_component_plots!(fig, state)
 end
 
 # Update add_navigation_controls! to include the global scale checkbox
-function add_navigation_controls!(fig, state)
+function _add_navigation_controls!(fig, state)
 
     # Add navigation buttons below topo plots in column 1
     topo_nav = GridLayout(fig[state.n_visible_components+1, 1], tellheight = false)
@@ -844,19 +844,19 @@ function add_navigation_controls!(fig, state)
     # Connect checkboxes to state
     on(global_scale_check.checked) do checked
         state.use_global_scale[] = checked
-        update_components!(state)
+        _update_components!(state)
     end
 
     on(invert_scale_check.checked) do checked
         state.invert_scale[] = checked
-        update_components!(state)
+        _update_components!(state)
     end
 
     # Connect navigation buttons
     on(prev_topo.clicks) do _
         new_start = max(1, state.comp_start[] - state.n_visible_components)
         state.comp_start[] = new_start
-        update_components!(state)
+        _update_components!(state)
     end
 
     on(next_topo.clicks) do _
@@ -865,7 +865,7 @@ function add_navigation_controls!(fig, state)
             state.comp_start[] + state.n_visible_components,
         )
         state.comp_start[] = new_start
-        update_components!(state)
+        _update_components!(state)
     end
 
     # Connect apply button
@@ -889,7 +889,7 @@ end
 
 
 # Update add_navigation_sliders! to match new layout
-function add_navigation_sliders!(fig, state)
+function _add_navigation_sliders!(fig, state)
     # Create new row for position slider below the navigation buttons
     slider_row = state.n_visible_components + 3  # Move slider to a new row
 
@@ -907,12 +907,12 @@ function add_navigation_sliders!(fig, state)
     )
 
     on(x_slider.value) do x
-        update_view_range!(state, Int(round(x)))
+        _update_view_range!(state, Int(round(x)))
     end
 end
 
 # Helper function to update view range (similar to plot_databrowser style)
-function update_view_range!(state, start_pos)
+function _update_view_range!(state, start_pos)
     # Ensure we stay within data bounds
     if start_pos + state.window_size > length(state.dat.data.time)
         start_pos = length(state.dat.data.time) - state.window_size + 1
@@ -958,13 +958,13 @@ function update_view_range!(state, start_pos)
 
         # If we found a boolean channel, redraw its indicators
         if !isnothing(current_channel) && eltype(state.dat.data[!, current_channel]) == Bool
-            add_boolean_indicators!(state, current_channel)
+            _add_boolean_indicators!(state, current_channel)
         end
     end
 end
 
-# Update add_channel_menu! to match new layout
-function add_channel_menu!(fig, state)
+# Update _add_channel_menu! to match new layout
+function _add_channel_menu!(fig, state)
     # Create a menu layout in column 2
     menu_row = state.n_visible_components + 2  # Keep menu in its own row
 
@@ -977,14 +977,14 @@ function add_channel_menu!(fig, state)
         Menu(menu_layout[1, 2], options = ["None"; names(state.dat.data)], default = "None", tellheight = false)
 
     on(channel_menu.selection) do selected
-        update_channel_selection!(state, selected)
+        _update_channel_selection!(state, selected)
     end
 
     return menu_layout
 end
 
 # Helper function to update channel selection (matches databrowser pattern)
-function update_channel_selection!(state, selected)
+function _update_channel_selection!(state, selected)
     # Clear previous channel visualizations from all axes
     for i = 1:state.n_visible_components
         if i <= length(state.channel_axs) &&
@@ -1006,7 +1006,7 @@ function update_channel_selection!(state, selected)
         # Only show overlay plot for non-Boolean channels
         if eltype(state.dat.data[!, selected_sym]) == Bool
             state.show_channel[] = false
-            add_boolean_indicators!(state, selected_sym)
+            _add_boolean_indicators!(state, selected_sym)
         else
             state.show_channel[] = true
         end
@@ -1014,7 +1014,7 @@ function update_channel_selection!(state, selected)
 end
 
 # Helper function to add boolean indicators (matching databrowser pattern)
-function add_boolean_indicators!(state, channel_sym)
+function _add_boolean_indicators!(state, channel_sym)
     # For each component axis, create a vertical line at each true position
     for i = 1:state.n_visible_components
         if i <= length(state.channel_axs)
@@ -1046,7 +1046,7 @@ function add_boolean_indicators!(state, channel_sym)
 end
 
 # Setup keyboard interactions
-function setup_keyboard_interactions!(fig, state)
+function _setup_keyboard_interactions!(fig, state)
 
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
@@ -1073,14 +1073,7 @@ function setup_keyboard_interactions!(fig, state)
                 first_idx = clamp(first(state.xrange[]), 1, length(state.dat.data.time))
                 last_idx = clamp(last(state.xrange[]), 1, length(state.dat.data.time))
                 new_xlims = (state.dat.data.time[first_idx], state.dat.data.time[last_idx])
-                for ax in state.axs
-                    xlims!(ax, new_xlims)
-                end
-                for ax in state.channel_axs
-                    if !isnothing(ax)
-                        xlims!(ax, new_xlims)
-                    end
-                end
+                xlims!.(state.axs, Ref(new_xlims))
 
             elseif event.key == Keyboard.up || event.key == Keyboard.down
                 shift_pressed =
@@ -1088,31 +1081,23 @@ function setup_keyboard_interactions!(fig, state)
                     (Keyboard.right_shift in events(fig).keyboardstate)
 
                 if !shift_pressed
-                    if !isempty(state.axs)
-                        if event.key == Keyboard.up
-                            ymore!.(state.axs)
-                            ymore!.(state.channel_axs)
-                        else  
-                            yless!.(state.axs)
-                            yless!.(state.channel_axs)
-                        end
-                        
-                        # Update the global ylims observable for consistency
-                        state.ylims[] = state.axs[1].yaxis.attributes.limits[]
+                    if event.key == Keyboard.up
+                        ymore!.(state.axs)
+                    else  
+                        yless!.(state.axs)
                     end
+                    state.ylims[] = state.axs[1].yaxis.attributes.limits[]
 
                     # Force a redraw of the plots with scale inversion
                     # For subsets, update all components in the subset
-                    num_plots = if length(state.components) == size(state.component_data, 1)
-                        state.n_visible_components
+                    if length(state.components) == size(state.component_data, 1)
+                        num_plots = state.n_visible_components
                     else
-                        length(state.components)  # Update all components in the subset
+                        num_plots = length(state.components)  # Update all components in the subset
                     end
 
                     for i = 1:num_plots
-                        # Get the correct component index
                         comp_idx = _get_component_index(state, i)
-
                         if comp_idx <= size(state.component_data, 1)
                             component_data = state.component_data[comp_idx, :]
                             if state.invert_scale[]
@@ -1122,14 +1107,12 @@ function setup_keyboard_interactions!(fig, state)
                         end
                     end
                 else
-                    # With shift - adjust ONLY channel scale without changing axis limits
+                    # HACK! With shift - adjust ONLY channel scale without changing axis limits
                     if event.key == Keyboard.up && shift_pressed
                         state.channel_yscale[] = state.channel_yscale[] * 1.1
                     elseif event.key == Keyboard.down && shift_pressed
                         state.channel_yscale[] = state.channel_yscale[] / 1.1
                     end
-                    # We don't modify any axis limits here, only the scaling factor
-                    # This will affect how the channel data is plotted through the Observable
                 end
 
             elseif event.key == Keyboard.page_up || event.key == Keyboard.page_down
@@ -1148,7 +1131,7 @@ function setup_keyboard_interactions!(fig, state)
 
                     if new_start != current_start
                         state.comp_start[] = new_start
-                        update_components!(state)
+                        _update_components!(state)
                     end
                 end
             end
@@ -1157,8 +1140,7 @@ function setup_keyboard_interactions!(fig, state)
 end
 
 # Update component data when navigating
-function update_components!(state)
-    # Number of plots
+function _update_components!(state)
     if length(state.components) == size(state.component_data, 1)
         num_plots = state.n_visible_components
     else
@@ -1198,7 +1180,7 @@ function update_components!(state)
             if i <= length(state.lines_obs)
                 state.lines_obs[i][] = component_data
             else
-                @warn "Trying to update non-existent lines_obs at index $i"
+                @minimal_warning "Trying to update non-existent lines_obs at index $i"
             end
 
             # Clear and redraw topography using the viewer function
@@ -1223,7 +1205,7 @@ function update_components!(state)
                 # Update title
                 topo_ax.title = @sprintf("IC %d (%.1f%%)", comp_idx, state.ica.variance[comp_idx] * 100)
             else
-                @warn "Trying to update non-existent topo_axs at index $i"
+                @minimal_warning "Trying to update non-existent topo_axs at index $i"
             end
             # Update y-axis label
             if i <= length(state.axs)
@@ -1258,8 +1240,6 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
         throw(ArgumentError("Unknown interpolation method: $method"))
     end
 end
-
-# Internal function to plot ICA topoplot on an axis
 
 # Internal function to calculate ICA topoplot levels (global or local)
 function _calculate_ica_topo_levels(
@@ -1382,8 +1362,6 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
         @warn "Could not plot eye component features, input DataFrame or z-scores are empty."
         return Figure() # Return empty figure
     end
-
-    n_components = nrow(metrics_df)
 
     # Plot vEOG/hEOG Correlation Z-Scores
     fig = Figure()
@@ -1832,8 +1810,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     )
 
     # Right panel: Heart Rate vs IBI Regularity (std)
-    ax2 =
-        Axis(fig[1, 2], xlabel = "Heart Rate (BPM)", ylabel = "IBI Std Dev (seconds)", title = "Heart Rate Regularity")
+    ax2 = Axis(fig[1, 2], xlabel = "BPM", ylabel = "IBI Std Dev (seconds)", title = "Heart Rate Regularity")
 
     # Plot non-ECG components
     non_ecg_idx = setdiff(1:nrow(metrics_df), identified_comps)
