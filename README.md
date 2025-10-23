@@ -12,19 +12,15 @@
 - ✓ Multiple plot types (ERP, topography, spectrum, etc.)
 - ✓ ICA component removal
 - ✓ Filtering (high-pass, low-pass)
-- ✓ Epoching and ERP analysis
+- ✓ Epoching and basic ERP analysis
 - ✓ Layout system for different electrode configurations
-- ✓ Comprehensive test suite
-- ✓ Documentation and examples
+- ✓ Initial test suite
+- ✓ Initial documentation and examples
 
 ## 📋 TODO
 
-- ☐ Improve region selection performance
 - ☐ Add more visualization options
-- ☐ Enhance documentation
-- ☐ Add more electrode layout support
-- ☐ Optimize memory usage for large datasets
-- ☐ Add batch processing capabilities
-- ☐ Improve error handling and user feedback
+- ☐ Improve documentation and examples
+- ☐ Add more filetypes (separate packages?)
 - ☐ Add more statistical analysis functions
 
