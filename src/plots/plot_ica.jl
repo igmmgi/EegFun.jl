@@ -1047,24 +1047,26 @@ end
 
 # Setup keyboard interactions
 function setup_keyboard_interactions!(fig, state)
+
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.i
-            # Show help for ICA
             show_plot_help(:ica)
         elseif event.action in (Keyboard.press, Keyboard.repeat)
             if event.key == Keyboard.left || event.key == Keyboard.right
+
                 # Handle x-axis scrolling
                 current_range = state.xrange[]
+                data_length = size(state.component_data, 2)
+                window_size = state.window_size
                 if event.key == Keyboard.left
-                    new_start = max(1, first(current_range) - state.window_size)
-                    state.xrange[] = new_start:(new_start+state.window_size-1)
-                else  # right
-                    new_start = min(
-                        size(state.component_data, 2) - state.window_size + 1,
-                        first(current_range) + state.window_size,
-                    )
-                    state.xrange[] = new_start:(new_start+state.window_size-1)
+                    new_start = max(1, first(current_range) - window_size)
+                elseif event.key == Keyboard.right   
+                    new_start = min(data_length - window_size + 1, first(current_range) + window_size)
                 end
+                
+                # Ensure we don't go beyond data bounds
+                new_start = max(1, min(new_start, data_length - window_size + 1))
+                state.xrange[] = new_start:(new_start + window_size - 1)
 
                 # Update x-axis limits for all axes
                 # Ensure the indices are within bounds
@@ -1088,27 +1090,15 @@ function setup_keyboard_interactions!(fig, state)
                 if !shift_pressed
                     if !isempty(state.axs)
                         if event.key == Keyboard.up
-                            for ax in state.axs
-                                ymore!(ax)
-                            end
+                            ymore!.(state.axs)
+                            ymore!.(state.channel_axs)
                         else  
-                            for ax in state.axs
-                                yless!(ax)
-                            end
-                        end
-                        
-                        for ax in state.channel_axs
-                            if !isnothing(ax)
-                                if event.key == Keyboard.up
-                                    ymore!(ax)
-                                else  
-                                    yless!(ax)
-                                end
-                            end
+                            yless!.(state.axs)
+                            yless!.(state.channel_axs)
                         end
                         
                         # Update the global ylims observable for consistency
-                        state.ylims[] = ylims(state.axs[1])
+                        state.ylims[] = state.axs[1].yaxis.attributes.limits[]
                     end
 
                     # Force a redraw of the plots with scale inversion
