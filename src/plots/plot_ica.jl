@@ -106,54 +106,6 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
 end
 
 """
-    plot_topography(ica::InfoIca, component::Int; ...)
-
-Plot a single ICA component topography.
-
-# Arguments
-- `ica::InfoIca`: The ICA result object (contains layout information).
-- `component::Int`: The component index to plot (1-based).
-
-# Keyword Arguments
-$(generate_kwargs_doc(PLOT_ICA_KWARGS))
-
-# Returns
-- `fig::Figure`: The generated Makie Figure containing the topoplot.
-- `ax::Axis`: The Axis containing the plot.
-
-# Examples
-
-## Basic Usage
-```julia
-# Plot component 1
-fig, ax = plot_topography(ica, 1)
-
-# Plot component 5 with colorbar
-fig, ax = plot_topography(ica, 5, colorbar_plot = true)
-
-# Plot with different method
-fig, ax = plot_topography(ica, 1, method = :spherical_spline)
-```
-"""
-function plot_topography(ica::InfoIca, component::Int; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
-    display_plot = pop!(plot_kwargs, :display_plot)
-    
-    # Create figure and axis
-    fig = Figure()
-    ax = Axis(fig[1, 1])
-    
-    # Use the internal plotting function
-    _plot_topography!(fig, ax, ica, component; plot_kwargs...)
-    
-    if display_plot
-        display_figure(fig)
-    end
-    
-    return fig, ax
-end
-
-"""
     plot_topography(ica::InfoIca; ...)
 
 Plot multiple ICA component topographies in a grid layout within a new Figure.
