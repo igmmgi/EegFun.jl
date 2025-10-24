@@ -8,9 +8,7 @@
 # package
 using eegfun
 using GLMakie
-
-
 # using CairoMakie
 # using BenchmarkTools
 # while preprocessing routine
-eegfun.preprocess("pipeline.toml", log_level = "Info")
+eegfun.preprocess("pipeline.toml", log_level = "warn")

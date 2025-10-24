@@ -11,13 +11,13 @@ epoch_condition_file = "epochs.toml"
 
 [preprocess]
 reference_channel = "avg"
-epoch_start = -1.0
-epoch_end = 1.0
+epoch_start = -0.5
+epoch_end = 2.0
 
 [preprocess.filter]
 highpass.apply = true
 highpass.type = "hp"
-highpass.freq = 0.5
+highpass.freq = 0.1
 highpass.method = "iir"
 highpass.func = "filtfilt"
 highpass.order = 1

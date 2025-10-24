@@ -848,17 +848,49 @@ end
 
 
 """
-    log_pretty_table(df::DataFrame; kwargs...)
+    log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
 
-Log a pretty table. For general DataFrame logging.
+Log a pretty table with specified log level. For general DataFrame logging.
 Sets show_row_number=false and show_subheader=false by default for cleaner logs.
+
+# Arguments
+- `df::DataFrame`: The DataFrame to log
+- `log_level::Symbol`: Log level (:debug, :info, :warn, :error) (default: :info)
+- `kwargs...`: Additional arguments passed to pretty_table
+
+# Examples
+```julia
+# Log with default info level
+log_pretty_table(df; title = "My Table")
+
+# Log with debug level
+log_pretty_table(df; log_level = :debug, title = "Debug Table")
+
+# Log with warn level
+log_pretty_table(df; log_level = :warn, title = "Warning Table")
+```
 """
-function log_pretty_table(df::DataFrame; kwargs...)
+function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
     table_output = sprint() do output_io
-        io_context = IOContext(output_io, :displaysize => displaysize(stdout))
+        # Set a large display size to avoid terminal limitations (i.e., cropping!)
+        io_context = IOContext(output_io, :displaysize => (2000, 2000))
         pretty_table(io_context, df; kwargs...)
     end
-    @info "\n\n$table_output\n"
+    
+    # Log with specified level
+    if log_level == :debug
+        @debug "\n\n$table_output\n"
+    elseif log_level == :info
+        @info "\n\n$table_output\n"
+    elseif log_level == :warn
+        @warn "\n\n$table_output\n"
+    elseif log_level == :error
+        @error "\n\n$table_output\n"
+    else
+        @warn "Unknown log level: $log_level, using :info instead"
+        @info "\n\n$table_output\n"
+    end
+    
     return nothing
 end
 

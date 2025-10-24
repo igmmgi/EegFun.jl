@@ -98,6 +98,16 @@ function preprocess(config::String; log_level::String = "info")
                 @info "Continuous data filters: $(_applied_filters(preprocess_cfg.filter, filter_sections = [:highpass, :lowpass]))"
                 filter_data!(dat, preprocess_cfg.filter)
 
+                # Initial Channel Summary
+                @debug section("Channel Summary")
+                summary = channel_summary(dat)
+                log_pretty_table(summary; title = "Channel Summary (whole dataset)", log_level = :debug)
+
+                # Mark epoch windows
+                mark_epoch_windows!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
+                summary = channel_summary(dat, sample_selection = samples(:epoch_window))
+                log_pretty_table(summary; title = "Channel Summary (epoch window)", log_level = :debug)
+
                 # Calculate EOG channels based on configuration
                 @info section("EOG")
                 @info subsection("Calculating EOG (vEOG/hEOG) channels")
@@ -107,9 +117,31 @@ function preprocess(config::String; log_level::String = "info")
                 @info subsection("Detecting EOG (vEOG/hEOG) onsets")
                 detect_eog_signals!(dat, preprocess_cfg.eog)
 
+                # Calculate correlations between all channels and EOG channels
+                @info subsection("Channel x vEOG/hEOG Correlation Matrix")
+                hEOG_vEOG_cm = eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog)
+                eegfun.add_zscore_columns!(hEOG_vEOG_cm)
+                log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)", log_level = :debug)
+
+                # Calculate correlations between all channels and EOG channels
+                @info subsection("Channel x vEOG/hEOG Correlation Matrix")
+                hEOG_vEOG_cm = eegfun.correlation_matrix_eog(dat, sample_selection = samples(:epoch_window), preprocess_cfg.eog)
+                eegfun.add_zscore_columns!(hEOG_vEOG_cm)
+                log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)", log_level = :debug)
+
+                @info section("Bad Channel Detection")
+                cjp = channel_joint_probability(dat)
+                log_pretty_table(cjp; title = "Channel Joint Probability (whole dataset)", log_level = :debug)
+
+                cjp = channel_joint_probability(dat, sample_selection = samples(:epoch_window))
+                log_pretty_table(cjp; title = "Channel Joint Probability (epoch window)", log_level = :debug)
+
+
+                # Detect bad electrodes in continuous data
+
                 # detect extreme values
                 @info section("Artifact Detection (extreme values)")
-                @info "Detecting extreme values based on configuration: $(preprocess_cfg.eeg.artifact_value_criterion)"
+                @info "Detecting extreme values: $(preprocess_cfg.eeg.artifact_value_criterion) criterion"
                 is_extreme_value!(
                     dat,
                     Int(preprocess_cfg.eeg.artifact_value_criterion),
@@ -128,7 +160,7 @@ function preprocess(config::String; log_level::String = "info")
 
                     # Apply ICA-specific filters
                     @info subsection("ICA filters")
-                    @info _applied_filters(preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass])
+                    @info "ICA data filters: $(_applied_filters(preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass]))"
                     filter_data!(dat_ica, preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass])
 
                     @info subsection("Running ICA")
@@ -151,17 +183,10 @@ function preprocess(config::String; log_level::String = "info")
                     )
 
                     # Print component metrics to log files
-                    @info "EOG Component Metrics:"
-                    log_pretty_table(component_metrics[:eog_metrics], title = "EOG Component Metrics")
-                    @info "ECG Component Metrics:"
-                    log_pretty_table(component_metrics[:ecg_metrics], title = "ECG Component Metrics")
-                    @info "Line Noise Component Metrics:"
-                    log_pretty_table(component_metrics[:line_noise_metrics], title = "Line Noise Component Metrics")
-                    @info "Channel Noise Component Metrics:"
-                    log_pretty_table(
-                        component_metrics[:channel_noise_metrics],
-                        title = "Channel Noise Component Metrics",
-                    )
+                    log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics", log_level = :debug)
+                    log_pretty_table(component_metrics[:ecg_metrics], title = "ECG Component Metrics", log_level = :debug)
+                    log_pretty_table(component_metrics[:line_noise_metrics], title = "Line Noise Component Metrics", log_level = :debug)
+                    log_pretty_table(component_metrics[:channel_noise_metrics], title = "Channel Noise Component Metrics", log_level = :debug)
 
                     @info subsection("Removing ICA components")
                     remove_ica_components!(
