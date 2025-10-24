@@ -94,6 +94,11 @@ Configuration for Independent Component Analysis.
     percentage_of_data::Float64
 end
 
+function get_eog_channels(eog_cfg::EogConfig)
+    return [Symbol(eog_cfg.vEOG_channels[3][1]), Symbol(eog_cfg.hEOG_channels[3][1])]
+end
+
+
 """
     PreprocessConfig
 
