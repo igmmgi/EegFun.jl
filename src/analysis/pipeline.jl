@@ -18,6 +18,11 @@ function preprocess(config::String; log_level::String = "info")
 
     try
 
+        # Setup for all analyses files:
+        # This involves loading the end-user config file, merging it with the default config, 
+        # and creating the PreprocessConfig object.
+        # The epoch conditions files are also loaded and parsed (see XXX for example configuration files)
+
         @info section("Setup")
         !isfile(config) && @minimal_error "Config file does not exist: $config"
         cfg = load_config(config)
@@ -63,11 +68,13 @@ function preprocess(config::String; log_level::String = "info")
         print_layout_neighbours(layout, joinpath(output_directory, "neighbours_xy.toml"))
 
         # Actual start of preprocessing pipeline!
+        # This is the main loop that processes each raw data file.
+        # TODO: embarrasingly parallel? use Threads.@threads?
         # Track processing results
         processed_files = 0
         failed_files = String[]
-        # TODO: embarrasingly parallel? use Threads.@threads?
         for data_file in raw_data_files
+
             try
                 @info section("Processing")
                 @info "File: $data_file"
@@ -78,7 +85,7 @@ function preprocess(config::String; log_level::String = "info")
                     log_level = log_level,
                 )
 
-                # read raw data file and create our Julia DataFrame
+                ################### LOAD RAW DATA FILE ###################
                 # TODO: update for different file types!
                 @info section("Raw Data")
                 dat = create_eeg_dataframe(read_bdf(data_file), layout)
@@ -89,16 +96,16 @@ function preprocess(config::String; log_level::String = "info")
                     jldsave(make_output_filename(output_directory, data_file, "_continuous"); dat = dat)
                 end
 
-                # rereference the data
+                ################### REREFERENCE DATA ###################
                 @info section("Rereference")
                 rereference!(dat, preprocess_cfg.reference_channel)
 
-                # Apply filters based on configuration
+                ################### APPLY FILTERS ###################
                 @info section("Initial Filters")
                 @info "Continuous data filters: $(_applied_filters(preprocess_cfg.filter, filter_sections = [:highpass, :lowpass]))"
                 filter_data!(dat, preprocess_cfg.filter)
 
-                # Initial Channel Summary
+                ################### INITIAL CHANNEL SUMMARY ###################
                 @debug section("Channel Summary")
                 summary = channel_summary(dat)
                 log_pretty_table(summary; title = "Channel Summary (whole dataset)", log_level = :debug)
@@ -108,7 +115,7 @@ function preprocess(config::String; log_level::String = "info")
                 summary = channel_summary(dat, sample_selection = samples(:epoch_window))
                 log_pretty_table(summary; title = "Channel Summary (epoch window)", log_level = :debug)
 
-                # Calculate EOG channels based on configuration
+                #################### CALCULATE EOG CHANNELS ###################
                 @info section("EOG")
                 @info subsection("Calculating EOG (vEOG/hEOG) channels")
                 calculate_eog_channels!(dat, preprocess_cfg.eog)
@@ -129,6 +136,7 @@ function preprocess(config::String; log_level::String = "info")
                 eegfun.add_zscore_columns!(hEOG_vEOG_cm)
                 log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)", log_level = :debug)
 
+                #################### DETECT BAD ELECTRODES IN CONTINUOUS DATA ###################
                 @info section("Bad Channel Detection")
                 cjp = channel_joint_probability(dat)
                 log_pretty_table(cjp; title = "Channel Joint Probability (whole dataset)", log_level = :debug)
@@ -137,9 +145,7 @@ function preprocess(config::String; log_level::String = "info")
                 log_pretty_table(cjp; title = "Channel Joint Probability (epoch window)", log_level = :debug)
 
 
-                # Detect bad electrodes in continuous data
-
-                # detect extreme values
+                #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
                 @info section("Artifact Detection (extreme values)")
                 @info "Detecting extreme values: $(preprocess_cfg.eeg.artifact_value_criterion) criterion"
                 is_extreme_value!(
@@ -150,8 +156,10 @@ function preprocess(config::String; log_level::String = "info")
                     ),
                 )
 
+                #################### Independent Component Analysis (ICA) ###################
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
-                # more extreme high-pass filter run ica on clean sections of "continuous" data
+                # more extreme high-pass filter applied. 
+                # We then run ica on clean sections of "continuous" data
                 if preprocess_cfg.ica.apply
 
                     @info section("ICA")
@@ -172,7 +180,7 @@ function preprocess(config::String; log_level::String = "info")
                         percentage_of_data = preprocess_cfg.ica.percentage_of_data,
                     )
 
-                    # Identify all artifact components in one unified call
+                    # Identify all artifact components 
                     @info subsection("Component Identification")
                     component_artifacts, component_metrics = identify_components(
                         dat_ica,
@@ -205,11 +213,11 @@ function preprocess(config::String; log_level::String = "info")
                     dat_cleaned = dat
                 end
 
-                # epoch data
+                #################### EPOCHING DATA ###################
                 @info section("Epoching")
                 epochs_original = extract_epochs(dat, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
 
-                # detect standard artifact values
+                #################### DETECT STANDARD ARTIFACT VALUES IN EPOCHED DATA ###################
                 @info subsection("Detecting artifact values in epoched data")
                 is_extreme_value!(
                     dat_cleaned,
@@ -227,7 +235,7 @@ function preprocess(config::String; log_level::String = "info")
                     Symbol("is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion)),
                 );
 
-                # Log epoch counts and store for summary
+                #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
                 df = log_epochs_table(epochs_original, epochs_cleaned, title = "Epoch counts per condition:")
                 push!(all_epoch_counts, df)
 
@@ -249,7 +257,7 @@ function preprocess(config::String; log_level::String = "info")
                     )
                 end
 
-                # save erp data
+                #################### SAVE ERP DATA ###################
                 if cfg["files"]["output"]["save_erp_data_original"]
                     erps_original = average_epochs(epochs_original)
                     @info "Saving ERP data (original)"
@@ -274,7 +282,7 @@ function preprocess(config::String; log_level::String = "info")
             end
         end
 
-        # Write final summary
+        #################### FINAL SUMMARY ###################
         @info section("Summary")
         @info "$processed_files success, $(length(failed_files)) fail"
         !isempty(failed_files) && @info "Failed files: $(join(failed_files, ", "))"
