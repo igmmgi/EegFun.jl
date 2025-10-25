@@ -46,6 +46,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ygrid => (false, "Whether to show y-axis grid"),
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
+
     # Origin lines
     :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
 
