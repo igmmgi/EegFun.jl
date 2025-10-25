@@ -1,9 +1,4 @@
 # =============================================================================
-# IMPORTS
-# =============================================================================
-using ..Utils: _is_shift_held, _get_mouse_position, _find_closest_channel, _toggle_channel_selection
-
-# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -49,17 +44,21 @@ function _create_rejected_color_map(rejected_channels, colormap_name)
 end
 
 """
-    _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs)
+    _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs; is_repaired=false)
 
 Get the styling parameters for a channel based on its state.
 """
-function _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs)
+function _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs; is_repaired=false)
     color = is_rejected ? rejected_color_map[ch] : :black
     alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
     base_linewidth = is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
     linewidth = is_selected ? base_linewidth * 2 : base_linewidth
     
-    label_text = is_rejected ? "$ch (rejected)" : "$ch"
+    if is_rejected
+        label_text = is_repaired ? "$ch (repaired)" : "$ch (rejected)"
+    else
+        label_text = "$ch"
+    end
     label_text = is_selected ? rich(label_text, font = :bold) : label_text
     
     return (; color, alpha, linewidth, label_text) # named tuple
@@ -67,16 +66,16 @@ end
 
 """
     _plot_channels!(ax, epoch, selected_channels, rejected_channels, selected_channels_set, 
-                   rejected_color_map, plot_kwargs)
+                   rejected_color_map, plot_kwargs; is_repaired=false)
 
 Plot all channels for a single epoch on the given axis.
 """
-function _plot_channels!(ax, epoch, selected_channels, rejected_channels, selected_channels_set, rejected_color_map, plot_kwargs)
+function _plot_channels!(ax, epoch, selected_channels, rejected_channels, selected_channels_set, rejected_color_map, plot_kwargs; is_repaired=false)
     for ch in selected_channels
         is_rejected = ch in rejected_channels
         is_selected = ch in selected_channels_set
         
-        styling = _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs)
+        styling = _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs; is_repaired=is_repaired)
         
         lines!(
             ax,
@@ -104,7 +103,7 @@ end
 """
     _setup_axis_styling!(ax, plot_kwargs)
 
-Apply grid and origin line styling to the axis.
+Apply grid, origin line styling, and axis limits to the axis.
 """
 function _setup_axis_styling!(ax, plot_kwargs)
     # Grid settings
@@ -112,6 +111,17 @@ function _setup_axis_styling!(ax, plot_kwargs)
     ax.ygridvisible = plot_kwargs[:ygrid]
     ax.xminorgridvisible = plot_kwargs[:xminorgrid]
     ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+    
+    # Axis limits
+    if plot_kwargs[:xlimits] !== nothing
+        xmin, xmax = plot_kwargs[:xlimits]
+        xlims!(ax, xmin, xmax)
+    end
+    
+    if plot_kwargs[:ylimits] !== nothing
+        ymin, ymax = plot_kwargs[:ylimits]
+        ylims!(ax, ymin, ymax)
+    end
     
     # Origin lines
     if plot_kwargs[:axes_through_origin]
@@ -154,19 +164,19 @@ Create event handlers for navigation buttons.
 """
 function _create_navigation_handlers(controls, epoch_idx, artifact_idx, n_epochs, epochs_with_artifacts)
 
-    on(controls.back_button.clicks) do 
+    on(controls.back_button.clicks) do _
         epoch_idx[] = max(1, epoch_idx[] - 1)
     end
     
-    on(controls.forward_button.clicks) do 
+    on(controls.forward_button.clicks) do _
         epoch_idx[] = min(n_epochs, epoch_idx[] + 1)
     end
     
-    on(controls.back_artifact_button.clicks) do 
+    on(controls.back_artifact_button.clicks) do _
         artifact_idx[] = max(1, artifact_idx[] - 1)
     end
     
-    on(controls.forward_artifact_button.clicks) do 
+    on(controls.forward_artifact_button.clicks) do _
         artifact_idx[] = min(length(epochs_with_artifacts), artifact_idx[] + 1)
     end
 end
@@ -186,6 +196,10 @@ const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # selection
     :selection_threshold => (50, "Distance threshold for channel selection."),
+
+    # Axis limits
+    :xlimits => (nothing, "X-axis limits as (min, max) tuple or nothing for auto-scaling"),
+    :ylimits => (nothing, "Y-axis limits as (min, max) tuple or nothing for auto-scaling"),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
@@ -216,11 +230,14 @@ $(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
 # Examples
 ```julia
 # Basic interactive plot
-fig = plot_artifact_detection_interactive(epochs, artifacts)
+fig = plot_artifact_detection(epochs, artifacts)
 
 # With specific channels
-fig = plot_artifact_detection_interactive(epochs, artifacts, 
-                                        channel_selection = channels([:Fp1, :Fp2, :Cz]))
+fig = plot_artifact_detection(epochs, artifacts, 
+                            channel_selection = channels([:Fp1, :Fp2, :Cz]))
+
+# With custom axis limits
+fig = plot_artifact_detection(epochs, artifacts, xlimits = (-0.2, 0.8), ylimits = (-100, 100))
 ```
 """
 function plot_artifact_detection(
@@ -266,7 +283,7 @@ function plot_artifact_detection(
 
     # Function to update plot based on epoch
     function update_plot!(epoch_idx_val)
-        # Clear the axis
+
         empty!(ax)
 
         # Delete existing legend if present
@@ -275,10 +292,8 @@ function plot_artifact_detection(
             current_legend[] = nothing
         end
 
-        # Get current epoch data
+        # Get current epoch data and rejected channels
         epoch = epochs.data[epoch_idx_val]
-
-        # Find rejected channels for this epoch
         epoch_rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
 
         # Update title
@@ -342,11 +357,14 @@ $(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
 # Examples
 ```julia
 # Basic interactive repair comparison
-fig = plot_repair_comparison_interactive(epochs_orig, epochs_repaired, artifacts)
+fig = plot_artifact_repair(epochs_orig, epochs_repaired, artifacts)
 
 # With specific channels
-fig = plot_repair_comparison_interactive(epochs_orig, epochs_repaired, artifacts,
-                                       channel_selection = channels([:Fp1, :Fp2, :Cz]))
+fig = plot_artifact_repair(epochs_orig, epochs_repaired, artifacts,
+                          channel_selection = channels([:Fp1, :Fp2, :Cz]))
+
+# With custom axis limits
+fig = plot_artifact_repair(epochs_orig, epochs_repaired, artifacts, xlimits = (-0.2, 0.8), ylimits = (-100, 100))
 ```
 """
 function plot_artifact_repair(
@@ -397,7 +415,7 @@ function plot_artifact_repair(
 
     # Function to update comparison plot
     function update_comparison_plot!(epoch_idx_val)
-        # Clear both axes
+
         empty!(ax1)
         empty!(ax2)
 
@@ -426,9 +444,9 @@ function plot_artifact_repair(
         _plot_channels!(ax1, epoch_orig, selected_channels, epoch_rejected_channels, selected_channels_set, 
                       rejected_color_map, plot_kwargs)
         
-        # For repaired plot, use normal styling (not rejected)
-        _plot_channels!(ax2, epoch_repaired, selected_channels, Symbol[], selected_channels_set, 
-                      rejected_color_map, plot_kwargs)
+        # For repaired plot, show which channels were originally rejected (now repaired)
+        _plot_channels!(ax2, epoch_repaired, selected_channels, epoch_rejected_channels, selected_channels_set, 
+                      rejected_color_map, plot_kwargs; is_repaired=true)
 
         # Create legends
         _create_legend!(ax1, selected_channels, current_legend1)

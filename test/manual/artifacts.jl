@@ -77,6 +77,8 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
 
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
+eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], ylimits = (-100, 100))
+eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], xlimits = (-5, 15), ylimits = (-100, 100))
 
 
 eegfun.get_rejected_epochs(bad_epochs[1])
@@ -106,7 +108,8 @@ epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method =
 epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method = :spherical_spline)
 epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method = :reject)
 
-eegfun.plot_artifact_repair(epochs[1], epochs_repaired, bad_epochs[1])
+eegfun.plot_artifact_repair(epochs[1], epochs_repaired[1], bad_epochs[1])
+eegfun.plot_artifact_repair(epochs[1], epochs_repaired[1], bad_epochs[1], ylimits = (-100, 100))
 
 
 
