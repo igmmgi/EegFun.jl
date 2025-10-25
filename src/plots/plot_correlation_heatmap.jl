@@ -27,8 +27,10 @@ const PLOT_CORRELATION_HEATMAP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :tick_fontsize => (12, "Font size for tick labels"),
 
     # Grid and layout
-    :grid_visible => (false, "Whether to show grid lines"),
-    :grid_alpha => (0.3, "Transparency of grid lines"),
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
     # Colorbar parameters
     :colorbar_plot => (true, "Whether to display the colorbar"),
@@ -125,11 +127,12 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
         ax.titlesize = plot_kwargs[:title_fontsize]
     end
 
-    # Configure grid
-    ax.xgridvisible = plot_kwargs[:grid_visible]
-    ax.ygridvisible = plot_kwargs[:grid_visible]
-    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
-    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
+    # Configure grid using the new axis styling function
+    _setup_axis_grid!(ax; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 
     # Create the heatmap
     heatmap!(

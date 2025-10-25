@@ -100,46 +100,6 @@ function _create_legend!(ax, selected_channels, current_legend)
     current_legend[] = axislegend(ax, position = (:right, :top), nbanks = n_cols)
 end
 
-"""
-    _setup_axis_grid!(ax, plot_kwargs)
-
-Apply grid settings to the axis.
-"""
-function _setup_axis_grid!(ax, plot_kwargs)
-    ax.xgridvisible = plot_kwargs[:xgrid]
-    ax.ygridvisible = plot_kwargs[:ygrid]
-    ax.xminorgridvisible = plot_kwargs[:xminorgrid]
-    ax.yminorgridvisible = plot_kwargs[:yminorgrid]
-end
-
-"""
-    _setup_axis_limits!(ax, plot_kwargs)
-
-Apply axis limits to the axis.
-"""
-function _setup_axis_limits!(ax, plot_kwargs)
-    if plot_kwargs[:xlimits] !== nothing
-        xmin, xmax = plot_kwargs[:xlimits]
-        xlims!(ax, xmin, xmax)
-    end
-    
-    if plot_kwargs[:ylimits] !== nothing
-        ymin, ymax = plot_kwargs[:ylimits]
-        ylims!(ax, ymin, ymax)
-    end
-end
-
-"""
-    _setup_origin_lines!(ax, plot_kwargs)
-
-Add origin lines at x=0 and y=0 to the axis.
-"""
-function _setup_origin_lines!(ax, plot_kwargs)
-    if plot_kwargs[:axes_through_origin]
-        hlines!(ax, 0, color = :gray, linewidth = 0.5, alpha = 0.7)
-        vlines!(ax, 0, color = :gray, linewidth = 0.5, alpha = 0.7)
-    end
-end
 
 """
     _create_channel_selection_handlers(fig, ax, epochs, selected_channels, selected_channels_set, 
@@ -209,8 +169,8 @@ const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :selection_threshold => (50, "Distance threshold for channel selection."),
 
     # Axis limits
-    :xlimits => (nothing, "X-axis limits as (min, max) tuple or nothing for auto-scaling"),
-    :ylimits => (nothing, "Y-axis limits as (min, max) tuple or nothing for auto-scaling"),
+    :xlim => (nothing, "X-axis limits as (min, max) tuple or nothing for auto-scaling"),
+    :ylim => (nothing, "Y-axis limits as (min, max) tuple or nothing for auto-scaling"),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
@@ -219,7 +179,7 @@ const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
     
     # Origin lines
-    :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
+    :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
 )
 
 """
@@ -248,7 +208,7 @@ fig = plot_artifact_detection(epochs, artifacts,
                             channel_selection = channels([:Fp1, :Fp2, :Cz]))
 
 # With custom axis limits
-fig = plot_artifact_detection(epochs, artifacts, xlimits = (-0.2, 0.8), ylimits = (-100, 100))
+fig = plot_artifact_detection(epochs, artifacts, xlim = (-0.2, 0.8), ylim = (-100, 100))
 ```
 """
 function plot_artifact_detection(
@@ -268,9 +228,16 @@ function plot_artifact_detection(
     ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
     # Setup axis styling
-    _setup_axis_grid!(ax, plot_kwargs)
-    _setup_axis_limits!(ax, plot_kwargs)
-    _setup_origin_lines!(ax, plot_kwargs)
+    _setup_axis_grid!(ax; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _setup_axis_limits!(ax; 
+                       xlim = plot_kwargs[:xlim], 
+                       ylim = plot_kwargs[:ylim])
+    _setup_origin_lines!(ax; 
+                        add_xy_origin = plot_kwargs[:add_xy_origin])
 
     # Get epochs with artifacts
     epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
@@ -377,7 +344,7 @@ fig = plot_artifact_repair(epochs_orig, epochs_repaired, artifacts,
                           channel_selection = channels([:Fp1, :Fp2, :Cz]))
 
 # With custom axis limits
-fig = plot_artifact_repair(epochs_orig, epochs_repaired, artifacts, xlimits = (-0.2, 0.8), ylimits = (-100, 100))
+fig = plot_artifact_repair(epochs_orig, epochs_repaired, artifacts, xlim = (-0.2, 0.8), ylim = (-100, 100))
 ```
 """
 function plot_artifact_repair(
@@ -399,13 +366,27 @@ function plot_artifact_repair(
     ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
     # Setup axis styling
-    _setup_axis_grid!(ax1, plot_kwargs)
-    _setup_axis_limits!(ax1, plot_kwargs)
-    _setup_origin_lines!(ax1, plot_kwargs)
+    _setup_axis_grid!(ax1; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _setup_axis_limits!(ax1; 
+                       xlim = plot_kwargs[:xlim], 
+                       ylim = plot_kwargs[:ylim])
+    _setup_origin_lines!(ax1; 
+                        add_xy_origin = plot_kwargs[:add_xy_origin])
     
-    _setup_axis_grid!(ax2, plot_kwargs)
-    _setup_axis_limits!(ax2, plot_kwargs)
-    _setup_origin_lines!(ax2, plot_kwargs)
+    _setup_axis_grid!(ax2; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _setup_axis_limits!(ax2; 
+                       xlim = plot_kwargs[:xlim], 
+                       ylim = plot_kwargs[:ylim])
+    _setup_origin_lines!(ax2; 
+                        add_xy_origin = plot_kwargs[:add_xy_origin])
 
     # Get epochs with artifacts
     epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
