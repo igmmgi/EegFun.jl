@@ -40,7 +40,6 @@ eegfun.n_extreme_value(dat, 50, mode = :separate)
 
 # add bool columns to the data frame
 eegfun.is_extreme_value!(dat, 100);
-eegfun.is_extreme_value!(dat, 100; include_extra = true);
 eegfun.is_extreme_value!(dat, 100; channel_selection = eegfun.channels_not([:Fp1, :Fp2]));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> endswith.(string.(x), "z"));
 eegfun.is_extreme_value!(dat, 100; channel_selection = x -> .!(endswith.(string.(x), "z")));
@@ -53,7 +52,6 @@ eegfun.is_extreme_value!(
 
 # retrun count of extreme values at specific electrodes at different thresholds
 eegfun.n_extreme_value(dat, 100)
-eegfun.n_extreme_value(dat, 100, include_extra = true)
 eegfun.n_extreme_value(dat, 100, channel_selection = eegfun.channels([:Fp1, :Fp2])) # count extreme values at Fp1 at 100 uV threshold
 eegfun.n_extreme_value(dat, 100, channel_selection = x -> endswith.(string.(x), "z"))
 eegfun.n_extreme_value(
@@ -77,6 +75,10 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
+
+eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
+
+
 eegfun.get_rejected_epochs(bad_epochs[1])
 eegfun.get_rejected_epochs(bad_epochs)
 

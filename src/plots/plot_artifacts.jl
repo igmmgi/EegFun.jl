@@ -2,28 +2,24 @@
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
-    :colormap_name => (:Set1_9, "Colormap name for artifact channel colors (e.g., :Set1_9, :tab20)."),
-    :display_plot => (true, "Whether to display the plot."),
-    :plot_height => (600, "Height of the plot area in pixels."),
-    :controls_height => (80, "Height of the controls area in pixels."),
-    :button_width => (100, "Width of navigation buttons."),
-    :artifact_button_width => (130, "Width of artifact navigation buttons."),
-    :label_width => (100, "Width of epoch/artifact labels."),
-    :artifact_label_width => (130, "Width of artifact label."),
+    :display_plot => (true, "Display plot."),
+    
+    # line settings
+    :colormap_name => (:jet, "Colormap name (e.g., :Set1_9, :tab20)."),
     :linewidth_normal => (1, "Line width for normal channels."),
     :linewidth_rejected => (2, "Line width for rejected channels."),
-    :linewidth_selected => (3, "Line width for selected channels."),
-    :linewidth_selected_rejected => (4, "Line width for selected rejected channels."),
     :alpha_normal => (0.2, "Transparency for normal channels."),
     :alpha_rejected => (1.0, "Transparency for rejected channels."),
-    :legend_position => ((:right, :top), "Position of the legend."),
-    :legend_nbanks => (5, "Number of columns in legend for many channels."),
-    :selection_threshold => (50, "Distance threshold for channel selection via mouse click."),
+
+    # selection
+    :selection_threshold => (50, "Distance threshold for channel selection."),
+
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
+    
     # Origin lines
     :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
 )
@@ -78,22 +74,19 @@ function plot_artifact_detection(
     sort!(epochs_with_artifacts)
 
     # Add controls with artifact navigation
-    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = plot_kwargs[:button_width])
-    epoch_label =
-        Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = plot_kwargs[:button_width], justification = :center)
-    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = plot_kwargs[:button_width])
+    back_button = Button(controls_layout[1, 1], label = "◀ Previous")
+    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", justification = :center)
+    forward_button = Button(controls_layout[1, 3], label = "Next ▶")
 
     # Add artifact navigation buttons
-    back_artifact_button =
-        Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = plot_kwargs[:artifact_button_width])
+    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = 130)
     artifact_label = Label(
         controls_layout[1, 5],
         "Artifact 1 / $(length(epochs_with_artifacts))",
-        width = plot_kwargs[:artifact_button_width],
+        width = 130,
         justification = :center,
     )
-    forward_artifact_button =
-        Button(controls_layout[1, 6], label = "Next Artifact ▶", width = plot_kwargs[:artifact_button_width])
+    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 130)
 
     # Center the entire control group
     for i = 1:6
@@ -136,12 +129,9 @@ function plot_artifact_detection(
         # Create color mapping for rejected channels using Makie categorical colors
         rejected_color_map = Dict{Symbol,Any}()
         if !isempty(rejected_channels)
-            # Use a colormap that cycles for any number of channels
             colormap_name = plot_kwargs[:colormap_name]
-            # Get the actual number of colors in the colormap
             colormap = cgrad(colormap_name)
             max_colors = length(colormap.colors)
-
             for (i, ch) in enumerate(rejected_channels)
                 color_idx = ((i - 1) % max_colors) + 1
                 rejected_color_map[ch] = colormap.colors[color_idx]
@@ -172,10 +162,8 @@ function plot_artifact_detection(
 
                 color = is_rejected ? rejected_color_map[ch] : :black
                 alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
-                linewidth =
-                    is_selected ?
-                    is_rejected ? plot_kwargs[:linewidth_selected_rejected] : plot_kwargs[:linewidth_selected] :
-                    is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
+                base_linewidth = is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
+                linewidth = is_selected ? base_linewidth * 2 : base_linewidth
 
                 # Create label with bold formatting for selected channels
                 label_text = is_rejected ? "$ch (rejected)" : "$ch"
@@ -196,59 +184,68 @@ function plot_artifact_detection(
         # Add legend and store reference with multiple columns for many channels
         n_channels = length(selected_channels)
         n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
-        current_legend[] =
-            axislegend(ax, position = plot_kwargs[:legend_position], nbanks = plot_kwargs[:legend_nbanks])
+        current_legend[] = axislegend(ax, position = (:right, :top), nbanks = n_cols)
+    end
+
+    # Helper functions for channel selection
+    function is_shift_held(fig)
+        return Keyboard.left_shift in events(fig).keyboardstate || Keyboard.right_shift in events(fig).keyboardstate
+    end
+
+    function get_mouse_position(ax)
+        pos = mouseposition(ax.scene)
+        if pos[1] !== nothing && pos[2] !== nothing
+            return (pos[1], pos[2])  # (time, amplitude)
+        end
+        return nothing
+    end
+
+    function find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
+        time_points = current_epoch.time
+        isempty(time_points) && return nothing
+
+        closest_time_idx = argmin(abs.(time_points .- mouse_time))
+        min_distance = Inf
+        closest_channel = nothing
+
+        for ch in selected_channels
+            if hasproperty(current_epoch, ch)
+                channel_amp = current_epoch[closest_time_idx, ch]
+                distance = abs(channel_amp - mouse_amp)
+                if distance < min_distance
+                    min_distance = distance
+                    closest_channel = ch
+                end
+            end
+        end
+
+        return closest_channel, min_distance
+    end
+
+    function toggle_channel_selection(channel, selected_channels_set)
+        if channel in selected_channels_set
+            delete!(selected_channels_set, channel)
+            @info "Deselected channel: $channel"
+        else
+            push!(selected_channels_set, channel)
+            @info "Selected channel: $channel"
+        end
     end
 
     # Add shift+click functionality to select/deselect channels
     on(events(ax).mousebutton, priority = 0) do event
-        if event.button == Mouse.left && event.action == Mouse.press
-            # Check if shift is held
-            if Keyboard.left_shift in events(fig).keyboardstate || Keyboard.right_shift in events(fig).keyboardstate
-                # Get mouse position in data coordinates
-                pos = mouseposition(ax.scene)
-                if pos[1] !== nothing && pos[2] !== nothing
-                    mouse_time = pos[1]
-                    mouse_amp = pos[2]
+        if event.button == Mouse.left && event.action == Mouse.press && is_shift_held(fig)
+            mouse_pos = get_mouse_position(ax)
+            mouse_pos === nothing && return Consume(false)
 
-                    # Get current epoch data
-                    current_epoch = epochs.data[epoch_idx[]]
-                    time_points = current_epoch.time
-
-                    # Find the closest time point
-                    if !isempty(time_points)
-                        closest_time_idx = argmin(abs.(time_points .- mouse_time))
-
-                        # Check which channel line is closest to mouse position
-                        min_distance = Inf
-                        closest_channel = nothing
-
-                        for ch in selected_channels
-                            if hasproperty(current_epoch, ch)
-                                channel_amp = current_epoch[closest_time_idx, ch]
-                                distance = abs(channel_amp - mouse_amp)
-                                if distance < min_distance
-                                    min_distance = distance
-                                    closest_channel = ch
-                                end
-                            end
-                        end
-
-                        # Toggle selection if we found a close channel
-                        if closest_channel !== nothing && min_distance < 50  # Threshold for selection
-                            if closest_channel in selected_channels_set
-                                delete!(selected_channels_set, closest_channel)
-                                @info "Deselected channel: $closest_channel"
-                            else
-                                push!(selected_channels_set, closest_channel)
-                                @info "Selected channel: $closest_channel"
-                            end
-
-                            # Refresh the plot
-                            update_plot!(ax, epoch_idx[])
-                        end
-                    end
-                end
+            mouse_time, mouse_amp = mouse_pos
+            current_epoch = epochs.data[epoch_idx[]]
+            
+            closest_channel, min_distance = find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
+            
+            if closest_channel !== nothing && min_distance < 50  # Threshold for selection
+                toggle_channel_selection(closest_channel, selected_channels_set)
+                update_plot!(ax, epoch_idx[])
             end
         end
         return Consume(false)
@@ -256,19 +253,15 @@ function plot_artifact_detection(
 
     # Button click handlers
     on(back_button.clicks) do _
-        ;
         epoch_idx[] = max(1, epoch_idx[] - 1)
     end
     on(forward_button.clicks) do _
-        ;
         epoch_idx[] = min(n_epochs, epoch_idx[] + 1)
     end
     on(back_artifact_button.clicks) do _
-        ;
         artifact_idx[] = max(1, artifact_idx[] - 1)
     end
     on(forward_artifact_button.clicks) do _
-        ;
         artifact_idx[] = min(length(epochs_with_artifacts), artifact_idx[] + 1)
     end
 
@@ -352,22 +345,19 @@ function plot_artifact_repair(
     sort!(epochs_with_artifacts)
 
     # Add controls with artifact navigation
-    back_button = Button(controls_layout[1, 1], label = "◀ Previous", width = plot_kwargs[:button_width])
-    epoch_label =
-        Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", width = plot_kwargs[:button_width], justification = :center)
-    forward_button = Button(controls_layout[1, 3], label = "Next ▶", width = plot_kwargs[:button_width])
+    back_button = Button(controls_layout[1, 1], label = "◀ Previous")
+    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", justification = :center)
+    forward_button = Button(controls_layout[1, 3], label = "Next ▶")
 
     # Add artifact navigation buttons
-    back_artifact_button =
-        Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = plot_kwargs[:artifact_button_width])
+    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = 130)
     artifact_label = Label(
         controls_layout[1, 5],
         "Artifact 1 / $(length(epochs_with_artifacts))",
-        width = plot_kwargs[:artifact_button_width],
+        width = 130,
         justification = :center,
     )
-    forward_artifact_button =
-        Button(controls_layout[1, 6], label = "Next Artifact ▶", width = plot_kwargs[:artifact_button_width])
+    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 130)
 
     # Center the entire control group
     for i = 1:6
@@ -457,9 +447,11 @@ function plot_artifact_repair(
 
                 # Original plot styling
                 orig_color = is_rejected ? rejected_color_map[ch] : :black
-                orig_alpha = is_rejected ? 1.0 : 0.2
-                orig_linewidth = is_selected ? is_rejected ? 4 : 3 : is_rejected ? 2 : 1
-                rep_linewidth = is_selected ? 3 : 1
+                orig_alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
+                orig_base_linewidth = is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
+                orig_linewidth = is_selected ? orig_base_linewidth * 2 : orig_base_linewidth
+                rep_base_linewidth = plot_kwargs[:linewidth_normal]
+                rep_linewidth = is_selected ? rep_base_linewidth * 2 : rep_base_linewidth
 
                 # Create labels with bold formatting for selected channels
                 orig_label_text = is_rejected ? "$ch (rejected)" : "$ch"
@@ -561,19 +553,15 @@ function plot_artifact_repair(
 
     # Button click handlers
     on(back_button.clicks) do _
-        ;
         epoch_idx[] = max(1, epoch_idx[] - 1)
     end
     on(forward_button.clicks) do _
-        ;
         epoch_idx[] = min(n_epochs, epoch_idx[] + 1)
     end
     on(back_artifact_button.clicks) do _
-        ;
         artifact_idx[] = max(1, artifact_idx[] - 1)
     end
     on(forward_artifact_button.clicks) do _
-        ;
         artifact_idx[] = min(length(epochs_with_artifacts), artifact_idx[] + 1)
     end
 

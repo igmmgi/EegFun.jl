@@ -198,13 +198,9 @@ function is_extreme_value!(
     channel_out::Union{Symbol,Nothing} = nothing,
 )
 
-    # Validate mode
-    if mode ∉ [:separate, :combined]
-        @minimal_error_throw("mode must be :separate or :combined, got :$mode")
-    end
-    if threshold <= 0
-        @minimal_error_throw("threshold must be greater than 0, got :$threshold")
-    end
+    # Validate mode/threshold
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined, got :$mode")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0, got :$threshold")
 
     if mode == :combined
         # Combined mode - use all channels (same as original behavior)
