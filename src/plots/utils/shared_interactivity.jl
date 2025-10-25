@@ -633,6 +633,72 @@ end
 # =============================================================================
 
 """
+    _is_shift_held(fig::Figure)
+
+Check if either shift key is currently held down.
+"""
+function _is_shift_held(fig::Figure)
+    return Keyboard.left_shift in events(fig).keyboardstate || Keyboard.right_shift in events(fig).keyboardstate
+end
+
+"""
+    _get_mouse_position(ax::Axis)
+
+Get mouse position in data coordinates for the given axis.
+Returns (x, y) tuple or nothing if position is invalid.
+"""
+function _get_mouse_position(ax::Axis)
+    pos = mouseposition(ax.scene)
+    if pos[1] !== nothing && pos[2] !== nothing
+        return (pos[1], pos[2])  # (x, y) in data coordinates
+    end
+    return nothing
+end
+
+"""
+    _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
+
+Find the channel closest to the mouse position in time and amplitude.
+Returns (closest_channel, min_distance) or (nothing, Inf) if no valid channel found.
+"""
+function _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
+    time_points = current_epoch.time
+    isempty(time_points) && return nothing, Inf
+
+    closest_time_idx = argmin(abs.(time_points .- mouse_time))
+    min_distance = Inf
+    closest_channel = nothing
+
+    for ch in selected_channels
+        if hasproperty(current_epoch, ch)
+            channel_amp = current_epoch[closest_time_idx, ch]
+            distance = abs(channel_amp - mouse_amp)
+            if distance < min_distance
+                min_distance = distance
+                closest_channel = ch
+            end
+        end
+    end
+
+    return closest_channel, min_distance
+end
+
+"""
+    _toggle_channel_selection(channel, selected_channels_set)
+
+Toggle a channel's selection state in the given set.
+"""
+function _toggle_channel_selection(channel, selected_channels_set)
+    if channel in selected_channels_set
+        delete!(selected_channels_set, channel)
+        @info "Deselected channel: $channel"
+    else
+        push!(selected_channels_set, channel)
+        @info "Selected channel: $channel"
+    end
+end
+
+"""
     _rectangles_overlap(rect1, rect2)
 
 Check if two rectangles overlap.

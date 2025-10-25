@@ -1,4 +1,177 @@
 # =============================================================================
+# IMPORTS
+# =============================================================================
+using ..Utils: _is_shift_held, _get_mouse_position, _find_closest_channel, _toggle_channel_selection
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+"""
+    _create_artifact_controls(fig, n_epochs, epochs_with_artifacts)
+
+Create the control buttons and labels for artifact navigation.
+"""
+function _create_artifact_controls(fig, n_epochs, epochs_with_artifacts)
+    controls_layout = GridLayout(fig, tellheight = false, tellwidth = false)
+    
+    # Epoch navigation
+    back_button = Button(controls_layout[1, 1], label = "◀ Previous")
+    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", justification = :center)
+    forward_button = Button(controls_layout[1, 3], label = "Next ▶")
+    
+    # Artifact navigation
+    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact")
+    artifact_label = Label(
+        controls_layout[1, 5],
+        "Artifact 1 / $(length(epochs_with_artifacts))",
+        justification = :center,
+    )
+    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶")
+    
+    return (; back_button, epoch_label, forward_button, back_artifact_button, artifact_label, forward_artifact_button) # named tuple
+end
+
+"""
+    _create_rejected_color_map(rejected_channels, colormap_name)
+
+Create a color mapping for rejected channels.
+"""
+function _create_rejected_color_map(rejected_channels, colormap_name)
+    rejected_color_map = Dict{Symbol,Any}()
+    colormap = cgrad(colormap_name)
+    max_colors = length(colormap.colors)
+    for (i, ch) in enumerate(rejected_channels)
+        color_idx = ((i - 1) % max_colors) + 1
+        rejected_color_map[ch] = colormap[color_idx]
+    end
+    return rejected_color_map
+end
+
+"""
+    _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs)
+
+Get the styling parameters for a channel based on its state.
+"""
+function _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs)
+    color = is_rejected ? rejected_color_map[ch] : :black
+    alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
+    base_linewidth = is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
+    linewidth = is_selected ? base_linewidth * 2 : base_linewidth
+    
+    label_text = is_rejected ? "$ch (rejected)" : "$ch"
+    label_text = is_selected ? rich(label_text, font = :bold) : label_text
+    
+    return (; color, alpha, linewidth, label_text) # named tuple
+end
+
+"""
+    _plot_channels!(ax, epoch, selected_channels, rejected_channels, selected_channels_set, 
+                   rejected_color_map, plot_kwargs)
+
+Plot all channels for a single epoch on the given axis.
+"""
+function _plot_channels!(ax, epoch, selected_channels, rejected_channels, selected_channels_set, rejected_color_map, plot_kwargs)
+    for ch in selected_channels
+        is_rejected = ch in rejected_channels
+        is_selected = ch in selected_channels_set
+        
+        styling = _get_channel_styling(ch, is_rejected, is_selected, rejected_color_map, plot_kwargs)
+        
+        lines!(
+            ax,
+            epoch.time,
+            epoch[!, ch];
+            color = styling.color,
+            alpha = styling.alpha,
+            linewidth = styling.linewidth,
+            label = styling.label_text,
+        )
+    end
+end
+
+"""
+    _create_legend!(ax, selected_channels, current_legend)
+
+Create or update the legend for the given axis.
+"""
+function _create_legend!(ax, selected_channels, current_legend)
+    n_channels = length(selected_channels)
+    n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
+    current_legend[] = axislegend(ax, position = (:right, :top), nbanks = n_cols)
+end
+
+"""
+    _setup_axis_styling!(ax, plot_kwargs)
+
+Apply grid and origin line styling to the axis.
+"""
+function _setup_axis_styling!(ax, plot_kwargs)
+    # Grid settings
+    ax.xgridvisible = plot_kwargs[:xgrid]
+    ax.ygridvisible = plot_kwargs[:ygrid]
+    ax.xminorgridvisible = plot_kwargs[:xminorgrid]
+    ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+    
+    # Origin lines
+    if plot_kwargs[:axes_through_origin]
+        hlines!(ax, 0, color = :gray, linewidth = 0.5, alpha = 0.7)
+        vlines!(ax, 0, color = :gray, linewidth = 0.5, alpha = 0.7)
+    end
+end
+
+"""
+    _create_channel_selection_handlers(fig, ax, epochs, selected_channels, selected_channels_set, 
+                                     plot_kwargs, epoch_idx, update_plot!)
+
+Create event handlers for channel selection via shift+click.
+"""
+function _create_channel_selection_handlers(fig, ax, epochs, selected_channels, selected_channels_set, plot_kwargs, epoch_idx, update_plot!)
+
+    on(events(ax).mousebutton, priority = 0) do event
+        if event.button == Mouse.left && event.action == Mouse.press && _is_shift_held(fig)
+            mouse_pos = _get_mouse_position(ax)
+            mouse_pos === nothing && return Consume(false)
+
+            mouse_time, mouse_amp = mouse_pos
+            current_epoch = epochs.data[epoch_idx[]]
+            
+            closest_channel, min_distance = _find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
+            
+            if closest_channel !== nothing && min_distance < plot_kwargs[:selection_threshold]
+                _toggle_channel_selection(closest_channel, selected_channels_set)
+                update_plot!()
+            end
+        end
+        return Consume(false)
+    end
+end
+
+"""
+    _create_navigation_handlers(controls, epoch_idx, artifact_idx, n_epochs, epochs_with_artifacts)
+
+Create event handlers for navigation buttons.
+"""
+function _create_navigation_handlers(controls, epoch_idx, artifact_idx, n_epochs, epochs_with_artifacts)
+
+    on(controls.back_button.clicks) do 
+        epoch_idx[] = max(1, epoch_idx[] - 1)
+    end
+    
+    on(controls.forward_button.clicks) do 
+        epoch_idx[] = min(n_epochs, epoch_idx[] + 1)
+    end
+    
+    on(controls.back_artifact_button.clicks) do 
+        artifact_idx[] = max(1, artifact_idx[] - 1)
+    end
+    
+    on(controls.forward_artifact_button.clicks) do 
+        artifact_idx[] = min(length(epochs_with_artifacts), artifact_idx[] + 1)
+    end
+end
+
+# =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_ARTIFACT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -58,58 +231,41 @@ function plot_artifact_detection(
 )
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
+    
     # Get channels to plot
     selected_channels = get_selected_channels(epochs, channel_selection, include_meta = false, include_extra = false)
 
-    # Create figure/ax with space for controls
+    # Create figure and axis
     fig = Figure()
     ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
-    # Create horizontal layout for controls 
-    n_epochs = length(epochs.data)
-    controls_layout = GridLayout(fig[2, 1], tellheight = false, tellwidth = false)
+    # Setup axis styling
+    _setup_axis_styling!(ax, plot_kwargs)
 
     # Get epochs with artifacts
     epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
     sort!(epochs_with_artifacts)
 
-    # Add controls with artifact navigation
-    back_button = Button(controls_layout[1, 1], label = "◀ Previous")
-    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", justification = :center)
-    forward_button = Button(controls_layout[1, 3], label = "Next ▶")
-
-    # Add artifact navigation buttons
-    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = 130)
-    artifact_label = Label(
-        controls_layout[1, 5],
-        "Artifact 1 / $(length(epochs_with_artifacts))",
-        width = 130,
-        justification = :center,
-    )
-    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 130)
-
-    # Center the entire control group
-    for i = 1:6
-        colsize!(controls_layout, i, Auto())
-    end
+    # Create controls
+    n_epochs = length(epochs.data)
+    controls = _create_artifact_controls(fig[2, 1], n_epochs, epochs_with_artifacts)
 
     # Set row sizes
-    rowsize!(controls_layout, 1, Auto())
     rowsize!(fig.layout, 1, Relative(0.9))  # Plot area
     rowsize!(fig.layout, 2, Relative(0.1))  # Controls area
 
-    # Create observables for epoch and artifact indices
+    # Create observables
     epoch_idx = Observable(1)
     artifact_idx = Observable(1)
-
-    # Keep reference to legend for cleanup
     current_legend = Ref{Union{Nothing,Legend}}(nothing)
-
-    # Track selected channels for highlighting
     selected_channels_set = Set{Symbol}()
 
+    # Create color map for rejected channels
+    rejected_channels = [r.label for r in artifacts.rejected_epochs]
+    rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
+
     # Function to update plot based on epoch
-    function update_plot!(ax, epoch_idx_val)
+    function update_plot!(epoch_idx_val)
         # Clear the axis
         empty!(ax)
 
@@ -121,169 +277,46 @@ function plot_artifact_detection(
 
         # Get current epoch data
         epoch = epochs.data[epoch_idx_val]
-        time_points = epoch.time
 
         # Find rejected channels for this epoch
-        rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
-
-        # Create color mapping for rejected channels using Makie categorical colors
-        rejected_color_map = Dict{Symbol,Any}()
-        if !isempty(rejected_channels)
-            colormap_name = plot_kwargs[:colormap_name]
-            colormap = cgrad(colormap_name)
-            max_colors = length(colormap.colors)
-            for (i, ch) in enumerate(rejected_channels)
-                color_idx = ((i - 1) % max_colors) + 1
-                rejected_color_map[ch] = colormap.colors[color_idx]
-            end
-        end
+        epoch_rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
 
         # Update title
         ax.title = "Artifact Detection - Epoch $(epoch_idx_val)"
 
-        # Configure grid and axes
-        ax.xgridvisible = plot_kwargs[:xgrid]
-        ax.ygridvisible = plot_kwargs[:ygrid]
-        ax.xminorgridvisible = plot_kwargs[:xminorgrid]
-        ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+        # Plot all channels
+        _plot_channels!(ax, epoch, selected_channels, epoch_rejected_channels, selected_channels_set, 
+                      rejected_color_map, plot_kwargs)
 
-        # Add origin lines if requested
-        if plot_kwargs[:axes_through_origin]
-            hlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
-            vlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
-        end
-
-        # Plot each channel
-        for ch in selected_channels
-            if hasproperty(epoch, ch)
-                # Determine styling based on rejection and selection status
-                is_rejected = ch in rejected_channels
-                is_selected = ch in selected_channels_set
-
-                color = is_rejected ? rejected_color_map[ch] : :black
-                alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
-                base_linewidth = is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
-                linewidth = is_selected ? base_linewidth * 2 : base_linewidth
-
-                # Create label with bold formatting for selected channels
-                label_text = is_rejected ? "$ch (rejected)" : "$ch"
-                label_text = is_selected ? rich(label_text, font = :bold) : label_text
-
-                lines!(
-                    ax,
-                    time_points,
-                    epoch[!, ch],
-                    color = color,
-                    alpha = alpha,
-                    linewidth = linewidth,
-                    label = label_text,
-                )
-            end
-        end
-
-        # Add legend and store reference with multiple columns for many channels
-        n_channels = length(selected_channels)
-        n_cols = n_channels > 10 ? cld(n_channels, 20) : 1
-        current_legend[] = axislegend(ax, position = (:right, :top), nbanks = n_cols)
+        # Create legend
+        _create_legend!(ax, selected_channels, current_legend)
     end
 
-    # Helper functions for channel selection
-    function is_shift_held(fig)
-        return Keyboard.left_shift in events(fig).keyboardstate || Keyboard.right_shift in events(fig).keyboardstate
-    end
-
-    function get_mouse_position(ax)
-        pos = mouseposition(ax.scene)
-        if pos[1] !== nothing && pos[2] !== nothing
-            return (pos[1], pos[2])  # (time, amplitude)
-        end
-        return nothing
-    end
-
-    function find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
-        time_points = current_epoch.time
-        isempty(time_points) && return nothing
-
-        closest_time_idx = argmin(abs.(time_points .- mouse_time))
-        min_distance = Inf
-        closest_channel = nothing
-
-        for ch in selected_channels
-            if hasproperty(current_epoch, ch)
-                channel_amp = current_epoch[closest_time_idx, ch]
-                distance = abs(channel_amp - mouse_amp)
-                if distance < min_distance
-                    min_distance = distance
-                    closest_channel = ch
-                end
-            end
-        end
-
-        return closest_channel, min_distance
-    end
-
-    function toggle_channel_selection(channel, selected_channels_set)
-        if channel in selected_channels_set
-            delete!(selected_channels_set, channel)
-            @info "Deselected channel: $channel"
-        else
-            push!(selected_channels_set, channel)
-            @info "Selected channel: $channel"
-        end
-    end
-
-    # Add shift+click functionality to select/deselect channels
-    on(events(ax).mousebutton, priority = 0) do event
-        if event.button == Mouse.left && event.action == Mouse.press && is_shift_held(fig)
-            mouse_pos = get_mouse_position(ax)
-            mouse_pos === nothing && return Consume(false)
-
-            mouse_time, mouse_amp = mouse_pos
-            current_epoch = epochs.data[epoch_idx[]]
-            
-            closest_channel, min_distance = find_closest_channel(mouse_time, mouse_amp, current_epoch, selected_channels)
-            
-            if closest_channel !== nothing && min_distance < 50  # Threshold for selection
-                toggle_channel_selection(closest_channel, selected_channels_set)
-                update_plot!(ax, epoch_idx[])
-            end
-        end
-        return Consume(false)
-    end
-
-    # Button click handlers
-    on(back_button.clicks) do _
-        epoch_idx[] = max(1, epoch_idx[] - 1)
-    end
-    on(forward_button.clicks) do _
-        epoch_idx[] = min(n_epochs, epoch_idx[] + 1)
-    end
-    on(back_artifact_button.clicks) do _
-        artifact_idx[] = max(1, artifact_idx[] - 1)
-    end
-    on(forward_artifact_button.clicks) do _
-        artifact_idx[] = min(length(epochs_with_artifacts), artifact_idx[] + 1)
-    end
+    # Create event handlers
+    _create_channel_selection_handlers(fig, ax, epochs, selected_channels, selected_channels_set, 
+                                     plot_kwargs, epoch_idx, () -> update_plot!(epoch_idx[]))
+    
+    _create_navigation_handlers(controls, epoch_idx, artifact_idx, n_epochs, epochs_with_artifacts)
 
     # Update plot and controls when epoch changes
     on(epoch_idx) do idx
-        update_plot!(ax, idx)
-        epoch_label.text = "Epoch $idx / $n_epochs"
+        update_plot!(idx)
+        controls.epoch_label.text = "Epoch $idx / $n_epochs"
     end
 
     # Update plot and controls when artifact changes
     on(artifact_idx) do idx
         if !isempty(epochs_with_artifacts)
             epoch_idx[] = epochs_with_artifacts[idx]
-            artifact_label.text = "Artifact $idx / $(length(epochs_with_artifacts))"
+            controls.artifact_label.text = "Artifact $idx / $(length(epochs_with_artifacts))"
         end
     end
 
     # Initialize plot and controls
-    update_plot!(ax, epoch_idx[])
-    epoch_label.text = "Epoch 1 / $n_epochs"
-    artifact_label.text =
-        !isempty(epochs_with_artifacts) ? "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
+    update_plot!(epoch_idx[])
+    controls.epoch_label.text = "Epoch 1 / $n_epochs"
+    controls.artifact_label.text = !isempty(epochs_with_artifacts) ? 
+        "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
     plot_kwargs[:display_plot] && display_figure(fig)
     return fig
@@ -325,64 +358,45 @@ function plot_artifact_repair(
 )
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
+    
     # Get channels to plot
-    selected_channels =
-        get_selected_channels(epochs_original, channel_selection, include_meta = false, include_extra = false)
+    selected_channels = get_selected_channels(epochs_original, channel_selection, include_meta = false, include_extra = false)
 
-    # Create figure with space for controls
+    # Create figure and axes
     fig = Figure()
-
-    # Create axes for original and repaired data (full width)
     ax1 = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
     ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
-    # Create horizontal layout for controls
-    n_epochs = length(epochs_original.data)
-    controls_layout = GridLayout(fig[3, 1], tellheight = false, tellwidth = false)
+    # Setup axis styling
+    _setup_axis_styling!(ax1, plot_kwargs)
+    _setup_axis_styling!(ax2, plot_kwargs)
 
     # Get epochs with artifacts
     epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
     sort!(epochs_with_artifacts)
 
-    # Add controls with artifact navigation
-    back_button = Button(controls_layout[1, 1], label = "◀ Previous")
-    epoch_label = Label(controls_layout[1, 2], "Epoch 1 / $n_epochs", justification = :center)
-    forward_button = Button(controls_layout[1, 3], label = "Next ▶")
-
-    # Add artifact navigation buttons
-    back_artifact_button = Button(controls_layout[1, 4], label = "◀ Previous Artifact", width = 130)
-    artifact_label = Label(
-        controls_layout[1, 5],
-        "Artifact 1 / $(length(epochs_with_artifacts))",
-        width = 130,
-        justification = :center,
-    )
-    forward_artifact_button = Button(controls_layout[1, 6], label = "Next Artifact ▶", width = 130)
-
-    # Center the entire control group
-    for i = 1:6
-        colsize!(controls_layout, i, Auto())
-    end
+    # Create controls
+    n_epochs = length(epochs_original.data)
+    controls = _create_artifact_controls(fig[3, 1], n_epochs, epochs_with_artifacts)
 
     # Set row sizes
-    rowsize!(controls_layout, 1, Auto())
     rowsize!(fig.layout, 1, Relative(0.45))  # Original plot
     rowsize!(fig.layout, 2, Relative(0.45))  # Repaired plot
     rowsize!(fig.layout, 3, Relative(0.1))   # Controls area
 
-    # Create observables for epoch and artifact indices
+    # Create observables
     epoch_idx = Observable(1)
     artifact_idx = Observable(1)
-
-    # Keep references to legends for cleanup
     current_legend1 = Ref{Union{Nothing,Legend}}(nothing)
     current_legend2 = Ref{Union{Nothing,Legend}}(nothing)
-
-    # Track selected channels for highlighting
     selected_channels_set = Set{Symbol}()
 
-    # Function to update plot based on epoch
-    function update_comparison_plot!(ax1, ax2, epoch_idx_val)
+    # Create color map for rejected channels
+    rejected_channels = [r.label for r in artifacts.rejected_epochs]
+    rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
+
+    # Function to update comparison plot
+    function update_comparison_plot!(epoch_idx_val)
         # Clear both axes
         empty!(ax1)
         empty!(ax2)
@@ -400,195 +414,59 @@ function plot_artifact_repair(
         # Get epoch data
         epoch_orig = epochs_original.data[epoch_idx_val]
         epoch_repaired = epochs_repaired.data[epoch_idx_val]
-        time_points = epoch_orig.time
 
         # Find rejected channels for this epoch
-        rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
-
-        # Create color mapping for rejected channels using Makie categorical colors
-        rejected_color_map = Dict{Symbol,Any}()
-        if !isempty(rejected_channels)
-            # Use a colormap that cycles for any number of channels
-            colormap_name = plot_kwargs[:colormap_name]
-            # Get the actual number of colors in the colormap
-            colormap = cgrad(colormap_name)
-            max_colors = length(colormap.colors)
-
-            for (i, ch) in enumerate(rejected_channels)
-                color_idx = ((i - 1) % max_colors) + 1
-                rejected_color_map[ch] = colormap.colors[color_idx]
-            end
-        end
+        epoch_rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
 
         # Update titles
         ax1.title = "Original Data - Epoch $(epoch_idx_val)"
         ax2.title = "Repaired Data - Epoch $(epoch_idx_val)"
 
-        # Configure grid and axes for both plots
-        for ax in [ax1, ax2]
-            ax.xgridvisible = plot_kwargs[:xgrid]
-            ax.ygridvisible = plot_kwargs[:ygrid]
-            ax.xminorgridvisible = plot_kwargs[:xminorgrid]
-            ax.yminorgridvisible = plot_kwargs[:yminorgrid]
+        # Plot channels for both axes
+        _plot_channels!(ax1, epoch_orig, selected_channels, epoch_rejected_channels, selected_channels_set, 
+                      rejected_color_map, plot_kwargs)
+        
+        # For repaired plot, use normal styling (not rejected)
+        _plot_channels!(ax2, epoch_repaired, selected_channels, Symbol[], selected_channels_set, 
+                      rejected_color_map, plot_kwargs)
 
-            # Add origin lines if requested
-            if plot_kwargs[:axes_through_origin]
-                hlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
-                vlines!(ax, 0, color = :gray, linestyle = :dash, linewidth = 1)
-            end
-        end
-
-        # Plot each channel
-        for ch in selected_channels
-            if hasproperty(epoch_orig, ch) && hasproperty(epoch_repaired, ch)
-                # Determine styling based on rejection and selection status
-                is_rejected = ch in rejected_channels
-                is_selected = ch in selected_channels_set
-
-                # Original plot styling
-                orig_color = is_rejected ? rejected_color_map[ch] : :black
-                orig_alpha = is_rejected ? plot_kwargs[:alpha_rejected] : plot_kwargs[:alpha_normal]
-                orig_base_linewidth = is_rejected ? plot_kwargs[:linewidth_rejected] : plot_kwargs[:linewidth_normal]
-                orig_linewidth = is_selected ? orig_base_linewidth * 2 : orig_base_linewidth
-                rep_base_linewidth = plot_kwargs[:linewidth_normal]
-                rep_linewidth = is_selected ? rep_base_linewidth * 2 : rep_base_linewidth
-
-                # Create labels with bold formatting for selected channels
-                orig_label_text = is_rejected ? "$ch (rejected)" : "$ch"
-                rep_label_text = is_rejected ? "$ch (repaired)" : "$ch"
-
-                if is_selected
-                    orig_label_text = rich(orig_label_text, font = :bold)
-                    rep_label_text = rich(rep_label_text, font = :bold)
-                end
-
-                lines!(
-                    ax1,
-                    time_points,
-                    epoch_orig[!, ch],
-                    color = orig_color,
-                    alpha = orig_alpha,
-                    linewidth = orig_linewidth,
-                    label = orig_label_text,
-                )
-
-                # Repaired plot
-                lines!(
-                    ax2,
-                    time_points,
-                    epoch_repaired[!, ch],
-                    color = orig_color,
-                    alpha = orig_alpha,
-                    linewidth = orig_linewidth,
-                    label = rep_label_text,
-                )
-            end
-        end
-
-        # Add legends and store references with multiple columns for many channels
-        n_channels = length(selected_channels)
-        n_cols = n_channels > 10 ? cld(n_channels, 10) : 1
-        current_legend1[] = axislegend(ax1, position = (:right, :top), nbanks = n_cols)
-        current_legend2[] = axislegend(ax2, position = (:right, :top), nbanks = n_cols)
+        # Create legends
+        _create_legend!(ax1, selected_channels, current_legend1)
+        _create_legend!(ax2, selected_channels, current_legend2)
 
         # Link axes
-        linkaxes!(ax1, ax2)
+        linkxaxes!(ax1, ax2)
     end
 
-    # Add shift+click functionality to both axes for channel selection
-    for current_ax in [ax1, ax2]
-        on(events(current_ax).mousebutton, priority = 0) do event
-            if event.button == Mouse.left && event.action == Mouse.press
-                # Check if shift is held
-                if Keyboard.left_shift in events(fig).keyboardstate || Keyboard.right_shift in events(fig).keyboardstate
-                    # Get mouse position in data coordinates
-                    pos = mouseposition(current_ax.scene)
-                    if pos[1] !== nothing && pos[2] !== nothing
-                        mouse_time = pos[1]
-                        mouse_amp = pos[2]
+    # Create event handlers for both axes
+    _create_channel_selection_handlers(fig, ax1, epochs_original, selected_channels, selected_channels_set, 
+                                     plot_kwargs, epoch_idx, () -> update_comparison_plot!(epoch_idx[]))
+    _create_channel_selection_handlers(fig, ax2, epochs_original, selected_channels, selected_channels_set, 
+                                     plot_kwargs, epoch_idx, () -> update_comparison_plot!(epoch_idx[]))
+    
 
-                        # Get current epoch data
-                        current_epoch = epochs_original.data[epoch_idx[]]
-                        time_points = current_epoch.time
-
-                        # Find the closest time point
-                        if !isempty(time_points)
-                            closest_time_idx = argmin(abs.(time_points .- mouse_time))
-
-                            # Check which channel line is closest to mouse position
-                            min_distance = Inf
-                            closest_channel = nothing
-
-                            for ch in selected_channels
-                                if hasproperty(current_epoch, ch)
-                                    channel_amp = current_epoch[closest_time_idx, ch]
-                                    distance = abs(channel_amp - mouse_amp)
-                                    if distance < min_distance
-                                        min_distance = distance
-                                        closest_channel = ch
-                                    end
-                                end
-                            end
-
-                            # Toggle selection if we found a close channel
-                            if closest_channel !== nothing && min_distance < plot_kwargs[:selection_threshold]  # Threshold for selection
-                                if closest_channel in selected_channels_set
-                                    delete!(selected_channels_set, closest_channel)
-                                    @info "Deselected channel: $closest_channel"
-                                else
-                                    push!(selected_channels_set, closest_channel)
-                                    @info "Selected channel: $closest_channel"
-                                end
-
-                                # Refresh the plot
-                                update_comparison_plot!(ax1, ax2, epoch_idx[])
-                            end
-                        end
-                    end
-                end
-            end
-            return Consume(false)
-        end
-    end
-
-    # Button click handlers
-    on(back_button.clicks) do _
-        epoch_idx[] = max(1, epoch_idx[] - 1)
-    end
-    on(forward_button.clicks) do _
-        epoch_idx[] = min(n_epochs, epoch_idx[] + 1)
-    end
-    on(back_artifact_button.clicks) do _
-        artifact_idx[] = max(1, artifact_idx[] - 1)
-    end
-    on(forward_artifact_button.clicks) do _
-        artifact_idx[] = min(length(epochs_with_artifacts), artifact_idx[] + 1)
-    end
+    # Create event handlers
+    _create_navigation_handlers(controls, epoch_idx, artifact_idx, n_epochs, epochs_with_artifacts)
 
     # Update plot and controls when epoch changes
     on(epoch_idx) do idx
-        update_comparison_plot!(ax1, ax2, idx)
-        epoch_label.text = "Epoch $idx / $n_epochs"
+        update_comparison_plot!(idx)
+        controls.epoch_label.text = "Epoch $idx / $n_epochs"
     end
 
     # Update plot and controls when artifact changes
     on(artifact_idx) do idx
         if !isempty(epochs_with_artifacts)
             epoch_idx[] = epochs_with_artifacts[idx]
-            artifact_label.text = "Artifact $idx / $(length(epochs_with_artifacts))"
+            controls.artifact_label.text = "Artifact $idx / $(length(epochs_with_artifacts))"
         end
     end
 
     # Initialize plot and controls
-    update_comparison_plot!(ax1, ax2, epoch_idx[])
-    epoch_label.text = "Epoch 1 / $n_epochs"
-
-    # Initialize artifact controls
-    if !isempty(epochs_with_artifacts)
-        artifact_label.text = "Artifact 1 / $(length(epochs_with_artifacts))"
-    else
-        artifact_label.text = "No artifacts found"
-    end
+    update_comparison_plot!(epoch_idx[])
+    controls.epoch_label.text = "Epoch 1 / $n_epochs"
+    controls.artifact_label.text = !isempty(epochs_with_artifacts) ? 
+        "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
     plot_kwargs[:display_plot] && display_figure(fig)
     return fig
