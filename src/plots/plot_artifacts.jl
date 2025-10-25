@@ -101,18 +101,23 @@ function _create_legend!(ax, selected_channels, current_legend)
 end
 
 """
-    _setup_axis_styling!(ax, plot_kwargs)
+    _setup_axis_grid!(ax, plot_kwargs)
 
-Apply grid, origin line styling, and axis limits to the axis.
+Apply grid settings to the axis.
 """
-function _setup_axis_styling!(ax, plot_kwargs)
-    # Grid settings
+function _setup_axis_grid!(ax, plot_kwargs)
     ax.xgridvisible = plot_kwargs[:xgrid]
     ax.ygridvisible = plot_kwargs[:ygrid]
     ax.xminorgridvisible = plot_kwargs[:xminorgrid]
     ax.yminorgridvisible = plot_kwargs[:yminorgrid]
-    
-    # Axis limits
+end
+
+"""
+    _setup_axis_limits!(ax, plot_kwargs)
+
+Apply axis limits to the axis.
+"""
+function _setup_axis_limits!(ax, plot_kwargs)
     if plot_kwargs[:xlimits] !== nothing
         xmin, xmax = plot_kwargs[:xlimits]
         xlims!(ax, xmin, xmax)
@@ -122,8 +127,14 @@ function _setup_axis_styling!(ax, plot_kwargs)
         ymin, ymax = plot_kwargs[:ylimits]
         ylims!(ax, ymin, ymax)
     end
-    
-    # Origin lines
+end
+
+"""
+    _setup_origin_lines!(ax, plot_kwargs)
+
+Add origin lines at x=0 and y=0 to the axis.
+"""
+function _setup_origin_lines!(ax, plot_kwargs)
     if plot_kwargs[:axes_through_origin]
         hlines!(ax, 0, color = :gray, linewidth = 0.5, alpha = 0.7)
         vlines!(ax, 0, color = :gray, linewidth = 0.5, alpha = 0.7)
@@ -257,7 +268,9 @@ function plot_artifact_detection(
     ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
     # Setup axis styling
-    _setup_axis_styling!(ax, plot_kwargs)
+    _setup_axis_grid!(ax, plot_kwargs)
+    _setup_axis_limits!(ax, plot_kwargs)
+    _setup_origin_lines!(ax, plot_kwargs)
 
     # Get epochs with artifacts
     epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
@@ -386,8 +399,13 @@ function plot_artifact_repair(
     ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
     # Setup axis styling
-    _setup_axis_styling!(ax1, plot_kwargs)
-    _setup_axis_styling!(ax2, plot_kwargs)
+    _setup_axis_grid!(ax1, plot_kwargs)
+    _setup_axis_limits!(ax1, plot_kwargs)
+    _setup_origin_lines!(ax1, plot_kwargs)
+    
+    _setup_axis_grid!(ax2, plot_kwargs)
+    _setup_axis_limits!(ax2, plot_kwargs)
+    _setup_origin_lines!(ax2, plot_kwargs)
 
     # Get epochs with artifacts
     epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])

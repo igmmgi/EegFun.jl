@@ -2,9 +2,10 @@
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+    :display_plot => (true, "Display plot."),
+    
     :sort_values => (false, "Sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
-    :display_plot => (true, "Display plot."),
     :dims => (nothing, "Tuple (rows, cols) for grid layout. default = best_rect(n_columns)."),
     :bar_color => (:steelblue, "Bar colour."),
     :bar_width => (0.8, "Bar width."),
@@ -18,10 +19,19 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_fontsize => (14, "Font size for axis labels."),
     :tick_fontsize => (12, "Font size for tick labels."),
     :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels."),
-    :grid_visible => (true, "Show grid."),
-    :grid_alpha => (0.3, "Grid transparencey."),
-    :xgridwidth => (1, "Width of x-axis grid lines."),
-    :ygridwidth => (1, "Width of y-axis grid lines."),
+    
+    # :grid_visible => (true, "Show grid."),
+    # :grid_alpha => (0.3, "Grid transparencey."),
+    # :xgridwidth => (1, "Width of x-axis grid lines."),
+    # :ygridwidth => (1, "Width of y-axis grid lines."),
+
+    # Grid
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
+
+
 )
 
 
