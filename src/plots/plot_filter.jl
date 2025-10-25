@@ -3,8 +3,8 @@
 # =============================================================================
 const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Axis limits
-    :ylimit => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),
-    :xlimit => (nothing, "X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined"),
+    :ylim => ((-100, 5), "Y-axis limits in dB as (min, max) tuple"),
+    :xlim => (nothing, "X-axis limits in Hz as (min, max) tuple. If nothing, automatically determined"),
 
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
@@ -19,6 +19,12 @@ const PLOT_FILTER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_fontsize => (22, "Font size for axis labels"),
     :tick_fontsize => (20, "Font size for tick labels"),
     :legend_fontsize => (32, "Font size for legend"),
+
+    # Grid
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
     # Line styling
     :actual_linewidth => (4, "Line width for actual response"),
@@ -71,12 +77,12 @@ function plot_filter_response(
     plot_kwargs = _merge_plot_kwargs(PLOT_FILTER_KWARGS, kwargs)
 
     # Determine x-axis limits based on filter type and cutoff
-    xlimit = plot_kwargs[:xlimit]
-    if isnothing(xlimit)
+    xlim = plot_kwargs[:xlim]
+    if isnothing(xlim)
         if filter_info.cutoff_freq < 2
-            xlimit = (0, filter_info.cutoff_freq * 10)
+            xlim = (0, filter_info.cutoff_freq * 10)
         else
-            xlimit = (0, filter_info.sample_rate / 2)
+            xlim = (0, filter_info.sample_rate / 2)
         end
     end
 
@@ -100,8 +106,8 @@ function plot_filter_response(
     elseif xscale == :log
         xscale = log10
         # Adjust x-limits for log scale (can't include 0)
-        if xlimit[1] == 0
-            xlimit = (0.01, xlimit[2])  # Use small positive value instead of 0
+        if xlim[1] == 0
+            xlim = (0.01, xlim[2])  # Use small positive value instead of 0
         end
     end
 
@@ -109,13 +115,13 @@ function plot_filter_response(
     xscale_props = (xscale = xscale,)
 
     # Create three axes in a row
-    ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = "Magnitude (linear)", limits = (xlimit, (0, 1.1)))
+    ax1 = Axis(fig[1, 1]; base_props..., xscale_props..., ylabel = "Magnitude (linear)", limits = (xlim, (0, 1.1)))
     ax2 = Axis(
         fig[1, 2];
         base_props...,
         xscale_props...,
         ylabel = plot_kwargs[:ylabel],
-        limits = (xlimit, plot_kwargs[:ylimit]),
+        limits = (xlim, plot_kwargs[:ylim]),
     )
     ax3 = Axis(
         fig[1, 3];
@@ -128,6 +134,23 @@ function plot_filter_response(
         xticklabelsize = plot_kwargs[:tick_fontsize],
         yticklabelsize = plot_kwargs[:tick_fontsize],
     )
+
+    # Set grid using the shared function
+    _setup_axis_grid!(ax1; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _setup_axis_grid!(ax2; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _setup_axis_grid!(ax3; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 
     # Simple logarithmic frequency spacing
     n_points = plot_kwargs[:n_points]

@@ -10,11 +10,11 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :plot_avg_trials => (true, "Whether to draw ERP average overlay"),
 
     # Axis limits and labels
-    :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
-    :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :title => (nothing, "Plot title. If nothing, automatically determined"),
     :xlabel => ("Time (S)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
+    :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
 
     # Line styling
     :linewidth => ([1, 2], "Line width for epoch traces and average"),
@@ -47,7 +47,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
     # Origin lines
-    :axes_through_origin => (true, "Whether to add origin lines at x=0 and y=0"),
+    :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
 
     # Interactive features
     :interactive => (true, "Whether to enable interactive features"),
@@ -168,10 +168,7 @@ function plot_epochs(
         end
 
         # Draw axes through origin if requested
-        if get(plot_kwargs, :axes_through_origin, false)
-            hlines!(ax, [0.0], color = :black, linewidth = 1)
-            vlines!(ax, [0.0], color = :black, linewidth = 1)
-        end
+        _setup_origin_lines!(ax; add_xy_origin = get(plot_kwargs, :add_xy_origin, false))
 
         # Set axis properties
         if length(all_plot_channels) == 1
@@ -213,11 +210,6 @@ function plot_epochs(
                 erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], plot_kwargs)
             end
 
-            # Draw axes through origin if requested
-            if get(plot_kwargs, :axes_through_origin, false)
-                hlines!(ax, [0.0], color = :black, linewidth = 1)
-                vlines!(ax, [0.0], color = :black, linewidth = 1)
-            end
 
             # Set title based on selected channels (like plot_erp does)
             channel_title =
@@ -430,11 +422,6 @@ function _plot_epochs_layout!(
         _plot_epochs!(ax, dat, [ch], plot_kwargs)
         erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [ch], plot_kwargs)
 
-        # Draw axes through origin if requested
-        if plot_kwargs[:axes_through_origin]
-            hlines!(ax, [0.0], color = :black, linewidth = 1)
-            vlines!(ax, [0.0], color = :black, linewidth = 1)
-        end
 
         # Suppress axis labels on all but the final axis; set only limits and title for now
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
@@ -494,11 +481,6 @@ function _plot_epochs_grid!(
         _plot_epochs!(ax, dat, [channel], plot_kwargs)
         erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], plot_kwargs)
 
-        # Draw axes through origin if requested
-        if plot_kwargs[:axes_through_origin]
-            hlines!(ax, [0.0], color = :black, linewidth = 1)
-            vlines!(ax, [0.0], color = :black, linewidth = 1)
-        end
 
         # Set axis properties with ylim
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim))
@@ -513,23 +495,20 @@ function _plot_epochs_grid!(
             ax.xticklabelsvisible = false
         end
 
-        _set_axis_properties!(ax, axis_kwargs, "$channel")
+        # Set axis styling using shared functions
+        _setup_axis_limits!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim])
+        _setup_axis_grid!(ax; 
+                         xgrid = axis_kwargs[:xgrid], 
+                         ygrid = axis_kwargs[:ygrid],
+                         xminorgrid = axis_kwargs[:xminorgrid], 
+                         yminorgrid = axis_kwargs[:yminorgrid])
+        _setup_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        
+        # Set axis labels
+        ax.title = isnothing(axis_kwargs[:title]) ? "$channel" : axis_kwargs[:title]
+        ax.xlabel = axis_kwargs[:xlabel]
+        ax.ylabel = axis_kwargs[:ylabel]
+        ax.yreversed = axis_kwargs[:yreversed]
     end
 end
 
-function _set_axis_properties!(ax::Axis, kwargs::Dict, default_title::String)::Nothing
-    !isnothing(kwargs[:xlim]) && xlims!(ax, kwargs[:xlim])
-    !isnothing(kwargs[:ylim]) && ylims!(ax, kwargs[:ylim])
-    ax.title = isnothing(kwargs[:title]) ? default_title : kwargs[:title]
-    ax.xlabel = kwargs[:xlabel]
-    ax.ylabel = kwargs[:ylabel]
-    ax.yreversed = kwargs[:yreversed]
-
-    # Apply grid settings
-    ax.xgridvisible = kwargs[:xgrid]
-    ax.ygridvisible = kwargs[:ygrid]
-    ax.xminorgridvisible = kwargs[:xminorgrid]
-    ax.yminorgridvisible = kwargs[:yminorgrid]
-
-    return nothing
-end

@@ -1,4 +1,9 @@
 # =============================================================================
+# IMPORTS
+# =============================================================================
+using ..Utils: _setup_axis_grid!
+
+# =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
@@ -19,18 +24,12 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_fontsize => (14, "Font size for axis labels."),
     :tick_fontsize => (12, "Font size for tick labels."),
     :xtick_rotation => (π/4, "Rotation angle for x-axis tick labels."),
-    
-    # :grid_visible => (true, "Show grid."),
-    # :grid_alpha => (0.3, "Grid transparencey."),
-    # :xgridwidth => (1, "Width of x-axis grid lines."),
-    # :ygridwidth => (1, "Width of y-axis grid lines."),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
-
 
 )
 
@@ -312,11 +311,10 @@ function _configure_axis!(
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
-    # Configure grid
-    ax.xgridvisible = plot_kwargs[:grid_visible]
-    ax.ygridvisible = plot_kwargs[:grid_visible]
-    ax.xgridwidth = plot_kwargs[:xgridwidth]
-    ax.ygridwidth = plot_kwargs[:ygridwidth]
-    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
-    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
+    # Configure grid using the new axis styling function
+    _setup_axis_grid!(ax; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 end

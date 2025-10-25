@@ -10,7 +10,7 @@ const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Whether to display the plot."),
     :ignore_triggers => (Int[], "Vector of trigger codes to ignore."),
     :marker_size => (15, "Size of markers in the trigger overview plot."),
-    :line_width_trigger => (1, "Line width for trigger vertical lines."),
+    :linewidth_trigger => (1, "Line width for trigger vertical lines."),
     :line_offset => (0.1, "Offset for trigger vertical lines."),
     :timeline_width => (2, "Line width for the main timeline."),
     :event_line_width => (1, "Line width for individual event lines."),
@@ -21,6 +21,12 @@ const PLOT_TRIGGERS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :y_max_limit => (0.15, "Maximum y-axis limit."),
     :window_size_step => (1.0, "Step size for window size slider."),
     :position_step => (0.5, "Step size for position slider."),
+
+    # Grid
+    :xgrid => (false, "Whether to show x-axis grid"),
+    :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
 )
 
 ########################################################
@@ -149,7 +155,7 @@ function _plot_trigger_vertical_lines!(ax::Axis, times::Vector{Float64}, y_posit
             [xpos, xpos],
             [ypos - PLOT_TRIGGERS_KWARGS[:line_offset][1], ypos + PLOT_TRIGGERS_KWARGS[:line_offset][1]],
             color = :black,
-            linewidth = PLOT_TRIGGERS_KWARGS[:line_width_trigger][1],
+            linewidth = PLOT_TRIGGERS_KWARGS[:linewidth_trigger][1],
         )
     end
 end
@@ -335,6 +341,13 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     fig = Figure()
     ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
 
+    # Set grid using the shared function
+    _setup_axis_grid!(ax; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+
     # Pre-compute trigger data for each type to avoid repeated filtering
     trigger_data = Dict{Int,Vector{Float64}}()
     for (key, _) in trigger_count
@@ -394,6 +407,13 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
 
         fig = Figure()
         ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), [trigger_labels[k] for k in trigger_count.keys]))
+
+        # Set grid using the shared function
+        _setup_axis_grid!(ax; 
+                         xgrid = plot_kwargs[:xgrid], 
+                         ygrid = plot_kwargs[:ygrid],
+                         xminorgrid = plot_kwargs[:xminorgrid], 
+                         yminorgrid = plot_kwargs[:yminorgrid])
 
         # Pre-compute trigger data for each type
         trigger_data = Dict{Int,Vector{Float64}}()
@@ -568,6 +588,13 @@ function _create_interactive_trigger_plot(
     # Create figure with grid layout to accommodate legend
     fig = Figure()
     ax = Axis(fig[1, 1])
+
+    # Set grid using the shared function
+    _setup_axis_grid!(ax; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 
     # Add trigger count legend entries (with or without trigger info)
     has_info = any(!isempty, trigger_info)

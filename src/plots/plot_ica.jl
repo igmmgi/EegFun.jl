@@ -1325,7 +1325,7 @@ const PLOT_ICA_QUALITY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :legend_fontsize => (12, "Font size for legend"),
 
     # Line styling
-    :line_width => (2, "Line width for plot lines"),
+    :linewidth => (2, "Line width for plot lines"),
     :line_alpha => (0.8, "Transparency for plot lines"),
 
     # Marker styling

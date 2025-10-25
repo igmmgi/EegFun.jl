@@ -30,7 +30,7 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :legend_fontsize => (12, "Font size for legend"),
 
     # Line styling
-    :line_width => (2, "Line width for spectrum lines"),
+    :linewidth => (2, "Line width for spectrum lines"),
     :line_alpha => (0.8, "Transparency for spectrum lines"),
 
     # Frequency band styling
@@ -38,8 +38,10 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :freq_band_height => (0.1, "Height of frequency band indicators"),
 
     # Grid styling
-    :grid_visible => (true, "Whether to show grid"),
-    :grid_alpha => (0.3, "Transparency of grid"),
+    :xgrid => (true, "Whether to show x-axis grid"),
+    :ygrid => (true, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
 )
 
 """
@@ -123,13 +125,12 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     ax.xticklabelsize = plot_kwargs[:tick_fontsize]
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
-    # Configure grid
-    ax.xgridvisible = plot_kwargs[:grid_visible]
-    ax.ygridvisible = plot_kwargs[:grid_visible]
-    ax.xgridwidth = 1
-    ax.ygridwidth = 1
-    ax.xgridcolor = (:gray, plot_kwargs[:grid_alpha])
-    ax.ygridcolor = (:gray, plot_kwargs[:grid_alpha])
+    # Configure grid using the new axis styling function
+    _setup_axis_grid!(ax; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 
     # Create interactive controls in the figure
     controls_area = fig[1, 2] = GridLayout()
@@ -190,7 +191,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
             freqs,
             psd,
             label = string(ch),
-            linewidth = plot_kwargs[:line_width],
+            linewidth = plot_kwargs[:linewidth],
             alpha = plot_kwargs[:line_alpha],
         )
     end

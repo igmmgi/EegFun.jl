@@ -31,6 +31,8 @@ const PLOT_GFP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
     :ygrid => (false, "Whether to show y-axis grid"),
+    :xminorgrid => (false, "Whether to show x-axis minor grid"),
+    :yminorgrid => (false, "Whether to show y-axis minor grid"),
 
     # Origin lines
     :add_x_origin => (true, "Whether to add vertical line at x=0"),
@@ -191,19 +193,15 @@ function plot_gfp(
         ax_gfp.title = "Global Field Power"
     end
 
-    if plot_kwargs[:xlim] !== nothing
-        xlims!(ax_gfp, plot_kwargs[:xlim]...)
-    end
-    if plot_kwargs[:ylim] !== nothing
-        ylims!(ax_gfp, plot_kwargs[:ylim]...)
-    end
+    # Set axis limits using the shared function
+    _setup_axis_limits!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
-    if plot_kwargs[:xgrid]
-        ax_gfp.xgridvisible = true
-    end
-    if plot_kwargs[:ygrid]
-        ax_gfp.ygridvisible = true
-    end
+    # Set grid using the shared function
+    _setup_axis_grid!(ax_gfp; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 
     if plot_kwargs[:add_x_origin]
         vlines!(ax_gfp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -240,16 +238,15 @@ function plot_gfp(
         ax_diss.ylabel = ylabel_diss
         ax_diss.title = "Global Dissimilarity"
 
-        if plot_kwargs[:xlim] !== nothing
-            xlims!(ax_diss, plot_kwargs[:xlim]...)
-        end
+        # Set axis limits using the shared function
+        _setup_axis_limits!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
-        if plot_kwargs[:xgrid]
-            ax_diss.xgridvisible = true
-        end
-        if plot_kwargs[:ygrid]
-            ax_diss.ygridvisible = true
-        end
+        # Set grid using the shared function
+        _setup_axis_grid!(ax_diss; 
+                         xgrid = plot_kwargs[:xgrid], 
+                         ygrid = plot_kwargs[:ygrid],
+                         xminorgrid = plot_kwargs[:xminorgrid], 
+                         yminorgrid = plot_kwargs[:yminorgrid])
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_diss, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -338,19 +335,15 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
     ax_gfp.title =
         plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
 
-    if plot_kwargs[:xlim] !== nothing
-        xlims!(ax_gfp, plot_kwargs[:xlim]...)
-    end
-    if plot_kwargs[:ylim] !== nothing
-        ylims!(ax_gfp, plot_kwargs[:ylim]...)
-    end
+    # Set axis limits using the shared function
+    _setup_axis_limits!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
-    if plot_kwargs[:xgrid]
-        ax_gfp.xgridvisible = true
-    end
-    if plot_kwargs[:ygrid]
-        ax_gfp.ygridvisible = true
-    end
+    # Set grid using the shared function
+    _setup_axis_grid!(ax_gfp; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 
     if plot_kwargs[:add_x_origin]
         vlines!(ax_gfp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -379,16 +372,15 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
         ax_diss.ylabel = ylabel_diss
         ax_diss.title = "Global Dissimilarity"
 
-        if plot_kwargs[:xlim] !== nothing
-            xlims!(ax_diss, plot_kwargs[:xlim]...)
-        end
+        # Set axis limits using the shared function
+        _setup_axis_limits!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
-        if plot_kwargs[:xgrid]
-            ax_diss.xgridvisible = true
-        end
-        if plot_kwargs[:ygrid]
-            ax_diss.ygridvisible = true
-        end
+        # Set grid using the shared function
+        _setup_axis_grid!(ax_diss; 
+                         xgrid = plot_kwargs[:xgrid], 
+                         ygrid = plot_kwargs[:ygrid],
+                         xminorgrid = plot_kwargs[:xminorgrid], 
+                         yminorgrid = plot_kwargs[:yminorgrid])
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_diss, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -476,19 +468,15 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
     ax_gfp.title =
         plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
 
-    if plot_kwargs[:xlim] !== nothing
-        xlims!(ax_gfp, plot_kwargs[:xlim]...)
-    end
-    if plot_kwargs[:ylim] !== nothing
-        ylims!(ax_gfp, plot_kwargs[:ylim]...)
-    end
+    # Set axis limits using the shared function
+    _setup_axis_limits!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
-    if plot_kwargs[:xgrid]
-        ax_gfp.xgridvisible = true
-    end
-    if plot_kwargs[:ygrid]
-        ax_gfp.ygridvisible = true
-    end
+    # Set grid using the shared function
+    _setup_axis_grid!(ax_gfp; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
 
     if plot_kwargs[:add_x_origin]
         vlines!(ax_gfp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -524,16 +512,15 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
         ax_diss.ylabel = ylabel_diss
         ax_diss.title = "Global Dissimilarity"
 
-        if plot_kwargs[:xlim] !== nothing
-            xlims!(ax_diss, plot_kwargs[:xlim]...)
-        end
+        # Set axis limits using the shared function
+        _setup_axis_limits!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
-        if plot_kwargs[:xgrid]
-            ax_diss.xgridvisible = true
-        end
-        if plot_kwargs[:ygrid]
-            ax_diss.ygridvisible = true
-        end
+        # Set grid using the shared function
+        _setup_axis_grid!(ax_diss; 
+                         xgrid = plot_kwargs[:xgrid], 
+                         ygrid = plot_kwargs[:ygrid],
+                         xminorgrid = plot_kwargs[:xminorgrid], 
+                         yminorgrid = plot_kwargs[:yminorgrid])
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_diss, [0.0], color = :black, linewidth = 1, linestyle = :dash)
