@@ -28,9 +28,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :layout_plot_height => (0.12, "Height of individual plots in layout"),
     :layout_margin => (0.02, "Margin between plots in layout"),
     :layout_show_scale => (true, "Whether to show scale in layout"),
-    :layout_scale_position => ([0.95, 0.05], "Position of scale in layout"),
-    :layout_scale_width => (0.14, "Width of scale in layout"),
-    :layout_scale_height => (0.14, "Height of scale in layout"),
+    :layout_scale_position => ([0.99, 0.01], "Position of scale in layout"),
     :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
 
     # Display options
@@ -173,14 +171,24 @@ function plot_epochs(
 
         # Set axis properties
         if length(all_plot_channels) == 1
-            _set_axis_properties!(ax, plot_kwargs, "$(all_plot_channels[1])")
+            ax.title = string(all_plot_channels[1])
         else
-            _set_axis_properties!(
-                ax,
-                plot_kwargs,
-                "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))",
-            )
+            ax.title = "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
         end
+        
+        # Set axis labels
+        ax.xlabel = plot_kwargs[:xlabel]
+        ax.ylabel = plot_kwargs[:ylabel]
+        ax.yreversed = plot_kwargs[:yreversed]
+        
+        # Use the existing refactored helper functions
+        _setup_axis_limits!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+        _setup_axis_grid!(ax; 
+                         xgrid = plot_kwargs[:xgrid], 
+                         ygrid = plot_kwargs[:ygrid],
+                         xminorgrid = plot_kwargs[:xminorgrid], 
+                         yminorgrid = plot_kwargs[:yminorgrid])
+        _setup_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
 
     else
 
@@ -217,7 +225,17 @@ function plot_epochs(
                 length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
 
             # Set axis properties
-            _set_axis_properties!(ax, plot_kwargs, channel_title)
+            ax.title = channel_title
+            ax.xlabel = plot_kwargs[:xlabel]
+            ax.ylabel = plot_kwargs[:ylabel]
+            ax.yreversed = plot_kwargs[:yreversed]
+            _setup_axis_limits!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+            _setup_axis_grid!(ax; 
+                             xgrid = plot_kwargs[:xgrid], 
+                             ygrid = plot_kwargs[:ygrid],
+                             xminorgrid = plot_kwargs[:xminorgrid], 
+                             yminorgrid = plot_kwargs[:yminorgrid])
+            _setup_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
         elseif typeof(layout) <: Vector{<:Integer}
             # Custom grid dimensions [rows, cols]
             if length(layout) != 2 || any(x -> x <= 0, layout)
@@ -426,7 +444,17 @@ function _plot_epochs_layout!(
 
         # Suppress axis labels on all but the final axis; set only limits and title for now
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
-        _set_axis_properties!(ax, axis_kwargs, string(ch))
+        ax.title = string(ch)
+        ax.xlabel = axis_kwargs[:xlabel]
+        ax.ylabel = axis_kwargs[:ylabel]
+        ax.yreversed = axis_kwargs[:yreversed]
+        _setup_axis_limits!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim])
+        _setup_axis_grid!(ax; 
+                         xgrid = axis_kwargs[:xgrid], 
+                         ygrid = axis_kwargs[:ygrid],
+                         xminorgrid = axis_kwargs[:xminorgrid], 
+                         yminorgrid = axis_kwargs[:yminorgrid])
+        _setup_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
         ax.xticklabelsvisible = false
         ax.yticklabelsvisible = false
         ax.xticksvisible = false
@@ -437,14 +465,24 @@ function _plot_epochs_layout!(
     # Optional extra scale axis in bottom-right
     if get(plot_kwargs, :layout_show_scale, true)
         sp = get(plot_kwargs, :layout_scale_position, [0.95, 0.05])
-        sw = get(plot_kwargs, :layout_scale_width, 0.14)
-        sh = get(plot_kwargs, :layout_scale_height, 0.14)
+        sw = get(plot_kwargs, :layout_plot_width, 0.14)
+        sh = get(plot_kwargs, :layout_plot_height, 0.14)
         scale_ax = Axis(fig[1, 1], width = Relative(sw), height = Relative(sh), halign = sp[1], valign = sp[2])
         push!(axes, scale_ax)
         # No data in this axis; just show labels and limits
         tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlim => (tmin, tmax)))
-        _set_axis_properties!(scale_ax, axis_kwargs, "")
+        scale_ax.title = ""
+        scale_ax.xlabel = axis_kwargs[:xlabel]
+        scale_ax.ylabel = axis_kwargs[:ylabel]
+        scale_ax.yreversed = axis_kwargs[:yreversed]
+        _setup_axis_limits!(scale_ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim])
+        _setup_axis_grid!(scale_ax; 
+                         xgrid = axis_kwargs[:xgrid], 
+                         ygrid = axis_kwargs[:ygrid],
+                         xminorgrid = axis_kwargs[:xminorgrid], 
+                         yminorgrid = axis_kwargs[:yminorgrid])
+        _setup_origin_lines!(scale_ax; add_xy_origin = axis_kwargs[:add_xy_origin])
         scale_ax.xticklabelsvisible = true
         scale_ax.yticklabelsvisible = true
     end
