@@ -583,7 +583,7 @@ function show_additional_menu(state, clicked_region_idx = nothing)
     display(new_screen, menu_fig)
 end
 
-function show_channel_repair_menu(state, selected_channels, ax)
+function _channel_repair_menu(state, selected_channels, ax)
     # Get all available channels
     all_channels = state.channels.labels
     n_channels = length(all_channels)
@@ -1106,10 +1106,16 @@ function handle_right_click!(ax, state, mouse_x)
     if clicked_region_idx !== nothing
         show_additional_menu(state, clicked_region_idx)
     else
-        # Always show channel repair menu on right-click
-        selected_channels = get_selected_channels(state)
-        show_channel_repair_menu(state, selected_channels, ax)
+        _show_channel_repair_menu(state, ax)
     end
+end
+
+function _show_channel_repair_menu(state::DataBrowserState{<:ContinuousDataState}, ax)
+    _channel_repair_menu(state, get_selected_channels(state), ax)
+end
+
+function _show_channel_repair_menu(state::DataBrowserState{<:EpochedDataState}, ax)
+    @info "Channel repair is only available for continuous data"
 end
 
 # Helper function to get selected channels
