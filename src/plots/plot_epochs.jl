@@ -9,18 +9,18 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :average_channels => (false, "Whether to average across channels"),
     :plot_avg_trials => (true, "Whether to draw ERP average overlay"),
 
-    # Axis limits and labels
+    # Axis limits, labels, and direction
     :title => (nothing, "Plot title. If nothing, automatically determined"),
     :xlabel => ("Time (S)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
+    :yreversed => (false, "Whether to reverse the y-axis"),
 
     # Line styling
     :linewidth => ([1, 2], "Line width for epoch traces and average"),
     :color => ([:grey, :red], "Colors for epoch traces and average"),
     :alpha => ([0.3, 1.0], "Transparency for epoch traces and average"),
-    :yreversed => (false, "Whether to reverse the y-axis"),
 
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
@@ -32,12 +32,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
 
     # Display options
-    :hidedecorations => (false, "Whether to hide axis decorations"),
     :theme_fontsize => (24, "Font size for theme"),
-
-    # Legend
-    :legend => (true, "Whether to show the legend"),
-    :legend_label => ("", "Custom label for the legend"),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
@@ -142,7 +137,9 @@ function plot_epochs(
     fig = Figure()
     axes = Axis[]  # Keep track of all axes created
 
-    # Early branch: average across channels path
+    # Apply theme font size early to affect all elements
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+
     # Use single plot if explicitly requested via average_channels
     if plot_kwargs[:average_channels]
 
@@ -167,7 +164,7 @@ function plot_epochs(
         end
 
         # Draw axes through origin if requested
-        _setup_origin_lines!(ax; add_xy_origin = get(plot_kwargs, :add_xy_origin, false))
+        # _set_origin_lines!(ax; add_xy_origin = get(plot_kwargs, :add_xy_origin, false))
 
         # Set axis properties
         if length(all_plot_channels) == 1
@@ -176,19 +173,15 @@ function plot_epochs(
             ax.title = "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
         end
         
-        # Set axis labels
-        ax.xlabel = plot_kwargs[:xlabel]
-        ax.ylabel = plot_kwargs[:ylabel]
-        ax.yreversed = plot_kwargs[:yreversed]
-        
         # Use the existing refactored helper functions
-        _setup_axis_limits!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
-        _setup_axis_grid!(ax; 
+        _set_axis_properties!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim], 
+                           xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], yreversed = plot_kwargs[:yreversed])
+        _set_axis_grid!(ax; 
                          xgrid = plot_kwargs[:xgrid], 
                          ygrid = plot_kwargs[:ygrid],
                          xminorgrid = plot_kwargs[:xminorgrid], 
                          yminorgrid = plot_kwargs[:yminorgrid])
-        _setup_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+        _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
 
     else
 
@@ -226,29 +219,23 @@ function plot_epochs(
 
             # Set axis properties
             ax.title = channel_title
-            ax.xlabel = plot_kwargs[:xlabel]
-            ax.ylabel = plot_kwargs[:ylabel]
-            ax.yreversed = plot_kwargs[:yreversed]
-            _setup_axis_limits!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
-            _setup_axis_grid!(ax; 
+            _set_axis_properties!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim],
+                               xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], yreversed = plot_kwargs[:yreversed])
+            _set_axis_grid!(ax; 
                              xgrid = plot_kwargs[:xgrid], 
                              ygrid = plot_kwargs[:ygrid],
                              xminorgrid = plot_kwargs[:xminorgrid], 
                              yminorgrid = plot_kwargs[:yminorgrid])
-            _setup_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
-        elseif typeof(layout) <: Vector{<:Integer}
-            # Custom grid dimensions [rows, cols]
-            if length(layout) != 2 || any(x -> x <= 0, layout)
-                throw(ArgumentError("layout must be a 2-element vector [rows, cols] with positive integers"))
-            end
-            rows, cols = layout
+            _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+        elseif !isnothing(plot_kwargs[:dims])
+            rows, cols = plot_kwargs[:dims]
             if rows * cols < n_channels
-                throw(ArgumentError("layout grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
+                throw(ArgumentError("dims grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
             end
             erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
             _plot_epochs_grid!(fig, axes, dat_subset, erp_dat, all_plot_channels, rows, cols, plot_kwargs)
         else
-            throw(ArgumentError("layout must be :single, :grid, :topo, or a 2-element vector [rows, cols]"))
+            throw(ArgumentError("layout must be :single, :grid, or :topo"))
         end
     end
 
@@ -257,18 +244,17 @@ function plot_epochs(
         Makie.linkaxes!(axes...)
     end
 
-    # Add keyboard interactivity (zoom with arrow keys)
+    # Add interactive functionality (keyboard zoom + time/channel selection)
     if plot_kwargs[:interactive]
         # Disable default Makie interactions that would conflict with our custom handling
         for ax in axes
             deregister_interaction!(ax, :rectanglezoom)
         end
 
+        # Setup keyboard interactivity (zoom with arrow keys)
         _setup_shared_interactivity!(fig, axes, :epochs)
-    end
 
-    # Add unified selection functionality (time + channel selection)
-    if plot_kwargs[:interactive]
+        # Add unified selection functionality (time + channel selection)
         # Create a selection state for both time and channel selection
         selection_state = SharedSelectionState(axes)
 
@@ -290,12 +276,12 @@ function plot_epochs(
                 axes,
                 :topo,
             )
-        elseif layout === :grid || typeof(layout) <: Vector{<:Integer}
+        elseif layout === :grid || !isnothing(plot_kwargs[:dims])
             # Grid layout - use unified selection + grid channel selection
             if layout === :grid
                 rows, cols = best_rect(length(all_plot_channels))
             else
-                rows, cols = layout
+                rows, cols = plot_kwargs[:dims]
             end
             _setup_unified_selection!(
                 fig,
@@ -313,14 +299,9 @@ function plot_epochs(
                 :grid,
             )
         elseif layout === :single
-            # Single plot layout - only time selection, no channel selection needed
             _setup_unified_selection!(fig, axes, selection_state, dat_subset, nothing)
         end
     end
-
-    # Theme adjustments
-    fontsize_theme = Theme(fontsize = plot_kwargs[:theme_fontsize])
-    update_theme!(fontsize_theme)
 
     if plot_kwargs[:display_plot]
         display_figure(fig)
@@ -445,16 +426,14 @@ function _plot_epochs_layout!(
         # Suppress axis labels on all but the final axis; set only limits and title for now
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
         ax.title = string(ch)
-        ax.xlabel = axis_kwargs[:xlabel]
-        ax.ylabel = axis_kwargs[:ylabel]
-        ax.yreversed = axis_kwargs[:yreversed]
-        _setup_axis_limits!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim])
-        _setup_axis_grid!(ax; 
+        _set_axis_properties!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim],
+                           xlabel = axis_kwargs[:xlabel], ylabel = axis_kwargs[:ylabel], yreversed = axis_kwargs[:yreversed])
+        _set_axis_grid!(ax; 
                          xgrid = axis_kwargs[:xgrid], 
                          ygrid = axis_kwargs[:ygrid],
                          xminorgrid = axis_kwargs[:xminorgrid], 
                          yminorgrid = axis_kwargs[:yminorgrid])
-        _setup_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
         ax.xticklabelsvisible = false
         ax.yticklabelsvisible = false
         ax.xticksvisible = false
@@ -473,16 +452,14 @@ function _plot_epochs_layout!(
         tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
         axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlim => (tmin, tmax)))
         scale_ax.title = ""
-        scale_ax.xlabel = axis_kwargs[:xlabel]
-        scale_ax.ylabel = axis_kwargs[:ylabel]
-        scale_ax.yreversed = axis_kwargs[:yreversed]
-        _setup_axis_limits!(scale_ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim])
-        _setup_axis_grid!(scale_ax; 
+        _set_axis_properties!(scale_ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim],
+                           xlabel = axis_kwargs[:xlabel], ylabel = axis_kwargs[:ylabel], yreversed = axis_kwargs[:yreversed])
+        _set_axis_grid!(scale_ax; 
                          xgrid = axis_kwargs[:xgrid], 
                          ygrid = axis_kwargs[:ygrid],
                          xminorgrid = axis_kwargs[:xminorgrid], 
                          yminorgrid = axis_kwargs[:yminorgrid])
-        _setup_origin_lines!(scale_ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        _set_origin_lines!(scale_ax; add_xy_origin = axis_kwargs[:add_xy_origin])
         scale_ax.xticklabelsvisible = true
         scale_ax.yticklabelsvisible = true
     end
@@ -535,19 +512,17 @@ function _plot_epochs_grid!(
         end
 
         # Set axis styling using shared functions
-        _setup_axis_limits!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim])
-        _setup_axis_grid!(ax; 
+        _set_axis_properties!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim],
+                           xlabel = axis_kwargs[:xlabel], ylabel = axis_kwargs[:ylabel], yreversed = axis_kwargs[:yreversed])
+        _set_axis_grid!(ax; 
                          xgrid = axis_kwargs[:xgrid], 
                          ygrid = axis_kwargs[:ygrid],
                          xminorgrid = axis_kwargs[:xminorgrid], 
                          yminorgrid = axis_kwargs[:yminorgrid])
-        _setup_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
         
-        # Set axis labels
+        # Set axis title
         ax.title = isnothing(axis_kwargs[:title]) ? "$channel" : axis_kwargs[:title]
-        ax.xlabel = axis_kwargs[:xlabel]
-        ax.ylabel = axis_kwargs[:ylabel]
-        ax.yreversed = axis_kwargs[:yreversed]
     end
 end
 

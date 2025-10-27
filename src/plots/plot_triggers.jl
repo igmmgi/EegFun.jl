@@ -342,7 +342,7 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
 
     # Set grid using the shared function
-    _setup_axis_grid!(ax; 
+    _set_axis_grid!(ax; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 
@@ -409,7 +409,7 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
         ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), [trigger_labels[k] for k in trigger_count.keys]))
 
         # Set grid using the shared function
-        _setup_axis_grid!(ax; 
+        _set_axis_grid!(ax; 
                          xgrid = plot_kwargs[:xgrid], 
                          ygrid = plot_kwargs[:ygrid],
                          xminorgrid = plot_kwargs[:xminorgrid], 
@@ -590,7 +590,7 @@ function _create_interactive_trigger_plot(
     ax = Axis(fig[1, 1])
 
     # Set grid using the shared function
-    _setup_axis_grid!(ax; 
+    _set_axis_grid!(ax; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 

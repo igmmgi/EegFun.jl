@@ -194,10 +194,10 @@ function plot_gfp(
     end
 
     # Set axis limits using the shared function
-    _setup_axis_limits!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+    _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
     # Set grid using the shared function
-    _setup_axis_grid!(ax_gfp; 
+    _set_axis_grid!(ax_gfp; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 
@@ -239,10 +239,10 @@ function plot_gfp(
         ax_diss.title = "Global Dissimilarity"
 
         # Set axis limits using the shared function
-        _setup_axis_limits!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+        _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
         # Set grid using the shared function
-        _setup_axis_grid!(ax_diss; 
+        _set_axis_grid!(ax_diss; 
                          xgrid = plot_kwargs[:xgrid], 
                          ygrid = plot_kwargs[:ygrid],
                          xminorgrid = plot_kwargs[:xminorgrid], 
@@ -336,10 +336,10 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
         plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
 
     # Set axis limits using the shared function
-    _setup_axis_limits!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+    _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
     # Set grid using the shared function
-    _setup_axis_grid!(ax_gfp; 
+    _set_axis_grid!(ax_gfp; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 
@@ -373,10 +373,10 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
         ax_diss.title = "Global Dissimilarity"
 
         # Set axis limits using the shared function
-        _setup_axis_limits!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+        _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
         # Set grid using the shared function
-        _setup_axis_grid!(ax_diss; 
+        _set_axis_grid!(ax_diss; 
                          xgrid = plot_kwargs[:xgrid], 
                          ygrid = plot_kwargs[:ygrid],
                          xminorgrid = plot_kwargs[:xminorgrid], 
@@ -469,10 +469,10 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
         plot_kwargs[:show_title] ? (isempty(plot_kwargs[:title]) ? "Global Field Power" : plot_kwargs[:title]) : ""
 
     # Set axis limits using the shared function
-    _setup_axis_limits!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+    _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
     # Set grid using the shared function
-    _setup_axis_grid!(ax_gfp; 
+    _set_axis_grid!(ax_gfp; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 
@@ -513,10 +513,10 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
         ax_diss.title = "Global Dissimilarity"
 
         # Set axis limits using the shared function
-        _setup_axis_limits!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
+        _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
         # Set grid using the shared function
-        _setup_axis_grid!(ax_diss; 
+        _set_axis_grid!(ax_diss; 
                          xgrid = plot_kwargs[:xgrid], 
                          ygrid = plot_kwargs[:ygrid],
                          xminorgrid = plot_kwargs[:xminorgrid], 

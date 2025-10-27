@@ -81,7 +81,7 @@ end
 # =============================================================================
 
 """
-    _setup_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
+    _set_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
 
 Apply grid settings to the axis.
 
@@ -94,7 +94,7 @@ Apply grid settings to the axis.
 - `xminorgrid`: Whether to show x-axis minor grid
 - `yminorgrid`: Whether to show y-axis minor grid
 """
-function _setup_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
+function _set_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false, yminorgrid = false)
     ax.xgridvisible = xgrid
     ax.ygridvisible = ygrid
     ax.xminorgridvisible = xminorgrid
@@ -102,9 +102,9 @@ function _setup_axis_grid!(ax; xgrid = false, ygrid = false, xminorgrid = false,
 end
 
 """
-    _setup_axis_limits!(ax; xlim = nothing, ylim = nothing)
+    _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", ylabel = "", yreversed = false)
 
-Apply axis limits to the axis.
+Apply axis limits, labels, and direction to the axis.
 
 # Arguments
 - `ax`: Makie Axis object
@@ -112,8 +112,18 @@ Apply axis limits to the axis.
 # Keyword Arguments
 - `xlim`: X-axis limits as (min, max) tuple or nothing for auto-scaling
 - `ylim`: Y-axis limits as (min, max) tuple or nothing for auto-scaling
+- `xlabel`: Label for x-axis (default: empty string)
+- `ylabel`: Label for y-axis (default: empty string)
+- `yreversed`: Whether to reverse the y-axis (default: false)
 """
-function _setup_axis_limits!(ax; xlim = nothing, ylim = nothing)
+function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", ylabel = "", yreversed = false)
+
+    # Set axis labels
+    ax.xlabel = xlabel
+    ax.ylabel = ylabel
+    ax.yreversed = yreversed
+    
+    # Set axis limits
     if xlim !== nothing
         xmin, xmax = xlim
         xlims!(ax, xmin, xmax)
@@ -126,7 +136,7 @@ function _setup_axis_limits!(ax; xlim = nothing, ylim = nothing)
 end
 
 """
-    _setup_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 0.5, alpha = 0.7)
+    _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 0.5, alpha = 0.7)
 
 Add origin lines at x=0 and y=0 to the axis.
 
@@ -139,7 +149,7 @@ Add origin lines at x=0 and y=0 to the axis.
 - `linewidth`: Line width of the origin lines
 - `alpha`: Transparency of the origin lines
 """
-function _setup_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 0.5, alpha = 0.7)
+function _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 0.5, alpha = 0.7)
     if add_xy_origin
         hlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
         vlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
