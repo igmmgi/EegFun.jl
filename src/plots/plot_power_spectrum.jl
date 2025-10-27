@@ -126,7 +126,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
     # Configure grid using the new axis styling function
-    _setup_axis_grid!(ax; 
+    _set_axis_grid!(ax; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 

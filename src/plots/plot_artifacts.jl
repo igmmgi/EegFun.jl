@@ -228,15 +228,15 @@ function plot_artifact_detection(
     ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
     # Setup axis styling
-    _setup_axis_grid!(ax; 
+    _set_axis_grid!(ax; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 
                      yminorgrid = plot_kwargs[:yminorgrid])
-    _setup_axis_limits!(ax; 
+    _set_axis_properties!(ax; 
                        xlim = plot_kwargs[:xlim], 
                        ylim = plot_kwargs[:ylim])
-    _setup_origin_lines!(ax; 
+    _set_origin_lines!(ax; 
                         add_xy_origin = plot_kwargs[:add_xy_origin])
 
     # Get epochs with artifacts
@@ -366,26 +366,26 @@ function plot_artifact_repair(
     ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
 
     # Setup axis styling
-    _setup_axis_grid!(ax1; 
+    _set_axis_grid!(ax1; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 
                      yminorgrid = plot_kwargs[:yminorgrid])
-    _setup_axis_limits!(ax1; 
+    _set_axis_properties!(ax1; 
                        xlim = plot_kwargs[:xlim], 
                        ylim = plot_kwargs[:ylim])
-    _setup_origin_lines!(ax1; 
+    _set_origin_lines!(ax1; 
                         add_xy_origin = plot_kwargs[:add_xy_origin])
     
-    _setup_axis_grid!(ax2; 
+    _set_axis_grid!(ax2; 
                      xgrid = plot_kwargs[:xgrid], 
                      ygrid = plot_kwargs[:ygrid],
                      xminorgrid = plot_kwargs[:xminorgrid], 
                      yminorgrid = plot_kwargs[:yminorgrid])
-    _setup_axis_limits!(ax2; 
+    _set_axis_properties!(ax2; 
                        xlim = plot_kwargs[:xlim], 
                        ylim = plot_kwargs[:ylim])
-    _setup_origin_lines!(ax2; 
+    _set_origin_lines!(ax2; 
                         add_xy_origin = plot_kwargs[:add_xy_origin])
 
     # Get epochs with artifacts
