@@ -24,8 +24,8 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
-    :layout_plot_width => (0.12, "Width of individual plots in layout"),
-    :layout_plot_height => (0.12, "Height of individual plots in layout"),
+    :layout_plot_width => (0.14, "Width of individual plots in layout"),
+    :layout_plot_height => (0.14, "Height of individual plots in layout"),
     :layout_margin => (0.02, "Margin between plots in layout"),
     :layout_show_scale => (true, "Whether to show scale in layout"),
     :layout_scale_position => ([0.99, 0.01], "Position of scale in layout"),
@@ -187,28 +187,30 @@ function plot_epochs(
 
         # Separate subplot for each channel
         n_channels = length(all_plot_channels)
-        # Handle layout parameter: :single, :grid, :topo, or custom [rows, cols]
-
+        
+        # Compute ERP once for all layout types (avoids duplication)
+        erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
+        
+        # Store grid dimensions for reuse in interactive section
+        grid_dims = nothing
+        
+        # Handle layout parameter: :single, :grid, :topo, or custom dims
         if layout === :topo
-            # Topographic layout using data's layout semantics
-            erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
             _plot_epochs_topo!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
-        elseif layout === :grid
-            # Auto grid layout
-            rows, cols = best_rect(n_channels)
-            erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
-            _plot_epochs_grid!(fig, axes, dat_subset, erp_dat, all_plot_channels, rows, cols, plot_kwargs)
-        elseif layout === :single
-            # Single plot - create one axis with all channels
-            erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
-            _plot_epochs_single!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
-        elseif !isnothing(plot_kwargs[:dims])
-            rows, cols = plot_kwargs[:dims]
-            if rows * cols < n_channels
-                throw(ArgumentError("dims grid ($(rows)×$(cols)=$(rows*cols)) is too small for $n_channels channels"))
+        elseif layout === :grid || !isnothing(plot_kwargs[:dims])
+            # Determine grid dimensions
+            grid_dims = if !isnothing(plot_kwargs[:dims])
+                dims = plot_kwargs[:dims]
+                if dims[1] * dims[2] < n_channels
+                    throw(ArgumentError("dims grid ($(dims[1])×$(dims[2])=$(dims[1]*dims[2])) is too small for $n_channels channels"))
+                end
+                dims
+            else
+                best_rect(n_channels)
             end
-            erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
-            _plot_epochs_grid!(fig, axes, dat_subset, erp_dat, all_plot_channels, rows, cols, plot_kwargs)
+            _plot_epochs_grid!(fig, axes, dat_subset, erp_dat, all_plot_channels, grid_dims, plot_kwargs)
+        elseif layout === :single
+            _plot_epochs_single!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
         else
             throw(ArgumentError("layout must be :single, :grid, or :topo"))
         end
@@ -235,44 +237,9 @@ function plot_epochs(
 
         # Set up unified selection (time selection with Shift, channel selection with Ctrl)
         if layout === :topo
-            # Topographic layout - use unified selection + topo channel selection
-            _setup_unified_selection!(
-                fig,
-                axes,
-                selection_state,
-                dat_subset,
-                create_topo_layout(dat_subset.layout, all_plot_channels),
-            )
-            _setup_channel_selection_events!(
-                fig,
-                selection_state,
-                create_topo_layout(dat_subset.layout, all_plot_channels),
-                dat_subset,
-                axes,
-                :topo,
-            )
+            _setup_interactivity_topo!(fig, axes, selection_state, dat_subset, all_plot_channels)
         elseif layout === :grid || !isnothing(plot_kwargs[:dims])
-            # Grid layout - use unified selection + grid channel selection
-            if layout === :grid
-                rows, cols = best_rect(length(all_plot_channels))
-            else
-                rows, cols = plot_kwargs[:dims]
-            end
-            _setup_unified_selection!(
-                fig,
-                axes,
-                selection_state,
-                dat_subset,
-                create_grid_layout(all_plot_channels, rows = rows, cols = cols),
-            )
-            _setup_channel_selection_events!(
-                fig,
-                selection_state,
-                create_grid_layout(all_plot_channels, rows = rows, cols = cols),
-                dat_subset,
-                axes,
-                :grid,
-            )
+            _setup_interactivity_grid!(fig, axes, selection_state, dat_subset, all_plot_channels, grid_dims)
         elseif layout === :single
             _setup_unified_selection!(fig, axes, selection_state, dat_subset, nothing)
         end
@@ -422,11 +389,12 @@ function _plot_epochs_topo!(
     end
 
     # Optional extra scale axis in bottom-right
-    if get(plot_kwargs, :layout_show_scale, true)
-        sp = get(plot_kwargs, :layout_scale_position, [0.95, 0.05])
-        sw = get(plot_kwargs, :layout_plot_width, 0.14)
-        sh = get(plot_kwargs, :layout_plot_height, 0.14)
-        scale_ax = Axis(fig[1, 1], width = Relative(sw), height = Relative(sh), halign = sp[1], valign = sp[2])
+    if plot_kwargs[:layout_show_scale]
+        scale_ax = Axis(fig[1, 1], 
+            width = Relative(plot_kwargs[:layout_plot_width]), 
+            height = Relative(plot_kwargs[:layout_plot_height]),
+            halign = plot_kwargs[:layout_scale_position][1], 
+            valign = plot_kwargs[:layout_scale_position][2])
         push!(axes, scale_ax)
         # No data in this axis; just show labels and limits
         tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
@@ -446,9 +414,12 @@ function _plot_epochs_topo!(
 end
 
 """
-    _plot_epochs_grid!(fig, axes, dat, erp_dat, all_plot_channels, rows, cols, kwargs)
+    _plot_epochs_grid!(fig, axes, dat, erp_dat, all_plot_channels, grid_dims, kwargs)
 
 Create a grid layout for plotting epochs.
+
+# Arguments
+- `grid_dims::Tuple{Int, Int}`: Grid dimensions as (rows, cols)
 """
 function _plot_epochs_grid!(
     fig::Figure,
@@ -456,13 +427,12 @@ function _plot_epochs_grid!(
     dat::EpochData,
     erp_dat,
     all_plot_channels::Vector{Symbol},
-    rows::Int,
-    cols::Int,
+    grid_dims::Tuple{Int, Int},
     plot_kwargs::Dict,
 )
-    n_channels = length(all_plot_channels)
+    rows, cols = grid_dims
 
-    # Calculate y-range if not provided (using shared yrange helper)
+    # Calculate y-range if not provided 
     ylim = plot_kwargs[:ylim]
     if isnothing(ylim)
         yr = ylimits(dat; channel_selection = channels(all_plot_channels))
@@ -475,7 +445,9 @@ function _plot_epochs_grid!(
         ax = Axis(fig[row, col])
         push!(axes, ax)
         _plot_epochs!(ax, dat, [channel], plot_kwargs)
-        erp_dat !== nothing && _plot_erp_average!(ax, erp_dat, [channel], plot_kwargs)
+        if erp_dat !== nothing
+            _plot_erp_average!(ax, erp_dat, [channel], plot_kwargs)
+        end
 
 
         # Set axis properties with ylim
@@ -543,6 +515,28 @@ function _plot_epochs_single!(
                      xminorgrid = plot_kwargs[:xminorgrid], 
                      yminorgrid = plot_kwargs[:yminorgrid])
     _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+end
+
+"""
+    _setup_interactivity_topo!(fig, axes, selection_state, dat, all_plot_channels)
+
+Set up topographic layout interactivity (unified selection + channel selection).
+"""
+function _setup_interactivity_topo!(fig, axes, selection_state, dat, all_plot_channels)
+    topo_layout = create_topo_layout(dat.layout, all_plot_channels)
+    _setup_unified_selection!(fig, axes, selection_state, dat, topo_layout)
+    _setup_channel_selection_events!(fig, selection_state, topo_layout, dat, axes, :topo)
+end
+
+"""
+    _setup_interactivity_grid!(fig, axes, selection_state, dat, all_plot_channels, grid_dims)
+
+Set up grid layout interactivity (unified selection + channel selection).
+"""
+function _setup_interactivity_grid!(fig, axes, selection_state, dat, all_plot_channels, grid_dims)
+    grid_layout = create_grid_layout(all_plot_channels, rows = grid_dims[1], cols = grid_dims[2])
+    _setup_unified_selection!(fig, axes, selection_state, dat, grid_layout)
+    _setup_channel_selection_events!(fig, selection_state, grid_layout, dat, axes, :grid)
 end
 
 
