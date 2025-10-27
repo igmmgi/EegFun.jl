@@ -16,7 +16,6 @@ eegfun.mark_epoch_windows!(dat, [1, 3, 4, 5], [-1, 1.0]) # simple epoch marking 
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
-# TODO: fix epoch slider 
 eegfun.plot_databrowser(epochs[1])
 
 eegfun.plot_epochs(epochs[1], layout = :single)
@@ -26,6 +25,7 @@ eegfun.plot_epochs(epochs[1], layout = :grid)
 eegfun.plot_epochs(epochs[1], layout = :topo)
 eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false)
 eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false, theme_fontsize = 10)
+eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false, theme_fontsize = 30)
 
 # TODO: ERP plotting bring to front
 eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))

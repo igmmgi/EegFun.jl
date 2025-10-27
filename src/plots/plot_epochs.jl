@@ -408,8 +408,8 @@ function _plot_epochs_topo!(
                          xminorgrid = axis_kwargs[:xminorgrid], 
                          yminorgrid = axis_kwargs[:yminorgrid])
         _set_origin_lines!(scale_ax; add_xy_origin = axis_kwargs[:add_xy_origin])
-        scale_ax.xticklabelsvisible = true
-        scale_ax.yticklabelsvisible = true
+        # scale_ax.xticklabelsvisible = true
+        # scale_ax.yticklabelsvisible = true
     end
 end
 
