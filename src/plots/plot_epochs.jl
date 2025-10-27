@@ -128,11 +128,11 @@ function plot_epochs(
     # Validate we have channels to plot
     isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
 
-    # Info about what we're plotting
-    @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(length(dat_subset.data)) epochs"
-
     # Merge user kwargs and default kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
+
+    # Info about what we're plotting
+    @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(length(dat_subset.data)) epochs"
 
     fig = Figure()
     axes = Axis[]  # Keep track of all axes created
@@ -160,7 +160,7 @@ function plot_epochs(
         # Optional ERP overlay (compute only when needed) from averaged data
         if plot_kwargs[:plot_avg_trials]
             erp_dat = average_epochs(dat_avg)
-            _plot_epochs_from_erp!(ax, erp_dat, [:avg], plot_kwargs)
+            _plot_erp_average!(ax, erp_dat, [:avg], plot_kwargs)
         end
 
         # Draw axes through origin if requested
@@ -192,7 +192,7 @@ function plot_epochs(
         if layout === :topo
             # Topographic layout using data's layout semantics
             erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
-            _plot_epochs_layout!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
+            _plot_epochs_topo!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
         elseif layout === :grid
             # Auto grid layout
             rows, cols = best_rect(n_channels)
@@ -201,32 +201,7 @@ function plot_epochs(
         elseif layout === :single
             # Single plot - create one axis with all channels
             erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
-
-            # Create a single axis
-            ax = Axis(fig[1, 1])
-            push!(axes, ax)
-
-            # Plot each channel on the same axis
-            for channel in all_plot_channels
-                _plot_epochs!(ax, dat_subset, [channel], plot_kwargs)
-                erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], plot_kwargs)
-            end
-
-
-            # Set title based on selected channels (like plot_erp does)
-            channel_title =
-                length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
-
-            # Set axis properties
-            ax.title = channel_title
-            _set_axis_properties!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim],
-                               xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], yreversed = plot_kwargs[:yreversed])
-            _set_axis_grid!(ax; 
-                             xgrid = plot_kwargs[:xgrid], 
-                             ygrid = plot_kwargs[:ygrid],
-                             xminorgrid = plot_kwargs[:xminorgrid], 
-                             yminorgrid = plot_kwargs[:yminorgrid])
-            _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+            _plot_epochs_single!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
         elseif !isnothing(plot_kwargs[:dims])
             rows, cols = plot_kwargs[:dims]
             if rows * cols < n_channels
@@ -354,8 +329,8 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs)::Nothing
 end
 
 
-function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, plot_kwargs)::Nothing
-    @assert length(channels) == 1 "_plot_epochs_from_erp! expects a single channel"
+function _plot_erp_average!(ax, erp_dat::ErpData, channels::Vector{Symbol}, plot_kwargs)::Nothing
+    @assert length(channels) == 1 "_plot_erp_average! expects a single channel"
     ch = channels[1]
 
     time_vec = erp_dat.data[!, :time]
@@ -366,7 +341,12 @@ function _plot_epochs_from_erp!(ax, erp_dat::ErpData, channels::Vector{Symbol}, 
     return nothing
 end
 
-function _plot_epochs_layout!(
+"""
+    _plot_epochs_topo!(fig, axes, dat, erp_dat, all_plot_channels, kwargs)
+
+Create a topographic layout for plotting epochs.
+"""
+function _plot_epochs_topo!(
     fig::Figure,
     axes::Vector{Axis},
     dat::EpochData,
@@ -420,7 +400,7 @@ function _plot_epochs_layout!(
         )
         push!(axes, ax)
         _plot_epochs!(ax, dat, [ch], plot_kwargs)
-        erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [ch], plot_kwargs)
+        erp_dat !== nothing && _plot_erp_average!(ax, erp_dat, [ch], plot_kwargs)
 
 
         # Suppress axis labels on all but the final axis; set only limits and title for now
@@ -495,7 +475,7 @@ function _plot_epochs_grid!(
         ax = Axis(fig[row, col])
         push!(axes, ax)
         _plot_epochs!(ax, dat, [channel], plot_kwargs)
-        erp_dat !== nothing && _plot_epochs_from_erp!(ax, erp_dat, [channel], plot_kwargs)
+        erp_dat !== nothing && _plot_erp_average!(ax, erp_dat, [channel], plot_kwargs)
 
 
         # Set axis properties with ylim
@@ -525,4 +505,44 @@ function _plot_epochs_grid!(
         ax.title = isnothing(axis_kwargs[:title]) ? "$channel" : axis_kwargs[:title]
     end
 end
+
+"""
+    _plot_epochs_single!(fig, axes, dat, erp_dat, all_plot_channels, kwargs)
+
+Create a single axis layout for plotting epochs with all channels on the same plot.
+"""
+function _plot_epochs_single!(
+    fig::Figure,
+    axes::Vector{Axis},
+    dat::EpochData,
+    erp_dat,
+    all_plot_channels::Vector{Symbol},
+    plot_kwargs::Dict,
+)
+    # Create a single axis
+    ax = Axis(fig[1, 1])
+    push!(axes, ax)
+
+    # Plot each channel on the same axis
+    for channel in all_plot_channels
+        _plot_epochs!(ax, dat, [channel], plot_kwargs)
+        erp_dat !== nothing && _plot_erp_average!(ax, erp_dat, [channel], plot_kwargs)
+    end
+
+    # Set title based on selected channels (like plot_erp does)
+    channel_title =
+        length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+
+    # Set axis properties
+    ax.title = channel_title
+    _set_axis_properties!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim],
+                       xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], yreversed = plot_kwargs[:yreversed])
+    _set_axis_grid!(ax; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+end
+
 
