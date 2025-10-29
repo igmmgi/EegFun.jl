@@ -86,11 +86,11 @@ using OrderedCollections
         @test haskey(layout_xy.neighbours, :Cz)
 
         # Test that Fp1 has expected neighbours
-        @test :AF7 in layout_xy.neighbours[:Fp1].electrodes
-        @test :AF3 in layout_xy.neighbours[:Fp1].electrodes
+        @test :AF7 in layout_xy.neighbours[:Fp1].channels
+        @test :AF3 in layout_xy.neighbours[:Fp1].channels
 
         # Test weight calculations for 2D
-        @test length(layout_xy.neighbours[:Fp1].weights) == length(layout_xy.neighbours[:Fp1].electrodes)
+        @test length(layout_xy.neighbours[:Fp1].weights) == length(layout_xy.neighbours[:Fp1].channels)
         @test isapprox(sum(layout_xy.neighbours[:Fp1].weights), 1.0, atol = 1e-10)
 
         # Test 3D neighbours
@@ -103,7 +103,7 @@ using OrderedCollections
         @test haskey(layout_xyz.neighbours, :Cz)
 
         # Test weight calculations for 3D
-        @test length(layout_xyz.neighbours[:Fp1].weights) == length(layout_xyz.neighbours[:Fp1].electrodes)
+        @test length(layout_xyz.neighbours[:Fp1].weights) == length(layout_xyz.neighbours[:Fp1].channels)
         @test isapprox(sum(layout_xyz.neighbours[:Fp1].weights), 1.0, atol = 1e-10)
 
         # Test error handling

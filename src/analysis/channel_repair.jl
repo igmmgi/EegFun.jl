@@ -93,7 +93,7 @@ function _repair_channels_neighbor!(
 
         # Get neighbors information
         neighbours = get(neighbours_dict, bad_ch, nothing)
-        if isnothing(neighbours) || isempty(neighbours.electrodes)
+        if isnothing(neighbours) || isempty(neighbours.channels)
             @minimal_warning "No neighbors found for channel $bad_ch, skipping"
             continue
         end
@@ -104,7 +104,7 @@ function _repair_channels_neighbor!(
             weighted_sum = 0.0
 
             # Sum weighted neighbor values
-            for (i, neighbour_ch) in enumerate(neighbours.electrodes)
+            for (i, neighbour_ch) in enumerate(neighbours.channels)
                 # Get neighbor index
                 neigh_idx = get(ch_indices, neighbour_ch, nothing)
                 if !isnothing(neigh_idx)
@@ -388,3 +388,109 @@ function _legendre_polynomial(cos_theta, m)
         return p_prev1
     end
 end
+
+# =============================================================================
+# PER-EPOCH CHANNEL REPAIR
+# =============================================================================
+
+"""
+    repair_channels_per_epoch!(epochs::Vector{EpochData}, layout::Layout, threshold::Real, artifact_col::Symbol)
+
+Repair channels on a per-epoch basis for epochs with artifacts.
+
+This function identifies channels that exceed the artifact threshold in each epoch and repairs
+them using neighbor interpolation if good neighbors are available. This allows trial-by-trial 
+repair when channels have good neighbors.
+
+# Arguments
+- `epochs_list::Vector{EpochData}`: Vector of EpochData objects (one per condition)
+- `layout::Layout`: Layout object containing neighbor information
+- `threshold::Real`: Artifact detection threshold (e.g., 100.0 μV)
+- `artifact_col::Symbol`: Column name for artifact flags (e.g., :is_artifact_value_100)
+
+# Returns
+- `Tuple{Vector{Symbol}, Int}`: (unique_channels_repaired, epochs_repaired_count)
+
+# Examples
+```julia
+# Repair channels per epoch
+channels_repaired, epochs_repaired = repair_channels_per_epoch!(
+    epochs_cleaned, 
+    layout, 
+    100.0, 
+    :is_artifact_value_100
+)
+```
+"""
+function repair_channels_per_epoch!(
+    epochs_list::Vector{EpochData}, 
+    layout::Layout, 
+    threshold::Real, 
+    artifact_col::Symbol
+)::Tuple{Vector{Symbol}, Int}
+    
+    channels_with_artifacts = Symbol[]
+    epochs_repaired = 0
+    
+    for (condition_idx, epoch_data) in enumerate(epochs_list)
+        for epoch_idx in 1:length(epoch_data.data)
+            epoch_df = epoch_data.data[epoch_idx]
+            
+            if hasproperty(epoch_df, artifact_col)
+                if any(epoch_df[!, artifact_col])
+                    @info "Condition $condition_idx, Epoch $epoch_idx: Artifacts detected"
+                    
+                    eeg_channels = channel_labels(epoch_data)
+                    
+                    # Find which specific channels have artifacts (exceed threshold) in this epoch
+                    artifact_channels = Symbol[]
+                    
+                    for ch in eeg_channels
+                        if hasproperty(epoch_df, ch)
+                            ch_data = epoch_df[!, ch]
+                            max_val = maximum(abs.(ch_data))
+                            if max_val > threshold
+                                push!(artifact_channels, ch)
+                                @info "    - Channel $ch: max absolute value = $(round(max_val, sigdigits=3)), threshold = $threshold"
+                            end
+                        end
+                    end
+                    
+                    if !isempty(artifact_channels)
+                        # Check if any of these channels have good neighbors and can be repaired
+                        repaired_in_epoch = Symbol[]
+                        for ch in artifact_channels
+                            if haskey(layout.neighbours, ch)
+                                neighbors = layout.neighbours[ch]
+                                good_neighbors = setdiff(neighbors.channels, artifact_channels)
+                                if !isempty(good_neighbors)
+                                    @info "    - Channel $ch: Has $(length(good_neighbors)) good neighbors: $(good_neighbors), attempting repair"
+                                    push!(repaired_in_epoch, ch)
+                                    # Repair this channel for this specific epoch
+                                    repair_channels!(epoch_data, [ch]; epoch_selection = epochs(epoch_idx))
+                                    if ch ∉ channels_with_artifacts
+                                        push!(channels_with_artifacts, ch)
+                                    end
+                                else
+                                    @info "    - Channel $ch: No good neighbors available (all neighbors also have artifacts)"
+                                end
+                            else
+                                @info "    - Channel $ch: No neighbor information available in layout"
+                            end
+                        end
+                        
+                        if !isempty(repaired_in_epoch)
+                            epochs_repaired += 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    @info "Per-epoch repair summary: Repaired $(length(channels_with_artifacts)) unique channels across $(epochs_repaired) epochs"
+    @info "Channels repaired: $(channels_with_artifacts)"
+    
+    return (channels_with_artifacts, epochs_repaired)
+end
+

@@ -10,7 +10,7 @@ eegfun.polar_to_cartesian_xyz!(layout_file)
 dat = eegfun.read_bdf(data_file)
 dat = eegfun.create_eeg_dataframe(dat, layout_file)
 eegfun.rereference!(dat, :avg)
-eegfun.filter_data!(dat, "hp", 1)
+eegfun.filter_data!(dat, "hp", 0.1)
 
 summary = eegfun.channel_summary(dat)
 eegfun.log_pretty_table(summary; title = "Initial Channel Summary")

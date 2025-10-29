@@ -480,7 +480,7 @@ function _add_interactive_points!(
     for (i, label) in enumerate(layout.label)
         neighbor_indices[i] = Int[]
         if haskey(neighbours, Symbol(label))
-            for neighbor in neighbours[Symbol(label)].electrodes
+            for neighbor in neighbours[Symbol(label)].channels
                 neighbor_idx = findfirst(==(neighbor), layout.label)
                 if neighbor_idx !== nothing
                     push!(neighbor_indices[i], neighbor_idx)

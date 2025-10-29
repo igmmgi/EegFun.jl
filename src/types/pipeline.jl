@@ -72,12 +72,12 @@ end
 Configuration for EEG-specific preprocessing settings.
 
 # Fields
-- `artifact_value_criterion::Float64`: Threshold for artifact detection (μV)
-- `extreme_value_criterion::Float64`: Threshold for extreme value detection (μV)
+- `artifact_value_criterion::Int`: Threshold for artifact detection (μV)
+- `extreme_value_criterion::Int`: Threshold for extreme value detection (μV)
 """
 @kwdef struct EegConfig
-    artifact_value_criterion::Float64
-    extreme_value_criterion::Float64
+    artifact_value_criterion::Int
+    extreme_value_criterion::Int
 end
 
 """
@@ -93,8 +93,6 @@ Configuration for Independent Component Analysis.
     apply::Bool
     percentage_of_data::Float64
 end
-
-
 
 """
     PreprocessConfig
@@ -112,6 +110,7 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
 - `eog::EogConfig`: EOG channel calculation and detection settings
 - `eeg::EegConfig`: EEG-specific preprocessing settings
 - `ica::IcaConfig`: ICA configuration settings
+- `neighbour_criterion::Float64`: Distance criterion (in mm) for channel neighbour definition
 """
 @kwdef struct PreprocessConfig
     reference_channel::Symbol
@@ -121,6 +120,7 @@ pipeline, including filtering, referencing, artifact detection, and ICA settings
     eog::EogConfig
     eeg::EegConfig
     ica::IcaConfig
+    neighbour_criterion::Float64
 end
 
 # === CONSTRUCTORS ===
@@ -157,8 +157,8 @@ end
 
 function EegConfig(cfg::Dict)
     return EegConfig(
-        artifact_value_criterion = cfg["artifact_value_criterion"],
-        extreme_value_criterion = cfg["extreme_value_criterion"],
+        artifact_value_criterion = Int(cfg["artifact_value_criterion"]),
+        extreme_value_criterion = Int(cfg["extreme_value_criterion"]),
     )
 end
 
@@ -175,5 +175,6 @@ function PreprocessConfig(cfg::Dict)
         eog = EogConfig(cfg["eog"]),
         eeg = EegConfig(cfg["eeg"]),
         ica = IcaConfig(cfg["ica"]),
+        neighbour_criterion = cfg["layout"]["neighbour_criterion"],
     )
 end

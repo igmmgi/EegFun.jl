@@ -57,7 +57,7 @@ function detect_eog_onsets!(
     if channel_in ∉ propertynames(dat.data)
         @minimal_error_throw("channel $(channel_in) not found in data")
     end
-    step_size = div(dat.sample_rate, 20)
+    step_size = div(dat.sample_rate, step_size)
     eog_signal = dat.data[1:step_size:end, channel_in]
     eog_diff = diff(eog_signal)
     eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
@@ -223,6 +223,157 @@ function is_extreme_value!(
         end
     end
 
+    return nothing
+end
+
+"""
+    is_extreme_value!(dat::MultiDataFrameEeg, threshold::Int; 
+                     channel_selection::Function = channels(), 
+                     sample_selection::Function = samples(),
+                     epoch_selection::Function = epochs(),
+                     mode::Symbol = :combined,
+                     channel_out::Union{Symbol, Nothing} = nothing)
+
+Detect extreme values across selected channels in multi-DataFrame EEG data (e.g., EpochData).
+
+For each epoch DataFrame in the data, detects extreme values across selected channels and
+adds results to that epoch's DataFrame. Works similarly to the SingleDataFrameEeg version
+but processes each epoch separately.
+
+# Arguments
+- `dat::MultiDataFrameEeg`: The EEG data object (e.g., EpochData)
+- `threshold::Int`: Threshold for extreme value detection
+- `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
+- `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
+- `epoch_selection::Function`: Epoch predicate for selecting epochs (default: all epochs)
+- `mode::Symbol`: Mode of operation - `:combined` (single combined column, default) or `:separate` (separate columns per channel)
+- `channel_out::Union{Symbol, Nothing}`: Output channel name for combined mode (default: auto-generated as `is_extreme_value_<threshold>`)
+
+# Modifies
+- `dat`: Adds extreme value detection columns to each epoch DataFrame
+
+# Examples
+```julia
+# Detect extreme values in all epochs (default)
+is_extreme_value!(epoch_data, 100)
+
+# Detect extreme values only in specific epochs
+is_extreme_value!(epoch_data, 100, epoch_selection = epochs([1, 3, 5]))
+
+# Detect with custom output channel name
+is_extreme_value!(epoch_data, 100, channel_out = :is_artifact_value_100)
+```
+"""
+function is_extreme_value!(
+    dat::MultiDataFrameEeg,
+    threshold::Int;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    epoch_selection::Function = epochs(),
+    mode::Symbol = :combined,
+    channel_out::Union{Symbol,Nothing} = nothing,
+)
+    # Validate mode/threshold
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined, got :$mode")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0, got :$threshold")
+
+    # Get selected channels
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+    if isempty(selected_channels)
+        @minimal_error_throw("No channels selected for extreme value detection")
+    end
+
+    # Get selected epochs
+    selected_epochs = get_selected_epochs(dat, epoch_selection)
+    if isempty(selected_epochs)
+        @minimal_error_throw("No epochs selected for extreme value detection")
+    end
+
+    # Use provided channel_out or generate default name
+    output_channel = channel_out === nothing ? Symbol("is_extreme_value_$(threshold)") : channel_out
+
+    # Process each selected epoch
+    for epoch_idx in selected_epochs
+        epoch_df = dat.data[epoch_idx]
+        
+        # Get selected samples for this epoch
+        selected_samples = get_selected_samples(epoch_df, sample_selection)
+        
+        # Initialize artifact flag column for this epoch
+        if hasproperty(epoch_df, output_channel)
+            epoch_df[!, output_channel] .= false
+        else
+            epoch_df[!, output_channel] = falses(nrow(epoch_df))
+        end
+
+        if mode == :combined
+            # Combined mode - single output column (OR across all channels)
+            for ch in selected_channels
+                if hasproperty(epoch_df, ch)
+                    ch_data = epoch_df[!, ch]
+                    extreme_mask = _is_extreme_value(ch_data, Float64(threshold))
+                    
+                    # Apply sample selection
+                    sample_mask = falses(length(extreme_mask))
+                    sample_mask[selected_samples] .= true
+                    extreme_mask = extreme_mask .& sample_mask
+                    
+                    # Update artifact flag (OR operation)
+                    epoch_df[!, output_channel] .|= extreme_mask
+                end
+            end
+        else
+            # Separate mode - separate column for each channel
+            for ch in selected_channels
+                if hasproperty(epoch_df, ch)
+                    ch_data = epoch_df[!, ch]
+                    extreme_mask = _is_extreme_value(ch_data, Float64(threshold))
+                    
+                    # Apply sample selection
+                    sample_mask = falses(length(extreme_mask))
+                    sample_mask[selected_samples] .= true
+                    extreme_mask = extreme_mask .& sample_mask
+                    
+                    column_name = Symbol("is_extreme_value_$(ch)_$(threshold)")
+                    epoch_df[!, column_name] = extreme_mask
+                end
+            end
+        end
+    end
+
+    return nothing
+end
+
+"""
+    is_extreme_value!(epochs_list::Vector{EpochData}, threshold::Int; kwargs...)
+
+Detect extreme values across multiple EpochData objects (conditions).
+
+Applies extreme value detection to each EpochData object in the vector. This is useful
+when processing multiple experimental conditions.
+
+# Arguments
+- `epochs_list::Vector{EpochData}`: Vector of EpochData objects (one per condition)
+- `threshold::Int`: Threshold for extreme value detection
+- `kwargs...`: Same keyword arguments as `is_extreme_value!(dat::MultiDataFrameEeg, ...)`
+
+# Examples
+```julia
+# Detect extreme values in all conditions
+is_extreme_value!(epochs_cleaned, 100)
+
+# Detect with custom output channel name
+is_extreme_value!(epochs_cleaned, 100, channel_out = :is_artifact_value_100)
+```
+"""
+function is_extreme_value!(
+    epochs_list::Vector{EpochData},
+    threshold::Int;
+    kwargs...
+)
+    for epoch_data in epochs_list
+        is_extreme_value!(epoch_data, threshold; kwargs...)
+    end
     return nothing
 end
 
@@ -425,13 +576,11 @@ Internal function to count extreme values for specified channels.
 """
 function _n_extreme_value(df::DataFrame, channels::Vector{Symbol}, threshold::Float64)
     counts = Int[]
-
     for ch in channels
         channel_data = df[!, ch]
         extreme_mask = _is_extreme_value(channel_data, threshold)
         push!(counts, sum(extreme_mask))
     end
-
     return counts
 end
 
@@ -591,11 +740,14 @@ function detect_bad_epochs_automatic(
 )::EpochRejectionInfo
 
     # Validate inputs
-    if z_criterion <= 0
-        @minimal_error_throw("Z-criterion must be positive, got $z_criterion")
+    if z_criterion < 0
+        @minimal_error_throw("Z-criterion must be non-negative, got $z_criterion")
     end
     if abs_criterion < 0
         @minimal_error_throw("Absolute criterion must be non-negative, got $abs_criterion")
+    end
+    if z_criterion == 0 && abs_criterion == 0
+        @minimal_error_throw("At least one of z_criterion or abs_criterion must be greater than 0")
     end
 
     # Get selected channels
@@ -609,18 +761,20 @@ function detect_bad_epochs_automatic(
     # Combine all rejected epochs
     rejected_epochs_vectors = []
 
-    # Add z-score based rejections (z_criterion is always > 0 now)
-    append!(
-        rejected_epochs_vectors,
-        [
-            values(metrics[:z_variance])...,
-            values(metrics[:z_max])...,
-            values(metrics[:z_min])...,
-            values(metrics[:z_abs])...,
-            values(metrics[:z_range])...,
-            values(metrics[:z_kurtosis])...,
-        ],
-    )
+    # Add z-score based rejections if z_criterion > 0
+    if z_criterion > 0
+        append!(
+            rejected_epochs_vectors,
+            [
+                values(metrics[:z_variance])...,
+                values(metrics[:z_max])...,
+                values(metrics[:z_min])...,
+                values(metrics[:z_abs])...,
+                values(metrics[:z_range])...,
+                values(metrics[:z_kurtosis])...,
+            ],
+        )
+    end
 
     # Add absolute threshold rejections if abs_criterion > 0
     if abs_criterion > 0
@@ -649,16 +803,24 @@ function detect_bad_epochs_automatic(
     end
 
     # Define metric mappings
-    metric_mappings = [
-        (:z_variance, z_variance, metric_sets[:z_variance]),
-        (:z_max, z_max, metric_sets[:z_max]),
-        (:z_min, z_min, metric_sets[:z_min]),
-        (:z_abs, z_abs, metric_sets[:z_abs]),
-        (:z_range, z_range, metric_sets[:z_range]),
-        (:z_kurtosis, z_kurtosis, metric_sets[:z_kurtosis]),
-    ]
+    metric_mappings = []
+    
+    # Add z-score metrics if z_criterion > 0
+    if z_criterion > 0
+        append!(
+            metric_mappings,
+            [
+                (:z_variance, z_variance, metric_sets[:z_variance]),
+                (:z_max, z_max, metric_sets[:z_max]),
+                (:z_min, z_min, metric_sets[:z_min]),
+                (:z_abs, z_abs, metric_sets[:z_abs]),
+                (:z_range, z_range, metric_sets[:z_range]),
+                (:z_kurtosis, z_kurtosis, metric_sets[:z_kurtosis]),
+            ],
+        )
+    end
 
-    # Add absolute threshold if provided
+    # Add absolute threshold if abs_criterion > 0
     if abs_criterion > 0
         push!(metric_mappings, (:absolute_threshold, absolute_threshold, metric_sets[:absolute_threshold]))
     end
@@ -832,7 +994,11 @@ Display rejection information in a human-readable format.
 """
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo:")
-    println(io, "  Z-criterion: $(info.z_criterion)")
+    if info.z_criterion > 0
+        println(io, "  Z-criterion: $(info.z_criterion)")
+    else
+        println(io, "  Z-criterion: disabled (0)")
+    end
     if info.abs_criterion > 0
         println(io, "  Abs criterion: $(info.abs_criterion) μV")
     else
@@ -841,32 +1007,36 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "  Number epochs: $(info.n_epochs)")
     println(io, "  Number artifacts: $(info.n_artifacts)")
     println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected_epochs)))\n")
-    println(io, "  Rejection breakdown (z-score):")
-    println(
-        io,
-        "    Z-Variance:  $(length(unique_epochs(info.z_variance))) unique epochs, $(length(unique_channels(info.z_variance))) unique channels",
-    )
-    println(
-        io,
-        "    Z-Maximum:   $(length(unique_epochs(info.z_max))) unique epochs, $(length(unique_channels(info.z_max))) unique channels",
-    )
-    println(
-        io,
-        "    Z-Minimum:   $(length(unique_epochs(info.z_min))) unique epochs, $(length(unique_channels(info.z_min))) unique channels",
-    )
-    println(
-        io,
-        "    Z-Absolute:  $(length(unique_epochs(info.z_abs))) unique epochs, $(length(unique_channels(info.z_abs))) unique channels",
-    )
-    println(
-        io,
-        "    Z-Range:     $(length(unique_epochs(info.z_range))) unique epochs, $(length(unique_channels(info.z_range))) unique channels",
-    )
-    println(
-        io,
-        "    Z-Kurtosis:  $(length(unique_epochs(info.z_kurtosis))) unique epochs, $(length(unique_channels(info.z_kurtosis))) unique channels",
-    )
-    if info.abs_criterion !== nothing
+    
+    if info.z_criterion > 0
+        println(io, "  Rejection breakdown (z-score):")
+        println(
+            io,
+            "    Z-Variance:  $(length(unique_epochs(info.z_variance))) unique epochs, $(length(unique_channels(info.z_variance))) unique channels",
+        )
+        println(
+            io,
+            "    Z-Maximum:   $(length(unique_epochs(info.z_max))) unique epochs, $(length(unique_channels(info.z_max))) unique channels",
+        )
+        println(
+            io,
+            "    Z-Minimum:   $(length(unique_epochs(info.z_min))) unique epochs, $(length(unique_channels(info.z_min))) unique channels",
+        )
+        println(
+            io,
+            "    Z-Absolute:  $(length(unique_epochs(info.z_abs))) unique epochs, $(length(unique_channels(info.z_abs))) unique channels",
+        )
+        println(
+            io,
+            "    Z-Range:     $(length(unique_epochs(info.z_range))) unique epochs, $(length(unique_channels(info.z_range))) unique channels",
+        )
+        println(
+            io,
+            "    Z-Kurtosis:  $(length(unique_epochs(info.z_kurtosis))) unique epochs, $(length(unique_channels(info.z_kurtosis))) unique channels",
+        )
+    end
+    
+    if info.abs_criterion > 0
         println(io, "")
         println(io, "  Rejection breakdown (absolute):")
         println(

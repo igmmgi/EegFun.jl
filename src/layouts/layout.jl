@@ -448,7 +448,7 @@ function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
             if distance_sq <= distance_criterion^2
                 distance = sqrt(distance_sq)
-                push!(neighbour_dict[Symbol(label1)].electrodes, label2)
+                push!(neighbour_dict[Symbol(label1)].channels, label2)
                 push!(neighbour_dict[Symbol(label1)].distances, distance)
             end
         end
@@ -457,7 +457,7 @@ function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
         distances = neighbour_dict[Symbol(label1)].distances
         inv_distances = 1 ./ distances  # Inverse of distances
         total_inv_distance = sum(inv_distances)
-        for idx in eachindex(neighbour_dict[Symbol(label1)].electrodes)
+        for idx in eachindex(neighbour_dict[Symbol(label1)].channels)
             push!(neighbour_dict[Symbol(label1)].weights, inv_distances[idx] / total_inv_distance)
         end
 
@@ -523,7 +523,7 @@ function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
             if distance_sq <= distance_criterion^2
                 distance = sqrt(distance_sq)
-                push!(neighbour_dict[Symbol(label1)].electrodes, label2)
+                push!(neighbour_dict[Symbol(label1)].channels, label2)
                 push!(neighbour_dict[Symbol(label1)].distances, distance)
             end
 
@@ -533,7 +533,7 @@ function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
         distances = neighbour_dict[Symbol(label1)].distances
         inv_distances = 1 ./ distances  # Inverse of distances
         total_inv_distance = sum(inv_distances)
-        for idx in eachindex(neighbour_dict[Symbol(label1)].electrodes)
+        for idx in eachindex(neighbour_dict[Symbol(label1)].channels)
             push!(neighbour_dict[Symbol(label1)].weights, inv_distances[idx] / total_inv_distance)
         end
 
@@ -569,10 +569,10 @@ function _format_neighbours_toml(neighbours_dict::OrderedDict{Symbol,Neighbours}
     for (electrode, neighbours) in neighbours_dict
         electrode_str = string(electrode)
         toml_dict["electrodes"][electrode_str] = OrderedDict(
-            "neighbours" => [string(n) for n in neighbours.electrodes],
+            "neighbours" => [string(n) for n in neighbours.channels],
             "distances" => [round(d, digits = 4) for d in neighbours.distances],
             "weights" => [round(w, digits = 6) for w in neighbours.weights],
-            "neighbour_count" => length(neighbours.electrodes),
+            "neighbour_count" => length(neighbours.channels),
         )
     end
 
@@ -641,7 +641,7 @@ function average_number_of_neighbours(neighbours_dict::OrderedDict{Symbol,Neighb
     if isempty(neighbours_dict)
         return 0.0
     end
-    total_neighbours = sum(length(neighbours.electrodes) for neighbours in values(neighbours_dict))
+    total_neighbours = sum(length(neighbours.channels) for neighbours in values(neighbours_dict))
     return total_neighbours / length(neighbours_dict)
 end
 
@@ -747,14 +747,14 @@ _format_electrode(io, :Fp1, neighbours_struct)
 ```
 """
 function _format_electrode(io, electrode, neighbours)
-    n_neighbours = length(neighbours.electrodes)
+    n_neighbours = length(neighbours.channels)
     avg_distance = round(mean(neighbours.distances), digits = 1)
 
     println(io, "$(rpad(string(electrode), 6)): $(n_neighbours) neighbours (avg dist: $(avg_distance))")
     if n_neighbours > 0
         neighbour_details = []
         for j = 1:n_neighbours
-            neighbour = string(neighbours.electrodes[j])
+            neighbour = string(neighbours.channels[j])
             distance = round(neighbours.distances[j], digits = 1)
             weight = round(neighbours.weights[j], digits = 3)
             push!(neighbour_details, "$(neighbour) ($(distance),$(weight))")

@@ -10,6 +10,10 @@ eegfun.polar_to_cartesian_xyz!(layout_file)
 dat = eegfun.read_bdf(data_file)
 dat = eegfun.create_eeg_dataframe(dat, layout_file)
 eegfun.rereference!(dat, :avg)
-eegfun.filter_data!(dat, "hp", 1)
+eegfun.filter_data!(dat, "hp", 0.1)
+
+eegfun.is_extreme_value!(dat, 100)
 
 channel_joint_probability = eegfun.channel_joint_probability(dat)
+
+channel_joint_probability = eegfun.channel_joint_probability(dat, sample_selection = eegfun.samples_not(:is_extreme_value_100))
