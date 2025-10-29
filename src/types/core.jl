@@ -65,12 +65,12 @@ The distances and weights are typically calculated based on electrode
 positions in 2D or 3D space.
 
 # Fields
-- `electrodes::Vector{Symbol}`: List of neighboring electrode labels
+- `channels::Vector{Symbol}`: List of neighboring channel labels
 - `distances::Vector{Float64}`: Distances to each neighbor in mm
 - `weights::Vector{Float64}`: Interpolation weights for each neighbor
 """
 struct Neighbours
-    electrodes::Vector{Symbol}
+    channels::Vector{Symbol}
     distances::Vector{Float64}
     weights::Vector{Float64}
 end

@@ -173,15 +173,15 @@ function _correlation_matrix_dual_selection(
 end
 
 """
-    channel_joint_probability(dat::SingleDataFrameEeg; channel_selection::Function = channels(), threshold::Real = 0.5, normalize::Int = 1, discret::Int = 1000)
+    channel_joint_probability(dat::SingleDataFrameEeg; channel_selection::Function = channels(), threshold::Real = 5.0, normalize::Int = 2, discret::Int = 1000)
 
 Calculate joint probability of extreme values across EEG channels.
 
 # Arguments
 - `dat::SingleDataFrameEeg`: The EEG data object
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: channels() - all channels)
-- `threshold::Real`: Threshold for extreme value detection (default: 0.5)
-- `normalize::Int`: Normalization method (default: 1)
+- `threshold::Real`: Threshold for extreme value detection (default: 5.0)
+- `normalize::Int`: Normalization method (default: 2)
 - `discret::Int`: Number of discretization bins (default: 1000)
 
 # Returns
@@ -515,3 +515,171 @@ function correlation_matrix_eog(
         include_extra_selection2 = true  # EOG channels are typically extra channels
     )
 end
+
+# =============================================================================
+# BAD CHANNEL IDENTIFICATION
+# =============================================================================
+
+"""
+    identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; 
+                         zvar_criterion::Real = 3.0)::Vector{Symbol}
+
+Identify bad channels based on channel summary z-variance and joint probability criteria.
+
+# Arguments
+- `summary_df::DataFrame`: Channel summary DataFrame (output from channel_summary)
+- `joint_prob_df::DataFrame`: Joint probability DataFrame (output from channel_joint_probability)
+- `zvar_criterion::Real`: Z-variance threshold for bad channel identification (default: 3.0)
+
+# Returns
+- `Vector{Symbol}`: Vector of channel names identified as bad channels
+
+# Examples
+```julia
+# Get channel summary and joint probability
+summary_df = channel_summary(dat)
+joint_prob_df = channel_joint_probability(dat)
+
+# Identify bad channels with default criteria
+bad_channels = identify_bad_channels(summary_df, joint_prob_df)
+
+# Use custom z-variance criterion
+bad_channels = identify_bad_channels(summary_df, joint_prob_df, zvar_criterion = 2.5)
+```
+"""
+function identify_bad_channels(
+    summary_df::DataFrame, 
+    joint_prob_df::DataFrame; 
+    zvar_criterion::Real = 3.0
+)::Vector{Symbol}
+    
+    # Identify bad channels based on z-variance criterion
+    bad_by_zvar = summary_df[abs.(summary_df.zvar) .> zvar_criterion, :channel]
+    
+    # Identify bad channels based on joint probability criterion
+    bad_by_jp = joint_prob_df[joint_prob_df.rejection, :channel]
+    
+    # Combine both criteria (union of bad channels)
+    all_bad_channels = unique(vcat(bad_by_zvar, bad_by_jp))
+    
+    return all_bad_channels
+end
+
+"""
+    filter_eog_correlated_channels(bad_channels::Vector{Symbol}, eog_correlation_df::DataFrame; 
+                                  eog_correlation_threshold::Real = 0.3)::Vector{Symbol}
+
+Filter out channels that are highly correlated with EOG channels from the bad channel list.
+These channels are likely contaminated by eye movements/blinks and can be corrected with ICA.
+
+# Arguments
+- `bad_channels::Vector{Symbol}`: Vector of bad channel names
+- `eog_correlation_df::DataFrame`: EOG correlation matrix DataFrame (output from correlation_matrix_eog)
+- `eog_correlation_threshold::Real`: Correlation threshold for EOG contamination (default: 0.3)
+
+# Returns
+- `Vector{Symbol}`: Bad channels with EOG-correlated channels removed
+
+# Examples
+```julia
+# Get bad channels and EOG correlations
+bad_channels = identify_bad_channels(summary_df, joint_prob_df)
+eog_corr = correlation_matrix_eog(dat, eog_cfg)
+
+# Filter out EOG-correlated channels
+bad_channels_filtered = filter_eog_correlated_channels(bad_channels, eog_corr)
+```
+"""
+function filter_eog_correlated_channels(
+    bad_channels::Vector{Symbol}, 
+    eog_correlation_df::DataFrame; 
+    eog_correlation_threshold::Real = 0.3
+)::Vector{Symbol}
+    
+    if isempty(bad_channels)
+        return bad_channels
+    end
+    
+    # Get EOG channel names from the correlation matrix
+    # Look for both vEOG and hEOG channels
+    eog_channels = Symbol[]
+    for col in names(eog_correlation_df)
+        col_str = string(col)
+        if col != :row && (occursin("EOG", col_str) || occursin("vEOG", col_str) || occursin("hEOG", col_str))
+            push!(eog_channels, col)
+        end
+    end
+    
+    if isempty(eog_channels)
+        @warn "No EOG channels found in correlation matrix. Available columns: $(names(eog_correlation_df))"
+        return bad_channels
+    end
+    
+    # Find channels highly correlated with any EOG channel
+    eog_correlated_channels = Symbol[]
+    
+    for bad_ch in bad_channels
+        # Find the row for this bad channel
+        bad_ch_row = eog_correlation_df[eog_correlation_df.row .== bad_ch, :]
+        
+        if nrow(bad_ch_row) > 0
+            # Check correlation with each EOG channel
+            for eog_ch in eog_channels
+                if hasproperty(bad_ch_row, eog_ch)
+                    correlation = abs(bad_ch_row[1, eog_ch])
+                    if correlation > eog_correlation_threshold
+                        push!(eog_correlated_channels, bad_ch)
+                        break  # No need to check other EOG channels for this bad channel
+                    end
+                end
+            end
+        end
+    end
+    
+    # Remove EOG-correlated channels from bad channel list
+    filtered_channels = setdiff(bad_channels, eog_correlated_channels)
+    
+    return filtered_channels
+end
+
+"""
+    check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::Vector{Symbol}
+
+Check which bad channels have good neighbors that can be used for repair.
+
+# Arguments
+- `bad_channels::Vector{Symbol}`: Vector of bad channel names
+- `layout::Layout`: Layout object containing neighbor information
+
+# Returns
+- `Vector{Symbol}`: Bad channels that have good neighbors (can be repaired)
+
+# Examples
+```julia
+# Check which bad channels can be repaired
+repairable_channels = check_channel_neighbors(bad_channels, layout)
+```
+"""
+function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::Vector{Symbol}
+    
+    if isempty(bad_channels)
+        return bad_channels
+    end
+    
+    repairable_channels = Symbol[]
+    
+    for bad_ch in bad_channels
+        # Check if this channel has neighbors defined in the layout
+        if haskey(layout.neighbours, bad_ch)
+            neighbors = layout.neighbours[bad_ch]
+            # Check if any neighbors are NOT in the bad channels list
+            good_neighbors = setdiff(neighbors.channels, bad_channels)
+            if !isempty(good_neighbors)
+                push!(repairable_channels, bad_ch)
+            end
+        end
+    end
+    
+    return repairable_channels
+end
+

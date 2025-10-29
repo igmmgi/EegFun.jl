@@ -965,6 +965,12 @@ function get_selected_samples(dat::DataFrame, sample_selection::Function)
     return findall(sample_selection(dat))
 end
 
+# Helper to select epochs based on a predicate
+function get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection::Function)
+    all_epochs = 1:length(dat.data)
+    return findall(epoch_selection(all_epochs))
+end
+
 
 
 

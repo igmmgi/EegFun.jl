@@ -32,7 +32,7 @@ using eegfun
     @testset "Neighbours" begin
         # Test constructor
         neighbours = eegfun.Neighbours([:Fz, :Cz], [10.0, 15.0], [0.5, 0.5])
-        @test neighbours.electrodes == [:Fz, :Cz]
+        @test neighbours.channels == [:Fz, :Cz]
         @test neighbours.distances == [10.0, 15.0]
         @test neighbours.weights == [0.5, 0.5]
 

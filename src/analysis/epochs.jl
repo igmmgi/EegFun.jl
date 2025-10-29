@@ -740,11 +740,11 @@ function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
     end
 
     n_epochs = length(dat.data)
-    rejected_indices = [r.epoch for r in info.rejected_epochs]
+    rejected_indices = unique([r.epoch for r in info.rejected_epochs])
     epochs_to_keep = setdiff(1:n_epochs, rejected_indices)
     dat.data = dat.data[epochs_to_keep]
 
-    @info "Rejected $(length(info.rejected_epochs)) of $(info.n_epochs) epochs."
+    @info "Rejected $(length(rejected_indices)) of $(info.n_epochs) epochs."
 
     return dat
 end
@@ -776,6 +776,29 @@ function reject_epochs(dat::EpochData, info::EpochRejectionInfo)::EpochData
     reject_epochs!(dat_copy, info)
     return dat_copy
 end
+
+"""
+    reject_epochs(dat::Vector{EpochData}, info::Vector{EpochRejectionInfo})::Vector{EpochData}
+
+Remove epochs identified in `info` from each `EpochData` in `dat`.
+
+# Arguments
+- `dat::Vector{EpochData}`: Vector of epoched EEG data to filter
+- `info::Vector{EpochRejectionInfo}`: Vector of rejection information (one per condition)
+
+# Returns
+- `Vector{EpochData}`: Vector of new EpochData objects with rejected epochs removed
+
+# Examples
+```julia
+# Detect bad epochs for multiple conditions
+rejection_info = detect_bad_epochs_automatic(epochs)
+
+# Get cleaned copies (originals preserved)
+cleaned_epochs = reject_epochs(epochs, rejection_info)
+```
+"""
+reject_epochs(dat::Vector{EpochData}, info::Vector{EpochRejectionInfo})::Vector{EpochData} = reject_epochs.(dat, info)
 
 
 """
@@ -838,7 +861,7 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
 
     # Log removal statistics
     if n_removed > 0
-        @minimal_warning "Condition $(dat.data[1].condition[1]) ($(dat.data[1].condition_name[1])) removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
+        @info "Condition $(dat.data[1].condition[1]) ($(dat.data[1].condition_name[1])) removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
     end
 
     # Return new EpochData with only good epochs
