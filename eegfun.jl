@@ -11,4 +11,4 @@ using GLMakie
 # using CairoMakie
 # using BenchmarkTools
 # while preprocessing routine
-eegfun.preprocess("pipeline.toml", log_level = "info")
+eegfun.preprocess("pipeline.toml", log_level = :info)

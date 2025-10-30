@@ -49,21 +49,21 @@ global_log = setup_global_logging("global_analysis.log")
 write(global_log, "Direct write to global log\\n")
 ```
 """
-function setup_global_logging(log_file::String; log_level::String = "info")
-    # Convert string log level to LogLevel
-    level = if log_level == "debug"
-        Logging.Debug
-    elseif log_level == "info"
-        Logging.Info
-    elseif log_level == "warn"
-        Logging.Warn
-    elseif log_level == "error"
-        Logging.Error
-    else
-        Logging.Info  # Default fallback
-    end
 
-    # Store the current log level
+# Internal: normalize log level
+_to_loglevel(level::Symbol) =
+    level === :debug ? Logging.Debug :
+    level === :info  ? Logging.Info  :
+    level === :warn  ? Logging.Warn  :
+    level === :error ? Logging.Error : Logging.Info
+
+# Back-compat overload for String input
+_to_loglevel(level::String) = _to_loglevel(Symbol(lowercase(level)))
+
+function setup_global_logging(log_file::String; log_level::Symbol = :info)
+
+    # Convert log level to LogLevel and store it
+    level = _to_loglevel(log_level)
     current_log_level[] = level
 
     # Close any existing global log file
@@ -144,19 +144,9 @@ setup_logging("my_analysis.log")
 @info "This will be logged to both stdout and the file"
 ```
 """
-function setup_logging(log_file::String; log_level::String = "info")
-    # Convert string log level to LogLevel
-    level = if log_level == "debug"
-        Logging.Debug
-    elseif log_level == "info"
-        Logging.Info
-    elseif log_level == "warn"
-        Logging.Warn
-    elseif log_level == "error"
-        Logging.Error
-    else
-        Logging.Info  # Default fallback
-    end
+function setup_logging(log_file::String; log_level::Symbol = :info)
+    # Convert log level to LogLevel
+    level = _to_loglevel(log_level)
 
     # Store the current log level
     current_log_level[] = level
