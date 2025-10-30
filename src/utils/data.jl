@@ -871,7 +871,9 @@ log_pretty_table(df; log_level = :warn, title = "Warning Table")
 ```
 """
 function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
+
     table_output = sprint() do output_io
+        # TODO: better way of doing this?
         # Set a large display size to avoid terminal limitations (i.e., cropping!)
         io_context = IOContext(output_io, :displaysize => (2000, 2000))
         pretty_table(io_context, df; kwargs...)
@@ -944,7 +946,6 @@ end
 
 # Helper to select components based on a predicate
 function get_selected_components(ica_result::InfoIca, component_selection::Function)
-    # Get all component indices (1 to n_components)
     all_components = 1:length(ica_result.ica_label)
     return all_components[component_selection(all_components)]
 end
@@ -953,12 +954,11 @@ end
 function get_selected_samples(dat::SingleDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data))
 end
+
 # Helper to select samples based on a predicate
 function get_selected_samples(dat::MultiDataFrameEeg, sample_selection::Function)
     return findall(sample_selection(dat.data[1])) # assume all data have the same samples
 end
-
-
 
 # Helper to select samples from a DataFrame
 function get_selected_samples(dat::DataFrame, sample_selection::Function)

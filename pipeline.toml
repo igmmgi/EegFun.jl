@@ -22,7 +22,7 @@ highpass.method = "iir"
 highpass.func = "filtfilt"
 highpass.order = 1
 
-lowpass.apply = true
+lowpass.apply = false
 lowpass.type = "lp"
 lowpass.freq = 30.0
 lowpass.method = "iir"

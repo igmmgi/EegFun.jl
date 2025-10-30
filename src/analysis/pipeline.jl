@@ -1,13 +1,13 @@
 """
-    preprocess(config::String; log_level::String = "info")
+    preprocess(config::String; log_level::Symbol = :info)
 
 Preprocess EEG data according to the specified configuration file.
 
 # Arguments
 - `config::String`: Path to the configuration file in TOML format
-- `log_level::String`: Log level for preprocessing ("debug", "info", "warn", "error")
+- `log_level::Symbol`: Log level for preprocessing (:debug, :info, :warn, :error)
 """
-function preprocess(config::String; log_level::String = "info")
+function preprocess(config::String; log_level::Symbol = :info)
 
     # set up the global log for overall processing
     global_log = setup_global_logging("preprocess_eeg_data.log", log_level = log_level)
@@ -78,7 +78,7 @@ function preprocess(config::String; log_level::String = "info")
 
             try
 
-                # Inddividual file processing
+                # Individual file processing
                 @info section("Processing")
                 @info "File: $data_file"
 
@@ -100,14 +100,16 @@ function preprocess(config::String; log_level::String = "info")
                 end
 
                 # Mark epoch windows
-                # This is useful for sample subsetting within the preprocessing pipeline
+                # This is useful for x (time/sample) subsetting within the preprocessing pipeline
+                @info section("Marking epoch windows")
+                @info "Epoch windows: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
                 mark_epoch_windows!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
                 
                 ################### REREFERENCE DATA ###################
                 @info section("Rereference")
                 rereference!(dat, preprocess_cfg.reference_channel)
 
-                ################### APPLY FILTERS ###################
+                ################### APPLY INITIAL FILTERS ###################
                 @info section("Initial Filters")
                 @info "Continuous data filters: $(_applied_filters(preprocess_cfg.filter, filter_sections = [:highpass, :lowpass]))"
                 filter_data!(dat, preprocess_cfg.filter)
@@ -125,13 +127,13 @@ function preprocess(config::String; log_level::String = "info")
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix")
                 hEOG_vEOG_cm = eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog)
                 eegfun.add_zscore_columns!(hEOG_vEOG_cm)
-                log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)", log_level = :debug)
+                log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
 
                 # Calculate correlations between all channels and EOG channels (epoch window)
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch window)")
                 hEOG_vEOG_cm_epoch = eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
                 eegfun.add_zscore_columns!(hEOG_vEOG_cm_epoch)
-                log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)", log_level = :debug)
+                log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)")
 
                 #################### INITIAL EPOCH and ERP EXTRACTION ###################
                 # This is just the initial epoch extraction and not the cleaned epoched data.
@@ -166,9 +168,6 @@ function preprocess(config::String; log_level::String = "info")
                 log_pretty_table(summary_epoch_window; title = "Channel Summary (epoch window)")
 
                 #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
-                # This is the initial artifact detection on the continuous data and just looks for sections of 
-                # data that are extreme (i.e., beyond a certain threshold and unlikely to be real data).
-                # This is used as a sample selection subset for the ICA data selection.
                 @info subsection("Artifact Detection (extreme values)")
                 @info "Detecting extreme values: $(preprocess_cfg.eeg.extreme_value_criterion)μV"
                 is_extreme_value!(
@@ -197,21 +196,25 @@ function preprocess(config::String; log_level::String = "info")
                 cjp_epoch_window = channel_joint_probability(dat, sample_selection = samples(:epoch_window))
                 log_pretty_table(cjp_epoch_window; title = "Channel Joint Probability (epoch window)")
 
+                @info subsubsection("Bad Channels")
                 bad_channels_whole_dataset = identify_bad_channels(summary_whole_dataset, cjp_whole_dataset)
                 bad_channels_epoch_window = identify_bad_channels(summary_epoch_window, cjp_epoch_window)
                 
                 # Separate identification within whole dataset and epoch windows and taking common seems more reliable
                 bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_window)
                
-                # Some channels may be classified as "bad" as they have a lot of EOG-related activity, thus 
-                # we need to filter out these channels that are highly correlated with EOG channels.
-                # Use epoch window correlation matrix for filtering
-                bad_channels_non_eog_related = filter_eog_correlated_channels(bad_channels, hEOG_vEOG_cm_epoch)
+                # Some channels may be classified as "bad" due to EOG-related activity.
+                # Partition into non-EOG-related (retain) and EOG-related (prob. handled better via ICA later).
+                bad_channels_non_eog_related, bad_channels_eog_related = partition_channels_by_eog_correlation(
+                    bad_channels, hEOG_vEOG_cm_epoch;
+                    eog_channels = [:hEOG, :vEOG], threshold = 0.3, use_z = false,
+                )
                
                 # We can only really repair channels that have good neighbours with the neighbour approach.
                 repairable_channels = check_channel_neighbors(bad_channels_non_eog_related, layout)
                 
-                @info "Bad channels: $(length(bad_channels_non_eog_related)) channels - $(bad_channels_non_eog_related)"
+                @info "Bad channels (non-EOG related): $(length(bad_channels_non_eog_related)) channels - $(bad_channels_non_eog_related)"
+                @info "Bad channels (EOG related): $(length(bad_channels_eog_related)) channels - $(bad_channels_eog_related)"
                 @info "Repairable channels: $(length(repairable_channels)) channels - $(repairable_channels)"
 
                 #################### Independent Component Analysis (ICA) ###################
@@ -441,6 +444,5 @@ function section(title::String; width::Int = 80)
     return "\n$dash_line\n$middle_line\n$dash_line"
 end
 
-function subsection(title::String; width::Int = 80)
-    return "\n" * _center_title(title, width)
-end
+subsection(title::String; width::Int = 80) = "\n" * _center_title(title, width)
+subsubsection(title::String) = "\n# " * title

@@ -566,80 +566,53 @@ function identify_bad_channels(
 end
 
 """
-    filter_eog_correlated_channels(bad_channels::Vector{Symbol}, eog_correlation_df::DataFrame; 
-                                  eog_correlation_threshold::Real = 0.3)::Vector{Symbol}
+    partition_channels_by_eog_correlation(bad_channels::Vector{Symbol}, eog_correlation_df::DataFrame;
+                                          eog_channels::Vector{Symbol} = [:hEOG, :vEOG],
+                                          threshold::Real = 0.3,
+                                          use_z::Bool = false)::Tuple{Vector{Symbol},Vector{Symbol}}
 
-Filter out channels that are highly correlated with EOG channels from the bad channel list.
-These channels are likely contaminated by eye movements/blinks and can be corrected with ICA.
+Partition bad channels into two groups based on correlation with EOG columns:
+- First element: bad channels NOT highly correlated with EOG (retain for non-EOG handling)
+- Second element: bad channels correlated with EOG (prefer ICA handling)
 
 # Arguments
 - `bad_channels::Vector{Symbol}`: Vector of bad channel names
-- `eog_correlation_df::DataFrame`: EOG correlation matrix DataFrame (output from correlation_matrix_eog)
-- `eog_correlation_threshold::Real`: Correlation threshold for EOG contamination (default: 0.3)
-
-# Returns
-- `Vector{Symbol}`: Bad channels with EOG-correlated channels removed
-
-# Examples
-```julia
-# Get bad channels and EOG correlations
-bad_channels = identify_bad_channels(summary_df, joint_prob_df)
-eog_corr = correlation_matrix_eog(dat, eog_cfg)
-
-# Filter out EOG-correlated channels
-bad_channels_filtered = filter_eog_correlated_channels(bad_channels, eog_corr)
-```
+- `eog_correlation_df::DataFrame`: EOG correlation matrix DataFrame
+- `eog_channels::Vector{Symbol}`: EOG columns to use (default: `[:hEOG, :vEOG]`)
+- `threshold::Real`: Correlation threshold (default: 0.3)
+- `use_z::Bool`: If true, use z-scored equivalents (e.g., `:z_hEOG`, `:z_vEOG`)
 """
-function filter_eog_correlated_channels(
-    bad_channels::Vector{Symbol}, 
-    eog_correlation_df::DataFrame; 
-    eog_correlation_threshold::Real = 0.3
-)::Vector{Symbol}
-    
+function partition_channels_by_eog_correlation(
+    bad_channels::Vector{Symbol},
+    eog_correlation_df::DataFrame;
+    eog_channels::Vector{Symbol} = [:hEOG, :vEOG],
+    threshold::Real = 0.3,
+    use_z::Bool = false,
+)::Tuple{Vector{Symbol},Vector{Symbol}}
+
     if isempty(bad_channels)
-        return bad_channels
+        return bad_channels, Symbol[]
     end
-    
-    # Get EOG channel names from the correlation matrix
-    # Look for both vEOG and hEOG channels
-    eog_channels = Symbol[]
-    for col in names(eog_correlation_df)
-        col_str = string(col)
-        if col != :row && (occursin("EOG", col_str) || occursin("vEOG", col_str) || occursin("hEOG", col_str))
-            push!(eog_channels, col)
-        end
-    end
-    
+
     if isempty(eog_channels)
-        @warn "No EOG channels found in correlation matrix. Available columns: $(names(eog_correlation_df))"
-        return bad_channels
+        @minimal_warning "No EOG channels provided to partition_channels_by_eog_correlation."
+        return bad_channels, Symbol[]
     end
-    
-    # Find channels highly correlated with any EOG channel
-    eog_correlated_channels = Symbol[]
-    
-    for bad_ch in bad_channels
-        # Find the row for this bad channel
-        bad_ch_row = eog_correlation_df[eog_correlation_df.row .== bad_ch, :]
-        
-        if nrow(bad_ch_row) > 0
-            # Check correlation with each EOG channel
-            for eog_ch in eog_channels
-                if hasproperty(bad_ch_row, eog_ch)
-                    correlation = abs(bad_ch_row[1, eog_ch])
-                    if correlation > eog_correlation_threshold
-                        push!(eog_correlated_channels, bad_ch)
-                        break  # No need to check other EOG channels for this bad channel
-                    end
-                end
+
+    cols_to_use = use_z ? Symbol.("z_" .* String.(eog_channels)) : eog_channels
+
+    eog_related = Symbol[]
+    for ch in bad_channels
+        rows = eog_correlation_df[eog_correlation_df.row .== ch, :]
+        if nrow(rows) > 0
+            if any(hasproperty(rows, c) && abs(rows[1, c]) > threshold for c in cols_to_use)
+                push!(eog_related, ch)
             end
         end
     end
-    
-    # Remove EOG-correlated channels from bad channel list
-    filtered_channels = setdiff(bad_channels, eog_correlated_channels)
-    
-    return filtered_channels
+
+    non_eog_bad = setdiff(bad_channels, eog_related)
+    return non_eog_bad, eog_related
 end
 
 """
