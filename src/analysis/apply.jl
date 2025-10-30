@@ -40,30 +40,4 @@ end
 apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Observable{AnalysisSettings}) =
     apply_analysis_settings!(dat, ica, settings[])
 
-"""
-    apply_analysis_settings(data::EegData, settings::AnalysisSettings, ica::InfoIca) -> EegData
-
-Apply analysis settings to data, returning a copy, including ICA component removal.
-"""
-function apply_analysis_settings(data::EegData, ica::InfoIca, settings::AnalysisSettings)
-    data_copy = copy(data)
-    apply_analysis_settings!(data_copy, ica, settings)
-    return data_copy
-end
-apply_analysis_settings(data::EegData, ica::InfoIca, settings::Observable{AnalysisSettings}) =
-    apply_analysis_settings(data, ica, settings[])
-
-
-
-"""
-    apply_analysis_settings(data::EegData, settings::AnalysisSettings) -> EegData
-
-Apply analysis settings to data, returning a copy.
-"""
-function apply_analysis_settings(data::EegData, settings::AnalysisSettings)
-    data_copy = copy(data)
-    apply_analysis_settings!(data_copy, settings)
-    return data_copy
-end
-apply_analysis_settings(data::EegData, settings::Observable{AnalysisSettings}) =
-    apply_analysis_settings(data, settings[])
+@add_nonmutating apply_analysis_settings!

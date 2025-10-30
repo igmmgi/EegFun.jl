@@ -1,5 +1,6 @@
 using eegfun
 using GLMakie
+using BenchmarkTools
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
@@ -23,7 +24,8 @@ eegfun.channel_difference!(
     channel_selection2 = eegfun.channels([:F10]),
     channel_out = :hEOG,
 ); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+
+@btime eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 dat.data[!, :is_vEOG]

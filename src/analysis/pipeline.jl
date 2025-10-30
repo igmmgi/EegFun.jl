@@ -10,7 +10,7 @@ Preprocess EEG data according to the specified configuration file.
 function preprocess(config::String; log_level::Symbol = :info)
 
     # set up the global log for overall processing
-    global_log = setup_global_logging("preprocess_eeg_data.log", log_level = log_level)
+    global_log = setup_global_logging("preprocess_log.txt", log_level = log_level)
 
     # initialize variable for outer scope
     output_directory = ""
@@ -84,7 +84,7 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 # Set up per-file logging (temporarily replaces global logger)
                 setup_logging(
-                    joinpath(output_directory, "$(basename_without_ext(data_file)).log"),
+                    joinpath(output_directory, "$(basename_without_ext(data_file))_log.txt"),
                     log_level = log_level,
                 )
 
@@ -169,23 +169,19 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
                 @info subsection("Artifact Detection (extreme values)")
-                @info "Detecting extreme values: $(preprocess_cfg.eeg.extreme_value_criterion)μV"
+                @info "Detecting extreme values: $(preprocess_cfg.eeg.extreme_value_criterion) μV"
                 is_extreme_value!(
                     dat,
                     preprocess_cfg.eeg.extreme_value_criterion,
-                    channel_out = Symbol(
-                        "is_extreme_value" * "_" * string(preprocess_cfg.eeg.extreme_value_criterion),
-                    ),
+                    channel_out = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
                 )
 
                 @info subsection("Artifact Detection (criterion values)")
-                @info "Detecting artifact values: $(preprocess_cfg.eeg.artifact_value_criterion)μV"
+                @info "Detecting artifact values: $(preprocess_cfg.eeg.artifact_value_criterion) μV"
                 is_extreme_value!(
                     dat,
                     preprocess_cfg.eeg.artifact_value_criterion,
-                    channel_out = Symbol(
-                        "is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion),
-                    ),
+                    channel_out = _flag_symbol("is_artifact_value", preprocess_cfg.eeg.artifact_value_criterion),
                 )
 
                 #################### CHANNEL JOINT PROBABILITY IN CONTINUOUS DATA ###################
@@ -242,7 +238,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     ica_result = run_ica(
                         dat_ica;
                         sample_selection = samples_not(
-                            Symbol("is_extreme_value" * "_" * string(preprocess_cfg.eeg.extreme_value_criterion)),
+                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
                         ),
                         percentage_of_data = preprocess_cfg.ica.percentage_of_data,
                     )
@@ -253,7 +249,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                         dat_ica,
                         ica_result,
                         sample_selection = samples_not(
-                            Symbol("is_extreme_value" * "_" * string(preprocess_cfg.eeg.extreme_value_criterion)),
+                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
                         ),
                     )
 
@@ -388,8 +384,8 @@ function preprocess(config::String; log_level::Symbol = :info)
 
     finally
         close_global_logging()
-        log_source = "preprocess_eeg_data.log"
-        log_destination = joinpath(output_directory, "preprocess_eeg_data.log")
+        log_source = "preprocess_log.txt"
+        log_destination = joinpath(output_directory, "preprocess_log.txt")
         if log_source != log_destination
             mv(log_source, log_destination, force = true)
         end
@@ -397,42 +393,39 @@ function preprocess(config::String; log_level::Symbol = :info)
 
 end
 
-# Helper function to return applied filters string during preprocessing
+# Helper functions used during preprocess to make logging easier/prettier
 function _applied_filters(filter_cfg::FilterConfig; filter_sections::Vector{Symbol} = [:highpass, :lowpass])
-    sections = [getfield(filter_cfg, section) for section in filter_sections]
     applied_filters = []
-    for section in sections
+    for name in filter_sections
+        section = getproperty(filter_cfg, name)
         if section.apply
             push!(
                 applied_filters,
-                "$(section.freq)Hz $(section.type), $(section.method), $(section.func), order $(section.order)",
+                "$(section.freq) Hz $(section.type), $(section.method), $(section.func), order $(section.order)",
             )
         end
     end
     return join(applied_filters, "; ")
 end
 
-# Helper function to return EOG configuration string for printing
 function _eog_config_string(eog_cfg::EogConfig)
-    vEOG_channels =
-        join(eog_cfg.vEOG_channels[1], ", ") *
-        " - " *
-        join(eog_cfg.vEOG_channels[2], ", ") *
-        " → " *
-        eog_cfg.vEOG_channels[3][1]
-    hEOG_channels =
-        join(eog_cfg.hEOG_channels[1], ", ") *
-        " - " *
-        join(eog_cfg.hEOG_channels[2], ", ") *
-        " → " *
-        eog_cfg.hEOG_channels[3][1]
-    return "vEOG: $vEOG_channels ($(eog_cfg.vEOG_criterion)μV); hEOG: $hEOG_channels ($(eog_cfg.hEOG_criterion)μV)"
+
+    format_channels(channels) = begin
+        left = join(channels[1], ", ")
+        right = join(channels[2], ", ")
+        ref = channels[3][1]
+        return "$left - $right → $ref"
+    end
+
+    vEOG = format_channels(eog_cfg.vEOG_channels)
+    hEOG = format_channels(eog_cfg.hEOG_channels)
+return "vEOG: $vEOG ($(eog_cfg.vEOG_criterion) μV); hEOG: $hEOG ($(eog_cfg.hEOG_criterion) μV)"
 end
 
-# Helper functions for section headers
+_flag_symbol(base::AbstractString, criterion) = Symbol("$(base)_$(criterion)")
+
 function _center_title(title::String, width::Int)
-    title_length = length(title)
-    total_dashes = width - title_length - 2  # 2 spaces around title
+    total_dashes = width - length(title) - 2  # 2 spaces around title
     left_dashes = div(total_dashes, 2)
     right_dashes = total_dashes - left_dashes
     return "-" ^ left_dashes * " $title " * "-" ^ right_dashes

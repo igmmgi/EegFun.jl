@@ -1,7 +1,3 @@
-# =============================================================================
-# ARTIFACT DETECTION
-# =============================================================================
-
 """
     detect_eog_onsets!(dat::ContinuousData, criterion::Float64, channel_in::Symbol, channel_out::Symbol)
 
@@ -54,12 +50,10 @@ function detect_eog_onsets!(
     step_size::Int = 20,
 )
     @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
-    if channel_in ∉ propertynames(dat.data)
-        @minimal_error_throw("channel $(channel_in) not found in data")
-    end
+    channel_in ∉ propertynames(dat.data) && @minimal_error_throw("channel $(channel_in) not found in data")
+
     step_size = div(dat.sample_rate, step_size)
-    eog_signal = dat.data[1:step_size:end, channel_in]
-    eog_diff = diff(eog_signal)
+    eog_diff = diff(dat.data[1:step_size:end, channel_in])
     eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
     eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] * step_size
     dat.data[!, channel_out] .= false
@@ -88,15 +82,9 @@ eog_cfg = Dict(
 detect_eog_signals!(dat, eog_cfg)
 ```
 """
-
-
-
 function detect_eog_signals!(dat::EegData, eog_cfg::Dict)
-    # Detect vertical EOG onsets
     vEOG_cfg = eog_cfg["vEOG_channels"]
     detect_eog_onsets!(dat, eog_cfg["vEOG_criterion"], Symbol(vEOG_cfg[3][1]), Symbol("is_" * vEOG_cfg[3][1]))
-
-    # Detect horizontal EOG onsets
     hEOG_cfg = eog_cfg["hEOG_channels"]
     detect_eog_onsets!(dat, eog_cfg["hEOG_criterion"], Symbol(hEOG_cfg[3][1]), Symbol("is_" * hEOG_cfg[3][1]))
 end
@@ -119,12 +107,10 @@ Detect extreme values in a signal using threshold crossing.
 extreme_mask = _is_extreme_value(signal, 50.0)
 ```
 """
-function _is_extreme_value(signal::AbstractVector{Float64}, threshold::Float64)
-    return abs.(signal) .> threshold
-end
+_is_extreme_value(signal::AbstractVector{Float64}, threshold::Real) = abs.(signal) .> threshold
 
 """
-    _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Float64)
+    _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Real)
 
 Detect extreme values in a signal and store results in a pre-allocated mask.
 
@@ -143,7 +129,7 @@ mask = Vector{Bool}(undef, length(signal))
 _is_extreme_value!(mask, signal, 50.0)
 ```
 """
-function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Float64)
+function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64}, threshold::Real)
     @assert length(mask) == length(signal) "Mask and signal must have the same length"
     @inbounds for i in eachindex(signal)
         mask[i] = abs(signal[i]) > threshold
@@ -198,25 +184,18 @@ function is_extreme_value!(
     channel_out::Union{Symbol,Nothing} = nothing,
 )
 
-    # Validate mode/threshold
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined, got :$mode")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0, got :$threshold")
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
-    if mode == :combined
-        # Combined mode - use all channels (same as original behavior)
-        results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
+    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
 
-        # Use provided channel_out or generate default name
-        output_channel = channel_out === nothing ? Symbol("is_extreme_value_$(threshold)") : channel_out
-        dat.data[!, output_channel] = falses(nrow(dat.data))
-
-        # Combine results from all channels (OR operation)
+    if mode == :combined  # any channel
+        channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
+        dat.data[!, channel_out] = falses(nrow(dat.data))
         for (ch, extreme_mask) in results
-            dat.data[!, output_channel] .|= extreme_mask
+            dat.data[!, channel_out] .|= extreme_mask
         end
-
-    else  # Separate mode - use specified channel selection
-        results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
+    elseif mode == :separate # separate columns for each channel
         for (ch, extreme_mask) in results
             column_name = Symbol("is_extreme_value_$(ch)_$(threshold)")
             dat.data[!, column_name] = extreme_mask
@@ -273,24 +252,20 @@ function is_extreme_value!(
     mode::Symbol = :combined,
     channel_out::Union{Symbol,Nothing} = nothing,
 )
-    # Validate mode/threshold
-    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined, got :$mode")
-    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0, got :$threshold")
+
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_error_throw("No channels selected for extreme value detection")
-    end
+    isempty(selected_channels) && @minimal_error_throw("No channels selected for extreme value detection")
 
     # Get selected epochs
     selected_epochs = get_selected_epochs(dat, epoch_selection)
-    if isempty(selected_epochs)
-        @minimal_error_throw("No epochs selected for extreme value detection")
-    end
+    isempty(selected_epochs) && @minimal_error_throw("No epochs selected for extreme value detection")
 
     # Use provided channel_out or generate default name
-    output_channel = channel_out === nothing ? Symbol("is_extreme_value_$(threshold)") : channel_out
+    channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
 
     # Process each selected epoch
     for epoch_idx in selected_epochs
@@ -300,43 +275,31 @@ function is_extreme_value!(
         selected_samples = get_selected_samples(epoch_df, sample_selection)
         
         # Initialize artifact flag column for this epoch
-        if hasproperty(epoch_df, output_channel)
-            epoch_df[!, output_channel] .= false
-        else
-            epoch_df[!, output_channel] = falses(nrow(epoch_df))
-        end
+        epoch_df[!, output_channel] = falses(nrow(epoch_df))
 
         if mode == :combined
-            # Combined mode - single output column (OR across all channels)
             for ch in selected_channels
-                if hasproperty(epoch_df, ch)
-                    ch_data = epoch_df[!, ch]
-                    extreme_mask = _is_extreme_value(ch_data, Float64(threshold))
-                    
-                    # Apply sample selection
-                    sample_mask = falses(length(extreme_mask))
-                    sample_mask[selected_samples] .= true
-                    extreme_mask = extreme_mask .& sample_mask
-                    
-                    # Update artifact flag (OR operation)
-                    epoch_df[!, output_channel] .|= extreme_mask
-                end
+                extreme_mask = _is_extreme_value(epoch_df[!, ch], threshold)
+                
+                # Apply sample selection
+                sample_mask = falses(length(extreme_mask))
+                sample_mask[selected_samples] .= true
+                extreme_mask = extreme_mask .& sample_mask
+                
+                # Update artifact flag (OR operation)
+                epoch_df[!, output_channel] .|= extreme_mask
             end
         else
-            # Separate mode - separate column for each channel
             for ch in selected_channels
-                if hasproperty(epoch_df, ch)
-                    ch_data = epoch_df[!, ch]
-                    extreme_mask = _is_extreme_value(ch_data, Float64(threshold))
-                    
-                    # Apply sample selection
-                    sample_mask = falses(length(extreme_mask))
-                    sample_mask[selected_samples] .= true
-                    extreme_mask = extreme_mask .& sample_mask
-                    
-                    column_name = Symbol("is_extreme_value_$(ch)_$(threshold)")
-                    epoch_df[!, column_name] = extreme_mask
-                end
+                extreme_mask = _is_extreme_value(epoch_df[!, ch], threshold)
+                
+                # Apply sample selection
+                sample_mask = falses(length(extreme_mask))
+                sample_mask[selected_samples] .= true
+                extreme_mask = extreme_mask .& sample_mask
+                
+                column_name = Symbol("is_extreme_value_$(ch)_$(threshold)")
+                epoch_df[!, column_name] = extreme_mask
             end
         end
     end
@@ -366,16 +329,7 @@ is_extreme_value!(epochs_cleaned, 100)
 is_extreme_value!(epochs_cleaned, 100, channel_out = :is_artifact_value_100)
 ```
 """
-function is_extreme_value!(
-    epochs_list::Vector{EpochData},
-    threshold::Int;
-    kwargs...
-)
-    for epoch_data in epochs_list
-        is_extreme_value!(epoch_data, threshold; kwargs...)
-    end
-    return nothing
-end
+is_extreme_value!(dat::Vector{EpochData}, threshold::Int; kwargs...) = is_extreme_value!.(dat, threshold; kwargs...)
 
 # Helper function to detect extreme values for selected channels
 function _detect_extreme_values(
@@ -385,17 +339,15 @@ function _detect_extreme_values(
     sample_selection::Function = samples(),
 )
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        @minimal_error_throw("No channels selected for extreme value detection")
-    end
+    isempty(selected_channels) && @minimal_error_throw("No channels selected for extreme value detection")
 
     selected_samples = get_selected_samples(dat, sample_selection)
+    isempty(selected_samples) && @minimal_error_throw("No samples selected for extreme value detection")
 
     results = Dict{Symbol,Vector{Bool}}()
 
     for ch in selected_channels
-        channel_data = dat.data[!, ch]
-        extreme_mask = _is_extreme_value(channel_data, Float64(threshold))
+        extreme_mask = _is_extreme_value(dat.data[!, ch], Float64(threshold))
 
         # Apply sample selection - only keep extreme values for selected samples
         sample_mask = falses(length(extreme_mask))
@@ -449,22 +401,14 @@ function is_extreme_value(
     mode::Symbol = :combined,
 )
 
-    # Validate mode
-    if mode ∉ [:separate, :combined]
-        @minimal_error_throw("mode must be :separate or :combined, got :$mode")
-    end
-    if threshold <= 0
-        @minimal_error_throw("threshold must be greater than 0, got :$threshold")
-    end
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
 
+    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
 
     if mode == :combined
-        # Combined mode - return boolean vector directly
-        results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
 
-        # Initialize the result with false values
         combined_mask = Vector{Bool}(falses(nrow(dat.data)))
-
         # Combine results from all channels (OR operation)
         for (ch, extreme_mask) in results
             combined_mask .|= extreme_mask
@@ -472,7 +416,7 @@ function is_extreme_value(
 
         return combined_mask
 
-    else  # mode == :separate
+    elseif mode == :separate  
         # Separate mode - create temporary data object and use mutating version
         temp_dat = deepcopy(dat)
         is_extreme_value!(temp_dat, threshold; channel_selection, sample_selection, mode = :separate)
@@ -524,40 +468,22 @@ function n_extreme_value(
     sample_selection::Function = samples(),
     mode::Symbol = :combined,
 )
-    # Validate mode
-    if mode ∉ [:separate, :combined]
-        @minimal_error_throw("mode must be :separate or :combined, got :$mode")
-    end
+
+    mode ∉ [:separate, :combined] && @minimal_error_throw("mode must be :separate or :combined")
+    threshold <= 0 && @minimal_error_throw("threshold must be greater than 0")
+
+    results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
 
     if mode == :combined
-        # Combined mode - use all channels (same as original behavior)
-        results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
-
-        # Initialize the result with false values
         combined_mask = Vector{Bool}(falses(nrow(dat.data)))
-
-        # Combine results from all channels (OR operation)
         for (ch, extreme_mask) in results
             combined_mask .|= extreme_mask
         end
-
-        # Return total count
         return sum(combined_mask)
-
-    else  # Separate mode - count for each channel
-
-        results = _detect_extreme_values(dat, threshold; channel_selection, sample_selection)
-
-        # Get channels in original order
+    elseif mode == :separate 
         selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
-
-        # Count extreme values for each channel in original order
         counts = [sum(results[ch]) for ch in selected_channels]
-
-        # Create result DataFrame
-        result_df = DataFrame(channel = selected_channels, n_extreme = counts)
-
-        return result_df
+        return DataFrame(channel = selected_channels, n_extreme = counts)
     end
 end
 
@@ -593,11 +519,6 @@ statistical measures (variance, max, min, absolute max, range, kurtosis)
 using z-score thresholds. This is useful for removing epochs with artifacts
 without manual inspection.
 """
-
-#=============================================================================
-    REJECTION INFORMATION STRUCTURE
-=============================================================================#
-
 struct Rejection
     label::Symbol
     epoch::Int
@@ -667,9 +588,6 @@ unique_channels(info::Vector{EpochRejectionInfo}) = unique_channels.(info)
 unique_epochs(rejections::EpochRejectionInfo) = unique_epochs(rejections.rejected_epochs)
 unique_epochs(info::Vector{EpochRejectionInfo}) = unique_epochs.(info)
 
-#=============================================================================
-    CORE REJECTION FUNCTIONS
-=============================================================================#
 
 """
     detect_bad_epochs_automatic(dat::EpochData; z_criterion::Real = 3,
@@ -751,15 +669,9 @@ function detect_bad_epochs_automatic(
 )::EpochRejectionInfo
 
     # Validate inputs
-    if z_criterion < 0
-        @minimal_error_throw("Z-criterion must be non-negative, got $z_criterion")
-    end
-    if abs_criterion < 0
-        @minimal_error_throw("Absolute criterion must be non-negative, got $abs_criterion")
-    end
-    if z_criterion == 0 && abs_criterion == 0
-        @minimal_error_throw("At least one of z_criterion or abs_criterion must be greater than 0")
-    end
+    z_criterion < 0 && @minimal_error_throw("Z-criterion must be non-negative")
+    abs_criterion < 0 && @minimal_error_throw("Absolute criterion must be non-negative")
+    z_criterion == 0 && abs_criterion == 0 && @minimal_error_throw("One of z_criterion or abs_criterion must be > 0")
 
     # Validate measures
     allowed_measures = Set([:variance, :max, :min, :abs, :range, :kurtosis])
@@ -777,9 +689,6 @@ function detect_bad_epochs_automatic(
     # Calculate metrics and identify rejected epochs
     metrics = _calculate_epoch_metrics(dat, selected_channels, Float64(z_criterion), Float64(abs_criterion))
 
-    # Combine all rejected epochs
-    rejected_epochs_vectors = []
-
     # Map measure -> metric key symbol used internally
     measure_to_metric = Dict(
         :variance => :z_variance,
@@ -791,6 +700,7 @@ function detect_bad_epochs_automatic(
     )
 
     # Add z-score based rejections if z_criterion > 0
+    rejected_epochs_vectors = []
     if z_criterion > 0
         for m in z_measures
             append!(rejected_epochs_vectors, [values(metrics[measure_to_metric[m]])...])
@@ -798,9 +708,7 @@ function detect_bad_epochs_automatic(
     end
 
     # Add absolute threshold rejections if abs_criterion > 0
-    if abs_criterion > 0
-        append!(rejected_epochs_vectors, [values(metrics[:absolute_threshold])...])
-    end
+    abs_criterion > 0 && append!(rejected_epochs_vectors, [values(metrics[:absolute_threshold])...])
 
     rejected_epochs = sort(unique(vcat(rejected_epochs_vectors...)))
 
@@ -880,13 +788,7 @@ function detect_bad_epochs_automatic(
     return rejection_info
 end
 
-function detect_bad_epochs_automatic(dat::Vector{EpochData}; kwargs...)
-    return detect_bad_epochs_automatic.(dat; kwargs...)
-end
-
-
-
-
+detect_bad_epochs_automatic(dat::Vector{EpochData}; kwargs...) = detect_bad_epochs_automatic.(dat; kwargs...)
 
 
 """
@@ -917,23 +819,13 @@ rejected_indices = get_rejected_epochs(state)
 """
 get_rejected_epochs(info::Vector{EpochRejectionInfo})::Vector{Vector{Rejection}} = get_rejected_epochs.(info)
 
-#=============================================================================
-    INTERNAL HELPER FUNCTIONS
-=============================================================================#
-
 """
 Validate inputs for epoch rejection.
 """
 function _validate_rejection_inputs(dat::EpochData, z_criterion::Real)
-    if isempty(dat.data)
-        @minimal_error_throw("Cannot reject epochs from empty EpochData")
-    end
-    if z_criterion <= 0
-        @minimal_error_throw("Z-criterion must be positive, got $z_criterion")
-    end
-    if length(dat.data) < 3
-        @minimal_warning "Only $(length(dat.data)) epochs available. Statistical rejection may not be meaningful with so few epochs."
-    end
+    isempty(dat.data) && @minimal_error_throw("Cannot reject epochs from empty EpochData")
+    z_criterion <= 0 && @minimal_error_throw("Z-criterion must be positive")
+    length(dat.data) < 3 && @minimal_warning "Only $(length(dat.data)) epochs available."
 end
 
 
@@ -946,12 +838,12 @@ Each value is a vector of length n_epochs containing the maximum of that metric 
 function _calculate_epoch_metrics(
     dat::EpochData,
     selected_channels::Vector{Symbol},
-    z_criterion::Float64,
-    abs_criterion::Float64,
+    z_criterion::Real,
+    abs_criterion::Real,
 )::Dict{Symbol,Dict{Symbol,Vector{Int}}}
-    # Initialize metrics dictionary
-    metrics = Dict{Symbol,Dict{Symbol,Vector{Int}}}()
 
+    metrics = Dict{Symbol,Dict{Symbol,Vector{Int}}}()
+    
     # Preallocate dictionaries for each metric
     metrics[:z_variance] = Dict{Symbol,Vector{Int}}()
     metrics[:z_max] = Dict{Symbol,Vector{Int}}()
