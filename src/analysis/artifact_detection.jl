@@ -608,22 +608,25 @@ function is_equal_rejection(a::Rejection, b::Rejection)
 end
 
 function unique_rejections(rejections::Vector{Rejection})
-    unique_rejections = Rejection[]
+    out = Rejection[]
     for rejection in rejections
-        if !any(x -> is_equal_rejection(x, rejection), unique_rejections)
-            push!(unique_rejections, rejection)
+        if !any(x -> is_equal_rejection(x, rejection), out)
+            push!(out, rejection)
         end
     end
-    return unique_rejections
+    return out
 end
 
-function unique_channels(rejections::Vector{Rejection})
-    return unique(map(x -> x.label, rejections))
-end
+unique_rejections(info::EpochRejectionInfo) = unique_rejections(info.rejected_epochs)
+unique_rejections(info::Vector{EpochRejectionInfo}) = unique_rejections.(info)
 
-function unique_epochs(rejections::Vector{Rejection})
-    return unique(map(x -> x.epoch, rejections))
-end
+unique_channels(rejections::Vector{Rejection}) = unique(map(x -> x.label, rejections))
+unique_channels(rejections::EpochRejectionInfo) = unique_channels(rejections.rejected_epochs)
+unique_channels(info::Vector{EpochRejectionInfo}) = unique_channels.(info)
+
+unique_epochs(rejections::Vector{Rejection}) = unique(map(x -> x.epoch, rejections))
+unique_epochs(rejections::EpochRejectionInfo) = unique_epochs(rejections.rejected_epochs)
+unique_epochs(info::Vector{EpochRejectionInfo}) = unique_epochs.(info)
 
 
 """
@@ -994,20 +997,22 @@ Display rejection information in a human-readable format.
 """
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo:")
-    if info.z_criterion > 0
-        println(io, "  Z-criterion: $(info.z_criterion)")
-    else
-        println(io, "  Z-criterion: disabled (0)")
-    end
-    if info.abs_criterion > 0
-        println(io, "  Abs criterion: $(info.abs_criterion) μV")
-    else
-        println(io, "  Abs criterion: disabled (0)")
-    end
-    println(io, "  Number epochs: $(info.n_epochs)")
+    println(io, "  Abs criterion: $(info.abs_criterion > 0 ? string(info.abs_criterion,  " μV") : "disabled")")
+    println(io, "  Z-criterion: $(info.z_criterion > 0 ? string(info.z_criterion) : "disabled")")
+    println(io, "  Number epochs total: $(info.n_epochs)")
+    println(io, "  Number epochs rejected: $(length(unique_epochs(info.rejected_epochs)))")
     println(io, "  Number artifacts: $(info.n_artifacts)")
     println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected_epochs)))\n")
-    
+ 
+    if info.abs_criterion > 0
+        println(io, "")
+        println(io, "  Rejection breakdown (absolute):")
+        println(
+            io,
+            "    Abs threshold: $(length(unique_epochs(info.absolute_threshold))) unique epochs, $(length(unique_channels(info.absolute_threshold))) unique channels",
+        )
+    end
+
     if info.z_criterion > 0
         println(io, "  Rejection breakdown (z-score):")
         println(
@@ -1035,15 +1040,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
             "    Z-Kurtosis:  $(length(unique_epochs(info.z_kurtosis))) unique epochs, $(length(unique_channels(info.z_kurtosis))) unique channels",
         )
     end
-    
-    if info.abs_criterion > 0
-        println(io, "")
-        println(io, "  Rejection breakdown (absolute):")
-        println(
-            io,
-            "    Abs threshold: $(length(unique_epochs(info.absolute_threshold))) unique epochs, $(length(unique_channels(info.absolute_threshold))) unique channels",
-        )
-    end
+ 
 end
 
 #=============================================================================

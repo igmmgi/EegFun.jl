@@ -75,6 +75,17 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
+bad_epochs
+eegfun.unique_rejections(bad_epochs)
+eegfun.unique_rejections(bad_epochs[1])
+eegfun.unique_channels(bad_epochs)
+eegfun.unique_channels(bad_epochs[1])
+eegfun.unique_epochs(bad_epochs)
+eegfun.unique_epochs(bad_epochs[1])
+
+
+bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, abs_criterion = 0)
+bad_epochs[1]
 
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], ylimits = (-100, 100))
