@@ -617,16 +617,8 @@ function unique_rejections(rejections::Vector{Rejection})
     return out
 end
 
-unique_rejections(info::EpochRejectionInfo) = unique_rejections(info.rejected_epochs)
-unique_rejections(info::Vector{EpochRejectionInfo}) = unique_rejections.(info)
-
 unique_channels(rejections::Vector{Rejection}) = unique(map(x -> x.label, rejections))
-unique_channels(rejections::EpochRejectionInfo) = unique_channels(rejections.rejected_epochs)
-unique_channels(info::Vector{EpochRejectionInfo}) = unique_channels.(info)
-
 unique_epochs(rejections::Vector{Rejection}) = unique(map(x -> x.epoch, rejections))
-unique_epochs(rejections::EpochRejectionInfo) = unique_epochs(rejections.rejected_epochs)
-unique_epochs(info::Vector{EpochRejectionInfo}) = unique_epochs.(info)
 
 
 """
@@ -647,6 +639,7 @@ Stores information about which epochs were rejected and why.
 - `rejected_by_abs_threshold::Vector{Int}`: Epochs rejected due to absolute voltage threshold
 - `z_criterion::Float64`: Z-score criterion used for rejection
 - `abs_criterion::Union{Float64, Nothing}`: Absolute voltage threshold (μV) used for rejection
+- `z_measures::Vector{Symbol}`: Which z-score measures were evaluated
 """
 struct EpochRejectionInfo
     n_epochs::Int
@@ -661,7 +654,18 @@ struct EpochRejectionInfo
     absolute_threshold::Vector{Rejection}
     z_criterion::Float64
     abs_criterion::Float64
+    z_measures::Vector{Symbol}
 end
+
+# Methods depending on EpochRejectionInfo must be defined after the struct
+unique_rejections(info::EpochRejectionInfo) = unique_rejections(info.rejected_epochs)
+unique_rejections(info::Vector{EpochRejectionInfo}) = unique_rejections.(info)
+
+unique_channels(rejections::EpochRejectionInfo) = unique_channels(rejections.rejected_epochs)
+unique_channels(info::Vector{EpochRejectionInfo}) = unique_channels.(info)
+
+unique_epochs(rejections::EpochRejectionInfo) = unique_epochs(rejections.rejected_epochs)
+unique_epochs(info::Vector{EpochRejectionInfo}) = unique_epochs.(info)
 
 #=============================================================================
     CORE REJECTION FUNCTIONS
@@ -670,7 +674,8 @@ end
 """
     detect_bad_epochs_automatic(dat::EpochData; z_criterion::Real = 3,
                      abs_criterion::Real = 100,
-                     channel_selection::Function = channels())::EpochRejectionInfo
+                     channel_selection::Function = channels(),
+                     z_measures::Vector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis])::EpochRejectionInfo
 
 Detect bad epochs using statistical criteria and/or absolute voltage thresholds.
 
@@ -678,7 +683,8 @@ This function can use two types of criteria for epoch rejection:
 1. **Z-score criteria**: Calculates six statistical measures for each epoch (variance, max, min,
    absolute max, range, kurtosis) across selected channels. For each measure, the maximum
    across channels is taken for each epoch, then z-scored across epochs. Epochs exceeding
-   the z-criterion for any measure are rejected.
+   the z-criterion for any selected measure are rejected. You can choose which measures to
+   apply using `measures` (default: `[:variance, :max, :min, :abs, :range, :kurtosis]`).
 2. **Absolute voltage criteria**: Epochs with any channel exceeding the absolute voltage
    threshold (in μV) are rejected.
 
@@ -687,6 +693,7 @@ This function can use two types of criteria for epoch rejection:
 - `z_criterion::Real`: Z-score threshold for rejection (default: 3.0). Set to 0 to disable z-score based rejection.
 - `abs_criterion::Real`: Absolute voltage threshold in μV for rejection (default: 100.0). Set to 0 to disable absolute threshold rejection.
 - `channel_selection::Function`: Channel predicate for selecting channels to analyze (default: all channels)
+- `z_measures::Vector{Symbol}`: Which z-score measures to apply (default: all: `[:variance, :max, :min, :abs, :range, :kurtosis]`)
 
 # Returns
 - `EpochRejectionInfo`: Information about which epochs were rejected and why
@@ -740,6 +747,7 @@ function detect_bad_epochs_automatic(
     z_criterion::Real = 3,
     abs_criterion::Real = 100,
     channel_selection::Function = channels(),
+    z_measures::Vector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis],
 )::EpochRejectionInfo
 
     # Validate inputs
@@ -753,6 +761,14 @@ function detect_bad_epochs_automatic(
         @minimal_error_throw("At least one of z_criterion or abs_criterion must be greater than 0")
     end
 
+    # Validate measures
+    allowed_measures = Set([:variance, :max, :min, :abs, :range, :kurtosis])
+    selected_measures = Set(z_measures)
+    if !issubset(selected_measures, allowed_measures)
+        invalid = collect(setdiff(selected_measures, allowed_measures))
+        @minimal_error_throw("Invalid measures: $(invalid). Allowed: $(collect(allowed_measures))")
+    end
+
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     @info "Selected channels: $(print_vector(selected_channels))"
@@ -764,19 +780,21 @@ function detect_bad_epochs_automatic(
     # Combine all rejected epochs
     rejected_epochs_vectors = []
 
+    # Map measure -> metric key symbol used internally
+    measure_to_metric = Dict(
+        :variance => :z_variance,
+        :max => :z_max,
+        :min => :z_min,
+        :abs => :z_abs,
+        :range => :z_range,
+        :kurtosis => :z_kurtosis,
+    )
+
     # Add z-score based rejections if z_criterion > 0
     if z_criterion > 0
-        append!(
-            rejected_epochs_vectors,
-            [
-                values(metrics[:z_variance])...,
-                values(metrics[:z_max])...,
-                values(metrics[:z_min])...,
-                values(metrics[:z_abs])...,
-                values(metrics[:z_range])...,
-                values(metrics[:z_kurtosis])...,
-            ],
-        )
+        for m in z_measures
+            append!(rejected_epochs_vectors, [values(metrics[measure_to_metric[m]])...])
+        end
     end
 
     # Add absolute threshold rejections if abs_criterion > 0
@@ -810,17 +828,16 @@ function detect_bad_epochs_automatic(
     
     # Add z-score metrics if z_criterion > 0
     if z_criterion > 0
-        append!(
-            metric_mappings,
-            [
-                (:z_variance, z_variance, metric_sets[:z_variance]),
-                (:z_max, z_max, metric_sets[:z_max]),
-                (:z_min, z_min, metric_sets[:z_min]),
-                (:z_abs, z_abs, metric_sets[:z_abs]),
-                (:z_range, z_range, metric_sets[:z_range]),
-                (:z_kurtosis, z_kurtosis, metric_sets[:z_kurtosis]),
-            ],
-        )
+        for m in z_measures
+            key = measure_to_metric[m]
+            list_ref = key === :z_variance ? z_variance :
+                       key === :z_max ? z_max :
+                       key === :z_min ? z_min :
+                       key === :z_abs ? z_abs :
+                       key === :z_range ? z_range :
+                       z_kurtosis
+            append!(metric_mappings, [(key, list_ref, metric_sets[key])])
+        end
     end
 
     # Add absolute threshold if abs_criterion > 0
@@ -857,6 +874,7 @@ function detect_bad_epochs_automatic(
         absolute_threshold,
         Float64(z_criterion),  # Store the actual value (0 means disabled)
         Float64(abs_criterion),  # Store the actual value (0 means disabled)
+        (z_criterion > 0 ? z_measures : Symbol[]),
     )
 
     return rejection_info
@@ -1004,7 +1022,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "  Number artifacts: $(info.n_artifacts)")
     println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected_epochs)))\n")
  
-    if info.abs_criterion > 0
+    if info.abs_criterion > 0 
         println(io, "")
         println(io, "  Rejection breakdown (absolute):")
         println(
@@ -1014,31 +1032,30 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     end
 
     if info.z_criterion > 0
-        println(io, "  Rejection breakdown (z-score):")
-        println(
-            io,
-            "    Z-Variance:  $(length(unique_epochs(info.z_variance))) unique epochs, $(length(unique_channels(info.z_variance))) unique channels",
+        # Map measures to fields and labels
+        field_map = Dict(
+            :variance => (info.z_variance, "Z-Variance"),
+            :max => (info.z_max, "Z-Maximum"),
+            :min => (info.z_min, "Z-Minimum"),
+            :abs => (info.z_abs, "Z-Absolute"),
+            :range => (info.z_range, "Z-Range"),
+            :kurtosis => (info.z_kurtosis, "Z-Kurtosis"),
         )
-        println(
-            io,
-            "    Z-Maximum:   $(length(unique_epochs(info.z_max))) unique epochs, $(length(unique_channels(info.z_max))) unique channels",
-        )
-        println(
-            io,
-            "    Z-Minimum:   $(length(unique_epochs(info.z_min))) unique epochs, $(length(unique_channels(info.z_min))) unique channels",
-        )
-        println(
-            io,
-            "    Z-Absolute:  $(length(unique_epochs(info.z_abs))) unique epochs, $(length(unique_channels(info.z_abs))) unique channels",
-        )
-        println(
-            io,
-            "    Z-Range:     $(length(unique_epochs(info.z_range))) unique epochs, $(length(unique_channels(info.z_range))) unique channels",
-        )
-        println(
-            io,
-            "    Z-Kurtosis:  $(length(unique_epochs(info.z_kurtosis))) unique epochs, $(length(unique_channels(info.z_kurtosis))) unique channels",
-        )
+
+        # Determine which selected measures actually have entries
+        nonempty_selected = Tuple{Vector{Rejection},String}[]
+        for m in info.z_measures
+            vec, label = field_map[m]
+            if !isempty(vec)
+                push!(nonempty_selected, (vec, label))
+            end
+        end
+        if !isempty(nonempty_selected)
+            println(io, "  Rejection breakdown (z-score):")
+            for (vec, label) in nonempty_selected
+                println(io, "    $(label):  $(length(unique_epochs(vec))) unique epochs, $(length(unique_channels(vec))) unique channels")
+            end
+        end
     end
  
 end
