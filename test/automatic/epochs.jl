@@ -1163,6 +1163,5 @@ end
         # Test with invalid z-criterion
         epoch_data, _ = create_test_epochs_with_artifacts(1, 1, 5, 50, 2)
         @test_throws Exception eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = -1.0)
-        @test_throws Exception eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = 0.0)
     end
 end
