@@ -524,6 +524,10 @@ struct Rejection
     epoch::Int
 end
 
+function Base.show(io::IO, r::Rejection)
+    print(io, "Rejection(:$(r.label), $(r.epoch))")
+end
+
 function is_equal_rejection(a::Rejection, b::Rejection)
     return a.label == b.label && a.epoch == b.epoch
 end
@@ -543,43 +547,67 @@ unique_epochs(rejections::Vector{Rejection}) = unique(map(x -> x.epoch, rejectio
 
 
 """
-    EpochRejectionInfo
+    EpochInfo
 
-Stores information about which epochs were rejected and why.
+Stores metadata about the epoch condition.
 
 # Fields
-- `condition_number::Int`: Condition number from the epoch data
-- `condition_name::String`: Condition name from the epoch data
-- `n_epochs::Int`: Number of epochs before rejection
-- `n_artifacts::Int`: Number of epochs after rejection
-- `rejected_epochs::Vector{Int}`: Indices of rejected epochs
-- `rejected_by_z_variance::Vector{Int}`: Epochs rejected due to high variance (z-score)
-- `rejected_by_z_max::Vector{Int}`: Epochs rejected due to high maximum values (z-score)
-- `rejected_by_z_min::Vector{Int}`: Epochs rejected due to low minimum values (z-score)
-- `rejected_by_z_abs::Vector{Int}`: Epochs rejected due to high absolute values (z-score)
-- `rejected_by_z_range::Vector{Int}`: Epochs rejected due to large range (z-score)
-- `rejected_by_z_kurtosis::Vector{Int}`: Epochs rejected due to high kurtosis (z-score)
-- `rejected_by_abs_threshold::Vector{Int}`: Epochs rejected due to absolute voltage threshold
-- `z_criterion::Real`: Z-score criterion used for rejection
-- `abs_criterion::Union{Real, Nothing}`: Absolute voltage threshold (μV) used for rejection
-- `z_measures::Vector{Symbol}`: Which z-score measures were evaluated
+- `number::Int`: Condition number from the epoch data
+- `name::String`: Condition name from the epoch data
+- `n::Int`: Number of epochs before rejection
 """
-struct EpochRejectionInfo
-    condition_number::Int
-    condition_name::String
-    n_epochs::Int
-    n_artifacts::Int
-    rejected_epochs::Vector{Rejection}
+struct EpochInfo
+    number::Int
+    name::String
+    n::Int
+end
+
+"""
+    ZScoreRejectionInfo
+
+Stores z-score based rejection information.
+
+# Fields
+- `z_measures::Vector{Symbol}`: Which z-score measures were evaluated
+- `z_variance::Vector{Rejection}`: Rejections due to high variance
+- `z_max::Vector{Rejection}`: Rejections due to high maximum values
+- `z_min::Vector{Rejection}`: Rejections due to low minimum values
+- `z_abs::Vector{Rejection}`: Rejections due to high absolute values
+- `z_range::Vector{Rejection}`: Rejections due to large range
+- `z_kurtosis::Vector{Rejection}`: Rejections due to high kurtosis
+"""
+struct ZScoreRejectionInfo
+    z_measures::Vector{Symbol}
     z_variance::Vector{Rejection}
     z_max::Vector{Rejection}
     z_min::Vector{Rejection}
     z_abs::Vector{Rejection}
     z_range::Vector{Rejection}
     z_kurtosis::Vector{Rejection}
-    absolute_threshold::Vector{Rejection}
-    z_criterion::Real
+end
+
+"""
+    EpochRejectionInfo
+
+Stores information about which epochs were rejected and why.
+
+# Fields
+- `epoch_info::EpochInfo`: Condition metadata (number, name, n_epochs)
+- `n_artifacts::Int`: Number of epochs after rejection
+- `rejected_epochs::Vector{Rejection}`: All rejected epochs
+- `z_criterion::Real`: Z-score criterion used for rejection
+- `z_rejections::Union{ZScoreRejectionInfo, Nothing}`: Z-score based rejection info (Nothing if z_criterion = 0)
+- `abs_rejections::Union{Vector{Rejection}, Nothing}`: Rejections due to absolute voltage threshold (Nothing if abs_criterion = 0)
+- `abs_criterion::Real`: Absolute voltage threshold (μV) used for rejection
+"""
+struct EpochRejectionInfo
+    epoch_info::EpochInfo
+    n_artifacts::Int
     abs_criterion::Real
-    z_measures::Vector{Symbol}
+    abs_rejections::Union{Vector{Rejection}, Nothing}
+    z_criterion::Real
+    z_rejections::Union{ZScoreRejectionInfo, Nothing}
+    rejected_epochs::Vector{Rejection}
 end
 
 # Methods depending on EpochRejectionInfo must be defined after the struct
@@ -682,7 +710,7 @@ function detect_bad_epochs_automatic(
     selected_measures = Set(z_measures)
     if !issubset(selected_measures, allowed_measures)
         invalid = collect(setdiff(selected_measures, allowed_measures))
-        @minimal_error_throw("Invalid measures: $(invalid). Allowed: $(collect(allowed_measures))")
+        @minimal_error_throw("Invalid measures: $(invalid).")
     end
 
     # Get selected channels
@@ -693,30 +721,7 @@ function detect_bad_epochs_automatic(
     # Calculate metrics and identify rejected epochs
     metrics = _calculate_epoch_metrics(dat, selected_channels, Float64(z_criterion), Float64(abs_criterion))
 
-    # Map measure -> metric key symbol used internally
-    measure_to_metric = Dict(
-        :variance => :z_variance,
-        :max => :z_max,
-        :min => :z_min,
-        :abs => :z_abs,
-        :range => :z_range,
-        :kurtosis => :z_kurtosis,
-    )
-
-    # Add z-score based rejections if z_criterion > 0
-    rejected_epochs_vectors = []
-    if z_criterion > 0
-        for m in z_measures
-            append!(rejected_epochs_vectors, [values(metrics[measure_to_metric[m]])...])
-        end
-    end
-
-    # Add absolute threshold rejections if abs_criterion > 0
-    abs_criterion > 0 && append!(rejected_epochs_vectors, [values(metrics[:absolute_threshold])...])
-
-    rejected_epochs = sort(unique(vcat(rejected_epochs_vectors...)))
-
-    # Create Rejection structs for each rejection
+    # Initialize rejection lists (all needed for EpochRejectionInfo struct)
     rejected_epochs_info = Rejection[]
     z_variance = Rejection[]
     z_max = Rejection[]
@@ -724,75 +729,70 @@ function detect_bad_epochs_automatic(
     z_abs = Rejection[]
     z_range = Rejection[]
     z_kurtosis = Rejection[]
-    absolute_threshold = Rejection[]
 
-    # Convert metric vectors to Sets for O(1) lookups
-    metric_sets = Dict{Symbol,Dict{Symbol,Set{Int}}}()
-    for metric_key in [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold]
-        metric_sets[metric_key] = Dict{Symbol,Set{Int}}()
-        for ch in selected_channels
-            metric_sets[metric_key][ch] = Set(metrics[metric_key][ch])
-        end
-    end
+    # Map measure directly to (rejection_list, metrics_key)
+    measure_to_list_and_key = Dict(
+        :variance => (z_variance, :z_variance),
+        :max => (z_max, :z_max),
+        :min => (z_min, :z_min),
+        :abs => (z_abs, :z_abs),
+        :range => (z_range, :z_range),
+        :kurtosis => (z_kurtosis, :z_kurtosis),
+    )
 
-    # Define metric mappings
-    metric_mappings = []
-    
-    # Add z-score metrics if z_criterion > 0
+    # Build Rejection objects directly from metric results
+    # Handle z-score metrics
     if z_criterion > 0
         for m in z_measures
-            key = measure_to_metric[m]
-            list_ref = key === :z_variance ? z_variance :
-                       key === :z_max ? z_max :
-                       key === :z_min ? z_min :
-                       key === :z_abs ? z_abs :
-                       key === :z_range ? z_range :
-                       z_kurtosis
-            append!(metric_mappings, [(key, list_ref, metric_sets[key])])
-        end
-    end
-
-    # Add absolute threshold if abs_criterion > 0
-    if abs_criterion > 0
-        push!(metric_mappings, (:absolute_threshold, absolute_threshold, metric_sets[:absolute_threshold]))
-    end
-
-    for epoch_idx in rejected_epochs
-        for ch in selected_channels
-            rejection = nothing
-            for (_, rejection_list, metric_set) in metric_mappings
-                if epoch_idx in metric_set[ch]
+            rejection_list, metrics_key = measure_to_list_and_key[m]
+            for ch in selected_channels
+                for epoch_idx in metrics[metrics_key][ch]
                     rejection = Rejection(ch, epoch_idx)
-                    if rejection !== nothing
-                        push!(rejected_epochs_info, rejection)
-                        push!(rejection_list, rejection)
-                    end
+                    push!(rejected_epochs_info, rejection)
+                    push!(rejection_list, rejection)
                 end
             end
         end
     end
 
-    # Extract condition info from data
-    cond_num = dat.data[1].condition[1]
-    cond_name = dat.data[1].condition_name[1]
+    # Handle absolute threshold
+    abs_rejections = abs_criterion > 0 ? Rejection[] : nothing
+    if abs_criterion > 0
+        for ch in selected_channels
+            for epoch_idx in metrics[:absolute_threshold][ch]
+                rejection = Rejection(ch, epoch_idx)
+                push!(rejected_epochs_info, rejection)
+                push!(abs_rejections, rejection)
+            end
+        end
+    end
 
-    # Create rejection info
-    rejection_info = EpochRejectionInfo(
-        cond_num,
-        cond_name,
-        length(dat.data),  # n_epochs
-        length(rejected_epochs_info),
-        unique_rejections(rejected_epochs_info),
+    # Create z-score rejection info if z_criterion > 0
+    z_rejections = z_criterion > 0 ? ZScoreRejectionInfo(
+        z_measures,
         z_variance,
         z_max,
         z_min,
         z_abs,
         z_range,
         z_kurtosis,
-        absolute_threshold,
-        z_criterion,  # Store the actual value (0 means disabled)
-        abs_criterion,  # Store the actual value (0 means disabled)
-        (z_criterion > 0 ? z_measures : Symbol[]),
+    ) : nothing
+
+    # Create rejection info
+    epoch_info = EpochInfo(
+        dat.data[1].condition[1],
+        dat.data[1].condition_name[1],
+        length(dat.data),
+    )
+
+    rejection_info = EpochRejectionInfo(
+        epoch_info,
+        length(rejected_epochs_info),
+        abs_criterion,
+        abs_rejections,
+        z_criterion,
+        z_rejections,
+        unique_rejections(rejected_epochs_info),
     )
 
     return rejection_info
@@ -842,8 +842,8 @@ end
 """
 Calculate statistical metrics for all epochs.
 
-Returns a Dict with keys: :variance, :max, :min, :abs, :range, :kurtosis
-Each value is a vector of length n_epochs containing the maximum of that metric across channels.
+Returns a Dict with keys: :z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold
+Each value is a Dict mapping channel symbols to vectors of epoch indices that exceeded the criteria.
 """
 function _calculate_epoch_metrics(
     dat::EpochData,
@@ -852,51 +852,39 @@ function _calculate_epoch_metrics(
     abs_criterion::Real,
 )::Dict{Symbol,Dict{Symbol,Vector{Int}}}
 
-    metrics = Dict{Symbol,Dict{Symbol,Vector{Int}}}()
-    
-    # Preallocate dictionaries for each metric
-    metrics[:z_variance] = Dict{Symbol,Vector{Int}}()
-    metrics[:z_max] = Dict{Symbol,Vector{Int}}()
-    metrics[:z_min] = Dict{Symbol,Vector{Int}}()
-    metrics[:z_abs] = Dict{Symbol,Vector{Int}}()
-    metrics[:z_range] = Dict{Symbol,Vector{Int}}()
-    metrics[:z_kurtosis] = Dict{Symbol,Vector{Int}}()
-    metrics[:absolute_threshold] = Dict{Symbol,Vector{Int}}()
+    metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold]
+    metrics = Dict(k => Dict(ch => Int[] for ch in selected_channels) for k in metric_keys)
 
-    # Calculate metrics for each channel
+    n_epochs = eegfun.n_epochs(dat)
     for ch in selected_channels
-        # Initialize vectors for this channel
-        for metric_key in [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold]
-            metrics[metric_key][ch] = Int[]
+        channel_data_all = Vector{Vector{Float64}}(undef, n_epochs)
+        for (i, epoch) in enumerate(dat.data)
+            channel_data_all[i] = epoch[!, ch]
         end
 
-        # Extract all channel data at once
-        channel_data_all = [epoch[!, ch] for epoch in dat.data]
-
-        # Calculate all metrics vectorized
-        variances = var.(channel_data_all)
-        max_values = maximum.(channel_data_all)
-        min_values = minimum.(channel_data_all)
-        abs_values = maximum.([abs.(epoch_data) for epoch_data in channel_data_all])
-        ranges = max_values .- min_values
-        kurtoses = kurtosis.(channel_data_all)
-
-        # Calculate z-scores and identify exceeding epochs (only if z_criterion > 0)
-        if z_criterion > 0
-            z_scores = zscore.([variances, max_values, min_values, abs_values, ranges, kurtoses])
-            metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis]
-
-            for (z_score, metric_key) in zip(z_scores, metric_keys)
-                exceeding_epochs = findall(abs.(z_score) .> z_criterion)
-                append!(metrics[metric_key][ch], exceeding_epochs)
-            end
-        end
-
-        # Check absolute threshold (only if abs_criterion > 0)
         if abs_criterion > 0
-            abs_threshold_violations = findall(epoch -> any(abs.(epoch[!, ch]) .> abs_criterion), dat.data)
+            abs_threshold_violations = findall(epoch_data -> maximum(abs.(epoch_data)) > abs_criterion, channel_data_all)
             append!(metrics[:absolute_threshold][ch], abs_threshold_violations)
         end
+
+        if z_criterion > 0
+
+            variances = var.(channel_data_all)
+            max_values = maximum.(channel_data_all)
+            min_values = minimum.(channel_data_all)
+            abs_values = maximum.(abs.(epoch_data) for epoch_data in channel_data_all)
+            ranges = max_values .- min_values
+            kurtoses = kurtosis.(channel_data_all)
+
+            z_scores = zscore.([variances, max_values, min_values, abs_values, ranges, kurtoses])
+
+            for (z_score, metric_key) in zip(z_scores, metric_keys)
+                bad_epochs = findall(abs.(z_score) .> z_criterion)
+                append!(metrics[metric_key][ch], bad_epochs)
+            end
+
+        end
+
     end
 
     return metrics
@@ -917,37 +905,37 @@ Display rejection information in a human-readable format.
 """
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo:")
-    println(io, "Condition: $(info.condition_number): $(info.condition_name)")
+    println(io, "Condition: $(info.epoch_info.number): $(info.epoch_info.name)")
     println(io, "  Abs criterion: $(info.abs_criterion > 0 ? string(info.abs_criterion,  " μV") : "disabled")")
     println(io, "  Z-criterion: $(info.z_criterion > 0 ? string(info.z_criterion) : "disabled")")
-    println(io, "  Number epochs total: $(info.n_epochs)")
-    println(io, "  Number epochs rejected: $(length(unique_epochs(info.rejected_epochs)))")
-    println(io, "  Number artifacts: $(info.n_artifacts)")
+    println(io, "  Epochs total: $(info.epoch_info.n), Epochs rejected: $(length(unique_epochs(info.rejected_epochs)))")
+    println(io, "  Artifacts total: $(info.n_artifacts)")
     println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected_epochs)))")
  
-    if info.abs_criterion > 0 
+    if info.abs_rejections !== nothing
         println(io, "")
         println(io, "  Rejection breakdown (absolute):")
         println(
             io,
-            "    Abs threshold: $(length(unique_epochs(info.absolute_threshold))) unique epochs, $(length(unique_channels(info.absolute_threshold))) unique channels",
+            "    Abs threshold: $(length(unique_epochs(info.abs_rejections))) unique epochs, $(length(unique_channels(info.abs_rejections))) unique channels",
         )
     end
 
-    if info.z_criterion > 0
+    if info.z_rejections !== nothing
+        z_info = info.z_rejections
         # Map measures to fields and labels
         field_map = Dict(
-            :variance => (info.z_variance, "Z-Variance"),
-            :max => (info.z_max, "Z-Maximum"),
-            :min => (info.z_min, "Z-Minimum"),
-            :abs => (info.z_abs, "Z-Absolute"),
-            :range => (info.z_range, "Z-Range"),
-            :kurtosis => (info.z_kurtosis, "Z-Kurtosis"),
+            :variance => (z_info.z_variance, "Z-Variance"),
+            :max => (z_info.z_max, "Z-Maximum"),
+            :min => (z_info.z_min, "Z-Minimum"),
+            :abs => (z_info.z_abs, "Z-Absolute"),
+            :range => (z_info.z_range, "Z-Range"),
+            :kurtosis => (z_info.z_kurtosis, "Z-Kurtosis"),
         )
 
         # Determine which selected measures actually have entries
         nonempty_selected = Tuple{Vector{Rejection},String}[]
-        for m in info.z_measures
+        for m in z_info.z_measures
             vec, label = field_map[m]
             if !isempty(vec)
                 push!(nonempty_selected, (vec, label))
@@ -963,12 +951,9 @@ function Base.show(io::IO, info::EpochRejectionInfo)
  
 end
 
-
 Base.show(io::IO, infos::Vector{EpochRejectionInfo}) = Base.show.(Ref(io), infos)
 
-#=============================================================================
-    UNIFIED ARTIFACT DETECTION & REPAIR API
-=============================================================================#
+
 
 
 """
