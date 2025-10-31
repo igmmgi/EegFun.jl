@@ -74,6 +74,7 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
 
+bad_epochs
 bad_epochs[1]
 
 eegfun.unique_rejections(bad_epochs)
