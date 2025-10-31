@@ -558,8 +558,8 @@ Stores information about which epochs were rejected and why.
 - `rejected_by_z_range::Vector{Int}`: Epochs rejected due to large range (z-score)
 - `rejected_by_z_kurtosis::Vector{Int}`: Epochs rejected due to high kurtosis (z-score)
 - `rejected_by_abs_threshold::Vector{Int}`: Epochs rejected due to absolute voltage threshold
-- `z_criterion::Float64`: Z-score criterion used for rejection
-- `abs_criterion::Union{Float64, Nothing}`: Absolute voltage threshold (μV) used for rejection
+- `z_criterion::Real`: Z-score criterion used for rejection
+- `abs_criterion::Union{Real, Nothing}`: Absolute voltage threshold (μV) used for rejection
 - `z_measures::Vector{Symbol}`: Which z-score measures were evaluated
 """
 struct EpochRejectionInfo
@@ -573,8 +573,8 @@ struct EpochRejectionInfo
     z_range::Vector{Rejection}
     z_kurtosis::Vector{Rejection}
     absolute_threshold::Vector{Rejection}
-    z_criterion::Float64
-    abs_criterion::Float64
+    z_criterion::Real
+    abs_criterion::Real
     z_measures::Vector{Symbol}
 end
 
@@ -780,8 +780,8 @@ function detect_bad_epochs_automatic(
         z_range,
         z_kurtosis,
         absolute_threshold,
-        Float64(z_criterion),  # Store the actual value (0 means disabled)
-        Float64(abs_criterion),  # Store the actual value (0 means disabled)
+        z_criterion,  # Store the actual value (0 means disabled)
+        abs_criterion,  # Store the actual value (0 means disabled)
         (z_criterion > 0 ? z_measures : Symbol[]),
     )
 
@@ -951,6 +951,9 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     end
  
 end
+
+
+Base.show(io::IO, infos::Vector{EpochRejectionInfo}) = Base.show.(Ref(io), infos)
 
 #=============================================================================
     UNIFIED ARTIFACT DETECTION & REPAIR API
