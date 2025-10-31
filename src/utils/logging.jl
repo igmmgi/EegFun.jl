@@ -40,6 +40,90 @@ function format_duration(duration::Millisecond)
     end
 end
 
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+# Internal: normalize log level
+_to_loglevel(level::Symbol) =
+    level === :debug ? Logging.Debug :
+    level === :info  ? Logging.Info  :
+    level === :warn  ? Logging.Warn  :
+    level === :error ? Logging.Error : Logging.Info
+
+# Back-compat overload for String input
+_to_loglevel(level::String) = _to_loglevel(Symbol(lowercase(level)))
+
+"""
+    _write_log_header(io::IO, start_time::DateTime)
+
+Write version info and start time to a log file.
+"""
+function _write_log_header(io::IO, start_time::DateTime)
+    version_info = eegfun_version_info()
+    println(io, "julia version: $(version_info["julia_version"])")
+    println(io, "eegfun version: $(version_info["eegfun_version"])")
+    println(io, "Start time: ", Dates.format(start_time, "dd-mm-yyyy HH:MM:SS"))
+end
+
+"""
+    _open_log_file(handle_field::Union{Nothing,IO}, start_time_field::Union{Nothing,DateTime}, filename::String) -> Tuple{IO, DateTime}
+
+Open a log file, closing any existing one, and record the start time.
+Returns the opened file handle and start time.
+"""
+function _open_log_file(handle_field::Union{Nothing,IO}, start_time_field::Union{Nothing,DateTime}, filename::String)
+    !isnothing(handle_field) && close(handle_field)
+
+    handle = open(filename, "w")
+    start_time = now()
+    _write_log_header(handle, start_time)
+    
+    return handle, start_time
+end
+
+"""
+    _close_log_file(handle::Union{Nothing,IO}, start_time::Union{Nothing,DateTime}, label::String)
+
+Close a log file, write duration, and return nothing for cleanup.
+"""
+function _close_log_file(handle::Union{Nothing,IO}, start_time::Union{Nothing,DateTime}, label::String)
+    if !isnothing(handle)
+        duration = now() - start_time
+        println(handle, "\n$(label): ", format_duration(duration))
+        close(handle)
+    end
+end
+
+"""
+    _create_file_logger(io::IO, level::Logging.LogLevel; include_kwargs::Bool = false)
+
+Create a FormatLogger that writes to the given IO handle.
+"""
+function _create_file_logger(io::IO, level::Logging.LogLevel; include_kwargs::Bool = false)
+    return FormatLogger(io) do io_inner, log
+        if log.level >= level
+            println(io_inner, log.message)
+            if include_kwargs && !isempty(log.kwargs)
+                for (key, val) in log.kwargs
+                    println(io_inner, "$key = $val")
+                end
+            end
+        end
+    end
+end
+
+"""
+    _create_tee_logger(console_level::Logging.LogLevel, file_handle::IO, file_level::Logging.LogLevel; include_kwargs::Bool = false)
+
+Create a TeeLogger that writes to both console and file.
+"""
+function _create_tee_logger(console_level::Logging.LogLevel, file_handle::IO, file_level::Logging.LogLevel; include_kwargs::Bool = false)
+    console_logger = ConsoleLogger(stdout, console_level)
+    file_logger = _create_file_logger(file_handle, file_level; include_kwargs = include_kwargs)
+    return TeeLogger(console_logger, file_logger)
+end
+
 """
     setup_global_logging(log_file::String)
 
@@ -60,58 +144,27 @@ write(global_log, "Direct write to global log\\n")
 ```
 """
 
-# Internal: normalize log level
-_to_loglevel(level::Symbol) =
-    level === :debug ? Logging.Debug :
-    level === :info  ? Logging.Info  :
-    level === :warn  ? Logging.Warn  :
-    level === :error ? Logging.Error : Logging.Info
-
-# Back-compat overload for String input
-_to_loglevel(level::String) = _to_loglevel(Symbol(lowercase(level)))
-
 function setup_global_logging(log_file::String; log_level::Symbol = :info)
-
-    # Convert log level to LogLevel and store it
+    # Convert log level and store it
     level = _to_loglevel(log_level)
     LOG_STATE.log_level = level
 
-    # Close any existing global log file
-    if !isnothing(LOG_STATE.global_log_handle)
-        close(LOG_STATE.global_log_handle)
-    end
-
-    # Open new global log file
-    LOG_STATE.global_log_handle = open(log_file, "w")
-
-    # Record start time
-    LOG_STATE.global_log_start_time = now()
-
-    # Some version info
-    version_info = eegfun_version_info()
-    println(LOG_STATE.global_log_handle, "julia version: $(version_info["julia_version"])")
-    println(LOG_STATE.global_log_handle, "eegfun version: $(version_info["eegfun_version"])")
-    println(LOG_STATE.global_log_handle, "Start time: ", Dates.format(LOG_STATE.global_log_start_time, "dd-mm-yyyy HH:MM:SS"))
+    # Open log file (handles closing existing, recording time, writing header)
+    handle, start_time = _open_log_file(LOG_STATE.global_log_handle, LOG_STATE.global_log_start_time, log_file)
+    LOG_STATE.global_log_handle = handle
+    LOG_STATE.global_log_start_time = start_time
 
     # Set up the global logger, but only if we're not already file logging
     if isnothing(LOG_STATE.log_handle)
-        # Create a logger that writes to both stdout and file
-        console_logger = ConsoleLogger(stdout, level)
-        file_logger = FormatLogger(LOG_STATE.global_log_handle) do io, log
-            if log.level >= level
-                println(io, log.message)
-            end
-        end
-
         # Save current logger before replacing
         LOG_STATE.saved_logger = global_logger()
 
-        # Combine both loggers and set as global
-        logger = TeeLogger(console_logger, file_logger)
+        # Create and set the combined logger
+        logger = _create_tee_logger(level, handle, level)
         global_logger(logger)
     end
 
-    return LOG_STATE.global_log_handle
+    return handle
 end
 
 """
@@ -120,18 +173,13 @@ end
 Close the global log file and add a closing timestamp with duration.
 """
 function close_global_logging()
-    if !isnothing(LOG_STATE.global_log_handle)
-        duration = now() - LOG_STATE.global_log_start_time
-        println(LOG_STATE.global_log_handle, "\nDuration: ", format_duration(duration))
-        close(LOG_STATE.global_log_handle)
-        LOG_STATE.global_log_handle = nothing
-        LOG_STATE.global_log_start_time = nothing
+    _close_log_file(LOG_STATE.global_log_handle, LOG_STATE.global_log_start_time, "Duration")
+    LOG_STATE.global_log_handle = nothing
+    LOG_STATE.global_log_start_time = nothing
 
-        # Only restore logger if we're not in file logging mode
-        if isnothing(LOG_STATE.log_handle)
-            global_logger(LOG_STATE.saved_logger)
-        end
-    end
+    # Only restore logger if we're not in file logging mode
+    isnothing(LOG_STATE.log_handle) && global_logger(LOG_STATE.saved_logger)
+
 end
 
 """
@@ -153,52 +201,23 @@ setup_logging("my_analysis.log")
 ```
 """
 function setup_logging(log_file::String; log_level::Symbol = :info)
-    # Convert log level to LogLevel
+    # Convert log level and store it
     level = _to_loglevel(log_level)
-
-    # Store the current log level
     LOG_STATE.log_level = level
 
     # Check if we're entering logging for the first time (need to save logger)
     was_logging = !isnothing(LOG_STATE.log_handle)
 
-    # Close any existing log file
-    if was_logging
-        close(LOG_STATE.log_handle)
-    end
-
-    # Open new log file (creates a new file each time)
-    LOG_STATE.log_handle = open(log_file, "w")
-
-    # Record start time
-    LOG_STATE.log_start_time = now()
-
-    # Some version info
-    version_info = eegfun_version_info()
-    println(LOG_STATE.log_handle, "julia version: $(version_info["julia_version"])")
-    println(LOG_STATE.log_handle, "eegfun version: $(version_info["eegfun_version"])")
-    println(LOG_STATE.log_handle, "Start time: ", Dates.format(LOG_STATE.log_start_time, "dd-mm-yyyy HH:MM:SS"))
+    # Open log file (handles closing existing, recording time, writing header)
+    handle, start_time = _open_log_file(LOG_STATE.log_handle, LOG_STATE.log_start_time, log_file)
+    LOG_STATE.log_handle = handle
+    LOG_STATE.log_start_time = start_time
 
     # Only save logger if we're entering logging for the first time
-    if !was_logging
-        LOG_STATE.saved_logger = global_logger()
-    end
+    !was_logging && (LOG_STATE.saved_logger = global_logger())
 
-    # Create a logger that writes to both stdout and file
-    console_logger = ConsoleLogger(stdout, level)
-    file_logger = FormatLogger(LOG_STATE.log_handle) do io, log
-        if log.level >= level
-            println(io, log.message)
-            if !isempty(log.kwargs)
-                for (key, val) in log.kwargs
-                    println(io, "$key = $val")
-                end
-            end
-        end
-    end
-
-    # Combine both loggers
-    logger = TeeLogger(console_logger, file_logger)
+    # Create and set the combined logger (with kwargs support for file logging)
+    logger = _create_tee_logger(level, handle, level; include_kwargs = true)
     global_logger(logger)
 
     return nothing
@@ -211,14 +230,10 @@ Close the individual log file and add a closing timestamp with duration.
 Restores the previous logger (which may be the global logger).
 """
 function close_logging()
-    if !isnothing(LOG_STATE.log_handle)
-        duration = now() - LOG_STATE.log_start_time
-        println(LOG_STATE.log_handle, "\nFile Processing Duration: ", format_duration(duration))
-        close(LOG_STATE.log_handle)
-        LOG_STATE.log_handle = nothing
-        LOG_STATE.log_start_time = nothing
+    _close_log_file(LOG_STATE.log_handle, LOG_STATE.log_start_time, "File Processing Duration")
+    LOG_STATE.log_handle = nothing
+    LOG_STATE.log_start_time = nothing
 
-        # Restore the saved logger (which was the global logger before file logging replaced it)
-        global_logger(LOG_STATE.saved_logger)
-    end
+    # Restore the saved logger (which was the global logger before file logging replaced it)
+    global_logger(LOG_STATE.saved_logger)
 end
