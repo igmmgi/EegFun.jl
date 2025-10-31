@@ -62,20 +62,8 @@ using eegfun
         @test_throws ArgumentError eegfun.print_vector(v, max_length = 5, n_ends = -2)
     end
 
-    @testset "Git Commit" begin
-        commit = eegfun.get_git_commit()
-        @test typeof(commit) === String
-        @test !isempty(commit)
-
-        # Test that it returns a valid git hash format or "unknown"
-        if commit != "unknown"
-            @test length(commit) == 40  # SHA-1 hash length
-            @test all(c -> c in "0123456789abcdef", commit)  # Hex characters only
-        end
-    end
-
     @testset "Version" begin
-        version = eegfun.get_eegfun_version()
+        version = eegfun.get_package_version(package_name = "eegfun")
         @test typeof(version) === String
         @test !isempty(version)
 
@@ -99,9 +87,9 @@ using eegfun
         @test contains(output, "nested")
         @test contains(output, "key = \"value\"")
         @test contains(output, "metadata")
-        @test contains(output, "generated_at")
+        @test contains(output, "date")
+        @test contains(output, "julia_version")
         @test contains(output, "eegfun_version")
-        @test contains(output, "git_commit")
 
         # Test printing to file
         test_file = "test_config.toml"
@@ -173,9 +161,9 @@ using eegfun
 
         # Test metadata structure
         @test contains(output, "[metadata]")
-        @test contains(output, "generated_at = ")
+        @test contains(output, "date = ")
+        @test contains(output, "julia_version = ")
         @test contains(output, "eegfun_version = ")
-        @test contains(output, "git_commit = ")
 
         # Test with Symbol keys (should be converted to strings)
         symbol_config = Dict(:symbol_key => Dict(:nested_symbol => "value"))
