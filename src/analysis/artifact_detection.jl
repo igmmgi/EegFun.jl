@@ -548,6 +548,8 @@ unique_epochs(rejections::Vector{Rejection}) = unique(map(x -> x.epoch, rejectio
 Stores information about which epochs were rejected and why.
 
 # Fields
+- `condition_number::Int`: Condition number from the epoch data
+- `condition_name::String`: Condition name from the epoch data
 - `n_epochs::Int`: Number of epochs before rejection
 - `n_artifacts::Int`: Number of epochs after rejection
 - `rejected_epochs::Vector{Int}`: Indices of rejected epochs
@@ -563,6 +565,8 @@ Stores information about which epochs were rejected and why.
 - `z_measures::Vector{Symbol}`: Which z-score measures were evaluated
 """
 struct EpochRejectionInfo
+    condition_number::Int
+    condition_name::String
     n_epochs::Int
     n_artifacts::Int
     rejected_epochs::Vector{Rejection}
@@ -768,8 +772,14 @@ function detect_bad_epochs_automatic(
         end
     end
 
+    # Extract condition info from data
+    cond_num = dat.data[1].condition[1]
+    cond_name = dat.data[1].condition_name[1]
+
     # Create rejection info
     rejection_info = EpochRejectionInfo(
+        cond_num,
+        cond_name,
         length(dat.data),  # n_epochs
         length(rejected_epochs_info),
         unique_rejections(rejected_epochs_info),
@@ -907,12 +917,13 @@ Display rejection information in a human-readable format.
 """
 function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "EpochRejectionInfo:")
+    println(io, "Condition: $(info.condition_number): $(info.condition_name)")
     println(io, "  Abs criterion: $(info.abs_criterion > 0 ? string(info.abs_criterion,  " μV") : "disabled")")
     println(io, "  Z-criterion: $(info.z_criterion > 0 ? string(info.z_criterion) : "disabled")")
     println(io, "  Number epochs total: $(info.n_epochs)")
     println(io, "  Number epochs rejected: $(length(unique_epochs(info.rejected_epochs)))")
     println(io, "  Number artifacts: $(info.n_artifacts)")
-    println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected_epochs)))\n")
+    println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected_epochs)))")
  
     if info.abs_criterion > 0 
         println(io, "")
