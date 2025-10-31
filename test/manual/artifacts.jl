@@ -25,7 +25,7 @@ eegfun.channel_difference!(
     channel_out = :hEOG,
 ); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
 
-@btime eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
+eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 dat.data[!, :is_vEOG]
@@ -74,7 +74,8 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
 
-bad_epochs
+bad_epochs[1]
+
 eegfun.unique_rejections(bad_epochs)
 eegfun.unique_rejections(bad_epochs[1])
 eegfun.unique_channels(bad_epochs)

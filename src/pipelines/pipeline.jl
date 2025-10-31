@@ -314,7 +314,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 rejection_info = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
-                    abs_criterion = Float64(preprocess_cfg.eeg.artifact_value_criterion),
+                    abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
                 )
                 @info rejection_info
                 
@@ -330,7 +330,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 rejection_info_updated = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
-                    abs_criterion = Float64(preprocess_cfg.eeg.artifact_value_criterion),
+                    abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
                 )
                 @info rejection_info_updated
                 
