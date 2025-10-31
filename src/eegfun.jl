@@ -74,12 +74,16 @@ include("analysis/ica.jl")
 include("analysis/jackknife_average.jl")
 include("analysis/lrp.jl")
 include("analysis/mirror.jl")
-include("analysis/pipeline.jl")
 include("analysis/realign.jl")
 include("analysis/rereference.jl")
 include("analysis/resample.jl")
 include("analysis/tf.jl")
 include("analysis/triggers.jl")
+
+# analysis pipelines
+include("pipelines/utils/utils.jl")
+include("pipelines/utils/template.jl")
+include("pipelines/pipeline.jl")
 
 # Plotting functions
 include("plots/utils/plot_misc.jl")
