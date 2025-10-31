@@ -171,7 +171,7 @@ Reads a layout file in CSV format and returns a DataFrame containing the layout 
 """
 function read_layout(file)
     if !isfile(file)
-        @minimal_error "Cannot open file: $file"
+        @minimal_error_throw "Cannot open file: $file"
     end
     @info "Reading layout from $file"
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))

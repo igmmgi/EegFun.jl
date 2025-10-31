@@ -425,6 +425,7 @@ function create_test_epochs_with_artifacts(
         df.epoch = fill(epoch, n_timepoints)
         df.participant = fill(participant, n_timepoints)
         df.condition = fill(condition, n_timepoints)
+        df.condition_name = fill("condition_$condition", n_timepoints)
 
         # Add artifacts to some epochs (only the first n_bad_epochs)
         is_bad_epoch = epoch <= n_bad_epochs

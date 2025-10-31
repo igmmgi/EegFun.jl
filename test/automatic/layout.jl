@@ -15,8 +15,7 @@ using OrderedCollections
         @test all(test_layout.data.azi .!== missing)    # No missing azimuths
 
         # Test error handling for read_layout
-        result = eegfun.read_layout("nonexistent_file.csv")
-        @test result === nothing
+        @test_throws Exception eegfun.read_layout("nonexistent_file.csv")
     end
 
     @testset "Polar to Cartesian Conversion" begin
@@ -139,8 +138,7 @@ using OrderedCollections
             @test :azi in propertynames(layout.data)
 
             # Test error handling for non-existent file
-            result = eegfun.read_layout("nonexistent.csv")
-            @test result === nothing
+            @test_throws Exception eegfun.read_layout("nonexistent.csv")
         end
 
         # Test polar to cartesian conversions
