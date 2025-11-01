@@ -101,7 +101,7 @@ using GLMakie
             nothing,
             nothing,
         )
-        erp_data = eegfun.ErpData(df, layout, 1000.0, eegfun.AnalysisInfo(), 10)
+        erp_data = eegfun.ErpData("test_data", 1, "test", df, layout, 1000, eegfun.AnalysisInfo(), 10)
 
         # Calculate GFP
         gfp_result = eegfun.gfp(erp_data, normalize = false)
@@ -324,7 +324,7 @@ end
             nothing,
             nothing,
         )
-        erp_data = eegfun.ErpData(df, layout, 1000.0, eegfun.AnalysisInfo(), 10)
+        erp_data = eegfun.ErpData("test_data", 1, "test", df, layout, 1000, eegfun.AnalysisInfo(), 10)
 
         # Calculate GFP
         gfp_result = eegfun.gfp(erp_data, normalize = false)
@@ -348,7 +348,7 @@ end
             nothing,
             nothing,
         )
-        erp_data = eegfun.ErpData(df, layout, 1000.0, eegfun.AnalysisInfo(), 10)
+        erp_data = eegfun.ErpData("test_data", 1, "test", df, layout, 1000, eegfun.AnalysisInfo(), 10)
 
         # Calculate GFP
         gfp_result = eegfun.gfp(erp_data, normalize = false)

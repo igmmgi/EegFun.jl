@@ -1,4 +1,4 @@
-# === EEG DATA UTILITIES ===
+#  === EEG DATA UTILITIES ===
 #
 # This file provides utilities for accessing and manipulating EEG data structures.
 # It includes functions for column identification, data access, convenience functions,
@@ -363,9 +363,13 @@ n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
 
-condition_number(dat::EpochData)::Int = dat.data[1].condition[1]
-condition_name(dat::EpochData)::String = dat.data[1].condition_name[1]
-file_name(dat::EpochData)::String = dat.data[1].file[1]
+condition_number(dat::ErpData)::Int = dat.condition
+condition_number(dat::EpochData)::Int = dat.condition
+
+condition_name(dat::ErpData)::String = dat.condition_name
+condition_name(dat::EpochData)::String = dat.condition_name
+
+file_name(dat::EpochData)::String = dat.file
 
 
 """
@@ -754,8 +758,8 @@ end
 
 Internal helper to create ContinuousData from subset DataFrame.
 """
-function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info)
-    return ContinuousData(data_subset, layout, sample_rate, analysis_info)
+function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, file::String)
+    return ContinuousData(file, data_subset, layout, sample_rate, analysis_info)
 end
 
 """
@@ -763,8 +767,8 @@ end
 
 Internal helper to create ErpData from subset DataFrame.
 """
-function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int)
-    return ErpData(data_subset, layout, sample_rate, analysis_info, n_epochs)
+function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int, condition::Int, condition_name::String, file::String)
+    return ErpData(file, condition, condition_name, data_subset, layout, sample_rate, analysis_info, n_epochs)
 end
 
 """
@@ -772,8 +776,8 @@ end
 
 Internal helper to create EpochData from subset DataFrames.
 """
-function _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info)
-    return EpochData(data_subset, layout, sample_rate, analysis_info)
+function _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info, condition::Int, condition_name::String, file::String)
+    return EpochData(file, condition, condition_name, data_subset, layout, sample_rate, analysis_info)
 end
 
 # === SUBSET IMPLEMENTATIONS ===
@@ -787,7 +791,7 @@ function subset(
     selected_channels, selected_samples, layout_subset =
         _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
-    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
+    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.file)
 end
 
 function subset(
@@ -799,7 +803,7 @@ function subset(
     selected_channels, selected_samples, layout_subset =
         _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
-    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.n_epochs)
+    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.n_epochs, dat.condition, dat.condition_name, dat.file)
 end
 
 function subset(
@@ -812,17 +816,23 @@ function subset(
     selected_epochs, selected_channels, selected_samples, layout_subset =
         _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
-    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info)
+    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.condition, dat.condition_name, dat.file)
 end
 
 function subset(
     datasets::Vector{ErpData};
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     include_extra::Bool = false,
 )::Vector{ErpData}
+    # First filter by condition_selection
+    selected_conditions = get_selected_conditions(datasets, condition_selection)
+    datasets_filtered = datasets[selected_conditions]
+    
+    # Then apply channel and sample selection to each dataset
     return subset.(
-        datasets;
+        datasets_filtered;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         include_extra = include_extra,
@@ -831,13 +841,19 @@ end
 
 function subset(
     datasets::Vector{EpochData};
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
 )::Vector{EpochData}
+    # First filter by condition_selection
+    selected_conditions = get_selected_conditions(datasets, condition_selection)
+    datasets_filtered = datasets[selected_conditions]
+    
+    # Then apply channel, sample, and epoch selection to each dataset
     return subset.(
-        datasets;
+        datasets_filtered;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         epoch_selection = epoch_selection,
@@ -929,6 +945,21 @@ epochs(epoch_number::Int) = x -> x .== epoch_number
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
+# Helper to extract condition name from ErpData or EpochData
+_get_condition_name(dat::ErpData)::String = dat.condition_name
+_get_condition_name(dat::EpochData)::String = dat.condition_name
+
+# Helper function predicates for easier condition filtering (for Vector{ErpData} and Vector{EpochData})
+conditions() = x -> fill(true, length(x))  # Default: select all conditions given
+conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> [i in condition_indices for i = 1:length(x)]
+conditions(condition_index::Int) = x -> [i == condition_index for i = 1:length(x)]
+conditions(condition_names::Vector{String}) = x -> [_get_condition_name(dat) in condition_names for dat in x]
+conditions(condition_name::String) = x -> [_get_condition_name(dat) == condition_name for dat in x]
+conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
+conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
+conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(dat) in condition_names for dat in x])
+conditions_not(condition_name::String) = x -> .!([_get_condition_name(dat) == condition_name for dat in x])
+
 # Helper to select channels/columns based on a predicate (+ which to include)
 function get_selected_channels(dat, channel_selection::Function; include_meta::Bool = true, include_extra::Bool = true)
 
@@ -971,6 +1002,18 @@ function get_selected_epochs(dat::MultiDataFrameEeg, epoch_selection::Function)
     return findall(epoch_selection(all_epochs))
 end
 
+# Helper to select conditions from Vector{ErpData} based on a predicate
+function get_selected_conditions(datasets::Vector{ErpData}, condition_selection::Function)
+    all_indices = 1:length(datasets)
+    return findall(condition_selection(datasets))
+end
+
+# Helper to select conditions from Vector{EpochData} based on a predicate
+function get_selected_conditions(datasets::Vector{EpochData}, condition_selection::Function)
+    all_indices = 1:length(datasets)
+    return findall(condition_selection(datasets))
+end
+
 
 
 
@@ -1000,7 +1043,7 @@ function convert(dat::T, epoch_idx::Int)::ContinuousData where {T<:MultiDataFram
     if epoch_idx < 1 || epoch_idx > length(dat.data)
         @minimal_error "Epoch index $epoch_idx out of range (1:$(length(dat.data)))"
     end
-    return ContinuousData(dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info) # TODO: should we use SingleDataFrameEeg?
+    return ContinuousData(dat.file, dat.data[epoch_idx], dat.layout, dat.sample_rate, dat.analysis_info) # TODO: should we use SingleDataFrameEeg?
 end
 
 
@@ -1195,7 +1238,6 @@ function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame"
     df = hcat(
         DataFrame(
-            file = filename(dat),
             time = dat.time,
             sample = 1:length(dat.time),
             triggers = _clean_triggers(dat.triggers.raw),
@@ -1224,7 +1266,9 @@ eeg_data = create_eeg_dataframe(biosemi_data, layout)
 ```
 """
 function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData, layout::Layout)::ContinuousData
-    return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.sample_rate[1], AnalysisInfo())
+    file_name = filename(dat)
+    df = create_eeg_dataframe(dat)
+    return ContinuousData(file_name, df, layout, dat.header.sample_rate[1], AnalysisInfo())
 end
 
 """
@@ -1286,10 +1330,9 @@ function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataF
         triggers, triggers_info = _extract_triggers_from_markers(dat.markers, n_samples)
     end
 
-    # Create the DataFrame
+    # Create the DataFrame (file column removed, will be in struct)
     df = hcat(
         DataFrame(
-            file = dat.filename,
             time = time,
             sample = sample,
             triggers = triggers,
@@ -1320,7 +1363,9 @@ eeg_data = create_eeg_dataframe(brainvision_data, layout)
 ```
 """
 function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData, layout::Layout)::ContinuousData
-    return ContinuousData(create_eeg_dataframe(dat), layout, dat.header.Fs, AnalysisInfo())
+    file_name = basename_without_ext(dat.filename)
+    df = create_eeg_dataframe(dat)
+    return ContinuousData(file_name, df, layout, dat.header.Fs, AnalysisInfo())
 end
 
 """

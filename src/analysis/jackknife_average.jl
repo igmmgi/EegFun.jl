@@ -76,10 +76,12 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
         # Create a copy of the first included ERP's data as the base
         jackknife_data = copy(included_erps[1].data)
 
-        # Update metadata to indicate this is a jackknife average
-        if hasproperty(jackknife_data, :condition_name)
-            cond_name = jackknife_data[1, :condition_name]
-            jackknife_data.condition_name .= "$(cond_name)_jackknife_$(excluded_idx)"
+        # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
+        cols_to_remove = [:condition, :condition_name, :n_epochs]
+        for col in cols_to_remove
+            if hasproperty(jackknife_data, col)
+                select!(jackknife_data, Not(col))
+            end
         end
 
         # Average EEG channels across included participants
@@ -95,8 +97,16 @@ function _create_jackknife_averages(erps::Vector{ErpData})::Vector{ErpData}
         # Calculate total number of epochs across included participants
         total_epochs = sum(erp.n_epochs for erp in included_erps)
 
+        # Get condition info from first ERP and update for jackknife
+        cond_name = included_erps[1].condition_name
+        condition = included_erps[1].condition
+        jackknife_cond_name = "$(cond_name)_jackknife_$(excluded_idx)"
+
         # Create ErpData object for this jackknife average
         jackknife_erp = ErpData(
+            first_erp.file,
+            condition,
+            jackknife_cond_name,
             jackknife_data,
             first_erp.layout,
             first_erp.sample_rate,
@@ -148,8 +158,8 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
 
         # Group by condition
         for erp in data
-            # For ErpData, condition is stored in the DataFrame
-            cond_num = hasproperty(erp.data, :condition) ? erp.data[1, :condition] : 1
+            # For ErpData, condition is stored in the struct
+            cond_num = erp.condition
             if !haskey(all_erps_by_condition, cond_num)
                 all_erps_by_condition[cond_num] = ErpData[]
             end
@@ -220,16 +230,19 @@ jackknife_cond2 = jackknife_average(lrp_data_cond2)
 - The resulting data has the same format as the input (ErpData objects)
 - Common workflow: Calculate LRP → Jackknife average → Statistical testing
 """
-function jackknife_average(erps::Vector{ErpData})::Vector{ErpData}
+function jackknife_average(erps::Vector{ErpData}; condition_selection::Function = conditions())::Vector{ErpData}
     @info "Starting jackknife averaging"
 
+    # Apply condition_selection first
+    erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
+
     # Validate inputs
-    if (error_msg = _validate_jackknife_params(erps)) !== nothing
+    if (error_msg = _validate_jackknife_params(erps_filtered)) !== nothing
         @minimal_error_throw(error_msg)
     end
 
     # Create jackknife averages
-    jackknife_results = _create_jackknife_averages(erps)
+    jackknife_results = _create_jackknife_averages(erps_filtered)
 
     @info "Jackknife averaging complete"
     return jackknife_results

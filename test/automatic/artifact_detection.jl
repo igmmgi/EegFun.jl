@@ -18,7 +18,7 @@ function create_test_data_with_artifacts(; n::Int = 1000, fs::Int = 1000)
     df = DataFrame(:time => t, :triggers => zeros(Int, n), :Ch1 => clean_signal, :Ch2 => artifact_signal)
     layout = eegfun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-    dat = eegfun.ContinuousData(df, layout, fs, eegfun.AnalysisInfo())
+    dat = eegfun.ContinuousData("test_data", df, layout, fs, eegfun.AnalysisInfo())
 
     return dat
 

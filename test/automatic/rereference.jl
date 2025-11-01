@@ -228,7 +228,7 @@ end
         output_file = joinpath(output_dir2, "1_erps_cleaned.jld2")
         rereferenced_erps = load(output_file, "erps")
         @test length(rereferenced_erps) == 1  # Only condition 1
-        @test rereferenced_erps[1].data.condition[1] == 1
+        @test rereferenced_erps[1].condition == 1
     end
 
     @testset "Error handling" begin
@@ -339,8 +339,8 @@ end
         @test all(rereferenced_erp.data.time .== original_erp.data.time)
 
         # Verify condition information is preserved
-        @test all(rereferenced_erp.data.condition .== original_erp.data.condition)
-        @test all(rereferenced_erp.data.condition_name .== original_erp.data.condition_name)
+        @test rereferenced_erp.condition == original_erp.condition
+        @test rereferenced_erp.condition_name == original_erp.condition_name
         @test all(rereferenced_erp.data.participant .== original_erp.data.participant)
     end
 

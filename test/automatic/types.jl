@@ -87,7 +87,7 @@ using eegfun
         analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
         @test continuous_data.data == df
         @test continuous_data.layout == layout
         @test continuous_data.sample_rate == 250
@@ -105,7 +105,7 @@ using eegfun
         analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
-        erp_data = eegfun.ErpData(df, layout, 250, analysis_info, 10)
+        erp_data = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 10)
         @test erp_data.data == df
         @test erp_data.layout == layout
         @test erp_data.sample_rate == 250
@@ -125,7 +125,7 @@ using eegfun
         analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
         @test epoch_data.data == [epoch1, epoch2]
         @test epoch_data.layout == layout
         @test epoch_data.sample_rate == 250
@@ -320,17 +320,17 @@ using eegfun
 
     @testset "Filename functions" begin
         # Test filename function for SingleDataFrameEeg
-        df = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0], file = ["test_file.jld2", "test_file.jld2"])
+        df = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_file.jld2", df, layout, 250, analysis_info)
 
         @test eegfun.filename(continuous_data) == "test_file.jld2"
 
         # Test filename function for MultiDataFrameEeg
-        epoch1 = DataFrame(time = [0.1], Fz = [1.0], file = ["test_file.jld2"])
-        epoch2 = DataFrame(time = [0.2], Fz = [2.0], file = ["test_file.jld2"])
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch1 = DataFrame(time = [0.1], Fz = [1.0])
+        epoch2 = DataFrame(time = [0.2], Fz = [2.0])
+        epoch_data = eegfun.EpochData("test_file.jld2", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
         @test eegfun.filename(epoch_data) == "test_file.jld2"
     end

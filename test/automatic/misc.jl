@@ -170,7 +170,7 @@ using eegfun
 
         # Test ContinuousData copy
         df = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
-        continuous_data = eegfun.ContinuousData(df, layout, 250.0, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
         copied = copy(continuous_data)
 
         @test copied isa eegfun.ContinuousData
@@ -188,7 +188,7 @@ using eegfun
         # Test EpochData copy
         epoch1 = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250.0, analysis_info)
+        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
         copied_epoch = copy(epoch_data)
 
         @test copied_epoch isa eegfun.EpochData
@@ -198,7 +198,7 @@ using eegfun
 
         # Test ErpData copy
         erp_df = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
-        erp_data = eegfun.ErpData(erp_df, layout, 250.0, analysis_info, 10)
+        erp_data = eegfun.ErpData("test_data", 1, "condition_1", erp_df, layout, 250, analysis_info, 10)
         copied_erp = copy(erp_data)
 
         @test copied_erp isa eegfun.ErpData
@@ -256,7 +256,7 @@ using eegfun
         )
         layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
-        continuous_data = eegfun.ContinuousData(df, layout, 250.0, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test AND operation
         eegfun.combine_boolean_columns!(continuous_data, [:is_extreme, :is_eog], :and)

@@ -18,9 +18,12 @@ using DataFrames
         epoch2 = DataFrame(time = collect(time), Cz = collect(1.0:n_samples) .* 2, Pz = collect(n_samples:-1.0:1) .* 2)
 
         epochs = eegfun.EpochData(
+            "test_data",
+            1,
+            "condition_1",
             [epoch1, epoch2],
             eegfun.Layout(DataFrame(), nothing, nothing),
-            100.0,
+            100,
             eegfun.AnalysisInfo(),
         )
 
@@ -52,7 +55,7 @@ using DataFrames
 
         epoch1 = DataFrame(time = collect(time), Cz = collect(1.0:n_samples), Pz = collect(n_samples:-1.0:1))
 
-        epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
+        epochs = eegfun.EpochData("test_data", 1, "condition_1", [epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo())
 
         original_length = nrow(epochs.data[1])
         original_data = copy(epochs.data[1])
@@ -89,7 +92,7 @@ using DataFrames
             condition = fill(1, n_samples),
         )
 
-        epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
+        epochs = eegfun.EpochData("test_data", 1, "condition_1", [epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo())
 
         original_length = nrow(epochs.data[1])
         original_time = copy(epochs.data[1].time)
@@ -123,7 +126,7 @@ using DataFrames
         epoch1 = DataFrame(time = collect(time), Cz = collect(1.0:n_samples))
 
         epochs_original =
-            eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
+            eegfun.EpochData("test_data", 1, "condition_1", [epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo())
         original_length = nrow(epochs_original.data[1])
 
         # Non-mutating mirror
@@ -151,7 +154,7 @@ using DataFrames
 
         erp_df = DataFrame(time = collect(time), Cz = collect(1.0:n_samples), Pz = collect(n_samples:-1.0:1))
 
-        erp = eegfun.ErpData(erp_df, eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo(), 10)
+        erp = eegfun.ErpData("test_data", 1, "condition_1", erp_df, eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo(), 10)
 
         original_length = nrow(erp.data)
         original_time = copy(erp.data.time)
@@ -184,7 +187,7 @@ using DataFrames
         erp_df = DataFrame(time = collect(time), Cz = collect(1.0:n_samples))
 
         erp_original =
-            eegfun.ErpData(erp_df, eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo(), 10)
+            eegfun.ErpData("test_data", 1, "condition_1", erp_df, eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo(), 10)
         original_length = nrow(erp_original.data)
 
         # Non-mutating mirror
@@ -212,7 +215,7 @@ using DataFrames
 
         epoch1 = DataFrame(time = collect(time), Cz = collect(1.0:n_samples))
 
-        epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
+        epochs = eegfun.EpochData("test_data", 1, "condition_1", [epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo())
 
         # Test invalid side
         @test_throws Exception mirror!(epochs, :invalid)
@@ -232,9 +235,12 @@ using DataFrames
         epoch3 = DataFrame(time = collect(time), Cz = collect(n_samples:-1.0:1))
 
         epochs = eegfun.EpochData(
+            "test_data",
+            1,
+            "condition_1",
             [epoch1, epoch2, epoch3],
             eegfun.Layout(DataFrame(), nothing, nothing),
-            100.0,
+            100,
             eegfun.AnalysisInfo(),
         )
 
@@ -266,14 +272,14 @@ using DataFrames
             response = fill("left", n_samples),
         )
 
-        epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
+        epochs = eegfun.EpochData("test_data", 2, "condition_2", [epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo())
 
         # Mirror
         eegfun.mirror!(epochs, :both)
 
         # Check metadata preserved
         @test all(epochs.data[1].trial .== 1)
-        @test all(epochs.data[1].condition .== 2)
+        @test epochs.condition == 2
         @test all(epochs.data[1].response .== "left")
 
         # Unmirror
@@ -317,7 +323,7 @@ using DataFrames
         data = [1.0, 2.0, 3.0, 4.0, 5.0]  # Simple ascending pattern
         
         epoch1 = DataFrame(time = time, Cz = data)
-        epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 10.0, eegfun.AnalysisInfo())
+        epochs = eegfun.EpochData("test_data", 1, "condition_1", [epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 10, eegfun.AnalysisInfo())
         
         # Test :pre mirroring
         eegfun.mirror!(epochs, :pre)
@@ -364,7 +370,7 @@ using DataFrames
 
         epoch1 = DataFrame(time = collect(time), Cz = randn(n_samples), Pz = randn(n_samples))
 
-        epochs = eegfun.EpochData([epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100.0, eegfun.AnalysisInfo())
+        epochs = eegfun.EpochData("test_data", 1, "condition_1", [epoch1], eegfun.Layout(DataFrame(), nothing, nothing), 100, eegfun.AnalysisInfo())
 
         original_cz = copy(epochs.data[1].Cz)
         original_pz = copy(epochs.data[1].Pz)

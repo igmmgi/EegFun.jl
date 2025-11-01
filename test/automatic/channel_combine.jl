@@ -307,7 +307,7 @@ using Statistics
             layout =
                 eegfun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-            erps = [eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
             save(joinpath(math_dir, "1_erps_math.jld2"), "erps", erps)
 
             # Combine
@@ -704,7 +704,7 @@ using Statistics
 
             layout = eegfun.Layout(DataFrame(label = channel_names, inc = zeros(20), azi = zeros(20)), nothing, nothing)
 
-            erps = [eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
             save(joinpath(many_ch_dir, "1_erps_many.jld2"), "erps", erps)
 
             # Combine into 4 groups
@@ -747,7 +747,8 @@ using Statistics
             # Verify metadata columns still exist
             @test hasproperty(erps[1].data, :time)
             @test hasproperty(erps[1].data, :sample)
-            @test hasproperty(erps[1].data, :condition)
+            # condition is now in struct, not DataFrame
+            @test hasproperty(erps[1], :condition)
         end
 
         @testset "Metadata columns in reduce mode" begin
@@ -766,7 +767,8 @@ using Statistics
 
             # Metadata should be preserved in reduce mode
             @test hasproperty(erps[1].data, :time)
-            @test hasproperty(erps[1].data, :condition)
+            # condition is now in struct, not DataFrame
+            @test hasproperty(erps[1], :condition)
 
             # Only combined channel and metadata
             @test hasproperty(erps[1].data, :Group1)

@@ -50,14 +50,12 @@ using Statistics
             @test length(combined_epochs[1].data) == 20  # Group 1: conditions 1+2
             @test length(combined_epochs[2].data) == 20  # Group 2: conditions 3+4
 
-            # Verify condition labels are preserved from original data
-            # Group 1 contains conditions 1 and 2, so should have both labels
-            group1_conditions = unique(vcat([df.condition for df in combined_epochs[1].data]...))
-            @test 1 in group1_conditions && 2 in group1_conditions
-
-            # Group 2 contains conditions 3 and 4, so should have both labels  
-            group2_conditions = unique(vcat([df.condition for df in combined_epochs[2].data]...))
-            @test 3 in group2_conditions && 4 in group2_conditions
+            # Verify combined condition labels
+            # Group 1 is a combination of original conditions 1 and 2
+            @test combined_epochs[1].condition == 1  # group_idx becomes condition number
+            # Group 2 is a combination of original conditions 3 and 4
+            @test combined_epochs[2].condition == 2  # group_idx becomes condition number
+            # Note: condition column is no longer in DataFrames, it's in struct fields
         end
 
         @testset "Combine specific participants" begin
@@ -116,7 +114,7 @@ using Statistics
             # Each group should have 3 epochs (original count)
             for i = 1:4
                 @test length(combined_epochs[i].data) == 10
-                @test all(combined_epochs[i].data[1].condition .== i)
+                @test combined_epochs[i].condition == i
             end
         end
 
@@ -223,8 +221,9 @@ using Statistics
 
             # Verify metadata columns exist
             @test hasproperty(combined_epochs[1].data[1], :time)
-            @test hasproperty(combined_epochs[1].data[1], :condition)
-            @test hasproperty(combined_epochs[1].data[1], :condition_name)
+            # condition and condition_name are now in struct, not DataFrame
+            @test hasproperty(combined_epochs[1], :condition)
+            @test hasproperty(combined_epochs[1], :condition_name)
             @test hasproperty(combined_epochs[1].data[1], :epoch)
             # Verify channel data is preserved
             @test hasproperty(combined_epochs[1].data[1], :Ch1)

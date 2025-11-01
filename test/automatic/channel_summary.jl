@@ -110,7 +110,7 @@ using CSV
             # Test empty data
             empty_df = DataFrame()
             layout = eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
-            empty_dat = eegfun.ContinuousData(empty_df, layout, 100.0, eegfun.AnalysisInfo())
+            empty_dat = eegfun.ContinuousData("test_data", empty_df, layout, 100, eegfun.AnalysisInfo())
             @test_throws Exception eegfun.channel_summary(empty_dat)
         end
 
@@ -150,7 +150,7 @@ using CSV
             # Test empty epoch data
             empty_layout =
                 eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
-            empty_epochs = eegfun.EpochData(DataFrame[], empty_layout, 100.0, eegfun.AnalysisInfo())
+            empty_epochs = eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, eegfun.AnalysisInfo())
             @test_throws Exception eegfun.channel_summary(empty_epochs)
         end
 
@@ -497,7 +497,7 @@ end # eegfun testset
                 nothing,
             )
 
-            erps = [eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
             save(joinpath(stats_dir, "1_erps_stats.jld2"), "erps", erps)
 
             # Process
@@ -639,7 +639,7 @@ end # eegfun testset
 
             layout = eegfun.Layout(DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10)), nothing, nothing)
 
-            erps = [eegfun.ErpData(df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
             save(joinpath(many_ch_dir, "1_erps_many.jld2"), "erps", erps)
 
             # Process

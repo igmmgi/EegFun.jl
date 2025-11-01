@@ -443,30 +443,34 @@ save("participant_05_lrp.jld2", "lrp", lrp_results)
 function lrp(
     erps::Vector{ErpData},
     condition_pairs::Vector{Tuple{Int,Int}};
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
 )::Vector{ErpData}
 
-    @info "Calculating LRP for $(length(condition_pairs)) condition pair(s)"
+    # Apply condition_selection first
+    erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
+    
+    @info "Calculating LRP for $(length(condition_pairs)) condition pair(s) from $(length(erps_filtered)) condition(s)"
 
     lrp_results = ErpData[]
 
     for (idx, (left_cond, right_cond)) in enumerate(condition_pairs)
-        # Validate condition indices
-        if left_cond < 1 || left_cond > length(erps)
-            @minimal_error_throw("Left condition index $left_cond out of range (1-$(length(erps)))")
+        # Validate condition indices (now referring to filtered array)
+        if left_cond < 1 || left_cond > length(erps_filtered)
+            @minimal_error_throw("Left condition index $left_cond out of range (1-$(length(erps_filtered)))")
         end
-        if right_cond < 1 || right_cond > length(erps)
-            @minimal_error_throw("Right condition index $right_cond out of range (1-$(length(erps)))")
+        if right_cond < 1 || right_cond > length(erps_filtered)
+            @minimal_error_throw("Right condition index $right_cond out of range (1-$(length(erps_filtered)))")
         end
 
         @info "  Processing pair $idx: condition $left_cond (left) vs $right_cond (right)"
 
         # Calculate LRP for this pair
-        lrp_data = lrp(erps[left_cond], erps[right_cond]; channel_selection = channel_selection)
+        lrp_data = lrp(erps_filtered[left_cond], erps_filtered[right_cond]; channel_selection = channel_selection)
 
-        # Update condition information to reflect the pair number
-        lrp_data.data.condition .= idx
-        lrp_data.data.condition_name .= "lrp_$(left_cond)_$(right_cond)"
+        # Update condition information to reflect the pair number (set struct fields)
+        lrp_data.condition = idx
+        lrp_data.condition_name = "lrp_$(left_cond)_$(right_cond)"
 
         push!(lrp_results, lrp_data)
     end
@@ -540,8 +544,13 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
         lrp_df[!, label] = lrp_matrix[:, idx]
     end
 
-    # Update condition information
-    lrp_df.condition_name .= "lrp"
+    # Remove condition/condition_name columns if they exist (they're in struct now)
+    cols_to_remove = [:condition, :condition_name, :n_epochs]
+    for col in cols_to_remove
+        if hasproperty(lrp_df, col)
+            select!(lrp_df, Not(col))
+        end
+    end
 
     # Create layout with only the LRP channels
     lrp_layout = _create_lrp_layout(erp_left.layout, unique_labels)
@@ -549,8 +558,8 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
     # Create and return LRP ErpData
     # Use minimum n_epochs as conservative estimate
     min_epochs = min(erp_left.n_epochs, erp_right.n_epochs)
-
-    return ErpData(lrp_df, lrp_layout, erp_left.sample_rate, copy(erp_left.analysis_info), min_epochs)
+    # LRP doesn't have a condition number, use 0 as placeholder
+    return ErpData(erp_left.file, 0, "lrp", lrp_df, lrp_layout, erp_left.sample_rate, copy(erp_left.analysis_info), min_epochs)
 end
 
 
