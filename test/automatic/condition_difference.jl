@@ -53,12 +53,12 @@ using CSV
 
         # Verify difference wave structure
         diff1 = differences[1]
-        @test diff1.data.condition[1] == 1  # First difference labeled as condition 1
-        @test diff1.data.condition_name[1] == "difference_1_2"
+        @test diff1.condition == 1  # First difference labeled as condition 1
+        @test diff1.condition_name == "difference_1_2"
 
         diff2 = differences[2]
-        @test diff2.data.condition[1] == 2  # Second difference labeled as condition 2
-        @test diff2.data.condition_name[1] == "difference_3_4"
+        @test diff2.condition == 2  # Second difference labeled as condition 2
+        @test diff2.condition_name == "difference_3_4"
     end
 
     @testset "Single participant processing" begin

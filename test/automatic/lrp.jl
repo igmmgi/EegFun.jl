@@ -37,7 +37,7 @@ using DataFrames
         @test :Fz ∉ lrp_channels
 
         # Verify condition name
-        @test all(lrp_data.data.condition_name .== "lrp")
+        @test lrp_data.condition_name == "lrp"
 
         # Verify metadata columns are preserved
         @test hasproperty(lrp_data.data, :time)
@@ -80,8 +80,8 @@ using DataFrames
         # Create layouts and ErpData objects
         layout = eegfun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-        erp_left = eegfun.ErpData(df_left, layout, 250.0, eegfun.AnalysisInfo(), 10)
-        erp_right = eegfun.ErpData(df_right, layout, 250.0, eegfun.AnalysisInfo(), 10)
+        erp_left = eegfun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, eegfun.AnalysisInfo(), 10)
+        erp_right = eegfun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, eegfun.AnalysisInfo(), 10)
 
         # Calculate LRP
         lrp_data = eegfun.lrp(erp_left, erp_right)
@@ -187,7 +187,7 @@ using DataFrames
             )
 
             layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-            erp_no_pairs = eegfun.ErpData(df, layout, 250.0, eegfun.AnalysisInfo(), 10)
+            erp_no_pairs = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, eegfun.AnalysisInfo(), 10)
 
             @test_throws Exception eegfun.lrp(erp_no_pairs, erp_no_pairs)
         end
@@ -213,8 +213,8 @@ using DataFrames
 
         layout =
             eegfun.Layout(DataFrame(label = [:CP3, :CP4, :PO7, :PO8], inc = zeros(4), azi = zeros(4)), nothing, nothing)
-        erp1 = eegfun.ErpData(df, layout, 250.0, eegfun.AnalysisInfo(), 10)
-        erp2 = eegfun.ErpData(copy(df), layout, 250.0, eegfun.AnalysisInfo(), 10)
+        erp1 = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, eegfun.AnalysisInfo(), 10)
+        erp2 = eegfun.ErpData("test_data", 2, "condition_2", copy(df), layout, 250, eegfun.AnalysisInfo(), 10)
 
         lrp_data = eegfun.lrp(erp1, erp2)
 
@@ -288,8 +288,8 @@ using DataFrames
 
         layout = eegfun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-        erp_left = eegfun.ErpData(df_left, layout, 250.0, eegfun.AnalysisInfo(), 10)
-        erp_right = eegfun.ErpData(df_right, layout, 250.0, eegfun.AnalysisInfo(), 10)
+        erp_left = eegfun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, eegfun.AnalysisInfo(), 10)
+        erp_right = eegfun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, eegfun.AnalysisInfo(), 10)
 
         lrp_data = eegfun.lrp(erp_left, erp_right)
 
@@ -331,13 +331,13 @@ using DataFrames
         # Verify each LRP result
         for (idx, lrp_data) in enumerate(lrp_results)
             @test lrp_data isa eegfun.ErpData
-            @test lrp_data.data.condition[1] == idx
+            @test lrp_data.condition == idx
 
             # Verify condition name format
             left_cond = 2*idx - 1
             right_cond = 2*idx
             expected_name = "lrp_$(left_cond)_$(right_cond)"
-            @test lrp_data.data.condition_name[1] == expected_name
+            @test lrp_data.condition_name == expected_name
 
             # Verify channels are present
             @test :C3 in eegfun.channel_labels(lrp_data)
@@ -353,9 +353,9 @@ using DataFrames
         lrp_results = eegfun.lrp(erps, [(1, 2), (3, 4), (7, 8)])
 
         @test length(lrp_results) == 3
-        @test lrp_results[1].data.condition_name[1] == "lrp_1_2"
-        @test lrp_results[2].data.condition_name[1] == "lrp_3_4"
-        @test lrp_results[3].data.condition_name[1] == "lrp_7_8"
+        @test lrp_results[1].condition_name == "lrp_1_2"
+        @test lrp_results[2].condition_name == "lrp_3_4"
+        @test lrp_results[3].condition_name == "lrp_7_8"
     end
 
     @testset "Batch LRP error handling" begin

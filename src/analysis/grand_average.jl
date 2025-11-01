@@ -51,9 +51,13 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     # Create a copy of the first ERP's data as the base
     grand_avg_data = copy(first_erp.data)
 
-    # Update condition information
-    grand_avg_data.condition .= cond_num
-    grand_avg_data.condition_name .= "grand_average_condition_$(cond_num)"
+    # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
+    cols_to_remove = [:condition, :condition_name, :n_epochs]
+    for col in cols_to_remove
+        if hasproperty(grand_avg_data, col)
+            select!(grand_avg_data, Not(col))
+        end
+    end
 
     # Average EEG channels across participants
     for ch in eeg_channels
@@ -67,9 +71,10 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
 
     # Calculate total number of epochs across all participants
     total_epochs = sum(erp.n_epochs for erp in erps)
+    grand_avg_cond_name = "grand_average_condition_$(cond_num)"
 
     # Use the layout and analysis info from the first ERP
-    return ErpData(grand_avg_data, first_erp.layout, first_erp.sample_rate, first_erp.analysis_info, total_epochs)
+    return ErpData(first_erp.file, cond_num, grand_avg_cond_name, grand_avg_data, first_erp.layout, first_erp.sample_rate, first_erp.analysis_info, total_epochs)
 end
 
 """
@@ -98,8 +103,8 @@ function _load_and_group_erps(files::Vector{String}, input_dir::String, conditio
 
         # Group ERPs by condition
         for erp in erps_data
-            # For ErpData, condition is stored in the DataFrame
-            cond_num = hasproperty(erp.data, :condition) ? erp.data[1, :condition] : 1
+            # For ErpData, condition is stored in the struct
+            cond_num = erp.condition
             if !haskey(all_erps_by_condition, cond_num)
                 all_erps_by_condition[cond_num] = ErpData[]
             end

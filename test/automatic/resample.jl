@@ -30,6 +30,7 @@ using JLD2
             data.triggers[500] = 2
 
             continuous = eegfun.ContinuousData(
+                "test_data",
                 data,
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
@@ -68,6 +69,7 @@ using JLD2
             data = DataFrame(time = time, C3 = randn(n_samples), C4 = randn(n_samples))
 
             continuous = eegfun.ContinuousData(
+                "test_data",
                 data,
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
@@ -93,6 +95,7 @@ using JLD2
             data = DataFrame(time = time, C3 = randn(n_samples))
 
             continuous = eegfun.ContinuousData(
+                "test_data",
                 data,
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
@@ -110,6 +113,7 @@ using JLD2
 
         @testset "Factor of 1 (no change)" begin
             continuous = eegfun.ContinuousData(
+                "test_data",
                 DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0]),
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 1000,
@@ -138,7 +142,7 @@ using JLD2
             data.triggers[100] = 1
 
             continuous =
-                eegfun.ContinuousData(data, eegfun.Layout(DataFrame(), nothing, nothing), 500, eegfun.AnalysisInfo())
+                eegfun.ContinuousData("test_data", data, eegfun.Layout(DataFrame(), nothing, nothing), 500, eegfun.AnalysisInfo())
 
             resampled = eegfun.resample(continuous, 5)
 
@@ -182,6 +186,9 @@ using JLD2
             end
 
             epoch_data = eegfun.EpochData(
+                "test_data",
+                1,
+                "condition_1",
                 epochs,
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
@@ -222,7 +229,7 @@ using JLD2
             end
 
             epoch_data =
-                eegfun.EpochData(epochs, eegfun.Layout(DataFrame(), nothing, nothing), 512, eegfun.AnalysisInfo())
+                eegfun.EpochData("test_data", 1, "condition_1", epochs, eegfun.Layout(DataFrame(), nothing, nothing), 512, eegfun.AnalysisInfo())
 
             original_n_samples = nrow(epoch_data.data[1])
 
@@ -249,7 +256,7 @@ using JLD2
             end
 
             epoch_data =
-                eegfun.EpochData(epochs, eegfun.Layout(DataFrame(), nothing, nothing), 256, eegfun.AnalysisInfo())
+                eegfun.EpochData("test_data", 1, "condition_1", epochs, eegfun.Layout(DataFrame(), nothing, nothing), 256, eegfun.AnalysisInfo())
 
             resampled = eegfun.resample(epoch_data, 2)
 
@@ -278,6 +285,9 @@ using JLD2
             data = DataFrame(time = time, C3 = sin.(2π .* 10 .* time), C4 = cos.(2π .* 10 .* time))
 
             erp = eegfun.ErpData(
+                "test_data",
+                1,
+                "condition_1",
                 data,
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
@@ -306,15 +316,15 @@ using JLD2
 
         @testset "ERP with metadata columns" begin
             # Create ERP with condition info
-            data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512), condition = fill("Target", 512))
+            data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
 
-            erp = eegfun.ErpData(data, eegfun.Layout(DataFrame(), nothing, nothing), 512, eegfun.AnalysisInfo(), 30)
+            erp = eegfun.ErpData("test_data", 1, "Target", data, eegfun.Layout(DataFrame(), nothing, nothing), 512, eegfun.AnalysisInfo(), 30)
 
             resampled = eegfun.resample(erp, 4)
 
             @test resampled.sample_rate == 128
             @test nrow(resampled.data) == 128
-            @test all(resampled.data.condition .== "Target")
+            @test resampled.condition_name == "Target"  # condition_name is in struct, not DataFrame
         end
     end
 
@@ -327,6 +337,7 @@ using JLD2
 
         @testset "Invalid factors" begin
             continuous = eegfun.ContinuousData(
+                "test_data",
                 DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0]),
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 1000,
@@ -343,6 +354,7 @@ using JLD2
         @testset "Non-divisible sample rate" begin
             # 500 Hz cannot be evenly divided by 3
             continuous = eegfun.ContinuousData(
+                "test_data",
                 DataFrame(time = [0.0, 0.002], C3 = [1.0, 2.0]),
                 eegfun.Layout(DataFrame(), nothing, nothing),
                 500,
@@ -367,6 +379,7 @@ using JLD2
                     data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512), C4 = randn(512))
 
                     continuous = eegfun.ContinuousData(
+                        "test_data",
                         data,
                         eegfun.Layout(DataFrame(), nothing, nothing),
                         512,
@@ -406,6 +419,9 @@ using JLD2
                     end
 
                     epoch_data = eegfun.EpochData(
+                        "test_data",
+                        1,
+                        "condition_1",
                         epochs,
                         eegfun.Layout(DataFrame(), nothing, nothing),
                         256,
@@ -437,6 +453,7 @@ using JLD2
                 for i = 1:5
                     data = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256))
                     continuous = eegfun.ContinuousData(
+                        "test_data",
                         data,
                         eegfun.Layout(DataFrame(), nothing, nothing),
                         256,
@@ -472,7 +489,7 @@ using JLD2
 
             analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 40.0)
 
-            continuous = eegfun.ContinuousData(data, eegfun.Layout(DataFrame(), nothing, nothing), 512, analysis_info)
+            continuous = eegfun.ContinuousData("test_data", data, eegfun.Layout(DataFrame(), nothing, nothing), 512, analysis_info)
 
             resampled = eegfun.resample(continuous, 2)
 

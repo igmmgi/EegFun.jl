@@ -128,7 +128,7 @@ using Makie
             # Create ContinuousData without triggers column
             df = DataFrame(time = [0.0, 0.1, 0.2], channel = [1.0, 2.0, 3.0])
             layout = eegfun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
-            dat = eegfun.ContinuousData(df, layout, 100, eegfun.AnalysisInfo())
+            dat = eegfun.ContinuousData("test_data", df, layout, 100, eegfun.AnalysisInfo())
 
             # Should trigger minimal_error and return nothing
             @test eegfun._extract_trigger_data(dat) === nothing

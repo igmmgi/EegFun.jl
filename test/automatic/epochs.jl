@@ -123,8 +123,9 @@ using Random
         @test ep1.layout === dat.layout
         @test all(abs.(ep1.data[1].time) .<= maximum(abs.(ep1.data[1].time)))
         @test 0.0 in ep1.data[1].time
-        @test :condition in propertynames(ep1.data[1])
-        @test :condition_name in propertynames(ep1.data[1])
+        # condition and condition_name are now in struct, not DataFrame
+        @test hasproperty(ep1, :condition)
+        @test hasproperty(ep1, :condition_name)
         @test :epoch in propertynames(ep1.data[1])
 
         # Wildcard sequence [1,:any,3]
@@ -188,8 +189,7 @@ using Random
         @test eegfun.n_epochs(eps) == 3
         erp = eegfun.average_epochs(eps)
         @test erp isa eegfun.ErpData
-        @test :n_epochs in propertynames(erp.data)
-        @test maximum(erp.data.n_epochs) == 3
+        @test erp.n_epochs == 3
         # Check that averaged channel values at t=0 equal mean of contributing epochs
         zero_rows = findall(erp.data.time .== 0.0)
         @test !isempty(zero_rows)
@@ -197,9 +197,10 @@ using Random
         # Multiple conditions
         ec_other = eegfun.EpochCondition(name = "seq123b", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         eps2 = eegfun.extract_epochs(dat, 11, ec_other, win[1], win[2])
-        mixed = eegfun.EpochData(vcat(eps.data, eps2.data), eps.layout, eps.sample_rate, eps.analysis_info)
+        mixed = eegfun.EpochData(eps.file, eps.condition, eps.condition_name, vcat(eps.data, eps2.data), eps.layout, eps.sample_rate, eps.analysis_info)
         erp_mixed = eegfun.average_epochs(mixed)
-        @test length(unique(erp_mixed.data.condition)) >= 2
+        # Mixed epochs from different conditions, but averaged into single ERP
+        @test erp_mixed isa eegfun.ErpData
 
         # No EEG channels with layout mismatch → expect error (current implementation)
         only_meta = [
@@ -211,7 +212,7 @@ using Random
                 epoch = [1, 1],
             ),
         ]
-        em = eegfun.EpochData(only_meta, eps.layout, eps.sample_rate, eps.analysis_info)
+        em = eegfun.EpochData(eps.file, eps.condition, eps.condition_name, only_meta, eps.layout, eps.sample_rate, eps.analysis_info)
         @test_throws Any eegfun.average_epochs(em)
     end
 
@@ -246,7 +247,7 @@ using Random
         @test_throws ErrorException eegfun.reject_epochs(eps, :does_not_exist)
 
         # Empty EpochData → error (current implementation validates first epoch)
-        empty_ep = eegfun.EpochData(DataFrame[], eps.layout, eps.sample_rate, eps.analysis_info)
+        empty_ep = eegfun.EpochData(eps.file, eps.condition, eps.condition_name, DataFrame[], eps.layout, eps.sample_rate, eps.analysis_info)
         @test_throws Any eegfun.reject_epochs(empty_ep, :is_bad)
     end
 
@@ -377,18 +378,18 @@ using Random
         # Missing required columns
         df_no_triggers = DataFrame(time = [0.0, 0.1], A = [1.0, 2.0])
         layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
-        dat_no_triggers = eegfun.ContinuousData(df_no_triggers, layout, 1000, eegfun.AnalysisInfo())
+        dat_no_triggers = eegfun.ContinuousData("test_data", df_no_triggers, layout, 1000, eegfun.AnalysisInfo())
         @test_throws AssertionError eegfun._validate_epoch_window_params(dat_no_triggers, [-0.1, 0.1])
 
         df_no_time = DataFrame(triggers = [0, 1], A = [1.0, 2.0])
-        dat_no_time = eegfun.ContinuousData(df_no_time, layout, 1000, eegfun.AnalysisInfo())
+        dat_no_time = eegfun.ContinuousData("test_data", df_no_time, layout, 1000, eegfun.AnalysisInfo())
         @test_throws AssertionError eegfun._validate_epoch_window_params(dat_no_time, [-0.1, 0.1])
     end
 
     @testset "edge cases and robustness" begin
         # Empty EpochData for get_selected_epochs
         layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
-        empty_epochs = eegfun.EpochData(DataFrame[], layout, 1000, eegfun.AnalysisInfo())
+        empty_epochs = eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 1000, eegfun.AnalysisInfo())
         empty_selector = x -> trues(length(x))
         selected_empty = eegfun.get_selected_epochs(empty_epochs, empty_selector)
         @test isempty(selected_empty)
@@ -418,6 +419,9 @@ using Random
 
         # Test averaging with single epoch
         single_epoch = eegfun.EpochData(
+            large_epochs.file,
+            large_epochs.condition,
+            large_epochs.condition_name,
             [large_epochs.data[1]],
             large_epochs.layout,
             large_epochs.sample_rate,
@@ -425,7 +429,7 @@ using Random
         )
         erp_single = eegfun.average_epochs(single_epoch)
         @test erp_single isa eegfun.ErpData
-        @test maximum(erp_single.data.n_epochs) == 1
+        @test erp_single.n_epochs == 1
 
         # Test epoch extraction with very short windows
         dat_short = create_test_continuous_data_with_triggers()
@@ -523,8 +527,8 @@ end
                 layout =
                     eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-                # EpochData constructor: (data, layout, sample_rate, analysis_info)
-                push!(epochs, eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo()))
+                # EpochData constructor: (file, condition, condition_name, data, layout, sample_rate, analysis_info)
+                push!(epochs, eegfun.EpochData("test_data", cond, "condition_$cond", dfs, layout, fs, eegfun.AnalysisInfo()))
             end
 
             return epochs
@@ -561,10 +565,8 @@ end
             @test erps[1] isa eegfun.ErpData
             @test hasproperty(erps[1].data, :Fz)
             @test hasproperty(erps[1].data, :Cz)
-            @test hasproperty(erps[1].data, :n_epochs)
-
-            # Verify n_epochs column
-            @test all(erps[1].data.n_epochs .== 5)  # 5 epochs averaged
+            # Verify n_epochs (now in struct, not DataFrame)
+            @test erps[1].n_epochs == 5  # 5 epochs averaged
         end
 
         @testset "Average specific participants" begin
@@ -606,7 +608,7 @@ end
             # Load and verify only one condition
             erps = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "erps")
             @test length(erps) == 1
-            @test erps[1].data[1, :condition] == 1
+            @test erps[1].condition == 1
         end
 
         @testset "Average multiple conditions" begin
@@ -624,8 +626,8 @@ end
             # Load and verify both conditions
             erps = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "erps")
             @test length(erps) == 2
-            @test erps[1].data[1, :condition] == 1
-            @test erps[2].data[1, :condition] == 2
+            @test erps[1].condition == 1
+            @test erps[2].condition == 2
         end
 
         @testset "Error handling" begin
@@ -745,7 +747,6 @@ end
 
             # Check that n_epochs is correct
             @test erps[1].n_epochs == 5
-            @test all(erps[1].data.n_epochs .== 5)
 
             # Check that time vector is preserved
             original_time = original_epochs[1].data[1].time
@@ -771,7 +772,7 @@ end
             # Load and verify
             erps = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "erps")
             @test length(erps) == 1  # Only one condition
-            @test erps[1].data[1, :condition] == 1
+            @test erps[1].condition == 1
             @test !isfile(joinpath(output_dir, "2_epochs_cleaned.jld2"))  # Participant 2 not processed
         end
 
@@ -812,8 +813,8 @@ end
 
             layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            push!(epochs_var, eegfun.EpochData(dfs1, layout, fs, eegfun.AnalysisInfo()))
-            push!(epochs_var, eegfun.EpochData(dfs2, layout, fs, eegfun.AnalysisInfo()))
+            push!(epochs_var, eegfun.EpochData("test_data", 1, "condition_1", dfs1, layout, fs, eegfun.AnalysisInfo()))
+            push!(epochs_var, eegfun.EpochData("test_data", 2, "condition_2", dfs2, layout, fs, eegfun.AnalysisInfo()))
 
             # Save and process
             var_dir = joinpath(test_dir, "var_epochs")
@@ -828,9 +829,8 @@ end
             # Load and verify epoch counts
             erps = load(joinpath(output_dir, "1_epochs_var.jld2"), "erps")
             @test length(erps) == 2
-            @test all(erps[1].data.n_epochs .== 3)  # Condition 1: 3 epochs
-            @test all(erps[2].data.n_epochs .== 7)  # Condition 2: 7 epochs
-            @test erps[1].n_epochs == 3
+            @test erps[1].n_epochs == 3  # Condition 1: 3 epochs
+            @test erps[2].n_epochs == 7  # Condition 2: 7 epochs
             @test erps[2].n_epochs == 7
         end
 
@@ -843,7 +843,7 @@ end
             # We'll test this by creating a minimal epochs structure
             layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            empty_epoch = eegfun.EpochData(DataFrame[], layout, 256, eegfun.AnalysisInfo())
+            empty_epoch = eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 256, eegfun.AnalysisInfo())
             save(joinpath(empty_epochs_dir, "1_epochs_empty.jld2"), "epochs", [empty_epoch])
 
             output_dir = joinpath(test_dir, "averaged_empty")
@@ -913,7 +913,7 @@ end
 
             layout = eegfun.Layout(DataFrame(label = [:Ch1], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            epoch_data = eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo())
+            epoch_data = eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, eegfun.AnalysisInfo())
             save(joinpath(math_dir, "1_epochs_math.jld2"), "epochs", [epoch_data])
 
             # Average
@@ -926,7 +926,7 @@ end
             # Expected average: [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0]
             expected_avg = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0]
             @test erps[1].data.Ch1 ≈ expected_avg
-            @test all(erps[1].data.n_epochs .== 3)
+            @test erps[1].n_epochs == 3  # n_epochs is now in struct, not DataFrame
         end
 
         @testset "Metadata preservation" begin
@@ -939,15 +939,13 @@ end
             # Verify metadata columns exist
             # Note: :sample is not preserved during averaging (it's a per-epoch metadata)
             @test hasproperty(erps[1].data, :time)
-            @test hasproperty(erps[1].data, :condition)
-            @test hasproperty(erps[1].data, :condition_name)
-            @test hasproperty(erps[1].data, :n_epochs)
+            # condition, condition_name, and n_epochs are now in struct, not DataFrame
 
             # Verify condition metadata
-            @test all(erps[1].data.condition .== 1)
-            @test all(erps[1].data.condition_name .== "condition_1")
-            @test all(erps[2].data.condition .== 2)
-            @test all(erps[2].data.condition_name .== "condition_2")
+            @test erps[1].condition == 1
+            @test erps[1].condition_name == "condition_1"
+            @test erps[2].condition == 2
+            @test erps[2].condition_name == "condition_2"
         end
 
         @testset "Layout and metadata preservation" begin
@@ -990,7 +988,7 @@ end
 
             layout = eegfun.Layout(DataFrame(label = [:Cz], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            epoch_data = eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo())
+            epoch_data = eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, eegfun.AnalysisInfo())
             save(joinpath(single_dir, "1_epochs_single.jld2"), "epochs", [epoch_data])
 
             # Average single epoch
@@ -1001,7 +999,6 @@ end
 
             erps = load(joinpath(output_dir, "1_epochs_single.jld2"), "erps")
             @test erps[1].n_epochs == 1
-            @test all(erps[1].data.n_epochs .== 1)
 
             # With single epoch, average should equal the original
             @test erps[1].data.Cz ≈ df.Cz
@@ -1064,7 +1061,7 @@ end
             layout_df = DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10))
             layout = eegfun.Layout(layout_df, nothing, nothing)
 
-            epoch_data = eegfun.EpochData(dfs, layout, fs, eegfun.AnalysisInfo())
+            epoch_data = eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, eegfun.AnalysisInfo())
             save(joinpath(many_ch_dir, "1_epochs_many.jld2"), "epochs", [epoch_data])
 
             # Average
@@ -1153,6 +1150,9 @@ end
     @testset "Error handling" begin
         # Test with empty data
         empty_epochs = eegfun.EpochData(
+            "test_data",
+            1,
+            "condition_1",
             DataFrame[],
             eegfun.Layout(DataFrame(label = [:ch1], x = [0], y = [0], z = [0]), nothing, nothing),
             1000,

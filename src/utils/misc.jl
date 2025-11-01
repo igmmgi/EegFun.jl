@@ -332,7 +332,7 @@ The data and layout DataFrames are copied with `copycols=true` to ensure
 independence, while immutable fields are shared.
 """
 function Base.copy(dat::ContinuousData)::ContinuousData
-    return ContinuousData(copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+    return ContinuousData(dat.file, copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
 """
@@ -343,6 +343,9 @@ Each epoch DataFrame in the data vector is copied independently.
 """
 function Base.copy(dat::EpochData)::EpochData
     return EpochData(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
         [copy(epoch, copycols = true) for epoch in dat.data],
         copy(dat.layout),
         dat.sample_rate,
@@ -357,6 +360,9 @@ Create a copy of ErpData with copied data DataFrame and analysis info.
 """
 function Base.copy(dat::ErpData)::ErpData
     return ErpData(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
         copy(dat.data, copycols = true),
         copy(dat.layout),
         dat.sample_rate,

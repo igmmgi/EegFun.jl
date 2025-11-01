@@ -88,8 +88,11 @@ end
 Non-mutating version of realign!. Returns a new EpochData object with realigned epochs.
 """
 function realign(dat::EpochData, realignment_column::Symbol)::EpochData
-    # Create a deep copy of the data
+    # Create a deep copy of the data (preserve struct fields)
     dat_copy = EpochData(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
         [copy(epoch, copycols = true) for epoch in dat.data],
         copy(dat.layout),
         dat.sample_rate,

@@ -62,7 +62,12 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
         combined_data_frames = vcat([epoch_data.data for epoch_data in condition_data]...)
 
         # Create new EpochData with concatenated data, using metadata from first condition
+        # For combined conditions, use group_idx as condition number and create combined name
+        combined_condition_name = join([cond.condition_name for cond in condition_data], "_")
         combined_epochs = EpochData(
+            condition_data[1].file,  # All should have same file
+            group_idx,  # Use group index as condition number
+            combined_condition_name,
             combined_data_frames,
             condition_data[1].layout,
             condition_data[1].sample_rate,

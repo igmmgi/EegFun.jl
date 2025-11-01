@@ -47,9 +47,13 @@ function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2
     # Create a copy of erp1's data for the difference
     diff_data = copy(erp1.data)
 
-    # Update condition information
-    diff_data.condition .= diff_cond  # Sequential condition number for differences
-    diff_data.condition_name .= "difference_$(cond1)_$(cond2)"
+    # Remove condition/condition_name/n_epochs columns if they exist (they're in struct now)
+    cols_to_remove = [:condition, :condition_name, :n_epochs]
+    for col in cols_to_remove
+        if hasproperty(diff_data, col)
+            select!(diff_data, Not(col))
+        end
+    end
 
     # Subtract EEG channels
     for ch in eeg_channels
@@ -62,8 +66,9 @@ function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2
 
     # Update n_epochs to reflect the minimum (conservative estimate)
     min_epochs = min(erp1.n_epochs, erp2.n_epochs)
+    diff_condition_name = "difference_$(cond1)_$(cond2)"
 
-    return ErpData(diff_data, erp1.layout, erp1.sample_rate, erp1.analysis_info, min_epochs)
+    return ErpData(erp1.file, diff_cond, diff_condition_name, diff_data, erp1.layout, erp1.sample_rate, erp1.analysis_info, min_epochs)
 end
 
 """

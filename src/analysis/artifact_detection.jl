@@ -786,8 +786,8 @@ function detect_bad_epochs_automatic(
 
     # Create rejection info
     epoch_info = EpochInfo(
-        dat.data[1].condition[1],
-        dat.data[1].condition_name[1],
+        dat.condition,
+        dat.condition_name,
         length(dat.data),
     )
 

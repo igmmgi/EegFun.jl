@@ -21,7 +21,7 @@ using eegfun
             nothing,
         )
         analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test get_cols_by_group
         @test eegfun.get_cols_by_group(continuous_data, :channels) == [:Fz, :Cz, :Pz]
@@ -36,7 +36,7 @@ using eegfun
         # Test empty layout case - need a layout with a label column
         empty_layout = eegfun.Layout(DataFrame(label = Symbol[]), nothing, nothing)
         empty_df = DataFrame(time = [0.1], sample = [1])
-        empty_data = eegfun.ContinuousData(empty_df, empty_layout, 250, analysis_info)
+        empty_data = eegfun.ContinuousData("test_data", empty_df, empty_layout, 250, analysis_info)
         @test eegfun.get_cols_by_group(empty_data, :channels) == Symbol[]
         @test eegfun.get_cols_by_group(empty_data, :metadata) == Symbol[]
         @test eegfun.get_cols_by_group(empty_data, :extra) == Symbol[]
@@ -47,7 +47,7 @@ using eegfun
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test all_data
         @test eegfun.all_data(continuous_data) == df
@@ -78,7 +78,7 @@ using eegfun
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
         # Test all_data for MultiDataFrameEeg
         all_df = eegfun.all_data(epoch_data)
@@ -126,7 +126,7 @@ using eegfun
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test sample_rate
         @test eegfun.sample_rate(continuous_data) == 250
@@ -162,7 +162,7 @@ using eegfun
         # Test common_channels
         df2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Pz = [7.0, 8.0])
         layout2 = eegfun.Layout(DataFrame(label = [:Fz, :Pz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        continuous_data2 = eegfun.ContinuousData(df2, layout2, 250, analysis_info)
+        continuous_data2 = eegfun.ContinuousData("test_data", df2, layout2, 250, analysis_info)
         @test eegfun.common_channels(continuous_data, continuous_data2) == [:Fz]
     end
 
@@ -171,7 +171,7 @@ using eegfun
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        erp_data = eegfun.ErpData(df, layout, 250, analysis_info, 10)
+        erp_data = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 10)
 
         # Test n_epochs for ErpData
         @test eegfun.n_epochs(erp_data) == 10
@@ -187,7 +187,7 @@ using eegfun
         )
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test viewer function (just test it doesn't throw)
         @test_nowarn eegfun.viewer(continuous_data)
@@ -214,7 +214,7 @@ using eegfun
         # Test with empty DataFrame
         empty_df = DataFrame()
         empty_layout = eegfun.Layout(DataFrame(), nothing, nothing)
-        empty_data = eegfun.ContinuousData(empty_df, empty_layout, 250, analysis_info)
+        empty_data = eegfun.ContinuousData("test_data", empty_df, empty_layout, 250, analysis_info)
         @test isempty(eegfun.head(empty_data))
         @test isempty(eegfun.tail(empty_data))
     end
@@ -225,7 +225,7 @@ using eegfun
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
         # Test to_data_frame for EpochData
         combined_df = eegfun.to_data_frame(epoch_data)
@@ -233,12 +233,12 @@ using eegfun
         @test ncol(combined_df) == 4  # time, sample, Fz, Cz
 
         # Test to_data_frame for Vector{EpochData}
-        epoch_data2 = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data2 = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
         combined_df_vec = eegfun.to_data_frame([epoch_data, epoch_data2])
         @test nrow(combined_df_vec) == 8  # 2 epoch data objects × 2 epochs × 2 samples each
 
         # Test empty cases
-        empty_epoch_data = eegfun.EpochData(DataFrame[], layout, 250, analysis_info)
+        empty_epoch_data = eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 250, analysis_info)
         @test isempty(eegfun.to_data_frame(empty_epoch_data))
         @test isempty(eegfun.to_data_frame(eegfun.EpochData[]))
     end
@@ -310,7 +310,7 @@ using eegfun
         )
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test get_selected_channels
         selected = eegfun.get_selected_channels(continuous_data, eegfun.channels([:Fz]))
@@ -340,7 +340,7 @@ using eegfun
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
         # Test convert to SingleDataFrameEeg
         single_data = eegfun.convert(epoch_data, 1)
@@ -361,7 +361,7 @@ using eegfun
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test rename_channel! (in-place)
         rename_dict = Dict(:Fz => :Fz_new, :Cz => :Cz_new)
@@ -376,7 +376,7 @@ using eegfun
         # Test rename_channel (copy)
         df2 = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
         layout2 = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        continuous_data2 = eegfun.ContinuousData(df2, layout2, 250, analysis_info)
+        continuous_data2 = eegfun.ContinuousData("test_data", df2, layout2, 250, analysis_info)
 
         renamed_data = eegfun.rename_channel(continuous_data2, rename_dict)
         @test :Fz_new in propertynames(renamed_data.data)
@@ -457,7 +457,7 @@ using eegfun
         )
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData(df, layout, 250, analysis_info)
+        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
 
         # Test subset for ContinuousData
         subset_data = eegfun.subset(
@@ -473,7 +473,7 @@ using eegfun
         # The subset function only includes channels that match the selection criteria
 
         # Test subset for ErpData
-        erp_data = eegfun.ErpData(df, layout, 250, analysis_info, 5)
+        erp_data = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 5)
         subset_erp = eegfun.subset(erp_data; channel_selection = eegfun.channels([:Fz]))
         @test subset_erp isa eegfun.ErpData
         @test subset_erp.n_epochs == 5
@@ -481,7 +481,7 @@ using eegfun
         # Test subset for EpochData
         epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
         subset_epoch =
             eegfun.subset(epoch_data; channel_selection = eegfun.channels([:Fz]), epoch_selection = eegfun.epochs([1]))
@@ -494,7 +494,7 @@ using eegfun
         df = DataFrame(time = [0.1, 0.2, 0.3], sample = [1, 2, 3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         analysis_info = eegfun.AnalysisInfo()
-        erp_data = eegfun.ErpData(df, layout, 250, analysis_info, 5)
+        erp_data = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 5)
 
         # Test ylimits for ErpData
         ylims = eegfun.ylimits(erp_data)
@@ -504,7 +504,7 @@ using eegfun
         # Test ylimits for EpochData
         epoch1 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], sample = [1, 2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        epoch_data = eegfun.EpochData([epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
         ylims_epoch = eegfun.ylimits(epoch_data)
         @test ylims_epoch isa Tuple{Float64,Float64}

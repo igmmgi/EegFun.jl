@@ -75,8 +75,11 @@ using eegfun
     # 10) ErpData reduce path
     dat = create_test_epoch_data(n = 500)
     dat = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])]; reduce = true)
-    @test all(propertynames(dat.data[1]) .== [:time, :sample, :condition, :condition_name, :epoch, :Ch1_Ch2])
-    @test all(propertynames(dat.data[end]) .== [:time, :sample, :condition, :condition_name, :epoch, :Ch1_Ch2])
+    # condition and condition_name are now in struct, not DataFrame
+    @test all(propertynames(dat.data[1]) .== [:time, :sample, :epoch, :Ch1_Ch2])
+    @test all(propertynames(dat.data[end]) .== [:time, :sample, :epoch, :Ch1_Ch2])
+    @test hasproperty(dat, :condition)
+    @test hasproperty(dat, :condition_name)
 
     # 11) Test default behavior (average all channels)
     dat = create_test_epoch_data(n = 500)

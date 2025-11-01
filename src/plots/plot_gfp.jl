@@ -100,10 +100,14 @@ Each dataset is plotted with a different color/line style on the same axes.
 """
 function plot_gfp(
     datasets::Vector{ErpData};
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     normalize::Bool = true,
     kwargs...,
 )
+
+    # Apply condition_selection first
+    datasets_filtered = datasets[get_selected_conditions(datasets, condition_selection)]
 
     # Merge user kwargs and default kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
@@ -115,11 +119,11 @@ function plot_gfp(
     if show_dissimilarity
         # Calculate both GFP and dissimilarity
         results = [
-            gfp_and_dissimilarity(dat; channel_selection = channel_selection, normalize = normalize) for dat in datasets
+            gfp_and_dissimilarity(dat; channel_selection = channel_selection, normalize = normalize) for dat in datasets_filtered
         ]
     else
         # Calculate only GFP
-        results = [gfp(dat; channel_selection = channel_selection, normalize = normalize) for dat in datasets]
+        results = [gfp(dat; channel_selection = channel_selection, normalize = normalize) for dat in datasets_filtered]
     end
 
     # Determine number of panels
@@ -135,7 +139,7 @@ function plot_gfp(
         ax_erp = Axis(fig[panel_idx, 1])
 
         # Plot all channel traces for each dataset
-        for (dataset_idx, dat) in enumerate(datasets)
+        for (dataset_idx, dat) in enumerate(datasets_filtered)
             # Get selected channels
             selected_channels =
                 get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -169,7 +173,7 @@ function plot_gfp(
     end
 
     # Plot GFP for each dataset
-    colors = length(datasets) == 1 ? [plot_kwargs[:color]] : Makie.wong_colors()
+    colors = length(datasets_filtered) == 1 ? [plot_kwargs[:color]] : Makie.wong_colors()
     for (i, result) in enumerate(results)
         color = colors[mod1(i, length(colors))]
         lines!(
@@ -179,7 +183,7 @@ function plot_gfp(
             color = color,
             linewidth = plot_kwargs[:linewidth],
             linestyle = plot_kwargs[:linestyle],
-            label = length(datasets) > 1 ? "Condition $i" : nothing,
+            label = length(datasets_filtered) > 1 ? "Condition $i" : nothing,
         )
     end
 
@@ -208,7 +212,7 @@ function plot_gfp(
     end
 
     # Add legend if multiple datasets
-    if length(datasets) > 1
+    if length(datasets_filtered) > 1
         axislegend(ax_gfp, position = :rt)
     end
 

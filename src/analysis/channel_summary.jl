@@ -236,11 +236,11 @@ function channel_summary(
             continue
         end
 
-        # Get the original epoch number from the data
-        original_epoch_number = epoch_df.epoch[1]  # All rows in an epoch have the same epoch number
+        # Epoch number is now derived from vector index
+        original_epoch_number = epoch_idx
 
         # Create ContinuousData from this epoch DataFrame  
-        single_dat = ContinuousData(epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
+        single_dat = ContinuousData(dat.file, epoch_df, dat.layout, dat.sample_rate, dat.analysis_info)
 
         # Get summary for this epoch
         epoch_summary = channel_summary(

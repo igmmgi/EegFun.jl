@@ -43,9 +43,9 @@ using DataFrames
 
         # Verify grand average structure
         for grand_avg in grand_averages
-            condition_num = grand_avg.data.condition[1]
+            condition_num = grand_avg.condition
             @test condition_num in [1, 2, 3]
-            @test grand_avg.data.condition_name[1] == "grand_average_condition_$condition_num"
+            @test grand_avg.condition_name == "grand_average_condition_$condition_num"
             @test grand_avg.sample_rate == 1000.0
             @test nrow(grand_avg.data) == 2501  # n_timepoints
         end
@@ -79,7 +79,7 @@ using DataFrames
         @test length(grand_averages) == 2  # Only conditions 1 and 2
 
         # Verify condition numbers
-        condition_nums = [grand_avg.data.condition[1] for grand_avg in grand_averages]
+        condition_nums = [grand_avg.condition for grand_avg in grand_averages]
         @test 1 in condition_nums
         @test 2 in condition_nums
     end
@@ -231,15 +231,18 @@ using DataFrames
         @test grand_avg.data isa DataFrame
         @test nrow(grand_avg.data) == 2501  # n_timepoints
         @test "time" in names(grand_avg.data)
-        @test "condition" in names(grand_avg.data)
-        @test "condition_name" in names(grand_avg.data)
+        # condition and condition_name are now struct fields, not DataFrame columns
+        @test "condition" ∉ names(grand_avg.data)
+        @test "condition_name" ∉ names(grand_avg.data)
         @test "Ch1" in names(grand_avg.data)
         @test "Ch2" in names(grand_avg.data)
         @test "Ch3" in names(grand_avg.data)
 
-        # Verify metadata
-        @test all(grand_avg.data.condition .== 1)
-        @test all(grand_avg.data.condition_name .== "grand_average_condition_1")
+        # Verify metadata (now in struct fields)
+        @test grand_avg.condition == 1
+        @test grand_avg.condition_name == "grand_average_condition_1"
+        @test hasproperty(grand_avg, :condition)
+        @test hasproperty(grand_avg, :condition_name)
     end
 
     @testset "Output directory handling" begin

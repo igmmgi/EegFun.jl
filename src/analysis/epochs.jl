@@ -608,13 +608,23 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
         epoch_df = DataFrame(dat.data[pre:post, :])
         epoch_df.time = epoch_df.time .- dat.data.time[zero]
-        insertcols!(epoch_df, 4, :condition => condition)
-        insertcols!(epoch_df, 5, :condition_name => epoch_condition.name)
-        insertcols!(epoch_df, 6, :epoch => epoch)
+        # Remove condition, condition_name, file columns if they exist (they're in struct now)
+        # Keep epoch column since it represents original epoch number (needed after rejection)
+        cols_to_remove = [:condition, :condition_name, :file]
+        for col in cols_to_remove
+            if hasproperty(epoch_df, col)
+                select!(epoch_df, Not(col))
+            end
+        end
+        # Add epoch number (original numbering from extraction)
+        insertcols!(epoch_df, 4, :epoch => epoch)
         push!(epochs, epoch_df)
     end
 
-    return EpochData(epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+    # Get file name from ContinuousData struct field
+    file_name = dat.file
+    
+    return EpochData(file_name, condition, epoch_condition.name, epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
 function extract_epochs(dat::ContinuousData, epoch_conditions::Vector{EpochCondition}, start_time, end_time)
@@ -668,29 +678,27 @@ function average_epochs(dat::EpochData)
     # Ensure we have some channels to average
     isempty(eeg_channels) && @minimal_error_throw("No EEG channels found to average")
 
-    # Concatenate all epochs with error handling
-    try
-        all_epochs = reduce(vcat, dat.data)
+        # Concatenate all epochs with error handling
+        try
+            all_epochs = reduce(vcat, dat.data)
 
-        # Verify we have the required grouping columns
-        required_cols = [:time, :condition, :condition_name]
-        for col in required_cols
-            if !hasproperty(all_epochs, col)
-                @minimal_error_throw("Missing required column '$col' for epoch averaging")
+            # Verify we have time column
+            if !hasproperty(all_epochs, :time)
+                @minimal_error_throw("Missing required column 'time' for epoch averaging")
             end
-        end
 
-        # Group by time and condition, then average EEG channels and count epochs
-        erp = combine(
-            groupby(all_epochs, required_cols),
-            :epoch => length => :n_epochs,      # Count how many epochs contributed
-            eeg_channels .=> mean .=> eeg_channels,  # Average the EEG channels
-        )
+            # Group by time only (condition/condition_name are constant in struct)
+            # Count epochs by grouping by time
+            erp = combine(
+                groupby(all_epochs, [:time]),
+                eeg_channels .=> mean .=> eeg_channels,  # Average the EEG channels
+            )
+            
+            # Count epochs - each unique time point should have same number of epochs
+            # We can check by seeing how many epochs we concatenated
+            n_epochs = length(dat.data)
 
-        # Get the maximum number of epochs at any time point
-        n_epochs = maximum(erp.n_epochs)
-
-        return ErpData(erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
+            return ErpData(dat.file, dat.condition, dat.condition_name, erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
     catch e
         @minimal_error_throw("Failed to average epochs: $(e)")
     end
@@ -861,11 +869,11 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
 
     # Log removal statistics
     if n_removed > 0
-        @info "Condition $(dat.data[1].condition[1]) ($(dat.data[1].condition_name[1])) removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
+        @info "Condition $(dat.condition) ($(dat.condition_name)) removed $n_removed of $n_epochs epochs ($(round(100*n_removed/n_epochs, digits=1))%)"
     end
 
-    # Return new EpochData with only good epochs
-    return EpochData(good_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+    # Return new EpochData with only good epochs (preserve struct fields)
+    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
 """

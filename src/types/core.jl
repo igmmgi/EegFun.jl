@@ -121,12 +121,14 @@ stored in a single DataFrame. The data typically includes time series
 for each electrode channel along with metadata columns.
 
 # Fields
-- `data::DataFrame`: DataFrame containing continuous data with metadata groups
+- `file::String`: Source filename
+- `data::DataFrame`: DataFrame containing continuous data (without file column)
 - `layout::Layout`: Layout object containing electrode positioning information
 - `sample_rate::Int64`: Sample rate of the data in Hz
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 """
 mutable struct ContinuousData <: SingleDataFrameEeg
+    file::String
     data::DataFrame
     layout::Layout
     sample_rate::Int64
@@ -144,13 +146,19 @@ have been averaged together into a single time series. The data includes
 the averaged ERP waveform for each electrode channel.
 
 # Fields
-- `data::DataFrame`: DataFrame containing averaged ERP data with metadata groups
+- `file::String`: Source filename
+- `condition::Int64`: Condition number
+- `condition_name::String`: Name of the condition
+- `data::DataFrame`: DataFrame containing averaged ERP data (without condition/condition_name/n_epochs columns)
 - `layout::Layout`: Layout object containing electrode positioning information
 - `sample_rate::Int64`: Sample rate of the data in Hz
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 - `n_epochs::Int64`: Number of epochs that were averaged together
 """
 mutable struct ErpData <: SingleDataFrameEeg
+    file::String
+    condition::Int64
+    condition_name::String
     data::DataFrame
     layout::Layout
     sample_rate::Int64
@@ -169,12 +177,18 @@ epoch is stored as a separate DataFrame. This format is useful for
 event-related potential analysis and other epoch-based processing.
 
 # Fields
-- `data::Vector{DataFrame}`: Vector of DataFrames, one for each epoch
+- `file::String`: Source filename (constant across all epochs)
+- `condition::Int64`: Condition number (constant across all epochs)
+- `condition_name::String`: Name of the condition (constant across all epochs)
+- `data::Vector{DataFrame}`: Vector of DataFrames, one for each epoch (without condition/condition_name/file columns; epoch column remains for original numbering)
 - `layout::Layout`: Layout object containing electrode positioning information
 - `sample_rate::Int64`: Sample rate of the data in Hz
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 """
 mutable struct EpochData <: MultiDataFrameEeg
+    file::String
+    condition::Int64
+    condition_name::String
     data::Vector{DataFrame}
     layout::Layout
     sample_rate::Int64
@@ -378,8 +392,11 @@ function Base.show(io::IO, neighbours_dict::OrderedDict{Symbol,Neighbours})
 end
 
 filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.filename)
-filename(dat::SingleDataFrameEeg)::String = dat.data.file[1]
-filename(dat::MultiDataFrameEeg)::String = dat.data[1].file[1]
+filename(dat::ContinuousData)::String = dat.file
+filename(dat::ErpData)::String = dat.file
+filename(dat::EpochData)::String = dat.file
+filename(dat::SingleDataFrameEeg)::String = dat.data.file[1]  # Fallback for other SingleDataFrameEeg types
+filename(dat::MultiDataFrameEeg)::String = dat.data[1].file[1]  # Fallback for other MultiDataFrameEeg types
 
 
 
@@ -414,6 +431,7 @@ end
 
 
 function Base.show(io::IO, dat::EegData)
+    println(io, "File: $(filename(dat))")
     println(io, "Type: $(typeof(dat))")
     println(
         io,

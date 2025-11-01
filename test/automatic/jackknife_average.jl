@@ -80,7 +80,7 @@ using DataFrames
             # Create ERPs with different sample rates
             erp1 = create_test_erp_data(1, 1)
             erp2 = create_test_erp_data(2, 1)
-            erp2 = eegfun.ErpData(erp2.data, erp2.layout, 500.0, erp2.analysis_info, erp2.n_epochs)  # Different sample rate
+            erp2 = eegfun.ErpData(erp2.file, erp2.condition, erp2.condition_name, erp2.data, erp2.layout, 500, erp2.analysis_info, erp2.n_epochs)  # Different sample rate
 
             @test_throws Exception eegfun.jackknife_average([erp1, erp2])
         end
@@ -101,9 +101,10 @@ using DataFrames
             # Check that metadata is preserved
             for (i, jk) in enumerate(jackknife_results)
                 @test hasproperty(jk.data, :time)
-                @test hasproperty(jk.data, :condition)
-                @test hasproperty(jk.data, :condition_name)
-                @test occursin("jackknife", jk.data.condition_name[1])
+                # condition and condition_name are now in struct, not DataFrame
+                @test hasproperty(jk, :condition)
+                @test hasproperty(jk, :condition_name)
+                @test occursin("jackknife", jk.condition_name)
             end
         end
 
@@ -111,7 +112,7 @@ using DataFrames
             # Create ERPs with specific n_epochs
             erps = [create_test_erp_data(i, 1) for i = 1:4]
             for (i, erp) in enumerate(erps)
-                erps[i] = eegfun.ErpData(erp.data, erp.layout, erp.sample_rate, erp.analysis_info, i * 10)
+                erps[i] = eegfun.ErpData(erp.file, erp.condition, erp.condition_name, erp.data, erp.layout, erp.sample_rate, erp.analysis_info, i * 10)
             end
 
             jackknife_results = eegfun.jackknife_average(erps)
@@ -183,8 +184,8 @@ using DataFrames
             @test length(jk1) == 2
 
             # Verify each condition
-            @test jk1[1].data.condition[1] == 1
-            @test jk1[2].data.condition[1] == 2
+            @test jk1[1].condition == 1
+            @test jk1[2].condition == 2
         end
 
         @testset "Participant filtering" begin
@@ -227,7 +228,7 @@ using DataFrames
             # Load and verify - should only have condition 1
             jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "jackknife")
             @test jk1 isa eegfun.ErpData  # Single ErpData, not vector
-            @test jk1.data.condition[1] == 1
+            @test jk1.condition == 1
         end
 
         @testset "Custom data variable" begin
@@ -346,8 +347,9 @@ using DataFrames
                 @test jk1_cond.data isa DataFrame
                 @test nrow(jk1_cond.data) == 2501
                 @test "time" in names(jk1_cond.data)
-                @test "condition" in names(jk1_cond.data)
-                @test "condition_name" in names(jk1_cond.data)
+                # condition and condition_name are now in struct, not DataFrame
+                @test hasproperty(jk1_cond, :condition)
+                @test hasproperty(jk1_cond, :condition_name)
                 @test "Ch1" in names(jk1_cond.data)
                 @test "Ch2" in names(jk1_cond.data)
                 @test "Ch3" in names(jk1_cond.data)
@@ -360,8 +362,9 @@ using DataFrames
                 @test jk1.data isa DataFrame
                 @test nrow(jk1.data) == 2501
                 @test "time" in names(jk1.data)
-                @test "condition" in names(jk1.data)
-                @test "condition_name" in names(jk1.data)
+                # condition and condition_name are now in struct, not DataFrame
+                @test hasproperty(jk1, :condition)
+                @test hasproperty(jk1, :condition_name)
                 @test "Ch1" in names(jk1.data)
                 @test "Ch2" in names(jk1.data)
                 @test "Ch3" in names(jk1.data)

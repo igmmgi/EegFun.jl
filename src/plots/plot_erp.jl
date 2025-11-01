@@ -4,6 +4,7 @@
 const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
+    :figure_title => ("ERP Plot", "Title for the plot window"),
 
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
@@ -53,6 +54,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 """
     plot_erp(dat::ErpData; 
              layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
+             condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
              kwargs...)
@@ -112,6 +114,7 @@ When `interactive = true` (default):
 function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     kwargs...,
@@ -119,6 +122,7 @@ function plot_erp(
     return plot_erp(
         [dat];
         layout = layout,
+        condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         kwargs...,
@@ -128,6 +132,7 @@ end
 """
     plot_erp(datasets::Vector{ErpData}; 
              layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
+             condition_selection::Function = conditions(),
              channel_selection::Function = channels(), 
              sample_selection::Function = samples(), 
              kwargs...)
@@ -137,6 +142,7 @@ Plot multiple ERP datasets on the same axis (e.g., conditions).
 function plot_erp(
     datasets::Vector{ErpData};
     layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     kwargs...,
@@ -151,9 +157,10 @@ function plot_erp(
     # Pass color_explicitly_set info to the plotting function
     plot_kwargs[:_color_explicitly_set] = color_explicitly_set
 
-    # data subsetting
+    # data subsetting (includes condition_selection)
     dat_subset = subset(
         datasets;
+        condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         include_extra = true,
@@ -179,7 +186,7 @@ function plot_erp(
     end
 
     # Create figure and apply layout system
-    fig = Figure()
+    fig = Figure(title = plot_kwargs[:figure_title])
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
     axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
 
@@ -338,7 +345,7 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
         for (ch_idx, channel) in enumerate(channels)
 
             # labels/ colours
-            label = length(datasets) > 1 ? string(dat.data.condition_name[1], " ", channel) : string(channel)
+            label = length(datasets) > 1 ? string(dat.condition_name, " ", channel) : string(channel)
             color = length(channels) > 1 ? channel_colors[ch_idx] : dataset_color
 
             lines!(

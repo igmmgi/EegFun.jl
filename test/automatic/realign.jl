@@ -141,7 +141,8 @@ using DataFrames
         # Check that metadata columns are preserved
         for i = 1:length(realigned.data)
             @test hasproperty(realigned.data[i], :epoch)
-            @test hasproperty(realigned.data[i], :condition)
+            # condition is now in struct, not DataFrame
+            @test hasproperty(realigned, :condition)
             @test hasproperty(realigned.data[i], :rt)
 
             # Trial numbers should be preserved

@@ -42,7 +42,7 @@ using eegfun
             nothing,
             nothing,
         )
-        dat = eegfun.ContinuousData(copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
+        dat = eegfun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
         return dat
     end
 
