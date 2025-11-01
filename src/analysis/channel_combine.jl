@@ -7,7 +7,7 @@ Batch channel combining for EEG/ERP data.
 =============================================================================#
 
 """Generate default output directory name for channel combining."""
-function _default_combine_channels_output_dir(input_dir::String, pattern::String)
+function _channel_combine_default_output_dir(input_dir::String, pattern::String)
     joinpath(input_dir, "combined_channels_$(pattern)")
 end
 
@@ -19,7 +19,7 @@ end
 Process a single file through channel combining pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_combine_channels_file(
+function _channel_combine_process_file(
     filepath::String,
     output_path::String,
     channel_selections::Vector{<:Function},
@@ -57,7 +57,7 @@ end
 =============================================================================#
 
 """
-    combine_channels(file_pattern::String, channel_selections::Vector{Function}; 
+    channel_combine(file_pattern::String, channel_selections::Vector{Function}; 
                     output_labels::Union{Vector{Symbol}, Nothing} = nothing,
                     input_dir::String = pwd(), 
                     participants::Union{Int, Vector{Int}, Nothing} = nothing,
@@ -83,26 +83,26 @@ and saves the resulting data with new combined channels to a new directory.
 # Examples
 ```julia
 # Combine frontal and parietal channels using predicates
-combine_channels("erps_cleaned", [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])])
+channel_combine("erps_cleaned", [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])])
 
 # With custom output labels
-combine_channels("erps_cleaned", 
+channel_combine("erps_cleaned", 
                 [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])],
                 output_labels = [:frontal, :parietal])
 
 # Process specific participants and conditions
-combine_channels("erps_cleaned", [channels([:Fp1, :Fp2])], 
+channel_combine("erps_cleaned", [channels([:Fp1, :Fp2])], 
                 input_dir = "/path/to/data", 
                 participants = [1, 2, 3], 
                 conditions = [1, 2])
 
 # Create reduced dataset with only combined channels
-combine_channels("erps_cleaned", 
+channel_combine("erps_cleaned", 
                 [channels([:Fp1, :Fp2]), channels([:PO7, :PO8])], 
                 reduce = true)
 ```
 """
-function combine_channels(
+function channel_combine(
     file_pattern::String,
     channel_selections::Vector{<:Function};
     output_labels::Union{Vector{Symbol},Nothing} = nothing,
@@ -114,12 +114,12 @@ function combine_channels(
 )
 
     # Setup logging
-    log_file = "combine_channels.log"
+    log_file = "channel_combine.log"
     setup_global_logging(log_file)
 
     try
         @info "Batch channel combining started at $(now())"
-        @log_call "combine_channels" (file_pattern, channel_selections)
+        @log_call "channel_combine" (file_pattern, channel_selections)
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
@@ -139,7 +139,7 @@ function combine_channels(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_combine_channels_output_dir(input_dir, file_pattern))
+        output_dir = something(output_dir, _channel_combine_default_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
 
         # Find files
@@ -157,7 +157,7 @@ function combine_channels(
 
         # Create processing function with captured parameters
         process_fn =
-            (input_path, output_path) -> _process_combine_channels_file(
+            (input_path, output_path) -> _channel_combine_process_file(
                 input_path,
                 output_path,
                 channel_selections,
