@@ -14,7 +14,7 @@ function _validate_erps_pattern(pattern::String)
 end
 
 """Generate default output directory name for difference operation."""
-function _default_difference_output_dir(
+function _condition_difference_default_output_dir(
     input_dir::String,
     pattern::String,
     pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},
@@ -70,7 +70,7 @@ end
 Process a single ERP file through difference wave creation.
 Returns BatchResult with success/failure info.
 """
-function _process_difference_file(
+function _condition_difference_process_file(
     filepath::String,
     output_path::String,
     condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}},
@@ -202,7 +202,7 @@ function condition_difference(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_difference_output_dir(input_dir, file_pattern, condition_pairs))
+        output_dir = something(output_dir, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
         mkpath(output_dir)
 
         # Find files
@@ -217,7 +217,7 @@ function condition_difference(
         @info "Condition pairs: $condition_pairs"
 
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> _process_difference_file(input_path, output_path, condition_pairs)
+        process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
 
         # Execute batch operation
         results =

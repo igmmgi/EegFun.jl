@@ -7,15 +7,15 @@ Batch grand averaging of ERP data across participants.
 =============================================================================#
 
 """Validate that file pattern is for ERP data."""
-function _validate_erps_pattern_grandavg(pattern::String)
+function _validate_erps_pattern_grand_average(pattern::String)
     !contains(pattern, "erps") &&
-        return "grandaverage only works with ERP data. File pattern must contain 'erps', got: '$pattern'"
+        return "grand_average only works with ERP data. File pattern must contain 'erps', got: '$pattern'"
     return nothing
 end
 
 """Generate default output directory name for grand averaging."""
-function _default_grandaverage_output_dir(input_dir::String, pattern::String)
-    joinpath(input_dir, "grandaverage_$(pattern)")
+function _default_grand_average_output_dir(input_dir::String, pattern::String)
+    joinpath(input_dir, "grand_average_$(pattern)")
 end
 
 #=============================================================================
@@ -140,7 +140,7 @@ end
 =============================================================================#
 
 """
-    grandaverage(file_pattern::String; 
+    grand_average(file_pattern::String; 
                  input_dir::String = pwd(), 
                  participants::Union{Int, Vector{Int}, Nothing} = nothing,
                  conditions::Union{Int, Vector{Int}, Nothing} = nothing,
@@ -161,21 +161,21 @@ and creates grand averages by averaging the EEG channel data across participants
 # Examples
 ```julia
 # Grand average all ERP files in current directory
-grandaverage("erps_cleaned")
+grand_average("erps_cleaned")
 
 # Process specific participants and conditions
-grandaverage("erps_cleaned", 
+grand_average("erps_cleaned", 
             input_dir = "/path/to/data", 
             participants = [1, 2, 3], 
             conditions = [1, 2])
 
 # Specify custom output directory
-grandaverage("erps_cleaned", 
+grand_average("erps_cleaned", 
             input_dir = "/path/to/data", 
             output_dir = "/path/to/output")
 ```
 """
-function grandaverage(
+function grand_average(
     file_pattern::String;
     input_dir::String = pwd(),
     participants::Union{Int,Vector{Int},Nothing} = nothing,
@@ -184,24 +184,24 @@ function grandaverage(
 )
 
     # Setup logging
-    log_file = "grandaverage.log"
+    log_file = "grand_average.log"
     setup_global_logging(log_file)
 
     try
         @info "Batch grand averaging started at $(now())"
-        @log_call "grandaverage" (file_pattern,)
+        @log_call "grand_average" (file_pattern,)
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
 
-        if (error_msg = _validate_erps_pattern_grandavg(file_pattern)) !== nothing
+        if (error_msg = _validate_erps_pattern_grand_average(file_pattern)) !== nothing
             @minimal_error_throw(error_msg)
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_grandaverage_output_dir(input_dir, file_pattern))
+        output_dir = something(output_dir, _default_grand_average_output_dir(input_dir, file_pattern))
         mkpath(output_dir)
 
         # Find files
@@ -233,7 +233,7 @@ function grandaverage(
         end
 
         # Save grand averages
-        output_file = "grandaverage_$(file_pattern).jld2"
+        output_file = "grand_average_$(file_pattern).jld2"
         output_path = joinpath(output_dir, output_file)
         save(output_path, "grand_averages", grand_averages)
 
