@@ -1330,7 +1330,7 @@ function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataF
         triggers, triggers_info = _extract_triggers_from_markers(dat.markers, n_samples)
     end
 
-    # Create the DataFrame (file column removed, will be in struct)
+    # Create the DataFrame 
     df = hcat(
         DataFrame(
             time = time,
