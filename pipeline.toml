@@ -12,7 +12,7 @@ epoch_condition_file = "epochs.toml"
 [preprocess]
 reference_channel = "avg"
 epoch_start = -1.0
-epoch_end = 3.0
+epoch_end = 2.0
 
 [preprocess.filter]
 highpass.apply = true
@@ -50,8 +50,8 @@ vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
 hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
 
 [preprocess.eeg]
-artifact_value_criterion = 100
-extreme_value_criterion = 100
+artifact_value_criterion = 75
+extreme_value_criterion = 200
 
 [preprocess.ica]
 apply = true

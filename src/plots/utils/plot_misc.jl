@@ -42,6 +42,32 @@ end
 const COLORBAR_DEFAULTS = _get_colorbar_defaults()
 
 """
+    _get_legend_defaults()
+
+Get all default values for Legend attributes by creating a temporary Legend instance.
+Returns a dictionary mapping attribute names to their default values.
+"""
+function _get_legend_defaults()
+    # Create a minimal figure and axis with a dummy plot that has labels
+    # This is necessary because axislegend() requires plots with labels
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    lines!(ax, [1, 2], [1, 2], label = "dummy")  # Create a plot with a label
+    leg = axislegend(ax)
+
+    # Get all attribute values at once
+    defaults = Dict{Symbol,Any}()
+    for attr in propertynames(Legend)
+        defaults[attr] = getproperty(leg, attr)
+    end
+
+    return defaults
+end
+
+# Cache the legend defaults
+const LEGEND_DEFAULTS = _get_legend_defaults()
+
+"""
     _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol, Any})
 
 Extract all colorbar-related parameters from plot_kwargs and return a clean dictionary
@@ -74,6 +100,35 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
     pop!(colorbar_kwargs, :lowclip, nothing)
 
     return colorbar_kwargs
+end
+
+"""
+    _extract_legend_kwargs!(plot_kwargs::Dict{Symbol, Any})
+
+Extract all legend-related parameters from plot_kwargs and return a clean dictionary
+suitable for passing to Legend constructor or modifying legend properties.
+
+# Arguments
+- `plot_kwargs`: Dictionary of plot parameters (modified in-place)
+
+# Returns
+- `Dict{Symbol, Any}`: Cleaned legend parameters with invalid attributes removed
+"""
+function _extract_legend_kwargs!(plot_kwargs::Dict{Symbol,Any})
+    legend_kwargs = Dict{Symbol,Any}()
+    legend_attrs = propertynames(Legend)
+
+    for attr in legend_attrs
+        legend_key = Symbol("legend_$(attr)")
+        if haskey(plot_kwargs, legend_key)
+            value = pop!(plot_kwargs, legend_key)
+            if value !== nothing  # Only add if not the default nothing
+                legend_kwargs[attr] = value
+            end
+        end
+    end
+
+    return legend_kwargs
 end
 
 # =============================================================================
