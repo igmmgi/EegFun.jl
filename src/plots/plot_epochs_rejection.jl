@@ -40,9 +40,10 @@ const PLOT_EPOCHS_REJECTION_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :good_epoch_color => (:green, "Color for good epoch spines"),
     :bad_epoch_color => (:red, "Color for bad epoch spines"),
 
-
     # Y-axis limits
     :global_ylim => (false, "Whether to use global Y-axis limits across all epochs"),
+    :ylim => (nothing, "Y-axis limits as (min, max) tuple, or nothing for automatic"),
+    :xlim => (nothing, "X-axis limits as (min, max) tuple, or nothing for automatic"),
 )
 
 #=============================================================================
@@ -391,12 +392,19 @@ function _update_epoch_display!(
 
             ax.title = "Epoch $epoch_idx: $(print_vector(channels_to_show, n_ends = 3))"
 
-            # Apply global Y limits if enabled, otherwise reset to automatic scaling
-            if plot_kwargs[:global_ylim] && !isnothing(state.global_ylim)
+            # Apply Y limits: explicit ylim takes precedence, then global_ylim, then automatic
+            if !isnothing(plot_kwargs[:ylim])
+                ylims!(ax, plot_kwargs[:ylim])
+            elseif plot_kwargs[:global_ylim] && !isnothing(state.global_ylim)
                 ylims!(ax, state.global_ylim)
             else
                 # Reset to automatic scaling by clearing the limits
                 ax.limits = (ax.limits[][1], nothing)
+            end
+            
+            # Apply X limits if provided
+            if !isnothing(plot_kwargs[:xlim])
+                xlims!(ax, plot_kwargs[:xlim])
             end
             if i <= length(state.checkboxes)
                 # Check if epoch is already rejected by user or by automatic detection
