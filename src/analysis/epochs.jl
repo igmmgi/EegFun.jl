@@ -1,9 +1,9 @@
 """
-    parse_epoch_conditions(config::Dict) -> Vector{EpochCondition}
+    condition_parse_epoch(config::Dict) -> Vector{EpochCondition}
 
 Parse epoch conditions from configuration dictionary.
 """
-function parse_epoch_conditions(config::Dict)
+function condition_parse_epoch(config::Dict)
     defaults = get(config, "epochs", Dict())
 
     conditions = EpochCondition[]
@@ -1050,7 +1050,7 @@ function _process_average_file(filepath::String, output_path::String, conditions
     epochs_data = file_data["epochs"]
 
     # Select conditions
-    epochs_data = _select_conditions(epochs_data, conditions)
+    epochs_data = _condition_select(epochs_data, conditions)
 
     # Average epochs for each condition
     erps_data = average_epochs.(epochs_data)

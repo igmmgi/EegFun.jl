@@ -118,28 +118,28 @@ using DataFrames
         @test_throws ArgumentError eegfun._load_eeg_data("/nonexistent/file.jld2")
     end
 
-    @testset "_select_conditions" begin
+    @testset "_condition_select" begin
         # Create test data
         data = [create_test_erp_data(1, i) for i = 1:5]
 
         # Test with nothing (should return original)
-        result = eegfun._select_conditions(data, nothing)
+        result = eegfun._condition_select(data, nothing)
         @test result == data
 
         # Test with single condition
-        result = eegfun._select_conditions(data, 3)
+        result = eegfun._condition_select(data, 3)
         @test length(result) == 1
         @test result[1] == data[3]
 
         # Test with multiple conditions
-        result = eegfun._select_conditions(data, [1, 3, 5])
+        result = eegfun._condition_select(data, [1, 3, 5])
         @test length(result) == 3
         @test result[1] == data[1]
         @test result[2] == data[3]
         @test result[3] == data[5]
 
         # Test with empty selection
-        result = eegfun._select_conditions(data, Int[])
+        result = eegfun._condition_select(data, Int[])
         @test isempty(result)
     end
 

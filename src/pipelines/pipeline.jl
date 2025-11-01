@@ -46,7 +46,7 @@ function preprocess(config::String; log_level::Symbol = :info)
         # Read the epoch conditions defined within the toml file (See XXX for examples)
         !isfile(cfg["files"]["input"]["epoch_condition_file"]) &&
             @minimal_error "File missing: $(cfg["files"]["input"]["epoch_condition_file"])"
-        epoch_cfgs = parse_epoch_conditions(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
+        epoch_cfgs = condition_parse_epoch(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
         @info "Loading/parsing epoch file: $(cfg["files"]["input"]["epoch_condition_file"])"
 
         # Find and load layout file

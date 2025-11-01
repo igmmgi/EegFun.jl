@@ -304,7 +304,7 @@ function _process_channel_summary_file(
     data_var, var_name = data_result
 
     # Select conditions
-    data_var = _select_conditions(data_var, conditions)
+    data_var = _condition_select(data_var, conditions)
 
     # Process each condition and collect results
     summary_dfs = DataFrame[]

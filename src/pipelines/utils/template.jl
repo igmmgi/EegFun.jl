@@ -111,7 +111,7 @@ function _generate_setup_section()
         
         # Read the epoch conditions defined within the toml file
         !isfile(cfg["files"]["input"]["epoch_condition_file"]) && @minimal_error "File missing: \$(cfg["files"]["input"]["epoch_condition_file"])"
-        epoch_cfgs = parse_epoch_conditions(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
+        epoch_cfgs = condition_parse_epoch(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
         @info "Epoch file: \$(cfg["files"]["input"]["epoch_condition_file"]) loaded"
         
         # Find and load layout file

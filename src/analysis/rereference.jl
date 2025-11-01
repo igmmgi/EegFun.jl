@@ -162,7 +162,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     data, var_name = data_result
 
     # Select conditions
-    data = _select_conditions(data, conditions)
+    data = _condition_select(data, conditions)
 
     # Apply rereferencing (mutates data in-place)
     rereference!.(data, reference_selection)

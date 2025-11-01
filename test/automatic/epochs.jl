@@ -10,7 +10,7 @@ using Random
 @testset "epochs" begin
 
 
-    @testset "parse_epoch_conditions" begin
+    @testset "condition_parse_epoch" begin
         cfg = Dict(
             "epochs" => Dict(
                 "conditions" => [
@@ -26,7 +26,7 @@ using Random
                 ],
             ),
         )
-        conds = eegfun.parse_epoch_conditions(cfg)
+        conds = eegfun.condition_parse_epoch(cfg)
         @test length(conds) == 2
         @test conds[1].name == "c1"
         @test conds[1].reference_index == 2
@@ -34,7 +34,7 @@ using Random
 
         # Missing trigger_sequences → throws
         bad_cfg1 = Dict("epochs" => Dict("conditions" => [Dict("name" => "bad1")]))
-        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg1)
+        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg1)
 
         # after and before both set → throws
         bad_cfg2 = Dict(
@@ -43,7 +43,7 @@ using Random
                     [Dict("name" => "bad2", "trigger_sequences" => [[1, 2, 3]], "after" => 1, "before" => 2)],
             ),
         )
-        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg2)
+        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg2)
 
         # reference_index out of bounds → throws
         bad_cfg3 = Dict(
@@ -52,7 +52,7 @@ using Random
                     [Dict("name" => "bad3", "trigger_sequences" => [[1, 2, 3]], "reference_index" => 5)],
             ),
         )
-        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg3)
+        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg3)
 
         # timing_pairs provided but min/max missing → throws
         bad_cfg4 = Dict(
@@ -61,7 +61,7 @@ using Random
                     [Dict("name" => "bad4", "trigger_sequences" => [[1, 2, 3]], "timing_pairs" => [[1, 3]])],
             ),
         )
-        @test_throws Exception eegfun.parse_epoch_conditions(bad_cfg4)
+        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg4)
 
         # min_interval ≥ max_interval → throws
         bad_cfg5 = Dict(
@@ -77,23 +77,23 @@ using Random
                 ],
             ),
         )
-        @test_throws ErrorException eegfun.parse_epoch_conditions(bad_cfg5)
+        @test_throws ErrorException eegfun.condition_parse_epoch(bad_cfg5)
 
         # Additional edge cases
         # Empty conditions array
         empty_cfg = Dict("epochs" => Dict("conditions" => []))
-        @test eegfun.parse_epoch_conditions(empty_cfg) == []
+        @test eegfun.condition_parse_epoch(empty_cfg) == []
 
         # Missing epochs key
         no_epochs_cfg = Dict()
-        @test eegfun.parse_epoch_conditions(no_epochs_cfg) == []
+        @test eegfun.condition_parse_epoch(no_epochs_cfg) == []
 
         # Invalid trigger sequence format
         invalid_seq_cfg = Dict(
             "epochs" =>
                 Dict("conditions" => [Dict("name" => "invalid", "trigger_sequences" => ["invalid_string"])]),
         )
-        @test_throws Exception eegfun.parse_epoch_conditions(invalid_seq_cfg)
+        @test_throws Exception eegfun.condition_parse_epoch(invalid_seq_cfg)
     end
 
     @testset "search helpers" begin
