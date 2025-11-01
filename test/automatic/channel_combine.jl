@@ -25,7 +25,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_output")
 
             # Combine two channel groups
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 input_dir = test_dir,
@@ -61,7 +61,7 @@ using Statistics
         @testset "Custom output labels" begin
             output_dir = joinpath(test_dir, "combined_custom_labels")
 
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
@@ -81,7 +81,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_reduce")
 
             # With reduce=true, only combined channels should remain
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
@@ -110,7 +110,7 @@ using Statistics
         @testset "Combine specific participants" begin
             output_dir = joinpath(test_dir, "combined_participant")
 
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -127,7 +127,7 @@ using Statistics
         @testset "Combine multiple participants" begin
             output_dir = joinpath(test_dir, "combined_multi_participants")
 
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -144,7 +144,7 @@ using Statistics
         @testset "Combine specific conditions" begin
             output_dir = joinpath(test_dir, "combined_condition")
 
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -163,7 +163,7 @@ using Statistics
         @testset "Combine multiple conditions" begin
             output_dir = joinpath(test_dir, "combined_multi_conditions")
 
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -179,14 +179,14 @@ using Statistics
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception eegfun.combine_channels(
+            @test_throws Exception eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = "/nonexistent/path",
             )
 
             # Mismatched output labels
-            @test_throws Exception eegfun.combine_channels(
+            @test_throws Exception eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1],  # Only 1 label for 2 groups
@@ -198,7 +198,7 @@ using Statistics
             empty_dir = joinpath(test_dir, "empty_match")
             mkpath(empty_dir)
 
-            result = eegfun.combine_channels("erps_cleaned", [eegfun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
+            result = eegfun.channel_combine("erps_cleaned", [eegfun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
 
             @test result === nothing
         end
@@ -206,19 +206,19 @@ using Statistics
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "combined_with_log")
 
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
 
-            log_file = joinpath(output_dir, "combine_channels.log")
+            log_file = joinpath(output_dir, "channel_combine.log")
             @test isfile(log_file)
 
             log_contents = read(log_file, String)
             @test contains(log_contents, "Batch channel combining started")
-            @test contains(log_contents, "combine_channels")
+            @test contains(log_contents, "channel_combine")
         end
 
         @testset "Existing output directory" begin
@@ -228,7 +228,7 @@ using Statistics
             touch(joinpath(output_dir, "dummy.txt"))
             @test isfile(joinpath(output_dir, "dummy.txt"))
 
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -251,7 +251,7 @@ using Statistics
             save(joinpath(partial_dir, "2_erps_cleaned.jld2"), "invalid_var", erps)
 
             output_dir = joinpath(test_dir, "combined_partial")
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = partial_dir,
@@ -267,7 +267,7 @@ using Statistics
         @testset "Return value structure" begin
             output_dir = joinpath(test_dir, "combined_return_check")
 
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -312,7 +312,7 @@ using Statistics
 
             # Combine
             output_dir = joinpath(test_dir, "combined_math")
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_math",
                 [eegfun.channels([:Ch1, :Ch2])],
                 output_labels = [:avg],
@@ -335,7 +335,7 @@ using Statistics
             original_n_channels = nrow(original_erps[1].layout.data)
 
             # Combine without reduce (should append to layout)
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -356,7 +356,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_layout_reduce")
 
             # Combine with reduce (layout should only have combined channels)
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
@@ -378,7 +378,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_multiple_groups")
 
             # Combine 3 different groups
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:Group1, :Group2, :Group3],
@@ -401,7 +401,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_single_group")
 
             # Combine just one group
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
@@ -419,7 +419,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_filters")
 
             # Combine with participant AND condition filters
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -446,7 +446,7 @@ using Statistics
 
             # Test pattern matching "erps_original"
             output_dir1 = joinpath(test_dir, "combined_original")
-            result1 = eegfun.combine_channels(
+            result1 = eegfun.channel_combine(
                 "erps_original",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
@@ -456,7 +456,7 @@ using Statistics
 
             # Test pattern matching "erps" (should match all)
             output_dir2 = joinpath(test_dir, "combined_all_erps")
-            result2 = eegfun.combine_channels(
+            result2 = eegfun.channel_combine(
                 "erps",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
@@ -469,7 +469,7 @@ using Statistics
             overwrite_dir = joinpath(test_dir, "combined_overwrite")
 
             # First run
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -482,7 +482,7 @@ using Statistics
             sleep(0.1)
 
             # Second run (should overwrite)
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -497,7 +497,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_exclusion")
 
             # Combine all channels except Fz
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels_not([:Ch5])],
                 output_labels = [:not_Ch5],
@@ -524,7 +524,7 @@ using Statistics
 
             # Combine channels in epoch data
             output_dir = joinpath(test_dir, "combined_epochs")
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "epochs",
                 [eegfun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
@@ -551,7 +551,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_invalid")
 
             # This should fail because channels don't exist
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps",
                 [eegfun.channels([:NonExistent1, :NonExistent2])],
                 input_dir = invalid_dir,
@@ -567,7 +567,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_single_channel")
 
             # Average just one channel (edge case)
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch5])],
                 output_labels = [:Ch5_avg],
@@ -588,7 +588,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_all_channels")
 
             # Combine ALL channels
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels()],  # All channels
                 output_labels = [:global_avg],
@@ -624,7 +624,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_overlapping")
 
             # Same channel in multiple groups
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2, :Ch5]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:Group1, :Group2],
@@ -652,7 +652,7 @@ using Statistics
             original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "erps")
             original_fs = original_erps[1].sample_rate
 
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -672,7 +672,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_invalid_condition")
 
             # Request condition 5 when only 2 exist
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -709,7 +709,7 @@ using Statistics
 
             # Combine into 4 groups
             output_dir = joinpath(test_dir, "combined_many_ch")
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps_many",
                 [
                     eegfun.channels(channel_names[1:5]),
@@ -734,7 +734,7 @@ using Statistics
         @testset "Metadata columns preserved" begin
             output_dir = joinpath(test_dir, "combined_metadata_cols")
 
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
@@ -753,7 +753,7 @@ using Statistics
         @testset "Metadata columns in reduce mode" begin
             output_dir = joinpath(test_dir, "combined_metadata_reduce")
 
-            eegfun.combine_channels(
+            eegfun.channel_combine(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
@@ -783,7 +783,7 @@ using Statistics
 
             # Use a predicate that selects nothing
             output_dir = joinpath(test_dir, "combined_empty")
-            result = eegfun.combine_channels(
+            result = eegfun.channel_combine(
                 "erps",
                 [ch -> Symbol[]],  # Returns empty
                 input_dir = empty_dir,
