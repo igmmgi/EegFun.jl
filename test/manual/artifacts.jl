@@ -1,7 +1,6 @@
 using eegfun
 using GLMakie
 using BenchmarkTools
-using InteractiveUtils
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
@@ -72,7 +71,6 @@ epoch_cfg = [
     eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
     eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[3]]),
 ]
-
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
@@ -89,22 +87,13 @@ eegfun.unique_epochs(bad_epochs[1])
 
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, abs_criterion = 0)
-bad_epochs[1]
+eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 
-bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, z_criterion = 0)
-bad_epochs[1]
+bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, z_criterion = 0, abs_criterion = 150)
+eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, z_criterion = 1, abs_criterion = 0, z_measures = [:variance, :range])
-bad_epochs[1]
-
-
-
-eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], ylim = (-100, 100))
-eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], xlim = (-5, 15), ylimits = (-100, 100))
-
-
-bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, measures = [:variance])
 
 
 
@@ -115,18 +104,27 @@ eegfun.unique_rejections(bad_epochs[1].rejected_epochs)
 eegfun.unique_channels(bad_epochs[1].rejected_epochs)
 eegfun.unique_epochs(bad_epochs[1].rejected_epochs)
 
+# automatic vs. and/or visual/manual
+eegfun.get_rejected_epochs(bad_epochs)
+eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 
-bad_epochs_automatic = eegfun.detect_bad_epochs_automatic(epochs[1])
-eegfun.get_rejected_epochs(bad_epochs_automatic)
-eegfun.plot_artifact_detection(epochs[1], bad_epochs)
-
+bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, abs_criterion = 200, z_criterion = 0)
 bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4))
-bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_info = bad_epochs, dims = (4, 4))
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_info = bad_epochs[1], dims = (4, 4))
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_info = bad_epochs[1], dims = (4, 4), ylim = (-100, 100), xlim = (-1, 2))
 
 
-eegfun.unique_rejections(bad_epochs.rejected_epochs)
-eegfun.unique_channels(bad_epochs.rejected_epochs)
-eegfun.unique_epochs(bad_epochs.rejected_epochs)
+eegfun.unique_rejections(bad_epochs[1].rejected_epochs)
+eegfun.unique_rejections(bad_epochs)
+eegfun.unique_rejections(bad_epochs[1])
+
+eegfun.unique_channels(bad_epochs[1].rejected_epochs)
+eegfun.unique_channels(bad_epochs)
+eegfun.unique_channels(bad_epochs[1])
+
+eegfun.unique_epochs(bad_epochs[1].rejected_epochs)
+eegfun.unique_epochs(bad_epochs)
+eegfun.unique_epochs(bad_epochs[1])
 
 # repair
 bad_epochs_automatic = eegfun.detect_bad_epochs_automatic(epochs)
@@ -136,12 +134,7 @@ epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method =
 epochs_repaired = eegfun.repair_artifacts(epochs, bad_epochs_automatic, method = :reject)
 
 eegfun.plot_artifact_repair(epochs[1], epochs_repaired[1], bad_epochs[1])
-eegfun.plot_artifact_repair(epochs[1], epochs_repaired[1], bad_epochs[1], ylimits = (-100, 100))
-
-
-
-
-
+eegfun.plot_artifact_repair(epochs[1], epochs_repaired[1], bad_epochs[1], ylim = (-100, 100))
 
 
 
@@ -156,3 +149,7 @@ bad_epochs_manual = eegfun.detect_bad_epochs_interactive(
     artifact_info = bad_epochs_automatic,
     colormap = :seaborn_colorblind,
 )
+
+# reject 
+epochs_rejected = eegfun.reject_epochs(epochs, bad_epochs_automatic)
+eegfun.plot_artifact_rejection(epochs[1], epochs_rejected[1], bad_epochs_automatic[1])

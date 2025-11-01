@@ -744,7 +744,7 @@ function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
     epochs_to_keep = setdiff(1:n_epochs, rejected_indices)
     dat.data = dat.data[epochs_to_keep]
 
-    @info "Rejected $(length(rejected_indices)) of $(info.n_epochs) epochs."
+    @info "Rejected $(length(rejected_indices)) of $(info.epoch_info.n) epochs."
 
     return dat
 end

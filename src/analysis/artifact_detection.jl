@@ -612,7 +612,13 @@ end
 
 # Methods depending on EpochRejectionInfo must be defined after the struct
 unique_rejections(info::EpochRejectionInfo) = unique_rejections(info.rejected_epochs)
-unique_rejections(info::Vector{EpochRejectionInfo}) = unique_rejections.(info)
+function unique_rejections(infos::Vector{EpochRejectionInfo})
+    results = Vector{Rejection}[]
+    for info in infos
+        push!(results, unique_rejections(info))
+    end
+    return results
+end
 
 unique_channels(rejections::EpochRejectionInfo) = unique_channels(rejections.rejected_epochs)
 unique_channels(info::Vector{EpochRejectionInfo}) = unique_channels.(info)

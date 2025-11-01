@@ -488,3 +488,205 @@ function plot_artifact_repair(
     plot_kwargs[:display_plot] && display_figure(fig)
     return fig
 end
+
+"""
+    plot_artifact_rejection(epochs_original::EpochData, epochs_rejected::EpochData, artifacts::EpochRejectionInfo; channel_selection::Function=channels(), kwargs...)
+
+Interactive plot comparison between original and rejected epochs with navigation buttons.
+Epochs are aligned by epoch number from the dataframe. If an epoch was rejected (doesn't exist in epochs_rejected),
+both plots show a blank plot with red spines.
+
+# Arguments
+- `epochs_original::EpochData`: Original epoch data (before rejection)
+- `epochs_rejected::EpochData`: Epoch data after rejection (may have fewer epochs)
+- `artifacts::EpochRejectionInfo`: Artifact detection results
+- `channel_selection::Function`: Channel predicate for selecting channels to plot (default: all layout channels)
+
+# Keyword Arguments
+$(generate_kwargs_doc(PLOT_ARTIFACT_KWARGS))
+
+# Returns
+- `Figure`: Interactive Makie figure with navigation buttons showing before/after comparison
+
+# Examples
+```julia
+# Basic interactive rejection comparison
+fig = plot_artifact_rejection(epochs_orig, epochs_rejected, artifacts)
+
+# With specific channels
+fig = plot_artifact_rejection(epochs_orig, epochs_rejected, artifacts,
+                            channel_selection = channels([:Fp1, :Fp2, :Cz]))
+
+# With custom axis limits
+fig = plot_artifact_rejection(epochs_orig, epochs_rejected, artifacts, xlim = (-0.2, 0.8), ylim = (-100, 100))
+```
+"""
+function plot_artifact_rejection(
+    epochs_original::EpochData,
+    epochs_rejected::EpochData,
+    artifacts::EpochRejectionInfo;
+    channel_selection::Function = channels(),
+    kwargs...,
+)
+    # Merge user kwargs with defaults and validate
+    plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
+    
+    # Get channels to plot
+    selected_channels = get_selected_channels(epochs_original, channel_selection, include_meta = false, include_extra = false)
+
+    # Create figure and axes
+    fig = Figure()
+    ax1 = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
+    ax2 = Axis(fig[2, 1], xlabel = "Time (s)", ylabel = "Amplitude (μV)")
+
+    # Setup axis styling
+    _set_axis_grid!(ax1; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_properties!(ax1; 
+                       xlim = plot_kwargs[:xlim], 
+                       ylim = plot_kwargs[:ylim])
+    _set_origin_lines!(ax1; 
+                        add_xy_origin = plot_kwargs[:add_xy_origin])
+    
+    _set_axis_grid!(ax2; 
+                     xgrid = plot_kwargs[:xgrid], 
+                     ygrid = plot_kwargs[:ygrid],
+                     xminorgrid = plot_kwargs[:xminorgrid], 
+                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_properties!(ax2; 
+                       xlim = plot_kwargs[:xlim], 
+                       ylim = plot_kwargs[:ylim])
+    _set_origin_lines!(ax2; 
+                        add_xy_origin = plot_kwargs[:add_xy_origin])
+
+    # Get epochs with artifacts
+    epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
+    sort!(epochs_with_artifacts)
+
+    # Create controls
+    n_epochs = length(epochs_original.data)
+    controls = _create_artifact_controls(fig[3, 1], n_epochs, epochs_with_artifacts)
+
+    # Set row sizes
+    rowsize!(fig.layout, 1, Relative(0.45))  # Original plot
+    rowsize!(fig.layout, 2, Relative(0.45))  # Rejected plot
+    rowsize!(fig.layout, 3, Relative(0.1))   # Controls area
+
+    # Create observables
+    epoch_idx = Observable(1)
+    artifact_idx = Observable(1)
+    current_legend1 = Ref{Union{Nothing,Legend}}(nothing)
+    current_legend2 = Ref{Union{Nothing,Legend}}(nothing)
+    selected_channels_set = Set{Symbol}()
+
+    # Create color map for rejected channels
+    rejected_channels = [r.label for r in artifacts.rejected_epochs]
+    rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
+
+    # Build a lookup map from epoch number to index in epochs_rejected
+    epoch_number_to_idx = Dict{Int,Int}()
+    for (idx, epoch_df) in enumerate(epochs_rejected.data)
+        epoch_num = epoch_df.epoch[1]  # All rows in a DataFrame should have the same epoch number
+        epoch_number_to_idx[epoch_num] = idx
+    end
+
+    # Function to update comparison plot
+    function update_comparison_plot!(epoch_idx_val)
+
+        empty!(ax1)
+        empty!(ax2)
+
+        # Delete existing legends if present
+        if current_legend1[] !== nothing
+            delete!(current_legend1[])
+            current_legend1[] = nothing
+        end
+        if current_legend2[] !== nothing
+            delete!(current_legend2[])
+            current_legend2[] = nothing
+        end
+
+        # Get epoch number from original data
+        epoch_orig = epochs_original.data[epoch_idx_val]
+        epoch_num = epoch_orig.epoch[1]
+
+        # Find rejected channels for this epoch
+        epoch_rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_num]
+
+        # Check if this epoch exists in epochs_rejected
+        rejected_idx = get(epoch_number_to_idx, epoch_num, nothing)
+
+        # Update titles
+        ax1.title = "Original Data - Epoch $epoch_num"
+        ax2.title = "Rejected Data - Epoch $epoch_num"
+
+        # Reset spine colors to default
+        for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
+            setproperty!(ax1, spline, :black)
+            setproperty!(ax2, spline, :black)
+        end
+
+        # Plot original epoch
+        _plot_channels!(ax1, epoch_orig, selected_channels, epoch_rejected_channels, selected_channels_set, 
+                      rejected_color_map, plot_kwargs)
+
+        # Plot rejected epoch if it exists, otherwise show blank with red spines
+        if rejected_idx !== nothing
+            epoch_rejected = epochs_rejected.data[rejected_idx]
+            _plot_channels!(ax2, epoch_rejected, selected_channels, epoch_rejected_channels, selected_channels_set, 
+                          rejected_color_map, plot_kwargs)
+            
+            # Create legends only when data exists
+            _create_legend!(ax1, selected_channels, current_legend1)
+            _create_legend!(ax2, selected_channels, current_legend2)
+        else
+            # Epoch was rejected - show blank plot with red spines on both axes
+            for spline in (:leftspinecolor, :rightspinecolor, :bottomspinecolor, :topspinecolor)
+                setproperty!(ax1, spline, :red)
+                setproperty!(ax2, spline, :red)
+            end
+            
+            # Create legend only for original plot (ax2 is empty)
+            _create_legend!(ax1, selected_channels, current_legend1)
+        end
+
+        # Link axes
+        linkxaxes!(ax1, ax2)
+    end
+
+    # Create event handlers for both axes
+    _create_channel_selection_handlers(fig, ax1, epochs_original, selected_channels, selected_channels_set, 
+                                     plot_kwargs, epoch_idx, () -> update_comparison_plot!(epoch_idx[]))
+    _create_channel_selection_handlers(fig, ax2, epochs_original, selected_channels, selected_channels_set, 
+                                     plot_kwargs, epoch_idx, () -> update_comparison_plot!(epoch_idx[]))
+    
+
+    # Create event handlers
+    _create_navigation_handlers(controls, epoch_idx, artifact_idx, n_epochs, epochs_with_artifacts)
+
+    # Update plot and controls when epoch changes
+    on(epoch_idx) do idx
+        update_comparison_plot!(idx)
+        controls.epoch_label.text = "Epoch $idx / $n_epochs"
+    end
+
+    # Update plot and controls when artifact changes
+    on(artifact_idx) do idx
+        if !isempty(epochs_with_artifacts)
+            epoch_idx[] = epochs_with_artifacts[idx]
+            controls.artifact_label.text = "Artifact $idx / $(length(epochs_with_artifacts))"
+        end
+    end
+
+    # Initialize plot and controls
+    update_comparison_plot!(epoch_idx[])
+    controls.epoch_label.text = "Epoch 1 / $n_epochs"
+    controls.artifact_label.text = !isempty(epochs_with_artifacts) ? 
+        "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
+
+    plot_kwargs[:display_plot] && display_figure(fig)
+    return fig
+end
