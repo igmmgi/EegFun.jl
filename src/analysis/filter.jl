@@ -499,7 +499,7 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     data, var_name = data_result
 
     # Select conditions
-    data = _select_conditions(data, conditions)
+    data = _condition_select(data, conditions)
 
     # Apply filter (mutates data in-place)
     filter_data!.(data, filter_type, cutoff_freq)

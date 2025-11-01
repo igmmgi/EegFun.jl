@@ -9,12 +9,12 @@ Batch combining of conditions for epoch data.
 """Validate that file pattern is for epochs data."""
 function _validate_epochs_pattern_combine(pattern::String)
     !contains(pattern, "epochs") &&
-        return "combine_conditions only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
+        return "condition_combine only works with epoch data. File pattern must contain 'epochs', got: '$pattern'"
     return nothing
 end
 
 """Generate default output directory name for condition combining."""
-function _default_combine_conditions_output_dir(input_dir::String, pattern::String, groups::Vector{Vector{Int}})
+function _condition_combine_default_output_dir(input_dir::String, pattern::String, groups::Vector{Vector{Int}})
     groups_str = join([join(group, "-") for group in groups], "_")
     joinpath(input_dir, "combined_$(pattern)_$(groups_str)")
 end
@@ -27,7 +27,7 @@ end
 Process a single epochs file through condition combining pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_combine_conditions_file(filepath::String, output_path::String, condition_groups::Vector{Vector{Int}})
+function _condition_combine_process_file(filepath::String, output_path::String, condition_groups::Vector{Vector{Int}})
     filename = basename(filepath)
 
     # Load data
@@ -85,7 +85,7 @@ end
 =============================================================================#
 
 """
-    combine_conditions(file_pattern::String, condition_groups::Vector{Vector{Int}}; 
+    condition_combine(file_pattern::String, condition_groups::Vector{Vector{Int}}; 
                       input_dir::String = pwd(), 
                       participants::Union{Int, Vector{Int}, Nothing} = nothing,
                       output_dir::Union{String, Nothing} = nothing)
@@ -102,13 +102,13 @@ Combine EEG epoch conditions from JLD2 files and save to a new directory.
 # Example
 ```julia
 # Combine conditions 1,2 into first group and 3,4 into second group
-combine_conditions("epochs", [[1, 2], [3, 4]])
+condition_combine("epochs", [[1, 2], [3, 4]])
 
 # Combine specific participant
-combine_conditions("epochs_cleaned", [[1, 2], [3, 4]], participants=3)
+condition_combine("epochs_cleaned", [[1, 2], [3, 4]], participants=3)
 
 # Combine with custom output directory
-combine_conditions("epochs", [[1, 2], [3, 4]], output_dir="/path/to/output/")
+condition_combine("epochs", [[1, 2], [3, 4]], output_dir="/path/to/output/")
 ```
 
 # Note
@@ -116,7 +116,7 @@ combine_conditions("epochs", [[1, 2], [3, 4]], output_dir="/path/to/output/")
 - Conditions are combined (concatenated) into new conditions
 - Use `average_epochs()` separately to create ERPs from combined epochs
 """
-function combine_conditions(
+function condition_combine(
     file_pattern::String,
     condition_groups::Vector{Vector{Int}};
     input_dir::String = pwd(),
@@ -125,12 +125,12 @@ function combine_conditions(
 )
 
     # Setup logging
-    log_file = "combine_conditions.log"
+    log_file = "condition_combine.log"
     setup_global_logging(log_file)
 
     try
         @info "Batch condition combining started at $(now())"
-        @log_call "combine_conditions" (file_pattern, condition_groups)
+        @log_call "condition_combine" (file_pattern, condition_groups)
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
@@ -148,7 +148,7 @@ function combine_conditions(
 
         # Setup directories
         output_dir =
-            something(output_dir, _default_combine_conditions_output_dir(input_dir, file_pattern, condition_groups))
+            something(output_dir, _condition_combine_default_output_dir(input_dir, file_pattern, condition_groups))
         mkpath(output_dir)
 
         # Find files
@@ -164,7 +164,7 @@ function combine_conditions(
 
         # Create processing function with captured parameters
         process_fn =
-            (input_path, output_path) -> _process_combine_conditions_file(input_path, output_path, condition_groups)
+            (input_path, output_path) -> _condition_combine_process_file(input_path, output_path, condition_groups)
 
         # Execute batch operation
         results =

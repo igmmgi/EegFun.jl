@@ -1,5 +1,5 @@
 """
-Test suite for src/analysis/difference_conditions.jl
+Test suite for src/analysis/condition_difference.jl
 """
 
 using Test
@@ -28,7 +28,7 @@ using CSV
         output_dir = joinpath(test_dir, "differences")
 
         # Test basic difference creation
-        result = eegfun.difference_conditions(
+        result = eegfun.condition_difference(
             "erps_cleaned",
             [(1, 2), (3, 4)],
             input_dir = test_dir,
@@ -64,7 +64,7 @@ using CSV
     @testset "Single participant processing" begin
         output_dir = joinpath(test_dir, "differences_single")
 
-        result = eegfun.difference_conditions(
+        result = eegfun.condition_difference(
             "erps_cleaned",
             [(1, 2)],
             input_dir = test_dir,
@@ -82,7 +82,7 @@ using CSV
     @testset "Vector condition pairs" begin
         output_dir = joinpath(test_dir, "differences_vector")
 
-        result = eegfun.difference_conditions(
+        result = eegfun.condition_difference(
             "erps_cleaned",
             [[1, 2], [3, 4]],
             input_dir = test_dir,
@@ -108,7 +108,7 @@ using CSV
 
         output_dir = joinpath(test_dir, "differences_missing")
 
-        result = eegfun.difference_conditions(
+        result = eegfun.condition_difference(
             "erps_cleaned",
             [(1, 2), (3, 4)],
             input_dir = test_dir,
@@ -129,7 +129,7 @@ using CSV
 
     @testset "Error handling" begin
         @testset "Invalid input directory" begin
-            @test_throws Exception eegfun.difference_conditions(
+            @test_throws Exception eegfun.condition_difference(
                 "erps_cleaned",
                 [(1, 2)],
                 input_dir = "/nonexistent/dir",
@@ -137,22 +137,22 @@ using CSV
         end
 
         @testset "Non-ERP pattern" begin
-            @test_throws Exception eegfun.difference_conditions("epochs_cleaned", [(1, 2)], input_dir = test_dir)
+            @test_throws Exception eegfun.condition_difference("epochs_cleaned", [(1, 2)], input_dir = test_dir)
         end
 
         @testset "Empty condition pairs" begin
-            @test_throws Exception eegfun.difference_conditions("erps_cleaned", [], input_dir = test_dir)
+            @test_throws Exception eegfun.condition_difference("erps_cleaned", [], input_dir = test_dir)
         end
 
         @testset "Invalid condition pairs" begin
-            @test_throws Exception eegfun.difference_conditions("erps_cleaned", [(1, "invalid")], input_dir = test_dir)
+            @test_throws Exception eegfun.condition_difference("erps_cleaned", [(1, "invalid")], input_dir = test_dir)
         end
     end
 
     @testset "Data integrity" begin
         output_dir = joinpath(test_dir, "differences_integrity")
 
-        result = eegfun.difference_conditions(
+        result = eegfun.condition_difference(
             "erps_cleaned",
             [(1, 2)],
             input_dir = test_dir,
@@ -191,7 +191,7 @@ using CSV
             output_dir = joinpath(test_dir, "differences_identical")
 
             # Should work but create zero differences
-            result = eegfun.difference_conditions(
+            result = eegfun.condition_difference(
                 "erps_cleaned",
                 [(1, 1)],
                 input_dir = test_dir,
@@ -225,7 +225,7 @@ using CSV
             output_dir = joinpath(test_dir, "differences_none")
 
             # This should throw an error because the pattern doesn't contain 'erps'
-            @test_throws Exception eegfun.difference_conditions(
+            @test_throws Exception eegfun.condition_difference(
                 "nonexistent_pattern",
                 [(1, 2)],
                 input_dir = test_dir,
@@ -240,7 +240,7 @@ using CSV
 
             output_dir = joinpath(test_dir, "differences_empty")
 
-            result = eegfun.difference_conditions(
+            result = eegfun.condition_difference(
                 "erps_cleaned",
                 [(1, 2)],
                 input_dir = test_dir,
@@ -260,7 +260,7 @@ using CSV
             custom_dir = joinpath(test_dir, "custom_output")
 
             result =
-                eegfun.difference_conditions("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = custom_dir)
+                eegfun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = custom_dir)
 
             @test isdir(custom_dir)
             # Expect 5 files: 1, 2, 3, 99, and empty (but empty will have 0 differences)
@@ -268,7 +268,7 @@ using CSV
         end
 
         @testset "Auto-generated output directory" begin
-            result = eegfun.difference_conditions("erps_cleaned", [(1, 2)], input_dir = test_dir)
+            result = eegfun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir)
 
             # Should create directory with pattern-based name
             expected_dir = joinpath(test_dir, "differences_erps_cleaned_1-2")
@@ -279,10 +279,10 @@ using CSV
     @testset "Logging and return values" begin
         output_dir = joinpath(test_dir, "differences_logging")
 
-        result = eegfun.difference_conditions("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = output_dir)
+        result = eegfun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = output_dir)
 
         # Check that log file was created
-        log_file = joinpath(output_dir, "difference_conditions.log")
+        log_file = joinpath(output_dir, "condition_difference.log")
         @test isfile(log_file)
 
         # Verify log content contains expected information

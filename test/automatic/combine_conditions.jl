@@ -25,7 +25,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_basic")
 
             # Combine conditions 1,2 into group 1 and 3,4 into group 2
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2], [3, 4]],
                 input_dir = test_dir,
@@ -63,7 +63,7 @@ using Statistics
         @testset "Combine specific participants" begin
             output_dir = joinpath(test_dir, "combined_participant")
 
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2], [3, 4]],
                 input_dir = test_dir,
@@ -81,7 +81,7 @@ using Statistics
         @testset "Combine multiple participants" begin
             output_dir = joinpath(test_dir, "combined_multi_participants")
 
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2], [3, 4]],
                 input_dir = test_dir,
@@ -100,7 +100,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_single")
 
             # Each condition becomes its own group (no actual combining)
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1], [2], [3], [4]],
                 input_dir = test_dir,
@@ -124,7 +124,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_overlapping")
 
             # Overlapping groups: [1,2], [2,3], [3,4]
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2], [2, 3], [3, 4]],
                 input_dir = test_dir,
@@ -144,23 +144,23 @@ using Statistics
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception eegfun.combine_conditions(
+            @test_throws Exception eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2]],
                 input_dir = "/nonexistent/path",
             )
 
             # Invalid pattern (doesn't contain 'epochs')
-            @test_throws Exception eegfun.combine_conditions("erps_cleaned", [[1, 2]], input_dir = test_dir)
+            @test_throws Exception eegfun.condition_combine("erps_cleaned", [[1, 2]], input_dir = test_dir)
 
             # Invalid condition groups
-            @test_throws Exception eegfun.combine_conditions(
+            @test_throws Exception eegfun.condition_combine(
                 "epochs_cleaned",
                 [],  # Empty groups
                 input_dir = test_dir,
             )
 
-            @test_throws Exception eegfun.combine_conditions(
+            @test_throws Exception eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2], []],  # Empty group
                 input_dir = test_dir,
@@ -171,7 +171,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_invalid_condition")
 
             # Request condition 5 when only 4 exist
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 5]],  # Condition 5 doesn't exist
                 input_dir = test_dir,
@@ -187,7 +187,7 @@ using Statistics
             empty_dir = joinpath(test_dir, "empty_match")
             mkpath(empty_dir)
 
-            result = eegfun.combine_conditions("epochs_cleaned", [[1, 2]], input_dir = empty_dir)
+            result = eegfun.condition_combine("epochs_cleaned", [[1, 2]], input_dir = empty_dir)
 
             @test result === nothing  # No files to process
         end
@@ -200,7 +200,7 @@ using Statistics
             original_counts = [length(cond.data) for cond in original_epochs]
 
             # Combine conditions 1 and 2
-            eegfun.combine_conditions("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
+            eegfun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
             # Load combined data
             combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
@@ -217,7 +217,7 @@ using Statistics
         @testset "Metadata preservation" begin
             output_dir = joinpath(test_dir, "combined_metadata")
 
-            eegfun.combine_conditions("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
+            eegfun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
             combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
 
@@ -239,7 +239,7 @@ using Statistics
             original_layout = original_epochs[1].layout
             original_fs = original_epochs[1].sample_rate
 
-            eegfun.combine_conditions("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
+            eegfun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
             combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
 
@@ -260,7 +260,7 @@ using Statistics
             save(joinpath(var_dir, "1_epochs_var.jld2"), "epochs", dat)
 
             output_dir = joinpath(test_dir, "combined_var")
-            result = eegfun.combine_conditions("epochs_var", [[1, 2]], input_dir = var_dir, output_dir = output_dir)
+            result = eegfun.condition_combine("epochs_var", [[1, 2]], input_dir = var_dir, output_dir = output_dir)
 
             @test result.success == 1
 
@@ -274,7 +274,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_empty_groups")
 
             # Test with empty condition groups (should fail validation)
-            @test_throws Exception eegfun.combine_conditions(
+            @test_throws Exception eegfun.condition_combine(
                 "epochs_cleaned",
                 [],
                 input_dir = test_dir,
@@ -286,7 +286,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_single_per_group")
 
             # Each condition in its own group (no actual combining)
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1], [2], [3], [4]],
                 input_dir = test_dir,
@@ -307,7 +307,7 @@ using Statistics
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "combined_with_log")
 
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2], [3, 4]],
                 input_dir = test_dir,
@@ -315,19 +315,19 @@ using Statistics
             )
 
             # Check log file exists
-            log_file = joinpath(output_dir, "combine_conditions.log")
+            log_file = joinpath(output_dir, "condition_combine.log")
             @test isfile(log_file)
 
             # Verify log contains expected information
             log_contents = read(log_file, String)
             @test contains(log_contents, "Batch condition combining started")
-            @test contains(log_contents, "combine_conditions")
+            @test contains(log_contents, "condition_combine")
             @test contains(log_contents, "epochs_cleaned")
         end
 
         @testset "Output directory naming" begin
             # Test default output directory naming
-            result = eegfun.combine_conditions("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir)
+            result = eegfun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir)
 
             # Should create directory with pattern and groups in name
             expected_dir = joinpath(test_dir, "combined_epochs_cleaned_1-2_3-4")
@@ -337,7 +337,7 @@ using Statistics
         @testset "Return value structure" begin
             output_dir = joinpath(test_dir, "combined_return_check")
 
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2], [3, 4]],
                 input_dir = test_dir,
@@ -358,7 +358,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_duplicates")
 
             # Test with duplicate conditions within groups: [[1, 1, 2], [3, 3, 4]]
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 1, 2], [3, 3, 4]],
                 input_dir = test_dir,
@@ -380,7 +380,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_empty_after_duplicates")
 
             # Test with group that becomes single condition after removing duplicates: [[1, 1, 1]]
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 1, 1], [2, 3]],
                 input_dir = test_dir,
@@ -402,7 +402,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_negative")
 
             # Test with negative condition numbers (should fail for all files)
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, -1], [2, 3]],
                 input_dir = test_dir,
@@ -418,7 +418,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_zero")
 
             # Test with zero condition numbers (should fail for all files)
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[0, 1], [2, 3]],
                 input_dir = test_dir,
@@ -434,7 +434,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_large")
 
             # Test with very large condition numbers that don't exist
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1000, 1001]],
                 input_dir = test_dir,
@@ -450,7 +450,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_single_multiple")
 
             # Test with same condition in multiple groups: [[1], [1], [2]]
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1], [1], [2]],
                 input_dir = test_dir,
@@ -473,7 +473,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_all_single")
 
             # Test with all conditions in one group: [[1, 2, 3, 4]]
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1, 2, 3, 4]],
                 input_dir = test_dir,
@@ -492,7 +492,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_non_integer")
 
             # Test with non-integer condition groups (should fail at type level)
-            @test_throws MethodError eegfun.combine_conditions(
+            @test_throws MethodError eegfun.condition_combine(
                 "epochs_cleaned",
                 [["1", "2"], [3, 4]],
                 input_dir = test_dir,
@@ -504,7 +504,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_nested_empty")
 
             # Test with nested empty groups: [[], [1, 2]]
-            @test_throws Exception eegfun.combine_conditions(
+            @test_throws Exception eegfun.condition_combine(
                 "epochs_cleaned",
                 [[], [1, 2]],
                 input_dir = test_dir,
@@ -516,7 +516,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_many_groups")
 
             # Test with many groups: [[1], [2], [3], [4], [1], [2], [3], [4]]
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_cleaned",
                 [[1], [2], [3], [4], [1], [2], [3], [4]],
                 input_dir = test_dir,
@@ -540,7 +540,7 @@ using Statistics
 
             output_dir = joinpath(test_dir, "combined_corrupt")
             result =
-                eegfun.combine_conditions("epochs_corrupt", [[1, 2]], input_dir = corrupt_dir, output_dir = output_dir)
+                eegfun.condition_combine("epochs_corrupt", [[1, 2]], input_dir = corrupt_dir, output_dir = output_dir)
 
             # Should fail for the corrupted file
             @test result.success == 0
@@ -559,7 +559,7 @@ using Statistics
             )
 
             output_dir = joinpath(test_dir, "combined_missing_var")
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_missing",
                 [[1, 2]],
                 input_dir = missing_var_dir,
@@ -579,7 +579,7 @@ using Statistics
             save(joinpath(empty_epochs_dir, "1_epochs_empty.jld2"), "epochs", eegfun.EpochData[])
 
             output_dir = joinpath(test_dir, "combined_empty_epochs")
-            result = eegfun.combine_conditions(
+            result = eegfun.condition_combine(
                 "epochs_empty",
                 [[1, 2]],
                 input_dir = empty_epochs_dir,
@@ -603,7 +603,7 @@ using Statistics
             # Combine
             output_dir = joinpath(test_dir, "combined_many_ch")
             result =
-                eegfun.combine_conditions("epochs_many", [[1, 2]], input_dir = many_ch_dir, output_dir = output_dir)
+                eegfun.condition_combine("epochs_many", [[1, 2]], input_dir = many_ch_dir, output_dir = output_dir)
 
             @test result.success == 1
 

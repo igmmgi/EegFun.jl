@@ -94,7 +94,7 @@ function _load_and_group_erps(files::Vector{String}, input_dir::String, conditio
         erps_data = file_data["erps"]
 
         # Select conditions
-        erps_data = _select_conditions(erps_data, conditions)
+        erps_data = _condition_select(erps_data, conditions)
 
         # Group ERPs by condition
         for erp in erps_data

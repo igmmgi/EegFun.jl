@@ -68,13 +68,13 @@ function _load_eeg_data(filepath::String)
 end
 
 """
-    select_conditions(data, conditions)
+    _condition_select(data, conditions)
 
 Filter data by condition indices.
 
 Returns filtered data or original if `conditions` is `nothing`.
 """
-function _select_conditions(data, conditions)
+function _condition_select(data, conditions)
     isnothing(conditions) && return data
     isempty(data) && return data
     condition_nums = conditions isa Int ? [conditions] : conditions

@@ -38,7 +38,7 @@ function _process_combine_channels_file(
     data, var_name = data_result
 
     # Select conditions
-    data = _select_conditions(data, conditions)
+    data = _condition_select(data, conditions)
 
     # Apply channel combination to each data item
     foreach(data) do item

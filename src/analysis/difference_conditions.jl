@@ -9,7 +9,7 @@ Batch computation of condition difference waves for ERP data.
 """Validate that file pattern is for ERP data."""
 function _validate_erps_pattern(pattern::String)
     !contains(pattern, "erps") &&
-        return "difference_conditions_data only works with ERP data. File pattern must contain 'erps', got: '$pattern'"
+        return "condition_difference_data only works with ERP data. File pattern must contain 'erps', got: '$pattern'"
     return nothing
 end
 
@@ -134,7 +134,7 @@ end
 =============================================================================#
 
 """
-    difference_conditions(file_pattern::String, condition_pairs; 
+    condition_difference(file_pattern::String, condition_pairs; 
                          input_dir::String = pwd(), 
                          participants::Union{Int, Vector{Int}, Nothing} = nothing,
                          output_dir::Union{String, Nothing} = nothing)
@@ -156,23 +156,23 @@ by subtracting EEG channel columns, and saves the resulting difference waves to 
 # Examples
 ```julia
 # Create difference waves for conditions 1-2 and 3-4 (tuples)
-difference_conditions("erps_cleaned", [(1,2), (3,4)])
+condition_difference("erps_cleaned", [(1,2), (3,4)])
 
 # Or with vectors
-difference_conditions("erps_cleaned", [[1,2], [3,4]])
+condition_difference("erps_cleaned", [[1,2], [3,4]])
 
 # Process specific participants
-difference_conditions("erps_cleaned", [(1,2)], 
+condition_difference("erps_cleaned", [(1,2)], 
                      input_dir = "/path/to/data", 
                      participants = [1, 2, 3])
 
 # Specify custom output directory
-difference_conditions("erps_cleaned", [(1,2), (3,4)], 
+condition_difference("erps_cleaned", [(1,2), (3,4)], 
                      input_dir = "/path/to/data", 
                      output_dir = "/path/to/output")
 ```
 """
-function difference_conditions(
+function condition_difference(
     file_pattern::String,
     condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}};
     input_dir::String = pwd(),
@@ -181,12 +181,12 @@ function difference_conditions(
 )
 
     # Setup logging
-    log_file = "difference_conditions.log"
+    log_file = "condition_difference.log"
     setup_global_logging(log_file)
 
     try
         @info "Batch condition differencing started at $(now())"
-        @log_call "difference_conditions" (file_pattern, condition_pairs)
+        @log_call "condition_difference" (file_pattern, condition_pairs)
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

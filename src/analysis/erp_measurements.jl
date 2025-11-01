@@ -157,7 +157,7 @@ function _process_measurements_file(
     end
 
     # Select conditions
-    data_var = _select_conditions(data_var, conditions)
+    data_var = _condition_select(data_var, conditions)
 
     # Process each condition
     results = []

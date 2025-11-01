@@ -144,7 +144,7 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
         end
 
         # Select conditions if specified
-        data = _select_conditions(data, conditions)
+        data = _condition_select(data, conditions)
 
         # Group by condition
         for erp in data
