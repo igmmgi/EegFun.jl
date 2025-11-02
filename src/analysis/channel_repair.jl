@@ -97,7 +97,15 @@ function _repair_channels_neighbor!(
             @minimal_warning "No neighbors found for channel $bad_ch, skipping"
             continue
         end
+        
+        # Require at least 2 neighbors for meaningful interpolation
+        if length(neighbours.channels) < 2
+            @minimal_warning "Channel $bad_ch has only $(length(neighbours.channels)) neighbor(s), need at least 2 for repair, skipping"
+            continue
+        end
 
+        # Since check_channel_neighbors ensures ALL neighbors are good, 
+        # we can use all neighbors directly (weights already normalized to sum to 1.0)
         # For each time point, calculate weighted average of neighbors
         n_timepoints = size(data, 2)
         for t = 1:n_timepoints
@@ -105,7 +113,6 @@ function _repair_channels_neighbor!(
 
             # Sum weighted neighbor values
             for (i, neighbour_ch) in enumerate(neighbours.channels)
-                # Get neighbor index
                 neigh_idx = get(ch_indices, neighbour_ch, nothing)
                 if !isnothing(neigh_idx)
                     weight = neighbours.weights[i]
@@ -117,7 +124,7 @@ function _repair_channels_neighbor!(
             data[bad_idx, t] = weighted_sum
         end
 
-        @info "Repaired channel $bad_ch using weighted neighbor interpolation"
+        @info "Repaired channel $bad_ch using weighted neighbor interpolation with neighbors: $(neighbours.channels)"
     end
 
     return nothing

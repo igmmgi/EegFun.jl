@@ -16,6 +16,9 @@ eegfun.mark_epoch_windows!(dat, [1, 3, 4, 5], [-1, 1.0]) # simple epoch marking 
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]])]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
+epochs[1].condition_name
+epochs[1].condition
+
 eegfun.plot_databrowser(epochs[1])
 
 eegfun.plot_epochs(epochs[1], layout = :single)
