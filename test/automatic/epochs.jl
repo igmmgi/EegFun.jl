@@ -1105,8 +1105,8 @@ end
         # Check that some epochs were rejected
         @test length(clean_data.data) < original_n_epochs
         @test length(clean_data.data) ==
-              rejection_info.epoch_info.n - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
-        @test length(rejection_info.rejected_epochs) > 0
+              rejection_info.info.n - length(unique([r.epoch for r in rejection_info.rejected]))
+        @test length(rejection_info.rejected) > 0
     end
 
     @testset "In-place rejection" begin
@@ -1120,7 +1120,7 @@ end
         # Check that data was modified
         @test length(epoch_data.data) < original_n_epochs
         @test length(epoch_data.data) ==
-              rejection_info.epoch_info.n - length(unique([r.epoch for r in rejection_info.rejected_epochs]))
+              rejection_info.info.n - length(unique([r.epoch for r in rejection_info.rejected]))
     end
 
     @testset "Different z-criteria" begin
@@ -1131,7 +1131,7 @@ end
         rejection_info_conservative = eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = 3.0)
 
         # More aggressive should reject more epochs
-        @test length(rejection_info_aggressive.rejected_epochs) >= length(rejection_info_conservative.rejected_epochs)
+        @test length(rejection_info_aggressive.rejected) >= length(rejection_info_conservative.rejected)
     end
 
     @testset "EpochRejectionInfo structure" begin
@@ -1140,11 +1140,11 @@ end
 
         # Check structure
         @test rejection_info isa eegfun.EpochRejectionInfo
-        @test rejection_info.epoch_info.n == length(epoch_data.data)
-        # n_artifacts now counts total artifacts (all channel/epoch combinations), rejected_epochs contains unique rejections
-        unique_rejected_epochs = length(unique([r.epoch for r in rejection_info.rejected_epochs]))
-        @test rejection_info.n_artifacts >= unique_rejected_epochs  # n_artifacts should be >= unique epochs (can be more due to multiple channels)
-        @test length(rejection_info.rejected_epochs) >= 0
+        @test rejection_info.info.n == length(epoch_data.data)
+        # n_artifacts now counts total artifacts (all channel/epoch combinations), rejected contains unique rejections
+        unique_rejected = length(unique([r.epoch for r in rejection_info.rejected]))
+        @test rejection_info.n_artifacts >= unique_rejected  # n_artifacts should be >= unique epochs (can be more due to multiple channels)
+        @test length(rejection_info.rejected) >= 0
     end
 
     @testset "Error handling" begin

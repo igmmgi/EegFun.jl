@@ -742,17 +742,17 @@ save("participant_1_cleaned.jld2", "epochs", epochs)
 """
 function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
 
-    if isempty(info.rejected_epochs)
+    if isempty(info.rejected)
         @info "No epochs to reject"
         return dat
     end
 
     n_epochs = length(dat.data)
-    rejected_indices = unique([r.epoch for r in info.rejected_epochs])
+    rejected_indices = unique([r.epoch for r in info.rejected])
     epochs_to_keep = setdiff(1:n_epochs, rejected_indices)
     dat.data = dat.data[epochs_to_keep]
 
-    @info "Rejected $(length(rejected_indices)) of $(info.epoch_info.n) epochs."
+    @info "Rejected $(length(rejected_indices)) of $(info.info.n) epochs."
 
     return dat
 end

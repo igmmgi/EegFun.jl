@@ -647,7 +647,7 @@ function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::
     
     for bad_ch in bad_channels
         # Check if this channel has neighbors defined in the layout
-        if haskey(layout.neighbours, bad_ch)
+        if !isnothing(layout.neighbours) && haskey(layout.neighbours, bad_ch)
             neighbors = layout.neighbours[bad_ch]
             # Only repair if ALL neighbors are good (not in bad_channels list)
             # AND there are at least 2 good neighbors (need at least 2 for meaningful interpolation)

@@ -240,7 +240,7 @@ function plot_artifact_detection(
                         add_xy_origin = plot_kwargs[:add_xy_origin])
 
     # Get epochs with artifacts
-    epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
+    epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected])
     sort!(epochs_with_artifacts)
 
     # Create controls
@@ -258,7 +258,7 @@ function plot_artifact_detection(
     selected_channels_set = Set{Symbol}()
 
     # Create color map for rejected channels
-    rejected_channels = [r.label for r in artifacts.rejected_epochs]
+    rejected_channels = [r.label for r in artifacts.rejected]
     rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
 
     # Function to update plot based on epoch
@@ -274,7 +274,7 @@ function plot_artifact_detection(
 
         # Get current epoch data and rejected channels
         epoch = epochs.data[epoch_idx_val]
-        epoch_rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
+        epoch_rejected_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_idx_val]
 
         # Update title
         ax.title = "Artifact Detection - Epoch $(epoch_idx_val)"
@@ -389,7 +389,7 @@ function plot_artifact_repair(
                         add_xy_origin = plot_kwargs[:add_xy_origin])
 
     # Get epochs with artifacts
-    epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
+    epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected])
     sort!(epochs_with_artifacts)
 
     # Create controls
@@ -409,7 +409,7 @@ function plot_artifact_repair(
     selected_channels_set = Set{Symbol}()
 
     # Create color map for rejected channels
-    rejected_channels = [r.label for r in artifacts.rejected_epochs]
+    rejected_channels = [r.label for r in artifacts.rejected]
     rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
 
     # Function to update comparison plot
@@ -433,7 +433,7 @@ function plot_artifact_repair(
         epoch_repaired = epochs_repaired.data[epoch_idx_val]
 
         # Find rejected channels for this epoch
-        epoch_rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx_val]
+        epoch_rejected_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_idx_val]
 
         # Update titles
         ax1.title = "Original Data - Epoch $(epoch_idx_val)"
@@ -563,7 +563,7 @@ function plot_artifact_rejection(
                         add_xy_origin = plot_kwargs[:add_xy_origin])
 
     # Get epochs with artifacts
-    epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected_epochs])
+    epochs_with_artifacts = unique([r.epoch for r in artifacts.rejected])
     sort!(epochs_with_artifacts)
 
     # Create controls
@@ -583,7 +583,7 @@ function plot_artifact_rejection(
     selected_channels_set = Set{Symbol}()
 
     # Create color map for rejected channels
-    rejected_channels = [r.label for r in artifacts.rejected_epochs]
+    rejected_channels = [r.label for r in artifacts.rejected]
     rejected_color_map = _create_rejected_color_map(rejected_channels, plot_kwargs[:colormap_name])
 
     # Build a lookup map from epoch number to index in epochs_rejected
@@ -614,7 +614,7 @@ function plot_artifact_rejection(
         epoch_num = epoch_orig.epoch[1]
 
         # Find rejected channels for this epoch
-        epoch_rejected_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_num]
+        epoch_rejected_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_num]
 
         # Check if this epoch exists in epochs_rejected
         rejected_idx = get(epoch_number_to_idx, epoch_num, nothing)

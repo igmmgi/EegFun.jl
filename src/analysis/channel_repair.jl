@@ -29,11 +29,16 @@ repair_channels!(dat, [:Fp1, :Fp2], method=:spherical_spline)
 repair_channels!(dat, [:Fp1], method=:spherical_spline, m=6, lambda=1e-6)
 ```
 """
-function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_interpolation, kwargs...)
+function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_interpolation, repair_info = nothing, kwargs...)
+    # repair_info is only used for ContinuousData, not for EpochData (tracking is in EpochRejectionInfo)
     if method == :neighbor_interpolation
-        _repair_channels_neighbor!(data, channels_to_repair; kwargs...)
+        _repair_channels_neighbor!(data, channels_to_repair; repair_info = repair_info, kwargs...)
     elseif method == :spherical_spline
-        _repair_channels_spherical!(data, channels_to_repair; kwargs...)
+        if data isa EpochData
+            _repair_channels_spherical!(data, channels_to_repair; kwargs...)
+        else
+            _repair_channels_spherical!(data, channels_to_repair; repair_info = repair_info, kwargs...)
+        end
     else
         throw(ArgumentError("Unknown repair method: $method. Use :neighbor_interpolation or :spherical_spline"))
     end
@@ -42,7 +47,7 @@ end
 @add_nonmutating repair_channels!
 
 # Helper function for neighbor interpolation
-function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = nothing, kwargs...)
+function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = nothing, repair_info = nothing, kwargs...)
     if isnothing(neighbours_dict)
         # For data objects, get neighbors from layout
         if hasfield(typeof(data), :layout)
@@ -56,8 +61,12 @@ function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = 
         end
     end
 
-    # Use multiple dispatch
-    _repair_channels_neighbor!(data, channels_to_repair, neighbours_dict; kwargs...)
+    # Use multiple dispatch - repair_info only used for ContinuousData, not for EpochData
+    if data isa EpochData
+        _repair_channels_neighbor!(data, channels_to_repair, neighbours_dict; kwargs...)
+    else
+        _repair_channels_neighbor!(data, channels_to_repair, neighbours_dict; repair_info = repair_info, kwargs...)
+    end
 end
 
 # === CORE IMPLEMENTATION FUNCTIONS ===
@@ -71,12 +80,22 @@ function _repair_channels_neighbor!(
     data::AbstractMatrix,
     channels::Vector{Symbol},
     channels_to_repair::Vector{Symbol},
-    neighbours_dict::OrderedDict{Symbol,Neighbours},
+    neighbours_dict::OrderedDict{Symbol,Neighbours};
+    repair_info = nothing,
 )
     # Check that channels match data dimensions
     n_channels = size(data, 1)
     if length(channels) != n_channels
         throw(ArgumentError("Number of channels ($(length(channels))) doesn't match data dimensions ($n_channels)"))
+    end
+
+    # Initialize tracking if provided
+    if !isnothing(repair_info)
+        repair_info.repaired = Symbol[]
+        repair_info.skipped = Symbol[]
+        if repair_info.method == :neighbor_interpolation
+            repair_info.neighbors = Dict{Symbol, Vector{Symbol}}()
+        end
     end
 
     # Create channel index lookup
@@ -88,6 +107,7 @@ function _repair_channels_neighbor!(
         bad_idx = get(ch_indices, bad_ch, nothing)
         if isnothing(bad_idx)
             @minimal_warning "Channel $bad_ch not found in channel list, skipping"
+            !isnothing(repair_info) && push!(repair_info.skipped, bad_ch)
             continue
         end
 
@@ -95,12 +115,14 @@ function _repair_channels_neighbor!(
         neighbours = get(neighbours_dict, bad_ch, nothing)
         if isnothing(neighbours) || isempty(neighbours.channels)
             @minimal_warning "No neighbors found for channel $bad_ch, skipping"
+            !isnothing(repair_info) && push!(repair_info.skipped, bad_ch)
             continue
         end
         
         # Require at least 2 neighbors for meaningful interpolation
         if length(neighbours.channels) < 2
             @minimal_warning "Channel $bad_ch has only $(length(neighbours.channels)) neighbor(s), need at least 2 for repair, skipping"
+            !isnothing(repair_info) && push!(repair_info.skipped, bad_ch)
             continue
         end
 
@@ -125,20 +147,29 @@ function _repair_channels_neighbor!(
         end
 
         @info "Repaired channel $bad_ch using weighted neighbor interpolation with neighbors: $(neighbours.channels)"
+        
+        # Track successful repair
+        if !isnothing(repair_info)
+            push!(repair_info.repaired, bad_ch)
+            if repair_info.method == :neighbor_interpolation && !isnothing(repair_info.neighbors)
+                repair_info.neighbors[bad_ch] = neighbours.channels
+            end
+        end
     end
 
     return nothing
 end
 
 """
-    _repair_channels_neighbor!(data::ContinuousData, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours})
+    _repair_channels_neighbor!(data::ContinuousData, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours}; repair_info = nothing)
 
 Repair bad channels in ContinuousData using weighted neighbor interpolation.
 """
 function _repair_channels_neighbor!(
     data::ContinuousData,
     channels_to_repair::Vector{Symbol},
-    neighbours_dict::OrderedDict{Symbol,Neighbours},
+    neighbours_dict::OrderedDict{Symbol,Neighbours};
+    repair_info = nothing,
 )
     # Extract channels vector from ContinuousData
     channels = data.layout.data.label
@@ -147,7 +178,7 @@ function _repair_channels_neighbor!(
     data_matrix = Matrix(data.data[:, data.layout.data.label])'
 
     # Call the core implementation
-    _repair_channels_neighbor!(data_matrix, channels, channels_to_repair, neighbours_dict)
+    _repair_channels_neighbor!(data_matrix, channels, channels_to_repair, neighbours_dict; repair_info = repair_info)
 
     # Update the data in the ContinuousData object
     data.data[:, data.layout.data.label] = data_matrix'
@@ -159,6 +190,7 @@ end
     _repair_channels_neighbor!(data::EpochData, channels_to_repair::Vector{Symbol}, neighbours_dict::OrderedDict{Symbol, Neighbours}; epoch_selection::Function=epochs())
 
 Repair bad channels in epoched EEG data using weighted neighbor interpolation.
+Tracking for EpochData is handled via EpochRejectionInfo, not through a separate repair_info parameter.
 """
 function _repair_channels_neighbor!(
     data::EpochData,
@@ -177,7 +209,7 @@ function _repair_channels_neighbor!(
         epoch = data.data[epoch_idx]
         epoch_matrix = Matrix(epoch[:, channels])'
 
-        _repair_channels_neighbor!(epoch_matrix, channels, channels_to_repair, neighbours_dict)
+        _repair_channels_neighbor!(epoch_matrix, channels, channels_to_repair, neighbours_dict; repair_info = nothing)
 
         # Update the epoch data
         epoch[:, channels] = epoch_matrix'
@@ -198,11 +230,18 @@ function _repair_channels_spherical!(
     layout::DataFrame;
     m::Int = 4,
     lambda::Float64 = 1e-5,
+    repair_info = nothing,
 )
     # Check that channels match data dimensions
     n_channels = size(data, 1)
     if length(channels) != n_channels
         throw(ArgumentError("Number of channels doesn't match data dimensions"))
+    end
+
+    # Initialize tracking if provided
+    if !isnothing(repair_info)
+        repair_info.repaired = Symbol[]
+        repair_info.skipped = Symbol[]
     end
 
     # Extract and normalize coordinates
@@ -226,6 +265,7 @@ function _repair_channels_spherical!(
         bad_idx = findfirst(x -> x == bad_ch, channels)
         if isnothing(bad_idx)
             @minimal_warning "Channel $bad_ch not found in channel list, skipping"
+            !isnothing(repair_info) && push!(repair_info.skipped, bad_ch)
             continue
         end
 
@@ -254,6 +294,9 @@ function _repair_channels_spherical!(
         end
 
         @info "Repaired channel $bad_ch using spherical spline interpolation"
+        
+        # Track successful repair
+        !isnothing(repair_info) && push!(repair_info.repaired, bad_ch)
     end
 
     return nothing
@@ -269,6 +312,7 @@ function _repair_channels_spherical!(
     channels_to_repair::Vector{Symbol};
     m::Int = 4,
     lambda::Float64 = 1e-5,
+    repair_info = nothing,
 )
     # Ensure 3D coordinates are available
     _ensure_coordinates_3d!(data.layout)
@@ -276,7 +320,7 @@ function _repair_channels_spherical!(
     channels = Symbol.(data.layout.data.label)
     data_matrix = Matrix(data.data[:, channels])'
 
-    _repair_channels_spherical!(data_matrix, channels_to_repair, channels, data.layout.data; m = m, lambda = lambda)
+    _repair_channels_spherical!(data_matrix, channels_to_repair, channels, data.layout.data; m = m, lambda = lambda, repair_info = repair_info)
 
     # Update the data
     data.data[:, channels] = data_matrix'
@@ -288,6 +332,7 @@ end
     _repair_channels_spherical!(data::EpochData, channels_to_repair::Vector{Symbol}; epoch_selection::Function=epochs(), m::Int=4, lambda::Float64=1e-5)
 
 Repair bad channels in epoched EEG data using spherical spline interpolation.
+Tracking for EpochData is handled via EpochRejectionInfo, not through a separate repair_info parameter.
 """
 function _repair_channels_spherical!(
     data::EpochData,
@@ -310,6 +355,7 @@ function _repair_channels_spherical!(
         epoch = data.data[epoch_idx]
         epoch_matrix = Matrix(epoch[:, channels])'
 
+        # Note: repair_info is ignored for EpochData - tracking is handled via EpochRejectionInfo
         _repair_channels_spherical!(
             epoch_matrix,
             channels_to_repair,
@@ -317,6 +363,7 @@ function _repair_channels_spherical!(
             data.layout.data;
             m = m,
             lambda = lambda,
+            repair_info = nothing,
         )
 
         # Update the epoch data

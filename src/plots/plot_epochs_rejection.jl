@@ -338,7 +338,7 @@ function _create_rejection_interface!(
 
     on(bad_channels_toggle.active) do active
         # Only show info message when trying to turn ON without artifact_info
-        if active && (isnothing(artifact_info) || isempty(artifact_info.rejected_epochs))
+        if active && (isnothing(artifact_info) || isempty(artifact_info.rejected))
             @info "Bad channel filtering requires artifact_info with rejected epochs"
         else # Normal operation: update state and display
             state.show_bad_channels_only[] = active
@@ -411,7 +411,7 @@ function _update_epoch_display!(
                 auto_rejected = if isnothing(artifact_info)
                     false
                 else
-                    epoch_idx ∈ unique_epochs(artifact_info.rejected_epochs)
+                    epoch_idx ∈ unique_epochs(artifact_info.rejected)
                 end
                 state.checkboxes[i].active[] = state.rejected[epoch_idx] || auto_rejected
             end
@@ -506,7 +506,7 @@ function _get_bad_channels_for_epoch(artifact_info::Union{Nothing,EpochRejection
         return Set{Symbol}()
     end
 
-    bad_channels = [r.label for r in artifact_info.rejected_epochs if r.epoch == epoch_idx]
+    bad_channels = [r.label for r in artifact_info.rejected if r.epoch == epoch_idx]
     return Set(bad_channels)
 end
 

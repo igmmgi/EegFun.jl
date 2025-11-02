@@ -75,6 +75,16 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs)
 
+
+# determine which channels can be repaired
+test = eegfun.channel_repairable(bad_epochs, dat.layout)
+eegfun.channel_repairable!(bad_epochs, dat.layout)
+
+epochs_repaired = eegfun.repair_artifacts(epochs, test, method = :neighbor_interpolation)
+
+
+
+
 bad_epochs
 bad_epochs[1]
 
@@ -97,15 +107,15 @@ eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], ylim = (-100, 100))
 
 
 
-eegfun.get_rejected_epochs(bad_epochs[1])
-eegfun.get_rejected_epochs(bad_epochs)
+eegfun.get_rejected(bad_epochs[1])
+eegfun.get_rejected(bad_epochs)
 
-eegfun.unique_rejections(bad_epochs[1].rejected_epochs)
-eegfun.unique_channels(bad_epochs[1].rejected_epochs)
-eegfun.unique_epochs(bad_epochs[1].rejected_epochs)
+eegfun.unique_rejections(bad_epochs[1].rejected)
+eegfun.unique_channels(bad_epochs[1].rejected)
+eegfun.unique_epochs(bad_epochs[1].rejected)
 
 # automatic vs. and/or visual/manual
-eegfun.get_rejected_epochs(bad_epochs)
+eegfun.get_rejected(bad_epochs)
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, abs_criterion = 200, z_criterion = 0)
@@ -114,15 +124,15 @@ bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_inf
 bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_info = bad_epochs[1], dims = (4, 4), ylim = (-100, 100), xlim = (-1, 2))
 
 
-eegfun.unique_rejections(bad_epochs[1].rejected_epochs)
+eegfun.unique_rejections(bad_epochs[1].rejected)
 eegfun.unique_rejections(bad_epochs)
 eegfun.unique_rejections(bad_epochs[1])
 
-eegfun.unique_channels(bad_epochs[1].rejected_epochs)
+eegfun.unique_channels(bad_epochs[1].rejected)
 eegfun.unique_channels(bad_epochs)
 eegfun.unique_channels(bad_epochs[1])
 
-eegfun.unique_epochs(bad_epochs[1].rejected_epochs)
+eegfun.unique_epochs(bad_epochs[1].rejected)
 eegfun.unique_epochs(bad_epochs)
 eegfun.unique_epochs(bad_epochs[1])
 

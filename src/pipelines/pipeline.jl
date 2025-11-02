@@ -206,12 +206,16 @@ function preprocess(config::String; log_level::Symbol = :info)
                     eog_channels = [:hEOG, :vEOG], threshold = 0.3, use_z = false,
                 )
                
-                # We can only really repair channels that have good neighbours with the neighbour approach.
-                repairable_channels = check_channel_neighbors(bad_channels_non_eog_related, layout)
-                
                 @info "Bad channels (non-EOG related): $(length(bad_channels_non_eog_related)) channels - $(bad_channels_non_eog_related)"
                 @info "Bad channels (EOG related): $(length(bad_channels_eog_related)) channels - $(bad_channels_eog_related)"
-                @info "Repairable channels: $(length(repairable_channels)) channels - $(repairable_channels)"
+                
+                # Analyze which channels can be repaired (needed for ICA and repair steps)
+                continuous_repair_info = nothing
+                if !isempty(bad_channels_non_eog_related)
+                    continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation)
+                    channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, layout)
+                end
+                jldsave(make_output_filename(output_directory, data_file, "_continuous_repair_info"); continuous_repair_info = continuous_repair_info)
 
                 #################### Independent Component Analysis (ICA) ###################
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
@@ -223,10 +227,10 @@ function preprocess(config::String; log_level::Symbol = :info)
                     
                     dat_ica = copy(dat) # we need a copy of the data for the ICA
                     
-                    if !isempty(repairable_channels)
+                    if !isnothing(continuous_repair_info) && !isempty(continuous_repair_info.repaired)
                         @info subsection("Removing repairable bad channels for ICA")
-                        dat_ica = subset(dat_ica, channel_selection = channels_not(repairable_channels), include_extra = true)
-                        @info "Removed $(length(repairable_channels)) repairable channels for ICA: $(repairable_channels)"
+                        dat_ica = subset(dat_ica, channel_selection = channels_not(continuous_repair_info.repaired), include_extra = true)
+                        @info "Removed $(length(continuous_repair_info.repaired)) repairable channels for ICA: $(continuous_repair_info.repaired)"
                     end
 
                     # Apply ICA-specific filters
@@ -276,10 +280,15 @@ function preprocess(config::String; log_level::Symbol = :info)
                 end
 
                 #################### REPAIR BAD CHANNELS BEFORE EPOCHING ###################
-                if !isempty(repairable_channels)
+                if !isnothing(continuous_repair_info)
                     @info section("Channel Repair")
-                    @info subsection("Repairing $(length(repairable_channels)) channels: $(repairable_channels)")
-                    repair_channels!(dat, repairable_channels)
+                    
+                    # Perform repairs with tracking (similar to repair_artifacts! for epochs)
+                    repair_channels!(dat, continuous_repair_info; method = :neighbor_interpolation)
+                    
+                    # Save continuous repair info
+                    jldsave(make_output_filename(output_directory, data_file, "_continuous_repair_info"); continuous_repair_info = continuous_repair_info)
+                    @info continuous_repair_info
                 end
 
                 #################### RECALCULATE EOG CHANNELS AFTER ICA AND REPAIR ###################
@@ -311,32 +320,36 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 #################### DETECT BAD EPOCHS ###################
                 @info subsection("Automatic epoch detection")
-                rejection_info = detect_bad_epochs_automatic(
+                rejection_step1 = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
                     abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
                 )
-                @info rejection_info
+                channel_repairable!(rejection_step1, epochs[1].layout)
+                jldsave(make_output_filename(output_directory, data_file, "_rejection_info_step1"); rejection_info = rejection_step1)
+                @info rejection_step1
                 
                 #################### CHANNEL REPAIR PER EPOCH ###################
-                # Repair channels identified in rejection_info before rejecting epochs
+                # Repair channels identified in rejection_step1 before rejecting epochs
                 # This may save epochs that would otherwise be rejected
                 @info section("Channel Repair per Epoch")
-                repair_artifacts!(epochs, rejection_info; neighbours_dict = layout.neighbours)
+                repair_artifacts!(epochs, rejection_step1)
                 
                 #################### RE-DETECT ARTIFACTS AFTER REPAIR ###################
                 # Re-detect artifacts after repair to get updated rejection info
                 @info subsection("Re-detecting artifacts after repair")
-                rejection_info_updated = detect_bad_epochs_automatic(
+                rejection_info_step2 = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
                     abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
                 )
-                @info rejection_info_updated
+                channel_repairable!(rejection_info_step2, epochs[1].layout)
+                jldsave(make_output_filename(output_directory, data_file, "_rejection_info_step2"); rejection_info = rejection_info_step2)
+                @info rejection_info_step2
                 
                 #################### EPOCH REJECTION ###################
                 @info subsection("Rejecting bad epochs")
-                epochs = reject_epochs(epochs, rejection_info_updated)
+                epochs = reject_epochs(epochs, rejection_info_step2)
 
                 #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
                 df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
