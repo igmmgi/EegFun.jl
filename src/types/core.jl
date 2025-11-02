@@ -334,6 +334,21 @@ struct InfoIca
     layout::Layout  # Layout information for the ICA components
 end
 
+"""
+    TriggerInfo
+
+Stores trigger count information in a DataFrame format with pretty printing support.
+
+This type wraps a DataFrame containing trigger counts and provides automatic
+pretty table formatting when displayed.
+
+# Fields
+- `data::DataFrame`: The underlying DataFrame with trigger count information
+"""
+struct TriggerInfo
+    data::DataFrame
+end
+
 # === CONFIGURATION TYPES ===
 # Preprocessing configuration types are now in preprocess_config.jl
 

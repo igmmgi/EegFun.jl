@@ -7,9 +7,9 @@
 
 Clean trigger data by detecting only the onset (first occurrence) of each trigger value.
 
-This function converts sustained trigger signals into single onset events, which is
-essential for proper EEG event marking. When a trigger is held for multiple samples,
-only the first sample is retained, with subsequent samples set to zero.
+This function converts sustained trigger signals into single onset events. 
+When a trigger is held for multiple samples, only the first sample is retained, 
+with subsequent samples set to zero.
 
 # Arguments
 - `trigger_data::Vector{<:Integer}`: Raw trigger data vector
@@ -42,64 +42,67 @@ end
 # =============================================================================
 
 """
-    trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
+    trigger_count(dat::ContinuousData)::TriggerInfo
+    trigger_count(df::DataFrame)::TriggerInfo
 
-Count occurrences of each trigger value in ContinuousData and optionally display results.
+Count occurrences of each trigger value in ContinuousData or DataFrame.
 
 This function analyzes trigger data to provide a summary of how many times each
 trigger value appears in the dataset. Zero values are excluded from the count.
 Useful for validating experimental paradigms and checking trigger timing.
 
+The returned `TriggerInfo` object displays as a formatted table and can be accessed
+like a DataFrame (e.g., `info.data.trigger`, `info.data.count`).
+
 # Arguments
 - `dat::ContinuousData`: The ContinuousData object containing EEG data.
-- `print_table::Bool`: Whether to print the trigger count table (default: true).
+- `df::DataFrame`: A DataFrame with a `:triggers` column.
 
 # Returns
-A DataFrame with columns `trigger` and `count` showing trigger values and their counts, excluding zero values.
+A `TriggerInfo` object containing trigger counts. Display the object to see a formatted table.
 
 # Examples
 ```julia
-# Get trigger counts and print table
+# Get trigger counts from ContinuousData
 trigger_counts = trigger_count(dat)
 
-# Get trigger counts without printing
-trigger_counts = trigger_count(dat, print_table = false)
+# Get trigger counts from DataFrame
+trigger_counts = trigger_count(df)
+
+# Display the table
+trigger_counts
+
+# Access DataFrame properties
+trigger_counts.data.trigger
+trigger_counts.data.count
 ```
 """
-function trigger_count(dat::ContinuousData; print_table::Bool = true)::DataFrame
-    @assert hasproperty(dat.data, :triggers) "Data must have a triggers column"
+function trigger_count(df::DataFrame)::TriggerInfo
+    @assert hasproperty(df, :triggers) "DataFrame must have a triggers column"
 
     # Check if triggers_info column exists and pass it along
-    triggers_info = hasproperty(dat.data, :triggers_info) ? dat.data.triggers_info : nothing
-    return _trigger_count_impl([dat.data.triggers], ["count"], print_table = print_table, triggers_info = triggers_info)
+    triggers_info = hasproperty(df, :triggers_info) ? df.triggers_info : nothing
+    return _trigger_count_impl([df.triggers], ["count"], triggers_info = triggers_info)
 end
+trigger_count(dat::ContinuousData)::TriggerInfo = trigger_count(dat.data)
 
 
 """
-    _trigger_count_impl(trigger_datasets, column_names; print_table=true, title="Trigger Count Summary", 
-                        headers=nothing, note=nothing, triggers_info=nothing)
+    _trigger_count_impl(trigger_datasets, column_names; triggers_info=nothing)
 
 Simplified trigger counting function with optional trigger info support.
 
 # Arguments
 - `trigger_datasets::Vector{<:Vector{<:Integer}}`: Vector of trigger datasets to analyze
 - `column_names::Vector{String}`: Names for the count columns in the output DataFrame
-- `print_table::Bool`: Whether to print formatted table (default: true)
-- `title::String`: Title for the printed table (default: "Trigger Count Summary")
-- `headers::Union{Nothing,Vector{String}}`: Custom headers for table (auto-generated if nothing)
-- `note::Union{Nothing,String}`: Optional note to display as footnote
 - `triggers_info::Union{Nothing,Vector{String}}`: Optional trigger info strings
 
 # Returns
-- `DataFrame`: DataFrame with 'trigger' column and count columns (plus triggers_info if provided)
+- `TriggerInfo`: TriggerInfo object containing DataFrame with 'trigger' column and count columns (plus triggers_info if provided)
 """
 function _trigger_count_impl(
     trigger_datasets::Vector{<:Vector{<:Integer}},
     column_names::Vector{String};
-    print_table::Bool = true,
-    title::String = "Trigger Count Summary",
-    headers::Union{Nothing,Vector{String}} = nothing,
-    note::Union{Nothing,String} = nothing,
     triggers_info::Union{Nothing,Vector{String}} = nothing,
 )
     # Get unique non-zero trigger values from all datasets
@@ -107,9 +110,6 @@ function _trigger_count_impl(
     non_zero_triggers = sort(unique(Base.filter(x -> x != 0, all_triggers)))
 
     if isempty(non_zero_triggers)
-        if print_table
-            println("No non-zero triggers found in the data.")
-        end
         # Return empty DataFrame with correct structure
         empty_cols = [Int[]]  # trigger column
         append!(empty_cols, [Int[] for _ in column_names])  # count columns
@@ -117,7 +117,8 @@ function _trigger_count_impl(
             insert!(empty_cols, 2, String[])  # triggers_info column
         end
         column_symbols = [:trigger; triggers_info !== nothing ? [:triggers_info] : []; Symbol.(column_names)]
-        return DataFrame([col => data for (col, data) in zip(column_symbols, empty_cols)]...)
+        result_df = DataFrame([col => data for (col, data) in zip(column_symbols, empty_cols)]...)
+        return TriggerInfo(result_df)
     end
 
     # Count occurrences of each trigger value across all datasets
@@ -156,36 +157,42 @@ function _trigger_count_impl(
         result_df = result_df[:, Cols(:trigger, :triggers_info, count_cols...)]
     end
 
-    # Print table if requested
-    if print_table
-        if headers === nothing
-            if triggers_info !== nothing
-                headers = [
-                    "Trigger",
-                    "Triggers Info",
-                    [uppercasefirst(replace(name, "_" => " ")) for name in column_names]...,
-                ]
-            else
-                headers = ["Trigger"; [uppercasefirst(replace(name, "_" => " ")) for name in column_names]]
-            end
-        end
+    return TriggerInfo(result_df)
+end
 
-        alignment =
-            triggers_info !== nothing ? [:r, :l, [:r for _ = 1:length(column_names)]...] :
-            [:r for _ = 1:length(headers)]
+function Base.show(io::IO, info::TriggerInfo)
 
-        pretty_table(result_df, title = title, alignment = alignment, footnotes = note !== nothing ? [note] : nothing)
-        println()
+    if isempty(info.data)
+        println(io, "No non-zero triggers found in the data.")
+        return
     end
 
-    return result_df
+    # Determine title based on column names
+    if "raw_count" in names(info.data) && "cleaned_count" in names(info.data)
+        title = "Trigger Count Summary (Raw vs Cleaned)"
+    else
+        title = "Trigger Count Summary"
+    end
+
+    # Calculate alignment based on actual DataFrame columns
+    n_cols = length(names(info.data))
+    alignment = if hasproperty(info.data, :triggers_info)
+        # trigger (r), triggers_info (l), then rest (r)
+        [:r, :l, fill(:r, n_cols - 2)...]
+    else
+        # All columns right-aligned
+        fill(:r, n_cols)
+    end
+
+    pretty_table(io, info.data, title = title, alignment = alignment)
+    println(io)
 end
 
 
 
 
 """
-    trigger_count(dat::BiosemiDataFormat.BiosemiData; print_table::Bool = true)::DataFrame
+    trigger_count(dat::BiosemiDataFormat.BiosemiData)::TriggerInfo
 
 Count trigger occurrences in BioSemi data comparing raw vs cleaned counts.
 
@@ -193,31 +200,35 @@ This function provides a comprehensive view of trigger counts in BioSemi data by
 comparing raw trigger counts with cleaned counts (onset-only). This comparison
 helps verify trigger cleaning operations and identify sustained vs onset triggers.
 
+The returned `TriggerInfo` object displays as a formatted table and can be accessed
+like a DataFrame (e.g., `info.trigger`, `info.raw_count`, `info.cleaned_count`).
+
 # Arguments
 - `dat::BiosemiDataFormat.BiosemiData`: The BioSemiData object containing EEG data.
-- `print_table::Bool`: Whether to print the trigger count table (default: true).
 
 # Returns
-A DataFrame with columns `trigger`, `raw_count`, and `cleaned_count` showing trigger values and their counts in both raw and cleaned data, excluding zero values.
+A `TriggerInfo` object containing trigger counts for both raw and cleaned data. Display the object to see a formatted table.
 
 # Examples
 ```julia
-# Get trigger counts and print table
+# Get trigger counts
 trigger_counts = trigger_count(dat)
 
-# Get trigger counts without printing
-trigger_counts = trigger_count(dat, print_table = false)
+# Display the table
+trigger_counts
+
+# Access DataFrame properties
+trigger_counts.data.trigger
+trigger_counts.data.raw_count
+trigger_counts.data.cleaned_count
 ```
 """
-function trigger_count(dat::BiosemiDataFormat.BiosemiData; print_table::Bool = true)::DataFrame
+function trigger_count(dat::BiosemiDataFormat.BiosemiData)::TriggerInfo
     # Get cleaned trigger data (onset detection only)
     cleaned_triggers = _clean_triggers(dat.triggers.raw)
     return _trigger_count_impl(
         [dat.triggers.raw, cleaned_triggers],
         ["raw_count", "cleaned_count"],
-        print_table = print_table,
-        title = "Trigger Count Summary (Raw vs Cleaned)",
-        note = "Note: Cleaned counts show only trigger onset events (sustained signals converted to single onsets)",
     )
 end
 
