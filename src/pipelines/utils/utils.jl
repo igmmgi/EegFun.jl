@@ -44,3 +44,359 @@ end
 
 subsection(title::String; width::Int = 80) = "\n" * _center_title(title, width)
 subsubsection(title::String) = "\n# " * title
+
+# =============================================================================
+# CHANNEL REPAIR TRACKING
+# =============================================================================
+
+"""
+    ContinuousRepairInfo
+
+Stores information about channels repaired at the continuous data level
+(before epoching). These repairs apply to all epochs.
+
+# Fields
+- `method::Symbol`: Repair method used (:neighbor_interpolation or :spherical_spline)
+- `repaired::Vector{Symbol}`: Channels that were successfully repaired (populated during repair)
+- `skipped::Vector{Symbol}`: Channels that were identified as bad but couldn't be repaired (populated during repair)
+- `neighbors::Union{Dict{Symbol, Vector{Symbol}}, Nothing}`: For neighbor interpolation, 
+  maps each repaired channel to its neighbor channels used for repair (Nothing for spherical_spline)
+"""
+mutable struct ContinuousRepairInfo
+    method::Symbol
+    repaired::Vector{Symbol}
+    skipped::Vector{Symbol}
+    neighbors::Union{Dict{Symbol, Vector{Symbol}}, Nothing}
+end
+
+"""
+    EpochRepairInfo
+
+Stores information about channels repaired at the epoch level for a specific condition.
+
+# Fields
+- `condition::Int64`: Condition number
+- `condition_name::String`: Condition name
+- `repaired::OrderedDict{Int, Vector{Symbol}}`: Maps epoch index to channels repaired in that epoch (ordered by epoch number)
+- `method::Symbol`: Repair method used (:neighbor_interpolation or :spherical_spline)
+- `neighbors::Union{Dict{Symbol, Vector{Symbol}}, Nothing}`: For neighbor interpolation,
+  maps each repaired channel to its neighbor channels (may be the same across epochs)
+- `skipped::OrderedDict{Int, Vector{Symbol}}`: Maps epoch index to channels that were
+  identified as bad but couldn't be repaired (bad neighbors or too few neighbors) (ordered by epoch number)
+"""
+struct EpochRepairInfo
+    condition::Int64
+    condition_name::String
+    repaired::OrderedDict{Int, Vector{Symbol}}
+    method::Symbol
+    neighbors::Union{Dict{Symbol, Vector{Symbol}}, Nothing}
+    skipped::OrderedDict{Int, Vector{Symbol}}
+end
+
+"""
+    ChannelRepairInfo
+
+Comprehensive tracking of all channel repairs during preprocessing.
+
+# Fields
+- `continuous::Union{ContinuousRepairInfo, Nothing}`: Repairs at continuous level (Nothing if none)
+- `epochs::Vector{EpochRepairInfo}`: Repairs at epoch level, one per condition
+"""
+struct ChannelRepairInfo
+    continuous::Union{ContinuousRepairInfo, Nothing}
+    epochs::Vector{EpochRepairInfo}
+end
+
+# Convenience constructors
+ChannelRepairInfo() = ChannelRepairInfo(nothing, EpochRepairInfo[])
+
+function Base.show(io::IO, info::ContinuousRepairInfo)
+    println(io, "ContinuousRepairInfo:")
+    println(io, "  Method: $(info.method)")
+    println(io, "  Channels repaired: $(length(info.repaired)) - $(info.repaired)")
+    println(io, "  Channels skipped: $(length(info.skipped)) - $(info.skipped)")
+    if info.neighbors !== nothing && !isempty(info.neighbors)
+        println(io, "  Neighbors used:")
+        for (ch, neighs) in info.neighbors
+            println(io, "    $ch → $(neighs)")
+        end
+    end
+end
+
+function Base.show(io::IO, info::EpochRepairInfo)
+    println(io, "EpochRepairInfo:")
+    println(io, "  Condition: $(info.condition) ($(info.condition_name))")
+    println(io, "  Method: $(info.method)")
+    total_repairs = sum(length(v) for v in values(info.repaired))
+    total_skipped = sum(length(v) for v in values(info.skipped))
+    println(io, "  Epochs with repairs: $(length(info.repaired))")
+    println(io, "  Total channel repairs: $total_repairs")
+    println(io, "  Total channels skipped: $total_skipped")
+    if info.neighbors !== nothing && !isempty(info.neighbors)
+        println(io, "  Neighbors used:")
+        for (ch, neighs) in info.neighbors
+            println(io, "    $ch → $(neighs)")
+        end
+    end
+end
+
+function Base.show(io::IO, info::ChannelRepairInfo)
+    println(io, "ChannelRepairInfo:")
+    if info.continuous !== nothing
+        println(io, "Continuous level:")
+        println(io, info.continuous)
+    else
+        println(io, "Continuous level: No repairs")
+    end
+    println(io, "Epoch level:")
+    if isempty(info.epochs)
+        println(io, "  No repairs")
+    else
+        for info_item in info.epochs
+            println(io, "  ", info_item)
+        end
+    end
+end
+
+# =============================================================================
+# HELPER FUNCTIONS FOR CREATING REPAIR INFO
+# =============================================================================
+
+"""
+    create_continuous_repair_info(method::Symbol)
+
+Create a new ContinuousRepairInfo tracking struct for continuous data repairs.
+Initializes with empty repaired and skipped vectors.
+"""
+function create_continuous_repair_info(method::Symbol)
+    return ContinuousRepairInfo(method, Symbol[], Symbol[], nothing)
+end
+
+"""
+    channel_repairable!(repair_info::ContinuousRepairInfo, bad_channels::Vector{Symbol}, layout::Layout)
+
+Analyze which channels can be repaired and which cannot, based on neighbor availability.
+Populates `repair_info.repaired` and `repair_info.skipped` with the analysis.
+
+# Arguments
+- `repair_info::ContinuousRepairInfo`: Continuous repair tracking struct (mutated to add repair analysis)
+- `bad_channels::Vector{Symbol}`: Channels identified as bad that need repair consideration
+- `layout::Layout`: Layout object containing neighbor information
+
+# Returns
+- `ContinuousRepairInfo`: The same repair_info object (modified in-place)
+
+# Notes
+This function only analyzes repairability - it does not perform any repairs.
+Use `repair_channels!` to actually perform the repairs after this analysis.
+"""
+function channel_repairable!(
+    repair_info::ContinuousRepairInfo,
+    bad_channels::Vector{Symbol},
+    layout::Layout,
+)
+    if isempty(bad_channels)
+        repair_info.repaired = Symbol[]
+        repair_info.skipped = Symbol[]
+        return repair_info
+    end
+
+    # Determine which channels can be repaired
+    repairable_channels = check_channel_neighbors(bad_channels, layout)
+    
+    # Categorize channels
+    repair_info.repaired = repairable_channels
+    repair_info.skipped = setdiff(bad_channels, repairable_channels)
+    
+    # Log the results
+    if !isempty(repairable_channels)
+        @info "Can repair $(length(repairable_channels)) channel(s): $repairable_channels"
+    end
+    
+    if !isempty(repair_info.skipped)
+        @info "Cannot repair $(length(repair_info.skipped)) channel(s) (bad neighbors and/or fewer than 2 neighbors): $(repair_info.skipped)"
+    end
+    
+    if isempty(repairable_channels) && !isempty(bad_channels)
+        @info "No channels can be repaired (all $(length(bad_channels)) bad channels have bad neighbors and/or fewer than 2 neighbors)"
+    end
+
+    return repair_info
+end
+
+@add_nonmutating channel_repairable!
+
+# =============================================================================
+# CONTINUOUS DATA REPAIR FUNCTIONS
+# =============================================================================
+
+"""
+    repair_channels_neighbor!(data::ContinuousData, repair_info::ContinuousRepairInfo)
+
+Repair channels using weighted neighbor interpolation.
+Uses `repair_info.repaired` to determine which channels to repair (should be populated by `channel_repairable!`).
+Updates `repair_info` during repair to track actual repairs vs skips.
+
+# Arguments
+- `data::ContinuousData`: Continuous EEG data to repair (modified in-place)
+- `repair_info::ContinuousRepairInfo`: Repair tracking struct with `repaired` channels already populated
+
+# Returns
+- `Nothing`: All modifications are in-place
+
+# See also
+- `channel_repairable!`: Analyze which channels can be repaired before calling this function
+"""
+function repair_channels_neighbor!(
+    data::ContinuousData,
+    repair_info::ContinuousRepairInfo,
+)
+    if isempty(repair_info.repaired)
+        @info "No channels to repair (all bad channels were skipped)"
+        return nothing
+    end
+
+    @info "Repairing $(length(repair_info.repaired)) channels: $(repair_info.repaired) using neighbor interpolation"
+
+    repair_channels!(
+        data,
+        repair_info.repaired;
+        method = :neighbor_interpolation,
+        repair_info = repair_info,
+    )
+
+    return nothing
+end
+
+"""
+    repair_channels_spherical!(data::ContinuousData, repair_info::ContinuousRepairInfo; m::Int=4, lambda::Float64=1e-5)
+
+Repair channels using spherical spline interpolation.
+Uses `repair_info.repaired` to determine which channels to repair (should be populated by `channel_repairable!`).
+Updates `repair_info` during repair to track actual repairs vs skips.
+
+# Arguments
+- `data::ContinuousData`: Continuous EEG data to repair (modified in-place)
+- `repair_info::ContinuousRepairInfo`: Repair tracking struct with `repaired` channels already populated
+- `m::Int`: Order of Legendre polynomials (default: 4)
+- `lambda::Float64`: Regularization parameter (default: 1e-5)
+
+# Returns
+- `Nothing`: All modifications are in-place
+
+# See also
+- `channel_repairable!`: Analyze which channels can be repaired before calling this function
+"""
+function repair_channels_spherical!(
+    data::ContinuousData,
+    repair_info::ContinuousRepairInfo;
+    m::Int = 4,
+    lambda::Float64 = 1e-5,
+)
+    if isempty(repair_info.repaired)
+        @info "No channels to repair (all bad channels were skipped)"
+        return nothing
+    end
+
+    @info "Repairing $(length(repair_info.repaired)) channels: $(repair_info.repaired) using spherical spline interpolation"
+
+    repair_channels!(
+        data,
+        repair_info.repaired;
+        method = :spherical_spline,
+        repair_info = repair_info,
+        m = m,
+        lambda = lambda,
+    )
+
+    return nothing
+end
+
+"""
+    repair_channels!(data::ContinuousData, repair_info::ContinuousRepairInfo; method::Symbol=:neighbor_interpolation, kwargs...)
+
+Repair channels using the information in `repair_info`.
+Orchestrator function similar to `repair_artifacts!` for epoch data.
+
+# Arguments
+- `data::ContinuousData`: Continuous EEG data to repair (modified in-place)
+- `repair_info::ContinuousRepairInfo`: Repair tracking struct with `repaired` channels already populated
+- `method::Symbol`: Repair method to use (default: :neighbor_interpolation)
+
+# Returns
+- `Nothing`: All modifications are in-place
+
+# Notes
+- `repair_info.repaired` should be populated by `channel_repairable!` before calling this function
+"""
+function repair_channels!(
+    data::ContinuousData,
+    repair_info::ContinuousRepairInfo;
+    method::Symbol = :neighbor_interpolation,
+    kwargs...,
+)
+    if method == :neighbor_interpolation
+        repair_channels_neighbor!(data, repair_info; kwargs...)
+    elseif method == :spherical_spline
+        repair_channels_spherical!(data, repair_info; kwargs...)
+    else
+        throw(ArgumentError("Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline"))
+    end
+    return nothing
+end
+
+"""
+    create_epoch_repair_info(dat::EpochData,
+                              repaired::Union{OrderedDict{Int, Vector{Symbol}}, Dict{Int, Vector{Symbol}}},
+                              skipped::Union{OrderedDict{Int, Vector{Symbol}}, Dict{Int, Vector{Symbol}}},
+                              method::Symbol,
+                              neighbors_dict::Union{OrderedDict, Nothing} = nothing)
+
+Create EpochRepairInfo from actual repair tracking data.
+The repaired and skipped should be populated during the repair process.
+If not already OrderedDict, will convert to OrderedDict sorted by epoch number.
+"""
+function create_epoch_repair_info(
+    dat::EpochData,
+    repaired::Union{OrderedDict{Int, Vector{Symbol}}, Dict{Int, Vector{Symbol}}},
+    skipped::Union{OrderedDict{Int, Vector{Symbol}}, Dict{Int, Vector{Symbol}}},
+    method::Symbol,
+    neighbors_dict::Union{OrderedDict,Nothing} = nothing,
+)
+    # Convert to OrderedDict if not already, sorted by epoch number
+    repairs_ordered = if repaired isa OrderedDict
+        repaired
+    else
+        OrderedDict(sort(pairs(repaired)))
+    end
+    
+    skipped_ordered = if skipped isa OrderedDict
+        skipped
+    else
+        OrderedDict(sort(pairs(skipped)))
+    end
+    
+    neighbors_info = nothing
+    if method == :neighbor_interpolation && neighbors_dict !== nothing
+        neighbors_info = Dict{Symbol, Vector{Symbol}}()
+        # Collect unique repaired channels and their neighbors
+        all_repaired_channels = Set{Symbol}()
+        for channels in values(repairs_ordered)
+            union!(all_repaired_channels, channels)
+        end
+        for ch in all_repaired_channels
+            if haskey(neighbors_dict, ch)
+                neighbors_info[ch] = neighbors_dict[ch].channels
+            end
+        end
+    end
+    
+    return EpochRepairInfo(
+        dat.condition,
+        dat.condition_name,
+        repairs_ordered,
+        method,
+        neighbors_info,
+        skipped_ordered,
+    )
+end
