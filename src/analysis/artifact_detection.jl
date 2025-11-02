@@ -192,7 +192,7 @@ function is_extreme_value!(
     if mode == :combined  # any channel
         channel_out = something(channel_out, Symbol("is_extreme_value_$(threshold)"))
         dat.data[!, channel_out] = falses(nrow(dat.data))
-        for (ch, extreme_mask) in results
+        for (_, extreme_mask) in results
             dat.data[!, channel_out] .|= extreme_mask
         end
     elseif mode == :separate # separate columns for each channel
@@ -410,7 +410,7 @@ function is_extreme_value(
 
         combined_mask = Vector{Bool}(falses(nrow(dat.data)))
         # Combine results from all channels (OR operation)
-        for (ch, extreme_mask) in results
+        for (_, extreme_mask) in results
             combined_mask .|= extreme_mask
         end
 
@@ -476,7 +476,7 @@ function n_extreme_value(
 
     if mode == :combined
         combined_mask = Vector{Bool}(falses(nrow(dat.data)))
-        for (ch, extreme_mask) in results
+        for (_, extreme_mask) in results
             combined_mask .|= extreme_mask
         end
         return sum(combined_mask)
@@ -524,13 +524,10 @@ struct Rejection
     epoch::Int
 end
 
-function Base.show(io::IO, r::Rejection)
-    print(io, "Rejection(:$(r.label), $(r.epoch))")
-end
+Base.show(io::IO, r::Rejection) =  print(io, "Rejection(:$(r.label), $(r.epoch))")
 
-function is_equal_rejection(a::Rejection, b::Rejection)
-    return a.label == b.label && a.epoch == b.epoch
-end
+# Are two Rejections equal?
+is_equal_rejection(a::Rejection, b::Rejection) = a.label == b.label && a.epoch == b.epoch
 
 function unique_rejections(rejections::Vector{Rejection})
     out = Rejection[]
@@ -1119,10 +1116,7 @@ function channel_repairable!(
     return artifacts
 end
 
-channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) = 
-    channel_repairable!.(artifacts, Ref(layout))
-
-@add_nonmutating channel_repairable!
+channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) = channel_repairable!.(artifacts, Ref(layout))
 
 
 """
@@ -1171,7 +1165,7 @@ function repair_artifacts_neighbor!(
         @info "" # formatting
     end
 
-    return dat
+    return nothing
 end
 
 """
