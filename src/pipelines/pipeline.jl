@@ -235,7 +235,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     filter_data!(dat_ica, preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass])
 
                     @info subsection("Running ICA")
-                    ica_result = run_ica(
+                    ica = run_ica(
                         dat_ica;
                         sample_selection = samples_not(
                             _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
@@ -247,7 +247,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     @info subsection("Component Identification")
                     component_artifacts, component_metrics = identify_components(
                         dat_ica,
-                        ica_result,
+                        ica,
                         sample_selection = samples_not(
                             _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
                         ),
@@ -262,7 +262,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     @info subsection("Removing ICA components")
                     remove_ica_components!(
                         dat,
-                        ica_result,
+                        ica,
                         component_selection = components(get_all_ica_components(component_artifacts)),
                     )
                     @info "Removed $(length(get_all_ica_components(component_artifacts))) ICA components"
@@ -270,7 +270,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
                         @info "Saving ica data"
-                        jldsave(make_output_filename(output_directory, data_file, "_ica"); ica_result = ica_result)
+                        jldsave(make_output_filename(output_directory, data_file, "_ica"); ica = ica)
                     end
 
                 end

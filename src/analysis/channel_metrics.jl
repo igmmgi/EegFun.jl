@@ -618,14 +618,18 @@ end
 """
     check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::Vector{Symbol}
 
-Check which bad channels have good neighbors that can be used for repair.
+Check which bad channels can be repaired using neighbor interpolation.
+A channel is repairable only if:
+- ALL of its neighbors are good (not in the bad_channels list)
+- There are at least 2 good neighbors (required for meaningful interpolation)
+This prevents bad channels from being used to repair other bad channels.
 
 # Arguments
 - `bad_channels::Vector{Symbol}`: Vector of bad channel names
 - `layout::Layout`: Layout object containing neighbor information
 
 # Returns
-- `Vector{Symbol}`: Bad channels that have good neighbors (can be repaired)
+- `Vector{Symbol}`: Bad channels that have ALL good neighbors (can be repaired)
 
 # Examples
 ```julia
@@ -645,9 +649,10 @@ function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::
         # Check if this channel has neighbors defined in the layout
         if haskey(layout.neighbours, bad_ch)
             neighbors = layout.neighbours[bad_ch]
-            # Check if any neighbors are NOT in the bad channels list
+            # Only repair if ALL neighbors are good (not in bad_channels list)
+            # AND there are at least 2 good neighbors (need at least 2 for meaningful interpolation)
             good_neighbors = setdiff(neighbors.channels, bad_channels)
-            if !isempty(good_neighbors)
+            if length(good_neighbors) == length(neighbors.channels) && length(good_neighbors) >= 2
                 push!(repairable_channels, bad_ch)
             end
         end

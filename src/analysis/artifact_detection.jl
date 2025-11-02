@@ -706,6 +706,8 @@ function detect_bad_epochs_automatic(
     z_measures::Vector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis],
 )::EpochRejectionInfo
 
+    @info "--------------------------------" 
+    @info "Condition: $(dat.condition) ($(dat.condition_name)) - Detecting bad epochs"
     # Validate inputs
     z_criterion < 0 && @minimal_error_throw("Z-criterion must be non-negative")
     abs_criterion < 0 && @minimal_error_throw("Absolute criterion must be non-negative")
@@ -992,6 +994,8 @@ function repair_artifacts!(
     method::Symbol = :neighbor_interpolation,
     kwargs...,
 )
+    @info "--------------------------------" 
+    @info "Condition: $(dat.condition) ($(dat.condition_name)) - Repairing artifacts using method: $method"
     if method == :neighbor_interpolation
         return repair_artifacts_neighbor!(dat, artifacts; kwargs...)
     elseif method == :spherical_spline
@@ -1067,24 +1071,39 @@ function repair_artifacts_neighbor!(
     artifacts::EpochRejectionInfo;
     neighbours_dict::Union{OrderedDict,Nothing} = nothing,
 )
-    # Get all rejected epochs with their bad channels
     rejected_epochs = unique([r.epoch for r in artifacts.rejected_epochs])
 
     for epoch_idx in rejected_epochs
-        # Get bad channels for this epoch
         bad_channels = [r.label for r in artifacts.rejected_epochs if r.epoch == epoch_idx]
         isempty(bad_channels) && continue
 
-        @info "Repairing epoch $epoch_idx channels $(bad_channels) using neighbor interpolation"
+        repairable_channels = check_channel_neighbors(bad_channels, dat.layout)
+        
+        if isempty(repairable_channels)
+            if length(bad_channels) == 1
+                @info "Epoch $epoch_idx: Cannot repair channel $(bad_channels[1]) (fewer than 2 neighbors)"
+            else
+                @info "Epoch $epoch_idx: Cannot repair channels $(bad_channels) (bad neighbors and/or fewer than 2 neighbors)"
+            end
+            continue
+        end
+        
+        skipped_channels = setdiff(bad_channels, repairable_channels)
+        if !isempty(skipped_channels)
+            @info "Epoch $epoch_idx: Skipping repair of $(length(skipped_channels)) channel(s) with bad neighbors: $skipped_channels"
+        end
+
+        @info "Epoch $epoch_idx: Repairing channels $(repairable_channels) using neighbor interpolation"
 
         # Use unified channel repair function with epoch selection
         repair_channels!(
             dat,
-            bad_channels;
+            repairable_channels;
             method = :neighbor_interpolation,
             epoch_selection = epochs([epoch_idx]),
             neighbours_dict = neighbours_dict,
         )
+        @info "" # formatting
     end
 
     return dat
