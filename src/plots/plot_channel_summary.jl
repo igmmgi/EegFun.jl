@@ -145,7 +145,7 @@ function plot_channel_summary!(fig::Figure, ax::Axis, dat::DataFrame, col::Symbo
     return nothing
 end
 
-# Share documentation with the non-mutating version
+# Share documentation with the non-mutating version (set once for all methods)
 @doc (@doc plot_channel_summary!) plot_channel_summary
 function plot_channel_summary(dat::DataFrame, col::Symbol; kwargs...)
     # Merge user kwargs with defaults and validate
@@ -201,8 +201,6 @@ function plot_channel_summary!(fig, ax, dat::DataFrame, col::Vector{Symbol}; kwa
     _plot_multiple_columns!(fig, dat, col, plot_kwargs)
 end
 
-# Share documentation with the non-mutating version
-@doc (@doc plot_channel_summary!) plot_channel_summary
 function plot_channel_summary(dat::DataFrame, col::Vector{Symbol}; kwargs...)
     plot_kwargs = _merge_plot_kwargs(PLOT_CHANNEL_SUMMARY_KWARGS, kwargs)
     fig = Figure()

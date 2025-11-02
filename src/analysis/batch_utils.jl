@@ -24,9 +24,8 @@ struct BatchConfig
 end
 
 #=============================================================================
-    PURE FUNCTIONS (no side effects)
+    BATCH PROCESSING FUNCTIONS
 =============================================================================#
-
 """
     find_batch_files(pattern::String, dir::String; participants=nothing)
 
@@ -57,11 +56,11 @@ Load EEG data from JLD2 file, returning `(data_var, var_name)` or `nothing`.
 
 Tries common variable names: "erps", "epochs".
 """
-function _load_eeg_data(filepath::String)
+function _load_eeg_data(filepath::String; name::String = "")
     file_data = load(filepath)
 
     # Try common variable names
-    for var_name in ["erps", "epochs"]
+    for var_name in ["erps", "epochs", "ica", "continuous", name]
         if haskey(file_data, var_name)
             return (file_data[var_name], var_name)
         end
@@ -170,9 +169,6 @@ function _validate_condition_pairs(pairs::Union{Vector{Tuple{Int,Int}},Vector{Ve
     return nothing
 end
 
-#=============================================================================
-    ORCHESTRATION FUNCTIONS (with side effects: I/O, logging)
-=============================================================================#
 
 """
     run_batch_operation(process_fn::Function, files::Vector{String}, 
