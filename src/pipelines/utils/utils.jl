@@ -56,17 +56,16 @@ Stores information about channels repaired at the continuous data level
 (before epoching). These repairs apply to all epochs.
 
 # Fields
+- `name::String`: Name/identifier for this repair info (e.g., "continuous_repair_pre_ica")
 - `method::Symbol`: Repair method used (:neighbor_interpolation or :spherical_spline)
 - `repaired::Vector{Symbol}`: Channels that were successfully repaired (populated during repair)
 - `skipped::Vector{Symbol}`: Channels that were identified as bad but couldn't be repaired (populated during repair)
-- `neighbors::Union{Dict{Symbol, Vector{Symbol}}, Nothing}`: For neighbor interpolation, 
-  maps each repaired channel to its neighbor channels used for repair (Nothing for spherical_spline)
 """
 mutable struct ContinuousRepairInfo
+    name::String
     method::Symbol
     repaired::Vector{Symbol}
     skipped::Vector{Symbol}
-    neighbors::Union{Dict{Symbol, Vector{Symbol}}, Nothing}
 end
 
 """
@@ -111,16 +110,10 @@ end
 ChannelRepairInfo() = ChannelRepairInfo(nothing, EpochRepairInfo[])
 
 function Base.show(io::IO, info::ContinuousRepairInfo)
-    println(io, "ContinuousRepairInfo:")
+    println(io, "ContinuousRepairInfo: $(info.name)")
     println(io, "  Method: $(info.method)")
     println(io, "  Channels repaired: $(length(info.repaired)) - $(info.repaired)")
     println(io, "  Channels skipped: $(length(info.skipped)) - $(info.skipped)")
-    if info.neighbors !== nothing && !isempty(info.neighbors)
-        println(io, "  Neighbors used:")
-        for (ch, neighs) in info.neighbors
-            println(io, "    $ch → $(neighs)")
-        end
-    end
 end
 
 function Base.show(io::IO, info::EpochRepairInfo)
@@ -158,18 +151,51 @@ function Base.show(io::IO, info::ChannelRepairInfo)
     end
 end
 
+"""
+    ArtifactInfo
+
+Flexible container for storing all artifact-related information from preprocessing.
+Can hold multiple continuous repair infos and epoch rejection infos.
+
+# Fields
+- `continuous_repairs::Vector{ContinuousRepairInfo}`: Vector of continuous repair info objects
+- `epoch_rejections::Vector{EpochRejectionInfo}`: Vector of epoch rejection info objects
+"""
+struct ArtifactInfo
+    continuous_repairs::Vector{ContinuousRepairInfo}
+    epoch_rejections::Vector{EpochRejectionInfo}
+end
+
+ArtifactInfo() = ArtifactInfo(ContinuousRepairInfo[], EpochRejectionInfo[])
+
+function Base.show(io::IO, info::ArtifactInfo)
+    println(io, "ArtifactInfo:")
+    println(io, "  Continuous repairs: $(length(info.continuous_repairs))")
+    for repair_info in info.continuous_repairs
+        println(io, "    - $(repair_info.name) ($(repair_info.method))")
+    end
+    println(io, "  Epoch rejections: $(length(info.epoch_rejections))")
+    for rejection_info in info.epoch_rejections
+        println(io, "    - $(rejection_info.name) (condition $(rejection_info.info.number): $(rejection_info.info.name))")
+    end
+end
+
 # =============================================================================
 # HELPER FUNCTIONS FOR CREATING REPAIR INFO
 # =============================================================================
 
 """
-    create_continuous_repair_info(method::Symbol)
+    create_continuous_repair_info(method::Symbol; name::String="continuous_repair")
 
 Create a new ContinuousRepairInfo tracking struct for continuous data repairs.
 Initializes with empty repaired and skipped vectors.
+
+# Arguments
+- `method::Symbol`: Repair method to use
+- `name::String`: Optional name/identifier (default: "continuous_repair")
 """
-function create_continuous_repair_info(method::Symbol)
-    return ContinuousRepairInfo(method, Symbol[], Symbol[], nothing)
+function create_continuous_repair_info(method::Symbol; name::String="continuous_repair")
+    return ContinuousRepairInfo(name, method, Symbol[], Symbol[])
 end
 
 """

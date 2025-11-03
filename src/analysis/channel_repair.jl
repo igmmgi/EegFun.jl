@@ -93,9 +93,6 @@ function _repair_channels_neighbor!(
     if !isnothing(repair_info)
         repair_info.repaired = Symbol[]
         repair_info.skipped = Symbol[]
-        if repair_info.method == :neighbor_interpolation
-            repair_info.neighbors = Dict{Symbol, Vector{Symbol}}()
-        end
     end
 
     # Create channel index lookup
@@ -151,9 +148,6 @@ function _repair_channels_neighbor!(
         # Track successful repair
         if !isnothing(repair_info)
             push!(repair_info.repaired, bad_ch)
-            if repair_info.method == :neighbor_interpolation && !isnothing(repair_info.neighbors)
-                repair_info.neighbors[bad_ch] = neighbours.channels
-            end
         end
     end
 
