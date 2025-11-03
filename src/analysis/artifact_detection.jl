@@ -589,6 +589,7 @@ end
 Stores information about which epochs were rejected and why, and optionally tracks channel repairs.
 
 # Fields
+- `name::String`: Name/identifier for this rejection info (e.g., "rejection_step1", "rejection_step2")
 - `info::EpochInfo`: Condition metadata (number, name, n_epochs)
 - `n_artifacts::Int`: Number of epochs after rejection
 - `rejected::Vector{Rejection}`: All rejected epochs
@@ -600,6 +601,7 @@ Stores information about which epochs were rejected and why, and optionally trac
 - `skipped::Union{OrderedDict{Int, Vector{Symbol}}, Nothing}`: Channels skipped per epoch, ordered by epoch number (populated during repair, Nothing if no repairs)
 """
 mutable struct EpochRejectionInfo
+    name::String
     info::EpochInfo
     n_artifacts::Int
     abs_criterion::Real
@@ -705,6 +707,7 @@ function detect_bad_epochs_automatic(
     abs_criterion::Real = 100,
     channel_selection::Function = channels(),
     z_measures::Vector{Symbol} = [:variance, :max, :min, :abs, :range, :kurtosis],
+    name::String = "rejection_info",
 )::EpochRejectionInfo
 
     @info "--------------------------------" 
@@ -795,6 +798,7 @@ function detect_bad_epochs_automatic(
     )
 
     rejection_info = EpochRejectionInfo(
+        name,
         info,
         length(rejected_info),
         abs_criterion,
@@ -915,7 +919,7 @@ end
 Display rejection information in a human-readable format.
 """
 function Base.show(io::IO, info::EpochRejectionInfo)
-    println(io, "EpochRejectionInfo:")
+    println(io, "EpochRejectionInfo: $(info.name)")
     println(io, "Condition: $(info.info.number): $(info.info.name)")
     println(io, "  Abs criterion: $(info.abs_criterion > 0 ? string(info.abs_criterion,  " μV") : "disabled")")
     println(io, "  Z-criterion: $(info.z_criterion > 0 ? string(info.z_criterion) : "disabled")")

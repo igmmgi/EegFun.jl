@@ -212,10 +212,9 @@ function preprocess(config::String; log_level::Symbol = :info)
                 # Analyze which channels can be repaired (needed for ICA and repair steps)
                 continuous_repair_info = nothing
                 if !isempty(bad_channels_non_eog_related)
-                    continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation)
+                    continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
                     channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, layout)
                 end
-                jldsave(make_output_filename(output_directory, data_file, "_continuous_repair_info"); continuous_repair_info = continuous_repair_info)
 
                 #################### Independent Component Analysis (ICA) ###################
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
@@ -286,8 +285,6 @@ function preprocess(config::String; log_level::Symbol = :info)
                     # Perform repairs with tracking (similar to repair_artifacts! for epochs)
                     repair_channels!(dat, continuous_repair_info; method = :neighbor_interpolation)
                     
-                    # Save continuous repair info
-                    jldsave(make_output_filename(output_directory, data_file, "_continuous_repair_info"); continuous_repair_info = continuous_repair_info)
                     @info continuous_repair_info
                 end
 
@@ -324,9 +321,9 @@ function preprocess(config::String; log_level::Symbol = :info)
                     epochs;
                     z_criterion = 0.0,
                     abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
+                    name = "rejection_step1",
                 )
                 channel_repairable!(rejection_step1, epochs[1].layout)
-                jldsave(make_output_filename(output_directory, data_file, "_rejection_info_step1"); rejection_info = rejection_step1)
                 @info rejection_step1
                 
                 #################### CHANNEL REPAIR PER EPOCH ###################
@@ -342,14 +339,23 @@ function preprocess(config::String; log_level::Symbol = :info)
                     epochs;
                     z_criterion = 0.0,
                     abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
+                    name = "rejection_step2",
                 )
                 channel_repairable!(rejection_info_step2, epochs[1].layout)
-                jldsave(make_output_filename(output_directory, data_file, "_rejection_info_step2"); rejection_info = rejection_info_step2)
                 @info rejection_info_step2
                 
                 #################### EPOCH REJECTION ###################
                 @info subsection("Rejecting bad epochs")
                 epochs = reject_epochs(epochs, rejection_info_step2)
+                
+                #################### SAVE ARTIFACT INFO ###################
+                # Collect all artifact-related info into a single structure
+                artifact_info = ArtifactInfo(
+                    continuous_repair_info !== nothing ? [continuous_repair_info] : ContinuousRepairInfo[],
+                    vcat(rejection_step1, rejection_info_step2),
+                )
+                jldsave(make_output_filename(output_directory, data_file, "_artifact_info"); artifact_info = artifact_info)
+                @info "Saved artifact info: $(artifact_info)"
 
                 #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
                 df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
