@@ -49,25 +49,7 @@ function _find_batch_files(pattern::String, dir::String; participants = nothing)
     return files
 end
 
-"""
-    load_eeg_data(filepath::String)
 
-Load EEG data from JLD2 file, returning `(data_var, var_name)` or `nothing`.
-
-Tries common variable names: "erps", "epochs".
-"""
-function _load_eeg_data(filepath::String; name::String = "")
-    file_data = load(filepath)
-
-    # Try common variable names
-    for var_name in ["erps", "epochs", "ica", "continuous", name]
-        if haskey(file_data, var_name)
-            return (file_data[var_name], var_name)
-        end
-    end
-
-    return nothing
-end
 
 """
     _condition_select(data, conditions)
