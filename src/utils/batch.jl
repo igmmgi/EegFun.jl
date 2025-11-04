@@ -51,20 +51,24 @@ function _find_batch_files(pattern::String, dir::String; participants = nothing)
 end
 
 """
-    load_eeg_data(filepath::String)
+    load_data(filepath::String)
 
-Load EEG data from JLD2 file, returning `(data_var, var_name)` or `nothing`.
+Load data from JLD2 file, returning the data directly, a Dict of all variables, or `nothing`.
 
-Tries common variable names: "erps", "epochs".
+- If file has 1 variable: returns the value directly
+- If file has multiple variables: returns a Dict with all key-value pairs
+- If file is empty: returns `nothing`
 """
-function _load_eeg_data(filepath::String)
+function load_data(filepath::String)
     file_data = load(filepath)
-    for var_name in ["erps", "epochs"]
-        if haskey(file_data, var_name)
-            return (file_data[var_name], var_name)
-        end
+    keys_list = collect(keys(file_data))
+    isempty(keys_list) && return nothing
+    
+    if length(keys_list) == 1
+        return file_data[keys_list[1]]
+    else
+        return Dict(k => file_data[k] for k in keys_list)
     end
-    return nothing
 end
 
 """
@@ -175,9 +179,6 @@ function _validate_condition_pairs(pairs::Union{Vector{Tuple{Int,Int}},Vector{Ve
     return nothing
 end
 
-#=============================================================================
-    ORCHESTRATION FUNCTIONS (with side effects: I/O, logging)
-=============================================================================#
 
 """
     run_batch_operation(process_fn::Function, files::Vector{String}, 

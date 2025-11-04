@@ -81,7 +81,7 @@ using DataFrames
         @test isempty(files_none)
     end
 
-    @testset "_load_eeg_data" begin
+    @testset "load_data" begin
         # Create test files with different variable names
         erps = [create_test_erp_data(1, 1)]
 
@@ -89,33 +89,29 @@ using DataFrames
         erps_file = joinpath(test_dir, "test_erps.jld2")
         save(erps_file, "erps", erps)
 
-        result = eegfun._load_eeg_data(erps_file)
+        result = eegfun.load_data(erps_file)
         @test result !== nothing
-        data, var_name = result
-        @test var_name == "erps"
-        @test length(data) == length(erps)
-        @test data[1].data == erps[1].data
+        @test length(result) == length(erps)
+        @test result[1].data == erps[1].data
 
         # Test with "epochs" variable
         epochs_file = joinpath(test_dir, "test_epochs.jld2")
         save(epochs_file, "epochs", erps)
 
-        result = eegfun._load_eeg_data(epochs_file)
+        result = eegfun.load_data(epochs_file)
         @test result !== nothing
-        data, var_name = result
-        @test var_name == "epochs"
-        @test length(data) == length(erps)
-        @test data[1].data == erps[1].data
+        @test length(result) == length(erps)
+        @test result[1].data == erps[1].data
 
         # Test with unrecognized variable
         other_file = joinpath(test_dir, "test_other.jld2")
         save(other_file, "other_data", "test")
 
-        result = eegfun._load_eeg_data(other_file)
+        result = eegfun.load_data(other_file)
         @test result === nothing
 
         # Test with non-existent file
-        @test_throws ArgumentError eegfun._load_eeg_data("/nonexistent/file.jld2")
+        @test_throws ArgumentError eegfun.load_data("/nonexistent/file.jld2")
     end
 
     @testset "_condition_select" begin
@@ -424,7 +420,7 @@ using DataFrames
             # Process files
             process_fn =
                 (input_path, output_path) -> begin
-                    data_result = eegfun._load_eeg_data(input_path)
+                    data_result = eegfun.load_data(input_path)
                     if isnothing(data_result)
                         return eegfun.BatchResult(false, basename(input_path), "No data")
                     end

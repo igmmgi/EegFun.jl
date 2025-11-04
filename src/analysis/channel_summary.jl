@@ -296,12 +296,10 @@ function _process_channel_summary_file(
     filename = basename(filepath)
 
     # Load data
-    data_result = _load_eeg_data(filepath)
-    if isnothing(data_result)
+    data_var = load_data(filepath)
+    if isnothing(data_var)
         return (BatchResult(false, filename, "No recognized data variable"), DataFrame[])
     end
-
-    data_var, var_name = data_result
 
     # Select conditions
     data_var = _condition_select(data_var, conditions)

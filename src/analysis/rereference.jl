@@ -154,18 +154,19 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     filename = basename(filepath)
 
     # Load data
-    data_result = _load_eeg_data(filepath)
-    if isnothing(data_result)
+    data = load_data(filepath)
+    if isnothing(data)
         return BatchResult(false, filename, "No recognized data variable")
     end
-
-    data, var_name = data_result
 
     # Select conditions
     data = _condition_select(data, conditions)
 
     # Apply rereferencing (mutates data in-place)
     rereference!.(data, reference_selection)
+
+    # Determine variable name based on data type
+    var_name = data isa Vector{<:ErpData} ? "erps" : "epochs"
 
     # Save
     save(output_path, var_name, data)
