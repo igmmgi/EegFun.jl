@@ -82,14 +82,17 @@ function _condition_difference_process_file(
 )
     filename = basename(filepath)
 
-    # Load data
-    file_data = load(filepath)
-
-    if !haskey(file_data, "erps")
-        return BatchResult(false, filename, "No 'erps' variable found")
+    # Load data (using load_data which finds by type)
+    erps_data = load_data(filepath)
+    
+    if isnothing(erps_data)
+        return BatchResult(false, filename, "No data variables found")
     end
-
-    erps_data = file_data["erps"]
+    
+    # Validate that data is Vector{ErpData}
+    if !(erps_data isa Vector{<:ErpData})
+        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData}, got $(typeof(erps_data))")
+    end
 
     # Create difference waves for each condition pair
     difference_waves = ErpData[]
@@ -129,7 +132,7 @@ function _condition_difference_process_file(
     end
 
     # Save difference waves
-    save(output_path, "differences", difference_waves)
+    jldsave(output_path; data = difference_waves)
 
     return BatchResult(true, filename, "Created $(length(difference_waves)) difference wave(s)")
 end

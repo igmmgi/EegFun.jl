@@ -140,7 +140,7 @@ using DataFrames
             for participant = 1:4
                 lrp_data = create_test_erp_data(participant, 1)
                 file_path = joinpath(test_dir, "$(participant)_lrp.jld2")
-                save(file_path, "lrp", lrp_data)
+                jldsave(file_path; data = lrp_data)
             end
 
             output_dir = joinpath(test_dir, "jackknife_test")
@@ -159,7 +159,7 @@ using DataFrames
             @test "4_lrp.jld2" in output_files
 
             # Load and verify jackknife data
-            jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "jackknife")
+            jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "data")
             @test jk1 isa eegfun.ErpData
             @test nrow(jk1.data) == 2501
         end
@@ -169,7 +169,7 @@ using DataFrames
             for participant = 1:4
                 lrp_data = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
                 file_path = joinpath(test_dir, "$(participant)_multi_lrp.jld2")
-                save(file_path, "lrp", lrp_data)
+                jldsave(file_path; data = lrp_data)
             end
 
             output_dir = joinpath(test_dir, "jackknife_multi")
@@ -179,7 +179,7 @@ using DataFrames
             @test isdir(output_dir)
 
             # Load and verify - should have vector of ErpData for multiple conditions
-            jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "jackknife")
+            jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "data")
             @test jk1 isa Vector{eegfun.ErpData}
             @test length(jk1) == 2
 
@@ -226,7 +226,7 @@ using DataFrames
             @test isdir(output_dir)
 
             # Load and verify - should only have condition 1
-            jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "jackknife")
+            jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "data")
             @test jk1 isa eegfun.ErpData  # Single ErpData, not vector
             @test jk1.condition == 1
         end
@@ -236,7 +236,7 @@ using DataFrames
             for participant = 1:3
                 erp_data = [create_test_erp_data(participant, 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps.jld2")
-                save(file_path, "erps", erp_data)
+                jldsave(file_path; data = erp_data)
             end
 
             output_dir = joinpath(test_dir, "jackknife_erps")
@@ -260,7 +260,7 @@ using DataFrames
             for participant = 1:3
                 lrp_data = create_test_erp_data(participant, 1)
                 file_path = joinpath(verify_dir, "$(participant)_verify.jld2")
-                save(file_path, "lrp", lrp_data)
+                jldsave(file_path; data = lrp_data)
             end
 
             output_dir = joinpath(verify_dir, "jackknife_output")
@@ -268,12 +268,12 @@ using DataFrames
             result = eegfun.jackknife_average("verify", input_dir = verify_dir, output_dir = output_dir)
 
             # Load original data
-            lrp1 = load(joinpath(verify_dir, "1_verify.jld2"), "lrp")
-            lrp2 = load(joinpath(verify_dir, "2_verify.jld2"), "lrp")
-            lrp3 = load(joinpath(verify_dir, "3_verify.jld2"), "lrp")
+            lrp1 = load(joinpath(verify_dir, "1_verify.jld2"), "data")
+            lrp2 = load(joinpath(verify_dir, "2_verify.jld2"), "data")
+            lrp3 = load(joinpath(verify_dir, "3_verify.jld2"), "data")
 
             # Load jackknife for participant 1 (should exclude participant 1)
-            jk1 = load(joinpath(output_dir, "1_verify.jld2"), "jackknife")
+            jk1 = load(joinpath(output_dir, "1_verify.jld2"), "data")
 
             # Since there's only one condition, should be single ErpData
             @test jk1 isa eegfun.ErpData
@@ -289,7 +289,7 @@ using DataFrames
         @testset "Error handling: insufficient files" begin
             # Create directory with only 1 file
             single_dir = mktempdir()
-            save(joinpath(single_dir, "1_lrp.jld2"), "lrp", create_test_erp_data(1, 1))
+            jldsave(joinpath(single_dir, "1_lrp.jld2"); data = create_test_erp_data(1, 1))
 
             output_dir = joinpath(single_dir, "jackknife_insufficient")
 
@@ -332,7 +332,7 @@ using DataFrames
             result =
                 eegfun.jackknife_average("lrp", input_dir = test_dir, participants = [1, 2], output_dir = output_dir)
 
-            jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "jackknife")
+            jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "data")
 
             # When multiple conditions exist, result is Vector{ErpData}, otherwise single ErpData
             if jk1 isa Vector

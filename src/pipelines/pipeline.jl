@@ -96,7 +96,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 # Save the original data in Julia format
                 if cfg["files"]["output"]["save_continuous_data"]
                     @info "Saving continuous data"
-                    jldsave(make_output_filename(output_directory, data_file, "_continuous"); dat = dat)
+                    jldsave(make_output_filename(output_directory, data_file, "_continuous"); data = dat)
                 end
 
                 # Mark epoch windows
@@ -145,12 +145,12 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
-                    jldsave(make_output_filename(output_directory, data_file, "_epochs_all"); epochs = epochs_original)
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_all"); data = epochs_original)
                 end
 
                 if cfg["files"]["output"]["save_erp_data_original"]
                     @info "Saving ERP data (original)"
-                    jldsave(make_output_filename(output_directory, data_file, "_erps_all"); erps = erps_original)
+                    jldsave(make_output_filename(output_directory, data_file, "_erps_all"); data = erps_original)
                 end
 
                 ############################### INITIAL ARTIFACT DETECTION ###############################
@@ -273,7 +273,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
                         @info "Saving ica data"
-                        jldsave(make_output_filename(output_directory, data_file, "_ica"); ica = ica)
+                        jldsave(make_output_filename(output_directory, data_file, "_ica"); data = ica)
                     end
 
                 end
@@ -308,7 +308,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 # Save the original data in Julia format
                 if cfg["files"]["output"]["save_continuous_data"]
                     @info "Saving continuous data"
-                    jldsave(make_output_filename(output_directory, data_file, "_continuous_cleaned"); dat = dat)
+                    jldsave(make_output_filename(output_directory, data_file, "_continuous_cleaned"); data = dat)
                 end
 
                 #################### EPOCH EXTRACTION ###################
@@ -354,7 +354,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     continuous_repair_info !== nothing ? [continuous_repair_info] : ContinuousRepairInfo[],
                     vcat(rejection_step1, rejection_info_step2),
                 )
-                jldsave(make_output_filename(output_directory, data_file, "_artifact_info"); artifact_info = artifact_info)
+                jldsave(make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
                 @info "Saved artifact info: $(artifact_info)"
 
                 #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
@@ -364,17 +364,14 @@ function preprocess(config::String; log_level::Symbol = :info)
                 #################### SAVE EPOCH DATA ###################
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
                     @info "Saving epoch data (cleaned)"
-                    jldsave(
-                        make_output_filename(output_directory, data_file, "_epochs_cleaned");
-                        epochs = epochs,
-                    )
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_cleaned"); data = epochs)
                 end
 
                 #################### SAVE ERP DATA ###################
                 if cfg["files"]["output"]["save_erp_data_cleaned"]
                     erps = average_epochs(epochs)
                     @info "Saving ERP data (cleaned)"
-                    jldsave(make_output_filename(output_directory, data_file, "_erps_cleaned"); erps = erps)
+                    jldsave(make_output_filename(output_directory, data_file, "_erps_cleaned"); data = erps)
                 end
 
                 @info section("End of Processing")
@@ -398,7 +395,7 @@ function preprocess(config::String; log_level::Symbol = :info)
         if !isempty(all_epoch_counts)
             combined_counts = vcat(all_epoch_counts...)
             log_pretty_table(combined_counts, title = "Combined epoch counts across all files:")
-            jldsave(joinpath(output_directory, "epoch_summary.jld2"); df = combined_counts)
+            jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = combined_counts)
         end
 
     finally

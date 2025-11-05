@@ -386,7 +386,7 @@ using JLD2
                         eegfun.AnalysisInfo(),
                     )
 
-                    save(joinpath(tmpdir, "$(i)_continuous.jld2"), "data", continuous)
+                    jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
                 end
 
                 # Create output directory
@@ -428,7 +428,7 @@ using JLD2
                         eegfun.AnalysisInfo(),
                     )
 
-                    save(joinpath(tmpdir, "$(i)_epochs.jld2"), "epochs", epoch_data)
+                    jldsave(joinpath(tmpdir, "$(i)_epochs.jld2"); data = epoch_data)
                 end
 
                 output_dir = joinpath(tmpdir, "resampled")
@@ -440,7 +440,7 @@ using JLD2
                 @test isfile(joinpath(output_dir, "1_epochs.jld2"))
 
                 # Load and verify
-                resampled = load(joinpath(output_dir, "1_epochs.jld2"), "epochs")
+                resampled = load(joinpath(output_dir, "1_epochs.jld2"), "data")
                 @test resampled isa eegfun.EpochData
                 @test resampled.sample_rate == 128
                 @test nrow(resampled.data[1]) == 128
@@ -459,7 +459,7 @@ using JLD2
                         256,
                         eegfun.AnalysisInfo(),
                     )
-                    save(joinpath(tmpdir, "$(i)_continuous.jld2"), "data", continuous)
+                    jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
                 end
 
                 output_dir = joinpath(tmpdir, "resampled")

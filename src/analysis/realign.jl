@@ -288,7 +288,7 @@ function _process_realign_file(filepath::String, output_path::String, realignmen
         realigned_epochs = realign(epochs_data, realignment_column)
 
         # Save results
-        save(output_path, "epochs", realigned_epochs)
+        jldsave(output_path; data = realigned_epochs)
 
         n_epochs = length(realigned_epochs.data)
         n_samples = nrow(realigned_epochs.data[1])

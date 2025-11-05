@@ -126,6 +126,7 @@ Load ERP/LRP data from multiple files and organize by condition.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
 """
 function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, conditions, data_var::String)
+    # data_var parameter kept for backwards compatibility but not used - load_data() finds by type
     all_erps_by_condition = Dict{Int,Vector{ErpData}}()
     participant_ids = Int[]
 
@@ -138,15 +139,19 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
         participant_id = m !== nothing ? parse(Int, m.captures[1]) : i
         push!(participant_ids, participant_id)
 
-        # Load data
-        file_data = load(input_path)
-
-        if !haskey(file_data, data_var)
-            @minimal_warning "No '$data_var' variable found in $file. Skipping."
+        # Load data (using load_data which finds by type)
+        data = load_data(input_path)
+        
+        if isnothing(data)
+            @minimal_warning "No data variables found in $file. Skipping."
             continue
         end
-
-        data = file_data[data_var]
+        
+        # Validate that data is Vector{ErpData} or ErpData
+        if !(data isa Union{Vector{<:ErpData}, ErpData})
+            @minimal_warning "Invalid data type in $file: expected Vector{ErpData} or ErpData, got $(typeof(data)). Skipping."
+            continue
+        end
 
         # Handle both single ErpData and Vector{ErpData}
         if data isa ErpData
@@ -211,7 +216,7 @@ jackknife_results = jackknife_average(lrp_data)
 # etc.
 
 # Save results
-save("jackknife_lrp.jld2", "jackknife", jackknife_results)
+jldsave("jackknife_lrp.jld2"; data = jackknife_results)
 ```
 
 # Multiple Conditions
@@ -268,7 +273,7 @@ and creates jackknife (leave-one-out) averages for each participant and conditio
 - `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
 - `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
-- `data_var::String`: Variable name to load from JLD2 files (default: "lrp", can also use "erps")
+- `data_var::String`: Deprecated parameter kept for backwards compatibility. Data is now loaded using `load_data()` which finds data by type.
 
 # Examples
 ```julia
@@ -281,9 +286,8 @@ jackknife_average("lrp",
                   participants = 1:20,
                   conditions = [1, 2])
 
-# Process ERP data instead of LRP
+# Process ERP data (data is automatically detected by type)
 jackknife_average("erps_cleaned",
-                  data_var = "erps",
                   input_dir = "/path/to/data")
 
 # Specify custom output directory
@@ -294,7 +298,7 @@ jackknife_average("lrp",
 # Output
 The function creates a new directory containing jackknifed data files:
 - One file per participant
-- Each file contains "jackknife" variable with jackknifed average(s)
+- Each file contains "data" variable with jackknifed average(s)
 - If multiple conditions exist, each file contains a Vector{ErpData} with one element per condition
 - Log file saved to output directory
 
@@ -310,7 +314,7 @@ jackknife_average("lrp")
 # 3. Results are in jackknife_lrp/ directory
 # Load and analyze:
 using JLD2
-participant_1_jackknife = load("jackknife_lrp/1_lrp.jld2", "jackknife")
+participant_1_jackknife = load("jackknife_lrp/1_lrp.jld2", "data")
 ```
 """
 function jackknife_average(
@@ -352,9 +356,8 @@ function jackknife_average(
         end
 
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        @info "Loading data using variable name: '$data_var'"
 
-        # Load and group data by condition
+        # Load and group data by condition (data_var parameter kept for backwards compatibility but not used)
         erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, conditions, data_var)
 
         if isempty(erps_by_condition)
@@ -408,7 +411,7 @@ function jackknife_average(
 
                 # If single condition, save as single ErpData, otherwise as Vector
                 data_to_save = length(participant_jackknife) == 1 ? participant_jackknife[1] : participant_jackknife
-                save(output_path, "jackknife", data_to_save)
+                jldsave(output_path; data = data_to_save)
 
                 @info "  Saved participant $participant_id: $output_file"
             end

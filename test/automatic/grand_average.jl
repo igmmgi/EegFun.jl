@@ -21,7 +21,7 @@ using DataFrames
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "grand_average")
@@ -38,7 +38,7 @@ using DataFrames
         grand_avg_file = joinpath(output_dir, "grand_average_erps_cleaned.jld2")
         @test isfile(grand_avg_file)
 
-        grand_averages = load(grand_avg_file, "grand_averages")
+        grand_averages = load(grand_avg_file, "data")
         @test length(grand_averages) == 3  # One for each condition
 
         # Verify grand average structure
@@ -59,7 +59,7 @@ using DataFrames
             eegfun.grand_average("erps_cleaned", input_dir = test_dir, participants = [1, 2, 3], output_dir = output_dir)
 
         @test isdir(output_dir)
-        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "grand_averages")
+        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
         @test length(grand_averages) == 3
 
         # Verify that only 3 participants were used (check n_epochs)
@@ -75,7 +75,7 @@ using DataFrames
         result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, conditions = [1, 2], output_dir = output_dir)
 
         @test isdir(output_dir)
-        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "grand_averages")
+        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
         @test length(grand_averages) == 2  # Only conditions 1 and 2
 
         # Verify condition numbers
@@ -97,15 +97,15 @@ using DataFrames
 
         # Load original data for verification
         erp1_file = joinpath(test_dir, "1_erps_cleaned.jld2")
-        erp1_data = load(erp1_file, "erps")
+        erp1_data = load(erp1_file, "data")
         erp1_cond1 = erp1_data[1]  # Condition 1 from participant 1
 
         erp2_file = joinpath(test_dir, "2_erps_cleaned.jld2")
-        erp2_data = load(erp2_file, "erps")
+        erp2_data = load(erp2_file, "data")
         erp2_cond1 = erp2_data[1]  # Condition 1 from participant 2
 
         # Load grand average
-        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "grand_averages")
+        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
         grand_avg_cond1 = grand_averages[1]
 
         # Verify grand average is actually the mean of the two ERPs
@@ -138,7 +138,7 @@ using DataFrames
         @testset "Files with no ERP data" begin
             # Create file with no 'erps' variable
             no_erps_file = joinpath(test_dir, "no_erps_cleaned.jld2")
-            save(no_erps_file, "other_data", "test")
+            jldsave(no_erps_file; other_data = "test")
 
             output_dir = joinpath(test_dir, "grand_average_no_erps")
 
@@ -172,7 +172,7 @@ using DataFrames
             ]
 
             file_path = joinpath(test_dir, "5_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
 
             output_dir = joinpath(test_dir, "grand_average_insufficient")
 
@@ -185,14 +185,14 @@ using DataFrames
 
             # Should create grand averages for all conditions
             @test isdir(output_dir)
-            grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "grand_averages")
+            grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
             @test length(grand_averages) == 3  # All conditions
         end
 
         @testset "Empty ERP data" begin
             # Create file with empty ERP list
             empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
-            save(empty_file, "erps", eegfun.ErpData[])
+            jldsave(empty_file; data = eegfun.ErpData[])
 
             output_dir = joinpath(test_dir, "grand_average_empty")
 
@@ -218,7 +218,7 @@ using DataFrames
             output_dir = output_dir,
         )
 
-        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "grand_averages")
+        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
         grand_avg = grand_averages[1]
 
         # Verify ErpData structure
@@ -285,14 +285,14 @@ using DataFrames
         for participant = 1:3
             erps = [create_test_erp_data(participant, 1)]
             file_path = joinpath(test_dir, "$(participant)_single_cond_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         # Only 2 participants have condition 2
         for participant = 1:2
             erps = [create_test_erp_data(participant, 2)]
             file_path = joinpath(test_dir, "$(participant)_cond2_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "grand_average_different_counts")
@@ -300,7 +300,7 @@ using DataFrames
         result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
         @test isdir(output_dir)
-        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "grand_averages")
+        grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
 
         # Should have grand averages for all conditions
         @test length(grand_averages) == 3

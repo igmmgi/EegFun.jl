@@ -16,7 +16,7 @@ using Statistics
             for participant in [1, 2]
                 erps = create_batch_test_erp_data(2; n_channels = 7)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-                save(filename, "erps", erps)
+                jldsave(filename; data = erps)
                 @test isfile(filename)
             end
         end
@@ -42,7 +42,7 @@ using Statistics
             @test isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
 
             # Load and verify combined data
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test length(erps) == 2  # 2 conditions
             @test erps[1] isa eegfun.ErpData
 
@@ -71,7 +71,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
             @test hasproperty(erps[1].data, :Group2)
             @test !hasproperty(erps[1].data, :combined_1)
@@ -92,7 +92,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Should have metadata + only combined channels
             @test hasproperty(erps[1].data, :time)
@@ -155,7 +155,7 @@ using Statistics
             @test result.success == 2
 
             # Load and verify only one condition
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test length(erps) == 1
             @test erps[1].data[1, :condition] == 1
         end
@@ -173,7 +173,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test length(erps) == 2
         end
 
@@ -245,10 +245,10 @@ using Statistics
 
             # Create one valid file
             erps = create_batch_test_erp_data(2; n_channels = 7)
-            save(joinpath(partial_dir, "1_erps_cleaned.jld2"), "erps", erps)
+            jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
 
-            # Create one malformed file
-            save(joinpath(partial_dir, "2_erps_cleaned.jld2"), "invalid_var", erps)
+            # Create one malformed file (invalid data type - String instead of Vector{ErpData})
+            jldsave(joinpath(partial_dir, "2_erps_cleaned.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "combined_partial")
             result = eegfun.channel_combine(
@@ -308,7 +308,7 @@ using Statistics
                 eegfun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
             erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
-            save(joinpath(math_dir, "1_erps_math.jld2"), "erps", erps)
+            jldsave(joinpath(math_dir, "1_erps_math.jld2"); data = erps)
 
             # Combine
             output_dir = joinpath(test_dir, "combined_math")
@@ -320,7 +320,7 @@ using Statistics
                 output_dir = output_dir,
             )
 
-            erps_combined = load(joinpath(output_dir, "1_erps_math.jld2"), "erps")
+            erps_combined = load(joinpath(output_dir, "1_erps_math.jld2"), "data")
 
             # Expected average: [6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0]
             expected_avg = fill(6.0, 11)
@@ -331,7 +331,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_layout")
 
             # Get original layout info
-            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "erps")
+            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "data")
             original_n_channels = nrow(original_erps[1].layout.data)
 
             # Combine without reduce (should append to layout)
@@ -343,7 +343,7 @@ using Statistics
                 reduce = false,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Layout should have original channels + 1 combined
             @test nrow(erps[1].layout.data) == original_n_channels + 1
@@ -365,7 +365,7 @@ using Statistics
                 reduce = true,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Layout should only have 2 channels
             @test nrow(erps[1].layout.data) == 2
@@ -388,7 +388,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
             @test hasproperty(erps[1].data, :Group2)
             @test hasproperty(erps[1].data, :Group3)
@@ -411,7 +411,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
         end
 
@@ -430,7 +430,7 @@ using Statistics
 
             @test result.success == 1
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test length(erps) == 1
             @test !isfile(joinpath(output_dir, "2_erps_cleaned.jld2"))
         end
@@ -440,9 +440,9 @@ using Statistics
             mkpath(pattern_dir)
 
             erps = create_batch_test_erp_data(2; n_channels = 7)
-            save(joinpath(pattern_dir, "1_erps_original.jld2"), "erps", erps)
-            save(joinpath(pattern_dir, "2_erps_cleaned.jld2"), "erps", erps)
-            save(joinpath(pattern_dir, "3_custom_erps.jld2"), "erps", erps)
+            jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
 
             # Test pattern matching "erps_original"
             output_dir1 = joinpath(test_dir, "combined_original")
@@ -508,7 +508,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test hasproperty(erps[1].data, :not_Ch5)
             @test !hasproperty(erps[1].data, :Ch5)
             @test !hasproperty(erps[1].data, :Ch1)  # All original channels removed in reduce mode
@@ -520,7 +520,7 @@ using Statistics
             mkpath(epochs_dir)
 
             epochs = create_test_epoch_data()
-            save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", [epochs])
+            jldsave(joinpath(epochs_dir, "1_epochs.jld2"); data = [epochs])
 
             # Combine channels in epoch data
             output_dir = joinpath(test_dir, "combined_epochs")
@@ -534,7 +534,7 @@ using Statistics
 
             @test result.success == 1
 
-            epochs_combined = load(joinpath(output_dir, "1_epochs.jld2"), "epochs")
+            epochs_combined = load(joinpath(output_dir, "1_epochs.jld2"), "data")
             @test epochs_combined[1] isa eegfun.EpochData
             @test hasproperty(epochs_combined[1].data[1], :Group1)
             @test hasproperty(epochs_combined[1].data[1], :Ch1)  # Original channels preserved
@@ -546,7 +546,7 @@ using Statistics
             mkpath(invalid_dir)
 
             erps = create_batch_test_erp_data(1; n_channels = 7)
-            save(joinpath(invalid_dir, "1_erps.jld2"), "erps", erps)
+            jldsave(joinpath(invalid_dir, "1_erps.jld2"); data = erps)
 
             output_dir = joinpath(test_dir, "combined_invalid")
 
@@ -577,7 +577,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test hasproperty(erps[1].data, :Ch5_avg)
 
             # Single channel average should equal the original
@@ -599,14 +599,14 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Should only have metadata + global_avg
             @test hasproperty(erps[1].data, :global_avg)
             @test !hasproperty(erps[1].data, :Ch1)
 
             # Verify it's the average of all original channels
-            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "erps")
+            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "data")
             all_ch_data = hcat(
                 original_erps[1].data.Ch1,
                 original_erps[1].data.Ch2,
@@ -634,7 +634,7 @@ using Statistics
 
             @test result.success == 2
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test hasproperty(erps[1].data, :Group1)
             @test hasproperty(erps[1].data, :Group2)
 
@@ -649,7 +649,7 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_metadata_preserve")
 
             # Get original metadata
-            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "erps")
+            original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "data")
             original_fs = original_erps[1].sample_rate
 
             eegfun.channel_combine(
@@ -659,7 +659,7 @@ using Statistics
                 output_dir = output_dir,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Verify sample rate preserved
             @test erps[1].sample_rate == original_fs
@@ -705,7 +705,7 @@ using Statistics
             layout = eegfun.Layout(DataFrame(label = channel_names, inc = zeros(20), azi = zeros(20)), nothing, nothing)
 
             erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
-            save(joinpath(many_ch_dir, "1_erps_many.jld2"), "erps", erps)
+            jldsave(joinpath(many_ch_dir, "1_erps_many.jld2"); data = erps)
 
             # Combine into 4 groups
             output_dir = joinpath(test_dir, "combined_many_ch")
@@ -724,7 +724,7 @@ using Statistics
 
             @test result.success == 1
 
-            erps_combined = load(joinpath(output_dir, "1_erps_many.jld2"), "erps")
+            erps_combined = load(joinpath(output_dir, "1_erps_many.jld2"), "data")
             @test hasproperty(erps_combined[1].data, :Group1)
             @test hasproperty(erps_combined[1].data, :Group2)
             @test hasproperty(erps_combined[1].data, :Group3)
@@ -742,7 +742,7 @@ using Statistics
                 reduce = false,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Verify metadata columns still exist
             @test hasproperty(erps[1].data, :time)
@@ -763,7 +763,7 @@ using Statistics
                 reduce = true,
             )
 
-            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "erps")
+            erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Metadata should be preserved in reduce mode
             @test hasproperty(erps[1].data, :time)
@@ -781,7 +781,7 @@ using Statistics
 
             # Create file but select channels that result in empty selection
             erps = create_batch_test_erp_data(1; n_channels = 7)
-            save(joinpath(empty_dir, "1_erps.jld2"), "erps", erps)
+            jldsave(joinpath(empty_dir, "1_erps.jld2"); data = erps)
 
             # Use a predicate that selects nothing
             output_dir = joinpath(test_dir, "combined_empty")

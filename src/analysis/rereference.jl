@@ -156,7 +156,12 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     # Load data
     data = load_data(filepath)
     if isnothing(data)
-        return BatchResult(false, filename, "No recognized data variable")
+        return BatchResult(false, filename, "No data variables found")
+    end
+
+    # Validate that data is valid EEG data (Vector of ErpData or EpochData)
+    if !(data isa Vector{<:Union{ErpData,EpochData}})
+        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
     # Select conditions
@@ -165,11 +170,8 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     # Apply rereferencing (mutates data in-place)
     rereference!.(data, reference_selection)
 
-    # Determine variable name based on data type
-    var_name = data isa Vector{<:ErpData} ? "erps" : "epochs"
-
-    # Save
-    save(output_path, var_name, data)
+    # Save (always use "data" as variable name since load_data finds by type)
+    jldsave(output_path; data = data)
 
     ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
     return BatchResult(true, filename, "Rereferenced to $ref_str")

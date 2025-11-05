@@ -182,7 +182,7 @@ end
                 erps = create_batch_test_erp_data(2)
                 # Use filename format consistent with codebase (numeric participant ID)
                 filename = joinpath(test_dir, "$(participant)_erps.jld2")
-                save(filename, "erps", erps)
+                jldsave(filename; data = erps)
                 @test isfile(filename)
             end
         end
@@ -203,7 +203,7 @@ end
             @test isfile(joinpath(output_dir, "2_erps.jld2"))
 
             # Load and verify filtered data
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
+            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 2  # 2 conditions
             @test filtered_data[1] isa eegfun.ErpData
             @test hasproperty(filtered_data[1].data, :Ch1)
@@ -232,7 +232,7 @@ end
             @test result.success == 2
 
             # Load and verify only one condition
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
+            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 1
             @test filtered_data[1].data[1, :condition] == 1
         end
@@ -246,7 +246,7 @@ end
             @test result.errors == 0
 
             # Load and verify
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
+            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test filtered_data[1] isa eegfun.ErpData
         end
 
@@ -307,7 +307,7 @@ end
             @test result.success == 2
 
             # Load and verify both conditions are present
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
+            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 2
             @test filtered_data[1].data[1, :condition] == 1
             @test filtered_data[2].data[1, :condition] == 2
@@ -323,7 +323,7 @@ end
 
             # Save epoch data - create a vector of EpochData for batch processing
             epochs = [create_test_epoch_data(conditions = 1), create_test_epoch_data(conditions = 1)]
-            save(joinpath(epochs_dir, "1_epochs.jld2"), "epochs", epochs)
+            jldsave(joinpath(epochs_dir, "1_epochs.jld2"); data = epochs)
 
             # Filter epoch data
             output_dir = joinpath(test_dir, "filtered_epochs")
@@ -334,7 +334,7 @@ end
             @test isfile(joinpath(output_dir, "1_epochs.jld2"))
 
             # Load and verify
-            filtered_epochs = load(joinpath(output_dir, "1_epochs.jld2"), "epochs")
+            filtered_epochs = load(joinpath(output_dir, "1_epochs.jld2"), "data")
             @test filtered_epochs[1] isa eegfun.EpochData
             @test length(filtered_epochs) == 2  # 2 conditions
         end
@@ -361,10 +361,10 @@ end
 
             # Create one valid file
             erps = create_batch_test_erp_data(2)
-            save(joinpath(partial_dir, "1_erps.jld2"), "erps", erps)
+            jldsave(joinpath(partial_dir, "1_erps.jld2"); data = erps)
 
-            # Create one malformed file (wrong variable name)
-            save(joinpath(partial_dir, "2_erps.jld2"), "invalid_var", erps)
+            # Create one malformed file (invalid data type - String instead of Vector{ErpData})
+            jldsave(joinpath(partial_dir, "2_erps.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "filtered_partial")
             result = eegfun.filter("erps", 30.0, input_dir = partial_dir, output_dir = output_dir)
@@ -415,14 +415,14 @@ end
             output_dir = joinpath(test_dir, "filtered_integrity")
 
             # Get original data statistics
-            original_data = load(joinpath(test_dir, "1_erps.jld2"), "erps")
+            original_data = load(joinpath(test_dir, "1_erps.jld2"), "data")
             original_signal = original_data[1].data.Ch1
 
             # Apply low-pass filter
             eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             # Load filtered data
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
+            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             filtered_signal = filtered_data[1].data.Ch1
 
             # Check that high-frequency noise is reduced (lower std deviation)
@@ -451,7 +451,7 @@ end
             @test result.success == 1
 
             # Load and verify
-            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "erps")
+            filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 1  # Only one condition
             @test filtered_data[1].data[1, :condition] == 1
             @test !isfile(joinpath(output_dir, "2_erps.jld2"))  # Participant 2 not processed

@@ -283,7 +283,7 @@ end
         for participant = 1:3
             epoch_data = create_test_epoch_data_with_rt(participant, 1, 10, 200, 3)
             file_path = joinpath(test_dir, "$(participant)_epochs.jld2")
-            save(file_path, "epochs", epoch_data)
+            jldsave(file_path; data = epoch_data)
         end
 
         output_dir = joinpath(test_dir, "realigned_test")
@@ -301,7 +301,7 @@ end
         @test "3_epochs.jld2" in output_files
 
         # Load and verify one file
-        realigned = load(joinpath(output_dir, "1_epochs.jld2"), "epochs")
+        realigned = load(joinpath(output_dir, "1_epochs.jld2"), "data")
         @test realigned isa eegfun.EpochData
 
         # Check that RT is now 0

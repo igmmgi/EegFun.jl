@@ -57,7 +57,7 @@ lrp_data = lrp(erps[1], erps[2],
 using JLD2
 erps = load("participant_05_erps.jld2", "erps")
 lrp_result = lrp(erps[1], erps[2], channel_selection = channels([:C3]))
-save("participant_05_lrp.jld2", "lrp", lrp_result)
+jldsave("participant_05_lrp.jld2"; data = lrp_result)
 ```
 
 # References
@@ -267,14 +267,17 @@ function _process_lrp_file(
 )
     filename = basename(filepath)
 
-    # Load data
-    file_data = load(filepath)
-
-    if !haskey(file_data, "erps")
-        return BatchResult(false, filename, "No 'erps' variable found")
+    # Load data (using load_data which finds by type)
+    erps_data = load_data(filepath)
+    
+    if isnothing(erps_data)
+        return BatchResult(false, filename, "No data variables found")
     end
-
-    erps_data = file_data["erps"]
+    
+    # Validate that data is Vector{ErpData}
+    if !(erps_data isa Vector{<:ErpData})
+        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData}, got $(typeof(erps_data))")
+    end
 
     if isempty(erps_data)
         return BatchResult(false, filename, "Empty erps array")
@@ -285,7 +288,7 @@ function _process_lrp_file(
         lrp_results = lrp(erps_data, condition_pairs; channel_selection = channel_selection)
 
         # Save results
-        save(output_path, "lrp", lrp_results)
+        jldsave(output_path; data = lrp_results)
 
         return BatchResult(true, filename, "Calculated LRP for $(length(lrp_results)) pair(s)")
     catch e
@@ -437,7 +440,7 @@ lrp_results = lrp(erps, pairs,
                   channel_selection = channels(x -> startswith.(string.(x), "C")))
 
 # Save results
-save("participant_05_lrp.jld2", "lrp", lrp_results)
+jldsave("participant_05_lrp.jld2"; data = lrp_results)
 ```
 """
 function lrp(

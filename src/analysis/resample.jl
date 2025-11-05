@@ -333,8 +333,8 @@ function _process_resample_file(filepath::String, output_path::String, factor::I
         resampled_data = resample(loaded_data, factor)
         new_rate = resampled_data.sample_rate
 
-        # Save results using original variable name
-        save(output_path, data_var_name, resampled_data)
+        # Save results (always use "data" as variable name since load_data finds by type)
+        jldsave(output_path; data = resampled_data)
 
         message = "Resampled from $old_rate Hz to $new_rate Hz (factor: $factor)"
         return BatchResult(true, filename, message)
