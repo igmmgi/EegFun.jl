@@ -82,7 +82,7 @@ using eegfun
         settings = eegfun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, [(0.1, 0.3), (0.5, 0.7)], Int[])
         eegfun.apply_analysis_settings!(dat, settings)
         @test hasproperty(dat.data, :selected_region)
-        @test isa(dat.data.selected_region, Vector{Bool})
+        @test dat.data.selected_region isa AbstractVector{Bool}
         @test length(dat.data.selected_region) == nrow(dat.data)
 
         # Test 8: Combined settings
@@ -167,7 +167,7 @@ using eegfun
         eegfun.apply_analysis_settings!(dat, ica_result, settings)
         # After removing 1 component, should still have same number of channels
         # (ICA removal affects data values, not channel count)
-        @test length(eegfun.channels(dat)) == original_n_channels
+        @test eegfun.n_channels(dat) == original_n_channels
 
         # Test with all settings including ICA
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 3)
