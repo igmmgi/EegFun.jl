@@ -17,7 +17,7 @@ using CSV
             erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "measurements")
@@ -55,7 +55,7 @@ using CSV
             erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "measurements_types")
@@ -96,7 +96,7 @@ using CSV
             epochs = create_test_epoch_data(conditions = 2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
-            save(file_path, "epochs", epochs)
+            jldsave(file_path; data = epochs)
         end
 
         output_dir = joinpath(test_dir, "measurements_epochs")
@@ -122,7 +122,7 @@ using CSV
             erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "measurements_filtered")
@@ -162,7 +162,7 @@ using CSV
             erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "measurements_channels")
@@ -190,7 +190,7 @@ using CSV
             erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "measurements_baseline")
@@ -281,7 +281,7 @@ using CSV
         @testset "Empty data files" begin
             # Create file with empty data
             empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
-            save(empty_file, "erps", eegfun.ErpData[])
+            jldsave(empty_file; data = eegfun.ErpData[])
 
             output_dir = joinpath(test_dir, "measurements_empty")
 
@@ -300,7 +300,7 @@ using CSV
         @testset "Files with no recognized data variable" begin
             # Create file with unrecognized variable
             unrecognized_file = joinpath(test_dir, "unrecognized_erps_cleaned.jld2")
-            save(unrecognized_file, "other_data", "test")
+            jldsave(unrecognized_file; other_data = "test")
 
             output_dir = joinpath(test_dir, "measurements_unrecognized")
 

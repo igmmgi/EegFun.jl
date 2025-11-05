@@ -142,17 +142,17 @@ function _process_measurements_file(
     # Extract participant ID
     participant = _extract_participant_id(filename)
 
-    # Load data
-    file_data = load(filepath)
-
-    # Determine data type
-    data_var = nothing
-    if haskey(file_data, "erps")
-        data_var = file_data["erps"]
-    elseif haskey(file_data, "epochs")
-        data_var = file_data["epochs"]
-    else
-        @minimal_warning "No recognized data variable in $filename"
+    # Load data (using load_data which finds by type)
+    data_var = load_data(filepath)
+    
+    if isnothing(data_var)
+        @minimal_warning "No data variables found in $filename"
+        return nothing
+    end
+    
+    # Validate that data is Vector of ErpData or EpochData
+    if !(data_var isa Vector{<:Union{ErpData,EpochData}})
+        @minimal_warning "Invalid data type in $filename: expected Vector{ErpData} or Vector{EpochData}, got $(typeof(data_var))"
         return nothing
     end
 

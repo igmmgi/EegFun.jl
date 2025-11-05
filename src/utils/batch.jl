@@ -60,14 +60,18 @@ Load data from JLD2 file, returning the data directly, a Dict of all variables, 
 - If file is empty: returns `nothing`
 """
 function load_data(filepath::String)
-    file_data = load(filepath)
-    keys_list = collect(keys(file_data))
-    isempty(keys_list) && return nothing
-    
-    if length(keys_list) == 1
-        return file_data[keys_list[1]]
-    else
-        return Dict(k => file_data[k] for k in keys_list)
+    # Use jldopen to properly access variables by name
+    jldopen(filepath, "r") do file
+        keys_list = collect(keys(file))
+        isempty(keys_list) && return nothing
+        
+        if length(keys_list) == 1
+            # Single variable - return it directly
+            return file[keys_list[1]]
+        else
+            # Multiple variables - return a Dict
+            return Dict(k => file[k] for k in keys_list)
+        end
     end
 end
 
@@ -239,6 +243,7 @@ function _log_batch_summary(results::Vector{BatchResult}, output_dir::String)
     n_success = count(r -> r.success, results)
     n_error = length(results) - n_success
 
+    @info ""
     @info "Batch operation complete! Processed $n_success files successfully, $n_error errors"
     @info "Output saved to: $output_dir"
 

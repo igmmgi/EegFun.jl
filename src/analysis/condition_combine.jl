@@ -31,17 +31,19 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
     filename = basename(filepath)
 
     # Load data
-    file_data = load(filepath)
-
-    if !haskey(file_data, "epochs")
-        return BatchResult(false, filename, "No 'epochs' variable found")
+    data = load_data(filepath)
+    if isnothing(data)
+        return BatchResult(false, filename, "No data variables found")
     end
 
-    data = file_data["epochs"]
+    # Validate that data is valid EEG data (Vector of EpochData)
+    if !(data isa Vector{<:EpochData})
+        return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
+    end
     max_condition = length(data)
 
     # Combine conditions for epochs
-    combined_data = Vector{Any}()
+    combined_data = EpochData[]
 
     for (group_idx, original_conditions) in enumerate(condition_groups)
         # Validate that all requested conditions exist
@@ -77,8 +79,8 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
         push!(combined_data, combined_epochs)
     end
 
-    # Save
-    save(output_path, "epochs", combined_data)
+    # Save (always use "data" as variable name since load_data finds by type)
+    jldsave(output_path; data = combined_data)
 
     n_groups = length(condition_groups)
     total_epochs = sum(length(cond.data) for cond in combined_data)
@@ -134,7 +136,8 @@ function condition_combine(
     setup_global_logging(log_file)
 
     try
-        @info "Batch condition combining started at $(now())"
+
+        @info ""
         @log_call "condition_combine" (file_pattern, condition_groups)
 
         # Validation (early return on error)
@@ -164,8 +167,9 @@ function condition_combine(
             return nothing
         end
 
+        @info ""
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        @info "Condition groups: $condition_groups"
+        @info "Condition groups: $condition_groups\n"
 
         # Create processing function with captured parameters
         process_fn =

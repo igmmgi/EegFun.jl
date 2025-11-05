@@ -737,7 +737,7 @@ info = detect_bad_epochs_automatic(epochs, z_criterion = 2.0)
 reject_epochs!(epochs, info)
 
 # Save cleaned data
-save("participant_1_cleaned.jld2", "epochs", epochs)
+jldsave("participant_1_cleaned.jld2"; data = epochs)
 ```
 """
 function reject_epochs!(dat::EpochData, info::EpochRejectionInfo)::EpochData
@@ -1049,13 +1049,15 @@ function _process_average_file(filepath::String, output_path::String, conditions
     filename = basename(filepath)
 
     # Load data
-    file_data = load(filepath)
-
-    if !haskey(file_data, "epochs")
-        return BatchResult(false, filename, "No 'epochs' variable found")
+    epochs_data = load_data(filepath)
+    if isnothing(epochs_data)
+        return BatchResult(false, filename, "No data variables found")
     end
 
-    epochs_data = file_data["epochs"]
+    # Validate that data is valid EEG data (Vector of EpochData)
+    if !(epochs_data isa Vector{<:EpochData})
+        return BatchResult(false, filename, "Invalid data type: expected Vector{EpochData}")
+    end
 
     # Select conditions
     epochs_data = _condition_select(epochs_data, conditions)
@@ -1063,8 +1065,8 @@ function _process_average_file(filepath::String, output_path::String, conditions
     # Average epochs for each condition
     erps_data = average_epochs.(epochs_data)
 
-    # Save
-    save(output_path, "erps", erps_data)
+    # Save (always use "data" as variable name since load_data finds by type)
+    jldsave(output_path; data = erps_data)
 
     return BatchResult(true, filename, "Averaged $(length(erps_data)) condition(s)")
 end
@@ -1149,7 +1151,14 @@ function average_epochs(
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
         # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> _process_average_file(input_path, output_path, conditions)
+        # Transform output filenames: replace "epochs" with "erps"
+        process_fn = (input_path, output_path) -> begin
+            # Transform filename: replace "epochs" with "erps" in the output filename
+            output_file = basename(output_path)
+            transformed_file = replace(output_file, "epochs" => "erps")
+            transformed_output_path = joinpath(dirname(output_path), transformed_file)
+            _process_average_file(input_path, transformed_output_path, conditions)
+        end
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Averaging")

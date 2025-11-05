@@ -140,7 +140,7 @@ clean_data = EpochData(
 )
 
 # Save
-save("participant_1_epochs_cleaned.jld2", "epochs", clean_data)
+jldsave("participant_1_epochs_cleaned.jld2"; data = clean_data)
 ```
 
 # Interactive Controls

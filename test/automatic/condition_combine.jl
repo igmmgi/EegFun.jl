@@ -16,7 +16,7 @@ using Statistics
             for participant in [1, 2, 3]
                 epochs = create_test_epoch_data(conditions = 4)  # 4 conditions, 3 epochs each
                 filename = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
-                save(filename, "epochs", epochs)
+                jldsave(filename; data = epochs)
                 @test isfile(filename)
             end
         end
@@ -43,7 +43,7 @@ using Statistics
             @test isfile(joinpath(output_dir, "3_epochs_cleaned.jld2"))
 
             # Load and verify combined data
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 2  # 2 groups
 
             # Check epoch counts: each group should have 6 epochs (3 from each original condition)
@@ -108,7 +108,7 @@ using Statistics
             @test result.success == 3
 
             # Load and verify
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 4  # 4 groups
 
             # Each group should have 3 epochs (original count)
@@ -131,7 +131,7 @@ using Statistics
 
             @test result.success == 3
 
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 3  # 3 groups
 
             # Check epoch counts
@@ -194,14 +194,14 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_integrity")
 
             # Get original epoch counts
-            original_epochs = load(joinpath(test_dir, "1_epochs_cleaned.jld2"), "epochs")
+            original_epochs = load(joinpath(test_dir, "1_epochs_cleaned.jld2"), "data")
             original_counts = [length(cond.data) for cond in original_epochs]
 
             # Combine conditions 1 and 2
             eegfun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
             # Load combined data
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
 
             # Verify total epoch count is preserved
             @test length(combined_epochs[1].data) == original_counts[1] + original_counts[2]
@@ -217,7 +217,7 @@ using Statistics
 
             eegfun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
 
             # Verify metadata columns exist
             @test hasproperty(combined_epochs[1].data[1], :time)
@@ -234,13 +234,13 @@ using Statistics
             output_dir = joinpath(test_dir, "combined_layout")
 
             # Get original metadata
-            original_epochs = load(joinpath(test_dir, "1_epochs_cleaned.jld2"), "epochs")
+            original_epochs = load(joinpath(test_dir, "1_epochs_cleaned.jld2"), "data")
             original_layout = original_epochs[1].layout
             original_fs = original_epochs[1].sample_rate
 
             eegfun.condition_combine("epochs_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
 
             # Verify layout and sample rate are preserved
             @test combined_epochs[1].layout.data == original_layout.data
@@ -256,7 +256,7 @@ using Statistics
             # Save and process
             var_dir = joinpath(test_dir, "var_epochs")
             mkpath(var_dir)
-            save(joinpath(var_dir, "1_epochs_var.jld2"), "epochs", dat)
+            jldsave(joinpath(var_dir, "1_epochs_var.jld2"); data = dat)
 
             output_dir = joinpath(test_dir, "combined_var")
             result = eegfun.condition_combine("epochs_var", [[1, 2]], input_dir = var_dir, output_dir = output_dir)
@@ -264,7 +264,7 @@ using Statistics
             @test result.success == 1
 
             # Load and verify epoch counts
-            combined_epochs = load(joinpath(output_dir, "1_epochs_var.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_var.jld2"), "data")
             @test length(combined_epochs) == 1
             @test length(combined_epochs[1].data) == 4  # 2 + 5 epochs
         end
@@ -294,7 +294,7 @@ using Statistics
 
             @test result.success == 3
 
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 4
 
             # Each group should have the same number of epochs as original
@@ -319,9 +319,9 @@ using Statistics
 
             # Verify log contains expected information
             log_contents = read(log_file, String)
-            @test contains(log_contents, "Batch condition combining started")
             @test contains(log_contents, "condition_combine")
             @test contains(log_contents, "epochs_cleaned")
+            @test contains(log_contents, "Found")
         end
 
         @testset "Output directory naming" begin
@@ -367,7 +367,7 @@ using Statistics
             @test result.success == 3
 
             # Load and verify - duplicates should be removed
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 2
 
             # Each group should have 6 epochs (3 from each unique condition)
@@ -389,7 +389,7 @@ using Statistics
             @test result.success == 3
 
             # Should create 2 groups (1 becomes [1] after removing duplicates)
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 2
 
             # First group should have 3 epochs (from condition 1), second group should have 6 epochs (from conditions 2+3)
@@ -459,7 +459,7 @@ using Statistics
             @test result.success == 3
 
             # Should create 3 groups (even though 2 are identical)
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 3
 
             # Each group should have 3 epochs
@@ -482,7 +482,7 @@ using Statistics
             @test result.success == 3
 
             # Should create 1 group with all epochs
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 1
             @test length(combined_epochs[1].data) == 40  # 3 epochs from each of 4 conditions
         end
@@ -525,7 +525,7 @@ using Statistics
             @test result.success == 3
 
             # Should create 8 groups (including duplicates)
-            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_cleaned.jld2"), "data")
             @test length(combined_epochs) == 8
         end
 
@@ -550,12 +550,8 @@ using Statistics
             missing_var_dir = joinpath(test_dir, "missing_var")
             mkpath(missing_var_dir)
 
-            # Create file with wrong variable name
-            save(
-                joinpath(missing_var_dir, "1_epochs_missing.jld2"),
-                "wrong_var",
-                create_test_epoch_data(conditions = 2),
-            )
+            # Create file with invalid data type (String instead of Vector{EpochData}) to test error handling
+            jldsave(joinpath(missing_var_dir, "1_epochs_missing.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "combined_missing_var")
             result = eegfun.condition_combine(
@@ -565,7 +561,7 @@ using Statistics
                 output_dir = output_dir,
             )
 
-            # Should fail for the file with missing epochs variable
+            # Should fail for the file with invalid data type
             @test result.success == 0
             @test result.errors == 1
         end
@@ -575,7 +571,7 @@ using Statistics
             mkpath(empty_epochs_dir)
 
             # Create file with empty epochs array
-            save(joinpath(empty_epochs_dir, "1_epochs_empty.jld2"), "epochs", eegfun.EpochData[])
+            jldsave(joinpath(empty_epochs_dir, "1_epochs_empty.jld2"); data = eegfun.EpochData[])
 
             output_dir = joinpath(test_dir, "combined_empty_epochs")
             result = eegfun.condition_combine(
@@ -597,7 +593,7 @@ using Statistics
 
             dat = create_test_epoch_data(conditions = 2, n_epochs = 3, n_channels = 1000)
 
-            save(joinpath(many_ch_dir, "1_epochs_many.jld2"), "epochs", dat)
+            jldsave(joinpath(many_ch_dir, "1_epochs_many.jld2"); data = dat)
 
             # Combine
             output_dir = joinpath(test_dir, "combined_many_ch")
@@ -606,7 +602,7 @@ using Statistics
 
             @test result.success == 1
 
-            combined_epochs = load(joinpath(output_dir, "1_epochs_many.jld2"), "epochs")
+            combined_epochs = load(joinpath(output_dir, "1_epochs_many.jld2"), "data")
 
             # Verify all channels are present
             # Verify epoch count

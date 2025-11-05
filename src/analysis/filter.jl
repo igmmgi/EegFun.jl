@@ -493,7 +493,12 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     # Load data
     data = load_data(filepath)
     if isnothing(data)
-        return BatchResult(false, filename, "No recognized data variable")
+        return BatchResult(false, filename, "No data variables found")
+    end
+
+    # Validate that data is valid EEG data (Vector of ErpData or EpochData)
+    if !(data isa Vector{<:Union{ErpData,EpochData}})
+        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
     # Select conditions
@@ -502,11 +507,8 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     # Apply filter (mutates data in-place)
     filter_data!.(data, filter_type, cutoff_freq)
 
-    # Determine variable name based on data type
-    var_name = data isa Vector{<:ErpData} ? "erps" : "epochs"
-
-    # Save
-    save(output_path, var_name, data)
+    # Save (always use "data" as variable name since load_data finds by type)
+    jldsave(output_path; data = data)
 
     return BatchResult(true, filename, "Filtered successfully")
 end

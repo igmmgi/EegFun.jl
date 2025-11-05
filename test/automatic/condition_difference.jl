@@ -22,7 +22,7 @@ using CSV
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "differences")
@@ -48,7 +48,7 @@ using CSV
         output_file = joinpath(output_dir, "1_erps_cleaned.jld2")
         @test isfile(output_file)
 
-        differences = load(output_file, "differences")
+        differences = load(output_file, "data")
         @test length(differences) == 2  # Two difference waves
 
         # Verify difference wave structure
@@ -104,7 +104,7 @@ using CSV
         ]
 
         file_path = joinpath(test_dir, "99_erps_cleaned.jld2")
-        save(file_path, "erps", erps)
+        jldsave(file_path; data = erps)
 
         output_dir = joinpath(test_dir, "differences_missing")
 
@@ -123,7 +123,7 @@ using CSV
         # Should have at least 1 file (participant 99), but might have more from other tests
         @test length(output_files) >= 1
 
-        differences = load(joinpath(output_dir, "99_erps_cleaned.jld2"), "differences")
+        differences = load(joinpath(output_dir, "99_erps_cleaned.jld2"), "data")
         @test length(differences) == 1  # Only one difference wave (1-2)
     end
 
@@ -162,10 +162,10 @@ using CSV
 
         # Load original and difference data
         original_file = joinpath(test_dir, "1_erps_cleaned.jld2")
-        original_erps = load(original_file, "erps")
+        original_erps = load(original_file, "data")
 
         diff_file = joinpath(output_dir, "1_erps_cleaned.jld2")
-        differences = load(diff_file, "differences")
+        differences = load(diff_file, "data")
 
         # Verify difference calculation
         erp1 = original_erps[1]  # Condition 1
@@ -204,7 +204,7 @@ using CSV
             # but it might not due to a bug in the condition finding logic
             output_files = readdir(output_dir)
             if "1_erps_cleaned.jld2" in output_files
-                differences = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "differences")
+                differences = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
                 @test length(differences) == 1
 
                 # Verify difference is zero
@@ -236,7 +236,7 @@ using CSV
         @testset "Empty ERP data" begin
             # Create file with empty ERP list
             empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
-            save(empty_file, "erps", eegfun.ErpData[])
+            jldsave(empty_file; data = eegfun.ErpData[])
 
             output_dir = joinpath(test_dir, "differences_empty")
 

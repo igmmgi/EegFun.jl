@@ -234,7 +234,7 @@ end # eegfun testset
             for participant in [1, 2]
                 erps = create_batch_test_erp_data(2)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-                save(filename, "erps", erps)
+                jldsave(filename; data = erps)
                 @test isfile(filename)
             end
         end
@@ -440,10 +440,10 @@ end # eegfun testset
 
             # Create one valid file
             erps = create_batch_test_erp_data(2)
-            save(joinpath(partial_dir, "1_erps_cleaned.jld2"), "erps", erps)
+            jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
 
-            # Create one malformed file (wrong variable name)
-            save(joinpath(partial_dir, "2_erps_cleaned.jld2"), "invalid_var", erps)
+            # Create one malformed file (invalid data type - String instead of Vector{ErpData})
+            jldsave(joinpath(partial_dir, "2_erps_cleaned.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "summary_partial")
             eegfun.channel_summary("erps_cleaned", input_dir = partial_dir, output_dir = output_dir)
@@ -498,7 +498,7 @@ end # eegfun testset
             )
 
             erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
-            save(joinpath(stats_dir, "1_erps_stats.jld2"), "erps", erps)
+            jldsave(joinpath(stats_dir, "1_erps_stats.jld2"); data = erps)
 
             # Process
             output_dir = joinpath(test_dir, "summary_stats")
@@ -557,9 +557,9 @@ end # eegfun testset
             mkpath(pattern_dir)
 
             erps = create_batch_test_erp_data(2)
-            save(joinpath(pattern_dir, "1_erps_original.jld2"), "erps", erps)
-            save(joinpath(pattern_dir, "2_erps_cleaned.jld2"), "erps", erps)
-            save(joinpath(pattern_dir, "3_custom_erps.jld2"), "erps", erps)
+            jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
+            jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
 
             # Test pattern matching "erps_original"
             output_dir1 = joinpath(test_dir, "summary_original")
@@ -640,7 +640,7 @@ end # eegfun testset
             layout = eegfun.Layout(DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10)), nothing, nothing)
 
             erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
-            save(joinpath(many_ch_dir, "1_erps_many.jld2"), "erps", erps)
+            jldsave(joinpath(many_ch_dir, "1_erps_many.jld2"); data = erps)
 
             # Process
             output_dir = joinpath(test_dir, "summary_many_ch")

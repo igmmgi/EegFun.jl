@@ -88,15 +88,19 @@ function _load_and_group_erps(files::Vector{String}, input_dir::String, conditio
         input_path = joinpath(input_dir, file)
         @info "Loading: $file ($i/$(length(files)))"
 
-        # Load ERP data
-        file_data = load(input_path)
-
-        if !haskey(file_data, "erps")
-            @minimal_warning "No 'erps' variable found in $file. Skipping."
+        # Load ERP data (using load_data which finds by type)
+        erps_data = load_data(input_path)
+        
+        if isnothing(erps_data)
+            @minimal_warning "No data variables found in $file. Skipping."
             continue
         end
-
-        erps_data = file_data["erps"]
+        
+        # Validate that data is Vector{ErpData}
+        if !(erps_data isa Vector{<:ErpData})
+            @minimal_warning "Invalid data type in $file: expected Vector{ErpData}, got $(typeof(erps_data)). Skipping."
+            continue
+        end
 
         # Select conditions
         erps_data = _condition_select(erps_data, conditions)
@@ -240,7 +244,7 @@ function grand_average(
         # Save grand averages
         output_file = "grand_average_$(file_pattern).jld2"
         output_path = joinpath(output_dir, output_file)
-        save(output_path, "grand_averages", grand_averages)
+        jldsave(output_path; data = grand_averages)
 
         @info "Grand averaging complete! Created $(length(grand_averages)) grand averages"
         @info "Output saved to: $output_path"

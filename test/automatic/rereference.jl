@@ -64,7 +64,7 @@ end
             erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
-            save(file_path, "erps", erps)
+            jldsave(file_path; data = erps)
         end
 
         output_dir = joinpath(test_dir, "rereferenced")
@@ -86,7 +86,7 @@ end
         output_file = joinpath(output_dir, "1_erps_cleaned.jld2")
         @test isfile(output_file)
 
-        rereferenced_erps = load(output_file, "erps")
+        rereferenced_erps = load(output_file, "data")
         @test length(rereferenced_erps) == 2  # Two conditions
 
         # Verify data structure is preserved
@@ -167,7 +167,7 @@ end
             epochs = create_test_epoch_data(conditions = 2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
-            save(file_path, "epochs", epochs)
+            jldsave(file_path; data = epochs)
         end
 
         output_dir = joinpath(test_dir, "rereferenced_epochs")
@@ -185,7 +185,7 @@ end
 
         # Load and verify epoch data structure
         output_file = joinpath(output_dir, "1_epochs_cleaned.jld2")
-        rereferenced_epochs = load(output_file, "epochs")
+        rereferenced_epochs = load(output_file, "data")
         @test length(rereferenced_epochs) == 2  # Two conditions
 
         for epoch_data in rereferenced_epochs
@@ -226,7 +226,7 @@ end
 
         # Verify only condition 1 was processed
         output_file = joinpath(output_dir2, "1_erps_cleaned.jld2")
-        rereferenced_erps = load(output_file, "erps")
+        rereferenced_erps = load(output_file, "data")
         @test length(rereferenced_erps) == 1  # Only condition 1
         @test rereferenced_erps[1].condition == 1
     end
@@ -247,7 +247,7 @@ end
         @testset "Files with no recognized data variable" begin
             # Create file with unrecognized variable and non-matching participant
             unrecognized_file = joinpath(test_dir, "999_unrecognized_erps_cleaned.jld2")
-            save(unrecognized_file, "other_data", "test")
+            jldsave(unrecognized_file; other_data = "test")
 
             output_dir = joinpath(test_dir, "rereferenced_unrecognized")
 
@@ -269,7 +269,7 @@ end
         @testset "Empty data files" begin
             # Create file with empty data
             empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
-            save(empty_file, "erps", eegfun.ErpData[])
+            jldsave(empty_file; data = eegfun.ErpData[])
 
             output_dir = joinpath(test_dir, "rereferenced_empty")
 
@@ -317,11 +317,11 @@ end
 
         # Load original and rereferenced data
         original_file = joinpath(test_dir, "1_erps_cleaned.jld2")
-        original_erps = load(original_file, "erps")
+        original_erps = load(original_file, "data")
         original_erp = original_erps[1]  # Condition 1
 
         rereferenced_file = joinpath(output_dir, "1_erps_cleaned.jld2")
-        rereferenced_erps = load(rereferenced_file, "erps")
+        rereferenced_erps = load(rereferenced_file, "data")
         rereferenced_erp = rereferenced_erps[1]  # Condition 1
 
         # Verify metadata is preserved
@@ -404,11 +404,11 @@ end
 
         # Load original and rereferenced data
         original_file = joinpath(test_dir, "1_erps_cleaned.jld2")
-        original_erps = load(original_file, "erps")
+        original_erps = load(original_file, "data")
         original_erp = original_erps[1]
 
         rereferenced_file = joinpath(output_dir, "1_erps_cleaned.jld2")
-        rereferenced_erps = load(rereferenced_file, "erps")
+        rereferenced_erps = load(rereferenced_file, "data")
         rereferenced_erp = rereferenced_erps[1]
 
         # Verify average reference calculation
