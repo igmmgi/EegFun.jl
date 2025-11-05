@@ -37,35 +37,6 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 # Base type for data states
 abstract type AbstractDataState end
 
-# Analysis step tracking
-"""
-    AnalysisSettings
-
-Stores the final analysis settings applied by the user in the databrowser.
-
-# Fields
-- `hp_filter::Float64`: High-pass filter frequency (0.0 if not applied)
-- `lp_filter::Float64`: Low-pass filter frequency (0.0 if not applied)
-- `reference::Symbol`: Reference type used (:avg, :mastoid, :none, or channel name)
-- `repaired_channels::Vector{Symbol}`: List of channels that were repaired
-- `repair_method::Symbol`: Repair method used for all repaired channels
-- `selected_regions::Vector{Tuple{Float64,Float64}}`: Time regions selected by user
-- `removed_ica_components::Vector{Int}`: ICA components that were removed
-"""
-struct AnalysisSettings
-    hp_filter::Float64
-    lp_filter::Float64
-    reference::Symbol
-    repaired_channels::Vector{Symbol}
-    repair_method::Symbol  # Single repair method for all repaired channels
-    selected_regions::Vector{Tuple{Float64,Float64}}
-    removed_ica_components::Vector{Int}
-end
-
-AnalysisSettings() = AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
-
-# Analysis step recording functions will be defined after DataBrowserState
-
 # Data Browser: Continuous Data
 mutable struct Marker
     data::Any
@@ -278,6 +249,20 @@ function _add_selected_regions!(dat::EegData, selected_regions::Vector{Tuple{Flo
     end
     dat.data[!, :selected_region] = selected_mask
 
+end
+
+# EpochData version - apply to each epoch DataFrame
+function _add_selected_regions!(dat::EpochData, selected_regions::Vector{Tuple{Float64,Float64}})
+    for epoch_df in dat.data
+        # Create boolean vector for this epoch
+        selected_mask = falses(nrow(epoch_df))
+        for (start_time, end_time) in selected_regions
+            region_mask = (epoch_df.time .>= start_time) .& (epoch_df.time .<= end_time)
+            selected_mask .|= region_mask
+        end
+        epoch_df[!, :selected_region] = selected_mask
+    end
+    return nothing
 end
 
 

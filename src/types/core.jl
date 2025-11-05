@@ -53,6 +53,32 @@ settings that affect the interpretation of the data.
     lp_filter::Float64 = 0.0
 end
 
+"""
+    AnalysisSettings
+
+Stores the final analysis settings applied by the user in the databrowser.
+
+# Fields
+- `hp_filter::Float64`: High-pass filter frequency (0.0 if not applied)
+- `lp_filter::Float64`: Low-pass filter frequency (0.0 if not applied)
+- `reference::Symbol`: Reference type used (:avg, :mastoid, :none, or channel name)
+- `repaired_channels::Vector{Symbol}`: List of channels that were repaired
+- `repair_method::Symbol`: Repair method used for all repaired channels
+- `selected_regions::Vector{Tuple{Float64,Float64}}`: Time regions selected by user
+- `removed_ica_components::Vector{Int}`: ICA components that were removed
+"""
+struct AnalysisSettings
+    hp_filter::Float64
+    lp_filter::Float64
+    reference::Symbol
+    repaired_channels::Vector{Symbol}
+    repair_method::Symbol  # Single repair method for all repaired channels
+    selected_regions::Vector{Tuple{Float64,Float64}}
+    removed_ica_components::Vector{Int}
+end
+
+AnalysisSettings() = AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
+
 # === LAYOUT TYPES ===
 """
     Neighbours
