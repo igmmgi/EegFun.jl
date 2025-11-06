@@ -9,6 +9,12 @@ using DataFrames
 @testset "Batch Utils" begin
     # Create temporary test directory
     test_dir = mktempdir()
+    
+    # Save initial global logger state to restore later
+    initial_logger = global_logger()
+    
+    # Track log files created in current directory for cleanup
+    created_log_files = String[]
 
     @testset "BatchResult struct" begin
         # Test BatchResult creation and access
@@ -373,6 +379,7 @@ using DataFrames
         # Create a dummy log file in current directory (as expected by _cleanup_logging)
         log_file = "test_cleanup.log"
         write(log_file, "Test log content")
+        push!(created_log_files, log_file)
 
         eegfun._cleanup_logging(log_file, output_dir)
 
@@ -383,6 +390,9 @@ using DataFrames
 
         # Clean up the moved file
         rm(moved_log, force = true)
+        
+        # Remove from tracking since it was moved
+        filter!(f -> f != log_file, created_log_files)
 
         # Test cleanup when log file and destination are the same
         log_file_same = joinpath(output_dir, "same.log")
@@ -602,7 +612,20 @@ using DataFrames
         end
     end
 
-    # Cleanup
-    rm(test_dir, recursive = true)
+    # Cleanup: Restore global logger state and remove any leftover log files
+    # Helper to safely execute cleanup operations
+    safe_cleanup(f) = try; f(); catch; end
+    
+    # Close any open global logging and restore initial logger
+    safe_cleanup(() -> eegfun.close_global_logging())
+    global_logger(initial_logger)
+    
+    # Clean up log files created in current directory
+    for log_file in created_log_files
+        safe_cleanup(() -> isfile(log_file) && rm(log_file, force = true))
+    end
+    
+    # Remove test directory
+    safe_cleanup(() -> rm(test_dir, recursive = true))
 end
 
