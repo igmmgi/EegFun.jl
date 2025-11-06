@@ -275,7 +275,7 @@ function is_extreme_value!(
         selected_samples = get_selected_samples(epoch_df, sample_selection)
         
         # Initialize artifact flag column for this epoch
-        epoch_df[!, output_channel] = falses(nrow(epoch_df))
+        epoch_df[!, channel_out] = falses(nrow(epoch_df))
 
         if mode == :combined
             for ch in selected_channels
@@ -287,7 +287,7 @@ function is_extreme_value!(
                 extreme_mask = extreme_mask .& sample_mask
                 
                 # Update artifact flag (OR operation)
-                epoch_df[!, output_channel] .|= extreme_mask
+                epoch_df[!, channel_out] .|= extreme_mask
             end
         else
             for ch in selected_channels
