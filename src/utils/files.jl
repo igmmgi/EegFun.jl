@@ -40,8 +40,10 @@ end
 
 function get_files(directory::String, files::String)
     # replace common wildcard with regex syntax
-    files = Base.filter(f -> occursin(Regex(files), f), readdir(directory))
-    return [joinpath(directory, file) for file in files]
+    matching_files = Base.filter(f -> occursin(Regex(files), f), readdir(directory))
+    # Natural order hack: "file_10" comes after "file_3"
+    sorted_files = sort(matching_files, by=x -> (replace(x, r"\d+" => m -> lpad(String(m), 10, '0')), x))
+    return [joinpath(directory, file) for file in sorted_files]
 end
 
 function get_files(directory::String, files::Vector{String})

@@ -1,8 +1,8 @@
 [files.input]
-directory = ".."
-# raw_data_files = "Flank_C_3.bdf"
+directory = "../AttentionExp/recoded"
+raw_data_files = "Flank_C_6.bdf"
 # raw_data_files = ["Flank_C_3.bdf"]
-raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf"]
+# raw_data_files = ["Flank_C_3.bdf", "Flank_C_4.bdf"]
 # raw_data_files = "\\.bdf$"
 # raw_data_files = "Flank_C_[^3]\\.bdf$"
 # raw_data_files = "Flank_C_(?!7|14|28)([1-9]|[123][0-9])\\.bdf$"
@@ -11,7 +11,7 @@ epoch_condition_file = "epochs.toml"
 
 [preprocess]
 reference_channel = "avg"
-epoch_start = -1.0
+epoch_start = -0.5
 epoch_end = 2.0
 
 [preprocess.filter]
@@ -50,7 +50,7 @@ vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]]
 hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
 
 [preprocess.eeg]
-artifact_value_criterion = 75
+artifact_value_criterion = 100
 extreme_value_criterion = 200
 
 [preprocess.ica]

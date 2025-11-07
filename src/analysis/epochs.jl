@@ -598,12 +598,8 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
     for (epoch, (pre, zero, post)) in enumerate(zip(pre_idx, zero_idx, post_idx))
         # Bounds checking to prevent out-of-bounds errors
         if pre < 1 || post > nrow(dat.data)
-            throw(
-                BoundsError(
-                    dat.data,
-                    "Epoch $epoch extends beyond data bounds (pre=$pre, post=$post, data_length=$(nrow(dat.data)))",
-                ),
-            )
+            @minimal_warning "Epoch $epoch extends beyond data bounds (pre=$pre, post=$post, data_length=$(nrow(dat.data))) - skipping"
+            continue
         end
 
         epoch_df = DataFrame(dat.data[pre:post, :])

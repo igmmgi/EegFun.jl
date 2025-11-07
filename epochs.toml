@@ -6,12 +6,12 @@ trigger_sequences = [[1]]
 
 [[epochs.conditions]]
 name = "condition_2"
-trigger_sequences = [[4]]
+trigger_sequences = [[2]]
 
 [[epochs.conditions]]
 name = "condition_3" 
-trigger_sequences = [[5]]
+trigger_sequences = [[3]]
 
 [[epochs.conditions]]
 name = "condition_4"
-trigger_sequences = [[3]]
+trigger_sequences = [[4]]
