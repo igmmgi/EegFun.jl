@@ -426,3 +426,26 @@ function create_epoch_repair_info(
         skipped_ordered,
     )
 end
+
+"""
+    _combine_and_average_epoch_counts(all_epoch_counts::Vector{DataFrame})
+
+Combine epoch counts from all files and create averaged version.
+
+# Arguments
+- `all_epoch_counts::Vector{DataFrame}`: Vector of DataFrames with epoch counts per file
+
+# Returns
+- `Tuple{DataFrame, DataFrame}`: (combined_counts, avg_counts)
+  - `combined_counts`: All epoch counts concatenated
+  - `avg_counts`: Averaged percentage per file (grouped by file)
+"""
+function _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
+    epoch_summary = vcat(all_epoch_counts...)
+    file_summary = combine(
+        groupby(epoch_summary, [:file]),
+        :percentage => mean => :percentage,
+    )
+    file_summary.percentage = round.(file_summary.percentage; digits = 1)
+    return epoch_summary, file_summary
+end

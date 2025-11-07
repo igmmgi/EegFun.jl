@@ -34,11 +34,19 @@ function preprocess(config::String; log_level::Symbol = :info)
         default_config == nothing && @minimal_error "Failed to load default configuration"
         cfg = _merge_configs(default_config, cfg)
 
+        # Set output directory early so log file can be moved even if errors occur later
+        output_directory = cfg["files"]["output"]["directory"]
+        !isdir(output_directory) && mkdir(output_directory)
+
         # Create the PreprocessConfig object for easier access
         preprocess_cfg = PreprocessConfig(cfg["preprocess"])
 
+        # check if input directory exists
+        input_directory = cfg["files"]["input"]["directory"]
+        !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
+
         # check if all requested raw data files exist
-        raw_data_files = get_files(cfg["files"]["input"]["directory"], cfg["files"]["input"]["raw_data_files"])
+        raw_data_files = get_files(input_directory, cfg["files"]["input"]["raw_data_files"])
         raw_data_files_exist = check_files_exist(raw_data_files)
         !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
         @info "Found $(length(raw_data_files)) files: $(join(raw_data_files, ", "))"
@@ -54,9 +62,7 @@ function preprocess(config::String; log_level::Symbol = :info)
         layout_file === nothing && @minimal_error "Layout file not found: $(cfg["files"]["input"]["layout_file"])"
         layout = read_layout(layout_file)
 
-        # Check if requested output directory exists and if not, create it
-        output_directory = cfg["files"]["output"]["directory"]
-        !isdir(output_directory) && mkdir(output_directory)
+        # Output directory was already set early, just log it
         @info "Output directory: $output_directory"
 
         # print config to output directory
@@ -378,8 +384,8 @@ function preprocess(config::String; log_level::Symbol = :info)
                 @info "Successfully processed $data_file"
                 processed_files += 1
 
-            catch e # Log error to both console and global log
-                @error "Error processing $data_file" exception=(e, catch_backtrace())
+            catch e
+                @minimal_stacktrace "Error processing $data_file" e 5 # avoid Julia spew!
                 push!(failed_files, data_file)
             finally # Close per-file logging (restores global logger)
                 close_logging()
@@ -393,17 +399,21 @@ function preprocess(config::String; log_level::Symbol = :info)
 
         # Print combined epoch counts
         if !isempty(all_epoch_counts)
-            combined_counts = vcat(all_epoch_counts...)
-            log_pretty_table(combined_counts, title = "Combined epoch counts across all files:")
-            jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = combined_counts)
+            epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
+            log_pretty_table(epoch_summary, title = "Combined epoch counts across all files:")
+            log_pretty_table(file_summary, title = "Average percentage per condition (averaged across conditions):")
+            jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = epoch_summary)
+            jldsave(joinpath(output_directory, "file_summary.jld2"); data = file_summary)
         end
 
     finally
         close_global_logging()
         log_source = "preprocess_log.txt"
-        log_destination = joinpath(output_directory, "preprocess_log.txt")
-        if log_source != log_destination
-            mv(log_source, log_destination, force = true)
+        if !isempty(output_directory) && isdir(output_directory) && isfile(log_source)
+            log_destination = joinpath(output_directory, "preprocess_log.txt")
+            if log_source != log_destination
+                mv(log_source, log_destination, force = true)
+            end
         end
     end
 
