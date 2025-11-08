@@ -176,9 +176,12 @@ using Random
         )
         @test_throws ErrorException eegfun.extract_epochs(dat, 10, ec_strict, win[1], win[2])
 
-        # Boundary windows (too wide) → BoundsError
-        @test_throws BoundsError eegfun.extract_epochs(dat, 11, ec1, -1.0, 0.02)
-        @test_throws BoundsError eegfun.extract_epochs(dat, 12, ec1, -0.01, 2.0)
+        # Boundary windows (too wide) → warnings, returns empty or partial epochs
+        ep11 = eegfun.extract_epochs(dat, 11, ec1, -1.0, 0.02)
+        @test eegfun.n_epochs(ep11) == 0  # All epochs out of bounds, returns empty
+        
+        ep12 = eegfun.extract_epochs(dat, 12, ec1, -0.01, 2.0)
+        @test eegfun.n_epochs(ep12) == 0  # All epochs out of bounds, returns empty
     end
 
     @testset "average_epochs" begin
