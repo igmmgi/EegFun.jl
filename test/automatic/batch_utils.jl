@@ -459,9 +459,10 @@ using DataFrames
     end
 
     @testset "@log_call macro" begin
-        # Test @log_call with function name only
+        # Test @log_call with function name and tuple of positional args
+        # This is the only supported form after simplification
         function test_func1(x, y; opt1 = 1, opt2 = "test")
-            eegfun.@log_call "test_func1"
+            eegfun.@log_call "test_func1" (x, y)
             return x + y + opt1
         end
 
@@ -469,37 +470,37 @@ using DataFrames
         result = test_func1(1, 2; opt1 = 3, opt2 = "test")
         @test result == 6
 
-        # Test @log_call with function name and tuple of args
-        function test_func2(x, y; opt1 = 1, opt2 = "test")
-            eegfun.@log_call "test_func2" (x, y)
-            return x + y + opt1
-        end
-
-        result = test_func2(1, 2; opt1 = 3, opt2 = "test")
-        @test result == 6
-
-        # Test @log_call with function name and integer (number of positional args)
-        function test_func3(x, y, z; opt1 = 1)
-            eegfun.@log_call "test_func3" 3
+        # Test @log_call with multiple positional args
+        function test_func2(x, y, z; opt1 = 1)
+            eegfun.@log_call "test_func2" (x, y, z)
             return x + y + z + opt1
         end
 
-        result = test_func3(1, 2, 3; opt1 = 4)
+        result = test_func2(1, 2, 3; opt1 = 4)
         @test result == 10
 
-        # Test @log_call with no arguments (auto-detect)
-        function test_func4(x, y)
-            eegfun.@log_call
-            return x + y
+        # Test @log_call with single positional arg
+        function test_func3(x; opt1 = 1)
+            eegfun.@log_call "test_func3" (x,)
+            return x + opt1
         end
 
-        result = test_func4(1, 2)
+        result = test_func3(5; opt1 = 2)
+        @test result == 7
+
+        # Test @log_call with no positional args (empty tuple)
+        function test_func4(; opt1 = 1, opt2 = "test")
+            eegfun.@log_call "test_func4" ()
+            return opt1
+        end
+
+        result = test_func4(opt1 = 3, opt2 = "test")
         @test result == 3
 
         # Note: Macro error testing is complex because macros are expanded at parse time.
-        # The macro will error during compilation if used incorrectly, but testing
-        # this requires compile-time evaluation which is beyond the scope of runtime tests.
-        # The macro is tested above through successful usage patterns.
+        # The macro will error during compilation if used incorrectly (e.g., wrong argument types),
+        # but testing this requires compile-time evaluation which is beyond the scope of runtime tests.
+        # The macro is tested above through successful usage patterns with various argument counts.
     end
 
     @testset "Edge cases and error handling" begin

@@ -21,24 +21,6 @@ detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
 
 # Detect horizontal EOG onsets
 detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
-
-# Combine for any EOG artifact
-combine_boolean_columns!(dat, [:is_vEOG, :is_hEOG], :or, output_column = :is_any_EOG)
-
-# Create quality flags
-combine_boolean_columns!(dat, [:is_extreme_value, :is_any_EOG], :nor, output_column = :is_good_data)
-
-# Complex quality control (good samples = not extreme AND not any EOG)
-combine_boolean_columns!(dat, [:is_extreme_value, :is_vEOG, :is_hEOG], :nor, output_column = :is_clean_data)
-
-## Multiple EOG Channels
-```julia
-# Detect both vertical and horizontal EOG
-detect_eog_onsets!(dat, 50.0, :vEOG, :is_vEOG)
-detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG)
-
-# Combine for any EOG artifact
-# dat.data[!, :is_any_EOG] = dat.data[!, :is_vEOG] .| dat.data[!, :is_hEOG]
 ```
 """
 
@@ -76,7 +58,7 @@ Detect EOG onsets for both vertical and horizontal EOG channels based on configu
 eog_cfg = Dict(
     "vEOG_criterion" => 50.0,
     "hEOG_criterion" => 50.0,
-    "vEOG_channels" => [["Fp1"], ["Fp2"], ["vEOG"]],
+    "vEOG_channels" => [["Fp1"], ["IO1"], ["vEOG"]],
     "hEOG_channels" => [["F9"], ["F10"], ["hEOG"]]
 )
 detect_eog_signals!(dat, eog_cfg)
@@ -103,7 +85,7 @@ Detect extreme values in a signal using threshold crossing.
 
 # Examples
 ```julia
-# Detect values above 50 μV
+# Detect values ±50 μV
 extreme_mask = _is_extreme_value(signal, 50.0)
 ```
 """
@@ -138,7 +120,7 @@ function _is_extreme_value!(mask::Vector{Bool}, signal::AbstractVector{Float64},
 end
 
 """
-    is_extreme_value!(dat::SingleDataFrameEeg, threshold::Int; 
+    is_extreme_value!(dat::SingleDataFrameEeg, threshold::Real; 
                      channel_selection::Function = channels(), 
                      sample_selection::Union{Vector{Bool}, Nothing} = nothing,
                      mode::Symbol = :combined,
@@ -177,7 +159,7 @@ is_extreme_value!(dat, 100, sample_selection = sample_mask)
 """
 function is_extreme_value!(
     dat::SingleDataFrameEeg,
-    threshold::Int;
+    threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     mode::Symbol = :combined,
@@ -206,7 +188,7 @@ function is_extreme_value!(
 end
 
 """
-    is_extreme_value!(dat::MultiDataFrameEeg, threshold::Int; 
+    is_extreme_value!(dat::MultiDataFrameEeg, threshold::Real; 
                      channel_selection::Function = channels(), 
                      sample_selection::Function = samples(),
                      epoch_selection::Function = epochs(),
@@ -221,7 +203,7 @@ but processes each epoch separately.
 
 # Arguments
 - `dat::MultiDataFrameEeg`: The EEG data object (e.g., EpochData)
-- `threshold::Int`: Threshold for extreme value detection
+- `threshold::Real`: Threshold for extreme value detection
 - `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
 - `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
 - `epoch_selection::Function`: Epoch predicate for selecting epochs (default: all epochs)
@@ -245,7 +227,7 @@ is_extreme_value!(epoch_data, 100, channel_out = :is_artifact_value_100)
 """
 function is_extreme_value!(
     dat::MultiDataFrameEeg,
-    threshold::Int;
+    threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
@@ -308,7 +290,7 @@ function is_extreme_value!(
 end
 
 """
-    is_extreme_value!(epochs_list::Vector{EpochData}, threshold::Int; kwargs...)
+    is_extreme_value!(epochs_list::Vector{EpochData}, threshold::Real; kwargs...)
 
 Detect extreme values across multiple EpochData objects (conditions).
 
@@ -329,7 +311,7 @@ is_extreme_value!(epochs_cleaned, 100)
 is_extreme_value!(epochs_cleaned, 100, channel_out = :is_artifact_value_100)
 ```
 """
-is_extreme_value!(dat::Vector{EpochData}, threshold::Int; kwargs...) = is_extreme_value!.(dat, threshold; kwargs...)
+is_extreme_value!(dat::Vector{EpochData}, threshold::Real; kwargs...) = is_extreme_value!.(dat, threshold; kwargs...)
 
 # Helper function to detect extreme values for selected channels
 function _detect_extreme_values(
@@ -361,7 +343,7 @@ function _detect_extreme_values(
 end
 
 """
-    is_extreme_value(dat::SingleDataFrameEeg, threshold::Int; 
+    is_extreme_value(dat::SingleDataFrameEeg, threshold::Real; 
                     channel_selection::Function = channels(), 
                     sample_selection::Function = samples(),
                     mode::Symbol = :combined)
@@ -370,7 +352,7 @@ Detect extreme values across selected channels and return results.
 
 # Arguments
 - `dat::SingleDataFrameEeg`: The EEG data object
-- `threshold::Int`: Threshold for extreme value detection
+- `threshold::Real`: Threshold for extreme value detection
 - `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
 - `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
 - `mode::Symbol`: Mode of operation - `:combined` (boolean vector, default) or `:separate` (DataFrame with separate columns per channel)
@@ -395,7 +377,7 @@ extreme_mask = is_extreme_value(dat, 100, sample_selection = sample_mask)
 """
 function is_extreme_value(
     dat::SingleDataFrameEeg,
-    threshold::Int;
+    threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     mode::Symbol = :combined,
@@ -429,7 +411,7 @@ function is_extreme_value(
 end
 
 """
-    n_extreme_value(dat::SingleDataFrameEeg, threshold::Int; 
+    n_extreme_value(dat::SingleDataFrameEeg, threshold::Real; 
                    channel_selection::Function = channels(), 
                    sample_selection::Function = samples(),
                    mode::Symbol = :combined)
@@ -438,7 +420,7 @@ Count the number of extreme values across selected channels.
 
 # Arguments
 - `dat::SingleDataFrameEeg`: The EEG data object
-- `threshold::Int`: Threshold for extreme value detection
+- `threshold::Real`: Threshold for extreme value detection
 - `channel_selection::Function`: Channel predicate for selecting channels (default: all layout channels)
 - `sample_selection::Function`: Sample predicate for selecting samples (default: all samples)
 - `mode::Symbol`: Mode for extreme value detection (:separate or :combined, default: :combined)
@@ -463,7 +445,7 @@ count_df = n_extreme_value(dat, 100, mode = :separate)
 """
 function n_extreme_value(
     dat::SingleDataFrameEeg,
-    threshold::Int;
+    threshold::Real;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     mode::Symbol = :combined,
@@ -665,7 +647,7 @@ This function can use two types of criteria for epoch rejection:
 using eegfun, JLD2
 
 # Load epoched data
-epochs = load("participant_1_epochs.jld2", "epochs")
+epochs = load("participant_1_epochs.jld2")
 
 # Use default criteria (z_criterion=3.0, abs_criterion=100.0)
 rejection_info = detect_bad_epochs_automatic(epochs)
@@ -692,13 +674,12 @@ println("Rejected epochs: \$(rejection_info.rejected)")
 ```
 
 # Notes
-- Default z-criterion: 3.0 (conservative, good for most applications)
-- Default abs-criterion: 100 μV (reasonable for most EEG systems)
+- Default z-criterion: 3.0 
+- Default abs-criterion: 100 μV 
 - Common z-criteria: 2.0 (more aggressive), 2.5, 3.0 (more conservative)
-- Common absolute criteria: 50-100 μV (depends on amplifier and task)
+- Common absolute criteria: 50-100 μV 
 - Set either criterion to 0 to disable that type of rejection
 - Rejection is based on ANY metric exceeding the criterion
-- Uses maximum across channels to identify global artifacts
 - All metrics are calculated independently and combined with OR logic
 """
 function detect_bad_epochs_automatic(
@@ -712,6 +693,7 @@ function detect_bad_epochs_automatic(
 
     @info "--------------------------------" 
     @info "Condition: $(dat.condition) ($(dat.condition_name)) - Detecting bad epochs"
+
     # Validate inputs
     z_criterion < 0 && @minimal_error_throw("Z-criterion must be non-negative")
     abs_criterion < 0 && @minimal_error_throw("Absolute criterion must be non-negative")
@@ -755,11 +737,11 @@ function detect_bad_epochs_automatic(
     # Build Rejection objects directly from metric results
     # Handle z-score metrics
     if z_criterion > 0
-        for m in z_measures
-            rejection_list, metrics_key = measure_to_list_and_key[m]
-            for ch in selected_channels
-                for epoch_idx in metrics[metrics_key][ch]
-                    rejection = Rejection(ch, epoch_idx)
+        for measure in z_measures
+            rejection_list, metrics_key = measure_to_list_and_key[measure]
+            for channel in selected_channels
+                for epoch_idx in metrics[metrics_key][channel]
+                    rejection = Rejection(channel, epoch_idx)
                     push!(rejected_info, rejection)
                     push!(rejection_list, rejection)
                 end
@@ -770,9 +752,9 @@ function detect_bad_epochs_automatic(
     # Handle absolute threshold
     abs_rejections = abs_criterion > 0 ? Rejection[] : nothing
     if abs_criterion > 0
-        for ch in selected_channels
-            for epoch_idx in metrics[:absolute_threshold][ch]
-                rejection = Rejection(ch, epoch_idx)
+        for channel in selected_channels
+            for epoch_idx in metrics[:absolute_threshold][channel]
+                rejection = Rejection(channel, epoch_idx)
                 push!(rejected_info, rejection)
                 push!(abs_rejections, rejection)
             end
@@ -824,7 +806,6 @@ Get indices of rejected epochs from the rejection state.
 # Examples
 ```julia
 state = detect_bad_epochs_interactive(epochs)
-# ... after review ...
 rejected_indices = get_rejected(state)
 ```
 """
@@ -838,7 +819,6 @@ Get indices of rejected epochs from the rejection state.
 # Examples
 ```julia
 state = detect_bad_epochs_interactive(epochs)
-# ... after review ...
 rejected_indices = get_rejected(state)
 ```
 """
@@ -906,12 +886,9 @@ function _calculate_epoch_metrics(
 end
 
 
-
-
-
-#=============================================================================
-    REPORTING FUNCTIONS
-=============================================================================#
+# ===================
+# REPORTING FUNCTIONS
+# ===================
 
 """
     Base.show(io::IO, info::EpochRejectionInfo)
@@ -1037,7 +1014,7 @@ Same as repair_artifacts! for the respective methods.
 repaired_epochs = repair_artifacts(epochs, artifacts)
 
 # Using spherical spline method
-repaired_epochs = repair_artifacts(epochs, artifacts, :spherical_spline, m=4, lambda=1e-5)
+repaired_epochs = repair_artifacts(epochs, artifacts, :spherical_spline)
 
 # Rejecting bad epochs entirely (use reject_epochs instead)
 clean_epochs = reject_epochs(epochs, artifacts)
@@ -1094,7 +1071,7 @@ function channel_repairable!(
 
     # Process epochs in sorted order to maintain ordering in OrderedDict
     for epoch_idx in sort(rejected)
-        bad_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_idx]
+        bad_channels = [artifact.label for artifact in artifacts.rejected if artifact.epoch == epoch_idx]
         isempty(bad_channels) && continue
 
         repairable_channels = check_channel_neighbors(bad_channels, layout)
@@ -1200,7 +1177,7 @@ function repair_artifacts_spherical_spline!(
 
     for epoch_idx in rejected
         # Get bad channels for this epoch
-        bad_channels = [r.label for r in artifacts.rejected if r.epoch == epoch_idx]
+        bad_channels = [artifact.label for artifact in artifacts.rejected if artifact.epoch == epoch_idx]
         isempty(bad_channels) && continue
 
         @info "Repairing epoch $epoch_idx channels $(bad_channels) using spherical spline interpolation"
