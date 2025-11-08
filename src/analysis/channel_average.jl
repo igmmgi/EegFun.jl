@@ -103,6 +103,7 @@ function channel_average!(
         df[!, outlbl] = colmeans(df, cols)
         return nothing
     end
+    
     function _add_avg!(dfs::Vector{DataFrame}, cols::Vector{Symbol}, outlbl::Symbol)
         _add_avg!.(dfs, Ref(cols), Ref(outlbl))
         return nothing

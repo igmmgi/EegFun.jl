@@ -237,3 +237,89 @@ function close_logging()
     # Restore the saved logger (which was the global logger before file logging replaced it)
     global_logger(LOG_STATE.saved_logger)
 end
+
+# ============================================================================
+# FUNCTION CALL LOGGING
+# ============================================================================
+
+"""Helper to format a single kwarg value for logging."""
+function _format_kwarg_value(k::Symbol, v)::String
+    if v === nothing
+        return "nothing"
+    elseif isa(v, String)
+        return "\"$v\""
+    elseif isa(v, Function)
+        # Special handling for common predicate functions
+        if k in (:channel_selection, :component_selection, :epoch_selection, :sample_selection)
+            return "<predicate>"
+        else
+            # Try to get a readable function name
+            func_str = string(v)
+            return occursin("#", func_str) ? "<function>" : func_str
+        end
+    else
+        return string(v)
+    end
+end
+
+"""
+    _log_function_call(func_name::String, args::Vector, kwargs)
+
+Log a function call in a generic way.
+
+# Arguments
+- `func_name::String`: Name of the function
+- `args::Vector`: Positional arguments
+- `kwargs`: Keyword arguments as pairs, named tuple, or dict
+"""
+function _log_function_call(
+    func_name::String,
+    args::Vector,
+    kwargs::Union{Vector{Pair{Symbol,Any}},NamedTuple,Dict{Symbol,Any}},
+)
+    # Format positional arguments
+    args_str = join(string.(args), ", ")
+
+    # Convert to iterable pairs
+    kw_pairs = kwargs isa NamedTuple ? pairs(kwargs) : kwargs
+
+    # Format keyword arguments
+    kwargs_str = join(["$k=$(_format_kwarg_value(k, v))" for (k, v) in kw_pairs], ", ")
+
+    @info "Function call: $func_name($args_str; $kwargs_str)"
+end
+
+"""
+    @log_call func_name (arg1, arg2, ...)
+
+Macro to automatically log a function call by capturing local variables.
+Any local variables not listed in the tuple are automatically captured as kwargs.
+
+# Examples
+```julia
+function my_function(x, y, z; opt1=1, opt2="test")
+    @log_call "my_function" (x, y, z)
+    # Logs: Function call: my_function(x, y, z; opt1=1, opt2="test")
+end
+```
+
+# Notes
+- Positional arguments must be listed explicitly in the tuple
+- Keyword arguments are automatically captured from local variables
+- To capture kwargs, assign them to local variables before calling the macro
+"""
+macro log_call(func_name, args_tuple)
+    # Validate inputs
+    func_name isa String || error("@log_call: first argument must be a string (function name)")
+    args_tuple isa Expr && args_tuple.head == :tuple || 
+        error("@log_call: second argument must be a tuple of argument names")
+    
+    # Extract argument names and create set for filtering
+    arg_names = Set(args_tuple.args)
+    
+    return quote
+        local all_locals = Base.@locals()
+        local kwargs_dict = Base.filter(p -> p.first ∉ $arg_names, all_locals)
+        _log_function_call($(esc(func_name)), [$(esc.(args_tuple.args)...)], kwargs_dict)
+    end
+end

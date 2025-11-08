@@ -8,7 +8,7 @@ Internal function that applies baseline correction to specified channels in a Da
 - `channels::Vector{Symbol}`: Names of channels to correct
 - `baseline_interval::Union{IntervalIndex,IntervalTime}`: Time interval for baseline calculation
 
-# Effects
+# Notes
 - Subtracts the mean of the baseline interval from each specified channel
 - Modifies the input DataFrame in-place
 """
@@ -47,7 +47,7 @@ Apply baseline correction in-place to EEG data.
 - `baseline_interval::Union{IntervalIndex,IntervalTime}`: Time/index interval for baseline calculation
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
 
-# Effects
+# Notes
 - Modifies the input data in-place by subtracting the baseline mean
 - Uses the specified time/index interval for baseline calculation
 """
@@ -81,7 +81,7 @@ Apply baseline correction in-place to EEG data using the entire time range.
 - `dat::EegData`: The data to baseline correct
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
 
-# Effects
+# Notes
 - Modifies the input data in-place by subtracting the baseline mean
 - Uses the entire time range for baseline calculation
 """
