@@ -45,8 +45,9 @@ eegfun.plot_my_data_gui()
 """
 function plot_gui()
 
-    # Create the main figure
-    fig = Figure(size = (700, 800), title = "Plot GUI", backgroundcolor = :white)
+    # Create the main figure with minimal padding
+    fig = Figure(size = (700, 800), title = "Plot GUI", backgroundcolor = :white, 
+    figure_padding = (5, 10, 10, 10))
 
     # Try and make sizing adaptive?
     function setup_adaptive_sizing(fig)
@@ -54,7 +55,12 @@ function plot_gui()
 
         # Update fonts and UI elements when figure is resized
         on(fig.scene.viewport) do area
-            scale_factor = area.widths[1] / 2000
+            # Check for valid viewport dimensions
+            width = area.widths[1]
+            if isnan(width) || width <= 0 || isinf(width)
+                return  # Skip update if viewport is invalid
+            end
+            scale_factor = width / 2000
             ui_style.title_font[] = max(MIN_FONTS.title, round(Int, BASE_FONTS.title * scale_factor))
             ui_style.label_font[] = max(MIN_FONTS.label, round(Int, BASE_FONTS.label * scale_factor))
             ui_style.tick_font[] = max(MIN_FONTS.tick, round(Int, BASE_FONTS.tick * scale_factor))
@@ -69,12 +75,21 @@ function plot_gui()
 
     ui_style = setup_adaptive_sizing(fig)
 
-    # Create main layout with proper 3-column structure
-    main_layout = GridLayout(fig[1, 1:3], colgap = 10, rowgap = 10)
-
+    # Create main layout with 2-column structure
+    # We'll add spacing by using column sizing with Relative widths
+    main_layout = GridLayout(fig[1, 1:2], rowgap = 10)
+    
     # Column 1: File & Data Selection
-    # File Type Section
+    # File Type Section - Place this first to create column 1
     Label(main_layout[1, 1], "File Type", fontsize = ui_style.label_font, font = :bold)
+    
+    # Column 2: Settings - Place this first to create column 2
+    Label(main_layout[1, 2], "Settings", fontsize = ui_style.label_font, font = :bold)
+    
+    # Now that both columns exist, set their widths to create spacing
+    colsize!(main_layout, 1, Relative(0.45))  # First column takes 45% of width
+    colsize!(main_layout, 2, Relative(0.45))  # Second column takes 45% of width
+    # The remaining 10% creates natural spacing between columns
     filetype_options = [
         "Select",
         "*.bdf",
@@ -127,9 +142,9 @@ function plot_gui()
         height = ui_style.input_height,
     )
 
-    # Column 2: Plot Configuration
+    # Plot Configuration (moved from column 2)
     # Plot Type Section
-    Label(main_layout[1, 2], "Plot Type", fontsize = ui_style.label_font, font = :bold)
+    Label(main_layout[9, 1], "Plot Type", fontsize = ui_style.label_font, font = :bold)
     plottype_options = [
         "Select",
         "Data Browser",
@@ -143,34 +158,31 @@ function plot_gui()
         "Boxplot",
     ]
     plottype_dropdown = Menu(
-        main_layout[2, 2],
+        main_layout[10, 1],
         options = plottype_options,
         width = ui_style.input_width,
         height = ui_style.input_height,
     )
 
     # Layout Section
-    Label(main_layout[3, 2], "Layout", fontsize = ui_style.label_font, font = :bold)
+    Label(main_layout[11, 1], "Layout", fontsize = ui_style.label_font, font = :bold)
     layout_options = ["Select", "BioSemi72", "BioSemi70", "BioSemi68", "BioSemi66", "BioSemi64", "Custom"]
     layout_dropdown =
-        Menu(main_layout[4, 2], options = layout_options, width = ui_style.input_width, height = ui_style.input_height)
+        Menu(main_layout[12, 1], options = layout_options, width = ui_style.input_width, height = ui_style.input_height)
 
     # Electrode Selection Section
-    Label(main_layout[5, 2], "Electrode", fontsize = ui_style.label_font, font = :bold)
+    Label(main_layout[13, 1], "Electrode", fontsize = ui_style.label_font, font = :bold)
     electrode_menu =
-        Menu(main_layout[6, 2], options = ["Select"], width = ui_style.input_width, height = ui_style.input_height)
+        Menu(main_layout[14, 1], options = ["Select"], width = ui_style.input_width, height = ui_style.input_height)
 
     # Multi-select electrode info
     electrode_info =
-        Label(main_layout[7, 2], "Ctrl+Click for multiple selection", fontsize = ui_style.slider_font, color = :gray)
+        Label(main_layout[15, 1], "Ctrl+Click for multiple selection", fontsize = ui_style.slider_font, color = :gray)
 
-    # Column 3: Settings
-    # Settings Title
-    Label(main_layout[1, 3], "Settings", fontsize = ui_style.label_font, font = :bold)
-
+    # Column 2: Settings (Settings title already placed above)
     # X Limits Section
-    Label(main_layout[2, 3], "X Limits", fontsize = ui_style.slider_font, font = :bold)
-    x_limits_layout = GridLayout(main_layout[3, 3], tellwidth = false, colgap = 10)
+    Label(main_layout[2, 2], "X Limits", fontsize = ui_style.slider_font, font = :bold)
+    x_limits_layout = GridLayout(main_layout[3, 2], tellwidth = false, colgap = 10)
     xmin_input = Textbox(
         x_limits_layout[1, 1],
         placeholder = "min",
@@ -187,9 +199,9 @@ function plot_gui()
     )
 
     # X Topo Series
-    Label(main_layout[4, 3], "X Topo Series", fontsize = ui_style.slider_font, font = :bold)
+    Label(main_layout[4, 2], "X Topo Series", fontsize = ui_style.slider_font, font = :bold)
     xtopo_input = Textbox(
-        main_layout[5, 3],
+        main_layout[5, 2],
         placeholder = "series",
         fontsize = ui_style.slider_font,
         width = ui_style.input_width,
@@ -197,8 +209,8 @@ function plot_gui()
     )
 
     # Y Limits Section
-    Label(main_layout[6, 3], "Y Limits", fontsize = ui_style.slider_font, font = :bold)
-    y_limits_layout = GridLayout(main_layout[7, 3], tellwidth = false, colgap = 10)
+    Label(main_layout[6, 2], "Y Limits", fontsize = ui_style.slider_font, font = :bold)
+    y_limits_layout = GridLayout(main_layout[7, 2], tellwidth = false, colgap = 10)
     ymin_input = Textbox(
         y_limits_layout[1, 1],
         placeholder = "min",
@@ -215,8 +227,8 @@ function plot_gui()
     )
 
     # Z Limits Section
-    Label(main_layout[8, 3], "Z Limits", fontsize = ui_style.slider_font, font = :bold)
-    z_limits_layout = GridLayout(main_layout[9, 3], tellwidth = false, colgap = 10)
+    Label(main_layout[8, 2], "Z Limits", fontsize = ui_style.slider_font, font = :bold)
+    z_limits_layout = GridLayout(main_layout[9, 2], tellwidth = false, colgap = 10)
     zmin_input = Textbox(
         z_limits_layout[1, 1],
         placeholder = "min",
@@ -233,8 +245,8 @@ function plot_gui()
     )
 
     # Baseline Section
-    Label(main_layout[10, 3], "Baseline", fontsize = ui_style.slider_font, font = :bold)
-    baseline_layout = GridLayout(main_layout[11, 3], tellwidth = false, colgap = 10)
+    Label(main_layout[10, 2], "Baseline", fontsize = ui_style.slider_font, font = :bold)
+    baseline_layout = GridLayout(main_layout[11, 2], tellwidth = false, colgap = 10)
     baseline_start = Textbox(
         baseline_layout[1, 1],
         placeholder = "start",
@@ -251,17 +263,17 @@ function plot_gui()
     )
 
     # Baseline Type
-    Label(main_layout[12, 3], "Baseline Type", fontsize = ui_style.slider_font, font = :bold)
+    Label(main_layout[12, 2], "Baseline Type", fontsize = ui_style.slider_font, font = :bold)
     baseline_type = Menu(
-        main_layout[13, 3],
+        main_layout[13, 2],
         options = ["Select", "absolute", "relative", "relchange", "perchange", "db"],
         width = ui_style.input_width,
         height = ui_style.input_height,
     )
 
     # Action Buttons Section - Outside the settings panel
-    # Create a button layout for the third column
-    button_layout = GridLayout(main_layout[12:14, 3], tellwidth = false, colgap = 15, rowgap = 10)
+    # Create a button layout for the second column (starting after Baseline Type at row 13)
+    button_layout = GridLayout(main_layout[14:16, 2], tellwidth = false, colgap = 15, rowgap = 10)
 
     # First row of buttons
     examples_button = Button(
