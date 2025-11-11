@@ -449,3 +449,51 @@ function _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
     file_summary.percentage = round.(file_summary.percentage; digits = 1)
     return epoch_summary, file_summary
 end
+
+"""
+    _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFrame, output_directory::String)
+
+Merge new summaries with existing summaries, replacing data for files that already exist.
+
+# Arguments
+- `new_epoch_summary::DataFrame`: New epoch summary data
+- `new_file_summary::DataFrame`: New file summary data
+- `output_directory::String`: Directory where summary files are stored
+
+# Returns
+- `Tuple{DataFrame, DataFrame}`: (merged_epoch_summary, merged_file_summary)
+"""
+function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFrame, output_directory::String)
+    epoch_path = joinpath(output_directory, "epoch_summary.jld2")
+    file_path = joinpath(output_directory, "file_summary.jld2")
+    
+    # Get list of files in new data (for replacement)
+    new_files = unique(new_epoch_summary.file)
+    
+    # Load and merge epoch summary
+    if isfile(epoch_path)
+        existing_epoch = JLD2.load(epoch_path, "data")
+        # Remove rows for files that are being updated
+        existing_epoch = existing_epoch[.!in.(existing_epoch.file, Ref(new_files)), :]
+        merged_epoch = vcat(existing_epoch, new_epoch_summary)
+    else
+        merged_epoch = new_epoch_summary
+    end
+    
+    # Load and merge file summary
+    if isfile(file_path)
+        existing_file = JLD2.load(file_path, "data")
+        # Remove rows for files that are being updated
+        existing_file = existing_file[.!in.(existing_file.file, Ref(new_files)), :]
+        merged_file = vcat(existing_file, new_file_summary)
+    else
+        merged_file = new_file_summary
+    end
+    
+    # Sort by filename using natural sorting (file_1, file_2, ..., file_10)
+    sort_key(x) = replace(x, r"\d+" => m -> lpad(String(m), 10, '0'))
+    merged_epoch = sort(merged_epoch, :file, by=sort_key)
+    merged_file = sort(merged_file, :file, by=sort_key)
+    
+    return merged_epoch, merged_file
+end
