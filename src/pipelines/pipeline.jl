@@ -9,8 +9,12 @@ Preprocess EEG data according to the specified configuration file.
 """
 function preprocess(config::String; log_level::Symbol = :info)
 
+    # Generate timestamp for unique log filename
+    timestamp = Dates.format(now(), "yyyy-mm-dd_HH-MM-SS")
+    log_filename = "preprocess_log_$(timestamp).txt"
+
     # set up the global log for overall processing
-    global_log = setup_global_logging("preprocess_log.txt", log_level = log_level)
+    global_log = setup_global_logging(log_filename, log_level = log_level)
 
     # initialize variable for outer scope
     output_directory = ""
@@ -400,19 +404,20 @@ function preprocess(config::String; log_level::Symbol = :info)
         # Print combined epoch counts
         if !isempty(all_epoch_counts)
             epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
-            log_pretty_table(epoch_summary, title = "Combined epoch counts across all files:")
-            log_pretty_table(file_summary, title = "Average percentage per condition (averaged across conditions):")
-            jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = epoch_summary)
-            jldsave(joinpath(output_directory, "file_summary.jld2"); data = file_summary)
+            # Merge with existing summaries (replaces data for files that already exist)
+            merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
+            log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:")
+            log_pretty_table(merged_file_summary, title = "Average percentage per condition (averaged across conditions):")
+            jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
+            jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
         end
 
     finally
         close_global_logging()
-        log_source = "preprocess_log.txt"
-        if !isempty(output_directory) && isdir(output_directory) && isfile(log_source)
-            log_destination = joinpath(output_directory, "preprocess_log.txt")
-            if log_source != log_destination
-                mv(log_source, log_destination, force = true)
+        if !isempty(output_directory) && isdir(output_directory) && isfile(log_filename)
+            log_destination = joinpath(output_directory, log_filename)
+            if log_filename != log_destination
+                mv(log_filename, log_destination, force = true)
             end
         end
     end
