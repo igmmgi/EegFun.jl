@@ -273,12 +273,13 @@ function preprocess(config::String; log_level::Symbol = :info)
                     log_pretty_table(component_metrics[:channel_noise_metrics]; title = "Channel Noise Component Metrics")
 
                     @info subsection("Removing ICA components")
+                    all_removed_components = get_all_ica_components(component_artifacts)
+                    @info "Removed $(length(all_removed_components)) ICA components" component_artifacts
                     remove_ica_components!(
                         dat,
                         ica,
-                        component_selection = components(get_all_ica_components(component_artifacts)),
+                        component_selection = components(all_removed_components),
                     )
-                    @info "Removed $(length(get_all_ica_components(component_artifacts))) ICA components"
 
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
@@ -353,6 +354,14 @@ function preprocess(config::String; log_level::Symbol = :info)
                 )
                 channel_repairable!(rejection_info_step2, epochs[1].layout)
                 @info rejection_info_step2
+                
+                #################### COMPARE REJECTION STEPS ###################
+                @info subsection("Rejection Step Comparison (before vs after repair)")
+                rejection_comparison = compare_rejections(rejection_step1, rejection_info_step2)
+                log_pretty_table(
+                    rejection_comparison;
+                    title = "Rejection Step Comparison: Effectiveness of Channel Repair",
+                )
                 
                 #################### EPOCH REJECTION ###################
                 @info subsection("Rejecting bad epochs")
