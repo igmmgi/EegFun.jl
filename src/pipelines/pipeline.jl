@@ -19,6 +19,8 @@ function preprocess(config::String; log_level::Symbol = :info)
     # initialize variable for outer scope
     output_directory = ""
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
+    all_continuous_repairs = Tuple{String, ContinuousRepairInfo}[]  # Track continuous-level electrode repairs
+    all_ica_components = Tuple{String, ArtifactComponents}[]  # Track ICA components removed
 
     try
 
@@ -84,8 +86,10 @@ function preprocess(config::String; log_level::Symbol = :info)
         # Track processing results
         processed_files = 0
         failed_files = String[]
-        for data_file in raw_data_files
-
+        
+        for (file_idx, data_file) in enumerate(raw_data_files)
+            @info "Processing file $file_idx/$(length(raw_data_files)): $(basename(data_file))"
+            
             try
 
                 # Individual file processing
@@ -230,6 +234,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 # We perform the ica on "continuous" data (clean sections) that usually has a 
                 # more extreme high-pass filter applied. 
                 # We then run ica on clean sections of "continuous" data
+                component_artifacts = nothing  # Initialize in case ICA is not applied
                 if preprocess_cfg.ica.apply
 
                     @info section("ICA")
@@ -280,6 +285,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                         ica,
                         component_selection = components(all_removed_components),
                     )
+                    
 
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
@@ -372,9 +378,18 @@ function preprocess(config::String; log_level::Symbol = :info)
                 artifact_info = ArtifactInfo(
                     continuous_repair_info !== nothing ? [continuous_repair_info] : ContinuousRepairInfo[],
                     vcat(rejection_step1, rejection_info_step2),
+                    component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
                 )
                 jldsave(make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
                 @info "Saved artifact info: $(artifact_info)"
+                
+                # Track data for summary tables
+                if !isnothing(continuous_repair_info) && !isempty(continuous_repair_info.repaired)
+                    push!(all_continuous_repairs, (basename(data_file), continuous_repair_info))
+                end
+                if !isnothing(component_artifacts)
+                    push!(all_ica_components, (basename(data_file), component_artifacts))
+                end
 
                 #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
                 df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
@@ -394,7 +409,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 end
 
                 @info section("End of Processing")
-                @info "Successfully processed $data_file"
+                @info "Successfully processed file $file_idx/$(length(raw_data_files)): $(basename(data_file))"
                 processed_files += 1
 
             catch e
@@ -409,6 +424,41 @@ function preprocess(config::String; log_level::Symbol = :info)
         @info section("Summary")
         @info "$processed_files success, $(length(failed_files)) fail"
         !isempty(failed_files) && @info "Failed files: $(join(failed_files, ", "))"
+
+        # Print electrode repair summary
+        if !isempty(all_continuous_repairs)
+            @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
+            # Extract ContinuousRepairInfo objects from tuples
+            continuous_repairs = [repair_info for (_, repair_info) in all_continuous_repairs]
+            electrode_repair_summary = summarize_electrode_repairs(continuous_repairs)
+            log_pretty_table(
+                electrode_repair_summary;
+                title = "Electrode Repairs at Continuous Level: Number of Participants Affected",
+            )
+        end
+        
+        # Print ICA component summary
+        if !isempty(all_ica_components)
+            @info subsection("ICA Component Removal Summary")
+            # Extract ArtifactComponents objects and filenames from tuples
+            ica_components = [component_artifacts for (_, component_artifacts) in all_ica_components]
+            filenames = [basename(filename) for (filename, _) in all_ica_components]
+            ica_per_file, ica_avg = summarize_ica_components(ica_components)
+            # Update filenames in per_file_df
+            for (i, filename) in enumerate(filenames)
+                ica_per_file.file[i] = filename
+            end
+            if !isempty(ica_per_file)
+                log_pretty_table(
+                    ica_per_file;
+                    title = "ICA Components Removed per Participant",
+                )
+                log_pretty_table(
+                    ica_avg;
+                    title = "Average ICA Components Removed per Participant",
+                )
+            end
+        end
 
         # Print combined epoch counts
         if !isempty(all_epoch_counts)
