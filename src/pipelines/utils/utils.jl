@@ -160,13 +160,15 @@ Can hold multiple continuous repair infos and epoch rejection infos.
 # Fields
 - `continuous_repairs::Vector{ContinuousRepairInfo}`: Vector of continuous repair info objects
 - `epoch_rejections::Vector{EpochRejectionInfo}`: Vector of epoch rejection info objects
+- `ica_components::Union{ArtifactComponents, Nothing}`: ICA artifact components (Nothing if ICA was not applied)
 """
 struct ArtifactInfo
     continuous_repairs::Vector{ContinuousRepairInfo}
     epoch_rejections::Vector{EpochRejectionInfo}
+    ica_components::Union{ArtifactComponents, Nothing}
 end
 
-ArtifactInfo() = ArtifactInfo(ContinuousRepairInfo[], EpochRejectionInfo[])
+ArtifactInfo() = ArtifactInfo(ContinuousRepairInfo[], EpochRejectionInfo[], nothing)
 
 function Base.show(io::IO, info::ArtifactInfo)
     println(io, "ArtifactInfo:")
@@ -177,6 +179,12 @@ function Base.show(io::IO, info::ArtifactInfo)
     println(io, "  Epoch rejections: $(length(info.epoch_rejections))")
     for rejection_info in info.epoch_rejections
         println(io, "    - $(rejection_info.name) (condition $(rejection_info.info.number): $(rejection_info.info.name))")
+    end
+    if !isnothing(info.ica_components)
+        all_comps = get_all_ica_components(info.ica_components)
+        println(io, "  ICA components removed: $(length(all_comps))")
+    else
+        println(io, "  ICA components: Not applied")
     end
 end
 
@@ -572,4 +580,259 @@ function compare_rejections(rejection1::Vector{EpochRejectionInfo}, rejection2::
     end
     
     return DataFrame(comparison_data)
+end
+
+"""
+    summarize_electrode_repairs(continuous_repairs::Vector{ContinuousRepairInfo})
+
+Summarize electrode repairs from a vector of ContinuousRepairInfo objects (continuous level only).
+Each ContinuousRepairInfo is treated as coming from a separate participant.
+
+# Arguments
+- `continuous_repairs::Vector{ContinuousRepairInfo}`: Vector of ContinuousRepairInfo objects
+
+# Returns
+- `DataFrame`: Summary table with columns:
+  - `electrode::Symbol`: Electrode name
+  - `n_participants::Int`: Number of participants where this electrode was repaired at the continuous level
+"""
+function summarize_electrode_repairs(continuous_repairs::Vector{ContinuousRepairInfo})
+    electrode_participants = Dict{Symbol, Set{Int}}()
+    
+    for (participant_idx, repair_info) in enumerate(continuous_repairs)
+        # Count continuous repairs (1 per participant)
+        for ch in repair_info.repaired
+            if !haskey(electrode_participants, ch)
+                electrode_participants[ch] = Set{Int}()
+            end
+            push!(electrode_participants[ch], participant_idx)
+        end
+    end
+    
+    # Create DataFrame sorted by number of participants (descending)
+    summary_data = [
+        (
+            electrode = ch,
+            n_participants = length(participants)
+        )
+        for (ch, participants) in sort(collect(electrode_participants), by = x -> length(x[2]), rev = true)
+    ]
+    
+    return DataFrame(summary_data)
+end
+
+"""
+    summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
+
+Summarize electrode repairs by loading ArtifactInfo files from a directory (continuous level only).
+Uses `_find_batch_files` to match files by pattern.
+
+# Arguments
+- `file_pattern::String`: Pattern to match filenames (e.g., "_artifact_info")
+- `input_dir::String`: Directory containing `_artifact_info.jld2` files (default: current directory)
+
+# Returns
+- `DataFrame`: Summary table with columns:
+  - `electrode::Symbol`: Electrode name
+  - `n_participants::Int`: Number of participants where this electrode was repaired at the continuous level
+
+# Examples
+```julia
+# Load all artifact info files from current directory
+summary = summarize_electrode_repairs("_artifact_info")
+
+# Load from specific directory
+summary = summarize_electrode_repairs("_artifact_info", input_dir="/path/to/output")
+```
+"""
+function summarize_electrode_repairs(file_pattern::String; input_dir::String = pwd())
+    # Find matching files using _find_batch_files
+    files = _find_batch_files(file_pattern, input_dir)
+    
+    if isempty(files)
+        @warn "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        return DataFrame(electrode = Symbol[], n_participants = Int[])
+    end
+    
+    # Load all ArtifactInfo objects and extract ContinuousRepairInfo
+    continuous_repairs = ContinuousRepairInfo[]
+    for file in files
+        file_path = joinpath(input_dir, file)
+        try
+            if isfile(file_path)
+                artifact_info = load(file_path, "data")
+                for repair_info in artifact_info.continuous_repairs
+                    if !isempty(repair_info.repaired)
+                        push!(continuous_repairs, repair_info)
+                    end
+                end
+            end
+        catch e
+            @warn "Failed to load artifact info from $file_path: $e"
+        end
+    end
+    
+    return summarize_electrode_repairs(continuous_repairs)
+end
+
+
+
+
+
+"""
+    summarize_ica_components(ica_components::Vector{ArtifactComponents})
+
+Summarize ICA components removed across all participants.
+
+# Arguments
+- `ica_components::Vector{ArtifactComponents}`: Vector of ArtifactComponents objects
+
+# Returns
+- `DataFrame`: Summary table with columns:
+  - `file::String`: Filename (empty string when called with Vector{ArtifactComponents})
+  - `total_components::Int`: Total number of ICA components removed
+  - `vEOG::Int`: Number of vEOG components
+  - `hEOG::Int`: Number of hEOG components
+  - `ECG::Int`: Number of ECG components
+  - `line_noise::Int`: Number of line noise components
+  - `channel_noise::Int`: Number of channel noise components
+- `DataFrame`: Average summary with columns:
+  - `component_type::String`: Type of component
+  - `avg_per_participant::Float64`: Average number of components per participant
+"""
+function summarize_ica_components(ica_components::Vector{ArtifactComponents})
+    if isempty(ica_components)
+        return DataFrame(
+            file = String[],
+            total_components = Int[],
+            vEOG = Int[],
+            hEOG = Int[],
+            ECG = Int[],
+            line_noise = Int[],
+            channel_noise = Int[]
+        ), DataFrame(
+            component_type = String[],
+            avg_per_participant = Float64[]
+        )
+    end
+    
+    # Per-file summary
+    per_file_data = []
+    for component_artifacts in ica_components
+        vEOG_count = length(get(component_artifacts.eog, :vEOG, []))
+        hEOG_count = length(get(component_artifacts.eog, :hEOG, []))
+        ecg_count = length(component_artifacts.ecg)
+        line_noise_count = length(component_artifacts.line_noise)
+        channel_noise_count = length(component_artifacts.channel_noise)
+        total_count = vEOG_count + hEOG_count + ecg_count + line_noise_count + channel_noise_count
+        
+        push!(per_file_data, (
+            file = "",  # No filename when called with Vector{ArtifactComponents}
+            total_components = total_count,
+            vEOG = vEOG_count,
+            hEOG = hEOG_count,
+            ECG = ecg_count,
+            line_noise = line_noise_count,
+            channel_noise = channel_noise_count,
+        ))
+    end
+    
+    per_file_df = DataFrame(per_file_data)
+    
+    # Average summary
+    n_participants = length(ica_components)
+    avg_data = [
+        (component_type = "vEOG", avg_per_participant = round(mean(per_file_df.vEOG), digits=2)),
+        (component_type = "hEOG", avg_per_participant = round(mean(per_file_df.hEOG), digits=2)),
+        (component_type = "ECG", avg_per_participant = round(mean(per_file_df.ECG), digits=2)),
+        (component_type = "line_noise", avg_per_participant = round(mean(per_file_df.line_noise), digits=2)),
+        (component_type = "channel_noise", avg_per_participant = round(mean(per_file_df.channel_noise), digits=2)),
+        (component_type = "total", avg_per_participant = round(mean(per_file_df.total_components), digits=2)),
+    ]
+    
+    avg_df = DataFrame(avg_data)
+    
+    return per_file_df, avg_df
+end
+
+"""
+    summarize_ica_components(file_pattern::String; input_dir::String = pwd())
+
+Summarize ICA components by loading ArtifactInfo files from a directory.
+Uses `_find_batch_files` to match files by pattern.
+
+# Arguments
+- `file_pattern::String`: Pattern to match filenames (e.g., "_artifact_info")
+- `input_dir::String`: Directory containing `_artifact_info.jld2` files (default: current directory)
+
+# Returns
+- `DataFrame`: Per-file summary table with columns:
+  - `file::String`: Filename
+  - `total_components::Int`: Total number of ICA components removed
+  - `vEOG::Int`: Number of vEOG components
+  - `hEOG::Int`: Number of hEOG components
+  - `ECG::Int`: Number of ECG components
+  - `line_noise::Int`: Number of line noise components
+  - `channel_noise::Int`: Number of channel noise components
+- `DataFrame`: Average summary with columns:
+  - `component_type::String`: Type of component
+  - `avg_per_participant::Float64`: Average number of components per participant
+
+# Examples
+```julia
+# Load all artifact info files from current directory
+per_file, avg = summarize_ica_components("_artifact_info")
+
+# Load from specific directory
+per_file, avg = summarize_ica_components("_artifact_info", input_dir="/path/to/output")
+```
+"""
+function summarize_ica_components(file_pattern::String; input_dir::String = pwd())
+    # Find matching files using _find_batch_files
+    files = _find_batch_files(file_pattern, input_dir)
+    
+    if isempty(files)
+        @warn "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        return DataFrame(
+            file = String[],
+            total_components = Int[],
+            vEOG = Int[],
+            hEOG = Int[],
+            ECG = Int[],
+            line_noise = Int[],
+            channel_noise = Int[]
+        ), DataFrame(
+            component_type = String[],
+            avg_per_participant = Float64[]
+        )
+    end
+    
+    # Load all ArtifactInfo objects and extract ArtifactComponents with filenames
+    ica_components = ArtifactComponents[]
+    filenames = String[]
+    
+    for file in files
+        file_path = joinpath(input_dir, file)
+        try
+            if isfile(file_path)
+                artifact_info = load(file_path, "data")
+                if !isnothing(artifact_info.ica_components)
+                    push!(ica_components, artifact_info.ica_components)
+                    push!(filenames, file)  # _find_batch_files returns filenames, not full paths
+                end
+            end
+        catch e
+            @warn "Failed to load artifact info from $file_path: $e"
+        end
+    end
+    
+    # Get summary from vector version
+    per_file_df, avg_df = summarize_ica_components(ica_components)
+    
+    # Update filenames in per_file_df
+    for (i, filename) in enumerate(filenames)
+        per_file_df.file[i] = filename
+    end
+    
+    return per_file_df, avg_df
 end

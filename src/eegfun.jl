@@ -25,6 +25,7 @@ using Logging
 using LoggingExtras
 using OrderedCollections
 using Printf
+using ProgressMeter
 using Statistics
 using StatsBase
 using Random
