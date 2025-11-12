@@ -497,3 +497,79 @@ function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFr
     
     return merged_epoch, merged_file
 end
+
+"""
+    compare_rejections(rejection_step1::Vector{EpochRejectionInfo}, rejection_step2::Vector{EpochRejectionInfo})
+
+Compare rejection results before and after repair to show repair effectiveness.
+
+# Arguments
+- `rejection_step1::Vector{EpochRejectionInfo}`: Rejection info before repair
+- `rejection_step2::Vector{EpochRejectionInfo}`: Rejection info after repair
+
+# Returns
+- `DataFrame`: Comparison table with detailed statistics per condition showing:
+  - Original number of epochs
+  - Rejected before repair (step1)
+  - Rejected after repair (step2)
+  - Successfully repaired epochs
+  - Percentage of step1 rejections that were repaired
+  - Final percentage of epochs kept
+
+# Examples
+```julia
+rejection_step1 = detect_bad_epochs_automatic(epochs, name="step1")
+repair_artifacts!(epochs, rejection_step1)
+rejection_step2 = detect_bad_epochs_automatic(epochs, name="step2")
+comparison = compare_rejections(rejection_step1, rejection_step2)
+```
+"""
+function compare_rejections(rejection1::Vector{EpochRejectionInfo}, rejection2::Vector{EpochRejectionInfo})
+    comparison_data = []
+    
+    for (info1, info2) in zip(rejection1, rejection2)
+        # Get unique epoch indices rejected in each step
+        epochs_rejected_step1 = unique_epochs(info1)
+        epochs_rejected_step2 = unique_epochs(info2)
+        
+        # Calculate statistics
+        n_original = info1.info.n
+        n_rejected_step1 = length(epochs_rejected_step1)
+        n_rejected_step2 = length(epochs_rejected_step2)
+        
+        # Epochs that were rejected in step1 but NOT in step2 (successfully repaired)
+        epochs_repaired = setdiff(epochs_rejected_step1, epochs_rejected_step2)
+        n_repaired = length(epochs_repaired)
+        
+        # Epochs rejected in BOTH steps (repair didn't help)
+        epochs_still_bad = intersect(epochs_rejected_step1, epochs_rejected_step2)
+        n_still_bad = length(epochs_still_bad)
+        
+        # New rejections in step2 (epochs that weren't rejected in step1)
+        # This can happen if repair introduces artifacts or if thresholds are slightly different
+        epochs_new_rejections = setdiff(epochs_rejected_step2, epochs_rejected_step1)
+        n_new_rejections = length(epochs_new_rejections)
+        
+        # Verify: n_rejected_step2 should equal n_still_bad + n_new_rejections
+        # Verify: n_rejected_step1 should equal n_repaired + n_still_bad
+        @assert n_rejected_step2 == n_still_bad + n_new_rejections "Logic error: n_rejected_step2 ($n_rejected_step2) != n_still_bad ($n_still_bad) + n_new_rejections ($n_new_rejections)"
+        @assert n_rejected_step1 == n_repaired + n_still_bad "Logic error: n_rejected_step1 ($n_rejected_step1) != n_repaired ($n_repaired) + n_still_bad ($n_still_bad)"
+        
+        # Calculate key percentages
+        pct_repaired = n_rejected_step1 > 0 ? round(100 * n_repaired / n_rejected_step1, digits=1) : 0.0
+        pct_final_kept = round(100 * (n_original - n_rejected_step2) / n_original, digits=1)
+        
+        push!(comparison_data, (
+            condition = info1.info.number,
+            condition_name = info1.info.name,
+            n_original = n_original,
+            rejected_before_repair = n_rejected_step1,
+            rejected_after_repair = n_rejected_step2,
+            successfully_repaired = n_repaired,
+            pct_repaired = pct_repaired,
+            pct_final_kept = pct_final_kept,
+        ))
+    end
+    
+    return DataFrame(comparison_data)
+end
