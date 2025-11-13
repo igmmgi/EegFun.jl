@@ -248,6 +248,31 @@ function extract_int(s::String)::Union{Int,Nothing}
 end
 
 
+"""
+    natural_sort_key(s::String) -> String
+
+Generate a sort key for natural/numeric sorting of strings.
+Pads numeric parts with zeros so that "file_3" sorts before "file_12".
+
+# Arguments
+- `s::String`: Input string to generate sort key for
+
+# Returns
+- `String`: Transformed string with numeric parts zero-padded
+
+# Example
+```julia
+# Use with sort
+files = ["file_10.jld2", "file_2.jld2", "file_1.jld2"]
+sort(files, by=natural_sort_key)  # Returns: ["file_1.jld2", "file_2.jld2", "file_10.jld2"]
+
+# Use with DataFrame sort
+sort(df, :file, by=natural_sort_key)
+```
+"""
+natural_sort_key(s::String)::String  = replace(s, r"\d+" => m -> lpad(String(m), 10, '0'))
+
+
 
 """
     @add_nonmutating function_name!
