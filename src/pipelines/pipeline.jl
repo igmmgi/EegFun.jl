@@ -19,8 +19,6 @@ function preprocess(config::String; log_level::Symbol = :info)
     # initialize variable for outer scope
     output_directory = ""
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
-    all_continuous_repairs = Tuple{String, ContinuousRepairInfo}[]  # Track continuous-level electrode repairs
-    all_ica_components = Tuple{String, ArtifactComponents}[]  # Track ICA components removed
 
     try
 
@@ -382,14 +380,6 @@ function preprocess(config::String; log_level::Symbol = :info)
                 )
                 jldsave(make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
                 @info "Saved artifact info: $(artifact_info)"
-                
-                # Track data for summary tables
-                if !isnothing(continuous_repair_info) && !isempty(continuous_repair_info.repaired)
-                    push!(all_continuous_repairs, (basename(data_file), continuous_repair_info))
-                end
-                if !isnothing(component_artifacts)
-                    push!(all_ica_components, (basename(data_file), component_artifacts))
-                end
 
                 #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
                 df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
@@ -425,39 +415,28 @@ function preprocess(config::String; log_level::Symbol = :info)
         @info "$processed_files success, $(length(failed_files)) fail"
         !isempty(failed_files) && @info "Failed files: $(join(failed_files, ", "))"
 
-        # Print electrode repair summary
-        if !isempty(all_continuous_repairs)
-            @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
-            # Extract ContinuousRepairInfo objects from tuples
-            continuous_repairs = [repair_info for (_, repair_info) in all_continuous_repairs]
-            electrode_repair_summary = summarize_electrode_repairs(continuous_repairs)
+        # Print electrode repair summary (load from saved artifact info files)
+        @info subsection("Electrode Repair Summary Across All Participants (Continuous Level Only)")
+        electrode_repair_summary = summarize_electrode_repairs("_artifact_info", input_dir = output_directory)
+        if !isempty(electrode_repair_summary)
             log_pretty_table(
                 electrode_repair_summary;
                 title = "Electrode Repairs at Continuous Level: Number of Participants Affected",
             )
         end
         
-        # Print ICA component summary
-        if !isempty(all_ica_components)
-            @info subsection("ICA Component Removal Summary")
-            # Extract ArtifactComponents objects and filenames from tuples
-            ica_components = [component_artifacts for (_, component_artifacts) in all_ica_components]
-            filenames = [basename(filename) for (filename, _) in all_ica_components]
-            ica_per_file, ica_avg = summarize_ica_components(ica_components)
-            # Update filenames in per_file_df
-            for (i, filename) in enumerate(filenames)
-                ica_per_file.file[i] = filename
-            end
-            if !isempty(ica_per_file)
-                log_pretty_table(
-                    ica_per_file;
-                    title = "ICA Components Removed per Participant",
-                )
-                log_pretty_table(
-                    ica_avg;
-                    title = "Average ICA Components Removed per Participant",
-                )
-            end
+        # Print ICA component summary (load from saved artifact info files)
+        @info subsection("ICA Component Removal Summary")
+        ica_per_file, ica_avg = summarize_ica_components("_artifact_info", input_dir = output_directory)
+        if !isempty(ica_per_file)
+            log_pretty_table(
+                ica_per_file;
+                title = "ICA Components Removed per Participant",
+            )
+            log_pretty_table(
+                ica_avg;
+                title = "Average ICA Components Removed per Participant",
+            )
         end
 
         # Print combined epoch counts
