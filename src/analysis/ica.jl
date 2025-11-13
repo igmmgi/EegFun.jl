@@ -1056,6 +1056,10 @@ function identify_ecg_components(
         if comp_idx == plot_component_index
             fig, ax = lines(ts, color = :black)
             scatter!(ax, peak_indices, ts[peak_indices], color = :red)
+            # Add vertical lines at peak positions
+            for peak_idx in peak_indices
+                vlines!(ax, peak_idx, color = :red, linestyle = :dash, linewidth = 1)
+            end
             display(fig)
         end
 
