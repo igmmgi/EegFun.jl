@@ -41,6 +41,8 @@ component_artifacts, component_metrics = eegfun.identify_components(
                     ),
                 )
 
+eegfun.identify_ecg_components(dat, ica_result; plot_component_index = 4)        
+
 
 
 
