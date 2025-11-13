@@ -3,7 +3,7 @@ using GLMakie
 # using BenchmarkTools
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -12,7 +12,7 @@ eegfun.rereference!(dat, :avg)
 # eegfun.filter_data!(dat, "hp", 0.5)
 eegfun.filter_data!(dat, "hp", 1)
 # eegfun.resample!(dat, 4)
-eegfun.is_extreme_value!(dat, 100);
+eegfun.is_extreme_value!(dat, 200);
 
 eegfun.channel_difference!(
     dat,
@@ -25,12 +25,23 @@ eegfun.channel_difference!(
     channel_selection1 = eegfun.channels([:F9]),
     channel_selection2 = eegfun.channels([:F10]),
     channel_out = :hEOG,
-); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
+); # horizontal EOG = F9 - F10
 
 # ICA on continuous data
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
+# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 25)
+
+eegfun.plot_ica_component_activation(dat, ica_result)
+component_artifacts, component_metrics = eegfun.identify_components(
+                    dat,
+                    ica_result,
+                    sample_selection = eegfun.samples_not(
+                        :is_extreme_value_200,
+                    ),
+                )
+
+
 
 
 fig, ax, analysis_settings = eegfun.plot_databrowser(dat, ica_result)
@@ -248,6 +259,17 @@ eegfun.plot_topography(
 eegfun.plot_ica_component_activation(dat, ica_result)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
+
+component_artifacts, component_metrics = eegfun.identify_components(
+                    dat,
+                    ica_result,
+                    sample_selection = eegfun.samples_not(
+                        :is_extreme_value_100,
+                    ),
+                )
+
+
+
 
 #################################
 # Epoched DataFrameEeg

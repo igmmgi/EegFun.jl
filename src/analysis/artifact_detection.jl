@@ -905,7 +905,6 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected)))")
  
     if info.abs_rejections !== nothing
-        println(io, "")
         println(io, "  Rejection breakdown (absolute):")
         println(
             io,
@@ -940,6 +939,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
             end
         end
     end
+    println(io, "")
  
 end
 

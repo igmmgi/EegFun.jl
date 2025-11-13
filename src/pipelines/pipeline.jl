@@ -262,7 +262,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     # Identify all artifact components 
                     @info subsection("Component Identification")
                     component_artifacts, component_metrics = identify_components(
-                        dat_ica,
+                        dat, # dat_ica vs. dat makes a difference here! TODO: what is going on?
                         ica,
                         sample_selection = samples_not(
                             _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
@@ -311,7 +311,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 calculate_eog_channels!(dat, preprocess_cfg.eog)
 
                 #################### DETECT ARTIFACT VALUES IN CONTINUOUS DATA (FOR EPOCHING) ###################
-                @info subsection("Detecting artifact values in continuous data")
+                @info section("Detecting artifact values in continuous data")
                 is_extreme_value!(
                     dat,
                     preprocess_cfg.eeg.artifact_value_criterion,
@@ -327,11 +327,11 @@ function preprocess(config::String; log_level::Symbol = :info)
                 end
 
                 #################### EPOCH EXTRACTION ###################
-                @info subsection("Extracting cleaned epoched data")
+                @info section("Extracting cleaned epoched data")
                 epochs = extract_epochs(dat, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
 
                 #################### DETECT BAD EPOCHS ###################
-                @info subsection("Automatic epoch detection")
+                @info section("Automatic epoch detection")
                 rejection_step1 = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
@@ -339,6 +339,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     name = "rejection_step1",
                 )
                 channel_repairable!(rejection_step1, epochs[1].layout)
+                @info "" # formatting
                 @info rejection_step1
                 
                 #################### CHANNEL REPAIR PER EPOCH ###################
@@ -357,6 +358,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     name = "rejection_step2",
                 )
                 channel_repairable!(rejection_info_step2, epochs[1].layout)
+                @info "" # formatting
                 @info rejection_info_step2
                 
                 #################### COMPARE REJECTION STEPS ###################
@@ -373,6 +375,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 
                 #################### SAVE ARTIFACT INFO ###################
                 # Collect all artifact-related info into a single structure
+                @info subsection("Artifact Information")
                 artifact_info = ArtifactInfo(
                     continuous_repair_info !== nothing ? [continuous_repair_info] : ContinuousRepairInfo[],
                     vcat(rejection_step1, rejection_info_step2),
@@ -432,10 +435,12 @@ function preprocess(config::String; log_level::Symbol = :info)
             log_pretty_table(
                 ica_per_file;
                 title = "ICA Components Removed per Participant",
+                alignment = [:l, :r, :r, :r, :r, :r, :r],  # First column left, rest right
             )
             log_pretty_table(
                 ica_avg;
                 title = "Average ICA Components Removed per Participant",
+                alignment = [:l, :r],  # First column left, second right
             )
         end
 
@@ -444,8 +449,8 @@ function preprocess(config::String; log_level::Symbol = :info)
             epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
             # Merge with existing summaries (replaces data for files that already exist)
             merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
-            log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:")
-            log_pretty_table(merged_file_summary, title = "Average percentage per condition (averaged across conditions):")
+            log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
+            log_pretty_table(merged_file_summary, title = "Average percentage per condition (averaged across conditions):", alignment = [:l, :r])
             jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
             jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
         end

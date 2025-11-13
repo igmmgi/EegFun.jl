@@ -41,8 +41,8 @@ end
 function get_files(directory::String, files::String)
     # replace common wildcard with regex syntax
     matching_files = Base.filter(f -> occursin(Regex(files), f), readdir(directory))
-    # Natural order hack: "file_10" comes after "file_3"
-    sorted_files = sort(matching_files, by=x -> (replace(x, r"\d+" => m -> lpad(String(m), 10, '0')), x))
+    # Natural order: "file_10" comes after "file_3"
+    sorted_files = sort(matching_files, by=x -> (natural_sort_key(x), x))
     return [joinpath(directory, file) for file in sorted_files]
 end
 

@@ -771,9 +771,21 @@ end
                           vEOG_channel::Symbol=:vEOG,
                           hEOG_channel::Symbol=:hEOG,
                           z_threshold::Float64=3.0,
+                          iterative::Bool=true,
                           sample_selection::Function = samples())
 
-Identify ICA components potentially related to eye movements based on z-scored correlation.
+Identify ICA components potentially related to eye movements based on z-scored correlation with EOG channels.
+
+Uses a two-step iterative approach by default (exactly two steps, no further iterations):
+1. **Step 1**: Calculate correlations between all ICA components and EOG channels, compute standard z-scores, 
+   and identify primary EOG components (those exceeding the z-score threshold).
+2. **Step 2**: Remove primary components from consideration, recalculate z-scores on remaining components only, 
+   and identify secondary EOG components. This prevents primary components with very high correlations from 
+   inflating the z-scores of secondary components. The process stops after these two steps.
+
+This iterative approach helps detect secondary EOG components that might otherwise be missed when a primary 
+component has an extremely high correlation (e.g., >0.9) that would inflate the mean and standard deviation 
+used for z-score calculation.
 
 # Arguments
 - `dat::ContinuousData`: The continuous data containing EOG channels.
@@ -782,14 +794,37 @@ Identify ICA components potentially related to eye movements based on z-scored c
 # Keyword Arguments
 - `vEOG_channel::Symbol`: Name of the vertical EOG channel (default: :vEOG).
 - `hEOG_channel::Symbol`: Name of the horizontal EOG channel (default: :hEOG).
-- `z_threshold::Float64`: Absolute Z-score threshold for identification (default: 3.0).
-- `sample_selection::Function`: Function to select samples from `dat.data`. Defaults to `samples()`.
+- `z_threshold::Float64`: Absolute Z-score threshold for identification (default: 3.0). Components with 
+  z-scores above this threshold are identified as EOG-related.
+- `iterative::Bool`: If true (default), use iterative two-step identification as described above. If false, 
+  use single-pass identification with standard z-scores on all components simultaneously.
+- `sample_selection::Function`: Function to select samples from `dat.data`. Defaults to `samples()`. Only 
+  selected samples are used for correlation calculation.
 
 # Returns
 - `Dict{Symbol, Vector{Int}}`: Dictionary containing:
-  - `:vEOG`: Vector of indices identified for vertical eye movements.
-  - `:hEOG`: Vector of indices identified for horizontal eye movements.
-- `DataFrame`: DataFrame containing detailed correlation metrics per component.
+  - `:vEOG`: Vector of component indices identified for vertical eye movements.
+  - `:hEOG`: Vector of component indices identified for horizontal eye movements.
+- `DataFrame`: DataFrame containing detailed metrics per component:
+  - `:Component`: Component index (1 to n_components)
+  - `:vEOG_corr`: Absolute correlation with vertical EOG channel
+  - `:vEOG_zscore`: Z-score of correlation with vertical EOG channel
+  - `:hEOG_corr`: Absolute correlation with horizontal EOG channel
+  - `:hEOG_zscore`: Z-score of correlation with horizontal EOG channel
+
+# Examples
+```julia
+# Basic usage with default iterative approach
+eog_comps, metrics = identify_eog_components(dat, ica_result)
+
+# Use single-pass identification (non-iterative)
+eog_comps, metrics = identify_eog_components(dat, ica_result, iterative=false)
+
+# Custom threshold and sample selection
+eog_comps, metrics = identify_eog_components(dat, ica_result, 
+    z_threshold=2.5,
+    sample_selection=samples_not(:is_extreme_value_100))
+```
 """
 function identify_eog_components(
     dat::ContinuousData,
@@ -798,6 +833,7 @@ function identify_eog_components(
     hEOG_channel::Symbol = :hEOG,
     sample_selection::Function = samples(),
     z_threshold::Float64 = 3.0,
+    iterative::Bool = false,
 )
 
     # Check basic inputs
@@ -846,15 +882,75 @@ function identify_eog_components(
     vEOG_corrs = Float64[]
     hEOG_corrs = Float64[]
 
-    # vEOG
-    vEOG_corrs = calculate_correlations(vEOG)
-    vEOG_corr_z = StatsBase.zscore(vEOG_corrs)
-    identified_vEOG = findall(abs.(vEOG_corr_z) .> z_threshold)
-
-    # hEOG
-    hEOG_corrs = calculate_correlations(hEOG)
-    hEOG_corr_z = StatsBase.zscore(hEOG_corrs)
-    identified_hEOG = findall(abs.(hEOG_corr_z) .> z_threshold)
+    if iterative
+        # Iterative approach: identify primary components first, then secondary
+        
+        # Step 1: Identify primary components with standard z-scores
+        vEOG_corrs = calculate_correlations(vEOG)
+        hEOG_corrs = calculate_correlations(hEOG)
+        
+        vEOG_corr_z_step1 = StatsBase.zscore(vEOG_corrs)
+        hEOG_corr_z_step1 = StatsBase.zscore(hEOG_corrs)
+        
+        primary_vEOG = findall(abs.(vEOG_corr_z_step1) .> z_threshold)
+        primary_hEOG = findall(abs.(hEOG_corr_z_step1) .> z_threshold)
+        
+        # Step 2: Remove primary components and recalculate z-scores for remaining components
+        remaining_components = setdiff(1:n_components, union(primary_vEOG, primary_hEOG))
+        
+        if !isempty(remaining_components)
+            # Recalculate correlations for remaining components only
+            vEOG_corrs_remaining = vEOG_corrs[remaining_components]
+            hEOG_corrs_remaining = hEOG_corrs[remaining_components]
+            
+            # Recalculate z-scores on remaining components (primary components won't inflate stats)
+            vEOG_corr_z_step2 = StatsBase.zscore(vEOG_corrs_remaining)
+            hEOG_corr_z_step2 = StatsBase.zscore(hEOG_corrs_remaining)
+            
+            # Find secondary components
+            secondary_vEOG_idx = findall(abs.(vEOG_corr_z_step2) .> z_threshold)
+            secondary_hEOG_idx = findall(abs.(hEOG_corr_z_step2) .> z_threshold)
+            
+            # Map back to original component indices
+            secondary_vEOG = remaining_components[secondary_vEOG_idx]
+            secondary_hEOG = remaining_components[secondary_hEOG_idx]
+            
+            # Combine primary and secondary
+            identified_vEOG = sort(union(primary_vEOG, secondary_vEOG))
+            identified_hEOG = sort(union(primary_hEOG, secondary_hEOG))
+            
+            # Build full z-score arrays for output (primary use step1, secondary use step2 mapped back)
+            vEOG_corr_z = zeros(n_components)
+            hEOG_corr_z = zeros(n_components)
+            vEOG_corr_z[primary_vEOG] .= vEOG_corr_z_step1[primary_vEOG]
+            hEOG_corr_z[primary_hEOG] .= hEOG_corr_z_step1[primary_hEOG]
+            # Map secondary z-scores back to original component indices
+            for (idx, comp) in enumerate(remaining_components)
+                if comp in secondary_vEOG
+                    vEOG_corr_z[comp] = vEOG_corr_z_step2[idx]
+                end
+                if comp in secondary_hEOG
+                    hEOG_corr_z[comp] = hEOG_corr_z_step2[idx]
+                end
+            end
+        else
+            # No remaining components, just use step 1 results
+            identified_vEOG = sort(primary_vEOG)
+            identified_hEOG = sort(primary_hEOG)
+            vEOG_corr_z = vEOG_corr_z_step1
+            hEOG_corr_z = hEOG_corr_z_step1
+        end
+    else
+        # Non-iterative: single pass with standard z-scores
+        vEOG_corrs = calculate_correlations(vEOG)
+        hEOG_corrs = calculate_correlations(hEOG)
+        
+        vEOG_corr_z = StatsBase.zscore(vEOG_corrs)
+        hEOG_corr_z = StatsBase.zscore(hEOG_corrs)
+        
+        identified_vEOG = findall(abs.(vEOG_corr_z) .> z_threshold)
+        identified_hEOG = findall(abs.(hEOG_corr_z) .> z_threshold)
+    end
 
     sort!(identified_vEOG)
     sort!(identified_hEOG)
@@ -913,7 +1009,7 @@ function identify_ecg_components(
     ica::InfoIca;
     min_bpm::Real = 40,
     max_bpm::Real = 130,
-    min_prominence_std::Real = 5,
+    min_prominence_std::Real = 2.5,
     min_peaks::Int = 10,
     max_ibi_std_s::Real = 0.2,
     min_peak_ratio::Real = 0.7,
@@ -949,9 +1045,12 @@ function identify_ecg_components(
     # Loop through components
     for comp_idx = 1:n_components
         ts = components_subset[comp_idx, :]
+        
+        # Z-score the time series for consistent peak detection across components
+        ts_zscored = StatsBase.zscore(ts)
 
         # Find prominent peaks 
-        peak_indices = _find_peaks(ts; min_prominence_std = min_prominence_std)
+        peak_indices = _find_peaks(ts_zscored; min_prominence_std = min_prominence_std)
 
         # for debugging
         if comp_idx == plot_component_index
@@ -1294,10 +1393,10 @@ ecg_metrics = metrics[:ecg_metrics]
 ```
 """
 function identify_components(dat::ContinuousData, ica::InfoIca; sample_selection::Function = samples(), kwargs...)
-    # Identify EOG components
+    # Identify EOG components (pass through use_robust_zscore if provided)
     eog_comps, eog_metrics_df = identify_eog_components(dat, ica; sample_selection = sample_selection, kwargs...)
 
-    # Identify ECG components  
+    # Identify ECG components
     ecg_comps, ecg_metrics_df = identify_ecg_components(dat, ica; sample_selection = sample_selection, kwargs...)
 
     # Identify line noise components

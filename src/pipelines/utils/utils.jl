@@ -499,9 +499,8 @@ function _merge_summaries(new_epoch_summary::DataFrame, new_file_summary::DataFr
     end
     
     # Sort by filename using natural sorting (file_1, file_2, ..., file_10)
-    sort_key(x) = replace(x, r"\d+" => m -> lpad(String(m), 10, '0'))
-    merged_epoch = sort(merged_epoch, :file, by=sort_key)
-    merged_file = sort(merged_file, :file, by=sort_key)
+    merged_epoch = sort(merged_epoch, :file, by=natural_sort_key)
+    merged_file = sort(merged_file, :file, by=natural_sort_key)
     
     return merged_epoch, merged_file
 end
@@ -767,7 +766,7 @@ Uses `_find_batch_files` to match files by pattern.
 
 # Returns
 - `DataFrame`: Per-file summary table with columns:
-  - `file::String`: Filename
+  - `file::String`: Base filename
   - `total_components::Int`: Total number of ICA components removed
   - `vEOG::Int`: Number of vEOG components
   - `hEOG::Int`: Number of hEOG components
@@ -829,10 +828,15 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
     # Get summary from vector version
     per_file_df, avg_df = summarize_ica_components(ica_components)
     
-    # Update filenames in per_file_df
+    # Update filenames in per_file_df: extract base filename
     for (i, filename) in enumerate(filenames)
-        per_file_df.file[i] = filename
+        # Extract base filename (remove "_artifact_info.jld2" suffix)
+        base_filename = replace(filename, "_artifact_info.jld2" => "")
+        per_file_df.file[i] = base_filename
     end
+    
+    # Sort by filename using natural sorting (handles numeric parts correctly: Flank_C_3 before Flank_C_12)
+    sort!(per_file_df, :file, by=natural_sort_key)
     
     return per_file_df, avg_df
 end
