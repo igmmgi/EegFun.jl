@@ -1167,25 +1167,25 @@ end
 
 
 """
-    identify_spatial_kurtosis_components(dat::ContinuousData, ica::InfoIca;
-                                      exclude_samples::Union{Nothing,Vector{Symbol}} = [:is_extreme_value],
-                                      z_threshold::Float64 = 3.0)
+    identify_spatial_kurtosis_components(ica::InfoIca; z_threshold::Float64 = 3.0)
 
 Identify ICA components with high spatial kurtosis (localized, spot-like activity).
 
+Spatial kurtosis measures how localized the component's topography is. High spatial kurtosis
+indicates that the component's activity is concentrated in a small number of channels (spot-like),
+which is characteristic of channel noise or artifacts.
+
 # Arguments
-- `dat::ContinuousData`: The continuous data.
 - `ica::InfoIca`: The ICA result object.
 
 # Keyword Arguments
-- `exclude_samples::Union{Nothing,Vector{Symbol}}`: Optional vector of Bool columns in `dat.data` marking samples to exclude. Defaults to `[:is_extreme_value]`.
 - `z_threshold::Float64`: Z-score threshold for identifying high spatial kurtosis components (default: 3.0).
 
 # Returns
 - `Vector{Int}`: Indices of components with high spatial kurtosis.
 - `DataFrame`: DataFrame containing spatial kurtosis values and z-scores for all components.
 """
-function identify_spatial_kurtosis_components(dat::ContinuousData, ica::InfoIca; z_threshold::Float64 = 3.0)
+function identify_spatial_kurtosis_components(ica::InfoIca; z_threshold::Float64 = 3.0)
 
     # Calculate spatial kurtosis for each component's weights
     n_components = size(ica.mixing, 2)
@@ -1431,7 +1431,7 @@ function identify_components(dat::ContinuousData, ica::InfoIca; sample_selection
     line_noise_comps, line_noise_metrics_df = identify_line_noise_components(dat, ica; kwargs...)
 
     # Identify channel noise components (spatial kurtosis)
-    channel_noise_comps, channel_noise_metrics_df = identify_spatial_kurtosis_components(dat, ica; kwargs...)
+    channel_noise_comps, channel_noise_metrics_df = identify_spatial_kurtosis_components(ica; kwargs...)
 
     # Combine all components
     artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)

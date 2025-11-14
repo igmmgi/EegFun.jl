@@ -1993,7 +1993,7 @@ All keyword arguments from `plot_topography` are supported, including:
 eog_comps, _ = identify_eog_components(dat, ica)
 ecg_comps, _ = identify_ecg_components(dat, ica)
 line_noise_comps, _ = identify_line_noise_components(dat, ica)
-channel_noise_comps, _ = identify_spatial_kurtosis_components(dat, ica)
+channel_noise_comps, _ = identify_spatial_kurtosis_components(ica)
 
 # Combine them
 artifacts = combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)

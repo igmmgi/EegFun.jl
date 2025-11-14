@@ -308,7 +308,7 @@ ecg_comps, ecg_comps_metrics_df =
     eegfun.identify_ecg_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_100))
 
 line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(dat, ica_result)
-channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(dat, ica_result)
+channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result)
 
 # Combine existing results and plot
 artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
