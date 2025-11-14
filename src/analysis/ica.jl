@@ -878,6 +878,7 @@ function identify_eog_components(
 )
 
     # Check basic inputs - return nothing as first value if EOG channels are missing
+    # TODO: what about when only one is available?
     if !(vEOG_channel in propertynames(dat.data)) || !(hEOG_channel in propertynames(dat.data))
         return nothing, DataFrame()
     end
