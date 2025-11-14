@@ -962,10 +962,10 @@ function identify_eog_components(
     metrics_df = DataFrame(
         :Component => 1:n_components,
         :vEOG_corr => vEOG_corrs,
-        :vEOG_zscore_step1 => vEOG_corr_z,
+        :vEOG_zscore => vEOG_corr_z,
         :vEOG_spatial_corr => vEOG_spatial_corr_full,
         :hEOG_corr => hEOG_corrs,
-        :hEOG_zscore_step1 => hEOG_corr_z,
+        :hEOG_zscore => hEOG_corr_z,
         :hEOG_spatial_corr => hEOG_spatial_corr_full,
     )
 
@@ -1018,7 +1018,6 @@ and interval regularity, using only samples consistent with ICA calculation.
   - `:std_ibi_s`: Standard deviation of inter-beat intervals in seconds (if num_valid_ibis > 1).
   - `:peak_ratio`: Ratio of valid inter-beat intervals to total inter-peak intervals.
   - `:heart_rate_bpm`: Estimated heart rate in beats per minute (if mean_ibi_s is valid).
-  - `:is_ecg_artifact`: Boolean flag indicating if component met all criteria.
 """
 function identify_ecg_components(
     dat::ContinuousData,
@@ -1052,7 +1051,6 @@ function identify_ecg_components(
             std_ibi_s = Float64[],
             peak_ratio = Float64[],
             heart_rate_bpm = Float64[],
-            is_ecg_artifact = Bool[],
         )
     end
 
@@ -1104,7 +1102,6 @@ function identify_ecg_components(
                 std_ibi_s = std_ibi,
                 peak_ratio = peak_ratio,
                 heart_rate_bpm = heart_rate_bpm,
-                is_ecg_artifact = is_ecg,
             ),
         )
     end
@@ -1189,30 +1186,28 @@ Identify ICA components with high spatial kurtosis (localized, spot-like activit
 - `DataFrame`: DataFrame containing spatial kurtosis values and z-scores for all components.
 """
 function identify_spatial_kurtosis_components(dat::ContinuousData, ica::InfoIca; z_threshold::Float64 = 3.0)
+
     # Calculate spatial kurtosis for each component's weights
     n_components = size(ica.mixing, 2)
     spatial_kurtosis = Float64[]
-
     for i = 1:n_components
-        # Get component weights
         weights = ica.mixing[:, i]
-        # Calculate kurtosis of the weights
         k = kurtosis(weights)
         push!(spatial_kurtosis, k)
     end
 
     # Calculate z-scores of spatial kurtosis values
-    spatial_kurtosis_z = StatsBase.zscore(spatial_kurtosis)
+    z_spatial_kurtosis = StatsBase.zscore(spatial_kurtosis)
 
     # Identify components with high spatial kurtosis (using z-scores)
-    high_kurtosis_comps = findall(spatial_kurtosis_z .> z_threshold)  # Only positive deviations (localized activity)
+    high_kurtosis_comps = findall(z_spatial_kurtosis .> z_threshold)  # Only positive deviations (localized activity)
     sort!(high_kurtosis_comps)
 
     # Create metrics DataFrame
     metrics_df = DataFrame(
         :Component => 1:n_components,
-        :SpatialKurtosis => spatial_kurtosis,
-        :SpatialKurtosisZScore => spatial_kurtosis_z,
+        :spatial_kurtosis => spatial_kurtosis,
+        :z_spatial_kurtosis => z_spatial_kurtosis,
     )
 
     return high_kurtosis_comps, metrics_df
@@ -1238,7 +1233,7 @@ Identify ICA components with strong line noise characteristics.
 - `line_freq::Real`: Line frequency in Hz (default: 50.0 for European power).
 - `freq_bandwidth::Real`: Bandwidth around line frequency to consider (default: 1.0 Hz).
 - `z_threshold::Float64`: Z-score threshold for identifying line noise components (default: 3.0).
-- `min_harmonic_power::Real`: Minimum power ratio of harmonics relative to fundamental (default: 0.5).
+- `min_harmonic_power::Real`: Minimum power ratio of 2nd harmonic relative to fundamental (default: 0.5).
 
 # Returns
 - `Vector{Int}`: Indices of components with strong line noise characteristics.
@@ -1263,50 +1258,56 @@ function identify_line_noise_components(
 
     # Calculate components for valid samples
     components, n_components = _prepare_ica_data_matrix(dat, ica, samples_to_use)
-    fs = dat.sample_rate
 
     # Calculate power spectrum for each component
     # Use a reasonable FFT size (power of 2, but not too large)
-    nfft = min(nextpow(2, size(components, 2)), 2^16)  # Cap at 2^16 points
-    freqs = FFTW.rfftfreq(nfft, fs)
-    psd = zeros(length(freqs), n_components)
+    n_samples = size(components, 2)
+    nfft = nextpow(2, n_samples)  # Cap at 2^16 points
+    freqs = FFTW.rfftfreq(nfft, dat.sample_rate)
+    n_freqs = length(freqs)
+    psd = zeros(n_freqs, n_components)
 
     for i = 1:n_components
-        # Zero-pad or truncate to nfft points
         signal = components[i, :]
+        
+        # Prepare signal for FFT: truncate or zero-pad to nfft points
         if length(signal) > nfft
-            signal = signal[1:nfft]
+            signal_fft = signal[1:nfft]
         elseif length(signal) < nfft
-            signal = [signal; zeros(nfft - length(signal))]
+            signal_fft = zeros(nfft)
+            signal_fft[1:length(signal)] = signal
+        else
+            signal_fft = signal
         end
-        psd[:, i] = abs2.(FFTW.rfft(signal))
+        
+        # Calculate power spectral density
+        psd[:, i] = abs2.(FFTW.rfft(signal_fft))
     end
 
-    # Find indices for line frequency and harmonics
-    line_idx = findmin(abs.(freqs .- line_freq))[2]
+    # Find frequency bands for line frequency and 2nd harmonic
     line_band = findall(abs.(freqs .- line_freq) .<= freq_bandwidth)
+    harmonic2_freq = line_freq * 2
+    harmonic2_band = findall(abs.(freqs .- harmonic2_freq) .<= freq_bandwidth)
 
     # Calculate metrics for each component
     metrics = []
     for i = 1:n_components
-        # Get power at line frequency and surrounding band
+        # Get power at line frequency band
         line_power = mean(psd[line_band, i])
 
-        # Calculate power in surrounding bands (excluding line frequency)
-        surrounding_bands = setdiff(1:length(freqs), line_band)
+        # Calculate power in surrounding frequencies (excluding line frequency band)
+        surrounding_bands = setdiff(1:n_freqs, line_band)
         surrounding_power = mean(psd[surrounding_bands, i])
 
-        # Calculate power ratio
+        # Calculate power ratio (line power relative to surrounding frequencies)
         power_ratio = line_power / (surrounding_power + eps())
 
-        # Check for harmonics (2x and 3x line frequency)
-        harmonic_powers = Float64[]
-        for h = 2:3
-            harmonic_freq = line_freq * h
-            harmonic_idx = findmin(abs.(freqs .- harmonic_freq))[2]
-            harmonic_band = findall(abs.(freqs .- harmonic_freq) .<= freq_bandwidth)
-            harmonic_power = mean(psd[harmonic_band, i])
-            push!(harmonic_powers, harmonic_power / line_power)
+        # Calculate 2nd harmonic power ratio (relative to fundamental)
+        harmonic_ratio = if !isempty(harmonic2_band)
+            harmonic2_power = mean(psd[harmonic2_band, i])
+            harmonic2_power / (line_power + eps())
+        else
+            NaN  # 2nd harmonic frequency above Nyquist
         end
 
         # Store metrics
@@ -1314,11 +1315,10 @@ function identify_line_noise_components(
             metrics,
             (
                 Component = i,
-                LinePower = line_power,
-                SurroundingPower = surrounding_power,
-                PowerRatio = power_ratio,
-                Harmonic2Ratio = harmonic_powers[1],
-                Harmonic3Ratio = harmonic_powers[2],
+                line_power = line_power,
+                surrounding_power = surrounding_power,
+                power_ratio = power_ratio,
+                harmonic_ratio = harmonic_ratio,
             ),
         )
     end
@@ -1327,19 +1327,18 @@ function identify_line_noise_components(
     metrics_df = DataFrame(metrics)
 
     # Calculate z-scores of power ratios
-    power_ratio_z = StatsBase.zscore(metrics_df.PowerRatio)
-    metrics_df[!, :PowerRatioZScore] = power_ratio_z
+    power_ratio_z = StatsBase.zscore(metrics_df.power_ratio)
+    metrics_df[!, :power_ratio_zscore] = power_ratio_z
 
     # Identify components with strong line noise characteristics
-    line_noise_comps = findall(power_ratio_z .> z_threshold)
-
-    # Additional check for harmonics
-    if !isempty(line_noise_comps)
-        harmonic_mask =
-            (metrics_df.Harmonic2Ratio .> min_harmonic_power) .| (metrics_df.Harmonic3Ratio .> min_harmonic_power)
-        line_noise_comps = intersect(line_noise_comps, findall(harmonic_mask))
-    end
-
+    # Step 1: High power ratio (z-score > threshold)
+    high_power_ratio_mask = power_ratio_z .> z_threshold
+    
+    # Step 2: Must have significant 2nd harmonic (> min_harmonic_power)
+    has_harmonic_mask = metrics_df.harmonic_ratio .> min_harmonic_power
+    
+    # Combine both criteria
+    line_noise_comps = findall(high_power_ratio_mask .& has_harmonic_mask)
     sort!(line_noise_comps)
 
     return line_noise_comps, metrics_df
