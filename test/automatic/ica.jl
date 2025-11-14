@@ -187,7 +187,7 @@ using eegfun
         @test isempty(ecg_vec0) && size(ecg_df0) == (0, 0)
 
         # Spatial kurtosis components
-        sk_vec, sk_df = eegfun.identify_spatial_kurtosis_components(dat, ica_res)
+        sk_vec, sk_df = eegfun.identify_spatial_kurtosis_components(ica_res)
         @test sk_vec isa Vector{Int}
         @test sk_df isa DataFrame
         @test all(c in propertynames(sk_df) for c in [:Component, :SpatialKurtosis, :SpatialKurtosisZScore])
