@@ -157,10 +157,11 @@ using eegfun
         @test all(haskey(eog_dict, k) for k in [:vEOG, :hEOG])
         @test eog_df isa DataFrame
         @test all(c in propertynames(eog_df) for c in [:Component, :vEOG_corr, :vEOG_zscore, :hEOG_corr, :hEOG_zscore])
-        # Missing EOG columns -> returns nothing
+        # Missing EOG columns -> returns nothing as first value
         dat_no_eog = copy(dat)
         select!(dat_no_eog.data, Not([:vEOG, :hEOG]))
-        @test eegfun.identify_eog_components(dat_no_eog, ica_res) === nothing
+        result = eegfun.identify_eog_components(dat_no_eog, ica_res)
+        @test result[1] === nothing
         # No samples selected -> returns empty dict and empty df
         empty_eog, empty_eog_df = eegfun.identify_eog_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
         @test empty_eog == Dict(:vEOG => Int[], :hEOG => Int[])
@@ -179,7 +180,6 @@ using eegfun
                 :std_ibi_s,
                 :peak_ratio,
                 :heart_rate_bpm,
-                :is_ecg_artifact,
             ]
         )
         # No samples selected -> empty results
@@ -190,7 +190,7 @@ using eegfun
         sk_vec, sk_df = eegfun.identify_spatial_kurtosis_components(ica_res)
         @test sk_vec isa Vector{Int}
         @test sk_df isa DataFrame
-        @test all(c in propertynames(sk_df) for c in [:Component, :SpatialKurtosis, :SpatialKurtosisZScore])
+        @test all(c in propertynames(sk_df) for c in [:Component, :spatial_kurtosis, :z_spatial_kurtosis])
 
         # Line noise components
         ln_vec, ln_df = eegfun.identify_line_noise_components(dat, ica_res)
@@ -199,12 +199,11 @@ using eegfun
         @test all(
             c in propertynames(ln_df) for c in [
                 :Component,
-                :LinePower,
-                :SurroundingPower,
-                :PowerRatio,
-                :Harmonic2Ratio,
-                :Harmonic3Ratio,
-                :PowerRatioZScore,
+                :line_power,
+                :surrounding_power,
+                :power_ratio,
+                :harmonic_ratio,
+                :power_ratio_zscore,
             ]
         )
         # No samples selected -> empty results

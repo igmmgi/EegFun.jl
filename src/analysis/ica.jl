@@ -877,9 +877,10 @@ function identify_eog_components(
     two_step::Bool = true,
 )
 
-    # Check basic inputs
-    !(vEOG_channel in propertynames(dat.data)) && @minimal_error_throw "Vertical EOG channel $vEOG_channel not found in data"
-    !(hEOG_channel in propertynames(dat.data)) && @minimal_error_throw "Horizontal EOG channel $hEOG_channel not found in data"
+    # Check basic inputs - return nothing as first value if EOG channels are missing
+    if !(vEOG_channel in propertynames(dat.data)) || !(hEOG_channel in propertynames(dat.data))
+        return nothing, DataFrame()
+    end
 
     # Get samples to use
     selected_samples = get_selected_samples(dat, sample_selection)
