@@ -455,7 +455,7 @@ function _epoch_and_file_summary(all_epoch_counts::Vector{DataFrame})
         :percentage => mean => :percentage,
     )
     file_summary.percentage = round.(file_summary.percentage; digits = 1)
-    return epoch_summary, file_summary
+    return epoch_summary, file_summary 
 end
 
 """

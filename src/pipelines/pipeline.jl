@@ -106,9 +106,9 @@ function preprocess(config::String; log_level::Symbol = :info)
                 dat = create_eeg_dataframe(read_bdf(data_file), layout)
 
                 # Save the original data in Julia format
-                if cfg["files"]["output"]["save_continuous_data"]
-                    @info "Saving continuous data"
-                    jldsave(make_output_filename(output_directory, data_file, "_continuous"); data = dat)
+                if cfg["files"]["output"]["save_continuous_data_original"]
+                    @info "Saving continuous data (original)"
+                    jldsave(make_output_filename(output_directory, data_file, "_continuous_original"); data = dat)
                 end
 
                 # Mark epoch windows
@@ -157,12 +157,12 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
-                    jldsave(make_output_filename(output_directory, data_file, "_epochs_all"); data = epochs_original)
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_original"); data = epochs_original)
                 end
 
                 if cfg["files"]["output"]["save_erp_data_original"]
                     @info "Saving ERP data (original)"
-                    jldsave(make_output_filename(output_directory, data_file, "_erps_all"); data = erps_original)
+                    jldsave(make_output_filename(output_directory, data_file, "_erps_original"); data = erps_original)
                 end
 
                 ############################### INITIAL ARTIFACT DETECTION ###############################
@@ -181,19 +181,19 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 #################### DETECT EXTREME VALUES IN CONTINUOUS DATA ###################
                 @info subsection("Artifact Detection (extreme values)")
-                @info "Detecting extreme values: $(preprocess_cfg.eeg.extreme_value_criterion) μV"
+                @info "Detecting extreme values: $(preprocess_cfg.eeg.extreme_value_abs_criterion) μV"
                 is_extreme_value!(
                     dat,
-                    preprocess_cfg.eeg.extreme_value_criterion,
-                    channel_out = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
+                    preprocess_cfg.eeg.extreme_value_abs_criterion,
+                    channel_out = _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion),
                 )
 
                 @info subsection("Artifact Detection (criterion values)")
-                @info "Detecting artifact values: $(preprocess_cfg.eeg.artifact_value_criterion) μV"
+                @info "Detecting artifact values: $(preprocess_cfg.eeg.artifact_value_abs_criterion) μV"
                 is_extreme_value!(
                     dat,
-                    preprocess_cfg.eeg.artifact_value_criterion,
-                    channel_out = _flag_symbol("is_artifact_value", preprocess_cfg.eeg.artifact_value_criterion),
+                    preprocess_cfg.eeg.artifact_value_abs_criterion,
+                    channel_out = _flag_symbol("is_artifact_value", preprocess_cfg.eeg.artifact_value_abs_criterion),
                 )
 
                 #################### CHANNEL JOINT PROBABILITY IN CONTINUOUS DATA ###################
@@ -234,7 +234,6 @@ function preprocess(config::String; log_level::Symbol = :info)
                 # We then run ica on clean sections of "continuous" data
                 component_artifacts = nothing  # Initialize in case ICA is not applied
                 if preprocess_cfg.ica.apply
-
                     @info section("ICA")
                     
                     dat_ica = copy(dat) # we need a copy of the data for the ICA
@@ -254,7 +253,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                     ica = run_ica(
                         dat_ica;
                         sample_selection = samples_not(
-                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
+                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion),
                         ),
                         percentage_of_data = preprocess_cfg.ica.percentage_of_data,
                     )
@@ -265,7 +264,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                         dat, # dat_ica vs. dat makes a difference here! TODO: what is going on?
                         ica,
                         sample_selection = samples_not(
-                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_criterion),
+                            _flag_symbol("is_extreme_value", preprocess_cfg.eeg.extreme_value_abs_criterion),
                         ),
                     )
 
@@ -283,7 +282,6 @@ function preprocess(config::String; log_level::Symbol = :info)
                         ica,
                         component_selection = components(all_removed_components),
                     )
-                    
 
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
@@ -296,10 +294,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 #################### REPAIR BAD CHANNELS BEFORE EPOCHING ###################
                 if !isnothing(continuous_repair_info)
                     @info section("Channel Repair")
-                    
-                    # Perform repairs with tracking (similar to repair_artifacts! for epochs)
                     repair_channels!(dat, continuous_repair_info; method = :neighbor_interpolation)
-                    
                     @info continuous_repair_info
                 end
 
@@ -314,14 +309,14 @@ function preprocess(config::String; log_level::Symbol = :info)
                 @info section("Detecting artifact values in continuous data")
                 is_extreme_value!(
                     dat,
-                    preprocess_cfg.eeg.artifact_value_criterion,
+                    preprocess_cfg.eeg.artifact_value_abs_criterion,
                     channel_out = Symbol(
-                        "is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_criterion),
+                        "is_artifact_value" * "_" * string(preprocess_cfg.eeg.artifact_value_abs_criterion),
                     ),
                 )
 
                 # Save the original data in Julia format
-                if cfg["files"]["output"]["save_continuous_data"]
+                if cfg["files"]["output"]["save_continuous_data_cleaned"]
                     @info "Saving continuous data"
                     jldsave(make_output_filename(output_directory, data_file, "_continuous_cleaned"); data = dat)
                 end
@@ -330,31 +325,41 @@ function preprocess(config::String; log_level::Symbol = :info)
                 @info section("Extracting cleaned epoched data")
                 epochs = extract_epochs(dat, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
 
+                #################### BASELINE WHOLE EPOCHS ##############
+                @info section("Baseline whole epochs")
+                baseline!(epochs)
+
                 #################### DETECT BAD EPOCHS ###################
                 @info section("Automatic epoch detection")
-                rejection_step1 = detect_bad_epochs_automatic(
+                rejection_info_step1 = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
-                    abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
+                    abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
                     name = "rejection_step1",
                 )
-                channel_repairable!(rejection_step1, epochs[1].layout)
+                channel_repairable!(rejection_info_step1, epochs[1].layout)
                 @info "" # formatting
-                @info rejection_step1
+                @info rejection_info_step1
                 
                 #################### CHANNEL REPAIR PER EPOCH ###################
                 # Repair channels identified in rejection_step1 before rejecting epochs
                 # This may save epochs that would otherwise be rejected
                 @info section("Channel Repair per Epoch")
-                repair_artifacts!(epochs, rejection_step1)
-                
+                repair_artifacts!(epochs, rejection_info_step1)
+
+                 #################### SAVE EPOCH DATA ###################
+                if cfg["files"]["output"]["save_epoch_data_cleaned"]
+                    @info "Saving epoch data (cleaned)"
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_cleaned"); data = epochs)
+                end
+
                 #################### RE-DETECT ARTIFACTS AFTER REPAIR ###################
                 # Re-detect artifacts after repair to get updated rejection info
                 @info subsection("Re-detecting artifacts after repair")
                 rejection_info_step2 = detect_bad_epochs_automatic(
                     epochs;
                     z_criterion = 0.0,
-                    abs_criterion = preprocess_cfg.eeg.artifact_value_criterion,
+                    abs_criterion = preprocess_cfg.eeg.artifact_value_abs_criterion,
                     name = "rejection_step2",
                 )
                 channel_repairable!(rejection_info_step2, epochs[1].layout)
@@ -363,30 +368,11 @@ function preprocess(config::String; log_level::Symbol = :info)
                 
                 #################### COMPARE REJECTION STEPS ###################
                 @info subsection("Rejection Step Comparison (before vs after repair)")
-                rejection_comparison = compare_rejections(rejection_step1, rejection_info_step2)
+                rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
                 log_pretty_table(
                     rejection_comparison;
                     title = "Rejection Step Comparison: Effectiveness of Channel Repair",
                 )
-                
-                #################### EPOCH REJECTION ###################
-                @info subsection("Rejecting bad epochs")
-                epochs = reject_epochs(epochs, rejection_info_step2)
-                
-                #################### SAVE ARTIFACT INFO ###################
-                # Collect all artifact-related info into a single structure
-                @info subsection("Artifact Information")
-                artifact_info = ArtifactInfo(
-                    continuous_repair_info !== nothing ? [continuous_repair_info] : ContinuousRepairInfo[],
-                    vcat(rejection_step1, rejection_info_step2),
-                    component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
-                )
-                jldsave(make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
-                @info "Saved artifact info: $(artifact_info)"
-
-                #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
-                df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
-                push!(all_epoch_counts, df)
 
                 #################### SAVE EPOCH DATA ###################
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
@@ -399,6 +385,38 @@ function preprocess(config::String; log_level::Symbol = :info)
                     erps = average_epochs(epochs)
                     @info "Saving ERP data (cleaned)"
                     jldsave(make_output_filename(output_directory, data_file, "_erps_cleaned"); data = erps)
+                end
+
+                #################### EPOCH REJECTION ###################
+                @info subsection("Rejecting bad epochs")
+                epochs = reject_epochs(epochs, rejection_info_step2)
+                
+                #################### SAVE ARTIFACT INFO ###################
+                # Collect all artifact-related info into a single structure
+                @info subsection("Artifact Information")
+                artifact_info = ArtifactInfo(
+                    continuous_repair_info !== nothing ? [continuous_repair_info] : ContinuousRepairInfo[],
+                    vcat(rejection_info_step1, rejection_info_step2),
+                    component_artifacts,  # Save ICA components if ICA was applied, otherwise nothing
+                )
+                jldsave(make_output_filename(output_directory, data_file, "_artifact_info"); data = artifact_info)
+                @info "Saved artifact info: $(artifact_info)"
+
+                #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
+                df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
+                push!(all_epoch_counts, df)
+
+                #################### SAVE EPOCH DATA ###################
+                if cfg["files"]["output"]["save_epoch_data_good"]
+                    @info "Saving epoch data (good)"
+                    jldsave(make_output_filename(output_directory, data_file, "_epochs_good"); data = epochs)
+                end
+
+                #################### SAVE ERP DATA ###################
+                if cfg["files"]["output"]["save_erp_data_good"]
+                    erps = average_epochs(epochs)
+                    @info "Saving ERP data (good)"
+                    jldsave(make_output_filename(output_directory, data_file, "_erps_good"); data = erps)
                 end
 
                 @info section("End of Processing")
@@ -451,6 +469,7 @@ function preprocess(config::String; log_level::Symbol = :info)
             merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
             log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
             log_pretty_table(merged_file_summary, title = "Average percentage per condition (averaged across conditions):", alignment = [:l, :r])
+            @info "Mean percentage (averaged across all conditions and files): $(round(mean(merged_file_summary.percentage), digits = 1)) %"
             jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
             jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
         end

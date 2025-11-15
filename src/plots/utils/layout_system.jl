@@ -71,17 +71,49 @@ function create_topo_layout(
 
     _ensure_coordinates_2d!(layout)
 
+    # Get layout coordinates for bounds calculation
+    layout_x_coords = Float64[]
+    layout_y_coords = Float64[]
+    for i in 1:length(layout.data.label)
+        push!(layout_x_coords, layout.data.x2[i])
+        push!(layout_y_coords, layout.data.y2[i])
+    end
+
+    # Calculate bounds from original layout (fixed, won't change as we add positions)
+    layout_minx = isempty(layout_x_coords) ? 0.0 : minimum(layout_x_coords)
+    layout_maxx = isempty(layout_x_coords) ? 0.0 : maximum(layout_x_coords)
+    layout_miny = isempty(layout_y_coords) ? 0.0 : minimum(layout_y_coords)
+    layout_maxy = isempty(layout_y_coords) ? 0.0 : maximum(layout_y_coords)
+    layout_xrange = layout_maxx - layout_minx
+    layout_yrange = layout_maxy - layout_miny
+
     # Get channel positions from layout data
-    positions = []
+    positions = Tuple{Float64,Float64}[]
+    new_plot_count = 0  # Count how many new plots we've placed
+    last_new_plot_pos = nothing  # Track position of last new plot
+    
     for channel in channels
         idx = findfirst(==(channel), layout.data.label)
         if idx !== nothing
             x = layout.data.x2[idx]
             y = layout.data.y2[idx]
-            push!(positions, (x, y))
+            pos = (x, y)
+            push!(positions, pos)
         else
-            @minimal_warning "Channel $channel not found in layout, using default position"
-            push!(positions, (0.0, 0.0))
+            @minimal_warning "Channel $channel not found in layout, finding non-overlapping position"
+            new_plot_count += 1
+            
+            # Calculate spacing based on layout range
+            spacing = max(layout_xrange, layout_yrange) * 0.15  # Spacing between new plots
+            
+            if new_plot_count == 1 # First new plot: to the right, near the top
+                new_pos = (layout_maxx + spacing, layout_maxy - spacing * 0.5)
+            else # Subsequent new plots: directly below the previous new plot
+                new_pos = (last_new_plot_pos[1], last_new_plot_pos[2] - spacing)
+            end
+            
+            push!(positions, new_pos)
+            last_new_plot_pos = new_pos  # Update for next new plot
         end
     end
 
@@ -202,7 +234,10 @@ end
     best_rect(n::Int)
 
 Find the best rectangular layout for n items.
-Returns (rows, cols) that minimizes the difference between rows and cols.
+Returns (rows, cols) that minimizes the difference between rows and cols,
+preferring arrangements that are as square-like as possible.
+For numbers with poor factors (like primes or near-primes), uses approximate
+square-like arrangements even if they have a few extra spaces.
 """
 function best_rect(n::Int)
     if n <= 0
@@ -213,49 +248,42 @@ function best_rect(n::Int)
         return (1, 1)
     end
 
-    # Find factors of n
-    factors = []
+    # Find exact factors of n
+    exact_factors = Tuple{Int,Int}[]
     for i = 1:isqrt(n)
         if n % i == 0
-            push!(factors, (i, n ÷ i))
+            push!(exact_factors, (i, n ÷ i))
         end
     end
 
-    @info "best_rect($n): factors = $factors"
-
-    if isempty(factors)
-        # n is prime or has no good factors, find closest rectangular arrangement
-        # Try to make it as square as possible
-        rows = ceil(Int, sqrt(n))
-        cols = ceil(Int, n / rows)
-
-        @info "best_rect($n): no factors, using sqrt approach: rows=$rows, cols=$cols"
-
-        # Ensure we have enough space for all items
-        if rows * cols < n
-            cols = ceil(Int, n / rows)
-            @info "best_rect($n): adjusted cols to $cols"
-        end
-
-        return (rows, cols)
-    end
-
-    # Return the factor pair with the smallest difference, but prefer more square-like arrangements
-    # Avoid 1×n arrangements unless they're the only option
-    if length(factors) == 1 && factors[1][1] == 1
-        # Only one factor and it's 1×n, use sqrt approach instead
-        rows = ceil(Int, sqrt(n))
-        cols = ceil(Int, n / rows)
-        @info "best_rect($n): only factor is 1×n, using sqrt approach: rows=$rows, cols=$cols"
-        return (rows, cols)
-    else
-        # Use the factor pair with the smallest difference
-        result = argmin(factors) do (r, c)
+    # Filter out 1×n arrangements (unless it's the only option)
+    good_factors = Base.filter(f -> f[1] > 1, exact_factors)
+    
+    if !isempty(good_factors)
+        # Use the factor pair with the smallest difference (most square-like)
+        best_exact = argmin(good_factors) do (r, c)
             abs(r - c)
         end
-        @info "best_rect($n): using factors, returning $result"
-        return result
+        
+        # Check if the best exact factor is reasonably square-like
+        # If the aspect ratio is too extreme (> 3:1), prefer approximate square
+        aspect_ratio = max(best_exact[1], best_exact[2]) / min(best_exact[1], best_exact[2])
+        if aspect_ratio <= 3.0
+            return best_exact
+        end
     end
+
+    # No good exact factors, or aspect ratio too extreme - use sqrt approach
+    # This gives a more square-like arrangement even if it has extra spaces
+    rows = ceil(Int, sqrt(n))
+    cols = ceil(Int, n / rows)
+    
+    # Ensure we have enough space
+    if rows * cols < n
+        cols = ceil(Int, n / rows)
+    end
+    
+    return (rows, cols)
 end
 
 """

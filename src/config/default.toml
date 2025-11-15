@@ -1,5 +1,5 @@
 # EEG Processing Configuration Template
-# Generated on 2025-10-17 14:26:49
+# Generated on 2025-11-15 12:27:49
 
 # This template shows all available configuration options.
 # Required fields are marked with [REQUIRED]
@@ -40,32 +40,42 @@ raw_data_files = "\\.bdf"
 # Default: ./preprocessed_files
 directory = "./preprocessed_files"
 
-# Exit early from preprocessing pipeline (i.e., quick epoching only)
+# Save continuous data cleaned?
 # Type: Bool
-# Default: false
-exit_early = false
+# Default: true
+save_continuous_data_cleaned = true
 
-# Save continuous data?
+# Save continuous data original?
 # Type: Bool
-# Default: false
-save_continuous_data = false
+# Default: true
+save_continuous_data_original = true
 
-# Save epoched data after cleaning?
+# Save epoched data cleaned?
 # Type: Bool
 # Default: true
 save_epoch_data_cleaned = true
 
-# Save epoched data?
+# Save epoched data good?
+# Type: Bool
+# Default: true
+save_epoch_data_good = true
+
+# Save epoched data original?
 # Type: Bool
 # Default: true
 save_epoch_data_original = true
 
-# Save ERP data after cleaning?
+# Save ERP data cleaned?
 # Type: Bool
 # Default: true
 save_erp_data_cleaned = true
 
-# Save ERP data
+# Save ERP data good?
+# Type: Bool
+# Default: true
+save_erp_data_good = true
+
+# Save ERP data original?
 # Type: Bool
 # Default: true
 save_erp_data_original = true
@@ -96,15 +106,20 @@ reference_channel = "avg"
 # eeg Settings
 [preprocess.eeg]
 
-# Value (mV) for defining data section as an artifact value.
+# Value (mV) for defining data section (or epoch) as an artifact value.
 # Type: Real
 # Default: 100
-artifact_value_criterion = 100
+artifact_value_abs_criterion = 100
+
+# Value (z) for defining data section (or epoch) as an artifact value (NB. various statistics with 0 being off!).
+# Type: Real
+# Default: 0
+artifact_value_z_criterion = 0
 
 # Value (mV) for defining data section as an extreme value.
 # Type: Real
 # Default: 500
-extreme_value_criterion = 500
+extreme_value_abs_criterion = 500
 
 # eog Settings
 [preprocess.eog]
@@ -300,8 +315,8 @@ percentage_of_data = 100.0
 # layout Settings
 [preprocess.layout]
 
-# Distance criterion (in mm) for channel neighbour definition.
+# Distance criterion (normalized) for channel neighbour definition.
 # Type: Real
 # Range: 0 ≤ value
-# Default: 0.5
-neighbour_criterion = 0.5
+# Default: 0.25
+neighbour_criterion = 0.25

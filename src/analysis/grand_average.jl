@@ -71,10 +71,10 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
 
     # Calculate total number of epochs across all participants
     total_epochs = sum(erp.n_epochs for erp in erps)
-    grand_avg_cond_name = "grand_average_condition_$(cond_num)"
+    grand_avg_cond_name = "grand_avg_$(first_erp.condition_name)"
 
     # Use the layout and analysis info from the first ERP
-    return ErpData(first_erp.file, cond_num, grand_avg_cond_name, grand_avg_data, first_erp.layout, first_erp.sample_rate, first_erp.analysis_info, total_epochs)
+    return ErpData("grand_avg", cond_num, grand_avg_cond_name, grand_avg_data, first_erp.layout, first_erp.sample_rate, first_erp.analysis_info, total_epochs)
 end
 
 """
@@ -126,7 +126,9 @@ Returns Vector{ErpData}.
 function _create_all_grand_averages(erps_by_condition::Dict{Int,Vector{ErpData}})
     grand_averages = ErpData[]
 
-    for (cond_num, erps) in erps_by_condition
+    # Sort conditions to ensure consistent ordering
+    for cond_num in sort(collect(keys(erps_by_condition)))
+        erps = erps_by_condition[cond_num]
         @info "Creating grand average for condition $cond_num (n=$(length(erps)) participants)"
 
         if length(erps) < 2

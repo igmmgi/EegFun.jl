@@ -846,11 +846,19 @@ even if their temporal correlations with EOG channels are not as strong.
     When `two_step=true`, only step1 z-scores are provided.
   - `:vEOG_spatial_corr`: (Only when `two_step=true`) Maximum spatial correlation (topography) with any primary vEOG 
     component. `NaN` for primary vEOG components identified in step1.
+  - `:vEOG_spatial_corr_z`: Z-score of `:vEOG_spatial_corr`.
+  - `:vEOG_temporal_corr`: (Only when `two_step=true`) Maximum lagged temporal correlation with any primary vEOG 
+    component. `NaN` for primary vEOG components identified in step1.
+  - `:vEOG_temporal_corr_z`: Z-score of `:vEOG_temporal_corr`.
   - `:hEOG_corr`: Absolute correlation with horizontal EOG channel
   - `:hEOG_zscore` or `:hEOG_zscore_step1`: Z-score of correlation with horizontal EOG channel.
     When `two_step=true`, only step1 z-scores are provided.
   - `:hEOG_spatial_corr`: (Only when `two_step=true`) Maximum spatial correlation (topography) with any primary hEOG 
     component. `NaN` for primary hEOG components identified in step1.
+  - `:hEOG_spatial_corr_z`: Z-score of `:hEOG_spatial_corr`.
+  - `:hEOG_temporal_corr`: (Only when `two_step=true`) Maximum lagged temporal correlation with any primary hEOG 
+    component. `NaN` for primary hEOG components identified in step1.
+  - `:hEOG_temporal_corr_z`: Z-score of `:hEOG_temporal_corr`.
 
 # Examples
 ```julia
@@ -873,7 +881,7 @@ function identify_eog_components(
     hEOG_channel::Symbol = :hEOG,
     sample_selection::Function = samples(),
     z_threshold::Float64 = 3.0,
-    min_correlation::Float64 = 0.6,
+    min_correlation::Float64 = 0.5,
     two_step::Bool = true,
 )
 
@@ -890,7 +898,7 @@ function identify_eog_components(
         return Dict(:vEOG => Int[], :hEOG => Int[]), DataFrame()
     end
 
-    # Function to calculate correlations for all components
+    # Function to calculate initial EOG-component correlations 
     function calculate_correlations(eog_signal)
         corrs = zeros(n_components)
         for comp_idx = 1:n_components
@@ -899,7 +907,7 @@ function identify_eog_components(
         return corrs
     end
 
-    # Function to calculate spatial correlations and identify secondary components
+    # Function to calculate spatial correlations between identified vEOG/hEOG components and remaining components (used in Step2)
     function calculate_spatial_correlations(remaining_components, primary_components, mixing_matrix, min_corr_threshold)
 
         spatial_corrs = fill(NaN, n_components)
@@ -930,6 +938,41 @@ function identify_eog_components(
         return spatial_corrs, secondary_components
     end
 
+    # Function to calculate lagged correlations between idenitified vEOG/hEOG components and remaining components (used in Step2) 
+    function calculate_lagged_correlations(remaining_components, primary_components, components_matrix, lp_filter, max_lag_samples, lag_step)
+
+        lagged_corrs = fill(NaN, n_components)
+        if isempty(remaining_components) || isempty(primary_components)
+            return lagged_corrs
+        end
+        
+        # Pre-filter all primary EOG components (they don't depend on remaining components)
+        eog_components_filtered = Dict{Int, Vector{Float64}}()
+        for eog_comp_idx in primary_components
+            eog_components_filtered[eog_comp_idx] = abs.(filtfilt(lp_filter.filter_object, components_matrix[eog_comp_idx, :]))
+        end
+        
+        for comp_idx in remaining_components
+            # Apply low-pass filter to remove high-frequency noise
+            comp_ts = abs.(filtfilt(lp_filter.filter_object, components_matrix[comp_idx, :]))
+            
+            max_corr = 0.0
+            for eog_comp_idx in primary_components
+                eog_comp_ts = eog_components_filtered[eog_comp_idx]
+                # Use crosscor to compute correlations at all lags, then take maximum absolute value
+                corrs = crosscor( eog_comp_ts, comp_ts, -max_lag_samples:lag_step:max_lag_samples)
+                max_corr_val = maximum(abs.(corrs))
+                if max_corr_val > max_corr
+                    max_corr = max_corr_val
+                end
+            end
+            
+            lagged_corrs[comp_idx] = max_corr
+        end
+        
+        return lagged_corrs
+    end
+
     # Get EOG signals for valid samples only
     vEOG = dat.data[selected_samples, vEOG_channel]
     hEOG = dat.data[selected_samples, hEOG_channel]
@@ -948,13 +991,65 @@ function identify_eog_components(
     primary_vEOG = findall((abs.(vEOG_corr_z) .> z_threshold) .& (abs.(vEOG_corrs) .> min_correlation))
     primary_hEOG = findall((abs.(hEOG_corr_z) .> z_threshold) .& (abs.(hEOG_corrs) .> min_correlation))
     
-    # Step 2: Always calculate spatial correlations between identified components and remaining
+    # Step 2: Always calculate spatial and temporal correlations between identified components and remaining
     remaining_vEOG = setdiff(1:n_components, primary_vEOG)
     remaining_hEOG = setdiff(1:n_components, primary_hEOG)
     
     # Calculate vEOG/hEOG step2: spatial correlations with primary vEOG/hEOG components
-    vEOG_spatial_corr_full, secondary_vEOG = calculate_spatial_correlations(remaining_vEOG, primary_vEOG, ica.mixing, min_correlation)
-    hEOG_spatial_corr_full, secondary_hEOG = calculate_spatial_correlations(remaining_hEOG, primary_hEOG, ica.mixing, min_correlation)
+    vEOG_spatial_corr, _ = calculate_spatial_correlations(remaining_vEOG, primary_vEOG, ica.mixing, min_correlation)
+    hEOG_spatial_corr, _ = calculate_spatial_correlations(remaining_hEOG, primary_hEOG, ica.mixing, min_correlation)
+    
+    # Calculate vEOG/hEOG step2: lagged correlations with primary vEOG/hEOG components
+    # Create low-pass filter for component time series (EOG artifacts are typically < 15 Hz)
+    lp_filter = create_filter("lp", "iir", 10.0, dat.sample_rate; order = 3)
+    
+    # Lag range: +- 100ms  
+    # Convert to samples based on sample rate
+    max_lag_samples = round(Int, 100.0 * dat.sample_rate / 1000.0) # 100 ms lag
+    lag_step = max(1, round(Int, 5.0 * dat.sample_rate / 1000.0)) # 5 ms step
+    
+    # Calculate lagged correlations for vEOG and hEOG
+    vEOG_temporal_corr = calculate_lagged_correlations(remaining_vEOG, primary_vEOG, components, lp_filter, max_lag_samples, lag_step)
+    hEOG_temporal_corr = calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, lp_filter, max_lag_samples, lag_step)
+    
+    # Helper function to compute z-scores only for remaining components
+    function zscore_for_remaining(corr_vector, remaining_indices)
+        z = fill(NaN, length(corr_vector))
+        if length(remaining_indices) >= 2
+            remaining_vals = corr_vector[remaining_indices]
+            if std(remaining_vals) > 0.0
+                z[remaining_indices] = StatsBase.zscore(remaining_vals)
+            end
+        end
+        return z
+    end
+    
+    # Calculate z-scores for spatial and temporal correlations
+    vEOG_spatial_corr_z = zscore_for_remaining(vEOG_spatial_corr, remaining_vEOG)
+    vEOG_temporal_corr_z = zscore_for_remaining(vEOG_temporal_corr, remaining_vEOG)
+    hEOG_spatial_corr_z = zscore_for_remaining(hEOG_spatial_corr, remaining_hEOG)
+    hEOG_temporal_corr_z = zscore_for_remaining(hEOG_temporal_corr, remaining_hEOG)
+    
+    # Identify secondary components: require BOTH correlation > min_correlation AND z-score > z_threshold
+    function identify_secondary_components(remaining_components, corr_vector, corr_z_vector, min_corr_threshold, z_threshold)
+        isempty(remaining_components) && return Int[]
+        corr_mask = corr_vector[remaining_components] .> min_corr_threshold
+        z_mask = abs.(corr_z_vector[remaining_components]) .> z_threshold
+        combined_mask = corr_mask .& z_mask
+        return remaining_components[combined_mask]
+    end
+    
+    # Identify secondary components for vEOG: spatial OR temporal (each requires both corr and z-score)
+    secondary_vEOG_spatial = identify_secondary_components(remaining_vEOG, vEOG_spatial_corr, vEOG_spatial_corr_z, min_correlation, z_threshold)
+    secondary_vEOG_temporal = identify_secondary_components(remaining_vEOG, vEOG_temporal_corr, vEOG_temporal_corr_z, min_correlation, z_threshold)
+    
+    # Identify secondary components for hEOG: spatial OR temporal (each requires both corr and z-score)
+    secondary_hEOG_spatial = identify_secondary_components(remaining_hEOG, hEOG_spatial_corr, hEOG_spatial_corr_z, min_correlation, z_threshold)
+    secondary_hEOG_temporal = identify_secondary_components(remaining_hEOG, hEOG_temporal_corr, hEOG_temporal_corr_z, min_correlation, z_threshold)
+    
+    # Combine spatial and temporal secondary components
+    secondary_vEOG = union(secondary_vEOG_spatial, secondary_vEOG_temporal)
+    secondary_hEOG = union(secondary_hEOG_spatial, secondary_hEOG_temporal)
     
     # Combine primary and secondary components (secondary only added if two_step is true)
     identified_vEOG = two_step ? union(primary_vEOG, secondary_vEOG) : primary_vEOG
@@ -965,10 +1060,16 @@ function identify_eog_components(
         :Component => 1:n_components,
         :vEOG_corr => vEOG_corrs,
         :vEOG_zscore => vEOG_corr_z,
-        :vEOG_spatial_corr => vEOG_spatial_corr_full,
+        :vEOG_spatial_corr => vEOG_spatial_corr,
+        :vEOG_spatial_corr_z => vEOG_spatial_corr_z,
+        :vEOG_temporal_corr => vEOG_temporal_corr,
+        :vEOG_temporal_corr_z => vEOG_temporal_corr_z,
         :hEOG_corr => hEOG_corrs,
         :hEOG_zscore => hEOG_corr_z,
-        :hEOG_spatial_corr => hEOG_spatial_corr_full,
+        :hEOG_spatial_corr => hEOG_spatial_corr,
+        :hEOG_spatial_corr_z => hEOG_spatial_corr_z,
+        :hEOG_temporal_corr => hEOG_temporal_corr,
+        :hEOG_temporal_corr_z => hEOG_temporal_corr_z,
     )
 
     sort!(identified_vEOG)
@@ -1494,3 +1595,4 @@ function Base.show(io::IO, artifacts::ArtifactComponents)
     println(io, "Channel Noise: $(artifacts.channel_noise)")
     println(io, "All: $all_comps")
 end
+
