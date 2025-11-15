@@ -360,6 +360,34 @@ function _compute_dataset_linestyles(linestyle_val, n_datasets::Int)
 end
 
 """
+    _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpData}, kwargs::Dict)
+
+Add legend to axis if conditions are met.
+Handles legend_channel filtering, position, and other legend attributes.
+"""
+function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpData}, kwargs::Dict)
+
+    # Check if legend should be shown
+    # Do not show if requested false, or single channel + single dataset
+    !kwargs[:legend] || (length(channels) == 1 && length(datasets) == 1) && return ax
+    !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels)) && return ax
+    
+    # Extract legend parameters
+    legend_label = kwargs[:legend_label]
+    legend_position = kwargs[:legend_position]
+    legend_kwargs = _extract_legend_kwargs(kwargs)
+    
+    # Add legend with position and optional label
+    if legend_label != ""
+        axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
+    else
+        axislegend(ax; position = legend_position, legend_kwargs...)
+    end
+    
+    return ax
+end
+
+"""
     _get_wrapped_value(value, idx, n_items)
 
 Get a value from a vector (with wrapping) or return the single value.
@@ -415,30 +443,8 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
         end
     end
 
-    # Add origin lines at x=0 and y=0
     _set_origin_lines!(ax; add_xy_origin = kwargs[:add_xy_origin])
-
-    # Show legend if requested and there are multiple channels or datasets
-    if kwargs[:legend] && (length(channels) > 1 || length(datasets) > 1)
-
-        # Skip legend if legend_channel is specified but doesn't match any plotted channels
-        legend_channel = kwargs[:legend_channel]
-        if !isempty(legend_channel) && isempty(intersect(legend_channel, channels))
-            return ax  # Don't show legend on this axis
-        end
-        
-        # Add legend with position and optional label
-        legend_label = kwargs[:legend_label]
-        legend_position = kwargs[:legend_position]
-        legend_kwargs = _extract_legend_kwargs!(kwargs)
-        
-        # Combine position with other legend kwargs
-        if legend_label != ""
-            axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
-        else
-            axislegend(ax; position = legend_position, legend_kwargs...)
-        end
-    end
+    _add_legend!(ax, channels, datasets, kwargs)
 
     return ax
 end

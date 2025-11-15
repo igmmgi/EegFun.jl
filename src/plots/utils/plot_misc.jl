@@ -103,30 +103,44 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
 end
 
 """
-    _extract_legend_kwargs!(plot_kwargs::Dict{Symbol, Any})
+    _extract_legend_kwargs(plot_kwargs::Dict{Symbol, Any}; exclude_positioning::Bool=false)
 
-Extract all legend-related parameters from plot_kwargs and return a clean dictionary
-suitable for passing to Legend constructor or modifying legend properties.
+Extract legend-related parameters from plot_kwargs and return a new dictionary
+suitable for passing to axislegend().
+
+Does not mutate plot_kwargs - only reads from it.
 
 # Arguments
-- `plot_kwargs`: Dictionary of plot parameters (modified in-place)
+- `plot_kwargs`: Dictionary of plot parameters (read-only)
+- `exclude_positioning`: If true, exclude positioning attributes (halign, valign, alignmode) 
+  that conflict with the `position` parameter in axislegend()
 
 # Returns
-- `Dict{Symbol, Any}`: Cleaned legend parameters with invalid attributes removed
+- `Dict{Symbol, Any}`: New dictionary containing extracted legend parameters (with legend_ prefix removed)
 """
-function _extract_legend_kwargs!(plot_kwargs::Dict{Symbol,Any})
+function _extract_legend_kwargs(plot_kwargs::Dict{Symbol,Any}; exclude_positioning::Bool = false)
     legend_kwargs = Dict{Symbol,Any}()
     legend_attrs = propertynames(Legend)
 
     for attr in legend_attrs
+        # attr in positioning_attrs && continue  # Skip positioning attributes if requested
         legend_key = Symbol("legend_$(attr)")
         if haskey(plot_kwargs, legend_key)
-            value = pop!(plot_kwargs, legend_key)
+            value = plot_kwargs[legend_key]  # Read from plot_kwargs
+            if value in [:legend_halign, :legend_valign, :legend_alignmode]
+                println("Skipping positioning attribute: $attr")
+                continue
+            end
             if value !== nothing  # Only add if not the default nothing
-                legend_kwargs[attr] = value
+                legend_kwargs[attr] = value  # Store in new dict without "legend_" prefix
             end
         end
     end
+  
+    # TODO: I do not know why this is needed? Bug here? Bug Makie axislegend?
+    # Without it legend_position is ignored!
+    # Remove positioning attributes that conflict with explicit position parameter
+    [pop!(legend_kwargs, attr, nothing) for attr in [:halign, :valign, :alignmode]]
 
     return legend_kwargs
 end
