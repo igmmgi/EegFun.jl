@@ -55,7 +55,8 @@ using eegfun
         @test eegfun.PARAMETERS["files.input.directory"] isa eegfun.ConfigParameter{String}
         @test eegfun.PARAMETERS["preprocess.filter.highpass.freq"] isa eegfun.ConfigParameter{Real}
         @test eegfun.PARAMETERS["preprocess.filter.highpass.order"] isa eegfun.ConfigParameter{Real}
-        @test eegfun.PARAMETERS["files.output.save_continuous_data"] isa eegfun.ConfigParameter{Bool}
+        @test eegfun.PARAMETERS["files.output.save_continuous_data_original"] isa eegfun.ConfigParameter{Bool}
+        @test eegfun.PARAMETERS["files.output.save_continuous_data_cleaned"] isa eegfun.ConfigParameter{Bool}
 
         # Test that all parameters have valid descriptions
         for (path, param) in eegfun.PARAMETERS
@@ -88,9 +89,10 @@ using eegfun
         @test haskey(eegfun.PARAMETERS, "files.output.save_ica_data")
         @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_original")
         @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_cleaned")
+        @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_good")
         @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_original")
         @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_cleaned")
-        @test haskey(eegfun.PARAMETERS, "files.output.exit_early")
+        @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_good")
 
         # Test that all preprocess parameters exist
         @test haskey(eegfun.PARAMETERS, "preprocess.reference_channel")
@@ -99,8 +101,8 @@ using eegfun
         @test haskey(eegfun.PARAMETERS, "preprocess.eog.hEOG_channels")
         @test haskey(eegfun.PARAMETERS, "preprocess.eog.vEOG_criterion")
         @test haskey(eegfun.PARAMETERS, "preprocess.eog.hEOG_criterion")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.extreme_value_criterion")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.artifact_value_criterion")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.extreme_value_abs_criterion")
+        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.artifact_value_abs_criterion")
 
         # Test that ICA parameters exist
         @test haskey(eegfun.PARAMETERS, "preprocess.ica.apply")
@@ -321,12 +323,14 @@ using eegfun
             bool_config_path = joinpath(test_dir, "bool_config.toml")
             open(bool_config_path, "w") do io
                 println(io, "[files.output]")
-                println(io, "save_continuous_data = true")
+                println(io, "save_continuous_data_original = true")
+                println(io, "save_continuous_data_cleaned = true")
                 println(io, "save_ica_data = false")
             end
 
             config = eegfun.load_config(bool_config_path)
-            @test config["files"]["output"]["save_continuous_data"] == true
+            @test config["files"]["output"]["save_continuous_data_original"] == true
+            @test config["files"]["output"]["save_continuous_data_cleaned"] == true
             @test config["files"]["output"]["save_ica_data"] == false
 
             # Test string values with special characters

@@ -45,7 +45,7 @@ using DataFrames
         for grand_avg in grand_averages
             condition_num = grand_avg.condition
             @test condition_num in [1, 2, 3]
-            @test grand_avg.condition_name == "grand_average_condition_$condition_num"
+            @test grand_avg.condition_name == "grand_avg_condition_$condition_num"
             @test grand_avg.sample_rate == 1000.0
             @test nrow(grand_avg.data) == 2501  # n_timepoints
         end
@@ -240,7 +240,7 @@ using DataFrames
 
         # Verify metadata (now in struct fields)
         @test grand_avg.condition == 1
-        @test grand_avg.condition_name == "grand_average_condition_1"
+        @test grand_avg.condition_name == "grand_avg_condition_1"
         @test hasproperty(grand_avg, :condition)
         @test hasproperty(grand_avg, :condition_name)
     end
@@ -281,35 +281,45 @@ using DataFrames
     end
 
     @testset "Multiple conditions with different participant counts" begin
+        # Use a separate directory to avoid matching files from earlier tests
+        separate_test_dir = joinpath(test_dir, "different_counts")
+        mkpath(separate_test_dir)
+        
         # Create scenario where some conditions have more participants than others
+        # 3 participants have condition 1
         for participant = 1:3
             erps = [create_test_erp_data(participant, 1)]
-            file_path = joinpath(test_dir, "$(participant)_single_cond_erps_cleaned.jld2")
+            file_path = joinpath(separate_test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
         end
 
-        # Only 2 participants have condition 2
+        # Only 2 participants have condition 2 (append to existing files)
         for participant = 1:2
-            erps = [create_test_erp_data(participant, 2)]
-            file_path = joinpath(test_dir, "$(participant)_cond2_erps_cleaned.jld2")
-            jldsave(file_path; data = erps)
+            erp2 = create_test_erp_data(participant, 2)
+            file_path = joinpath(separate_test_dir, "$(participant)_erps_cleaned.jld2")
+            # Load existing data and append condition 2
+            existing_data = load(file_path, "data")
+            push!(existing_data, erp2)
+            jldsave(file_path; data = existing_data)
         end
 
-        output_dir = joinpath(test_dir, "grand_average_different_counts")
+        output_dir = joinpath(separate_test_dir, "grand_average_different_counts")
 
-        result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+        result = eegfun.grand_average("erps_cleaned", input_dir = separate_test_dir, output_dir = output_dir)
 
         @test isdir(output_dir)
         grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
 
-        # Should have grand averages for all conditions
-        @test length(grand_averages) == 3
-
-        # Condition 1 should have 8 participants worth of epochs
-        @test grand_averages[1].n_epochs == 70  # 8 participants × 10 epochs
-
-        # Condition 2 should have 7 participants worth of epochs
-        @test grand_averages[2].n_epochs == 40  # 7 participants × 10 epochs
+        # Should have grand averages for conditions 1 and 2
+        @test length(grand_averages) == 2
+        # Condition 1: 3 participants × 10 epochs = 30 epochs
+        # Condition 2: 2 participants × 10 epochs = 20 epochs
+        # Find which condition is which (they're sorted by condition number)
+        sorted_grand_averages = sort(grand_averages, by = x -> x.condition)
+        @test sorted_grand_averages[1].condition == 1
+        @test sorted_grand_averages[1].n_epochs == 30
+        @test sorted_grand_averages[2].condition == 2
+        @test sorted_grand_averages[2].n_epochs == 20
     end
 
     # Cleanup

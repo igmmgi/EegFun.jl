@@ -197,7 +197,7 @@ function plot_erp(
     for (ax, channel) in zip(axes, channels)
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
-        _plot_erp!(ax, dat_subset, layout, channels_to_plot; fig=fig, plot_kwargs...)
+        _plot_erp!(ax, dat_subset, channels_to_plot; fig=fig, plot_kwargs...)
     end
 
     # Apply our axis stuff
@@ -317,7 +317,7 @@ Internal function to plot ERP data on an axis.
 Handles both single and multiple datasets.
 Note: datasets should already be subset based on channel_selection and sample_selection.
 """
-function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, layout::Symbol, channels::Vector{Symbol}; fig=nothing, kwargs...)
+function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; fig=nothing, kwargs...)
 
     # Use defaults + overrides (kwargs may already be merged, so merge is safe)
     kwargs = merge(PLOT_ERP_KWARGS, kwargs)
@@ -343,11 +343,11 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, layout::Symbol, channel
         for (ch_idx, channel) in enumerate(channels)
             # labels/ colors
             if isempty(kwargs[:legend_labels])
-                if layout == :single
-                    label = length(datasets) > 1 ? string(dat.condition_name, " ", channel) : string(channel)
-                else
+                # if layout == :single
+                #      label = length(datasets) > 1 ? string(dat.condition_name, " ", channel) : string(channel)
+                # else
                     label = dat.condition_name
-                end
+                # end
             else
                 label = kwargs[:legend_labels][idx]
             end
@@ -445,7 +445,7 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     all_plot_channels = vcat(selected_channels, extra_channels)
 
     # Plot on the axis
-    _plot_erp!(ax, dat_subset, all_plot_channels; fig=fig, plot_kwargs...)
+    _plot_erp!(ax, dat_subset, layout, all_plot_channels; fig=fig, plot_kwargs...)
 
     return ax
 end
