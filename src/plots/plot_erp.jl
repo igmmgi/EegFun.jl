@@ -38,7 +38,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # TODO: legend positon and other options at the same time not working!
     :legend => (true, "Whether to show the legend"),
     :legend_label => ("", "Title for the legend"),
-    :legend_framevisible => (false, "Whether to show the frame of the legend"),
+    :legend_framevisible => (true, "Whether to show the frame of the legend"),
     :legend_position => (:lt, "Position of the legend for axislegend() (symbol like :lt, :rt, :lb, :rb, or tuple like (:left, :top), or (0.5, 0.5))"),
     :legend_channel => ([], "If plotting multiple plots, within channel to put the legend on."),
     :legend_labels => ([], "If plotting multiple plots, within channel to put the legend on."),
@@ -151,32 +151,15 @@ function plot_erp(
     kwargs...,
 )
 
-    # Check if color was explicitly provided (before merge)
-    color_explicitly_set = haskey(kwargs, :color)
-    
-    # Merge user kwargs and default kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
-    
-    # Pass color_explicitly_set info to the plotting function
-    plot_kwargs[:_color_explicitly_set] = color_explicitly_set
-
-    # data subsetting (includes condition_selection)
-    dat_subset = subset(
-        datasets;
+    # Prepare kwargs and data
+    plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
+    dat_subset, all_plot_channels, original_channels = _prepare_erp_data(
+        datasets,
+        plot_kwargs;
         condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
-        include_extra = true,
     )
-
-    if plot_kwargs[:average_channels]
-        original_channels = channel_labels(dat_subset) # keep for better default plot title
-        dat_subset = channel_average(dat_subset, reduce = true)
-    end
-
-    selected_channels = channel_labels(dat_subset)
-    extra_channels = extra_labels(dat_subset)
-    all_plot_channels = vcat(selected_channels, extra_channels)
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
@@ -240,6 +223,64 @@ function plot_erp(
     return fig, axes
 end
 
+# =============================================================================
+# SHARED PREPARATION FUNCTIONS
+# =============================================================================
+
+"""
+    _prepare_plot_kwargs(kwargs)
+
+Prepare plot kwargs by merging with defaults and tracking color setting.
+Returns (plot_kwargs, color_explicitly_set).
+"""
+function _prepare_plot_kwargs(kwargs)
+    color_explicitly_set = haskey(kwargs, :color)
+    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
+    plot_kwargs[:_color_explicitly_set] = color_explicitly_set
+    return plot_kwargs, color_explicitly_set
+end
+
+"""
+    _prepare_erp_data(datasets, plot_kwargs; condition_selection, channel_selection, sample_selection)
+
+Prepare ERP data for plotting: subset, average channels if needed, extract channel labels.
+Returns (dat_subset, all_plot_channels, original_channels).
+"""
+function _prepare_erp_data(
+    datasets::Vector{ErpData},
+    plot_kwargs;
+    condition_selection = conditions(),
+    channel_selection = channels(),
+    sample_selection = samples(),
+)
+    # Data subsetting
+    dat_subset = subset(
+        datasets;
+        condition_selection = condition_selection,
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = true,
+    )
+
+    # Channel averaging if requested
+    original_channels = nothing
+    if plot_kwargs[:average_channels]
+        original_channels = channel_labels(dat_subset)
+        dat_subset = channel_average(dat_subset, reduce = true)
+    end
+
+    # Extract channel labels
+    selected_channels = channel_labels(dat_subset)
+    extra_channels = extra_labels(dat_subset)
+    all_plot_channels = vcat(selected_channels, extra_channels)
+
+    return dat_subset, all_plot_channels, original_channels
+end
+
+# =============================================================================
+# SELECTION HANDLERS
+# =============================================================================
+
 # Unified selection setup is now handled by _setup_unified_selection! in shared_interactivity.jl
 
 function _handle_erp_right_click!(selection_state, mouse_x, data)
@@ -257,7 +298,7 @@ function _show_erp_context_menu!(selection_state, data)
 
     for btn in menu_buttons
         on(btn.clicks) do n
-            original_data, x_min, x_max = _subset_erp_selected_data(selection_state, data)
+            original_data, x_min, x_max = _get_erp_selection_bounds(selection_state, data)
 
             # Create time-based sample selection for the topo plot
             time_sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max)
@@ -274,26 +315,47 @@ function _show_erp_context_menu!(selection_state, data)
     display(new_screen, menu_fig)
 end
 
-function _subset_erp_selected_data(selection_state, data)
-    x_min, x_max = minmax(selection_state.bounds[]...)
+"""
+    _get_erp_selection_bounds(selection_state, data)
 
-    # Return the original data and time bounds instead of subsetting
-    # This preserves all electrodes for topo plots
+Extract time bounds from selection state and return original data with bounds.
+Does not subset the data - preserves all electrodes for topo plots.
+Returns (data, x_min, x_max).
+"""
+function _get_erp_selection_bounds(selection_state, data)
+    x_min, x_max = minmax(selection_state.bounds[]...)
     return (data, x_min, x_max)
 end
 
 """
-    _compute_dataset_colors(color_val, n_datasets, colormap, color_explicitly_set)
+    _compute_dataset_colors(color_val, n_datasets, n_channels, colormap, color_explicitly_set)
 
-Compute colors for each dataset based on user input and defaults.
+Compute colors for each dataset-channel combination.
+Returns a vector of colors with length n_datasets * n_channels.
+Colors cycle across all channel-dataset combinations.
 """
-function _compute_dataset_colors(color_val, n_datasets::Int, colormap, color_explicitly_set::Bool)
-    if color_val isa Vector # User specified colors per dataset - use those (wrap if needed)
-        return [color_val[(i-1) % length(color_val) + 1] for i in 1:n_datasets]
-    elseif n_datasets > 1 && !color_explicitly_set # Default color with multiple datasets - use colormap wrapping
-        return Makie.cgrad(colormap, n_datasets, categorical = true)
-    else # Explicitly set single color - use for all datasets
-        return [color_val for _ in 1:n_datasets]
+function _compute_dataset_colors(color_val, n_datasets::Int, n_channels::Int, colormap, color_explicitly_set::Bool)
+    n_total = n_datasets * n_channels
+    if color_val isa Vector # User specified colors - cycle through them for all channel-dataset combinations
+        return [color_val[(i-1) % length(color_val) + 1] for i in 1:n_total]
+    elseif n_total > 1 && !color_explicitly_set # Default: use colormap for all channel-dataset combinations
+        return Makie.cgrad(colormap, n_total, categorical = true)
+    else # Single color - use for all channel-dataset combinations
+        return [color_val for _ in 1:n_total]
+    end
+end
+
+"""
+    _compute_dataset_linestyles(linestyle_val, n_datasets)
+
+Compute linestyles for each dataset based on user input.
+Returns a vector of linestyles, one per dataset.
+"""
+function _compute_dataset_linestyles(linestyle_val, n_datasets::Int)
+    if linestyle_val isa Vector # User specified linestyles per dataset - wrap if needed
+        return [linestyle_val[(i-1) % length(linestyle_val) + 1] for i in 1:n_datasets]
+    else # Single linestyle - use for all datasets
+        return [linestyle_val for _ in 1:n_datasets]
     end
 end
 
@@ -310,6 +372,7 @@ function _get_wrapped_value(value, idx::Int, n_items::Int)
     end
 end
 
+
 """
     _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
 
@@ -321,44 +384,32 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
 
     # Use defaults + overrides (kwargs may already be merged, so merge is safe)
     kwargs = merge(PLOT_ERP_KWARGS, kwargs)
-    
-    # Check if color was explicitly set (passed from calling function)
-    color_explicitly_set = get(kwargs, :_color_explicitly_set, false)
-    delete!(kwargs, :_color_explicitly_set)  # Remove internal flag
 
-    # Compute colors for all channel-dataset combinations
+    # Compute colors and linestyles for each dataset
     all_colors = _compute_dataset_colors(
         kwargs[:color],
-        length(datasets) * length(channels),
+        length(datasets),
+        length(channels),
         kwargs[:colormap],
-        color_explicitly_set
+        kwargs[:_color_explicitly_set]
     )
+    all_linestyles = _compute_dataset_linestyles(kwargs[:linestyle], length(datasets))
 
     # Plot each dataset for ALL channels in this subplot
-    for (idx, dat) in enumerate(datasets)
-        # Get styling for this dataset
-        linestyle = _get_wrapped_value(kwargs[:linestyle], idx, length(datasets))
+    for (dataset_idx, dat) in enumerate(datasets)
+        
+        label = isempty(kwargs[:legend_labels]) ? dat.condition_name : kwargs[:legend_labels][dataset_idx]
 
         # Plot ALL channels for this dataset
-        for (ch_idx, channel) in enumerate(channels)
-            # labels/ colors
-            if isempty(kwargs[:legend_labels])
-                # if layout == :single
-                #      label = length(datasets) > 1 ? string(dat.condition_name, " ", channel) : string(channel)
-                # else
-                    label = dat.condition_name
-                # end
-            else
-                label = kwargs[:legend_labels][idx]
-            end
-            color_idx = (idx - 1) * length(channels) + ch_idx
+        for (channel_idx, channel) in enumerate(channels)
+            color_idx = (dataset_idx - 1) * length(channels) + channel_idx
             lines!(
                 ax,
                 dat.data[!, :time],
                 dat.data[!, channel],
-                color = all_colors[color_idx],
                 linewidth = kwargs[:linewidth],
-                linestyle = linestyle,
+                color = all_colors[color_idx],
+                linestyle = all_linestyles[dataset_idx],
                 label = label,
             )
         end
@@ -369,17 +420,23 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
 
     # Show legend if requested and there are multiple channels or datasets
     if kwargs[:legend] && (length(channels) > 1 || length(datasets) > 1)
-        if !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels))
-            return ax
+
+        # Skip legend if legend_channel is specified but doesn't match any plotted channels
+        legend_channel = kwargs[:legend_channel]
+        if !isempty(legend_channel) && isempty(intersect(legend_channel, channels))
+            return ax  # Don't show legend on this axis
         end
-        legend_position = kwargs[:legend_position]
+        
+        # Add legend with position and optional label
         legend_label = kwargs[:legend_label]
-        # legend_kwargs = _extract_legend_kwargs!(kwargs)
-        # TODO: cannot seem to pass legend_kwargs to axislegend() and position at the same time
+        legend_position = kwargs[:legend_position]
+        legend_kwargs = _extract_legend_kwargs!(kwargs)
+        
+        # Combine position with other legend kwargs
         if legend_label != ""
-            axislegend(ax, legend_label, position = legend_position)
+            axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
         else
-            axislegend(ax, position = legend_position)
+            axislegend(ax; position = legend_position, legend_kwargs...)
         end
     end
 
@@ -419,33 +476,18 @@ Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
 - `ax::Axis`: The axis that was plotted on
 """
 function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
-    # Check if color was explicitly provided (before merge)
-    color_explicitly_set = haskey(kwargs, :color)
-    
-    # Merge user kwargs and default kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_ERP_KWARGS, kwargs)
-    
-    # Pass color_explicitly_set info to the plotting function
-    plot_kwargs[:_color_explicitly_set] = color_explicitly_set
-
-    # data subsetting
-    dat_subset = subset(
-        datasets;
+    # Prepare kwargs and data
+    plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
+    dat_subset, all_plot_channels, _ = _prepare_erp_data(
+        datasets,
+        plot_kwargs;
+        condition_selection = conditions(),
         channel_selection = get(plot_kwargs, :channel_selection, channels()),
         sample_selection = get(plot_kwargs, :sample_selection, samples()),
-        include_extra = true,
     )
 
-    if plot_kwargs[:average_channels]
-        dat_subset = channel_average(dat_subset, reduce = true)
-    end
-
-    selected_channels = channel_labels(dat_subset)
-    extra_channels = extra_labels(dat_subset)
-    all_plot_channels = vcat(selected_channels, extra_channels)
-
     # Plot on the axis
-    _plot_erp!(ax, dat_subset, layout, all_plot_channels; fig=fig, plot_kwargs...)
+    _plot_erp!(ax, dat_subset, all_plot_channels; fig=fig, plot_kwargs...)
 
     return ax
 end
