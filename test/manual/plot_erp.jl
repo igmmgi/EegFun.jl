@@ -24,6 +24,7 @@ fig, ax = eegfun.plot_erp(erps, average_channels = true)
 fig, ax = eegfun.plot_erp(erps, average_channels = false, layout = :grid)
 
 # ERP Plot
+fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = false)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = true)
 
 
