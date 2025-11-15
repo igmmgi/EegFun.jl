@@ -76,8 +76,8 @@ Configuration for EEG-specific preprocessing settings.
 - `extreme_value_criterion::Int`: Threshold for extreme value detection (μV)
 """
 @kwdef struct EegConfig
-    artifact_value_criterion::Int
-    extreme_value_criterion::Int
+    artifact_value_abs_criterion::Int
+    extreme_value_abs_criterion::Int
 end
 
 """
@@ -157,8 +157,8 @@ end
 
 function EegConfig(cfg::Dict)
     return EegConfig(
-        artifact_value_criterion = Int(cfg["artifact_value_criterion"]),
-        extreme_value_criterion = Int(cfg["extreme_value_criterion"]),
+        artifact_value_abs_criterion = Int(cfg["artifact_value_abs_criterion"]),
+        extreme_value_abs_criterion = Int(cfg["extreme_value_abs_criterion"]),
     )
 end
 

@@ -91,5 +91,46 @@ function baseline!(dat::EegData; channel_selection::Function = channels())
     return nothing
 end
 
+"""
+    baseline!(dat::Vector{EpochData}, baseline_interval; channel_selection=channels())
+
+Apply baseline correction in-place to a vector of EpochData objects.
+
+# Arguments
+- `dat::Vector{EpochData}`: Vector of epoch data to baseline correct
+- `baseline_interval::Union{IntervalIndex,IntervalTime}`: Time/index interval for baseline calculation
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+
+# Notes
+- Modifies each EpochData in the vector in-place by subtracting the baseline mean
+- Uses the specified time/index interval for baseline calculation
+"""
+function baseline!(
+    dat::Vector{EpochData},
+    baseline_interval::Union{IntervalIndex,IntervalTime};
+    channel_selection::Function = channels(),
+)
+    baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
+    return nothing
+end
+
+"""
+    baseline!(dat::Vector{EpochData}; channel_selection=channels())
+
+Apply baseline correction in-place to a vector of EpochData objects using the entire time range.
+
+# Arguments
+- `dat::Vector{EpochData}`: Vector of epoch data to baseline correct
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+
+# Notes
+- Modifies each EpochData in the vector in-place by subtracting the baseline mean
+- Uses the entire time range for baseline calculation
+"""
+function baseline!(dat::Vector{EpochData}; channel_selection::Function = channels())
+    baseline!.(dat; channel_selection = channel_selection)
+    return nothing
+end
+
 # generates all non-mutating versions
 @add_nonmutating baseline!

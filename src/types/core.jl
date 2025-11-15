@@ -471,9 +471,10 @@ function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symb
 end
 
 
-function Base.show(io::IO, dat::EegData)
+function Base.show(io::IO, dat::MultiDataFrameEeg)
     println(io, "File: $(filename(dat))")
     println(io, "Type: $(typeof(dat))")
+    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
     println(
         io,
         "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_labels(dat))) (columns)",
@@ -482,6 +483,16 @@ function Base.show(io::IO, dat::EegData)
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
 end
+
+function Base.show(io::IO, dat::SingleDataFrameEeg)
+    println(io, "File: $(filename(dat))")
+    println(io, "Type: $(typeof(dat))")
+    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
+    println(io, "Labels: ", print_vector(channel_labels(dat)))
+    println(io, "Duration: ", duration(dat), " S")
+    println(io, "Sample Rate: ", sample_rate(dat))
+end
+
 
 function Base.show(io::IO, dat::AnalysisInfo)
     print(io, "Reference: ", reference(dat), ", ")

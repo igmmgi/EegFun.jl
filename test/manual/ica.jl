@@ -3,7 +3,7 @@ using GLMakie
 # using BenchmarkTools
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "Flank_C_17.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -30,9 +30,52 @@ eegfun.channel_difference!(
 # ICA on continuous data
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 25)
+ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
 
-eegfun.plot_ica_component_activation(dat, ica_result)
+eegfun.plot_ica_component_activation(dat, ica_result)AbstractArray
+
+ # Calculate components for valid samples
+selected_samples = eegfun.get_selected_samples(dat, eegfun.samples_not(:is_extreme_value_200))
+components, n_components = eegfun._prepare_ica_data_matrix(dat, ica_result, selected_samples)
+
+lines(components[1, 1:2000])
+lines!(components[17, 1:2000])
+
+lines(abs.(components[1, 1:4000]))
+lines!(abs.(components[17, 1:4000]))
+
+
+crosscov(components[1, 1:2000], components[17, 1:2000])
+
+corspearman(abs.(zscore(components[1, :])), abs.(zscore(components[17, :])))
+
+
+lp_filter = eegfun.create_filter("lp", "iir", 5.0, dat.sample_rate; order = 3)
+comp1 = eegfun.filtfilt(lp_filter.filter_object, components[1, :])
+comp2 = eegfun.filtfilt(lp_filter.filter_object, components[17, :])
+
+lines(comp1[1:2000])
+lines!(comp2[1:2000])
+
+lines(zscore(comp1[1:2000]))
+lines!(zscore(comp2[1:2000]))
+
+lines(zscore(comp1[300:500]))
+lines!(zscore(comp2[300:500]))
+
+cor(zscore(comp1[300:500]),zscore(comp2[300:500]))
+
+
+
+
+
+corkendall(abs.(zscore(components[1, :])), abs.(zscore(components[17, :])))
+cor(StatsBase.zscore(components[1, 1:2000]), StatsBase.zscore(components[17, 1:2000]))
+
+cor(abs.(components[1, 1:2000]), abs.(components[17, 1:2000]))
+maximum(xcorr(abs.(components[1, 1:2000]), abs.(components[17, 1:2000])))
+xcorr(abs.(components[1, :]), abs.(components[17, :]))
+
 component_artifacts, component_metrics = eegfun.identify_components(
                     dat,
                     ica_result,
