@@ -23,6 +23,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colormap => (:jet, "Colormap for multi-channel plots"),
 
     # Plot configuration
+    :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
     :yreversed => (false, "Whether to reverse the y-axis"),
     :average_channels => (false, "Whether to average across channels"),
     :interactive => (true, "Whether to enable interactive features"),
@@ -35,14 +36,13 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ]...,
 
     # Override specific legend parameters with custom defaults
-    # TODO: legend positon and other options at the same time not working!
     :legend => (true, "Whether to show the legend"),
     :legend_label => ("", "Title for the legend"),
     :legend_framevisible => (true, "Whether to show the frame of the legend"),
     :legend_position => (:lt, "Position of the legend for axislegend() (symbol like :lt, :rt, :lb, :rb, or tuple like (:left, :top), or (0.5, 0.5))"),
     :legend_channel => ([], "If plotting multiple plots, within channel to put the legend on."),
     :legend_labels => ([], "If plotting multiple plots, within channel to put the legend on."),
-    :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
+    :legend_nbanks => (nothing, "Number of columns for the legend. If nothing, automatically determined."),
 
     # Grid
     :xgrid => (false, "Whether to show x-axis grid"),
@@ -164,12 +164,15 @@ function plot_erp(
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
     if plot_kwargs[:show_title] && plot_kwargs[:title] == "" && layout == :single
-        plot_kwargs[:title] =
-            length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
+        plot_kwargs[:title] = length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
         if plot_kwargs[:average_channels]
             plot_kwargs[:title] = "Avg: $(print_vector(original_channels))"
         end
     end
+
+    # Generate window title from datasets
+    title_str = _generate_window_title(dat_subset)
+    Makie.current_backend().activate!(title=title_str)
 
     # Create figure and apply layout system
     fig = Figure(title = plot_kwargs[:figure_title])
@@ -194,38 +197,37 @@ function plot_erp(
     if plot_kwargs[:interactive]
         _setup_shared_interactivity!(fig, axes, :erp)
 
-        # Disable default interactions that conflict with our custom selection
-        # Need to disable on ALL axes for grid layouts to work properly
+        # Disable default interactions that conflict with our custom selection (all axes)
         for ax in axes
             deregister_interaction!(ax, :rectanglezoom)
         end
 
         # Set up selection system for all axes (will work with linked axes)
-        # Pass the ORIGINAL datasets (not dat_subset) so we can subset by time for topo plots
         selection_state = SharedSelectionState(axes)
 
         # Set up selection system that works for all layouts
-        # Use figure-level events to avoid conflicts with multiple axis handlers
         _setup_unified_selection!(fig, axes, selection_state, datasets, plot_layout, _handle_erp_right_click!)
 
         # Set up channel selection events for topo and grid layouts
-        if plot_layout.type == :topo
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, :topo)
-        elseif plot_layout.type == :grid
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, :grid)
+        if plot_layout.type in (:topo, :grid)
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, plot_layout.type)
         end
+
     end
 
     if plot_kwargs[:display_plot]
         display_figure(fig)
     end
 
+    # reset default title
+    Makie.current_backend().activate!(title="Makie")
     return fig, axes
 end
 
 # =============================================================================
 # SHARED PREPARATION FUNCTIONS
 # =============================================================================
+
 
 """
     _prepare_plot_kwargs(kwargs)
@@ -359,6 +361,7 @@ function _compute_dataset_linestyles(linestyle_val, n_datasets::Int)
     end
 end
 
+
 """
     _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpData}, kwargs::Dict)
 
@@ -375,8 +378,11 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
     # Extract legend parameters
     legend_label = kwargs[:legend_label]
     legend_position = kwargs[:legend_position]
+    if kwargs[:legend_nbanks] === nothing
+        kwargs[:legend_nbanks] = length(channels) > 10 ? cld(length(channels), 10) : 1
+    end
     legend_kwargs = _extract_legend_kwargs(kwargs)
-    
+
     # Add legend with position and optional label
     if legend_label != ""
         axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
@@ -425,11 +431,15 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
 
     # Plot each dataset for ALL channels in this subplot
     for (dataset_idx, dat) in enumerate(datasets)
-        
-        label = isempty(kwargs[:legend_labels]) ? dat.condition_name : kwargs[:legend_labels][dataset_idx]
-
         # Plot ALL channels for this dataset
         for (channel_idx, channel) in enumerate(channels)
+
+            # axis label
+            label = isempty(kwargs[:legend_labels]) ? dat.condition_name : kwargs[:legend_labels][dataset_idx]
+            if length(channels) > 1 # More than one channel in this subplot
+                label *= " ($channel)"
+            end
+
             color_idx = (dataset_idx - 1) * length(channels) + channel_idx
             lines!(
                 ax,

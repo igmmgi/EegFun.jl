@@ -3,6 +3,7 @@ function display_figure(fig)
     display(get_makie_screen(get_makie_backend()), fig)
 end
 
+# TODO: I must be doing something wrong here!!! 
 function get_makie_backend()
     backend_str = string(Makie.current_backend())
     if occursin("GLMakie", backend_str)
@@ -223,4 +224,249 @@ function _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth =
         hlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
         vlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
     end
+end
+
+# =============================================================================
+# WINDOW TITLE AND STRING ABBREVIATION UTILITIES
+# =============================================================================
+
+"""
+    _split_into_parts(s::String)
+
+Split a string into parts on uppercase letters, underscores, and trailing digits.
+Returns a vector of parts, e.g., "ExampleCondition1" -> ["Example", "Condition", "1"]
+
+# Arguments
+- `s::String`: String to split
+
+# Returns
+- `Vector{String}`: Vector of parts
+"""
+function _split_into_parts(s::String)
+    # Use regex to split: match words (uppercase or lowercase, with optional trailing digits), underscores, or standalone digits
+    # Pattern: ([A-Z][a-z]*|[a-z]+)(\d*) - word with optional trailing digits, (_) - underscore, (\d+) - standalone digits
+    parts = String[]
+    pattern = r"([A-Z][a-z]*|[a-z]+)(\d*)|(_)|(\d+)"
+    
+    for m in eachmatch(pattern, s)
+        if m.captures[3] !== nothing  # Underscore
+            push!(parts, "_")
+        elseif m.captures[4] !== nothing  # Standalone digits
+            push!(parts, m.captures[4])
+        else  # Word with optional digits
+            word = m.captures[1]
+            digits = m.captures[2]
+            push!(parts, word)
+            !isempty(digits) && push!(parts, digits)
+        end
+    end
+    
+    return parts
+end
+
+"""
+    _generate_window_title(datasets; 
+                          max_total_length::Int = 80,
+                          max_name_length::Int = 30)
+
+Generate a window title from datasets, including file names and condition names.
+Handles single and multiple conditions, with automatic shortening if needed.
+
+Works with any type that has `.file` and `.condition_name` fields.
+
+If all datasets share the same file name, uses format: "FileName: Cond1, Cond2, Cond3"
+If datasets have different file names, uses format: "FileX:Cond1, FileY:Cond2"
+
+# Arguments
+- `datasets`: Vector of datasets (must have `.file` and `.condition_name` fields)
+- `max_total_length::Int`: Maximum total length of the result string
+- `max_name_length::Int`: Maximum length for each individual "file:condition" pair
+
+# Returns
+- `String`: Window title string
+"""
+function _generate_window_title( datasets::Vector{<:EegData}; max_total_length::Int = 80, max_name_length::Int = 20)
+
+    isempty(datasets) && return ""
+    length(datasets) == 1 && return "$(datasets[1].file):$(datasets[1].condition_name)" 
+
+    # Check if all datasets have the same file name
+    first_file = datasets[1].file
+    all_same_file = all(dataset.file == first_file for dataset in datasets)
+    
+    if all_same_file 
+        condition_names = [data.condition_name for data in datasets]
+        condition_str = _shorten_condition_names(condition_names; 
+                                                max_total_length = max_total_length - length(first_file) - 2, 
+                                                max_name_length = max_name_length)
+        return "$first_file: $condition_str"
+    else
+        file_condition_pairs = ["$(data.file):$(data.condition_name)" for data in datasets]
+        return _shorten_condition_names(file_condition_pairs; 
+                                       max_total_length = max_total_length, 
+                                       max_name_length = max_name_length)
+    end
+end
+
+function _generate_window_title(datasets::EegData; max_total_length::Int = 80, max_name_length::Int = 20)
+    return _generate_window_title([datasets], max_total_length, max_name_length)
+end
+
+"""
+    _abbreviate_name(name::String, common_prefix_parts::Vector{String})
+
+Create an intelligent abbreviation of a name by:
+- Abbreviating the common prefix parts (taking first letters)
+- Preserving the unique suffix parts
+
+# Arguments
+- `name::String`: The name to abbreviate
+- `common_prefix_parts::Vector{String}`: Common prefix parts found across all names
+
+# Returns
+- `String`: Abbreviated name
+"""
+function _abbreviate_name(name::String, common_prefix_parts::Vector{String})
+    isempty(common_prefix_parts) && return name
+    
+    name_parts = _split_into_parts(name)
+    
+    # Abbreviate common prefix parts: take first 2-3 letters of each (or first letter if short)
+    abbrev_prefix = ""
+    for part in common_prefix_parts
+        if part == "_"
+            abbrev_prefix *= "_"
+        elseif !isempty(part)
+            if isdigit(part[1])
+                abbrev_prefix *= part  # Keep numbers as-is
+            else
+                # Take first 2-3 letters, or first letter if part is very short
+                n = length(part) >= 3 ? 3 : (length(part) >= 2 ? 2 : 1)
+                abbrev_prefix *= uppercase(part[1]) * part[2:min(n, length(part))]
+            end
+        end
+    end
+    
+    # Get the unique suffix parts (everything after the common prefix)
+    unique_suffix = join(name_parts[length(common_prefix_parts)+1:end], "")
+    
+    return abbrev_prefix * unique_suffix
+end
+
+"""
+    _find_common_prefix_parts(names::Vector{String})
+
+Find common prefix parts across a list of names, splitting on uppercase letters and underscores.
+
+# Arguments
+- `names::Vector{String}`: Vector of names to analyze
+
+# Returns
+- `Vector{String}`: Common prefix parts
+"""
+function _find_common_prefix_parts(names::Vector{String})
+    isempty(names) && return String[]
+    length(names) == 1 && return String[]
+    
+    # Split all names into parts
+    all_parts = [_split_into_parts(name) for name in names]
+    
+    # Find common prefix parts
+    first_parts = all_parts[1]
+    common_parts = String[]
+    
+    for i in 1:length(first_parts)
+        part = first_parts[i]
+        if all(length(parts) >= i && parts[i] == part for parts in all_parts)
+            push!(common_parts, part)
+        else
+            break
+        end
+    end
+    
+    # Don't use if too short (less than 2 parts)
+    return length(common_parts) >= 2 ? common_parts : String[]
+end
+
+"""
+    _abbreviate_parts(parts::Vector{String})
+
+Abbreviate a list of parts by taking first 2-3 letters of each word part.
+"""
+function _abbreviate_parts(parts::Vector{String})
+    abbrev = ""
+    for part in parts
+        if part == "_"
+            abbrev *= "_"
+        elseif !isempty(part)
+            if isdigit(part[1])
+                abbrev *= part
+            else
+                n = min(3, length(part))
+                abbrev *= uppercase(part[1]) * part[2:n]
+            end
+        end
+    end
+    return abbrev
+end
+
+
+"""
+    _shorten_condition_names(condition_names::Vector{String}; 
+                            max_total_length::Int = 40,
+                            max_name_length::Int = 30,
+                            separator::String = ", ",
+                            show_ends::Int = 3)
+
+Shorten a list of condition names while preserving identification.
+Uses intelligent abbreviation to create shorter but still identifiable names.
+If the total is still too long, shows first and last N conditions with "..." in between.
+
+# Arguments
+- `condition_names::Vector{String}`: Vector of condition names
+- `max_total_length::Int`: Maximum total length of the result string
+- `max_name_length::Int`: Maximum length for each individual name (after abbreviation)
+- `separator::String`: Separator between names
+- `show_ends::Int`: Number of conditions to show at start/end when truncating
+
+# Returns
+- `String`: Shortened condition name string
+"""
+function _shorten_condition_names(
+    condition_names::Vector{String};
+    max_total_length::Int = 80,
+    max_name_length::Int = 30,
+    separator::String = ", ",
+    show_ends::Int = 3,
+)
+    isempty(condition_names) && return ""
+    length(condition_names) == 1 && return condition_names[1]
+
+    # Try intelligent abbreviation
+    common_prefix_parts = _find_common_prefix_parts(condition_names)
+    if isempty(common_prefix_parts)
+        abbreviated_names = [_abbreviate_parts(_split_into_parts(name)) for name in condition_names]
+    else
+        abbreviated_names = [_abbreviate_name(name, common_prefix_parts) for name in condition_names]
+    end
+
+    # Use original if abbreviation didn't help (less than 20% shorter)
+    avg_original = sum(length(name) for name in condition_names) / length(condition_names)
+    avg_abbreviated = sum(length(name) for name in abbreviated_names) / length(abbreviated_names)
+    if avg_abbreviated >= avg_original * 0.8
+        abbreviated_names = condition_names
+    end
+    
+    # Truncate individual names and join
+    final_names = [length(n) > max_name_length ? n[1:max_name_length] * "…" : n for n in abbreviated_names]
+    full_string = join(final_names, separator)
+    
+    # If still too long, show first N and last N
+    if length(full_string) > max_total_length && length(condition_names) > 2 * show_ends
+        first_part = join(final_names[1:show_ends], separator)
+        last_part = join(final_names[(end - show_ends + 1):end], separator)
+        return first_part * separator * "…" * separator * last_part
+    end
+    
+    return full_string
 end
