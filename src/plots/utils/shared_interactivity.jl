@@ -1,8 +1,7 @@
 # =============================================================================
 # SHARED CONSTANTS
 # =============================================================================
-const SHARED_KEYBOARD_ACTIONS =
-    Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
+const SHARED_KEYBOARD_ACTIONS = Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
 
 # =============================================================================
 # SHARED SELECTION STATE
