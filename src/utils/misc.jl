@@ -88,13 +88,47 @@ end
 
 
 """
-    validate_baseline_interval(time::AbstractVector, baseline_interval::Union{IntervalIndex,IntervalTime}) -> IntervalIndex
+    validate_baseline_interval(baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}) -> Union{IntervalIndex,IntervalTime}
 
-Validate and convert baseline interval to index format.
+Validate baseline interval structure (without data). Returns normalized interval.
+Converts tuples to IntervalTime. For full validation with bounds checking, use the version that takes time vector or data.
+
+# Arguments
+- `baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}`: Interval to validate
+
+# Returns
+- `Union{IntervalIndex,IntervalTime}`: Normalized interval (tuples converted to IntervalTime)
+
+# Throws
+- `ArgumentError`: If interval structure is invalid
+"""
+function validate_baseline_interval(
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+)::Union{IntervalIndex,IntervalTime}
+    # Convert tuple to IntervalTime
+    if baseline_interval isa Tuple
+        length(baseline_interval) == 2 || @minimal_error_throw "Baseline interval tuple must have 2 elements (start, stop), got: $baseline_interval"
+        baseline_interval = IntervalTime(start = Float64(baseline_interval[1]), stop = Float64(baseline_interval[2]))
+    end
+
+    # Validate structure
+    if baseline_interval isa IntervalTime
+        baseline_interval.start > baseline_interval.stop && @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+    elseif baseline_interval isa IntervalIndex
+        baseline_interval.start > baseline_interval.stop && @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+    end
+
+    return baseline_interval
+end
+
+"""
+    validate_baseline_interval(time::AbstractVector, baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}) -> IntervalIndex
+
+Validate and convert baseline interval to index format with bounds checking.
 
 # Arguments
 - `time::AbstractVector`: Time points vector
-- `baseline_interval::Union{IntervalIndex,IntervalTime}`: Interval to validate
+- `baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}`: Interval to validate
 
 # Returns
 - `IntervalIndex`: Validated interval in index format
@@ -104,17 +138,22 @@ Validate and convert baseline interval to index format.
 """
 function validate_baseline_interval(
     time::AbstractVector,
-    baseline_interval::Union{IntervalIndex,IntervalTime},
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
 )::IntervalIndex
+    # First normalize (convert tuple, validate structure)
+    baseline_interval = validate_baseline_interval(baseline_interval)
+    
+    # Convert IntervalTime to IntervalIndex
     if baseline_interval isa IntervalTime
         start_idx, stop_idx = find_idx_start_end(time, baseline_interval.start, baseline_interval.stop)
         baseline_interval = IntervalIndex(start = start_idx, stop = stop_idx)
     end
 
+    # Validate bounds
     if !(1 <= baseline_interval.start <= length(time)) ||
        !(1 <= baseline_interval.stop <= length(time)) ||
        !(baseline_interval.start <= baseline_interval.stop)
-        @minimal_error "Invalid baseline_interval: $baseline_interval"
+        @minimal_error "Invalid baseline_interval: $baseline_interval (time vector length: $(length(time)))"
     end
 
     return baseline_interval
@@ -122,14 +161,14 @@ end
 
 function validate_baseline_interval(
     dat::MultiDataFrameEeg,
-    baseline_interval::Union{IntervalIndex,IntervalTime},
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
 )::IntervalIndex
     return validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
 end
 
 function validate_baseline_interval(
     dat::SingleDataFrameEeg,
-    baseline_interval::Union{IntervalIndex,IntervalTime},
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
 )::IntervalIndex
     return validate_baseline_interval(dat.data.time, baseline_interval)
 end

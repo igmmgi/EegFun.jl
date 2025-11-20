@@ -55,6 +55,57 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 """
+    plot_erp(filepath::String; 
+             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
+             condition_selection::Function = conditions(),
+             channel_selection::Function = channels(),
+             sample_selection::Function = samples(),
+             kwargs...)
+
+Load ERP data from a JLD2 file and create plots.
+
+# Arguments
+- `filepath::String`: Path to JLD2 file containing ErpData or Vector{ErpData}
+- `layout`: Layout specification (see main plot_erp documentation)
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering
+- `kwargs`: Additional keyword arguments
+
+# Examples
+```julia
+# Load and plot from file
+plot_erp("grand_average_erps_good.jld2")
+
+# With channel selection
+plot_erp("grand_average_erps_good.jld2", channel_selection = channels([:PO7, :PO8]), layout = :grid)
+```
+"""
+function plot_erp(
+    filepath::String;
+    layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    kwargs...,
+)
+    # Load data from file
+    data = load_data(filepath)
+    if isnothing(data)
+        @minimal_error_throw "No data found in file: $filepath"
+    end
+
+    # Dispatch will handle ErpData vs Vector{ErpData} automatically
+    return plot_erp(
+        data;
+        layout = layout,
+        condition_selection = condition_selection,
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        kwargs...,
+    )
+end
+
+"""
     plot_erp(dat::ErpData; 
              layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
              condition_selection::Function = conditions(),

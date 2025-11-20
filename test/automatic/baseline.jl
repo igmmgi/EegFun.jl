@@ -251,9 +251,9 @@ using eegfun
     @test isapprox(epochs2.data[3].Ch1, original_epoch3_ch1_2 .- baseline_mean_epoch3_2; atol = 1e-9)
     
     # Test error handling - invalid interval (start > stop)
-    # @minimal_error returns nothing, causing MethodError when trying to convert to IntervalIndex
+    # validate_baseline_interval throws ErrorException for invalid intervals
     dat9 = create_test_data(n = 10)
-    @test_throws MethodError eegfun.baseline!(dat9, eegfun.IntervalIndex(start = 5, stop = 1))
+    @test_throws ErrorException eegfun.baseline!(dat9, eegfun.IntervalIndex(start = 5, stop = 1))
     
     # Test error handling - invalid interval (start out of range)
     dat10 = create_test_data(n = 10)
