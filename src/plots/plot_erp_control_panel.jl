@@ -91,11 +91,11 @@ function _setup_erp_control_panel!(
             plot_kwargs_no_legend = merge(copy(plot_kwargs), Dict(:legend => false))
             
             if plot_layout.type == :single
-                _plot_erp!(axes[1], dat_to_plot, all_plot_channels; fig=fig, condition_mask=condition_mask, _line_refs=line_refs[1], plot_kwargs_no_legend...)
+                _plot_erp!(axes[1], dat_to_plot, all_plot_channels; condition_mask=condition_mask, _line_refs=line_refs[1], plot_kwargs_no_legend...)
             else
                 for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
                     if channel in all_plot_channels
-                        _plot_erp!(ax, dat_to_plot, [channel]; fig=fig, condition_mask=condition_mask, _line_refs=line_refs[ax_idx], plot_kwargs_no_legend...)
+                        _plot_erp!(ax, dat_to_plot, [channel]; condition_mask=condition_mask, _line_refs=line_refs[ax_idx], plot_kwargs_no_legend...)
                     end
                 end
             end
