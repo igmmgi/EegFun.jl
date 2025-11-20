@@ -249,7 +249,7 @@ function plot_erp(
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
         plot_kwargs_with_refs = plot_kwargs[:interactive] && line_refs !== nothing ? 
             merge(plot_kwargs, Dict(:_line_refs => line_refs[ax_idx])) : plot_kwargs
-        _plot_erp!(ax, dat_subset, channels_to_plot; fig=fig, plot_kwargs_with_refs...)
+        _plot_erp!(ax, dat_subset, channels_to_plot; plot_kwargs_with_refs...)
     end
 
     # Apply our axis stuff
@@ -498,13 +498,18 @@ Handles both single and multiple datasets.
 Note: datasets should already be subset based on channel_selection and sample_selection.
 
 # Keyword Arguments
-- `condition_mask::Union{Vector{Bool},Nothing}`: Optional mask to set visibility of each dataset. 
-  If provided, `condition_mask[i]` controls visibility of `datasets[i]`. If `nothing`, all lines are visible.
+- `condition_mask::Vector{Bool}`: Mask to set visibility of each dataset. 
+  `condition_mask[i]` controls visibility of `datasets[i]`. Defaults to all `true`.
 """
-function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; fig=nothing, condition_mask::Union{Vector{Bool},Nothing}=nothing, kwargs...)
+function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; condition_mask::Vector{Bool}=Bool[], kwargs...)
 
     # Use defaults + overrides (kwargs may already be merged, so merge is safe)
     kwargs = merge(PLOT_ERP_KWARGS, kwargs)
+
+    # Default condition_mask to all true if not provided
+    if isempty(condition_mask)
+        condition_mask = fill(true, length(datasets))
+    end
 
     # Compute colors and linestyles for each dataset
     all_colors = _compute_dataset_colors(
@@ -528,8 +533,8 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
             end
 
             color_idx = (dataset_idx - 1) * length(channels) + channel_idx
-            # Set visibility based on condition_mask if provided, otherwise all visible
-            visible_ = condition_mask === nothing ? true : (dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true)
+            # Set visibility based on condition_mask
+            visible_ = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
             
             line = lines!(
                 ax,
@@ -604,7 +609,7 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     )
 
     # Plot on the axis
-    _plot_erp!(ax, dat_subset, all_plot_channels; fig=fig, plot_kwargs...)
+    _plot_erp!(ax, dat_subset, all_plot_channels; plot_kwargs...)
 
     return ax
 end
