@@ -53,7 +53,7 @@ Apply baseline correction in-place to EEG data.
 """
 function baseline!(
     dat::EegData,
-    baseline_interval::Union{IntervalIndex,IntervalTime};
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}};
     channel_selection::Function = channels(),
 )
     # Validate baseline interval
@@ -107,7 +107,7 @@ Apply baseline correction in-place to a vector of EpochData objects.
 """
 function baseline!(
     dat::Vector{EpochData},
-    baseline_interval::Union{IntervalIndex,IntervalTime};
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}};
     channel_selection::Function = channels(),
 )
     baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
@@ -134,3 +134,169 @@ end
 
 # generates all non-mutating versions
 @add_nonmutating baseline!
+
+# =============================================================================
+# BATCH BASELINE CORRECTION
+# =============================================================================
+
+"""
+Batch baseline correction for EEG/ERP data.
+"""
+
+#=============================================================================
+    BASELINE-SPECIFIC HELPERS
+=============================================================================#
+
+"""Generate default output directory name for baseline operation."""
+function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Union{IntervalIndex,IntervalTime})
+    if baseline_interval isa IntervalTime
+        interval_str = "$(baseline_interval.start)_to_$(baseline_interval.stop)"
+    else  # IntervalIndex
+        interval_str = "$(baseline_interval.start)_to_$(baseline_interval.stop)"
+    end
+    joinpath(input_dir, "baseline_$(pattern)_$(interval_str)")
+end
+
+#=============================================================================
+    BASELINE-SPECIFIC PROCESSING
+=============================================================================#
+
+"""
+Process a single file through baseline correction pipeline.
+Returns BatchResult with success/failure info.
+"""
+function _process_baseline_file(
+    filepath::String,
+    output_path::String,
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+    conditions,
+)
+    filename = basename(filepath)
+
+    # Load data
+    data = load_data(filepath)
+    if isnothing(data)
+        return BatchResult(false, filename, "No data variables found")
+    end
+
+    # Validate that data is valid EEG data (Vector of ErpData or EpochData)
+    if !(data isa Vector{<:Union{ErpData,EpochData}})
+        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
+    end
+
+    # Select conditions
+    data = _condition_select(data, conditions)
+
+    # Apply baseline correction (mutates data in-place)
+    baseline!.(data, Ref(baseline_interval))
+
+    # Save (always use "data" as variable name since load_data finds by type)
+    jldsave(output_path; data = data)
+
+    return BatchResult(true, filename, "Baseline corrected successfully")
+end
+
+#=============================================================================
+    MAIN API FUNCTION
+=============================================================================#
+
+"""
+    baseline(file_pattern::String, baseline_interval; 
+             input_dir::String = pwd(), 
+             participants::Union{Int, Vector{Int}, Nothing} = nothing,
+             conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+             output_dir::Union{String, Nothing} = nothing)
+
+Apply baseline correction to EEG/ERP data from JLD2 files and save to a new directory.
+
+# Arguments
+- `file_pattern::String`: Pattern to match files ("epochs", "erps", "cleaned", "original", or custom)
+- `baseline_interval`: Baseline interval as:
+  - `Tuple{Real,Real}`: Time interval in seconds (e.g., `(-0.2, 0.0)`)
+  - `IntervalTime`: Time interval struct (e.g., `IntervalTime(start=-0.2, stop=0.0)`)
+  - `IntervalIndex`: Index interval struct (e.g., `IntervalIndex(start=1, stop=51)`)
+- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
+- `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
+- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition number(s) to process (default: all)
+- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on baseline settings)
+
+# Example
+```julia
+# Baseline correct all epochs from -0.2 to 0.0 seconds
+baseline("epochs", (-0.2, 0.0))
+
+# Baseline correct specific participant
+baseline("epochs", (-0.2, 0.0), participants=3)
+
+# Baseline correct specific participants and conditions
+baseline("epochs", (-0.2, 0.0), participants=[3, 4], conditions=[1, 2])
+
+# Use IntervalTime explicitly
+baseline("epochs", IntervalTime(start=-0.2, stop=0.0))
+```
+"""
+function baseline(
+    file_pattern::String,
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}};
+    input_dir::String = pwd(),
+    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    output_dir::Union{String,Nothing} = nothing,
+)
+
+    # Setup logging
+    log_file = "baseline.log"
+    setup_global_logging(log_file)
+
+    try
+        @info ""
+        @info "Batch baseline correction started at $(now())"
+        @log_call "baseline" (file_pattern, baseline_interval)
+
+        # Validation
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
+        end
+
+        # Validate and normalize baseline interval (converts tuple to IntervalTime, validates structure)
+        normalized_interval = validate_baseline_interval(baseline_interval)
+
+        # Setup directories
+        output_dir = something(
+            output_dir,
+            _default_baseline_output_dir(input_dir, file_pattern, normalized_interval),
+        )
+        mkpath(output_dir)
+
+        # Find files
+        files = _find_batch_files(file_pattern, input_dir; participants)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+            return nothing
+        end
+        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+
+        # Create processing function with captured parameters
+        @info "Baseline interval: $normalized_interval"
+        process_fn = (input_path, output_path) -> _process_baseline_file(
+            input_path,
+            output_path,
+            normalized_interval,
+            conditions,
+        )
+
+        # Execute batch operation
+        results = _run_batch_operation(
+            process_fn,
+            files,
+            input_dir,
+            output_dir;
+            operation_name = "Baseline correction",
+        )
+
+        _log_batch_summary(results, output_dir)
+
+    finally
+        _cleanup_logging(log_file, output_dir)
+    end
+end
