@@ -47,12 +47,11 @@ function _setup_erp_control_panel!(
                     end
                 end
             end
-            
-            # Apply baseline if specified
+           
+            # apply baseline
             if baseline_interval_new !== nothing
                 baseline!.(dat_subset, Ref(baseline_interval_new))
             end
-            dat_to_plot = dat_subset
             
             # Get channels
             selected_channels = channel_labels(dat_to_plot)
@@ -91,19 +90,6 @@ function _setup_erp_control_panel!(
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
-            # Check if control panel exists and is still open
-            if control_fig[] !== nothing
-                try
-                    # Try to access the scene to see if it's still valid
-                    if !isopen(control_fig[].scene)
-                        control_fig[] = nothing
-                    end
-                catch
-                    # If we can't access it, it's probably closed
-                    control_fig[] = nothing
-                end
-            end
-            
             if control_fig[] === nothing
                 control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
                 layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
