@@ -240,16 +240,11 @@ function plot_erp(
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
     axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
 
-    # Initialize line references for control panel (if interactive)
-    line_refs = plot_kwargs[:interactive] ? [Dict{Int, Vector{Lines}}() for _ in axes] : nothing
-
     # Now do the actual plotting for each axis
-    for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
+    for (ax, channel) in zip(axes, channels)
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
-        plot_kwargs_with_refs = plot_kwargs[:interactive] && line_refs !== nothing ? 
-            merge(plot_kwargs, Dict(:_line_refs => line_refs[ax_idx])) : plot_kwargs
-        _plot_erp!(ax, dat_subset, channels_to_plot; plot_kwargs_with_refs...)
+        _plot_erp!(ax, dat_subset, channels_to_plot; plot_kwargs...)
     end
 
     # Apply our axis stuff
@@ -279,8 +274,8 @@ function plot_erp(
             _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, plot_layout.type)
         end
 
-        # Set up control panel (press 'c' to open) - pass line_refs so it can use them
-        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval, line_refs)
+        # Set up control panel (press 'c' to open)
+        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval)
 
     end
 
@@ -547,13 +542,6 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
                 visible = visible_,
             )
             
-            # Store line reference if provided (for control panel)
-            if haskey(kwargs, :_line_refs) && kwargs[:_line_refs] isa Dict
-                if !haskey(kwargs[:_line_refs], dataset_idx)
-                    kwargs[:_line_refs][dataset_idx] = Lines[]
-                end
-                push!(kwargs[:_line_refs][dataset_idx], line)
-            end
         end
     end
 
