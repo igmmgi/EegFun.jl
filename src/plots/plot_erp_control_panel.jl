@@ -5,9 +5,7 @@
 """
     _setup_erp_control_panel!(fig::Figure, dat_subset::Vector{ErpData}, axes::Vector{Axis}, 
                                plot_layout::PlotLayout, plot_kwargs::Dict,
-                               baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
-                               original_plot_channels::Vector{Symbol},
-                               line_refs::Vector{Dict{Int, Vector{Lines}}})
+                               baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing})
 
 Set up a control panel that opens when 'c' key is pressed.
 Allows adjusting baseline and toggling conditions.
@@ -19,7 +17,6 @@ function _setup_erp_control_panel!(
     plot_layout::PlotLayout,
     plot_kwargs::Dict,
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
-    line_refs::Vector{Dict{Int, Vector{Lines}}},
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     layout_channels = plot_layout.channels
@@ -33,22 +30,8 @@ function _setup_erp_control_panel!(
     start_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
     stop_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
     
-    # Update visibility based on checkboxes
-    function update_visibility!()
-        for (ax_idx, ax) in enumerate(axes)
-            if ax_idx <= length(line_refs)
-                for (dataset_idx, lines) in line_refs[ax_idx]
-                    visible = dataset_idx <= length(condition_checked) && condition_checked[dataset_idx][]
-                    for line in lines
-                        line.visible = visible
-                    end
-                end
-            end
-        end
-    end
-    
-    # Update baseline (re-plot everything)
-    function update_baseline!()
+    # Update plot (re-plot everything with current settings)
+    function update_plot!()
         try
             # Get baseline values from textboxes
             baseline_interval_new = nothing
@@ -65,23 +48,20 @@ function _setup_erp_control_panel!(
                 end
             end
             
-            # Copy all datasets and apply baseline
-            dat_to_plot = [copy(dat) for dat in dat_subset]
+            # Apply baseline if specified
             if baseline_interval_new !== nothing
-                baseline!.(dat_to_plot, Ref(baseline_interval_new))
+                baseline!.(dat_subset, Ref(baseline_interval_new))
             end
+            dat_to_plot = dat_subset
             
             # Get channels
             selected_channels = channel_labels(dat_to_plot)
             extra_channels = extra_labels(dat_to_plot)
             all_plot_channels = vcat(selected_channels, extra_channels)
             
-            # Clear axes and line references
+            # Clear axes
             for ax in axes
                 empty!(ax)
-            end
-            for refs in line_refs
-                empty!(refs)
             end
             
             # Build condition mask
@@ -91,11 +71,11 @@ function _setup_erp_control_panel!(
             plot_kwargs_no_legend = merge(copy(plot_kwargs), Dict(:legend => false))
             
             if plot_layout.type == :single
-                _plot_erp!(axes[1], dat_to_plot, all_plot_channels; condition_mask=condition_mask, _line_refs=line_refs[1], plot_kwargs_no_legend...)
+                _plot_erp!(axes[1], dat_to_plot, all_plot_channels; condition_mask=condition_mask, plot_kwargs_no_legend...)
             else
-                for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
+                for (ax, channel) in zip(axes, layout_channels)
                     if channel in all_plot_channels
-                        _plot_erp!(ax, dat_to_plot, [channel]; condition_mask=condition_mask, _line_refs=line_refs[ax_idx], plot_kwargs_no_legend...)
+                        _plot_erp!(ax, dat_to_plot, [channel]; condition_mask=condition_mask, plot_kwargs_no_legend...)
                     end
                 end
             end
@@ -104,14 +84,26 @@ function _setup_erp_control_panel!(
             _apply_axis_properties!.(axes; plot_kwargs...)
             _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
         catch e
-            @error "Error updating baseline: $e" exception=(e, catch_backtrace())
+            @error "Error updating plot: $e" exception=(e, catch_backtrace())
         end
     end
-    
     
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
+            # Check if control panel exists and is still open
+            if control_fig[] !== nothing
+                try
+                    # Try to access the scene to see if it's still valid
+                    if !isopen(control_fig[].scene)
+                        control_fig[] = nothing
+                    end
+                catch
+                    # If we can't access it, it's probably closed
+                    control_fig[] = nothing
+                end
+            end
+            
             if control_fig[] === nothing
                 control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
                 layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
@@ -157,13 +149,13 @@ function _setup_erp_control_panel!(
                             stop_input.stored_string[] = stop_input.displayed_string[]
                         end
                     end
-                    update_baseline!()
+                    update_plot!()
                 end
                 
-                # Auto-update visibility on condition changes
+                # Auto-update on condition changes (re-plot)
                 for checked in condition_checked
                     on(checked) do _
-                        update_visibility!()
+                        update_plot!()
                     end
                 end
                 
