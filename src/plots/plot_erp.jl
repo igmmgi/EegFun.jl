@@ -240,16 +240,16 @@ function plot_erp(
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
     axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
 
+    # Initialize line references for control panel (if interactive)
+    line_refs = plot_kwargs[:interactive] ? [Dict{Int, Vector{Lines}}() for _ in axes] : nothing
+
     # Now do the actual plotting for each axis
-    # Store legend references for control panel
-    initial_legends = Dict{Int, Union{Legend, Nothing}}()
-    for (idx, (ax, channel)) in enumerate(zip(axes, channels))
+    for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
-        ax_returned, leg = _plot_erp!(ax, dat_subset, channels_to_plot; fig=fig, plot_kwargs...)
-        if leg !== nothing
-            initial_legends[idx] = leg
-        end
+        plot_kwargs_with_refs = plot_kwargs[:interactive] && line_refs !== nothing ? 
+            merge(plot_kwargs, Dict(:_line_refs => line_refs[ax_idx])) : plot_kwargs
+        _plot_erp!(ax, dat_subset, channels_to_plot; fig=fig, plot_kwargs_with_refs...)
     end
 
     # Apply our axis stuff
@@ -279,8 +279,8 @@ function plot_erp(
             _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, plot_layout.type)
         end
 
-        # Set up control panel (press 'c' to open)
-        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, channel_selection, sample_selection, baseline_interval, initial_legends)
+        # Set up control panel (press 'c' to open) - pass line_refs so it can use them
+        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval, line_refs)
 
     end
 
@@ -496,8 +496,12 @@ end
 Internal function to plot ERP data on an axis.
 Handles both single and multiple datasets.
 Note: datasets should already be subset based on channel_selection and sample_selection.
+
+# Keyword Arguments
+- `condition_mask::Union{Vector{Bool},Nothing}`: Optional mask to set visibility of each dataset. 
+  If provided, `condition_mask[i]` controls visibility of `datasets[i]`. If `nothing`, all lines are visible.
 """
-function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; fig=nothing, kwargs...)
+function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; fig=nothing, condition_mask::Union{Vector{Bool},Nothing}=nothing, kwargs...)
 
     # Use defaults + overrides (kwargs may already be merged, so merge is safe)
     kwargs = merge(PLOT_ERP_KWARGS, kwargs)
@@ -524,7 +528,10 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
             end
 
             color_idx = (dataset_idx - 1) * length(channels) + channel_idx
-            lines!(
+            # Set visibility based on condition_mask if provided, otherwise all visible
+            visible_ = condition_mask === nothing ? true : (dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true)
+            
+            line = lines!(
                 ax,
                 dat.data[!, :time],
                 dat.data[!, channel],
@@ -532,7 +539,16 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
                 color = all_colors[color_idx],
                 linestyle = all_linestyles[dataset_idx],
                 label = label,
+                visible = visible_,
             )
+            
+            # Store line reference if provided (for control panel)
+            if haskey(kwargs, :_line_refs) && kwargs[:_line_refs] isa Dict
+                if !haskey(kwargs[:_line_refs], dataset_idx)
+                    kwargs[:_line_refs][dataset_idx] = Lines[]
+                end
+                push!(kwargs[:_line_refs][dataset_idx], line)
+            end
         end
     end
 
