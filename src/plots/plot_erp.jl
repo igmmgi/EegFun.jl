@@ -60,6 +60,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
+             baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
              kwargs...)
 
 Load ERP data from a JLD2 file and create plots.
@@ -86,6 +87,7 @@ function plot_erp(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
     kwargs...,
 )
     # Load data from file
@@ -101,6 +103,7 @@ function plot_erp(
         condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        baseline_interval = baseline_interval,
         kwargs...,
     )
 end
@@ -111,6 +114,7 @@ end
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
+             baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
              kwargs...)
 
 Create ERP plots with flexible layout options.
@@ -126,6 +130,7 @@ Create ERP plots with flexible layout options.
   
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering
+- `baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing}`: Baseline correction interval. Can be `nothing` (no baseline), tuple like `(-0.2, 0.0)`, `IntervalTime`, or `IntervalIndex`. Default `nothing` means no baseline correction.
 - `kwargs`: Additional keyword arguments
 
 $(generate_kwargs_doc(PLOT_ERP_KWARGS))
@@ -171,6 +176,7 @@ function plot_erp(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
     kwargs...,
 )
     return plot_erp(
@@ -179,6 +185,7 @@ function plot_erp(
         condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        baseline_interval = baseline_interval,
         kwargs...,
     )
 end
@@ -188,7 +195,8 @@ end
              layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(), 
-             sample_selection::Function = samples(), 
+             sample_selection::Function = samples(),
+             baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
              kwargs...)
 
 Plot multiple ERP datasets on the same axis (e.g., conditions).
@@ -199,6 +207,7 @@ function plot_erp(
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
     kwargs...,
 )
 
@@ -210,6 +219,7 @@ function plot_erp(
         condition_selection = condition_selection,
         channel_selection = channel_selection,
         sample_selection = sample_selection,
+        baseline_interval = baseline_interval,
     )
 
     # set default plot title only for single layouts
@@ -231,10 +241,15 @@ function plot_erp(
     axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
 
     # Now do the actual plotting for each axis
-    for (ax, channel) in zip(axes, channels)
+    # Store legend references for control panel
+    initial_legends = Dict{Int, Union{Legend, Nothing}}()
+    for (idx, (ax, channel)) in enumerate(zip(axes, channels))
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
-        _plot_erp!(ax, dat_subset, channels_to_plot; fig=fig, plot_kwargs...)
+        ax_returned, leg = _plot_erp!(ax, dat_subset, channels_to_plot; fig=fig, plot_kwargs...)
+        if leg !== nothing
+            initial_legends[idx] = leg
+        end
     end
 
     # Apply our axis stuff
@@ -263,6 +278,9 @@ function plot_erp(
         if plot_layout.type in (:topo, :grid)
             _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, plot_layout.type)
         end
+
+        # Set up control panel (press 'c' to open)
+        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, channel_selection, sample_selection, baseline_interval, initial_legends)
 
     end
 
@@ -305,6 +323,7 @@ function _prepare_erp_data(
     condition_selection = conditions(),
     channel_selection = channels(),
     sample_selection = samples(),
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
 )
     # Data subsetting
     dat_subset = subset(
@@ -314,6 +333,12 @@ function _prepare_erp_data(
         sample_selection = sample_selection,
         include_extra = true,
     )
+
+    # Apply baseline correction if requested
+    if baseline_interval !== nothing
+        # Apply baseline correction (mutating - safe since dat_subset is already a copy from subset)
+        baseline!.(dat_subset, Ref(baseline_interval))
+    end
 
     # Channel averaging if requested
     original_channels = nothing
@@ -423,8 +448,15 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
 
     # Check if legend should be shown
     # Do not show if requested false, or single channel + single dataset
-    !kwargs[:legend] || (length(channels) == 1 && length(datasets) == 1) && return ax
-    !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels)) && return ax
+    if !kwargs[:legend] || (length(channels) == 1 && length(datasets) == 1)
+        return nothing
+    end
+    if !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels))
+        return nothing
+    end
+    
+    # Don't check for existing legend - let caller handle deletion
+    # (This allows control panel to delete and recreate legends)
     
     # Extract legend parameters
     legend_label = kwargs[:legend_label]
@@ -436,12 +468,12 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
 
     # Add legend with position and optional label
     if legend_label != ""
-        axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
+        leg = axislegend(ax, legend_label; position = legend_position, legend_kwargs...)
     else
-        axislegend(ax; position = legend_position, legend_kwargs...)
+        leg = axislegend(ax; position = legend_position, legend_kwargs...)
     end
     
-    return ax
+    return leg  # Return the legend object so it can be stored and deleted later
 end
 
 """
@@ -505,9 +537,9 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
     end
 
     _set_origin_lines!(ax; add_xy_origin = kwargs[:add_xy_origin])
-    _add_legend!(ax, channels, datasets, kwargs)
+    leg = _add_legend!(ax, channels, datasets, kwargs)
 
-    return ax
+    return ax, leg  # Return both axis and legend
 end
 
 """
@@ -545,12 +577,14 @@ Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
 function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     # Prepare kwargs and data
     plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
+    baseline_interval = get(kwargs, :baseline_interval, nothing)
     dat_subset, all_plot_channels, _ = _prepare_erp_data(
         datasets,
         plot_kwargs;
         condition_selection = conditions(),
         channel_selection = get(plot_kwargs, :channel_selection, channels()),
         sample_selection = get(plot_kwargs, :sample_selection, samples()),
+        baseline_interval = baseline_interval,
     )
 
     # Plot on the axis
