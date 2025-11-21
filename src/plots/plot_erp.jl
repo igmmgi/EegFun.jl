@@ -608,16 +608,19 @@ function _setup_erp_control_panel!(
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     layout_channels = plot_layout.channels
-    
+    last_c_key_time = Ref{Float64}(0.0)  # Track last 'c' key press time for debouncing
+
     # State: baseline values and condition selections
-    baseline_start_obs = Observable(baseline_interval !== nothing && baseline_interval isa Tuple ? string(baseline_interval[1]) : "")
-    baseline_stop_obs = Observable(baseline_interval !== nothing && baseline_interval isa Tuple ? string(baseline_interval[2]) : "")
+    baseline_start_obs =
+        Observable(baseline_interval !== nothing && baseline_interval isa Tuple ? string(baseline_interval[1]) : "")
+    baseline_stop_obs =
+        Observable(baseline_interval !== nothing && baseline_interval isa Tuple ? string(baseline_interval[2]) : "")
     condition_checked = [Observable(true) for _ in dat_subset]
-    
+
     # Store textbox references
     start_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
     stop_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
-    
+
     # Update plot (re-plot everything with current settings)
     # TODO: is this v. inefficient?
     # It seems ok when there are only a few plots but fells very slow in grid mode when many electrodes!
@@ -637,104 +640,122 @@ function _setup_erp_control_panel!(
                     end
                 end
             end
-           
+
             # apply baseline
             if baseline_interval_new !== nothing
                 baseline!.(dat_subset, Ref(baseline_interval_new))
             end
-            
+
             # Get channels
             selected_channels = channel_labels(dat_subset)
             extra_channels = extra_labels(dat_subset)
             all_plot_channels = vcat(selected_channels, extra_channels)
-            
+
             # Clear axes
             for ax in axes
                 empty!(ax)
             end
-            
+
             # Build condition mask
             condition_mask = [checked[] for checked in condition_checked]
-            
+
             # Re-plot with condition mask
             plot_kwargs_no_legend = merge(copy(plot_kwargs), Dict(:legend => false))
-            
+
             if plot_layout.type == :single
-                _plot_erp!(axes[1], dat_subset, all_plot_channels; condition_mask=condition_mask, plot_kwargs_no_legend...)
+                _plot_erp!(
+                    axes[1],
+                    dat_subset,
+                    all_plot_channels;
+                    condition_mask = condition_mask,
+                    plot_kwargs_no_legend...,
+                )
             else
                 for (ax, channel) in zip(axes, layout_channels)
                     if channel in all_plot_channels
-                        _plot_erp!(ax, dat_subset, [channel]; condition_mask=condition_mask, plot_kwargs_no_legend...)
+                        _plot_erp!(ax, dat_subset, [channel]; condition_mask = condition_mask, plot_kwargs_no_legend...)
                     end
                 end
             end
-            
+
             # Re-apply axis properties
             _apply_axis_properties!.(axes; plot_kwargs...)
             _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
         catch e
-            @error "Error updating plot: $e" exception=(e, catch_backtrace())
+            @error "Error updating plot: $e" exception = (e, catch_backtrace())
         end
     end
-    
+
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
-                control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
-                layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
-                
-                # Baseline section
-                Label(layout[1, 1], "Baseline Correction", fontsize = 14, font = :bold)
-                baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
-                
-                Label(baseline_layout[1, 1], "Start (ms):", width = 60)
-                start_input = Textbox(baseline_layout[1, 2], placeholder = "e.g. -0.2", width = 100)
-                start_input.stored_string[] = baseline_start_obs[]
-                connect!(baseline_start_obs, start_input.stored_string)
-                start_input_ref[] = start_input
-                
-                Label(baseline_layout[2, 1], "End (ms):", width = 60)
-                stop_input = Textbox(baseline_layout[2, 2], placeholder = "e.g. 0.0", width = 100)
-                stop_input.stored_string[] = baseline_stop_obs[]
-                connect!(baseline_stop_obs, stop_input.stored_string)
-                stop_input_ref[] = stop_input
-                
-                # Apply button
-                apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
-                on(apply_btn.clicks) do _
-                    if start_input_ref[] !== nothing && hasproperty(start_input_ref[], :displayed_string)
-                        start_input = start_input_ref[]
-                        if start_input.displayed_string[] != start_input.stored_string[]
-                            start_input.stored_string[] = start_input.displayed_string[]
-                        end
+            # Debounce hack: ignore if pressed too quickly after last press (within 1 second)
+            current_time = time()
+            if current_time - last_c_key_time[] < 1.0
+                return
+            end
+            last_c_key_time[] = current_time
+
+            control_fig[] = nothing
+
+            # Create new control panel
+            control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
+            layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
+
+            # Baseline section
+            Label(layout[1, 1], "Baseline Correction", fontsize = 14, font = :bold)
+            baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
+
+            Label(baseline_layout[1, 1], "Start (ms):", width = 60)
+            start_input = Textbox(baseline_layout[1, 2], placeholder = "e.g. -0.2", width = 100)
+            start_input.stored_string[] = baseline_start_obs[]
+            connect!(baseline_start_obs, start_input.stored_string)
+            start_input_ref[] = start_input
+
+            Label(baseline_layout[2, 1], "End (ms):", width = 60)
+            stop_input = Textbox(baseline_layout[2, 2], placeholder = "e.g. 0.0", width = 100)
+            stop_input.stored_string[] = baseline_stop_obs[]
+            connect!(baseline_stop_obs, stop_input.stored_string)
+            stop_input_ref[] = stop_input
+
+            # Apply button
+            apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
+            on(apply_btn.clicks) do _
+                if start_input_ref[] !== nothing && hasproperty(start_input_ref[], :displayed_string)
+                    start_input = start_input_ref[]
+                    if start_input.displayed_string[] != start_input.stored_string[]
+                        start_input.stored_string[] = start_input.displayed_string[]
                     end
-                    if stop_input_ref[] !== nothing && hasproperty(stop_input_ref[], :displayed_string)
-                        stop_input = stop_input_ref[]
-                        if stop_input.displayed_string[] != stop_input.stored_string[]
-                            stop_input.stored_string[] = stop_input.displayed_string[]
-                        end
+                end
+                if stop_input_ref[] !== nothing && hasproperty(stop_input_ref[], :displayed_string)
+                    stop_input = stop_input_ref[]
+                    if stop_input.displayed_string[] != stop_input.stored_string[]
+                        stop_input.stored_string[] = stop_input.displayed_string[]
                     end
+                end
+                update_plot!()
+            end
+
+            # Conditions section
+            Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
+            conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
+
+            for (i, dat) in enumerate(dat_subset)
+                cb = Checkbox(conditions_layout[i, 1], checked = condition_checked[i][])
+                Label(conditions_layout[i, 2], dat.condition_name)
+                connect!(condition_checked[i], cb.checked)
+            end
+
+            # Auto-update on condition changes (re-plot)
+            for checked in condition_checked
+                on(checked) do _
+                    println("Condition changed: $checked")
                     update_plot!()
                 end
-                
-                # Conditions section
-                Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
-                conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
-                
-                for (i, dat) in enumerate(dat_subset)
-                    cb = Checkbox(conditions_layout[i, 1], checked = condition_checked[i][])
-                    Label(conditions_layout[i, 2], dat.condition_name)
-                    connect!(condition_checked[i], cb.checked)
-                end
-                
-                # Auto-update on condition changes (re-plot)
-                for checked in condition_checked
-                    on(checked) do _
-                        update_plot!()
-                    end
-                end
-                
-                display(control_fig[])
+            end
+
+            display(control_fig[])
+
         end
     end
 end
