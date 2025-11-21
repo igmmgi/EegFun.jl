@@ -288,9 +288,124 @@ function plot_erp(
     return fig, axes
 end
 
-# =============================================================================
-# SHARED PREPARATION FUNCTIONS
-# =============================================================================
+
+"""
+    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+
+Plot ERP data on an existing axis, mutating the figure and axis.
+
+# Arguments
+- `fig::Figure`: The figure to plot on
+- `ax::Axis`: The axis to plot on  
+- `dat::ErpData`: The ERP data to plot
+- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
+
+# Returns
+- `ax::Axis`: The axis that was plotted on
+"""
+function plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
+    return plot_erp!(fig, ax, [dat]; kwargs...)
+end
+
+"""
+    plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+
+Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
+
+# Arguments
+- `fig::Figure`: The figure to plot on
+- `ax::Axis`: The axis to plot on
+- `datasets::Vector{ErpData}`: The ERP datasets to plot
+- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
+
+# Returns
+- `ax::Axis`: The axis that was plotted on
+"""
+function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
+    # Prepare kwargs and data
+    plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
+    baseline_interval = get(kwargs, :baseline_interval, nothing)
+    dat_subset, all_plot_channels, _ = _prepare_erp_data(
+        datasets,
+        plot_kwargs;
+        condition_selection = conditions(),
+        channel_selection = get(plot_kwargs, :channel_selection, channels()),
+        sample_selection = get(plot_kwargs, :sample_selection, samples()),
+        baseline_interval = baseline_interval,
+    )
+
+    # Plot on the axis
+    _plot_erp!(ax, dat_subset, all_plot_channels; plot_kwargs...)
+
+    return ax
+end
+
+
+"""
+    _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
+
+Internal function to plot ERP data on an axis.
+Handles both single and multiple datasets.
+Note: datasets should already be subset based on channel_selection and sample_selection.
+
+# Keyword Arguments
+- `condition_mask::Vector{Bool}`: Mask to set visibility of each dataset. 
+  `condition_mask[i]` controls visibility of `datasets[i]`. Defaults to all `true`.
+"""
+function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; condition_mask::Vector{Bool}=Bool[], kwargs...)
+
+    # Use defaults + overrides (kwargs may already be merged, so merge is safe)
+    kwargs = merge(PLOT_ERP_KWARGS, kwargs)
+
+    # Default condition_mask to all true if not provided
+    if isempty(condition_mask)
+        condition_mask = fill(true, length(datasets))
+    end
+
+    # Compute colors and linestyles for each dataset
+    all_colors = _compute_dataset_colors(
+        kwargs[:color],
+        length(datasets),
+        length(channels),
+        kwargs[:colormap],
+        kwargs[:_color_explicitly_set]
+    )
+    all_linestyles = _compute_dataset_linestyles(kwargs[:linestyle], length(datasets))
+
+    # Plot each dataset for ALL channels in this subplot
+    for (dataset_idx, dat) in enumerate(datasets)
+        # Plot ALL channels for this dataset
+        for (channel_idx, channel) in enumerate(channels)
+
+            # axis label
+            label = isempty(kwargs[:legend_labels]) ? dat.condition_name : kwargs[:legend_labels][dataset_idx]
+            if length(channels) > 1 # More than one channel in this subplot
+                label *= " ($channel)"
+            end
+
+            color_idx = (dataset_idx - 1) * length(channels) + channel_idx
+            # Set visibility based on condition_mask
+            visible_ = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
+            
+            line = lines!(
+                ax,
+                dat.data[!, :time],
+                dat.data[!, channel],
+                linewidth = kwargs[:linewidth],
+                color = all_colors[color_idx],
+                linestyle = all_linestyles[dataset_idx],
+                label = label,
+                visible = visible_,
+            )
+            
+        end
+    end
+
+    _set_origin_lines!(ax; add_xy_origin = kwargs[:add_xy_origin])
+    leg = _add_legend!(ax, channels, datasets, kwargs)
+
+    return ax, leg  # Return both axis and legend
+end
 
 
 """
@@ -350,11 +465,6 @@ function _prepare_erp_data(
     return dat_subset, all_plot_channels, original_channels
 end
 
-# =============================================================================
-# SELECTION HANDLERS
-# =============================================================================
-
-# Unified selection setup is now handled by _setup_unified_selection! in shared_interactivity.jl
 
 function _handle_erp_right_click!(selection_state, mouse_x, data)
     if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
@@ -472,132 +582,150 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
 end
 
 """
-    _get_wrapped_value(value, idx, n_items)
+    _setup_erp_control_panel!(fig::Figure, dat_subset::Vector{ErpData}, axes::Vector{Axis}, 
+                               plot_layout::PlotLayout, plot_kwargs::Dict,
+                               baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing})
 
-Get a value from a vector (with wrapping) or return the single value.
+Set up a control panel that opens when 'c' key is pressed.
+Allows adjusting baseline and toggling conditions.
 """
-function _get_wrapped_value(value, idx::Int, n_items::Int)
-    if value isa Vector
-        return value[(idx-1) % length(value) + 1]
-    else
-        return value
-    end
-end
-
-
-"""
-    _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; kwargs...)
-
-Internal function to plot ERP data on an axis.
-Handles both single and multiple datasets.
-Note: datasets should already be subset based on channel_selection and sample_selection.
-
-# Keyword Arguments
-- `condition_mask::Vector{Bool}`: Mask to set visibility of each dataset. 
-  `condition_mask[i]` controls visibility of `datasets[i]`. Defaults to all `true`.
-"""
-function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; condition_mask::Vector{Bool}=Bool[], kwargs...)
-
-    # Use defaults + overrides (kwargs may already be merged, so merge is safe)
-    kwargs = merge(PLOT_ERP_KWARGS, kwargs)
-
-    # Default condition_mask to all true if not provided
-    if isempty(condition_mask)
-        condition_mask = fill(true, length(datasets))
-    end
-
-    # Compute colors and linestyles for each dataset
-    all_colors = _compute_dataset_colors(
-        kwargs[:color],
-        length(datasets),
-        length(channels),
-        kwargs[:colormap],
-        kwargs[:_color_explicitly_set]
-    )
-    all_linestyles = _compute_dataset_linestyles(kwargs[:linestyle], length(datasets))
-
-    # Plot each dataset for ALL channels in this subplot
-    for (dataset_idx, dat) in enumerate(datasets)
-        # Plot ALL channels for this dataset
-        for (channel_idx, channel) in enumerate(channels)
-
-            # axis label
-            label = isempty(kwargs[:legend_labels]) ? dat.condition_name : kwargs[:legend_labels][dataset_idx]
-            if length(channels) > 1 # More than one channel in this subplot
-                label *= " ($channel)"
+function _setup_erp_control_panel!(
+    fig::Figure,
+    dat_subset::Vector{ErpData},
+    axes::Vector{Axis},
+    plot_layout::PlotLayout,
+    plot_kwargs::Dict,
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
+)
+    control_fig = Ref{Union{Figure,Nothing}}(nothing)
+    layout_channels = plot_layout.channels
+    
+    # State: baseline values and condition selections
+    baseline_start_obs = Observable(baseline_interval !== nothing && baseline_interval isa Tuple ? string(baseline_interval[1]) : "")
+    baseline_stop_obs = Observable(baseline_interval !== nothing && baseline_interval isa Tuple ? string(baseline_interval[2]) : "")
+    condition_checked = [Observable(true) for _ in dat_subset]
+    
+    # Store textbox references
+    start_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
+    stop_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
+    
+    # Update plot (re-plot everything with current settings)
+    # TODO: is this v. inefficient?
+    # It seems ok when there are only a few plots but fells very slow in grid mode when many electrodes!
+    function update_plot!()
+        try
+            # Get baseline values from textboxes
+            baseline_interval_new = nothing
+            if start_input_ref[] !== nothing && stop_input_ref[] !== nothing
+                start_str = start_input_ref[].stored_string[]
+                stop_str = stop_input_ref[].stored_string[]
+                if start_str != "" && stop_str != ""
+                    try
+                        baseline_interval_new = (parse(Float64, start_str), parse(Float64, stop_str))
+                    catch e
+                        @minimal_warning "Invalid baseline values: $e"
+                        return
+                    end
+                end
             end
-
-            color_idx = (dataset_idx - 1) * length(channels) + channel_idx
-            # Set visibility based on condition_mask
-            visible_ = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
+           
+            # apply baseline
+            if baseline_interval_new !== nothing
+                baseline!.(dat_subset, Ref(baseline_interval_new))
+            end
             
-            line = lines!(
-                ax,
-                dat.data[!, :time],
-                dat.data[!, channel],
-                linewidth = kwargs[:linewidth],
-                color = all_colors[color_idx],
-                linestyle = all_linestyles[dataset_idx],
-                label = label,
-                visible = visible_,
-            )
+            # Get channels
+            selected_channels = channel_labels(dat_subset)
+            extra_channels = extra_labels(dat_subset)
+            all_plot_channels = vcat(selected_channels, extra_channels)
             
+            # Clear axes
+            for ax in axes
+                empty!(ax)
+            end
+            
+            # Build condition mask
+            condition_mask = [checked[] for checked in condition_checked]
+            
+            # Re-plot with condition mask
+            plot_kwargs_no_legend = merge(copy(plot_kwargs), Dict(:legend => false))
+            
+            if plot_layout.type == :single
+                _plot_erp!(axes[1], dat_subset, all_plot_channels; condition_mask=condition_mask, plot_kwargs_no_legend...)
+            else
+                for (ax, channel) in zip(axes, layout_channels)
+                    if channel in all_plot_channels
+                        _plot_erp!(ax, dat_subset, [channel]; condition_mask=condition_mask, plot_kwargs_no_legend...)
+                    end
+                end
+            end
+            
+            # Re-apply axis properties
+            _apply_axis_properties!.(axes; plot_kwargs...)
+            _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
+        catch e
+            @error "Error updating plot: $e" exception=(e, catch_backtrace())
         end
     end
-
-    _set_origin_lines!(ax; add_xy_origin = kwargs[:add_xy_origin])
-    leg = _add_legend!(ax, channels, datasets, kwargs)
-
-    return ax, leg  # Return both axis and legend
-end
-
-"""
-    plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
-
-Plot ERP data on an existing axis, mutating the figure and axis.
-
-# Arguments
-- `fig::Figure`: The figure to plot on
-- `ax::Axis`: The axis to plot on  
-- `dat::ErpData`: The ERP data to plot
-- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
-
-# Returns
-- `ax::Axis`: The axis that was plotted on
-"""
-function plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
-    return plot_erp!(fig, ax, [dat]; kwargs...)
-end
-
-"""
-    plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
-
-Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
-
-# Arguments
-- `fig::Figure`: The figure to plot on
-- `ax::Axis`: The axis to plot on
-- `datasets::Vector{ErpData}`: The ERP datasets to plot
-- `kwargs...`: Additional plotting arguments (see PLOT_ERP_KWARGS)
-
-# Returns
-- `ax::Axis`: The axis that was plotted on
-"""
-function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
-    # Prepare kwargs and data
-    plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
-    baseline_interval = get(kwargs, :baseline_interval, nothing)
-    dat_subset, all_plot_channels, _ = _prepare_erp_data(
-        datasets,
-        plot_kwargs;
-        condition_selection = conditions(),
-        channel_selection = get(plot_kwargs, :channel_selection, channels()),
-        sample_selection = get(plot_kwargs, :sample_selection, samples()),
-        baseline_interval = baseline_interval,
-    )
-
-    # Plot on the axis
-    _plot_erp!(ax, dat_subset, all_plot_channels; plot_kwargs...)
-
-    return ax
+    
+    # Keyboard handler for 'c' key
+    on(events(fig).keyboardbutton) do event
+        if event.action == Keyboard.press && event.key == Keyboard.c
+                control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
+                layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
+                
+                # Baseline section
+                Label(layout[1, 1], "Baseline Correction", fontsize = 14, font = :bold)
+                baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
+                
+                Label(baseline_layout[1, 1], "Start (ms):", width = 60)
+                start_input = Textbox(baseline_layout[1, 2], placeholder = "e.g. -0.2", width = 100)
+                start_input.stored_string[] = baseline_start_obs[]
+                connect!(baseline_start_obs, start_input.stored_string)
+                start_input_ref[] = start_input
+                
+                Label(baseline_layout[2, 1], "End (ms):", width = 60)
+                stop_input = Textbox(baseline_layout[2, 2], placeholder = "e.g. 0.0", width = 100)
+                stop_input.stored_string[] = baseline_stop_obs[]
+                connect!(baseline_stop_obs, stop_input.stored_string)
+                stop_input_ref[] = stop_input
+                
+                # Apply button
+                apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
+                on(apply_btn.clicks) do _
+                    if start_input_ref[] !== nothing && hasproperty(start_input_ref[], :displayed_string)
+                        start_input = start_input_ref[]
+                        if start_input.displayed_string[] != start_input.stored_string[]
+                            start_input.stored_string[] = start_input.displayed_string[]
+                        end
+                    end
+                    if stop_input_ref[] !== nothing && hasproperty(stop_input_ref[], :displayed_string)
+                        stop_input = stop_input_ref[]
+                        if stop_input.displayed_string[] != stop_input.stored_string[]
+                            stop_input.stored_string[] = stop_input.displayed_string[]
+                        end
+                    end
+                    update_plot!()
+                end
+                
+                # Conditions section
+                Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
+                conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
+                
+                for (i, dat) in enumerate(dat_subset)
+                    cb = Checkbox(conditions_layout[i, 1], checked = condition_checked[i][])
+                    Label(conditions_layout[i, 2], dat.condition_name)
+                    connect!(condition_checked[i], cb.checked)
+                end
+                
+                # Auto-update on condition changes (re-plot)
+                for checked in condition_checked
+                    on(checked) do _
+                        update_plot!()
+                    end
+                end
+                
+                display(control_fig[])
+        end
+    end
 end
