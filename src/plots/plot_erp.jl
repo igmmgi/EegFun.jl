@@ -111,7 +111,6 @@ end
 """
     plot_erp(dat::ErpData; 
              layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
-             condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
              baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
@@ -173,16 +172,16 @@ When `interactive = true` (default):
 function plot_erp(
     dat::ErpData;
     layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
-    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing} = nothing,
     kwargs...,
 )
+    # For single ErpData, condition_selection doesn't apply (there's only one condition)
     return plot_erp(
         [dat];
         layout = layout,
-        condition_selection = condition_selection,
+        condition_selection = conditions(),  # Always select all (just the one condition)
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         baseline_interval = baseline_interval,
@@ -443,6 +442,16 @@ function _prepare_erp_data(
         sample_selection = sample_selection,
         include_extra = true,
     )
+
+    # Check if subsetting resulted in empty data
+    if isempty(dat_subset)
+        n_conditions = length(datasets)
+        if n_conditions == 0
+            @minimal_error_throw "No data available (empty dataset)"
+        else
+            @minimal_error_throw "No data matched the selection criteria. Available condition indices: 1:$n_conditions"
+        end
+    end
 
     # Apply baseline correction if requested
     if baseline_interval !== nothing
