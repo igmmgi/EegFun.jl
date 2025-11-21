@@ -21,6 +21,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :linewidth => ([1, 2], "Line width for epoch traces and average"),
     :color => ([:grey, :red], "Colors for epoch traces and average"),
     :alpha => ([0.3, 1.0], "Transparency for epoch traces and average"),
+    :colormap => (:Set1_9, "Colormap for multi-condition plots"),
 
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
@@ -107,6 +108,201 @@ function plot_epochs(
         layout = layout,
         kwargs...,
     )
+end
+
+"""
+    plot_epochs(datasets::Vector{EpochData}; 
+                condition_selection::Function = conditions(),
+                channel_selection::Function = channels(),
+                sample_selection::Function = samples(), 
+                epoch_selection::Function = epochs(),
+                include_extra::Bool = false,
+                layout = :single,
+                kwargs...)
+
+Plot multiple epoch datasets (conditions) with flexible layout options.
+Conditions are overlaid on the same plot with different colors.
+
+# Arguments
+- `datasets::Vector{EpochData}`: Vector of epoch data structures (one per condition)
+- `condition_selection::Function`: Function that returns boolean vector for condition filtering (default: `conditions()`)
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering (default: `channels()`)
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering (default: `samples()`)
+- `epoch_selection::Function`: Function that returns boolean vector for epoch filtering (default: `epochs()`)
+- `include_extra::Bool`: Whether to include extra channels (default: `false`)
+- `layout`: Layout specification (see single EpochData method documentation)
+- `kwargs`: Additional keyword arguments
+
+# Examples
+```julia
+# Plot all conditions
+fig, ax = plot_epochs([dat1, dat2])
+
+# Plot specific conditions
+fig, ax = plot_epochs([dat1, dat2], condition_selection = conditions([1, 2]))
+```
+"""
+function plot_epochs(
+    datasets::Vector{EpochData};
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    epoch_selection::Function = epochs(),
+    include_extra::Bool = false,
+    layout = :single,
+    kwargs...,
+)::Tuple{Figure,Union{Axis,Vector{Axis}}}
+    # Merge user kwargs and default kwargs
+    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
+
+    # Use subset to filter by condition and apply other selections
+    dat_subset = subset(
+        datasets;
+        condition_selection = condition_selection,
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        epoch_selection = epoch_selection,
+        include_extra = include_extra,
+    )
+
+    # Check if subsetting resulted in empty data
+    if isempty(dat_subset)
+        n_conditions = length(datasets)
+        if n_conditions == 0
+            @minimal_error_throw "No data available (empty dataset)"
+        else
+            @minimal_error_throw "No data matched the selection criteria. Available condition indices: 1:$n_conditions"
+        end
+    end
+
+    # Get channels from first dataset (all should have same channels after subsetting)
+    selected_channels = channel_labels(dat_subset[1])
+    extra_channels = extra_labels(dat_subset[1])
+    all_plot_channels = vcat(selected_channels, extra_channels)
+
+    # Validate we have channels to plot
+    isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
+
+    # Compute colors for each condition
+    n_conditions = length(dat_subset)
+    # Use a colormap to generate distinct colors for each condition
+    condition_colors = Makie.to_colormap(plot_kwargs[:colormap])
+    n_colors = length(condition_colors)
+    condition_colors_list = [condition_colors[(i - 1) % n_colors + 1] for i in 1:n_conditions]
+
+    # Info about what we're plotting
+    @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
+
+    fig = Figure()
+    axes = Axis[]
+
+    # Apply theme font size early
+    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
+
+    # Handle layout (similar to single EpochData method)
+    if plot_kwargs[:average_channels]
+        # Single plot averaging across channels
+        ax = Axis(fig[1, 1])
+        push!(axes, ax)
+
+        # For each condition, average channels and plot
+        for (cond_idx, dat) in enumerate(dat_subset)
+            dat_avg = copy(dat)
+            channel_average!(
+                dat_avg;
+                channel_selections = [channels(all_plot_channels)],
+                output_labels = [:avg],
+                reduce = false,
+            )
+            
+            # Update plot_kwargs with condition-specific color
+            cond_plot_kwargs = merge(plot_kwargs, Dict(
+                :color => [condition_colors_list[cond_idx], condition_colors_list[cond_idx]]
+            ))
+            
+            _plot_epochs!(ax, dat_avg, [:avg], cond_plot_kwargs)
+
+            # Optional ERP overlay
+            if plot_kwargs[:plot_avg_trials]
+                erp_dat = average_epochs(dat_avg)
+                _plot_erp_average!(ax, erp_dat, [:avg], cond_plot_kwargs)
+            end
+        end
+
+        # Set axis properties
+        if length(all_plot_channels) == 1
+            ax.title = string(all_plot_channels[1])
+        else
+            ax.title = "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
+        end
+        
+        _set_axis_properties!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim], 
+                           xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], yreversed = plot_kwargs[:yreversed])
+        _set_axis_grid!(ax; 
+                         xgrid = plot_kwargs[:xgrid], 
+                         ygrid = plot_kwargs[:ygrid],
+                         xminorgrid = plot_kwargs[:xminorgrid], 
+                         yminorgrid = plot_kwargs[:yminorgrid])
+        _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+
+    else
+        # Multi-channel layout (grid, topo, or single)
+        # This follows the same pattern as single EpochData but plots all conditions
+        # For now, delegate to the existing layout logic but modify _plot_epochs! calls
+        # to handle multiple conditions
+        
+        # Determine layout type
+        if layout == :single
+            # Single plot with all channels overlaid
+            ax = Axis(fig[1, 1])
+            push!(axes, ax)
+            
+            # Plot all conditions for each channel
+            for ch in all_plot_channels
+                for (cond_idx, dat) in enumerate(dat_subset)
+                    cond_plot_kwargs = merge(plot_kwargs, Dict(
+                        :color => [condition_colors_list[cond_idx], condition_colors_list[cond_idx]]
+                    ))
+                    _plot_epochs!(ax, dat, [ch], cond_plot_kwargs)
+                    
+                    if plot_kwargs[:plot_avg_trials]
+                        erp_dat = average_epochs(dat)
+                        _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs)
+                    end
+                end
+            end
+            
+            # Set axis properties
+            _set_axis_properties!(ax; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim], 
+                               xlabel = plot_kwargs[:xlabel], ylabel = plot_kwargs[:ylabel], yreversed = plot_kwargs[:yreversed])
+            _set_axis_grid!(ax; 
+                             xgrid = plot_kwargs[:xgrid], 
+                             ygrid = plot_kwargs[:ygrid],
+                             xminorgrid = plot_kwargs[:xminorgrid], 
+                             yminorgrid = plot_kwargs[:yminorgrid])
+            _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+            
+        elseif layout == :grid || layout isa Vector{Int}
+            # Grid layout - each channel gets its own subplot
+            grid_dims = layout isa Vector{Int} ? (layout[1], layout[2]) : best_rect(length(all_plot_channels))
+            _plot_epochs_grid_multi!(fig, axes, dat_subset, all_plot_channels, grid_dims, condition_colors_list, plot_kwargs)
+            
+        elseif layout == :topo
+            # Topographic layout
+            _plot_epochs_topo_multi!(fig, axes, dat_subset, all_plot_channels, condition_colors_list, plot_kwargs)
+        end
+    end
+
+    # Setup interactivity if requested
+    if plot_kwargs[:interactive]
+        _setup_shared_interactivity!(fig, axes, :epochs)
+    end
+
+    if plot_kwargs[:display_plot]
+        display_figure(fig)
+    end
+
+    return fig, length(axes) == 1 ? first(axes) : axes
 end
 
 """
@@ -601,4 +797,180 @@ function _setup_interactivity_grid!(fig, axes, selection_state, dat, all_plot_ch
     _setup_channel_selection_events!(fig, selection_state, grid_layout, dat, axes, :grid)
 end
 
+"""
+    _plot_epochs_grid_multi!(fig, axes, datasets, all_plot_channels, grid_dims, condition_colors, plot_kwargs)
+
+Create a grid layout for plotting epochs from multiple conditions.
+"""
+function _plot_epochs_grid_multi!(
+    fig::Figure,
+    axes::Vector{Axis},
+    datasets::Vector{EpochData},
+    all_plot_channels::Vector{Symbol},
+    grid_dims::Tuple{Int, Int},
+    condition_colors::Vector,
+    plot_kwargs::Dict,
+)
+    rows, cols = grid_dims
+
+    # Calculate y-range if not provided (use first dataset as reference)
+    ylim = plot_kwargs[:ylim]
+    if isnothing(ylim)
+        yr = ylimits(datasets[1]; channel_selection = channels(all_plot_channels))
+        ylim = (yr[1], yr[2])
+    end
+
+    for (idx, channel) in enumerate(all_plot_channels)
+        row = fld(idx-1, cols) + 1
+        col = mod(idx-1, cols) + 1
+        ax = Axis(fig[row, col])
+        push!(axes, ax)
+        
+        # Plot all conditions for this channel
+        for (cond_idx, dat) in enumerate(datasets)
+            cond_plot_kwargs = merge(plot_kwargs, Dict(
+                :color => [condition_colors[cond_idx], condition_colors[cond_idx]]
+            ))
+            _plot_epochs!(ax, dat, [channel], cond_plot_kwargs)
+            
+            if plot_kwargs[:plot_avg_trials]
+                erp_dat = average_epochs(dat)
+                _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs)
+            end
+        end
+
+        # Set axis properties
+        axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim))
+        ax.title = string(channel)
+        _set_axis_properties!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim],
+                           xlabel = axis_kwargs[:xlabel], ylabel = axis_kwargs[:ylabel], yreversed = axis_kwargs[:yreversed])
+        _set_axis_grid!(ax; 
+                         xgrid = axis_kwargs[:xgrid], 
+                         ygrid = axis_kwargs[:ygrid],
+                         xminorgrid = axis_kwargs[:xminorgrid], 
+                         yminorgrid = axis_kwargs[:yminorgrid])
+        _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+    end
+
+    # Link axes for synchronized zooming
+    if length(axes) > 1
+        Makie.linkaxes!(axes...)
+    end
+end
+
+"""
+    _plot_epochs_topo_multi!(fig, axes, datasets, all_plot_channels, condition_colors, plot_kwargs)
+
+Create a topographic layout for plotting epochs from multiple conditions.
+"""
+function _plot_epochs_topo_multi!(
+    fig::Figure,
+    axes::Vector{Axis},
+    datasets::Vector{EpochData},
+    all_plot_channels::Vector{Symbol},
+    condition_colors::Vector,
+    plot_kwargs::Dict,
+)
+    # Use first dataset for layout (all should have same layout after subsetting)
+    dat = datasets[1]
+    
+    # Ensure 2D coordinates exist
+    if !all(in.([:x2, :y2], Ref(propertynames(dat.layout.data))))
+        polar_to_cartesian_xy!(dat.layout)
+    end
+
+    # Determine global y-lims for consistency across small axes
+    ylim = plot_kwargs[:ylim]
+    if isnothing(ylim)
+        yr = ylimits(dat; channel_selection = channels(all_plot_channels))
+        ylim = (yr[1], yr[2])
+    end
+
+    # Normalize positions to [0,1]
+    x2 = dat.layout.data.x2
+    y2 = dat.layout.data.y2
+    minx, maxx = extrema(x2)
+    miny, maxy = extrema(y2)
+    xrange = maxx - minx
+    yrange = maxy - miny
+    xrange = xrange == 0 ? 1.0 : xrange
+    yrange = yrange == 0 ? 1.0 : yrange
+
+    plot_w = get(plot_kwargs, :layout_plot_width, 0.12)
+    plot_h = get(plot_kwargs, :layout_plot_height, 0.12)
+    margin = get(plot_kwargs, :layout_margin, 0.02)
+
+    # Map channel -> position
+    pos_map = Dict{Symbol,Tuple{Float64,Float64}}()
+    for (lab, x, y) in zip(dat.layout.data.label, x2, y2)
+        nx = (x - minx) / xrange
+        ny = (y - miny) / yrange
+        pos_map[Symbol(lab)] = (nx, ny)
+    end
+
+    # Create axes at positions
+    for ch in all_plot_channels
+        pos = get(pos_map, ch, (0.5, 0.5))
+        ax = Axis(
+            fig[1, 1],
+            width = Relative(plot_w),
+            height = Relative(plot_h),
+            halign = clamp(pos[1], margin, 1 - margin),
+            valign = clamp(pos[2], margin, 1 - margin),
+        )
+        push!(axes, ax)
+        
+        # Plot all conditions for this channel
+        for (cond_idx, dat_cond) in enumerate(datasets)
+            cond_plot_kwargs = merge(plot_kwargs, Dict(
+                :color => [condition_colors[cond_idx], condition_colors[cond_idx]]
+            ))
+            _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs)
+            
+            if plot_kwargs[:plot_avg_trials]
+                erp_dat = average_epochs(dat_cond)
+                _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs)
+            end
+        end
+
+        # Suppress axis labels on all but the final axis
+        axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlabel => "", :ylabel => ""))
+        ax.title = string(ch)
+        _set_axis_properties!(ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim],
+                           xlabel = axis_kwargs[:xlabel], ylabel = axis_kwargs[:ylabel], yreversed = axis_kwargs[:yreversed])
+        _set_axis_grid!(ax; 
+                         xgrid = axis_kwargs[:xgrid], 
+                         ygrid = axis_kwargs[:ygrid],
+                         xminorgrid = axis_kwargs[:xminorgrid], 
+                         yminorgrid = axis_kwargs[:yminorgrid])
+        _set_origin_lines!(ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        ax.xticklabelsvisible = false
+        ax.yticklabelsvisible = false
+        ax.xticksvisible = false
+        ax.yticksvisible = false
+        hidespines!(ax)
+    end
+
+    # Optional extra scale axis in bottom-right
+    if plot_kwargs[:layout_show_scale]
+        scale_ax = Axis(fig[1, 1], 
+            width = Relative(plot_kwargs[:layout_plot_width]), 
+            height = Relative(plot_kwargs[:layout_plot_height]),
+            halign = plot_kwargs[:layout_scale_position][1], 
+            valign = plot_kwargs[:layout_scale_position][2])
+        push!(axes, scale_ax)
+        # No data in this axis; just show labels and limits
+        tmin, tmax = (dat.data[1].time[1], dat.data[1].time[end])
+        axis_kwargs = merge(plot_kwargs, Dict(:ylim => ylim, :xlim => (tmin, tmax)))
+        scale_ax.title = ""
+        _set_axis_properties!(scale_ax; xlim = axis_kwargs[:xlim], ylim = axis_kwargs[:ylim],
+                           xlabel = axis_kwargs[:xlabel], ylabel = axis_kwargs[:ylabel], yreversed = axis_kwargs[:yreversed])
+        _set_axis_grid!(scale_ax; 
+                         xgrid = axis_kwargs[:xgrid], 
+                         ygrid = axis_kwargs[:ygrid],
+                         xminorgrid = axis_kwargs[:xminorgrid], 
+                         yminorgrid = axis_kwargs[:yminorgrid])
+        _set_origin_lines!(scale_ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+    end
+end
 
