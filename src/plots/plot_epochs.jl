@@ -48,6 +48,68 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 """
+    plot_epochs(filepath::String; 
+               channel_selection::Function = channels(),
+               sample_selection::Function = samples(), 
+               epoch_selection::Function = epochs(),
+               include_extra::Bool = false,
+               layout = :single,
+               kwargs...)
+
+Load epoch data from a JLD2 file and create plots.
+
+# Arguments
+- `filepath::String`: Path to JLD2 file containing EpochData
+- `channel_selection::Function`: Function that returns boolean vector for channel filtering
+- `sample_selection::Function`: Function that returns boolean vector for sample filtering
+- `epoch_selection::Function`: Function that returns boolean vector for epoch filtering
+- `include_extra::Bool`: Whether to include extra channels
+- `layout`: Layout specification (see main plot_epochs documentation)
+- `kwargs`: Additional keyword arguments
+
+# Examples
+```julia
+# Load and plot from file
+plot_epochs("Flank_C_3_epochs_original.jld2")
+
+# With channel selection
+plot_epochs("Flank_C_3_epochs_original.jld2", channel_selection = channels([:PO7, :PO8]), layout = :grid)
+```
+"""
+function plot_epochs(
+    filepath::String;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    epoch_selection::Function = epochs(),
+    include_extra::Bool = false,
+    layout = :single,
+    kwargs...,
+)
+    # Load data from file
+    data = load_data(filepath)
+    if isnothing(data)
+        @minimal_error_throw "No data found in file: $filepath"
+    end
+
+    # Handle Vector{EpochData} case (if file contains multiple epoch datasets)
+    if data isa Vector && !isempty(data) && first(data) isa EpochData
+        # For now, just use the first dataset (could be extended to plot all)
+        data = first(data)
+    end
+
+    # Dispatch to main plot_epochs function
+    return plot_epochs(
+        data;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        epoch_selection = epoch_selection,
+        include_extra = include_extra,
+        layout = layout,
+        kwargs...,
+    )
+end
+
+"""
     plot_epochs(dat::EpochData; 
                 channel_selection::Function = channels(),
                 sample_selection::Function = samples(), 
