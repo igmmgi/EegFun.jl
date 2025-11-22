@@ -257,7 +257,6 @@ function plot_erp(
         end
     end
 
-    # TODO: this is very slow!!
     # Apply our axis stuff
     _apply_axis_properties!.(axes; plot_kwargs...)
     _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...) # slightly different for grid and topo layouts
@@ -286,7 +285,7 @@ function plot_erp(
         end
 
         # Set up control panel (press 'c' to open)
-        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval, line_refs, legend_refs)
+        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, baseline_interval, line_refs, legend_refs)
 
     end
 
@@ -314,9 +313,7 @@ Plot ERP data on an existing axis, mutating the figure and axis.
 # Returns
 - `ax::Axis`: The axis that was plotted on
 """
-function plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...)
-    return plot_erp!(fig, ax, [dat]; kwargs...)
-end
+plot_erp!(fig::Figure, ax::Axis, dat::ErpData; kwargs...) = plot_erp!(fig, ax, [dat]; kwargs...)
 
 """
     plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
@@ -333,7 +330,6 @@ Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
 - `ax::Axis`: The axis that was plotted on
 """
 function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
-    # Prepare kwargs and data
     plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
     dat_subset, all_plot_channels, _ = _prepare_erp_data(
@@ -344,10 +340,7 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
         sample_selection = get(plot_kwargs, :sample_selection, samples()),
         baseline_interval = baseline_interval,
     )
-
-    # Plot on the axis
     _plot_erp!(ax, dat_subset, all_plot_channels; plot_kwargs...)
-
     return ax
 end
 
@@ -367,7 +360,6 @@ Note: datasets should already be subset based on channel_selection and sample_se
 """
 function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; condition_mask::Vector{Bool}=Bool[], line_refs=nothing, kwargs...)
 
-    # Use defaults + overrides (kwargs may already be merged, so merge is safe)
     kwargs = merge(PLOT_ERP_KWARGS, kwargs)
 
     # Default condition_mask to all true if not provided
@@ -387,7 +379,7 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
 
     # Plot each dataset for ALL channels in this subplot
     for (dataset_idx, dat) in enumerate(datasets)
-        # Plot ALL channels for this dataset
+
         for (channel_idx, channel) in enumerate(channels)
 
             # axis label
@@ -397,40 +389,29 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
             end
 
             color_idx = (dataset_idx - 1) * length(channels) + channel_idx
+
             # Set visibility based on condition_mask
-            visible_ = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
+            condition_visible = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
             
-            # Use Observable for y-data if we need to update it later (for baseline changes)
+            # Always use Observable for y-data (allows updates for baseline changes and linked legend interactions)
+            y_obs = Observable(dat.data[!, channel])
+            line = lines!(
+                ax,
+                dat.data[!, :time],
+                y_obs,
+                linewidth = kwargs[:linewidth],
+                color = all_colors[color_idx],
+                linestyle = all_linestyles[dataset_idx],
+                label = label,
+                visible = condition_visible,
+            )
+            
+            # Store line and y Observable if references are requested
             if line_refs !== nothing
-                # Create Observable for y-data so we can update it later
-                y_obs = Observable(dat.data[!, channel])
-                line = lines!(
-                    ax,
-                    dat.data[!, :time],
-                    y_obs,
-                    linewidth = kwargs[:linewidth],
-                    color = all_colors[color_idx],
-                    linestyle = all_linestyles[dataset_idx],
-                    label = label,
-                    visible = visible_,
-                )
-                # Store both line and y Observable for updates
                 if !haskey(line_refs, dataset_idx)
                     line_refs[dataset_idx] = Dict{Symbol, Tuple{Any, Observable}}()
                 end
                 line_refs[dataset_idx][channel] = (line, y_obs)
-            else
-                # No need for Observable if we're not storing references
-                line = lines!(
-                    ax,
-                    dat.data[!, :time],
-                    dat.data[!, channel],
-                    linewidth = kwargs[:linewidth],
-                    color = all_colors[color_idx],
-                    linestyle = all_linestyles[dataset_idx],
-                    label = label,
-                    visible = visible_,
-                )
             end
         end
     end
@@ -490,13 +471,14 @@ function _prepare_erp_data(
 
     # Apply baseline correction if requested
     if baseline_interval !== nothing
-        # Apply baseline correction (mutating - safe since dat_subset is already a copy from subset)
+        @info "Applying baseline correction to $(length(dat_subset)) datasets"
         baseline!.(dat_subset, Ref(baseline_interval))
     end
 
     # Channel averaging if requested
     original_channels = nothing
     if plot_kwargs[:average_channels]
+        @info "Averaging channels for $(length(dat_subset)) datasets"
         original_channels = channel_labels(dat_subset)
         dat_subset = channel_average(dat_subset, reduce = true)
     end
@@ -517,7 +499,7 @@ function _handle_erp_right_click!(selection_state, mouse_x, data)
 end
 
 function _show_erp_context_menu!(selection_state, data)
-    # Create the menu figure
+
     menu_fig = Figure()
     plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)"]
 
@@ -596,16 +578,12 @@ Handles legend_channel filtering, position, and other legend attributes.
 function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpData}, kwargs::Dict)
 
     # Check if legend should be shown
-    # Do not show if requested false, or single channel + single dataset
     if !kwargs[:legend] || (length(channels) == 1 && length(datasets) == 1)
         return nothing
     end
     if !isempty(kwargs[:legend_channel]) && isempty(intersect(kwargs[:legend_channel], channels))
         return nothing
     end
-    
-    # Don't check for existing legend - let caller handle deletion
-    # (This allows control panel to delete and recreate legends)
     
     # Extract legend parameters
     legend_label = kwargs[:legend_label]
@@ -622,7 +600,7 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
         leg = axislegend(ax; position = legend_position, legend_kwargs...)
     end
     
-    return leg  # Return the legend object so it can be stored and deleted later
+    return leg  
 end
 
 """
