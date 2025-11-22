@@ -621,10 +621,19 @@ function _setup_erp_control_panel!(
     start_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
     stop_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
 
+    # Track if listeners are already set up (to prevent duplicate listeners)
+    listeners_setup = Ref{Bool}(false)
+    # Flag to prevent updates during panel creation (when reconnecting checkboxes)
+    updating_panel = Ref{Bool}(false)
+
     # Update plot (re-plot everything with current settings)
     # TODO: is this v. inefficient?
     # It seems ok when there are only a few plots but fells very slow in grid mode when many electrodes!
     function update_plot!()
+        # Skip updates during panel creation to avoid feedback loops
+        if updating_panel[]
+            return
+        end
         try
             # Get baseline values from textboxes
             baseline_interval_new = nothing
@@ -689,7 +698,7 @@ function _setup_erp_control_panel!(
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
-            # Debounce hack: ignore if pressed too quickly after last press (within 1 second)
+            # Debounce: ignore if pressed too quickly after last press (within 1 second)
             current_time = time()
             if current_time - last_c_key_time[] < 1.0
                 return
@@ -697,6 +706,9 @@ function _setup_erp_control_panel!(
             last_c_key_time[] = current_time
 
             control_fig[] = nothing
+
+            # Set flag to prevent updates during panel creation
+            updating_panel[] = true
 
             # Create new control panel
             control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
@@ -747,12 +759,18 @@ function _setup_erp_control_panel!(
             end
 
             # Auto-update on condition changes (re-plot)
-            for checked in condition_checked
-                on(checked) do _
-                    println("Condition changed: $checked")
-                    update_plot!()
+            # Only set up listeners once to avoid duplicate updates
+            if !listeners_setup[]
+                for checked in condition_checked
+                    on(checked) do _
+                        update_plot!()
+                    end
                 end
+                listeners_setup[] = true
             end
+
+            # Re-enable updates after panel is created
+            updating_panel[] = false
 
             display(control_fig[])
 
