@@ -239,13 +239,19 @@ function plot_erp(
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
     axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
 
+    # Store line references for control panel (if interactive)
+    # Structure: line_refs[ax_idx][dataset_idx][channel_idx] = line
+    line_refs = plot_kwargs[:interactive] ? [Dict{Int, Dict{Symbol, Any}}() for _ in axes] : nothing
+    
     # Now do the actual plotting for each axis
-    for (ax, channel) in zip(axes, channels)
+    for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
-        _plot_erp!(ax, dat_subset, channels_to_plot; plot_kwargs...)
+        ax_line_refs = plot_kwargs[:interactive] ? line_refs[ax_idx] : nothing
+        _plot_erp!(ax, dat_subset, channels_to_plot; line_refs=ax_line_refs, plot_kwargs...)
     end
 
+    # TODO: this is very slow!!
     # Apply our axis stuff
     _apply_axis_properties!.(axes; plot_kwargs...)
     _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...) # slightly different for grid and topo layouts
@@ -274,7 +280,7 @@ function plot_erp(
         end
 
         # Set up control panel (press 'c' to open)
-        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval)
+        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval, line_refs)
 
     end
 
@@ -350,8 +356,10 @@ Note: datasets should already be subset based on channel_selection and sample_se
 # Keyword Arguments
 - `condition_mask::Vector{Bool}`: Mask to set visibility of each dataset. 
   `condition_mask[i]` controls visibility of `datasets[i]`. Defaults to all `true`.
+- `line_refs::Union{Dict, Nothing}`: Dictionary to store line references for interactive updates.
+  If provided, stores lines as line_refs[dataset_idx][channel] = line.
 """
-function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; condition_mask::Vector{Bool}=Bool[], kwargs...)
+function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol}; condition_mask::Vector{Bool}=Bool[], line_refs=nothing, kwargs...)
 
     # Use defaults + overrides (kwargs may already be merged, so merge is safe)
     kwargs = merge(PLOT_ERP_KWARGS, kwargs)
@@ -386,17 +394,38 @@ function _plot_erp!(ax::Axis, datasets::Vector{ErpData}, channels::Vector{Symbol
             # Set visibility based on condition_mask
             visible_ = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
             
-            line = lines!(
-                ax,
-                dat.data[!, :time],
-                dat.data[!, channel],
-                linewidth = kwargs[:linewidth],
-                color = all_colors[color_idx],
-                linestyle = all_linestyles[dataset_idx],
-                label = label,
-                visible = visible_,
-            )
-            
+            # Use Observable for y-data if we need to update it later (for baseline changes)
+            if line_refs !== nothing
+                # Create Observable for y-data so we can update it later
+                y_obs = Observable(dat.data[!, channel])
+                line = lines!(
+                    ax,
+                    dat.data[!, :time],
+                    y_obs,
+                    linewidth = kwargs[:linewidth],
+                    color = all_colors[color_idx],
+                    linestyle = all_linestyles[dataset_idx],
+                    label = label,
+                    visible = visible_,
+                )
+                # Store both line and y Observable for updates
+                if !haskey(line_refs, dataset_idx)
+                    line_refs[dataset_idx] = Dict{Symbol, Tuple{Any, Observable}}()
+                end
+                line_refs[dataset_idx][channel] = (line, y_obs)
+            else
+                # No need for Observable if we're not storing references
+                line = lines!(
+                    ax,
+                    dat.data[!, :time],
+                    dat.data[!, channel],
+                    linewidth = kwargs[:linewidth],
+                    color = all_colors[color_idx],
+                    linestyle = all_linestyles[dataset_idx],
+                    label = label,
+                    visible = visible_,
+                )
+            end
         end
     end
 
@@ -605,6 +634,7 @@ function _setup_erp_control_panel!(
     plot_layout::PlotLayout,
     plot_kwargs::Dict,
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
+    line_refs::Union{Vector{<:Dict},Nothing} = nothing,
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     layout_channels = plot_layout.channels
@@ -650,46 +680,94 @@ function _setup_erp_control_panel!(
                 end
             end
 
-            # apply baseline
+            # Track if baseline changed
+            baseline_changed = false
             if baseline_interval_new !== nothing
                 baseline!.(dat_subset, Ref(baseline_interval_new))
-            end
-
-            # Get channels
-            selected_channels = channel_labels(dat_subset)
-            extra_channels = extra_labels(dat_subset)
-            all_plot_channels = vcat(selected_channels, extra_channels)
-
-            # Clear axes
-            for ax in axes
-                empty!(ax)
+                baseline_changed = true
             end
 
             # Build condition mask
             condition_mask = [checked[] for checked in condition_checked]
 
-            # Re-plot with condition mask
-            plot_kwargs_no_legend = merge(copy(plot_kwargs), Dict(:legend => false))
-
-            if plot_layout.type == :single
-                _plot_erp!(
-                    axes[1],
-                    dat_subset,
-                    all_plot_channels;
-                    condition_mask = condition_mask,
-                    plot_kwargs_no_legend...,
-                )
-            else
-                for (ax, channel) in zip(axes, layout_channels)
-                    if channel in all_plot_channels
-                        _plot_erp!(ax, dat_subset, [channel]; condition_mask = condition_mask, plot_kwargs_no_legend...)
+            # Update existing lines instead of re-plotting
+            if line_refs !== nothing
+                # Update line data if baseline changed, and visibility if conditions changed
+                for (ax_idx, ax_line_refs) in enumerate(line_refs)
+                    if ax_idx <= length(axes)
+                        for (dataset_idx, channel_lines) in ax_line_refs
+                            if dataset_idx <= length(dat_subset)
+                                dat = dat_subset[dataset_idx]
+                                
+                                for (channel, line_data) in channel_lines
+                                    # line_data is a tuple: (line, y_obs)
+                                    line, y_obs = line_data
+                                    
+                                    # Update y-data if baseline changed
+                                    if baseline_changed && channel in propertynames(dat.data)
+                                        # Update the Observable, which will update the line
+                                        y_obs[] = dat.data[!, channel]
+                                    end
+                                    
+                                    # Update visibility based on condition_mask
+                                    visible_ = dataset_idx <= length(condition_mask) ? condition_mask[dataset_idx] : true
+                                    line.visible = visible_
+                                end
+                            end
+                        end
                     end
                 end
-            end
+            else
+                # Fallback: re-plot if baseline changed or line_refs not available
+                # Get channels
+                selected_channels = channel_labels(dat_subset)
+                extra_channels = extra_labels(dat_subset)
+                all_plot_channels = vcat(selected_channels, extra_channels)
 
-            # Re-apply axis properties
-            _apply_axis_properties!.(axes; plot_kwargs...)
-            _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
+                # Clear axes
+                for ax in axes
+                    empty!(ax)
+                end
+
+                # Re-plot with condition mask (temporarily disable legend to avoid duplicates)
+                plot_kwargs_no_legend = merge(copy(plot_kwargs), Dict(:legend => false))
+
+                if plot_layout.type == :single
+                    _plot_erp!(
+                        axes[1],
+                        dat_subset,
+                        all_plot_channels;
+                        condition_mask = condition_mask,
+                        line_refs = line_refs !== nothing ? line_refs[1] : nothing,
+                        plot_kwargs_no_legend...,
+                    )
+                    # Re-add legend after plotting so it connects to the new lines
+                    if plot_kwargs[:legend]
+                        _add_legend!(axes[1], all_plot_channels, dat_subset, plot_kwargs)
+                    end
+                else
+                    for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
+                        if channel in all_plot_channels
+                            _plot_erp!(
+                                ax, 
+                                dat_subset, 
+                                [channel]; 
+                                condition_mask = condition_mask,
+                                line_refs = line_refs !== nothing && ax_idx <= length(line_refs) ? line_refs[ax_idx] : nothing,
+                                plot_kwargs_no_legend...
+                            )
+                            # Re-add legend after plotting so it connects to the new lines
+                            if plot_kwargs[:legend]
+                                _add_legend!(ax, [channel], dat_subset, plot_kwargs)
+                            end
+                        end
+                    end
+                end
+
+                # Re-apply axis properties
+                _apply_axis_properties!.(axes; plot_kwargs...)
+                _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
+            end
         catch e
             @error "Error updating plot: $e" exception = (e, catch_backtrace())
         end
