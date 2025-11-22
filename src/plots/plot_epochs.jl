@@ -1487,7 +1487,7 @@ end
 """
     _setup_epochs_control_panel!(fig::Figure, dat_subset::Vector{EpochData}, dat_subset_avg::Vector{ErpData}, axes::Vector{Axis}, 
                                  baseline_interval::BaselineInterval,
-                                 line_refs::Union{Vector{<:Dict},Nothing} = nothing)
+                                 line_refs::Vector{<:Dict})
 
 Set up a control panel that opens when 'c' key is pressed.
 Allows adjusting baseline and toggling conditions.
@@ -1498,14 +1498,12 @@ function _setup_epochs_control_panel!(
     dat_subset_avg::Vector{ErpData},
     axes::Vector{Axis},
     baseline_interval::BaselineInterval,
-    line_refs::Union{Vector{<:Dict},Nothing} = nothing,
+    line_refs::Vector{<:Dict},
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     
     # Set up linked legend interactions
-    if line_refs !== nothing
-        _setup_linked_legend_interactions_epochs!(line_refs)
-    end
+    _setup_linked_legend_interactions_epochs!(line_refs)
 
     # State: baseline values and condition selections
     start_val, stop_val = _extract_baseline_values(baseline_interval)
@@ -1518,12 +1516,6 @@ function _setup_epochs_control_panel!(
 
     # Update plot (toggle visibility instead of re-plotting)
     function update_plot!()
-
-        # Early return if no line references
-        if line_refs === nothing
-            return
-        end
-
         # Parse baseline values from observables
         start_str, stop_str = baseline_start_obs[], baseline_stop_obs[]
         start_val, stop_val = _parse_baseline_values(start_str, stop_str)
@@ -1548,15 +1540,15 @@ function _setup_epochs_control_panel!(
         for (ax_idx, ax_line_refs) in enumerate(line_refs)
             ax_idx > length(axes) && continue
             for (cond_idx, line_data) in ax_line_refs
-                cond_idx > length(condition_mask) && continue
-                visible = condition_mask[cond_idx]
+                cond_idx > length(dat_subset) && continue
+                visible = cond_idx <= length(condition_mask) ? condition_mask[cond_idx] : true
+                ch = line_data[:channel]
+                dat = dat_subset[cond_idx]
 
                 # Update trial line visibility and y-data
                 trial_line, trial_y_obs = line_data[:trials]
                 trial_line.visible = visible
-                if baseline_changed && cond_idx <= length(dat_subset)
-                    ch = line_data[:channel]
-                    dat = dat_subset[cond_idx]
+                if baseline_changed
                     time_vec = dat.data[1][!, :time]
                     trial_y_obs[] = _concatenate_trials(dat.data, ch, time_vec)
                 end
@@ -1567,12 +1559,13 @@ function _setup_epochs_control_panel!(
                     avg_line, y_obs = avg_data
                     avg_line.visible = visible
                     if baseline_changed && cond_idx <= length(dat_subset_avg)
-                        ch = line_data[:channel]
                         y_obs[] = dat_subset_avg[cond_idx].data[!, ch]
                     end
                 end
+
             end
         end
+
     end
 
     # Keyboard handler for 'c' key
