@@ -473,7 +473,8 @@ function plot_epochs(
                 dat_subset,
                 dat_subset_avg,
                 axes,
-                plot_kwargs_with_refs,
+                get(plot_kwargs, :baseline_interval, nothing),
+                line_refs,
             )
         end
     end
@@ -1350,9 +1351,18 @@ function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vecto
     return leg
 end
 
+# Extract numeric baseline values from interval
+function _extract_baseline_values(interval::BaselineInterval)
+    if interval === nothing
+        return nothing, nothing
+    else
+        return interval.start, interval.stop
+    end
+end
+
 # Parse numeric baseline values from textbox strings
 function _parse_baseline_values(start_str::String, stop_str::String)
-    (start_str == "" || stop_str == "") && return -Inf, Inf
+    (start_str == " " || stop_str == " ") && return -Inf, Inf
     try
         return parse(Float64, start_str), parse(Float64, stop_str)
     catch e
@@ -1464,7 +1474,8 @@ end
 
 """
     _setup_epochs_control_panel!(fig::Figure, dat_subset::Vector{EpochData}, dat_subset_avg::Vector{ErpData}, axes::Vector{Axis}, 
-                                 plot_kwargs::Dict)
+                                 baseline_interval::BaselineInterval,
+                                 line_refs::Union{Vector{<:Dict},Nothing} = nothing)
 
 Set up a control panel that opens when 'c' key is pressed.
 Allows adjusting baseline and toggling conditions.
@@ -1474,30 +1485,28 @@ function _setup_epochs_control_panel!(
     dat_subset::Vector{EpochData},
     dat_subset_avg::Vector{ErpData},
     axes::Vector{Axis},
-    plot_kwargs::Dict,
+    baseline_interval::BaselineInterval,
+    line_refs::Union{Vector{<:Dict},Nothing} = nothing,
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
-    last_c_key_time = Ref{Float64}(0.0)  # Track last 'c' key press time for debouncing
-
-    # State: baseline values and condition selections
-    baseline_start_obs = Observable("")
-    baseline_stop_obs = Observable("")
-    condition_checked = [Observable(true) for _ in dat_subset]
-
-    # Track previous baseline to avoid unnecessary updates
-    previous_baseline = Ref{Union{Tuple{Float64,Float64},Nothing}}(nothing)
-
-    # Store line references: line_refs[ax_idx][condition_idx][:trials] = line, [:average] = (line, y_obs)
-    # These will be populated during initial plotting and passed here
-    line_refs = get(plot_kwargs, :_line_refs, nothing)
     
     # Set up linked legend interactions
     if line_refs !== nothing
         _setup_linked_legend_interactions_epochs!(line_refs)
     end
 
+    # State: baseline values and condition selections
+    start_val, stop_val = _extract_baseline_values(baseline_interval)
+    baseline_start_obs = Observable(start_val === nothing ? "" : string(start_val))
+    baseline_stop_obs = Observable(stop_val === nothing ? "" : string(stop_val))
+    condition_checked = [Observable(true) for _ in dat_subset]
+
+    # Track previous baseline to avoid unnecessary updates
+    previous_baseline = Ref{Union{Tuple{Float64,Float64},Nothing}}(nothing)
+
     # Update plot (toggle visibility instead of re-plotting)
     function update_plot!()
+
         # Early return if no line references
         if line_refs === nothing
             return
@@ -1520,7 +1529,6 @@ function _setup_epochs_control_panel!(
         if baseline_changed && baseline_interval_new !== nothing
             baseline!.(dat_subset, Ref(baseline_interval_new))
             baseline!.(dat_subset_avg, Ref(baseline_interval_new))
-            
             previous_baseline[] = baseline_interval_new
             baseline_was_applied = true
         end
@@ -1536,63 +1544,42 @@ function _setup_epochs_control_panel!(
                 visible = condition_mask[cond_idx]
 
                 # Update trial line visibility and y-data
-                if haskey(line_data, :trials)
-                    trial_data = line_data[:trials]
-                    if trial_data isa Tuple && length(trial_data) == 2
-                        trial_line, trial_y_obs = trial_data
-                        trial_line.visible = visible
-                        # Update y-data if baseline was applied
-                        if baseline_was_applied && cond_idx <= length(dat_subset)
-                            # Get channel from stored line_data (should always be present)
-                            ch = get(line_data, :channel, :avg)
-                            
-                            # Use dat_subset directly (if average_channels=true, it already has :avg channel)
-                            dat = dat_subset[cond_idx]
-                            dat_to_use = dat
-                            
-                            # Recompute concatenated trials with NaN separators
-                            time_vec = dat_to_use.data[1][!, :time]
-                            trials = dat_to_use.data
-                            m = length(trials)
-                            n = length(time_vec)
-                            total_len = m * n + (m - 1)
-                            y_cat = Vector{Float64}(undef, total_len)
-                            pos = 1
-                            @inbounds for t = 1:m
-                                df = trials[t]
-                                y = df[!, ch]
-                                for i = 1:n
-                                    y_cat[pos] = y[i]
-                                    pos += 1
-                                end
-                                if t != m
-                                    y_cat[pos] = NaN
-                                    pos += 1
-                                end
-                            end
-                            trial_y_obs[] = y_cat
+                trial_line, trial_y_obs = line_data[:trials]
+                trial_line.visible = visible
+                if baseline_was_applied && cond_idx <= length(dat_subset)
+                    ch = line_data[:channel]
+                    dat = dat_subset[cond_idx]
+                    
+                    # Recompute concatenated trials with NaN separators
+                    time_vec = dat.data[1][!, :time]
+                    trials = dat.data
+                    m = length(trials)
+                    n = length(time_vec)
+                    total_len = m * n + (m - 1)
+                    y_cat = Vector{Float64}(undef, total_len)
+                    pos = 1
+                    @inbounds for t = 1:m
+                        df = trials[t]
+                        y = df[!, ch]
+                        for i = 1:n
+                            y_cat[pos] = y[i]
+                            pos += 1
                         end
-                    elseif trial_data isa Lines
-                        trial_data.visible = visible
+                        if t != m
+                            y_cat[pos] = NaN
+                            pos += 1
+                        end
                     end
+                    trial_y_obs[] = y_cat
                 end
 
-                # Update average line visibility and y-data
+                # Update average line visibility and y-data (if present)
                 if haskey(line_data, :average)
-                    avg_data = line_data[:average]
-                    if avg_data isa Tuple && length(avg_data) == 2
-                        avg_line, y_obs = avg_data
-                        avg_line.visible = visible
-                        # Update y-data from dat_subset_avg if baseline was applied
-                        if baseline_was_applied && cond_idx <= length(dat_subset_avg)
-                            erp_dat = dat_subset_avg[cond_idx]
-                            # Get channel used for average line (stored during plotting, should match what was used initially)
-                            ch = get(line_data, :channel, :avg)
-                            # Use the stored channel from initial plotting
-                                y_obs[] = erp_dat.data[!, ch]
-                        end
-                    elseif avg_data isa Lines
-                        avg_data.visible = visible
+                    avg_line, y_obs = line_data[:average]
+                    avg_line.visible = visible
+                    if baseline_was_applied && cond_idx <= length(dat_subset_avg)
+                        ch = line_data[:channel]
+                        y_obs[] = dat_subset_avg[cond_idx].data[!, ch]
                     end
                 end
             end
@@ -1602,35 +1589,27 @@ function _setup_epochs_control_panel!(
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
-            # Debounce: ignore if pressed too quickly after last press (within 1 second)
-            current_time = time()
-            if current_time - last_c_key_time[] < 1.0
-                return
-            end
-            last_c_key_time[] = current_time
-
-            control_fig[] = nothing
 
             # Create new control panel
             control_fig[] = Figure(title = "Epochs Control Panel", size = (300, 400))
-            layout_panel = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
+            layout = GridLayout(control_fig[][1, 1], tellwidth = false, rowgap = 10)
 
             # Baseline section
-            Label(layout_panel[1, 1], "Baseline Interval", fontsize = 14, font = :bold)
-            baseline_layout = GridLayout(layout_panel[2, 1], tellwidth = false, colgap = 10)
+            Label(layout[1, 1], "Baseline Interval", fontsize = 14, font = :bold)
+            baseline_layout = GridLayout(layout[2, 1], tellwidth = false, colgap = 10)
 
             _create_baseline_textbox(baseline_layout, 1, "Start (ms):", baseline_start_obs, " ", 100)
             _create_baseline_textbox(baseline_layout, 2, "End (ms):", baseline_stop_obs, " ", 100)
 
             # Apply button
-            apply_btn = Button(layout_panel[3, 1], label = "Apply Baseline", width = 200)
+            apply_btn = Button(layout[3, 1], label = "Apply Baseline", width = 200)
             on(apply_btn.clicks) do _
                 update_plot!()
             end
 
             # Conditions section
-            Label(layout_panel[4, 1], "Conditions", fontsize = 14, font = :bold)
-            conditions_layout = GridLayout(layout_panel[5, 1], tellwidth = false, rowgap = 5)
+            Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
+            conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
 
             for (i, dat) in enumerate(dat_subset)
                 cb = Checkbox(conditions_layout[i, 1], checked = condition_checked[i][])
@@ -1638,7 +1617,7 @@ function _setup_epochs_control_panel!(
                 connect!(condition_checked[i], cb.checked)
             end
 
-            # Auto-update on condition changes (re-plot)
+            # Auto-update on condition changes
             for checked in condition_checked
                 on(checked) do _
                     update_plot!()
