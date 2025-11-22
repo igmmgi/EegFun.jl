@@ -294,6 +294,7 @@ function plot_epochs(
                 end
                 ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
                 ax_line_refs[cond_idx][:channel] = :avg
+                ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
             end
 
             # Optional ERP overlay
@@ -392,6 +393,7 @@ function plot_epochs(
                         # But structure expects cond_idx - let's use cond_idx for now
                         ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)  # Will overwrite if multiple channels
                         ax_line_refs[cond_idx][:channel] = ch
+                        ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
                     end
 
                     if plot_kwargs[:plot_avg_trials]
@@ -717,35 +719,21 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
     trial_color = plot_kwargs[:color] isa Vector ? plot_kwargs[:color][1] : plot_kwargs[:color]
     trial_linewidth = plot_kwargs[:linewidth] isa Vector ? plot_kwargs[:linewidth][1] : plot_kwargs[:linewidth]
 
-    # Helper function to concatenate trials with NaN separators
-    function concatenate_trials(trials, ch, time_vec)
-        m = length(trials)
-        n = length(time_vec)
-        total_len = m * n + (m - 1)
-        
-        time_cat = Vector{Float64}(undef, total_len)
-        y_cat = Vector{Float64}(undef, total_len)
-        
-        pos = 1
-        @inbounds for t = 1:m
-            df = trials[t]
-            y = df[!, ch]
-            for i = 1:n
-                time_cat[pos] = time_vec[i]
-                y_cat[pos] = y[i]
-                pos += 1
-            end
-            if t != m
-                time_cat[pos] = NaN
-                y_cat[pos] = NaN
-                pos += 1
-            end
-        end
-        return time_cat, y_cat
-    end
-    
     # Concatenate trials initially
-    time_cat, y_cat = concatenate_trials(dat.data, ch, time_vec)
+    y_cat = _concatenate_trials(dat.data, ch, time_vec)
+    # Time vector is the same for all trials, just repeat with NaN separators
+    time_cat = similar(y_cat)
+    pos = 1
+    @inbounds for t = 1:length(dat.data)
+        for i = 1:length(time_vec)
+            time_cat[pos] = time_vec[i]
+            pos += 1
+        end
+        if t != length(dat.data)
+            time_cat[pos] = NaN
+            pos += 1
+        end
+    end
     
     # Use Observable for y-data to allow updates (e.g., for baseline changes)
     y_obs = Observable(y_cat)
@@ -1106,6 +1094,7 @@ function _plot_epochs_grid_multi!(
                 end
                 ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
                 ax_line_refs[cond_idx][:channel] = channel
+                ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
             end
 
             if plot_kwargs[:plot_avg_trials]
@@ -1243,6 +1232,7 @@ function _plot_epochs_topo_multi!(
                 end
                 ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
                 ax_line_refs[cond_idx][:channel] = ch
+                ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
             end
 
             if plot_kwargs[:plot_avg_trials]
@@ -1378,6 +1368,28 @@ function _create_baseline_textbox(layout, row, label, obs, placeholder, width)
     tb.stored_string[] = obs[]
     hasproperty(tb, :displayed_string) ? connect!(obs, tb.displayed_string) : connect!(obs, tb.stored_string)
     return tb
+end
+
+# Helper to concatenate trials with NaN separators
+function _concatenate_trials(trials, ch, time_vec)
+    m = length(trials)
+    n = length(time_vec)
+    total_len = m * n + (m - 1)
+    y_cat = Vector{Float64}(undef, total_len)
+    pos = 1
+    @inbounds for t = 1:m
+        df = trials[t]
+        y = df[!, ch]
+        for i = 1:n
+            y_cat[pos] = y[i]
+            pos += 1
+        end
+        if t != m
+            y_cat[pos] = NaN
+            pos += 1
+        end
+    end
+    return y_cat
 end
 
 """
@@ -1522,15 +1534,11 @@ function _setup_epochs_control_panel!(
         # Check if baseline actually changed
         baseline_changed = baseline_interval_new !== previous_baseline[]
 
-        # Track if baseline was actually applied (for updating plots)
-        baseline_was_applied = false
-        
         # Apply baseline if it changed
         if baseline_changed && baseline_interval_new !== nothing
             baseline!.(dat_subset, Ref(baseline_interval_new))
             baseline!.(dat_subset_avg, Ref(baseline_interval_new))
             previous_baseline[] = baseline_interval_new
-            baseline_was_applied = true
         end
 
         # Build condition mask
@@ -1546,38 +1554,19 @@ function _setup_epochs_control_panel!(
                 # Update trial line visibility and y-data
                 trial_line, trial_y_obs = line_data[:trials]
                 trial_line.visible = visible
-                if baseline_was_applied && cond_idx <= length(dat_subset)
+                if baseline_changed && cond_idx <= length(dat_subset)
                     ch = line_data[:channel]
                     dat = dat_subset[cond_idx]
-                    
-                    # Recompute concatenated trials with NaN separators
                     time_vec = dat.data[1][!, :time]
-                    trials = dat.data
-                    m = length(trials)
-                    n = length(time_vec)
-                    total_len = m * n + (m - 1)
-                    y_cat = Vector{Float64}(undef, total_len)
-                    pos = 1
-                    @inbounds for t = 1:m
-                        df = trials[t]
-                        y = df[!, ch]
-                        for i = 1:n
-                            y_cat[pos] = y[i]
-                            pos += 1
-                        end
-                        if t != m
-                            y_cat[pos] = NaN
-                            pos += 1
-                        end
-                    end
-                    trial_y_obs[] = y_cat
+                    trial_y_obs[] = _concatenate_trials(dat.data, ch, time_vec)
                 end
 
                 # Update average line visibility and y-data (if present)
-                if haskey(line_data, :average)
-                    avg_line, y_obs = line_data[:average]
+                avg_data = line_data[:average]
+                if avg_data !== nothing
+                    avg_line, y_obs = avg_data
                     avg_line.visible = visible
-                    if baseline_was_applied && cond_idx <= length(dat_subset_avg)
+                    if baseline_changed && cond_idx <= length(dat_subset_avg)
                         ch = line_data[:channel]
                         y_obs[] = dat_subset_avg[cond_idx].data[!, ch]
                     end
