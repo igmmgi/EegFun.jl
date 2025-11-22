@@ -243,12 +243,18 @@ function plot_erp(
     # Structure: line_refs[ax_idx][dataset_idx][channel_idx] = line
     line_refs = plot_kwargs[:interactive] ? [Dict{Int, Dict{Symbol, Any}}() for _ in axes] : nothing
     
+    # Store legend references for linked interactions (if interactive)
+    legend_refs = plot_kwargs[:interactive] ? Vector{Union{Legend,Nothing}}(undef, length(axes)) : nothing
+    
     # Now do the actual plotting for each axis
     for (ax_idx, (ax, channel)) in enumerate(zip(axes, channels))
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
         ax_line_refs = plot_kwargs[:interactive] ? line_refs[ax_idx] : nothing
-        _plot_erp!(ax, dat_subset, channels_to_plot; line_refs=ax_line_refs, plot_kwargs...)
+        ax_result, leg = _plot_erp!(ax, dat_subset, channels_to_plot; line_refs=ax_line_refs, plot_kwargs...)
+        if plot_kwargs[:interactive] && legend_refs !== nothing
+            legend_refs[ax_idx] = leg
+        end
     end
 
     # TODO: this is very slow!!
@@ -280,7 +286,7 @@ function plot_erp(
         end
 
         # Set up control panel (press 'c' to open)
-        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval, line_refs)
+        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, plot_kwargs, baseline_interval, line_refs, legend_refs)
 
     end
 
@@ -620,6 +626,70 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
 end
 
 """
+    _setup_linked_legend_interactions!(fig::Figure, axes::Vector{Axis}, 
+                                       legend_refs::Vector{Union{Legend,Nothing}}, 
+                                       line_refs::Vector{<:Dict},
+                                       dat_subset::Vector{ErpData},
+                                       plot_layout::PlotLayout)
+
+Set up linked legend interactions so clicking a legend entry in one plot
+toggles visibility of the corresponding condition in all plots.
+"""
+function _setup_linked_legend_interactions!(
+    fig::Figure,
+    axes::Vector{Axis},
+    legend_refs::Vector{Union{Legend,Nothing}},
+    line_refs::Vector{<:Dict},
+    dat_subset::Vector{ErpData},
+    plot_layout::PlotLayout,
+)
+    # Create a mapping: dataset_idx -> all lines across all axes for that dataset
+    dataset_lines = Dict{Int, Vector{Any}}()
+    
+    # Collect all lines for each dataset
+    for (ax_idx, ax_line_refs) in enumerate(line_refs)
+        for (dataset_idx, channel_lines) in ax_line_refs
+            if !haskey(dataset_lines, dataset_idx)
+                dataset_lines[dataset_idx] = Any[]
+            end
+            for (channel, line_data) in channel_lines
+                line, _ = line_data
+                push!(dataset_lines[dataset_idx], line)
+            end
+        end
+    end
+    
+    # For each dataset, set up visibility syncing
+    # When any line's visibility changes, update all other lines for that dataset
+    for (dataset_idx, lines) in dataset_lines
+        if length(lines) > 1  # Only need syncing if there are multiple lines
+            # Create a flag to prevent infinite loops
+            syncing = Ref(false)
+            
+            # Set up listeners on each line
+            for line in lines
+                on(line.visible) do visible_val
+                    # Skip if we're already syncing (to avoid loops)
+                    if syncing[]
+                        return
+                    end
+                    syncing[] = true
+                    
+                    # Update all other lines for this dataset
+                    for other_line in lines
+                        if other_line !== line
+                            other_line.visible = visible_val
+                        end
+                    end
+                    
+                    syncing[] = false
+                end
+            end
+        end
+    end
+end
+
+"""
     _setup_erp_control_panel!(fig::Figure, dat_subset::Vector{ErpData}, axes::Vector{Axis}, 
                                plot_layout::PlotLayout, plot_kwargs::Dict,
                                baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing})
@@ -635,10 +705,16 @@ function _setup_erp_control_panel!(
     plot_kwargs::Dict,
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
+    legend_refs::Union{Vector{Union{Legend,Nothing}},Nothing} = nothing,
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     layout_channels = plot_layout.channels
     last_c_key_time = Ref{Float64}(0.0)  # Track last 'c' key press time for debouncing
+    
+    # Set up linked legend interactions
+    if legend_refs !== nothing && line_refs !== nothing && length(legend_refs) > 0
+        _setup_linked_legend_interactions!(fig, axes, legend_refs, line_refs, dat_subset, plot_layout)
+    end
 
     # State: baseline values and condition selections
     baseline_start_obs =
