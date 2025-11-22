@@ -473,9 +473,6 @@ function plot_epochs(
                 dat_subset,
                 dat_subset_avg,
                 axes,
-                layout,
-                all_plot_channels,
-                condition_colors_list,
                 plot_kwargs_with_refs,
             )
         end
@@ -1467,7 +1464,7 @@ end
 
 """
     _setup_epochs_control_panel!(fig::Figure, dat_subset::Vector{EpochData}, dat_subset_avg::Vector{ErpData}, axes::Vector{Axis}, 
-                                 layout, all_plot_channels::Vector{Symbol}, condition_colors_list, plot_kwargs::Dict)
+                                 plot_kwargs::Dict)
 
 Set up a control panel that opens when 'c' key is pressed.
 Allows adjusting baseline and toggling conditions.
@@ -1477,9 +1474,6 @@ function _setup_epochs_control_panel!(
     dat_subset::Vector{EpochData},
     dat_subset_avg::Vector{ErpData},
     axes::Vector{Axis},
-    layout,
-    all_plot_channels::Vector{Symbol},
-    condition_colors_list,
     plot_kwargs::Dict,
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
@@ -1549,8 +1543,8 @@ function _setup_epochs_control_panel!(
                         trial_line.visible = visible
                         # Update y-data if baseline was applied
                         if baseline_was_applied && cond_idx <= length(dat_subset)
-                            # Get channel from stored line_data
-                            ch = get(line_data, :channel, length(all_plot_channels) > 0 ? all_plot_channels[1] : :avg)
+                            # Get channel from stored line_data (should always be present)
+                            ch = get(line_data, :channel, :avg)
                             
                             # Use dat_subset directly (if average_channels=true, it already has :avg channel)
                             dat = dat_subset[cond_idx]
@@ -1585,29 +1579,17 @@ function _setup_epochs_control_panel!(
 
                 # Update average line visibility and y-data
                 if haskey(line_data, :average)
-                    println("here1")
                     avg_data = line_data[:average]
                     if avg_data isa Tuple && length(avg_data) == 2
-                    println("here2")
                         avg_line, y_obs = avg_data
                         avg_line.visible = visible
                         # Update y-data from dat_subset_avg if baseline was applied
                         if baseline_was_applied && cond_idx <= length(dat_subset_avg)
                             erp_dat = dat_subset_avg[cond_idx]
                             # Get channel used for average line (stored during plotting, should match what was used initially)
-                            ch = get(line_data, :channel, length(all_plot_channels) > 0 ? all_plot_channels[1] : :avg)
-                            println("ch: $ch")
+                            ch = get(line_data, :channel, :avg)
                             # Use the stored channel from initial plotting
-                            if ch in propertynames(erp_dat.data)
                                 y_obs[] = erp_dat.data[!, ch]
-                            #else
-                            #    # Fallback: try :avg or first available channel
-                            #    if :avg in names(erp_dat.data)
-                            #        y_obs[] = erp_dat.data[!, :avg]
-                            #    elseif !isempty(names(erp_dat.data))
-                            #        y_obs[] = erp_dat.data[!, first(names(erp_dat.data))]
-                            #    end
-                            end
                         end
                     elseif avg_data isa Lines
                         avg_data.visible = visible
