@@ -53,7 +53,7 @@ Apply baseline correction in-place to EEG data.
 """
 function baseline!(
     dat::EegData,
-    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}};
+    baseline_interval::Union{AbstractInterval,Tuple{Real,Real}};
     channel_selection::Function = channels(),
 )
     # Validate baseline interval
@@ -107,7 +107,7 @@ Apply baseline correction in-place to a vector of EpochData objects.
 """
 function baseline!(
     dat::Vector{EpochData},
-    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}};
+    baseline_interval::Union{AbstractInterval,Tuple{Real,Real}};
     channel_selection::Function = channels(),
 )
     baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)

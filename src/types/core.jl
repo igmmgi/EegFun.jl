@@ -222,6 +222,13 @@ mutable struct EpochData <: MultiDataFrameEeg
 end
 
 """
+    AbstractInterval
+
+Abstract type for interval specifications used in baseline correction and other time-based operations.
+"""
+abstract type AbstractInterval end
+
+"""
     IntervalTime
 
 Defines a time interval with start and end times.
@@ -234,11 +241,13 @@ time-based operations.
 - `start::Float64`: Start time of the interval in seconds
 - `stop::Float64`: End time of the interval in seconds
 """
-@kwdef struct IntervalTime
+@kwdef struct IntervalTime <: AbstractInterval
     start::Float64
     stop::Float64
 end
 
+# Convert tuples to IntervalTime for convenience
+IntervalTime(t::Tuple{Real,Real}) = IntervalTime(start = Float64(t[1]), stop = Float64(t[2]))
 
 """
     IntervalIndex
@@ -254,11 +263,12 @@ extraction.
 - `start::Int`: Start sample index (1-based)
 - `stop::Int`: End sample index (inclusive)
 """
-@kwdef struct IntervalIndex
+@kwdef struct IntervalIndex <: AbstractInterval
     start::Int
     stop::Int
 end
 
+const BaselineInterval = Union{AbstractInterval,Nothing}
 
 """
     EpochCondition
