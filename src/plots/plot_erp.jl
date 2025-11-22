@@ -285,7 +285,7 @@ function plot_erp(
         end
 
         # Set up control panel (press 'c' to open)
-        _setup_erp_control_panel!(fig, dat_subset, axes, plot_layout, baseline_interval, line_refs, legend_refs)
+        _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs)
 
     end
 
@@ -604,73 +604,49 @@ function _add_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vector{ErpDa
 end
 
 """
-    _setup_linked_legend_interactions!(fig::Figure, axes::Vector{Axis}, 
-                                       legend_refs::Vector{Union{Legend,Nothing}}, 
-                                       line_refs::Vector{<:Dict},
-                                       dat_subset::Vector{ErpData},
-                                       plot_layout::PlotLayout)
+    _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
 
 Set up linked legend interactions so clicking a legend entry in one plot
 toggles visibility of the corresponding condition in all plots.
 """
-function _setup_linked_legend_interactions!(
-    fig::Figure,
-    axes::Vector{Axis},
-    legend_refs::Vector{Union{Legend,Nothing}},
-    line_refs::Vector{<:Dict},
-    dat_subset::Vector{ErpData},
-    plot_layout::PlotLayout,
-)
+function _setup_linked_legend_interactions!(line_refs::Vector{<:Dict})
     # Create a mapping: dataset_idx -> all lines across all axes for that dataset
     dataset_lines = Dict{Int, Vector{Any}}()
     
     # Collect all lines for each dataset
-    for (ax_idx, ax_line_refs) in enumerate(line_refs)
+    for ax_line_refs in line_refs
         for (dataset_idx, channel_lines) in ax_line_refs
-            if !haskey(dataset_lines, dataset_idx)
-                dataset_lines[dataset_idx] = Any[]
-            end
-            for (channel, line_data) in channel_lines
-                line, _ = line_data
-                push!(dataset_lines[dataset_idx], line)
-            end
+            lines = get!(dataset_lines, dataset_idx, Any[])
+            append!(lines, [line_data[1] for line_data in values(channel_lines)])
         end
     end
     
-    # For each dataset, set up visibility syncing
     # When any line's visibility changes, update all other lines for that dataset
-    for (dataset_idx, lines) in dataset_lines
-        if length(lines) > 1  # Only need syncing if there are multiple lines
-            # Create a flag to prevent infinite loops
-            syncing = Ref(false)
-            
-            # Set up listeners on each line
-            for line in lines
-                on(line.visible) do visible_val
-                    # Skip if we're already syncing (to avoid loops)
-                    if syncing[]
-                        return
-                    end
-                    syncing[] = true
-                    
-                    # Update all other lines for this dataset
-                    for other_line in lines
-                        if other_line !== line
-                            other_line.visible = visible_val
-                        end
-                    end
-                    
-                    syncing[] = false
+    for lines in values(dataset_lines)
+        length(lines) > 1 || continue  # Only need syncing if there are multiple lines
+        
+        # Create a flag to prevent infinite loops
+        syncing = Ref(false)
+        
+        for line in lines
+            other_lines = [l for l in lines if l !== line]
+            on(line.visible) do visible_val
+                syncing[] && return  # Skip if already syncing
+                syncing[] = true
+                for other_line in other_lines
+                    other_line.visible = visible_val
                 end
+                syncing[] = false
             end
         end
     end
+
 end
 
 """
     _setup_erp_control_panel!(fig::Figure, dat_subset::Vector{ErpData}, axes::Vector{Axis}, 
-                               plot_layout::PlotLayout, plot_kwargs::Dict,
-                               baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing})
+                               baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
+                               line_refs::Union{Vector{<:Dict},Nothing} = nothing)
 
 Set up a control panel that opens when 'c' key is pressed.
 Allows adjusting baseline and toggling conditions.
@@ -679,17 +655,15 @@ function _setup_erp_control_panel!(
     fig::Figure,
     dat_subset::Vector{ErpData},
     axes::Vector{Axis},
-    plot_layout::PlotLayout,
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
-    legend_refs::Union{Vector{Union{Legend,Nothing}},Nothing} = nothing,
 )
 
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     
     # Set up linked legend interactions
-    if legend_refs !== nothing && line_refs !== nothing && length(legend_refs) > 0
-        _setup_linked_legend_interactions!(fig, axes, legend_refs, line_refs, dat_subset, plot_layout)
+    if line_refs !== nothing
+        _setup_linked_legend_interactions!(line_refs)
     end
 
     # State: baseline values and condition selections
