@@ -1341,35 +1341,6 @@ function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vecto
     return leg
 end
 
-# Extract numeric baseline values from interval
-function _extract_baseline_values(interval::BaselineInterval)
-    if interval === nothing
-        return nothing, nothing
-    else
-        return interval.start, interval.stop
-    end
-end
-
-# Parse numeric baseline values from textbox strings
-function _parse_baseline_values(start_str::String, stop_str::String)
-    (start_str == " " || stop_str == " ") && return -Inf, Inf
-    try
-        return parse(Float64, start_str), parse(Float64, stop_str)
-    catch e
-        @minimal_warning "Invalid baseline values: $e"
-        return nothing, nothing
-    end
-end
-
-# Helper to create and connect a textbox to an observable
-function _create_baseline_textbox(layout, row, label, obs, placeholder, width)
-    Label(layout[row, 1], label, width = 60)
-    tb = Textbox(layout[row, 2], placeholder = placeholder, width = width)
-    tb.stored_string[] = obs[]
-    hasproperty(tb, :displayed_string) ? connect!(obs, tb.displayed_string) : connect!(obs, tb.stored_string)
-    return tb
-end
-
 # Helper to concatenate trials with NaN separators
 function _concatenate_trials(trials, ch, time_vec)
     m = length(trials)

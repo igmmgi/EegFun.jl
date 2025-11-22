@@ -470,3 +470,51 @@ function _shorten_condition_names(
     
     return full_string
 end
+
+# =============================================================================
+# BASELINE HELPER FUNCTIONS
+# =============================================================================
+
+"""
+    _extract_baseline_values(interval::BaselineInterval)
+
+Extract numeric baseline values from interval.
+Returns (start, stop) tuple or (nothing, nothing) if interval is nothing.
+"""
+function _extract_baseline_values(interval::BaselineInterval)
+    if interval === nothing
+        return nothing, nothing
+    else
+        return interval.start, interval.stop
+    end
+end
+
+"""
+    _parse_baseline_values(start_str::String, stop_str::String)
+
+Parse numeric baseline values from textbox strings.
+Returns (start, stop) tuple or (-Inf, Inf) for empty strings, or (nothing, nothing) on parse error.
+"""
+function _parse_baseline_values(start_str::String, stop_str::String)
+    (start_str == " " || stop_str == " ") && return -Inf, Inf
+    try
+        return parse(Float64, start_str), parse(Float64, stop_str)
+    catch e
+        @minimal_warning "Invalid baseline values: $e"
+        return nothing, nothing
+    end
+end
+
+"""
+    _create_baseline_textbox(layout, row, label, obs, placeholder, width)
+
+Helper to create and connect a textbox to an observable.
+Returns the created Textbox.
+"""
+function _create_baseline_textbox(layout, row, label, obs, placeholder, width)
+    Label(layout[row, 1], label, width = 60)
+    tb = Textbox(layout[row, 2], placeholder = placeholder, width = width)
+    tb.stored_string[] = obs[]
+    hasproperty(tb, :displayed_string) ? connect!(obs, tb.displayed_string) : connect!(obs, tb.stored_string)
+    return tb
+end
