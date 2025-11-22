@@ -14,11 +14,11 @@ using eegfun
         @test eegfun.basename_without_ext("multiple.dots.in.name.txt") == "multiple.dots.in.name"
 
         # Test make_output_filename
-        @test eegfun.make_output_filename("/output", "data/file.bdf", "_ica") == "/output/file_ica.jld2"
+        @test eegfun.make_output_filename("/output", "data/file.bdf", "_ica") == joinpath("/output", "file_ica.jld2")
         @test eegfun.make_output_filename("/output", "path/to/another_file.csv", "_continuous") ==
-              "/output/another_file_continuous.jld2"
+              joinpath("/output", "another_file_continuous.jld2")
         @test eegfun.make_output_filename("/output", "no_extension", "_processed") ==
-              "/output/no_extension_processed.jld2"
+              joinpath("/output", "no_extension_processed.jld2")
     end
 
     @testset "Vector operations" begin
