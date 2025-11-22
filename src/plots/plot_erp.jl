@@ -702,14 +702,12 @@ function _setup_erp_control_panel!(
     dat_subset::Vector{ErpData},
     axes::Vector{Axis},
     plot_layout::PlotLayout,
-    plot_kwargs::Dict,
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Nothing},
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
     legend_refs::Union{Vector{Union{Legend,Nothing}},Nothing} = nothing,
 )
+
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
-    layout_channels = plot_layout.channels
-    last_c_key_time = Ref{Float64}(0.0)  # Track last 'c' key press time for debouncing
     
     # Set up linked legend interactions
     if legend_refs !== nothing && line_refs !== nothing && length(legend_refs) > 0
@@ -727,19 +725,8 @@ function _setup_erp_control_panel!(
     start_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
     stop_input_ref = Ref{Union{Textbox,Nothing}}(nothing)
 
-    # Track if listeners are already set up (to prevent duplicate listeners)
-    listeners_setup = Ref{Bool}(false)
-    # Flag to prevent updates during panel creation (when reconnecting checkboxes)
-    updating_panel = Ref{Bool}(false)
 
-    # Update plot (re-plot everything with current settings)
-    # TODO: is this v. inefficient?
-    # It seems ok when there are only a few plots but fells very slow in grid mode when many electrodes!
     function update_plot!()
-        # Skip updates during panel creation to avoid feedback loops
-        if updating_panel[]
-            return
-        end
         try
             # Get baseline values from textboxes
             baseline_interval_new = nothing
@@ -793,56 +780,6 @@ function _setup_erp_control_panel!(
                         end
                     end
                 end
-            else
-                # Fallback: re-plot if baseline changed or line_refs not available
-                # Get channels
-                selected_channels = channel_labels(dat_subset)
-                extra_channels = extra_labels(dat_subset)
-                all_plot_channels = vcat(selected_channels, extra_channels)
-
-                # Clear axes
-                for ax in axes
-                    empty!(ax)
-                end
-
-                # Re-plot with condition mask (temporarily disable legend to avoid duplicates)
-                plot_kwargs_no_legend = merge(copy(plot_kwargs), Dict(:legend => false))
-
-                if plot_layout.type == :single
-                    _plot_erp!(
-                        axes[1],
-                        dat_subset,
-                        all_plot_channels;
-                        condition_mask = condition_mask,
-                        line_refs = line_refs !== nothing ? line_refs[1] : nothing,
-                        plot_kwargs_no_legend...,
-                    )
-                    # Re-add legend after plotting so it connects to the new lines
-                    if plot_kwargs[:legend]
-                        _add_legend!(axes[1], all_plot_channels, dat_subset, plot_kwargs)
-                    end
-                else
-                    for (ax_idx, (ax, channel)) in enumerate(zip(axes, layout_channels))
-                        if channel in all_plot_channels
-                            _plot_erp!(
-                                ax, 
-                                dat_subset, 
-                                [channel]; 
-                                condition_mask = condition_mask,
-                                line_refs = line_refs !== nothing && ax_idx <= length(line_refs) ? line_refs[ax_idx] : nothing,
-                                plot_kwargs_no_legend...
-                            )
-                            # Re-add legend after plotting so it connects to the new lines
-                            if plot_kwargs[:legend]
-                                _add_legend!(ax, [channel], dat_subset, plot_kwargs)
-                            end
-                        end
-                    end
-                end
-
-                # Re-apply axis properties
-                _apply_axis_properties!.(axes; plot_kwargs...)
-                _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
             end
         catch e
             @error "Error updating plot: $e" exception = (e, catch_backtrace())
@@ -852,17 +789,6 @@ function _setup_erp_control_panel!(
     # Keyboard handler for 'c' key
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key == Keyboard.c
-            # Debounce: ignore if pressed too quickly after last press (within 1 second)
-            current_time = time()
-            if current_time - last_c_key_time[] < 1.0
-                return
-            end
-            last_c_key_time[] = current_time
-
-            control_fig[] = nothing
-
-            # Set flag to prevent updates during panel creation
-            updating_panel[] = true
 
             # Create new control panel
             control_fig[] = Figure(title = "ERP Control Panel", size = (300, 400))
@@ -913,18 +839,11 @@ function _setup_erp_control_panel!(
             end
 
             # Auto-update on condition changes (re-plot)
-            # Only set up listeners once to avoid duplicate updates
-            if !listeners_setup[]
-                for checked in condition_checked
-                    on(checked) do _
-                        update_plot!()
-                    end
+            for checked in condition_checked
+                on(checked) do _
+                    update_plot!()
                 end
-                listeners_setup[] = true
             end
-
-            # Re-enable updates after panel is created
-            updating_panel[] = false
 
             display(control_fig[])
 
