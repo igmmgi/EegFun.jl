@@ -173,6 +173,7 @@ function plot_epochs(
     layout = :single,
     kwargs...,
 )::Tuple{Figure,Union{Axis,Vector{Axis}}}
+
     # Prepare kwargs and track color setting (like plot_erp)
     color_explicitly_set = haskey(kwargs, :color)
     plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
@@ -205,6 +206,23 @@ function plot_epochs(
 
     # Validate we have channels to plot
     isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
+
+    # If average_channels is requested, apply channel_average! directly to dat_subset (mutate in place)
+    # This way we can use dat_subset everywhere instead of maintaining a separate dat_subset_avg
+    if plot_kwargs[:average_channels]
+        for dat in dat_subset
+            channel_average!(
+                dat;
+                channel_selections = [channels(all_plot_channels)],
+                output_labels = [:avg],
+                reduce = false,
+            )
+        end
+    end
+
+    # Create dat_subset_avg: average over trials (ERP data) for the average overlay
+    # This will be used for the average line overlay (plot_avg_trials)
+    dat_subset_avg = [average_epochs(dat) for dat in dat_subset]
 
     # Compute colors for each condition using same logic as plot_erp
     n_conditions = length(dat_subset)
@@ -250,15 +268,8 @@ function plot_epochs(
         ax = Axis(fig[1, 1])
         push!(axes, ax)
 
-        # For each condition, average channels and plot
+        # For each condition, plot using dat_subset (channel_average! already applied if average_channels=true)
         for (cond_idx, dat) in enumerate(dat_subset)
-            dat_avg = copy(dat)
-            channel_average!(
-                dat_avg;
-                channel_selections = [channels(all_plot_channels)],
-                output_labels = [:avg],
-                reduce = false,
-            )
 
             # Update plot_kwargs with condition-specific color (single value, not array)
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[cond_idx]))
@@ -274,24 +285,30 @@ function plot_epochs(
             # Get line_refs for this axis
             ax_line_refs = line_refs !== nothing && length(axes) > 0 ? line_refs[1] : nothing
 
-            trial_line = _plot_epochs!(ax, dat_avg, [:avg], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+            trial_line, trial_y_obs = _plot_epochs!(ax, dat, [:avg], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
             # Store trial line reference
             if ax_line_refs !== nothing
                 if !haskey(ax_line_refs, cond_idx)
                     ax_line_refs[cond_idx] = Dict{Symbol,Any}()
                 end
-                ax_line_refs[cond_idx][:trials] = trial_line
+                ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
                 ax_line_refs[cond_idx][:channel] = :avg
             end
 
             # Optional ERP overlay
             if plot_kwargs[:plot_avg_trials]
-                erp_dat = average_epochs(dat_avg)
+                # Use dat_subset_avg directly (already computed from dat_subset)
+                erp_dat = dat_subset_avg[cond_idx]
                 avg_label = label * " (avg)"
-                avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [:avg], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
+                # For single plot with average_channels, use :avg channel (same as trials)
+                # The channel should match what was used for trials
+                avg_ch = :avg  # Always :avg for single plot case (average_channels=true)
+                avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [avg_ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if ax_line_refs !== nothing
                     ax_line_refs[cond_idx][:average] = (avg_line, y_obs)
+                    # Store the channel used for the average line (same as trials in this case)
+                    ax_line_refs[cond_idx][:avg_channel] = avg_ch
                 end
             end
         end
@@ -363,7 +380,7 @@ function plot_epochs(
                     # Get line_refs for this axis
                     ax_line_refs = line_refs !== nothing && length(axes) > 0 ? line_refs[1] : nothing
                     
-                    trial_line = _plot_epochs!(ax, dat, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+                    trial_line, trial_y_obs = _plot_epochs!(ax, dat, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
                     
                     # Store trial line reference (need unique key per channel+condition)
                     if ax_line_refs !== nothing
@@ -373,7 +390,7 @@ function plot_epochs(
                         end
                         # For single layout with multiple channels, we need to track by channel
                         # But structure expects cond_idx - let's use cond_idx for now
-                        ax_line_refs[cond_idx][:trials] = trial_line  # Will overwrite if multiple channels
+                        ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)  # Will overwrite if multiple channels
                         ax_line_refs[cond_idx][:channel] = ch
                     end
 
@@ -454,6 +471,7 @@ function plot_epochs(
             _setup_epochs_control_panel!(
                 fig,
                 dat_subset,
+                dat_subset_avg,
                 axes,
                 layout,
                 all_plot_channels,
@@ -689,7 +707,7 @@ function plot_epochs(
 
 end
 
-function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothing} = nothing, line_refs = nothing)::Union{Lines,Nothing}
+function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothing} = nothing, line_refs = nothing)::Tuple{Lines,Observable}
     # This function expects exactly one channel; callers pass [:avg] or [channel]
     @info "plot_epochs: $(print_vector(channels))"
     @assert length(channels) == 1 "_plot_epochs! expects a single channel"
@@ -701,43 +719,57 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
     trial_color = plot_kwargs[:color] isa Vector ? plot_kwargs[:color][1] : plot_kwargs[:color]
     trial_linewidth = plot_kwargs[:linewidth] isa Vector ? plot_kwargs[:linewidth][1] : plot_kwargs[:linewidth]
 
-    # Concatenate all trials with NaN separators into single buffers
-    trials = dat.data
-    m = length(trials)
-    n = length(time_vec)
-    total_len = m * n + (m - 1)
-
-    time_cat = Vector{Float64}(undef, total_len)
-    y_cat = Vector{Float64}(undef, total_len)
-
-    pos = 1
-    @inbounds for t = 1:m
-        df = trials[t]
-        y = df[!, ch]
-        for i = 1:n
-            time_cat[pos] = time_vec[i]
-            y_cat[pos] = y[i]
-            pos += 1
+    # Helper function to concatenate trials with NaN separators
+    function concatenate_trials(trials, ch, time_vec)
+        m = length(trials)
+        n = length(time_vec)
+        total_len = m * n + (m - 1)
+        
+        time_cat = Vector{Float64}(undef, total_len)
+        y_cat = Vector{Float64}(undef, total_len)
+        
+        pos = 1
+        @inbounds for t = 1:m
+            df = trials[t]
+            y = df[!, ch]
+            for i = 1:n
+                time_cat[pos] = time_vec[i]
+                y_cat[pos] = y[i]
+                pos += 1
+            end
+            if t != m
+                time_cat[pos] = NaN
+                y_cat[pos] = NaN
+                pos += 1
+            end
         end
-        if t != m
-            time_cat[pos] = NaN
-            y_cat[pos] = NaN
-            pos += 1
-        end
+        return time_cat, y_cat
     end
-
+    
+    # Concatenate trials initially
+    time_cat, y_cat = concatenate_trials(dat.data, ch, time_vec)
+    
+    # Use Observable for y-data to allow updates (e.g., for baseline changes)
+    y_obs = Observable(y_cat)
+    
     line = lines!(
         ax,
         time_cat,
-        y_cat,
+        y_obs,
         color = trial_color,
         linewidth = trial_linewidth,
         alpha = plot_kwargs[:trial_alpha],
         label = label,  # Should be nothing for trial lines, label for average lines
     )
     
+    # Store y_obs in line_refs if provided
+    if line_refs !== nothing
+        # line_refs structure: line_refs[condition_idx][:trials] = line or (line, y_obs)
+        # For consistency with average lines, store as (line, y_obs) tuple
+        # But we need to know the condition_idx - this is handled by the caller
+    end
 
-    return line
+    return line, y_obs
 end
 
 
@@ -1067,14 +1099,14 @@ function _plot_epochs_grid_multi!(
             label = isempty(plot_kwargs[:legend_labels]) ? dat.condition_name : plot_kwargs[:legend_labels][cond_idx]
 
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
-            trial_line = _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+            trial_line, trial_y_obs = _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
             # Store trial line reference
             if ax_line_refs !== nothing
                 if !haskey(ax_line_refs, cond_idx)
                     ax_line_refs[cond_idx] = Dict{Symbol,Any}()
                 end
-                ax_line_refs[cond_idx][:trials] = trial_line
+                ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
                 ax_line_refs[cond_idx][:channel] = channel
             end
 
@@ -1084,6 +1116,8 @@ function _plot_epochs_grid_multi!(
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if ax_line_refs !== nothing
                     ax_line_refs[cond_idx][:average] = (avg_line, y_obs)
+                    # Store the channel used for the average line
+                    ax_line_refs[cond_idx][:avg_channel] = channel
                 end
             end
         end
@@ -1202,14 +1236,14 @@ function _plot_epochs_topo_multi!(
                 isempty(plot_kwargs[:legend_labels]) ? dat_cond.condition_name : plot_kwargs[:legend_labels][cond_idx]
 
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
-            trial_line = _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
+            trial_line, trial_y_obs = _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
             # Store trial line reference
             if ax_line_refs !== nothing
                 if !haskey(ax_line_refs, cond_idx)
                     ax_line_refs[cond_idx] = Dict{Symbol,Any}()
                 end
-                ax_line_refs[cond_idx][:trials] = trial_line
+                ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
                 ax_line_refs[cond_idx][:channel] = ch
             end
 
@@ -1360,8 +1394,17 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
         for (cond_idx, line_data) in ax_line_refs
             # Collect trial lines
             if haskey(line_data, :trials) && line_data[:trials] !== nothing
-                trial_lines = get!(condition_trial_lines, cond_idx, Any[])
-                push!(trial_lines, line_data[:trials])
+                trial_data = line_data[:trials]
+                trial_line = nothing
+                if trial_data isa Tuple && length(trial_data) == 2
+                    trial_line = trial_data[1]  # Get the line, not the tuple
+                elseif trial_data isa Lines
+                    trial_line = trial_data
+                end
+                if trial_line !== nothing
+                    trial_lines = get!(condition_trial_lines, cond_idx, Any[])
+                    push!(trial_lines, trial_line)
+                end
             end
             
             # Collect average lines
@@ -1423,7 +1466,7 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
 end
 
 """
-    _setup_epochs_control_panel!(fig::Figure, dat_subset::Vector{EpochData}, axes::Vector{Axis}, 
+    _setup_epochs_control_panel!(fig::Figure, dat_subset::Vector{EpochData}, dat_subset_avg::Vector{ErpData}, axes::Vector{Axis}, 
                                  layout, all_plot_channels::Vector{Symbol}, condition_colors_list, plot_kwargs::Dict)
 
 Set up a control panel that opens when 'c' key is pressed.
@@ -1432,6 +1475,7 @@ Allows adjusting baseline and toggling conditions.
 function _setup_epochs_control_panel!(
     fig::Figure,
     dat_subset::Vector{EpochData},
+    dat_subset_avg::Vector{ErpData},
     axes::Vector{Axis},
     layout,
     all_plot_channels::Vector{Symbol},
@@ -1452,7 +1496,7 @@ function _setup_epochs_control_panel!(
     # Store line references: line_refs[ax_idx][condition_idx][:trials] = line, [:average] = (line, y_obs)
     # These will be populated during initial plotting and passed here
     line_refs = get(plot_kwargs, :_line_refs, nothing)
-
+    
     # Set up linked legend interactions
     if line_refs !== nothing
         _setup_linked_legend_interactions_epochs!(line_refs)
@@ -1475,10 +1519,16 @@ function _setup_epochs_control_panel!(
         # Check if baseline actually changed
         baseline_changed = baseline_interval_new !== previous_baseline[]
 
+        # Track if baseline was actually applied (for updating plots)
+        baseline_was_applied = false
+        
         # Apply baseline if it changed
         if baseline_changed && baseline_interval_new !== nothing
             baseline!.(dat_subset, Ref(baseline_interval_new))
+            baseline!.(dat_subset_avg, Ref(baseline_interval_new))
+            
             previous_baseline[] = baseline_interval_new
+            baseline_was_applied = true
         end
 
         # Build condition mask
@@ -1491,28 +1541,72 @@ function _setup_epochs_control_panel!(
                 cond_idx > length(condition_mask) && continue
                 visible = condition_mask[cond_idx]
 
-                # Update trial line visibility
+                # Update trial line visibility and y-data
                 if haskey(line_data, :trials)
-                    trial_line = line_data[:trials]
-                    if trial_line isa Lines
+                    trial_data = line_data[:trials]
+                    if trial_data isa Tuple && length(trial_data) == 2
+                        trial_line, trial_y_obs = trial_data
                         trial_line.visible = visible
+                        # Update y-data if baseline was applied
+                        if baseline_was_applied && cond_idx <= length(dat_subset)
+                            # Get channel from stored line_data
+                            ch = get(line_data, :channel, length(all_plot_channels) > 0 ? all_plot_channels[1] : :avg)
+                            
+                            # Use dat_subset directly (if average_channels=true, it already has :avg channel)
+                            dat = dat_subset[cond_idx]
+                            dat_to_use = dat
+                            
+                            # Recompute concatenated trials with NaN separators
+                            time_vec = dat_to_use.data[1][!, :time]
+                            trials = dat_to_use.data
+                            m = length(trials)
+                            n = length(time_vec)
+                            total_len = m * n + (m - 1)
+                            y_cat = Vector{Float64}(undef, total_len)
+                            pos = 1
+                            @inbounds for t = 1:m
+                                df = trials[t]
+                                y = df[!, ch]
+                                for i = 1:n
+                                    y_cat[pos] = y[i]
+                                    pos += 1
+                                end
+                                if t != m
+                                    y_cat[pos] = NaN
+                                    pos += 1
+                                end
+                            end
+                            trial_y_obs[] = y_cat
+                        end
+                    elseif trial_data isa Lines
+                        trial_data.visible = visible
                     end
                 end
 
                 # Update average line visibility and y-data
                 if haskey(line_data, :average)
+                    println("here1")
                     avg_data = line_data[:average]
                     if avg_data isa Tuple && length(avg_data) == 2
+                    println("here2")
                         avg_line, y_obs = avg_data
                         avg_line.visible = visible
-                        # Update y-data if baseline changed
-                        if baseline_changed && cond_idx <= length(dat_subset)
-                            dat = dat_subset[cond_idx]
-                            erp_dat = average_epochs(dat)
-                            # Get channel from stored line_data
+                        # Update y-data from dat_subset_avg if baseline was applied
+                        if baseline_was_applied && cond_idx <= length(dat_subset_avg)
+                            erp_dat = dat_subset_avg[cond_idx]
+                            # Get channel used for average line (stored during plotting, should match what was used initially)
                             ch = get(line_data, :channel, length(all_plot_channels) > 0 ? all_plot_channels[1] : :avg)
-                            if haskey(erp_dat.data, ch)
+                            println("ch: $ch")
+                            # Use the stored channel from initial plotting
+                            if ch in propertynames(erp_dat.data)
                                 y_obs[] = erp_dat.data[!, ch]
+                            #else
+                            #    # Fallback: try :avg or first available channel
+                            #    if :avg in names(erp_dat.data)
+                            #        y_obs[] = erp_dat.data[!, :avg]
+                            #    elseif !isempty(names(erp_dat.data))
+                            #        y_obs[] = erp_dat.data[!, first(names(erp_dat.data))]
+                            #    end
                             end
                         end
                     elseif avg_data isa Lines
