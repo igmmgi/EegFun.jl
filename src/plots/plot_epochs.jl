@@ -1350,34 +1350,59 @@ Note: Both trial and average lines appear in the legend (trial with condition na
 average with condition name + " (avg)"). We sync both types across plots.
 """
 function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
-    # Create a mapping: condition_idx -> all lines (trials and averages) across all axes
-    condition_lines = Dict{Int,Vector{Any}}()
+    # Create separate mappings: condition_idx -> trial lines and condition_idx -> average lines
+    condition_trial_lines = Dict{Int,Vector{Any}}()
+    condition_avg_lines = Dict{Int,Vector{Any}}()
 
-    # Collect all lines for each condition
+    # Collect all lines for each condition, separating trials and averages
     # Structure: line_refs[ax_idx][condition_idx][:trials] and [:average]
     for ax_line_refs in line_refs
         for (cond_idx, line_data) in ax_line_refs
-            lines = get!(condition_lines, cond_idx, Any[])
-            
-            # Add trial line
+            # Collect trial lines
             if haskey(line_data, :trials) && line_data[:trials] !== nothing
-                push!(lines, line_data[:trials])
+                trial_lines = get!(condition_trial_lines, cond_idx, Any[])
+                push!(trial_lines, line_data[:trials])
             end
             
-            # Add average line
+            # Collect average lines
             if haskey(line_data, :average)
                 avg_data = line_data[:average]
+                avg_line = nothing
                 if avg_data isa Tuple && length(avg_data) == 2
-                    push!(lines, avg_data[1])  # Add the line, not the tuple
+                    avg_line = avg_data[1]  # Get the line, not the tuple
                 elseif avg_data isa Lines
-                    push!(lines, avg_data)
+                    avg_line = avg_data
+                end
+                if avg_line !== nothing
+                    avg_lines = get!(condition_avg_lines, cond_idx, Any[])
+                    push!(avg_lines, avg_line)
                 end
             end
         end
     end
 
-    # When any line's visibility changes, update all other lines for that condition
-    for lines in values(condition_lines)
+    # Sync trial lines independently across plots
+    for lines in values(condition_trial_lines)
+        length(lines) > 1 || continue  # Only need syncing if there are multiple lines
+
+        # Create a flag to prevent infinite loops
+        syncing = Ref(false)
+
+        for line in lines
+            other_lines = [l for l in lines if l !== line]
+            on(line.visible) do visible_val
+                syncing[] && return  # Skip if already syncing
+                syncing[] = true
+                for other_line in other_lines
+                    other_line.visible = visible_val
+                end
+                syncing[] = false
+            end
+        end
+    end
+
+    # Sync average lines independently across plots
+    for lines in values(condition_avg_lines)
         length(lines) > 1 || continue  # Only need syncing if there are multiple lines
 
         # Create a flag to prevent infinite loops
