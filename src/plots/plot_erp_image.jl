@@ -53,7 +53,7 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 """
     plot_erp_image(dat::EpochData; 
-                   layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
+                   layout::Union{Symbol, PlotLayout} = :single,
                    channel_selection::Function = channels(),
                    sample_selection::Function = samples(),
                    kwargs...)
@@ -100,7 +100,7 @@ plot_erp_image(dat,
 """
 function plot_erp_image(
     dat::EpochData;
-    layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
+    layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     kwargs...,
@@ -128,7 +128,7 @@ function plot_erp_image(
     # Create figure and apply layout system
     fig = Figure()
     plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
-    axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
+    axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
     # Disable default interactions that conflict with our custom selection
     if plot_kwargs[:interactive]
@@ -189,16 +189,17 @@ function plot_erp_image(
                 length(all_plot_channels) == 1 ? string(all_plot_channels[1]) : "$(print_vector(all_plot_channels))"
         elseif plot_layout.type == :grid
             # Use the existing grid axis properties function
-            row = fld(findfirst(==(channel), channels) - 1, plot_layout.cols) + 1
-            col = mod(findfirst(==(channel), channels) - 1, plot_layout.cols) + 1
+            rows, cols = plot_layout.dims
+            row = fld(findfirst(==(channel), channels) - 1, cols) + 1
+            col = mod(findfirst(==(channel), channels) - 1, cols) + 1
             _set_grid_axis_properties!(
                 ax,
                 plot_layout,
                 channel,
                 row,
                 col,
-                plot_layout.rows,
-                plot_layout.cols;
+                rows,
+                cols;
                 xlabel = plot_kwargs[:xlabel],
                 ylabel = plot_kwargs[:ylabel],
             )
