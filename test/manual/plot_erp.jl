@@ -16,6 +16,12 @@ epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [
              eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[4]])]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
+
+
+fig, ax = eegfun.plot_erp(erps, layout = :topo)
+
+
+
 # ERP Plots (:single)
 fig, ax = eegfun.plot_erp(erps, average_channels = false, colormap = :viridis, legend_nbanks = 12)
 fig, ax = eegfun.plot_erp(erps[1], average_channels = false, colormap = :viridis, legend_nbanks = 12)

@@ -15,9 +15,7 @@ function get_makie_backend()
     end
 end
 
-function get_makie_screen(makie_backend::Symbol)
-    return getfield(Main, makie_backend).Screen()
-end
+get_makie_screen(makie_backend::Symbol) = getfield(Main, makie_backend).Screen()
 
 """
     set_window_title(title::String)
@@ -29,7 +27,7 @@ function set_window_title(title::String)
     if backend == :GLMakie
         Makie.current_backend().activate!(title = title)
     end
-    # CairoMakie doesn't support window titles (it's for static image generation)
+    # TODO: CairoMakie doesn't support window titles?
 end
 
 """
@@ -157,6 +155,64 @@ function _extract_legend_kwargs(plot_kwargs::Dict{Symbol,Any}; exclude_positioni
     [pop!(legend_kwargs, attr, nothing) for attr in [:halign, :valign, :alignmode]]
 
     return legend_kwargs
+end
+
+"""
+    _extract_layout_kwargs(plot_kwargs::Dict{Symbol, Any})
+
+Extract layout-related parameters from plot_kwargs and return a new dictionary
+suitable for passing to create_layout().
+
+Does not mutate plot_kwargs - only reads from it.
+
+# Arguments
+- `plot_kwargs`: Dictionary of plot parameters (read-only)
+
+# Returns
+- `Dict{Symbol, Any}`: New dictionary containing extracted layout parameters (with layout_ prefix removed)
+"""
+function _extract_layout_kwargs(plot_kwargs::Dict{Symbol,Any})
+    layout_kwargs = Dict{Symbol,Any}()
+    
+    # Get all layout parameter names from LAYOUT_KWARGS
+    # These are the base names (keys in LAYOUT_KWARGS, e.g., :plot_width, :grid_rowgap)
+    layout_param_names = keys(LAYOUT_KWARGS)
+    
+    # For each known layout parameter, check if it exists with layout_ prefix
+    # Map layout_topo_plot_width -> plot_width (remove layout_topo_ prefix)
+    # Map layout_grid_rowgap -> grid_rowgap (remove layout_ prefix)
+    # Map layout_grid_dims -> grid_dims (remove layout_ prefix)
+    # Map layout_figure_padding -> figure_padding (remove layout_ prefix)
+    for param_name in layout_param_names
+        # Try layout_topo_* first (for topo-specific params)
+        layout_topo_key = Symbol("layout_topo_$(param_name)")
+        if haskey(plot_kwargs, layout_topo_key)
+            value = plot_kwargs[layout_topo_key]
+            if value !== nothing
+                layout_kwargs[param_name] = value
+            end
+        else
+            # Try layout_grid_* (for grid-specific params like grid_rowgap, grid_dims)
+            layout_grid_key = Symbol("layout_grid_$(param_name)")
+            if haskey(plot_kwargs, layout_grid_key)
+                value = plot_kwargs[layout_grid_key]
+                if value !== nothing
+                    layout_kwargs[param_name] = value
+                end
+            else
+                # Try layout_* (for general params like figure_padding)
+                layout_key = Symbol("layout_$(param_name)")
+                if haskey(plot_kwargs, layout_key)
+                    value = plot_kwargs[layout_key]
+                    if value !== nothing
+                        layout_kwargs[param_name] = value
+                    end
+                end
+            end
+        end
+    end
+    
+    return layout_kwargs
 end
 
 # =============================================================================

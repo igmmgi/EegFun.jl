@@ -24,7 +24,6 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colormap => (:jet, "Colormap for multi-channel plots"),
 
     # Plot configuration
-    :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
     :yreversed => (false, "Whether to reverse the y-axis"),
     :average_channels => (false, "Whether to average across channels"),
     :interactive => (true, "Whether to enable interactive features"),
@@ -56,6 +55,24 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Origin lines
     :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
+
+    # Layout parameters (for topo and other layouts)
+    :layout_topo_plot_width => (0.10, "Width of individual plots in topo layout (as fraction of figure width)"),
+    :layout_topo_plot_height => (0.10, "Height of individual plots in topo layout (as fraction of figure height)"),
+    :layout_topo_margin => (0.12, "Margin between plots in topo layout"),
+    :layout_topo_scale_offset_factor => (0.1, "Offset factor for scale plot position in topo layout"),
+    :layout_topo_fallback_scale_x => (0.8, "Fallback x position for scale plot in topo layout"),
+    :layout_topo_fallback_scale_y => (-0.8, "Fallback y position for scale plot in topo layout"),
+    
+    # Grid layout parameters
+    :layout_grid_rowgap => (10, "Gap between rows in grid layout (in pixels)"),
+    :layout_grid_colgap => (10, "Gap between columns in grid layout (in pixels)"),
+    :layout_grid_padding => ((10, 10, 10, 10), "Padding around grid layout as (left, right, top, bottom) tuple (in pixels)"),
+    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
+    
+    # General layout parameters
+    :layout_figure_padding => ((20, 20, 20, 20), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    :layout_aspect_ratio => (nothing, "Aspect ratio for individual plots (width/height). If nothing, automatically determined"),
 )
 
 """
@@ -244,9 +261,25 @@ function plot_erp(
     title_str = _generate_window_title(dat_subset)
     set_window_title(title_str)
 
+    # Extract layout_* parameters, remove prefix, and pass to create_layout
+    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    
+    # Get figure_padding from layout_kwargs if available (must be set at Figure creation)
+    fig_padding = get(layout_kwargs, :figure_padding, nothing)
+    
     # Create figure and apply layout system
-    fig = Figure(title = plot_kwargs[:figure_title])
-    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
+    fig = if fig_padding !== nothing
+        Figure(title = plot_kwargs[:figure_title], figure_padding = fig_padding)
+    else
+        Figure(title = plot_kwargs[:figure_title])
+    end
+    
+    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
+    
+    # For :topo layout, set default legend_channel to last channel if not explicitly set
+    if plot_layout.type == :topo && isempty(plot_kwargs[:legend_channel]) && !isempty(all_plot_channels)
+        plot_kwargs[:legend_channel] = [all_plot_channels[end]]
+    end
     axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
 
     # Store line references for control panel (if interactive)
