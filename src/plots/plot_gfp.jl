@@ -109,6 +109,10 @@ function plot_gfp(
     # Apply condition_selection first
     datasets_filtered = datasets[get_selected_conditions(datasets, condition_selection)]
 
+    # Generate window title from datasets
+    title_str = _generate_window_title(datasets_filtered)
+    set_window_title(title_str)
+
     # Merge user kwargs and default kwargs
     plot_kwargs = _merge_plot_kwargs(PLOT_GFP_KWARGS, kwargs)
 
@@ -262,6 +266,7 @@ function plot_gfp(
         display(fig)
     end
 
+    set_window_title("Makie")
     return fig
 end
 

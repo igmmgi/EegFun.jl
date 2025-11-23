@@ -1,6 +1,6 @@
 using eegfun
 using GLMakie
-
+# using CairoMakie
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
@@ -9,7 +9,6 @@ dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
-
 # EPOCHS -> ERPs
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]), 
              eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
@@ -17,9 +16,9 @@ epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [
              eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[4]])]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
-
 # ERP Plots (:single)
 fig, ax = eegfun.plot_erp(erps, average_channels = false, colormap = :viridis, legend_nbanks = 12)
+
 fig, ax = eegfun.plot_erp(erps, average_channels = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = false)

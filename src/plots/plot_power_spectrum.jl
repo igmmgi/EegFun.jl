@@ -355,6 +355,10 @@ function plot_channel_spectrum(
     channel_selection::Function = channels(),
     kwargs...,
 )
+    # Generate window title from dataset
+    title_str = _generate_window_title(dat)
+    set_window_title(title_str)
+
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_POWER_SPECTRUM_KWARGS, kwargs)
 
@@ -378,6 +382,7 @@ function plot_channel_spectrum(
         display_figure(fig)
     end
 
+    set_window_title("Makie")
     return fig, ax
 
 end

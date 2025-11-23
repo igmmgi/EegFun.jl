@@ -190,7 +190,7 @@ function plot_epochs(
 
     # Generate window title from datasets
     title_str = _generate_window_title(dat_subset)
-    Makie.current_backend().activate!(title = title_str)
+    set_window_title(title_str)
 
     # Check if subsetting resulted in empty data
     isempty(dat_subset) && @minimal_error_throw "No data matched the selection criteria!"
@@ -391,7 +391,7 @@ function plot_epochs(
         display_figure(fig)
     end
 
-    Makie.current_backend().activate!(title = "Makie")
+    set_window_title("Makie")
     return fig, axes
 end
 

@@ -111,6 +111,10 @@ function plot_erp_image(
     # Use subset to get the data we want to plot (same pattern as other functions)
     dat_subset = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
 
+    # Generate window title from dataset
+    title_str = _generate_window_title(dat_subset)
+    set_window_title(title_str)
+
     # Get all available channels
     selected_channels = channel_labels(dat_subset)  # Gets EEG channels from layout
     extra_channels = extra_labels(dat_subset)       # Gets extra channels (EOG, etc.)
@@ -304,6 +308,7 @@ function plot_erp_image(
         display_figure(fig)
     end
 
+    set_window_title("Makie")
     return fig, axes
 end
 

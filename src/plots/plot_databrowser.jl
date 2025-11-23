@@ -1724,6 +1724,10 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
         @minimal_warning "CairoMakie detected. For full interactivity in plot_databrowser, use GLMakie."
     end
 
+    # Generate window title from dataset
+    title_str = _generate_window_title(dat)
+    set_window_title(title_str)
+
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_DATABROWSER_KWARGS, kwargs)
 
@@ -1739,6 +1743,7 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
 
     display(fig)
 
+    set_window_title("Makie")
     # Return the observable analysis settings
     return fig, ax, state.analysis_settings
 end
