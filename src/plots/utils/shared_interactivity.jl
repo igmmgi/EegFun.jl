@@ -1,7 +1,8 @@
 # =============================================================================
 # SHARED CONSTANTS
 # =============================================================================
-const SHARED_KEYBOARD_ACTIONS = Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
+const SHARED_KEYBOARD_ACTIONS =
+    Dict(Keyboard.up => :up, Keyboard.down => :down, Keyboard.left => :left, Keyboard.right => :right)
 
 # =============================================================================
 # SHARED SELECTION STATE
@@ -578,9 +579,6 @@ function _setup_channel_selection_events!(
     channel_selection_active = Ref(false)
     shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
-
-
-    println("here????")
 
     # Keyboard event tracking
     on(events(fig).keyboardbutton) do key_event

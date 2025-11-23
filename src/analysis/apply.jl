@@ -8,12 +8,14 @@ function apply_analysis_settings!(dat::EegData, settings::AnalysisSettings)
     settings.hp_filter != 0 && filter_data!(dat, "hp", settings.hp_filter)
     settings.lp_filter != 0 && filter_data!(dat, "lp", settings.lp_filter)
     settings.reference != :none && rereference!(dat, settings.reference)
-    !isempty(settings.repaired_channels) && repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)
+    !isempty(settings.repaired_channels) &&
+        repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)
     !isempty(settings.selected_regions) && _add_selected_regions!(dat, settings.selected_regions)
 
     return nothing
 end
-apply_analysis_settings!(dat::EegData, settings::Observable{AnalysisSettings}) = apply_analysis_settings!(dat, settings[])
+apply_analysis_settings!(dat::EegData, settings::Observable{AnalysisSettings}) =
+    apply_analysis_settings!(dat, settings[])
 
 """
     apply_analysis_settings!(data::EegData, settings::AnalysisSettings, ica::InfoIca)
@@ -25,7 +27,8 @@ function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Analysis
     settings.hp_filter != 0 && filter_data!(dat, "hp", settings.hp_filter)
     settings.lp_filter != 0 && filter_data!(dat, "lp", settings.lp_filter)
     settings.reference != :none && rereference!(dat, settings.reference)
-    !isempty(settings.repaired_channels) && repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)
+    !isempty(settings.repaired_channels) &&
+        repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)
     !isempty(settings.selected_regions) && _add_selected_regions!(dat, settings.selected_regions)
 
     # ICA component removal if selected
@@ -35,6 +38,7 @@ function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Analysis
 
     return nothing
 end
-apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Observable{AnalysisSettings}) = apply_analysis_settings!(dat, ica, settings[])
+apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::Observable{AnalysisSettings}) =
+    apply_analysis_settings!(dat, ica, settings[])
 
 @add_nonmutating apply_analysis_settings!
