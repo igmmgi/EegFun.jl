@@ -225,6 +225,10 @@ function plot_epochs(
         [condition_colors_result[i] for i = 1:length(condition_colors_result)]
 
     @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
+    
+    # Create plot_layout object for unified selection system
+    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
+    
     fig = Figure()
     axes = Axis[]
 
@@ -369,6 +373,17 @@ function plot_epochs(
     # Setup interactivity if requested
     if plot_kwargs[:interactive]
         _setup_shared_interactivity!(fig, axes, :epochs)
+
+        # Disable default interactions that conflict with our custom selection (all axes)
+        for ax in axes
+            deregister_interaction!(ax, :rectanglezoom)
+        end
+
+        # Set up selection system for all axes (will work with linked axes)
+        selection_state = SharedSelectionState(axes)
+
+        # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
+        condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
         _setup_epochs_control_panel!(
             fig,
             dat_subset,
@@ -376,7 +391,20 @@ function plot_epochs(
             axes,
             get(plot_kwargs, :baseline_interval, nothing),
             line_refs,
+            condition_checked_ref,
         )
+
+        # Create right-click handler that has access to condition visibility
+        right_click_handler = (selection_state, mouse_x, data) -> 
+            _handle_epochs_right_click!(selection_state, mouse_x, data, condition_checked_ref)
+
+        # Set up selection system that works for all layouts
+        _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout, right_click_handler)
+
+        # Set up channel selection events for topo and grid layouts
+        if plot_layout.type in (:topo, :grid)
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes, plot_layout.type)
+        end
     end
 
     if plot_kwargs[:display_plot]
@@ -973,6 +1001,7 @@ function _setup_epochs_control_panel!(
     axes::Vector{Axis},
     baseline_interval::BaselineInterval,
     line_refs::Vector{<:Dict},
+    condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
 )
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
     
@@ -984,6 +1013,7 @@ function _setup_epochs_control_panel!(
     baseline_start_obs = Observable(start_val === nothing ? "" : string(start_val))
     baseline_stop_obs = Observable(stop_val === nothing ? "" : string(stop_val))
     condition_checked = [Observable(true) for _ in dat_subset]
+    condition_checked_ref[] = condition_checked  # Store for access by right-click handler
 
     # Track previous baseline to avoid unnecessary updates
     previous_baseline = Ref{Union{Tuple{Float64,Float64},Nothing}}(nothing)
@@ -1091,5 +1121,112 @@ function _setup_epochs_control_panel!(
 
         end
     end
+end
+
+# =============================================================================
+# RIGHT-CLICK HANDLERS FOR EPOCHS
+# =============================================================================
+
+function _handle_epochs_right_click!(selection_state, mouse_x, data, condition_checked_ref)
+    if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
+        _show_epochs_context_menu!(selection_state, data, condition_checked_ref)
+    end
+end
+
+function _show_epochs_context_menu!(selection_state, data, condition_checked_ref)
+
+    menu_fig = Figure()
+    
+    # Filter by visible conditions to determine if we have multiple visible conditions
+    data_to_plot = _filter_visible_conditions_epochs(data, condition_checked_ref)
+    has_multiple_conditions = data_to_plot isa Vector{EpochData} && length(data_to_plot) > 1
+    
+    plot_types = [
+        "Topoplot (multiquadratic)", 
+        "Topoplot (spherical_spline)",
+    ]
+    
+    # Only add average options if multiple visible conditions
+    if has_multiple_conditions
+        push!(plot_types, "Topoplot (average, multiquadratic)")
+        push!(plot_types, "Topoplot (average, spherical_spline)")
+    end
+
+    menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
+
+    for btn in menu_buttons
+        on(btn.clicks) do n
+            original_data, x_min, x_max = _get_epochs_selection_bounds(selection_state, data)
+
+            # Create time-based sample selection for the plots
+            time_sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max)
+
+            # Filter by visible conditions if condition_checked is available (already done above, but do again for consistency)
+            data_to_plot = _filter_visible_conditions_epochs(original_data, condition_checked_ref)
+
+            # Convert EpochData to ErpData for topoplot (average epochs first)
+            if btn.label[] in ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)", 
+                               "Topoplot (average, multiquadratic)", "Topoplot (average, spherical_spline)"]
+                # Convert EpochData to ErpData by averaging epochs
+                erp_data = data_to_plot isa Vector{EpochData} ? 
+                    [average_epochs(dat) for dat in data_to_plot] : 
+                    [average_epochs(data_to_plot)]
+                
+                # Handle single vs vector
+                erp_data = length(erp_data) == 1 ? erp_data[1] : erp_data
+
+                if btn.label[] == "Topoplot (multiquadratic)"
+                    plot_topography(erp_data, sample_selection = time_sample_selection, method = :multiquadratic)
+                elseif btn.label[] == "Topoplot (spherical_spline)"
+                    plot_topography(erp_data, sample_selection = time_sample_selection, method = :spherical_spline)
+                elseif btn.label[] == "Topoplot (average, multiquadratic)"
+                    avg_data = erp_data isa Vector{ErpData} ? _average_conditions(erp_data) : erp_data
+                    plot_topography(avg_data, sample_selection = time_sample_selection, method = :multiquadratic)
+                elseif btn.label[] == "Topoplot (average, spherical_spline)"
+                    avg_data = erp_data isa Vector{ErpData} ? _average_conditions(erp_data) : erp_data
+                    plot_topography(avg_data, sample_selection = time_sample_selection, method = :spherical_spline)
+                end
+            end
+        end
+    end
+
+    new_screen = getfield(Main, :GLMakie).Screen()
+    display(new_screen, menu_fig)
+end
+
+"""
+    _get_epochs_selection_bounds(selection_state, data)
+
+Extract time bounds from selection state and return original data with bounds.
+Does not subset the data - preserves all electrodes for topo plots.
+Returns (data, x_min, x_max).
+"""
+function _get_epochs_selection_bounds(selection_state, data)
+    x_min, x_max = minmax(selection_state.bounds[]...)
+    return (data, x_min, x_max)
+end
+
+"""
+    _filter_visible_conditions_epochs(data, condition_checked_ref)
+
+Filter EpochData by visible conditions from the control panel.
+Returns filtered Vector{EpochData} or single EpochData if only one condition.
+"""
+function _filter_visible_conditions_epochs(data, condition_checked_ref)
+    # If no condition_checked available or data is not Vector, return as-is
+    if condition_checked_ref[] === nothing || !(data isa Vector{EpochData})
+        return data
+    end
+
+    condition_checked = condition_checked_ref[]
+    if length(condition_checked) != length(data)
+        return data  # Mismatch, return as-is
+    end
+
+    # Filter by visible conditions
+    visible_data = [data[i] for i in eachindex(data) if condition_checked[i][]]
+    
+    # Return single EpochData if only one visible, otherwise Vector
+    return length(visible_data) == 1 ? visible_data[1] : visible_data
 end
 
