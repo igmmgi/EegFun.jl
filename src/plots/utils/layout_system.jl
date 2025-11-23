@@ -53,25 +53,12 @@ function _create_layout_metadata(kwargs)
 end
 
 """
-    _get_metadata_value(plot_layout::PlotLayout, key::Symbol, default = nothing)
-
-Get a value from plot_layout.metadata, returning default if not found or nothing.
-"""
-function _get_metadata_value(plot_layout::PlotLayout, key::Symbol, default = nothing)
-    if haskey(plot_layout.metadata, key)
-        val = plot_layout.metadata[key]
-        return val !== nothing ? val : default
-    end
-    return default
-end
-
-"""
     _apply_aspect_ratio!(ax::Axis, plot_layout::PlotLayout)
 
 Apply aspect ratio from plot_layout metadata to axis if specified.
 """
 function _apply_aspect_ratio!(ax::Axis, plot_layout::PlotLayout)
-    aspect_val = _get_metadata_value(plot_layout, :aspect_ratio)
+    aspect_val = plot_layout.metadata[:aspect_ratio]
     if aspect_val !== nothing
         ax.aspect = aspect_val
     end
@@ -116,11 +103,11 @@ end
 Apply grid spacing (rowgap/colgap) from plot_layout metadata to figure layout.
 """
 function _apply_grid_spacing!(fig::Figure, plot_layout::PlotLayout)
-    rowgap_val = _get_metadata_value(plot_layout, :grid_rowgap)
+    rowgap_val = plot_layout.metadata[:grid_rowgap]
     if rowgap_val !== nothing
         rowgap!(fig.layout, rowgap_val)
     end
-    colgap_val = _get_metadata_value(plot_layout, :grid_colgap)
+    colgap_val = plot_layout.metadata[:grid_colgap]
     if colgap_val !== nothing
         colgap!(fig.layout, colgap_val)
     end
@@ -467,9 +454,9 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
         # Note: grid_padding is less commonly used, but we store it for potential future use
 
     elseif plot_layout.type == :topo
-        plot_width = _get_metadata_value(plot_layout, :plot_width, 0.10)
-        plot_height = _get_metadata_value(plot_layout, :plot_height, 0.10)
-        margin = _get_metadata_value(plot_layout, :margin, 0.02)
+        plot_width = plot_layout.metadata[:plot_width]
+        plot_height = plot_layout.metadata[:plot_height]
+        margin = plot_layout.metadata[:margin]
 
         # Use the coordinate normalization helper
         x_coords, y_coords, minx, maxx, miny, maxy, xrange, yrange =
