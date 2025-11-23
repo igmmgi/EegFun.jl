@@ -2,7 +2,7 @@ using eegfun
 using GLMakie
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -12,15 +12,14 @@ eegfun.filter_data!(dat, "hp", 1)
 
 # EPOCHS -> ERPs
 epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]), 
-             eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]]),
-             eegfun.EpochCondition(name = "ExampleEpoch3", trigger_sequences = [[5]]), 
-             eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[7]])]
+             eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
+             eegfun.EpochCondition(name = "ExampleEpoch3", trigger_sequences = [[3]]), 
+             eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[4]])]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
 
 # ERP Plots (:single)
 fig, ax = eegfun.plot_erp(erps, average_channels = false, colormap = :viridis, legend_nbanks = 12)
-fig, ax = eegfun.plot_erp(erps, average_channels = true)
 fig, ax = eegfun.plot_erp(erps, average_channels = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = false)
@@ -32,6 +31,7 @@ fig, ax = eegfun.plot_erp(erps, layout = :grid)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid)
 
 # EPR Plots (:topo)
+fig, ax = eegfun.plot_erp(erps, layout = :topo)
 fig, ax = eegfun.plot_erp([erps[1], erps[1]], layout = :topo)
 fig, ax = eegfun.plot_erp(erps, layout = :topo, channel_selection = eegfun.channels([:Fp1, :Fp2, :PO8]))
 
