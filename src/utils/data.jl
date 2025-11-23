@@ -363,9 +363,11 @@ n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
 
+condition_number(dat::ContinuousData)::String = "Raw Data"
 condition_number(dat::ErpData)::Int = dat.condition
 condition_number(dat::EpochData)::Int = dat.condition
 
+condition_name(dat::ContinuousData)::String = "Raw Data"
 condition_name(dat::ErpData)::String = dat.condition_name
 condition_name(dat::EpochData)::String = dat.condition_name
 

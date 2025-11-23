@@ -228,11 +228,9 @@ function plot_epochs(
         plot_kwargs[:colormap],
         plot_kwargs[:_color_explicitly_set],
     )
-    if condition_colors_result isa AbstractVector
-        condition_colors_list = condition_colors_result
-    else
-        condition_colors_list = [condition_colors_result[i] for i = 1:length(condition_colors_result)]
-    end
+    condition_colors_list = condition_colors_result isa AbstractVector ? 
+        condition_colors_result : 
+        [condition_colors_result[i] for i = 1:length(condition_colors_result)]
 
     @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
     fig = Figure()
@@ -242,11 +240,10 @@ function plot_epochs(
     set_theme!(fontsize = plot_kwargs[:theme_fontsize])
 
     # Initialize line references for control panel if interactive
+    line_refs = nothing
     if plot_kwargs[:interactive]
         n_axes = (layout == :grid || layout isa Vector{Int} || layout == :topo) ? length(all_plot_channels) : 1
         line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ in 1:n_axes]
-    else
-        line_refs = nothing
     end
 
     if plot_kwargs[:average_channels]
@@ -257,34 +254,20 @@ function plot_epochs(
         # For each condition, plot using dat_subset 
         for (cond_idx, dat) in enumerate(dat_subset)
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[cond_idx]))
-            
-            label =
-                isempty(plot_kwargs[:legend_labels]) ? dat.condition_name :
-                (
-                    length(plot_kwargs[:legend_labels]) >= cond_idx ? plot_kwargs[:legend_labels][cond_idx] :
-                    dat.condition_name
-                )
+            label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels])
             
             trial_line, trial_y_obs = _plot_epochs!(ax, dat, [:avg], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
-            # Store trial line reference
             if plot_kwargs[:interactive]
-                if !haskey(ax_line_refs, cond_idx)
-                    ax_line_refs[cond_idx] = Dict{Symbol,Any}()
-                end
-                ax_line_refs[cond_idx][:avg] = Dict{Symbol,Any}(
-                    :trials => (trial_line, trial_y_obs),
-                    :average => nothing,
-                )
+                _store_line_ref!(ax_line_refs, cond_idx, :avg, trial_line, trial_y_obs)
             end
 
-            # Optional ERP overlay
             if plot_kwargs[:plot_avg_trials]
                 erp_dat = dat_subset_avg[cond_idx]
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [:avg], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if plot_kwargs[:interactive]
-                    ax_line_refs[cond_idx][:avg][:average] = (avg_line, y_obs)
+                    _store_avg_line_ref!(ax_line_refs, cond_idx, :avg, avg_line, y_obs)
                 end
             end
         end
@@ -327,12 +310,8 @@ function plot_epochs(
             # Plot all conditions for each channel
             for (ch_idx, ch) in enumerate(all_plot_channels)
                 for (cond_idx, dat) in enumerate(dat_subset)
-                    label =
-                        isempty(plot_kwargs[:legend_labels]) ? dat.condition_name :
-                        plot_kwargs[:legend_labels][cond_idx]
-                    if length(all_plot_channels) > 1
-                        label *= " ($ch)"
-                    end
+                    channel_suffix = length(all_plot_channels) > 1 ? " ($ch)" : ""
+                    label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels], channel_suffix)
 
                     color_idx = length(all_plot_channels) > 1 ? 
                         ((cond_idx - 1) * length(all_plot_channels) + ch_idx) : 
@@ -341,15 +320,8 @@ function plot_epochs(
                     
                     trial_line, trial_y_obs = _plot_epochs!(ax, dat, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
                     
-                    # Store trial line reference
                     if plot_kwargs[:interactive]
-                        if !haskey(ax_line_refs, cond_idx)
-                            ax_line_refs[cond_idx] = Dict{Symbol,Any}()
-                        end
-                        ax_line_refs[cond_idx][ch] = Dict{Symbol,Any}(
-                            :trials => (trial_line, trial_y_obs),
-                            :average => nothing,
-                        )
+                        _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
                     end
 
                     if plot_kwargs[:plot_avg_trials]
@@ -357,7 +329,7 @@ function plot_epochs(
                         avg_label = label * " (avg)"
                         avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                         if plot_kwargs[:interactive]
-                            ax_line_refs[cond_idx][ch][:average] = (avg_line, y_obs)
+                            _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
                         end
                     end
                 end
@@ -596,21 +568,12 @@ function _plot_epochs_grid_multi!(
 
         # Plot all conditions for this channel
         for (cond_idx, dat) in enumerate(datasets)
-            # Get label for this condition
-            label = isempty(plot_kwargs[:legend_labels]) ? dat.condition_name : plot_kwargs[:legend_labels][cond_idx]
-
+            label = _get_condition_label(dat, cond_idx, plot_kwargs[:legend_labels])
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
-            # Store trial line reference - use consistent structure: cond_idx[ch][:trials]
             if ax_line_refs !== nothing
-                if !haskey(ax_line_refs, cond_idx)
-                    ax_line_refs[cond_idx] = Dict{Symbol,Any}()
-                end
-                ax_line_refs[cond_idx][channel] = Dict{Symbol,Any}(
-                    :trials => (trial_line, trial_y_obs),
-                    :average => nothing,  # Will be set if plot_avg_trials is true
-                )
+                _store_line_ref!(ax_line_refs, cond_idx, channel, trial_line, trial_y_obs)
             end
 
             if plot_kwargs[:plot_avg_trials]
@@ -618,7 +581,7 @@ function _plot_epochs_grid_multi!(
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if ax_line_refs !== nothing
-                    ax_line_refs[cond_idx][channel][:average] = (avg_line, y_obs)
+                    _store_avg_line_ref!(ax_line_refs, cond_idx, channel, avg_line, y_obs)
                 end
             end
         end
@@ -732,22 +695,12 @@ function _plot_epochs_topo_multi!(
 
         # Plot all conditions for this channel
         for (cond_idx, dat_cond) in enumerate(datasets)
-            # Get label for this condition
-            label =
-                isempty(plot_kwargs[:legend_labels]) ? dat_cond.condition_name : plot_kwargs[:legend_labels][cond_idx]
-
+            label = _get_condition_label(dat_cond, cond_idx, plot_kwargs[:legend_labels])
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
-            # Store trial line reference - use consistent structure: cond_idx[ch][:trials]
             if ax_line_refs !== nothing
-                if !haskey(ax_line_refs, cond_idx)
-                    ax_line_refs[cond_idx] = Dict{Symbol,Any}()
-                end
-                ax_line_refs[cond_idx][ch] = Dict{Symbol,Any}(
-                    :trials => (trial_line, trial_y_obs),
-                    :average => nothing,  # Will be set if plot_avg_trials is true
-                )
+                _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
             end
 
             if plot_kwargs[:plot_avg_trials]
@@ -755,7 +708,7 @@ function _plot_epochs_topo_multi!(
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if ax_line_refs !== nothing
-                    ax_line_refs[cond_idx][ch][:average] = (avg_line, y_obs)
+                    _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
                 end
             end
         end
@@ -854,6 +807,43 @@ function _add_epochs_legend!(ax::Axis, channels::Vector{Symbol}, datasets::Vecto
     end
 
     return leg
+end
+
+# Helper functions for plot_epochs
+
+"""
+    _get_condition_label(dat, cond_idx, legend_labels, channel_suffix = "")
+
+Get the label for a condition, with optional channel suffix.
+"""
+function _get_condition_label(dat, cond_idx, legend_labels, channel_suffix = "")
+    label = isempty(legend_labels) ? dat.condition_name : 
+            (cond_idx <= length(legend_labels) ? legend_labels[cond_idx] : dat.condition_name)
+    return channel_suffix == "" ? label : label * channel_suffix
+end
+
+"""
+    _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
+
+Store trial line reference in the line_refs structure.
+"""
+function _store_line_ref!(ax_line_refs, cond_idx, ch, trial_line, trial_y_obs)
+    if !haskey(ax_line_refs, cond_idx)
+        ax_line_refs[cond_idx] = Dict{Symbol,Any}()
+    end
+    ax_line_refs[cond_idx][ch] = Dict{Symbol,Any}(
+        :trials => (trial_line, trial_y_obs),
+        :average => nothing,
+    )
+end
+
+"""
+    _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
+
+Store average line reference in the line_refs structure.
+"""
+function _store_avg_line_ref!(ax_line_refs, cond_idx, ch, avg_line, y_obs)
+    ax_line_refs[cond_idx][ch][:average] = (avg_line, y_obs)
 end
 
 # Helper to concatenate trials with NaN separators

@@ -494,6 +494,15 @@ function Base.show(io::IO, dat::MultiDataFrameEeg)
     println(io, "Sample Rate: ", sample_rate(dat))
 end
 
+function Base.show(io::IO, dat::ContinuousData)
+    println(io, "File: $(filename(dat))")
+    println(io, "Type: $(typeof(dat))")
+    println(io, "Labels: ", print_vector(channel_labels(dat)))
+    println(io, "Duration: ", duration(dat), " S")
+    println(io, "Sample Rate: ", sample_rate(dat))
+end
+
+
 function Base.show(io::IO, dat::SingleDataFrameEeg)
     println(io, "File: $(filename(dat))")
     println(io, "Type: $(typeof(dat))")
