@@ -58,19 +58,19 @@ end
 Apply aspect ratio from plot_layout metadata to axis if specified.
 """
 function _apply_aspect_ratio!(ax::Axis, plot_layout::PlotLayout)
-    aspect_val = plot_layout.metadata[:aspect_ratio]
-    if aspect_val !== nothing
+   aspect_val = plot_layout.metadata[:aspect_ratio]
+   if aspect_val !== nothing
         ax.aspect = aspect_val
     end
 end
 
 """
-    _create_axis_with_grid(fig, position; kwargs...)
+    _create_axis(fig, position; kwargs...)
 
-Create an Axis with grid settings from kwargs.
+Create an Axis at the given position with settings from kwargs.
 """
-function _create_axis_with_grid(fig, position; kwargs...)
-    return Axis(position,
+function _create_axis(fig, position; kwargs...)
+    return Axis(position;
         xgridvisible = kwargs[:xgrid],
         ygridvisible = kwargs[:ygrid],
         xminorgridvisible = kwargs[:xminorgrid],
@@ -429,7 +429,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     # It's stored in metadata for reference but should be applied by the caller
 
     if plot_layout.type == :single
-        ax = _create_axis_with_grid(fig, fig[1, 1]; kwargs...)
+        ax = _create_axis(fig, fig[1, 1]; kwargs...)
         _apply_aspect_ratio!(ax, plot_layout)
         _add_axis_and_channel!(axes, channels, ax, plot_layout.channels[1])
 
@@ -445,7 +445,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
             row = fld(idx-1, plot_layout.cols) + 1
             col = mod(idx-1, plot_layout.cols) + 1
 
-            ax = _create_axis_with_grid(fig, fig[row, col]; kwargs...)
+            ax = _create_axis(fig, fig[row, col]; kwargs...)
             _apply_aspect_ratio!(ax, plot_layout)
             _add_axis_and_channel!(axes, channels, ax, channel)
         end
@@ -480,7 +480,7 @@ function apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
 
     elseif plot_layout.type == :custom
         for (idx, (channel, pos)) in enumerate(zip(plot_layout.channels, plot_layout.positions))
-            ax = _create_axis_with_grid(fig, fig[pos[1], pos[2]]; kwargs...)
+            ax = _create_axis(fig, fig[pos[1], pos[2]]; kwargs...)
             _add_axis_and_channel!(axes, channels, ax, channel)
         end
     end
