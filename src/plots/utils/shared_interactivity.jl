@@ -515,8 +515,6 @@ function _handle_mouse_button_events(
         elseif event.button == Mouse.right && event.action == Mouse.press
             if !isnothing(right_click_handler)
                 right_click_handler(selection_state, mouse_x, data)
-            else
-                @info "TODO: implement right click functionality"
             end
         end
     end
@@ -580,6 +578,9 @@ function _setup_channel_selection_events!(
     channel_selection_active = Ref(false)
     shift_pressed = Ref(false)
     ctrl_pressed = Ref(false)
+
+
+    println("here????")
 
     # Keyboard event tracking
     on(events(fig).keyboardbutton) do key_event
