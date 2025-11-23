@@ -189,6 +189,10 @@ function plot_epochs(
         include_extra = include_extra,
     )
 
+    # Generate window title from datasets
+    title_str = _generate_window_title(dat_subset)
+    Makie.current_backend().activate!(title = title_str)
+
     # Check if subsetting resulted in empty data
     if isempty(dat_subset)
         n_conditions = length(datasets)
@@ -224,14 +228,15 @@ function plot_epochs(
     # This will be used for the average line overlay (plot_avg_trials)
     dat_subset_avg = [average_epochs(dat) for dat in dat_subset]
 
-    # Compute colors for each condition using same logic as plot_erp
+    # Compute colors - need to account for number of channels when in :single layout
     n_conditions = length(dat_subset)
-    # For epochs, we have one color per condition (not per condition-channel combination)
-    # But we need colors for both epochs and averages, so we'll compute for conditions
+    # For :single layout with multiple channels, compute colors for all condition-channel combinations
+    # For other layouts or single channel, compute colors per condition only
+    n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1) ? length(all_plot_channels) : 1
     condition_colors_result = _compute_dataset_colors(
         plot_kwargs[:color],
         n_conditions,
-        1,  # n_channels = 1 for condition colors
+        n_channels_for_colors,
         plot_kwargs[:colormap],
         plot_kwargs[:_color_explicitly_set],
     )
@@ -240,7 +245,7 @@ function plot_epochs(
         condition_colors_list = condition_colors_result
     else
         # It's a gradient - extract colors from it
-        condition_colors_list = [condition_colors_result[i] for i = 1:n_conditions]
+        condition_colors_list = [condition_colors_result[i] for i = 1:length(condition_colors_result)]
     end
 
     # Info about what we're plotting
@@ -253,16 +258,16 @@ function plot_epochs(
     set_theme!(fontsize = plot_kwargs[:theme_fontsize])
 
     # Store line references for control panel (if interactive)
-    # Structure: line_refs[ax_idx][condition_idx][:trials] = line, [:average] = (line, y_obs), [:channel] = channel
+    # Structure: line_refs[ax_idx][condition_idx][ch][:trials] = (line, y_obs), [:average] = (line, y_obs)
     # We'll create axes first, then populate line_refs
-    # For now, create empty structure - will be populated during plotting
-    line_refs = plot_kwargs[:interactive] && length(dat_subset) > 1 ? nothing : nothing
+    # Initialize as nothing - will be populated during plotting based on layout
+    line_refs = plot_kwargs[:interactive] ? nothing : nothing
 
     # Handle layout (similar to single EpochData method)
     if plot_kwargs[:average_channels]
         # Single plot averaging across channels
         # Initialize line_refs for single axis
-        if plot_kwargs[:interactive] && length(dat_subset) > 1 && line_refs === nothing
+        if plot_kwargs[:interactive] && line_refs === nothing
             line_refs = [Dict{Int,Dict{Symbol,Any}}()]
         end
         ax = Axis(fig[1, 1])
@@ -287,14 +292,15 @@ function plot_epochs(
 
             trial_line, trial_y_obs = _plot_epochs!(ax, dat, [:avg], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
-            # Store trial line reference
+            # Store trial line reference - use consistent structure: cond_idx[ch][:trials]
             if ax_line_refs !== nothing
                 if !haskey(ax_line_refs, cond_idx)
                     ax_line_refs[cond_idx] = Dict{Symbol,Any}()
                 end
-                ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
-                ax_line_refs[cond_idx][:channel] = :avg
-                ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
+                ax_line_refs[cond_idx][:avg] = Dict{Symbol,Any}(
+                    :trials => (trial_line, trial_y_obs),
+                    :average => nothing,  # Will be set if plot_avg_trials is true
+                )
             end
 
             # Optional ERP overlay
@@ -303,13 +309,10 @@ function plot_epochs(
                 erp_dat = dat_subset_avg[cond_idx]
                 avg_label = label * " (avg)"
                 # For single plot with average_channels, use :avg channel (same as trials)
-                # The channel should match what was used for trials
                 avg_ch = :avg  # Always :avg for single plot case (average_channels=true)
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [avg_ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if ax_line_refs !== nothing
-                    ax_line_refs[cond_idx][:average] = (avg_line, y_obs)
-                    # Store the channel used for the average line (same as trials in this case)
-                    ax_line_refs[cond_idx][:avg_channel] = avg_ch
+                    ax_line_refs[cond_idx][:avg][:average] = (avg_line, y_obs)
                 end
             end
         end
@@ -351,14 +354,14 @@ function plot_epochs(
         if layout == :single
             # Single plot with all channels overlaid
             # Initialize line_refs for single axis
-            if plot_kwargs[:interactive] && length(dat_subset) > 1 && line_refs === nothing
+            if plot_kwargs[:interactive] && line_refs === nothing
                 line_refs = [Dict{Int,Dict{Symbol,Any}}()]
             end
             ax = Axis(fig[1, 1])
             push!(axes, ax)
 
             # Plot all conditions for each channel
-            for ch in all_plot_channels
+            for (ch_idx, ch) in enumerate(all_plot_channels)
                 for (cond_idx, dat) in enumerate(dat_subset)
                     # Get label for this condition
                     label =
@@ -368,32 +371,28 @@ function plot_epochs(
                         label *= " ($ch)"
                     end
 
-                    cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[cond_idx]))
-                    
-                    # Get label for this condition
-                    label =
-                        isempty(plot_kwargs[:legend_labels]) ? dat.condition_name :
-                        plot_kwargs[:legend_labels][cond_idx]
-                    if length(all_plot_channels) > 1
-                        label *= " ($ch)"
-                    end
+                    # Compute color index: for multiple channels, cycle through condition-channel combinations
+                    # Color index = (cond_idx - 1) * n_channels + ch_idx
+                    color_idx = length(all_plot_channels) > 1 ? 
+                        ((cond_idx - 1) * length(all_plot_channels) + ch_idx) : 
+                        cond_idx
+                    cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors_list[color_idx]))
                     
                     # Get line_refs for this axis
                     ax_line_refs = line_refs !== nothing && length(axes) > 0 ? line_refs[1] : nothing
                     
                     trial_line, trial_y_obs = _plot_epochs!(ax, dat, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
                     
-                    # Store trial line reference (need unique key per channel+condition)
+                    # Store trial line reference - track by both condition and channel (like plot_erp)
                     if ax_line_refs !== nothing
-                        key = Symbol("$(cond_idx)_$(ch)")
                         if !haskey(ax_line_refs, cond_idx)
                             ax_line_refs[cond_idx] = Dict{Symbol,Any}()
                         end
-                        # For single layout with multiple channels, we need to track by channel
-                        # But structure expects cond_idx - let's use cond_idx for now
-                        ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)  # Will overwrite if multiple channels
-                        ax_line_refs[cond_idx][:channel] = ch
-                        ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
+                        # Store by channel key to support multiple channels per condition
+                        ax_line_refs[cond_idx][ch] = Dict{Symbol,Any}(
+                            :trials => (trial_line, trial_y_obs),
+                            :average => nothing,  # Will be set if plot_avg_trials is true
+                        )
                     end
 
                     if plot_kwargs[:plot_avg_trials]
@@ -401,7 +400,7 @@ function plot_epochs(
                         avg_label = label * " (avg)"
                         avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                         if ax_line_refs !== nothing
-                            ax_line_refs[cond_idx][:average] = (avg_line, y_obs)
+                            ax_line_refs[cond_idx][ch][:average] = (avg_line, y_obs)
                         end
                     end
                 end
@@ -432,7 +431,7 @@ function plot_epochs(
             # Grid layout - each channel gets its own subplot
             grid_dims = layout isa Vector{Int} ? (layout[1], layout[2]) : best_rect(length(all_plot_channels))
             # Initialize line_refs before calling (one per channel/axis)
-            if plot_kwargs[:interactive] && length(dat_subset) > 1 && line_refs === nothing
+            if plot_kwargs[:interactive] && line_refs === nothing
                 line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ in 1:length(all_plot_channels)]
             end
             _plot_epochs_grid_multi!(
@@ -449,15 +448,15 @@ function plot_epochs(
         elseif layout == :topo
             # Topographic layout
             # Initialize line_refs before calling (one per channel/axis)
-            if plot_kwargs[:interactive] && length(dat_subset) > 1 && line_refs === nothing
+            if plot_kwargs[:interactive] && line_refs === nothing
                 line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ in 1:length(all_plot_channels)]
             end
             _plot_epochs_topo_multi!(fig, axes, dat_subset, all_plot_channels, condition_colors_list, plot_kwargs, line_refs)
         end
     end
 
-    # Initialize line references after axes are created (for single and average_channels layouts)
-    if plot_kwargs[:interactive] && length(dat_subset) > 1 && line_refs === nothing
+    # Initialize line references after axes are created (fallback if not already initialized)
+    if plot_kwargs[:interactive] && line_refs === nothing
         line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ in axes]
     end
 
@@ -465,27 +464,30 @@ function plot_epochs(
     if plot_kwargs[:interactive]
         _setup_shared_interactivity!(fig, axes, :epochs)
 
-        # Setup control panel for Vector{EpochData} (baseline + condition toggling)
-        if length(dat_subset) > 1
-            # Pass line_refs through plot_kwargs for storage during plotting
-            plot_kwargs_with_refs = merge(plot_kwargs, Dict(:_line_refs => line_refs))
-            
-            _setup_epochs_control_panel!(
-                fig,
-                dat_subset,
-                dat_subset_avg,
-                axes,
-                get(plot_kwargs, :baseline_interval, nothing),
-                line_refs,
-            )
+        # Setup control panel (baseline + condition toggling)
+        # Enable for both single and multiple conditions (baseline is useful even for single condition)
+        # Initialize line_refs if it wasn't initialized during plotting (shouldn't happen, but safety check)
+        if line_refs === nothing
+            # Fallback: create empty structure matching number of axes
+            line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ in axes]
         end
+        
+        _setup_epochs_control_panel!(
+            fig,
+            dat_subset,
+            dat_subset_avg,
+            axes,
+            get(plot_kwargs, :baseline_interval, nothing),
+            line_refs,
+        )
     end
 
     if plot_kwargs[:display_plot]
         display_figure(fig)
     end
 
-    return fig, length(axes) == 1 ? first(axes) : axes
+    Makie.current_backend().activate!(title = "Makie")
+    return fig, axes
 end
 
 """
@@ -545,166 +547,19 @@ function plot_epochs(
     sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
-    layout = :single,  # :single (default), :grid, :topo, or [rows, cols]
+    layout = :single,
     kwargs...,
 )::Tuple{Figure,Union{Axis,Vector{Axis}}}
-
-    # Merge user kwargs and default kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
-
-    # Use subset to get the data we want to plot (same pattern as other functions)
-    dat_subset = subset(
-        dat;
+    return plot_epochs(
+        [dat];
+        condition_selection = conditions(),  # Always select all (just the one condition)
         channel_selection = channel_selection,
         sample_selection = sample_selection,
         epoch_selection = epoch_selection,
         include_extra = include_extra,
+        layout = layout,
+        kwargs...,
     )
-
-    # Get all non-metadata channels from the subset (it already contains only what we want)
-    selected_channels = channel_labels(dat_subset)  # Gets EEG channels from layout
-    extra_channels = extra_labels(dat_subset)       # Gets extra channels (EOG, etc.)
-    all_plot_channels = vcat(selected_channels, extra_channels)
-
-    # Validate we have channels to plot
-    isempty(all_plot_channels) && throw(ArgumentError("No channels selected for plotting"))
-
-    # Merge user kwargs and default kwargs
-    plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
-
-    # Info about what we're plotting
-    @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(length(dat_subset.data)) epochs"
-
-    fig = Figure()
-    axes = Axis[]  # Keep track of all axes created
-
-    # Apply theme font size early to affect all elements
-    set_theme!(fontsize = plot_kwargs[:theme_fontsize])
-
-    # Use single plot if explicitly requested via average_channels
-    if plot_kwargs[:average_channels]
-
-        # Single plot averaging across channels
-        ax = Axis(fig[1, 1])
-        push!(axes, ax)
-
-        # Precompute averaged channel once via channel_average!
-        dat_avg = copy(dat_subset)
-        channel_average!(
-            dat_avg;
-            channel_selections = [channels(all_plot_channels)],
-            output_labels = [:avg],
-            reduce = false,
-        )
-        _plot_epochs!(ax, dat_avg, [:avg], plot_kwargs)
-
-        # Optional ERP overlay (compute only when needed) from averaged data
-        if plot_kwargs[:plot_avg_trials]
-            erp_dat = average_epochs(dat_avg)
-            _plot_erp_average!(ax, erp_dat, [:avg], plot_kwargs)
-        end
-
-        # Draw axes through origin if requested
-        # _set_origin_lines!(ax; add_xy_origin = get(plot_kwargs, :add_xy_origin, false))
-
-        # Set axis properties
-        if length(all_plot_channels) == 1
-            ax.title = string(all_plot_channels[1])
-        else
-            ax.title = "Avg: $(print_vector(all_plot_channels, max_length = 8, n_ends = 3))"
-        end
-
-        # Use the existing refactored helper functions
-        _set_axis_properties!(
-            ax;
-            xlim = plot_kwargs[:xlim],
-            ylim = plot_kwargs[:ylim],
-            xlabel = plot_kwargs[:xlabel],
-            ylabel = plot_kwargs[:ylabel],
-            yreversed = plot_kwargs[:yreversed],
-        )
-        _set_axis_grid!(
-            ax;
-            xgrid = plot_kwargs[:xgrid],
-            ygrid = plot_kwargs[:ygrid],
-            xminorgrid = plot_kwargs[:xminorgrid],
-            yminorgrid = plot_kwargs[:yminorgrid],
-        )
-        _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
-
-    else
-
-        # Separate subplot for each channel
-        n_channels = length(all_plot_channels)
-
-        # Compute ERP once for all layout types (avoids duplication)
-        erp_dat = plot_kwargs[:plot_avg_trials] ? average_epochs(dat_subset) : nothing
-
-        # Store grid dimensions for reuse in interactive section
-        grid_dims = nothing
-
-        # Handle layout parameter: :single, :grid, :topo, or custom dims
-        if layout === :topo
-            _plot_epochs_topo!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
-        elseif layout === :grid || !isnothing(plot_kwargs[:dims])
-            # Determine grid dimensions
-            grid_dims = if !isnothing(plot_kwargs[:dims])
-                dims = plot_kwargs[:dims]
-                if dims[1] * dims[2] < n_channels
-                    throw(
-                        ArgumentError(
-                            "dims grid ($(dims[1])×$(dims[2])=$(dims[1]*dims[2])) is too small for $n_channels channels",
-                        ),
-                    )
-                end
-                dims
-            else
-                best_rect(n_channels)
-            end
-            _plot_epochs_grid!(fig, axes, dat_subset, erp_dat, all_plot_channels, grid_dims, plot_kwargs)
-        elseif layout === :single
-            _plot_epochs_single!(fig, axes, dat_subset, erp_dat, all_plot_channels, plot_kwargs)
-        else
-            throw(ArgumentError("layout must be :single, :grid, or :topo"))
-        end
-    end
-
-    # Link axes (both x and y) when multiple axes are present
-    if length(axes) > 1
-        Makie.linkaxes!(axes...)
-    end
-
-    # Add interactive functionality (keyboard zoom + time/channel selection)
-    if plot_kwargs[:interactive]
-        # Disable default Makie interactions that would conflict with our custom handling
-        for ax in axes
-            deregister_interaction!(ax, :rectanglezoom)
-        end
-
-        # Setup keyboard interactivity (zoom with arrow keys)
-        _setup_shared_interactivity!(fig, axes, :epochs)
-
-        # Add unified selection functionality (time + channel selection)
-        # Create a selection state for both time and channel selection
-        selection_state = SharedSelectionState(axes)
-
-        # Set up unified selection (time selection with Shift, channel selection with Ctrl)
-        if layout === :topo
-            _setup_interactivity_topo!(fig, axes, selection_state, dat_subset, all_plot_channels)
-        elseif layout === :grid || !isnothing(plot_kwargs[:dims])
-            _setup_interactivity_grid!(fig, axes, selection_state, dat_subset, all_plot_channels, grid_dims)
-        elseif layout === :single
-            _setup_unified_selection!(fig, axes, selection_state, dat_subset, nothing)
-        end
-    end
-
-    if plot_kwargs[:display_plot]
-        display_figure(fig)
-    end
-
-    # Return fig and all axes (or single axis if only one)
-    return fig, length(axes) == 1 ? first(axes) : axes
-
 end
 
 function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothing} = nothing, line_refs = nothing)::Tuple{Lines,Observable}
@@ -750,9 +605,9 @@ function _plot_epochs!(ax, dat, channels, plot_kwargs; label::Union{String,Nothi
     
     # Store y_obs in line_refs if provided
     if line_refs !== nothing
-        # line_refs structure: line_refs[condition_idx][:trials] = line or (line, y_obs)
+        # line_refs structure: line_refs[condition_idx][ch][:trials] = (line, y_obs)
         # For consistency with average lines, store as (line, y_obs) tuple
-        # But we need to know the condition_idx - this is handled by the caller
+        # But we need to know the condition_idx and channel - this is handled by the caller
     end
 
     return line, y_obs
@@ -1087,14 +942,15 @@ function _plot_epochs_grid_multi!(
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat, [channel], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
-            # Store trial line reference
+            # Store trial line reference - use consistent structure: cond_idx[ch][:trials]
             if ax_line_refs !== nothing
                 if !haskey(ax_line_refs, cond_idx)
                     ax_line_refs[cond_idx] = Dict{Symbol,Any}()
                 end
-                ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
-                ax_line_refs[cond_idx][:channel] = channel
-                ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
+                ax_line_refs[cond_idx][channel] = Dict{Symbol,Any}(
+                    :trials => (trial_line, trial_y_obs),
+                    :average => nothing,  # Will be set if plot_avg_trials is true
+                )
             end
 
             if plot_kwargs[:plot_avg_trials]
@@ -1102,9 +958,7 @@ function _plot_epochs_grid_multi!(
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [channel], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if ax_line_refs !== nothing
-                    ax_line_refs[cond_idx][:average] = (avg_line, y_obs)
-                    # Store the channel used for the average line
-                    ax_line_refs[cond_idx][:avg_channel] = channel
+                    ax_line_refs[cond_idx][channel][:average] = (avg_line, y_obs)
                 end
             end
         end
@@ -1225,14 +1079,15 @@ function _plot_epochs_topo_multi!(
             cond_plot_kwargs = merge(plot_kwargs, Dict(:color => condition_colors[cond_idx]))
             trial_line, trial_y_obs = _plot_epochs!(ax, dat_cond, [ch], cond_plot_kwargs; label = label, line_refs = ax_line_refs)
             
-            # Store trial line reference
+            # Store trial line reference - use consistent structure: cond_idx[ch][:trials]
             if ax_line_refs !== nothing
                 if !haskey(ax_line_refs, cond_idx)
                     ax_line_refs[cond_idx] = Dict{Symbol,Any}()
                 end
-                ax_line_refs[cond_idx][:trials] = (trial_line, trial_y_obs)
-                ax_line_refs[cond_idx][:channel] = ch
-                ax_line_refs[cond_idx][:average] = nothing  # Initialize, will be set if plot_avg_trials is true
+                ax_line_refs[cond_idx][ch] = Dict{Symbol,Any}(
+                    :trials => (trial_line, trial_y_obs),
+                    :average => nothing,  # Will be set if plot_avg_trials is true
+                )
             end
 
             if plot_kwargs[:plot_avg_trials]
@@ -1240,7 +1095,7 @@ function _plot_epochs_topo_multi!(
                 avg_label = label * " (avg)"
                 avg_line, y_obs = _plot_erp_average!(ax, erp_dat, [ch], cond_plot_kwargs; label = avg_label, line_refs = ax_line_refs)
                 if ax_line_refs !== nothing
-                    ax_line_refs[cond_idx][:average] = (avg_line, y_obs)
+                    ax_line_refs[cond_idx][ch][:average] = (avg_line, y_obs)
                 end
             end
         end
@@ -1368,7 +1223,7 @@ end
 
 Set up linked legend interactions so clicking a legend entry in one plot
 toggles visibility of the corresponding condition in all plots.
-Adapted for epochs structure: line_refs[ax_idx][condition_idx][:trials] and [:average]
+Structure: line_refs[ax_idx][condition_idx][ch][:trials] and [:average]
 
 Note: Both trial and average lines appear in the legend (trial with condition name, 
 average with condition name + " (avg)"). We sync both types across plots.
@@ -1379,36 +1234,42 @@ function _setup_linked_legend_interactions_epochs!(line_refs::Vector{<:Dict})
     condition_avg_lines = Dict{Int,Vector{Any}}()
 
     # Collect all lines for each condition, separating trials and averages
-    # Structure: line_refs[ax_idx][condition_idx][:trials] and [:average]
+    # Structure: line_refs[ax_idx][condition_idx][ch][:trials] and [:average]
     for ax_line_refs in line_refs
-        for (cond_idx, line_data) in ax_line_refs
-            # Collect trial lines
-            if haskey(line_data, :trials) && line_data[:trials] !== nothing
-                trial_data = line_data[:trials]
-                trial_line = nothing
-                if trial_data isa Tuple && length(trial_data) == 2
-                    trial_line = trial_data[1]  # Get the line, not the tuple
-                elseif trial_data isa Lines
-                    trial_line = trial_data
+        for (cond_idx, cond_line_data) in ax_line_refs
+            # Iterate over channels
+            for (ch, ch_line_data) in cond_line_data
+                if !isa(ch_line_data, Dict)
+                    continue
                 end
-                if trial_line !== nothing
-                    trial_lines = get!(condition_trial_lines, cond_idx, Any[])
-                    push!(trial_lines, trial_line)
+                # Collect trial lines
+                if haskey(ch_line_data, :trials) && ch_line_data[:trials] !== nothing
+                    trial_data = ch_line_data[:trials]
+                    trial_line = nothing
+                    if trial_data isa Tuple && length(trial_data) == 2
+                        trial_line = trial_data[1]  # Get the line, not the tuple
+                    elseif trial_data isa Lines
+                        trial_line = trial_data
+                    end
+                    if trial_line !== nothing
+                        trial_lines = get!(condition_trial_lines, cond_idx, Any[])
+                        push!(trial_lines, trial_line)
+                    end
                 end
-            end
-            
-            # Collect average lines
-            if haskey(line_data, :average)
-                avg_data = line_data[:average]
-                avg_line = nothing
-                if avg_data isa Tuple && length(avg_data) == 2
-                    avg_line = avg_data[1]  # Get the line, not the tuple
-                elseif avg_data isa Lines
-                    avg_line = avg_data
-                end
-                if avg_line !== nothing
-                    avg_lines = get!(condition_avg_lines, cond_idx, Any[])
-                    push!(avg_lines, avg_line)
+                
+                # Collect average lines
+                if haskey(ch_line_data, :average) && ch_line_data[:average] !== nothing
+                    avg_data = ch_line_data[:average]
+                    avg_line = nothing
+                    if avg_data isa Tuple && length(avg_data) == 2
+                        avg_line = avg_data[1]  # Get the line, not the tuple
+                    elseif avg_data isa Lines
+                        avg_line = avg_data
+                    end
+                    if avg_line !== nothing
+                        avg_lines = get!(condition_avg_lines, cond_idx, Any[])
+                        push!(avg_lines, avg_line)
+                    end
                 end
             end
         end
@@ -1508,32 +1369,39 @@ function _setup_epochs_control_panel!(
         condition_mask = [checked[] for checked in condition_checked]
 
         # Update line visibility and y-data
+        # Structure: line_refs[ax_idx][cond_idx][ch][:trials] and [:average]
         for (ax_idx, ax_line_refs) in enumerate(line_refs)
             ax_idx > length(axes) && continue
-            for (cond_idx, line_data) in ax_line_refs
+            for (cond_idx, cond_line_data) in ax_line_refs
                 cond_idx > length(dat_subset) && continue
                 visible = cond_idx <= length(condition_mask) ? condition_mask[cond_idx] : true
-                ch = line_data[:channel]
                 dat = dat_subset[cond_idx]
 
-                # Update trial line visibility and y-data
-                trial_line, trial_y_obs = line_data[:trials]
-                trial_line.visible = visible
-                if baseline_changed
-                    time_vec = dat.data[1][!, :time]
-                    trial_y_obs[] = _concatenate_trials(dat.data, ch, time_vec)
-                end
+                # Iterate over channels
+                for (ch, line_data) in cond_line_data
+                    if !isa(line_data, Dict)
+                        continue  # Skip if not the expected structure
+                    end
 
-                # Update average line visibility and y-data (if present)
-                avg_data = line_data[:average]
-                if avg_data !== nothing
-                    avg_line, y_obs = avg_data
-                    avg_line.visible = visible
-                    if baseline_changed && cond_idx <= length(dat_subset_avg)
-                        y_obs[] = dat_subset_avg[cond_idx].data[!, ch]
+                    # Update trial line visibility and y-data
+                    if haskey(line_data, :trials) && line_data[:trials] !== nothing
+                        trial_line, trial_y_obs = line_data[:trials]
+                        trial_line.visible = visible
+                        if baseline_changed
+                            time_vec = dat.data[1][!, :time]
+                            trial_y_obs[] = _concatenate_trials(dat.data, ch, time_vec)
+                        end
+                    end
+
+                    # Update average line visibility and y-data (if present)
+                    if haskey(line_data, :average) && line_data[:average] !== nothing
+                        avg_line, y_obs = line_data[:average]
+                        avg_line.visible = visible
+                        if baseline_changed && cond_idx <= length(dat_subset_avg)
+                            y_obs[] = dat_subset_avg[cond_idx].data[!, ch]
+                        end
                     end
                 end
-
             end
         end
 

@@ -17,6 +17,7 @@ epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [
              eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3], [4]])]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -0.5, 2)
 
+eegfun.plot_epochs(epochs[1], layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels([:Fp1]))
 eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))
