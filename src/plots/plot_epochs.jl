@@ -107,19 +107,11 @@ function plot_epochs(
     layout = :single,
     kwargs...,
 )
-    # Load data from file
+
     data = load_data(filepath)
-    if isnothing(data)
-        @minimal_error_throw "No data found in file: $filepath"
-    end
+    isnothing(data) && @minimal_error_throw "No data found in file: $filepath"
 
-    # Handle Vector{EpochData} case (if file contains multiple epoch datasets)
-    if data isa Vector && !isempty(data) && first(data) isa EpochData
-        # For now, just use the first dataset (could be extended to plot all)
-        data = first(data)
-    end
-
-    # Dispatch to main plot_epochs function
+    # Dispatch to main plot_epochs function (handles both EpochData and Vector{EpochData})
     return plot_epochs(
         data;
         channel_selection = channel_selection,

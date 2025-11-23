@@ -166,7 +166,13 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     end
 
     # Calculate and plot spectra for all channels in a single loop
-    noverlap = Int(round(window_size * overlap))
+    # Adjust window_size if signal is shorter than window_size
+    n_samples = nrow(df)
+    effective_window_size = min(window_size, n_samples)
+    # Ensure window_size is at least 4 samples for meaningful FFT
+    effective_window_size = max(4, effective_window_size)
+    
+    noverlap = Int(round(effective_window_size * overlap))
     max_power = 0.0
 
     # Store frequency and power data for reactive updates
@@ -175,7 +181,8 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
 
     @views for ch in channels_to_plot
         signal = df[!, ch]
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = fs, window = window_function)
+        # Use effective_window_size instead of window_size
+        pgram = DSP.welch_pgram(signal, effective_window_size, noverlap; fs = fs, window = window_function)
         freqs, psd = DSP.freq(pgram), DSP.power(pgram)
 
         # Track max power for y-axis limits

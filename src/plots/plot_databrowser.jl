@@ -553,6 +553,9 @@ function show_additional_menu(state, clicked_region_idx = nothing)
                 @info "Selected regions: $(state.selection.selected_regions[])"
             else
                 selected_data = subset_selected_data(state, clicked_region_idx)
+                if selected_data === nothing
+                    return  # No data available, just return
+                end
                 if btn.label[] == "Topoplot (multiquadratic)"
                     plot_topography(selected_data, method = :multiquadratic)
                 elseif btn.label[] == "Topoplot (spherical_spline)"
@@ -1322,27 +1325,24 @@ function subset_selected_data(state::ContinuousDataBrowserState, clicked_region_
 end
 
 function subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx = nothing)
-    # Use the clicked region if specified, otherwise use the most recent region, or fall back to bounds
+    # Get the selected region
     if clicked_region_idx !== nothing && 1 <= clicked_region_idx <= length(state.selection.selected_regions[])
-        # Use the specific clicked region
         x_min, x_max = state.selection.selected_regions[][clicked_region_idx]
     elseif !isempty(state.selection.selected_regions[])
-        # Use the last (most recent) selected region
         x_min, x_max = state.selection.selected_regions[][end]
     else
-        # Fall back to the old bounds format for backward compatibility
-        x_min, x_max = minmax(state.selection.bounds[]...)
+        @minimal_warning "No region selected"
+        return nothing
     end
 
     selected_channels = state.channels.labels[state.channels.visible]
     current_epoch = state.data.current_epoch[]
 
     # Create a sample_selection function that works with epoch DataFrame
-    # Note: 'epochs' parameter is actually a single epoch DataFrame, not an array
-    sample_selection = epochs -> begin
-        # epochs is the current epoch DataFrame, use it directly
-        time_mask = (epochs.time .>= x_min) .& (epochs.time .<= x_max)
-        return time_mask  # Return boolean vector, not indices
+    # get_selected_samples for MultiDataFrameEeg expects a function that takes the first epoch DataFrame
+    sample_selection = epoch_df -> begin
+        time_mask = (epoch_df.time .>= x_min) .& (epoch_df.time .<= x_max)
+        return time_mask
     end
 
     epoch_data = subset(
@@ -1352,7 +1352,12 @@ function subset_selected_data(state::EpochedDataBrowserState, clicked_region_idx
         epoch_selection = epochs([current_epoch]),
     )
 
-    # Convert to SingleDataFrameEeg for consistent return type
+    # Check if we have data before converting
+    if isempty(epoch_data.data) || isempty(epoch_data.data[1])
+        @minimal_warning "Selected region contains no data"
+        return nothing
+    end
+
     return convert(epoch_data, 1)
 end
 
