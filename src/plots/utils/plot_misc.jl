@@ -322,7 +322,7 @@ function _generate_window_title( datasets::Vector{<:EegData}; max_total_length::
 end
 
 function _generate_window_title(datasets::EegData; max_total_length::Int = 80, max_name_length::Int = 20)
-    return _generate_window_title([datasets], max_total_length, max_name_length)
+    return "$(datasets.file):$(datasets.condition_name)"
 end
 
 """
