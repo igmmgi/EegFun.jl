@@ -170,11 +170,12 @@ function plot_epochs(
     plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
     plot_kwargs[:_color_explicitly_set] = color_explicitly_set
 
-    # Use subset to filter by condition and apply other selections
+    # Use subset to filter by condition, sample, and epoch - NOT by channel
+    # Channel selection is applied later at plot time to keep all channels available for topoplots
     dat_subset = subset(
         datasets;
         condition_selection = condition_selection,
-        channel_selection = channel_selection,
+        channel_selection = channels(),  # Select ALL channels (no filtering)
         sample_selection = sample_selection,
         epoch_selection = epoch_selection,
         include_extra = include_extra,
@@ -187,10 +188,14 @@ function plot_epochs(
     # Check if subsetting resulted in empty data
     isempty(dat_subset) && @minimal_error_throw "No data matched the selection criteria!"
 
-    # Get channels from first dataset (all should have same channels after subsetting)
-    selected_channels = channel_labels(dat_subset[1])
+    # Get ALL channels from first dataset (not filtered by channel_selection)
+    all_channels = channel_labels(dat_subset[1])
     extra_channels = extra_labels(dat_subset[1])
-    all_plot_channels = vcat(selected_channels, extra_channels)
+    all_channels = vcat(all_channels, extra_channels)
+
+    # Apply channel_selection to determine which channels to plot
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = include_extra)
+    all_plot_channels = intersect(all_channels, selected_channels)
 
     # Validate we have channels to plot
     isempty(all_plot_channels) && @minimal_error_throw "No channels selected for plotting"
