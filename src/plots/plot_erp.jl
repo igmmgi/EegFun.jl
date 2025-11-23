@@ -216,7 +216,7 @@ function plot_erp(
 
     # Prepare kwargs and data
     plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
-    dat_subset, all_plot_channels, original_channels = _prepare_erp_data(
+    dat_subset, all_channels, channel_selection_func, original_channels = _prepare_erp_data(
         datasets,
         plot_kwargs;
         condition_selection = condition_selection,
@@ -224,6 +224,11 @@ function plot_erp(
         sample_selection = sample_selection,
         baseline_interval = baseline_interval,
     )
+
+    # Apply channel_selection to determine which channels to plot
+    # dat_subset has all channels, but we only plot the selected ones
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    all_plot_channels = intersect(all_channels, selected_channels)
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
@@ -342,14 +347,18 @@ Plot multiple ERP datasets on an existing axis, mutating the figure and axis.
 function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     plot_kwargs, _ = _prepare_plot_kwargs(kwargs)
     baseline_interval = get(kwargs, :baseline_interval, nothing)
-    dat_subset, all_plot_channels, _ = _prepare_erp_data(
+    channel_selection_func = get(plot_kwargs, :channel_selection, channels())
+    dat_subset, all_channels, _, _ = _prepare_erp_data(
         datasets,
         plot_kwargs;
         condition_selection = conditions(),
-        channel_selection = get(plot_kwargs, :channel_selection, channels()),
+        channel_selection = channel_selection_func,
         sample_selection = get(plot_kwargs, :sample_selection, samples()),
         baseline_interval = baseline_interval,
     )
+    # Apply channel_selection to determine which channels to plot
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    all_plot_channels = intersect(all_channels, selected_channels)
     _plot_erp!(ax, dat_subset, all_plot_channels; plot_kwargs...)
     return ax
 end
@@ -456,8 +465,9 @@ end
 """
     _prepare_erp_data(datasets, plot_kwargs; condition_selection, channel_selection, sample_selection)
 
-Prepare ERP data for plotting: subset, average channels if needed, extract channel labels.
-Returns (dat_subset, all_plot_channels, original_channels).
+Prepare ERP data for plotting: subset by condition and sample only (NOT channels).
+Channel selection is applied later at plot time to keep all channels available for topoplots.
+Returns (dat_subset_unfiltered_channels, all_channels, channel_selection_func, original_channels).
 """
 function _prepare_erp_data(
     datasets::Vector{ErpData},
@@ -467,11 +477,12 @@ function _prepare_erp_data(
     sample_selection = samples(),
     baseline_interval::BaselineInterval = nothing,
 )
-    # Data subsetting
+    # Data subsetting - ONLY by condition and sample, NOT by channel
+    # This keeps all channels available for right-click topoplots
     dat_subset = subset(
         datasets;
         condition_selection = condition_selection,
-        channel_selection = channel_selection,
+        channel_selection = channels(),  # Select ALL channels (no filtering)
         sample_selection = sample_selection,
         include_extra = true,
     )
@@ -500,12 +511,12 @@ function _prepare_erp_data(
         dat_subset = channel_average(dat_subset, reduce = true)
     end
 
-    # Extract channel labels
-    selected_channels = channel_labels(dat_subset)
+    # Extract ALL channel labels (not filtered by channel_selection)
+    all_channels = channel_labels(dat_subset)
     extra_channels = extra_labels(dat_subset)
-    all_plot_channels = vcat(selected_channels, extra_channels)
+    all_channels = vcat(all_channels, extra_channels)
 
-    return dat_subset, all_plot_channels, original_channels
+    return dat_subset, all_channels, channel_selection, original_channels
 end
 
 
