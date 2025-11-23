@@ -20,6 +20,19 @@ function get_makie_screen(makie_backend::Symbol)
 end
 
 """
+    set_window_title(title::String)
+
+Set the window title for GLMakie. Does nothing for CairoMakie (which doesn't support window titles).
+"""
+function set_window_title(title::String)
+    backend = get_makie_backend()
+    if backend == :GLMakie
+        Makie.current_backend().activate!(title = title)
+    end
+    # CairoMakie doesn't support window titles (it's for static image generation)
+end
+
+"""
     _get_colorbar_defaults()
 
 Get all default values for Colorbar attributes by creating a single Colorbar instance.
@@ -310,6 +323,61 @@ end
 
 function _generate_window_title(datasets::EegData; max_total_length::Int = 80, max_name_length::Int = 20)
     return _generate_window_title([datasets], max_total_length, max_name_length)
+end
+
+"""
+    _generate_window_title(datasets::ContinuousData; 
+                          max_total_length::Int = 80,
+                          max_name_length::Int = 30)
+
+Generate a window title from ContinuousData, using just the filename.
+
+# Arguments
+- `datasets::ContinuousData`: ContinuousData object
+- `max_total_length::Int`: Maximum total length (not used for ContinuousData, kept for consistency)
+- `max_name_length::Int`: Maximum name length (not used for ContinuousData, kept for consistency)
+
+# Returns
+- `String`: Window title string (just the filename)
+"""
+function _generate_window_title(datasets::ContinuousData; max_total_length::Int = 80, max_name_length::Int = 20)
+    return datasets.file
+end
+
+"""
+    _generate_window_title(datasets::Vector{ContinuousData}; 
+                          max_total_length::Int = 80,
+                          max_name_length::Int = 30)
+
+Generate a window title from a vector of ContinuousData objects.
+
+If all datasets share the same file name, uses format: "FileName"
+If datasets have different file names, uses format: "File1, File2, File3"
+
+# Arguments
+- `datasets::Vector{ContinuousData}`: Vector of ContinuousData objects
+- `max_total_length::Int`: Maximum total length of the result string
+- `max_name_length::Int`: Maximum length for each individual filename
+
+# Returns
+- `String`: Window title string
+"""
+function _generate_window_title(datasets::Vector{ContinuousData}; max_total_length::Int = 80, max_name_length::Int = 20)
+    isempty(datasets) && return ""
+    length(datasets) == 1 && return datasets[1].file
+
+    # Check if all datasets have the same file name
+    first_file = datasets[1].file
+    all_same_file = all(dataset.file == first_file for dataset in datasets)
+    
+    if all_same_file
+        return first_file
+    else
+        file_names = [data.file for data in datasets]
+        return _shorten_condition_names(file_names; 
+                                     max_total_length = max_total_length, 
+                                     max_name_length = max_name_length)
+    end
 end
 
 """

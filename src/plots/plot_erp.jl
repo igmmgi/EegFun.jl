@@ -237,7 +237,7 @@ function plot_erp(
 
     # Generate window title from datasets
     title_str = _generate_window_title(dat_subset)
-    Makie.current_backend().activate!(title = title_str)
+    set_window_title(title_str)
 
     # Create figure and apply layout system
     fig = Figure(title = plot_kwargs[:figure_title])
@@ -299,7 +299,7 @@ function plot_erp(
     end
 
     # reset default title
-    Makie.current_backend().activate!(title = "Makie")
+    set_window_title("Makie")
     return fig, axes
 end
 

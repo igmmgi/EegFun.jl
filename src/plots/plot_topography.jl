@@ -147,6 +147,10 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
+    # Generate window title from dataset
+    title_str = _generate_window_title(dat)
+    set_window_title(title_str)
+
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_topography!(
@@ -161,6 +165,7 @@ function plot_topography(
     interactive && _setup_topo_interactivity!(fig, ax, dat)
     display_plot && display_figure(fig)
 
+    set_window_title("Makie")
     return fig, ax
 end
 

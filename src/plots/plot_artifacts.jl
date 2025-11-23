@@ -217,6 +217,10 @@ function plot_artifact_detection(
     channel_selection::Function = channels(),
     kwargs...,
 )
+    # Generate window title from dataset
+    title_str = _generate_window_title(epochs)
+    set_window_title(title_str)
+
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
     
@@ -314,6 +318,7 @@ function plot_artifact_detection(
         "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
     plot_kwargs[:display_plot] && display_figure(fig)
+    set_window_title("Makie")
     return fig
 end
 
@@ -354,6 +359,10 @@ function plot_artifact_repair(
     channel_selection::Function = channels(),
     kwargs...,
 )
+    # Generate window title from dataset
+    title_str = _generate_window_title(epochs_original)
+    set_window_title(title_str)
+
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
     
@@ -486,6 +495,7 @@ function plot_artifact_repair(
         "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
     plot_kwargs[:display_plot] && display_figure(fig)
+    set_window_title("Makie")
     return fig
 end
 
@@ -528,6 +538,10 @@ function plot_artifact_rejection(
     channel_selection::Function = channels(),
     kwargs...,
 )
+    # Generate window title from dataset
+    title_str = _generate_window_title(epochs_original)
+    set_window_title(title_str)
+
     # Merge user kwargs with defaults and validate
     plot_kwargs = _merge_plot_kwargs(PLOT_ARTIFACT_KWARGS, kwargs)
     
@@ -688,5 +702,6 @@ function plot_artifact_rejection(
         "Artifact 1 / $(length(epochs_with_artifacts))" : "No artifacts found"
 
     plot_kwargs[:display_plot] && display_figure(fig)
+    set_window_title("Makie")
     return fig
 end

@@ -272,6 +272,8 @@ function plot_topography(ica::InfoIca; kwargs...)
     if display_plot
         display_figure(fig)
     end
+
+    set_window_title("Makie")
     return fig
 
 end
@@ -429,6 +431,10 @@ Allows scrolling through components and time, adjusting scales, and overlaying r
 - `fig::Figure`: The Makie Figure object containing the interactive plot.
 """
 function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs...)
+    # Generate window title from dataset
+    title_str = _generate_window_title(dat)
+    set_window_title(title_str)
+
     # Merge user kwargs with defaults
     plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
 
