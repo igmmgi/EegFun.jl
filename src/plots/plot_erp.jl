@@ -281,16 +281,21 @@ function plot_erp(
         # Set up selection system for all axes (will work with linked axes)
         selection_state = SharedSelectionState(axes)
 
+        # Set up control panel (press 'c' to open) - must be before selection to capture condition_checked
+        condition_checked_ref = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing)
+        _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref)
+
+        # Create right-click handler that has access to condition visibility
+        right_click_handler = (selection_state, mouse_x, data) -> 
+            _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
+
         # Set up selection system that works for all layouts
-        _setup_unified_selection!(fig, axes, selection_state, datasets, plot_layout, _handle_erp_right_click!)
+        _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout, right_click_handler)
 
         # Set up channel selection events for topo and grid layouts
         if plot_layout.type in (:topo, :grid)
-            _setup_channel_selection_events!(fig, selection_state, plot_layout, datasets, axes, plot_layout.type)
+            _setup_channel_selection_events!(fig, selection_state, plot_layout, dat_subset, axes, plot_layout.type)
         end
-
-        # Set up control panel (press 'c' to open)
-        _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs)
 
     end
 
@@ -504,16 +509,21 @@ function _prepare_erp_data(
 end
 
 
-function _handle_erp_right_click!(selection_state, mouse_x, data)
+function _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
     if selection_state.visible[] && _is_within_selection(selection_state, mouse_x)
-        _show_erp_context_menu!(selection_state, data)
+        _show_erp_context_menu!(selection_state, data, condition_checked_ref)
     end
 end
 
-function _show_erp_context_menu!(selection_state, data)
+function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
 
     menu_fig = Figure()
-    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)"]
+    plot_types = [
+        "Topoplot (multiquadratic)", 
+        "Topoplot (spherical_spline)",
+        "Topoplot (average, multiquadratic)",
+        "Topoplot (average, spherical_spline)"
+    ]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
@@ -524,10 +534,19 @@ function _show_erp_context_menu!(selection_state, data)
             # Create time-based sample selection for the topo plot
             time_sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max)
 
+            # Filter by visible conditions if condition_checked is available
+            data_to_plot = _filter_visible_conditions(original_data, condition_checked_ref)
+
             if btn.label[] == "Topoplot (multiquadratic)"
-                plot_topography(original_data, sample_selection = time_sample_selection, method = :multiquadratic)
+                plot_topography(data_to_plot, sample_selection = time_sample_selection, method = :multiquadratic)
             elseif btn.label[] == "Topoplot (spherical_spline)"
-                plot_topography(original_data, sample_selection = time_sample_selection, method = :spherical_spline)
+                plot_topography(data_to_plot, sample_selection = time_sample_selection, method = :spherical_spline)
+            elseif btn.label[] == "Topoplot (average, multiquadratic)"
+                avg_data = _average_conditions(data_to_plot)
+                plot_topography(avg_data, sample_selection = time_sample_selection, method = :multiquadratic)
+            elseif btn.label[] == "Topoplot (average, spherical_spline)"
+                avg_data = _average_conditions(data_to_plot)
+                plot_topography(avg_data, sample_selection = time_sample_selection, method = :spherical_spline)
             end
         end
     end
@@ -547,6 +566,60 @@ function _get_erp_selection_bounds(selection_state, data)
     x_min, x_max = minmax(selection_state.bounds[]...)
     return (data, x_min, x_max)
 end
+
+"""
+    _filter_visible_conditions(data, condition_checked_ref)
+
+Filter data by visible conditions from the control panel.
+Returns filtered Vector{ErpData} or single ErpData if only one condition.
+"""
+function _filter_visible_conditions(data, condition_checked_ref)
+    # If no condition_checked available or data is not Vector, return as-is
+    if condition_checked_ref[] === nothing || !(data isa Vector{ErpData})
+        return data
+    end
+
+    condition_checked = condition_checked_ref[]
+    if length(condition_checked) != length(data)
+        return data  # Mismatch, return as-is
+    end
+
+    # Filter by visible conditions
+    visible_data = [data[i] for i in eachindex(data) if condition_checked[i][]]
+    
+    # Return single ErpData if only one visible, otherwise Vector
+    return length(visible_data) == 1 ? visible_data[1] : visible_data
+end
+
+"""
+    _average_conditions(erps::Vector{ErpData}) -> ErpData
+
+Average multiple ErpData conditions together into a single ErpData.
+Reuses _create_grand_average which averages ErpData objects together.
+"""
+function _average_conditions(erps::Vector{ErpData})
+    if isempty(erps)
+        @minimal_error_throw("Cannot average empty ERP list")
+    end
+    if length(erps) == 1
+        return erps[1]  # Nothing to average
+    end
+
+    # Reuse _create_grand_average - it averages ErpData together (same logic for conditions or participants)
+    # Use first condition number as cond_num (doesn't matter for averaging)
+    avg_erp = _create_grand_average(erps, first(erps).condition)
+    
+    # Update condition name to reflect averaging across conditions
+    avg_cond_name = "avg_" * join([erp.condition_name for erp in erps], "_")
+    return ErpData(avg_erp.file, avg_erp.condition, avg_cond_name, avg_erp.data, avg_erp.layout, avg_erp.sample_rate, avg_erp.analysis_info, avg_erp.n_epochs)
+end
+
+"""
+    _average_conditions(erp::ErpData) -> ErpData
+
+Single ErpData case - just return it.
+"""
+_average_conditions(erp::ErpData) = erp
 
 """
     _compute_dataset_colors(color_val, n_datasets, n_channels, colormap, color_explicitly_set)
@@ -669,6 +742,7 @@ function _setup_erp_control_panel!(
     axes::Vector{Axis},
     baseline_interval::BaselineInterval,
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
+    condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
 )
 
     control_fig = Ref{Union{Figure,Nothing}}(nothing)
@@ -683,6 +757,7 @@ function _setup_erp_control_panel!(
     baseline_start_obs = Observable(start_val === nothing ? "" : string(start_val))
     baseline_stop_obs = Observable(stop_val === nothing ? "" : string(stop_val))
     condition_checked = [Observable(true) for _ in dat_subset]
+    condition_checked_ref[] = condition_checked  # Store for access by right-click handler
 
     # Track previous baseline to avoid unnecessary updates
     previous_baseline = Ref{Union{Tuple{Float64,Float64},Nothing}}(nothing)
