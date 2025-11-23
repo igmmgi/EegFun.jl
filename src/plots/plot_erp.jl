@@ -518,12 +518,21 @@ end
 function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
 
     menu_fig = Figure()
+    
+    # Filter by visible conditions to determine if we have multiple visible conditions
+    data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
+    has_multiple_conditions = data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1
+    
     plot_types = [
         "Topoplot (multiquadratic)", 
         "Topoplot (spherical_spline)",
-        "Topoplot (average, multiquadratic)",
-        "Topoplot (average, spherical_spline)"
     ]
+    
+    # Only add average options if multiple visible conditions
+    if has_multiple_conditions
+        push!(plot_types, "Topoplot (average, multiquadratic)")
+        push!(plot_types, "Topoplot (average, spherical_spline)")
+    end
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
@@ -534,7 +543,7 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
             # Create time-based sample selection for the topo plot
             time_sample_selection = x -> (x.time .>= x_min) .& (x.time .<= x_max)
 
-            # Filter by visible conditions if condition_checked is available
+            # Filter by visible conditions if condition_checked is available (already done above, but do again for consistency)
             data_to_plot = _filter_visible_conditions(original_data, condition_checked_ref)
 
             if btn.label[] == "Topoplot (multiquadratic)"

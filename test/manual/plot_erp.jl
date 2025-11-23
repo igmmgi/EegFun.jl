@@ -18,6 +18,7 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
 # ERP Plots (:single)
 fig, ax = eegfun.plot_erp(erps, average_channels = false, colormap = :viridis, legend_nbanks = 12)
+fig, ax = eegfun.plot_erp(erps[1], average_channels = false, colormap = :viridis, legend_nbanks = 12)
 
 fig, ax = eegfun.plot_erp(erps, average_channels = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = true)
