@@ -77,7 +77,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
 """
     plot_erp(filepath::String; 
-             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
+             layout::Union{Symbol, PlotLayout} = :single,
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
@@ -104,7 +104,7 @@ plot_erp("grand_average_erps_good.jld2", channel_selection = channels([:PO7, :PO
 """
 function plot_erp(
     filepath::String;
-    layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
+    layout::Union{Symbol,PlotLayout} = :single,
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
@@ -131,7 +131,7 @@ end
 
 """
     plot_erp(dat::ErpData; 
-             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
+             layout::Union{Symbol, PlotLayout} = :single,
              channel_selection::Function = channels(),
              sample_selection::Function = samples(),
              baseline_interval::BaselineInterval = nothing,
@@ -164,14 +164,10 @@ plot_erp(dat)
 plot_erp(dat, layout = :grid)
 
 # Custom grid dimensions
-plot_erp(dat, layout = [3, 4])
+plot_erp(dat, layout = :grid, layout_grid_dims = (3, 4))
 
 # Topographic layout
 plot_erp(dat, layout = :topo)
-
-# Custom layout object
-layout = create_grid_layout(channels(dat), rows = 2, cols = 3)
-plot_erp(dat, layout = layout)
 
 # Disable interactivity
 plot_erp(dat, interactive = false)
@@ -192,7 +188,7 @@ When `interactive = true` (default):
 """
 function plot_erp(
     dat::ErpData;
-    layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
+    layout::Union{Symbol,PlotLayout} = :single,
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     baseline_interval::BaselineInterval = nothing,
@@ -212,7 +208,7 @@ end
 
 """
     plot_erp(datasets::Vector{ErpData}; 
-             layout::Union{Symbol, PlotLayout, Vector{Int}} = :single,
+             layout::Union{Symbol, PlotLayout} = :single,
              condition_selection::Function = conditions(),
              channel_selection::Function = channels(), 
              sample_selection::Function = samples(),
@@ -223,7 +219,7 @@ Plot multiple ERP datasets on the same axis (e.g., conditions).
 """
 function plot_erp(
     datasets::Vector{ErpData};
-    layout::Union{Symbol,PlotLayout,Vector{Int}} = :single,
+    layout::Union{Symbol,PlotLayout} = :single,
     condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
@@ -280,7 +276,7 @@ function plot_erp(
     if plot_layout.type == :topo && isempty(plot_kwargs[:legend_channel]) && !isempty(all_plot_channels)
         plot_kwargs[:legend_channel] = [all_plot_channels[end]]
     end
-    axes, channels = apply_layout!(fig, plot_layout; plot_kwargs...)
+    axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
     # Store line references for control panel (if interactive)
     # Structure: line_refs[ax_idx][dataset_idx][channel_idx] = line

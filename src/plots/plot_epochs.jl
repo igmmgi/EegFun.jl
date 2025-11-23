@@ -243,7 +243,7 @@ function plot_epochs(
     # Initialize line references for control panel if interactive
     line_refs = nothing
     if plot_kwargs[:interactive]
-        n_axes = (layout == :grid || layout isa Vector{Int} || layout == :topo) ? length(all_plot_channels) : 1
+        n_axes = (layout == :grid || layout == :topo) ? length(all_plot_channels) : 1
         line_refs = [Dict{Int,Dict{Symbol,Any}}() for _ in 1:n_axes]
     end
 
@@ -357,8 +357,8 @@ function plot_epochs(
             )
             _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
 
-        elseif layout == :grid || layout isa Vector{Int}
-            grid_dims = layout isa Vector{Int} ? (layout[1], layout[2]) : best_rect(length(all_plot_channels))
+        elseif layout == :grid
+            grid_dims = best_rect(length(all_plot_channels))
             _plot_epochs_grid_multi!(
                 fig,
                 axes,
