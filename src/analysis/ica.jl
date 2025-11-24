@@ -561,13 +561,35 @@ end
 # =============================================================================
 
 """
+    _invsqrtm!(C::AbstractMatrix{<:Real})
+
+Compute inv(sqrtm(C)) through symmetric eigenvalue decomposition.
+In-place version that modifies C.
+
+This is used for symmetric decorrelation in FastICA: W = W * (W'W)^{-1/2}
+"""
+function _invsqrtm!(C::AbstractMatrix{<:Real})
+    n = size(C, 1)
+    size(C, 2) == n || error("C must be a square matrix.")
+    E = eigen!(Symmetric(C))
+    U = E.vectors
+    evs = E.values
+    for i = 1:n
+        @inbounds evs[i] = 1.0 / sqrt(sqrt(evs[i]))
+    end
+    rmul!(U, Diagonal(evs))
+    return U * transpose(U)
+end
+
+"""
     fastica_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
 
 FastICA algorithm implementation using fixed-point iteration.
 
 FastICA is often faster than Infomax and uses a fixed-point iteration scheme
 to maximize non-Gaussianity. This implementation uses the symmetric approach
-(extracting all components simultaneously).
+(extracting all components simultaneously), which is faster and more stable than
+the deflationary approach.
 
 # Arguments
 - `dat_ica::Matrix{Float64}`: Data matrix (channels × samples), should be preprocessed
@@ -610,141 +632,126 @@ function fastica_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
     
-    # Initialize weights as random orthogonal matrix
-    weights = Matrix{Float64}(undef, n_components, n_channels)
-    randn!(weights)
-    # Orthogonalize using QR decomposition
-    Q, R = qr(weights')
-    weights = Matrix(Q')  # Transpose to get n_components × n_channels
+    # Initialize weights as random orthogonal matrix (n_channels × n_components)
+    # Note: W is transposed compared to deflationary approach for symmetric FastICA
+    W = Matrix{Float64}(undef, n_channels, n_components)
+    randn!(W)
+    # Normalize each column
+    for j = 1:n_components
+        w = view(W, :, j)
+        rmul!(w, 1.0 / sqrt(sum(abs2, w)))
+    end
     
     # FastICA parameters
     max_iter = params.max_iter
-    # sklearn uses tol=1e-4 by default, but we use params.w_change (typically 1e-6)
-    # Use a more lenient tolerance for FastICA to match sklearn's behavior
-    tol = max(params.w_change, 1e-4)  # At least 1e-4 like sklearn
+    # Use tolerance matching sklearn's default (1e-4) for FastICA
+    # sklearn's FastICA uses tol=1e-4 by default, which is more lenient than Infomax
+    # This is appropriate because symmetric FastICA converges differently than deflationary
+    tol = max(params.w_change, 1e-4)  # At least 1e-4 like sklearn, but respect user's w_change if higher
     contrast_function = :tanh  # Options: :tanh, :gauss, :pow3
     
-    # Contrast function matching sklearn's logcosh (tanh with alpha=1.0)
-    # sklearn's _logcosh: gx = tanh(x), g_x = mean(1 - tanh(x)^2) along samples
-    function g(x, fun::Symbol)
-        if fun == :tanh
-            return tanh(x)
-        elseif fun == :gauss
-            return x * exp(-x^2 / 2)
-        elseif fun == :pow3
-            return x^3
-        else
-            return tanh(x)  # Default
+    # Vectorized contrast function computation (like MultiVariateStats)
+    # For tanh: g(x) = tanh(x), g'(x) = 1 - tanh(x)^2
+    function update_tanh!(U::AbstractMatrix{Float64}, E::AbstractVector{Float64})
+        n, k = size(U)
+        @inbounds for j in 1:k
+            _s = zero(Float64)
+            @fastmath for i in 1:n
+                t = tanh(U[i, j])
+                U[i, j] = t
+                _s += 1.0 - t^2
+            end
+            E[j] = _s / n
         end
     end
     
-    function gprime(x, fun::Symbol)
-        if fun == :tanh
-            # sklearn computes: alpha * (1 - tanh(x)^2) where alpha=1.0
-            return 1.0 - tanh(x)^2
-        elseif fun == :gauss
-            return (1 - x^2) * exp(-x^2 / 2)
-        elseif fun == :pow3
-            return 3.0 * x^2
+    # Pre-allocated storage for symmetric FastICA (like MultiVariateStats)
+    Wp = similar(W)                # previous version of W
+    U  = Matrix{Float64}(undef, n_samples, n_components)  # to store w'x & g(w'x)
+    Y  = Matrix{Float64}(undef, n_channels, n_components)  # to store E{x g(w'x)} for components
+    E1 = Vector{Float64}(undef, n_components)              # store E{g'(w'x)} for components
+    
+    # Main symmetric FastICA loop (extract all components simultaneously)
+    chg = Float64(NaN)
+    converged = false
+    
+    for iteration in 1:max_iter
+        copyto!(Wp, W)
+        
+        # Apply W of previous step: U = X' * W (all components at once)
+        # U[i, j] = w_j' * x_i for sample i and component j
+        mul!(U, transpose(dat_ica), W)
+        
+        # Compute g(w'x) --> U and E{g'(w'x)} --> E1 (vectorized for all components)
+        if contrast_function == :tanh
+            update_tanh!(U, E1)
         else
-            return 1.0 - tanh(x)^2  # Default
-        end
-    end
-    
-    # Deflationary FastICA (one component at a time) - more stable and matches sklearn's _ica_def
-    # Pre-allocate work arrays
-    w = Vector{Float64}(undef, n_channels)
-    w_old = Vector{Float64}(undef, n_channels)
-    w_new = Vector{Float64}(undef, n_channels)
-    wx_vec = Vector{Float64}(undef, n_samples)  # w' * X for one component
-    g_wx_vec = Vector{Float64}(undef, n_samples)
-    
-    # Store final weights (n_components × n_channels)
-    W_final = Matrix{Float64}(undef, n_components, n_channels)
-    
-    # Extract components one at a time (deflationary approach - more stable)
-    for comp in 1:n_components
-        # Initialize this component randomly (like sklearn)
-        randn!(w)
-        w ./= norm(w)
-        
-        # Orthogonalize against previously found components (Gram-Schmidt)
-        if comp > 1
-            for j in 1:(comp - 1)
-                w .-= dot(w, W_final[j, :]) * W_final[j, :]
-            end
-            w ./= norm(w)
-        end
-        
-        # Fixed-point iteration for this component
-        # Following sklearn's _ica_def exactly
-        for iteration in 1:max_iter
-            copyto!(w_old, w)
-            
-            # Compute w' * X for all samples using BLAS (like sklearn: np.dot(w.T, X))
-            # w is n_channels vector, dat_ica is n_channels × n_samples
-            # Result: wx_vec is n_samples vector
-            # Use: wx_vec = dat_ica' * w (equivalent to w' * dat_ica)
-            mul!(wx_vec, transpose(dat_ica), w)
-            
-            # Compute g(w'x) and mean of gprime (like sklearn: gwtx, g_wtx = g(np.dot(w.T, X), fun_args))
-            mean_gprime = 0.0
-            @inbounds for i in 1:n_samples
-                g_wx_vec[i] = g(wx_vec[i], contrast_function)
-                mean_gprime += gprime(wx_vec[i], contrast_function)
-            end
-            mean_gprime /= n_samples
-            
-            # Fixed-point update: w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w
-            # Following sklearn: w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w
-            # Use BLAS: w_new = dat_ica * g_wx_vec / n_samples
-            mul!(w_new, dat_ica, g_wx_vec)
-            w_new ./= n_samples
-            # Subtract mean_gprime * w
-            @. w_new = w_new - mean_gprime * w
-            
-            # Orthogonalize against previously found components (Gram-Schmidt)
-            # Following sklearn: _gs_decorrelation(w1, W, j)
-            if comp > 1
-                for j in 1:(comp - 1)
-                    w_new .-= dot(w_new, W_final[j, :]) * W_final[j, :]
+            # Fallback to element-wise for other contrast functions
+            @inbounds for j in 1:n_components
+                _s = zero(Float64)
+                for i in 1:n_samples
+                    u = U[i, j]
+                    if contrast_function == :gauss
+                        u2 = u^2
+                        e = exp(-u2 / 2)
+                        U[i, j] = u * e
+                        _s += (1 - u2) * e
+                    elseif contrast_function == :pow3
+                        U[i, j] = u^3
+                        _s += 3.0 * u^2
+                    else  # default to tanh
+                        t = tanh(u)
+                        U[i, j] = t
+                        _s += 1.0 - t^2
+                    end
                 end
-            end
-            
-            # Normalize
-            w_new ./= norm(w_new)
-            
-            # Check convergence: lim = abs(abs((w1 * w).sum()) - 1)
-            # Following sklearn's convergence check exactly
-            dot_prod = dot(w_new, w_old)
-            change = abs(abs(dot_prod) - 1.0)
-            
-            # Handle sign flip (for consistency)
-            if dot_prod < 0
-                w_new .*= -1
-            end
-            
-            copyto!(w, w_new)
-            
-            if iteration % 10 == 0 || change < tol
-                @info "FastICA component $comp, iteration $iteration, change = $change"
-            end
-            
-            if change < tol
-                break
+                E1[j] = _s / n_samples
             end
         end
         
-        # Store this component
-        copyto!(view(W_final, comp, :), w)
+        # Compute E{x g(w'x)} --> Y (all components at once)
+        # Y[:, j] = mean(X * U[:, j]) for component j
+        rmul!(mul!(Y, dat_ica, U), 1.0 / n_samples)
         
-        if comp % 10 == 0 || comp == n_components
-            @info "FastICA: extracted component $comp of $n_components"
+        # Update all components: w := y - e1 * w
+        # Following MultiVariateStats: w = y - e1 * w
+        for j = 1:n_components
+            w = view(W, :, j)
+            y = view(Y, :, j)
+            e1 = E1[j]
+            @. w = y - e1 * w
+        end
+        
+        # Symmetric decorrelation: W <- W * (W'W)^{-1/2}
+        # This is more numerically stable than Gram-Schmidt
+        # Following MultiVariateStats exactly: copyto!(W, W * _invsqrtm!(W'W))
+        # Note: _invsqrtm! modifies its input, so we compute W'W inline
+        copyto!(W, W * _invsqrtm!(W'W))
+        
+        # Compare with Wp to evaluate convergence change
+        # We want to check if each component (column of W) has converged
+        # W is m×k (channels × components), so W'*Wp is k×k (components × components)
+        # The diagonal gives the dot product of each component with its previous version
+        # Following the FastICA paper: we check max(|abs(diag(W'*Wp)) - 1|)
+        # This measures how much each component has rotated (should be close to 1 if converged)
+        chg = maximum(abs.(abs.(diag(W' * Wp)) .- 1))
+        converged = (chg < tol)
+        
+        if iteration % 10 == 0 || converged
+            @info "FastICA iteration $iteration, change = $chg, tolerance = $tol"
+        end
+        
+        if converged
+            break
         end
     end
     
-    # Use W_final as the final weights
-    weights = W_final
+    if !converged
+        @warn "FastICA did not converge after $max_iter iterations. Final change = $chg (tolerance = $tol)"
+    end
+    
+    # Transpose W to get n_components × n_channels (matching expected format)
+    weights = transpose(W)
     
     # Final calculations - convert to original space
     # weights is the unmixing matrix in sphered space
@@ -753,8 +760,9 @@ function fastica_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
     mixing = pinv(unmixing)
     
     # Calculate variance explained and order
-    # Use original workspace for variance calculation (before sphering)
-    meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, workspace, dims = 2)' ./ (n_components * n_samples - 1))
+    # Use sphered dat_ica for variance calculation (matching Infomax exactly)
+    # This ensures consistent ordering between Infomax and FastICA
+    meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
     
