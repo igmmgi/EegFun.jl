@@ -3,7 +3,7 @@
 # =============================================================================
 const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
-    :display_plot => (true, "Whether to display the plot"),
+    :display_plot => (true, "Display the plot (true/false)"),
     :figure_title => ("ERP Plot", "Title for the plot window"),
 
     # Axis limits and labels
@@ -14,19 +14,18 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Title
     :title => ("", "Plot title"),
-    :show_title => (true, "Whether to show the title"),
+    :show_title => (true, "Show title (true/false)"),
 
     # Line styling
-    :linewidth => (2, "Line width for ERP traces"),
-    :color => (:black, "Color for ERP traces (can be a single color or a vector of colors, one per dataset)"),
-    :linestyle =>
-        (:solid, "Line style for ERP traces (can be a single style or a vector of styles, one per dataset)"),
+    :linewidth => (2, "Line width for ERPs"),
+    :color => (:black, "Color for ERPs (single color or a vector of colors, one per dataset)"),
+    :linestyle => (:solid, "Line style for ERPs (single style or a vector of styles, one per dataset)"),
     :colormap => (:jet, "Colormap for multi-channel plots"),
 
     # Plot configuration
-    :yreversed => (false, "Whether to reverse the y-axis"),
-    :average_channels => (false, "Whether to average across channels"),
-    :interactive => (true, "Whether to enable interactive features"),
+    :yreversed => (false, "Reverse the y-axis (true/false)"),
+    :average_channels => (false, "Average across channels (true/false)"),
+    :interactive => (true, "Enable interactive features (true/false)"),
 
     # Legend parameters - get all Legend attributes with their actual defaults
     # This allows users to control any Legend parameter
@@ -36,43 +35,38 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     ]...,
 
     # Override specific legend parameters with custom defaults
-    :legend => (true, "Whether to show the legend"),
+    :legend => (true, "Show the legend (true/false)"),
     :legend_label => ("", "Title for the legend"),
-    :legend_framevisible => (true, "Whether to show the frame of the legend"),
-    :legend_position => (
-        :lt,
-        "Position of the legend for axislegend() (symbol like :lt, :rt, :lb, :rb, or tuple like (:left, :top), or (0.5, 0.5))",
-    ),
-    :legend_channel => ([], "If plotting multiple plots, within channel to put the legend on."),
-    :legend_labels => ([], "If plotting multiple plots, within channel to put the legend on."),
-    :legend_nbanks => (nothing, "Number of columns for the legend. If nothing, automatically determined."),
+    :legend_framevisible => (true, "Legend frame visible (true/false)"),
+    :legend_position => (:lt, "Legend position (:lt, :rt, :lb, :rb, or tuple like (:left, :top), or (0.5, 0.5))"),
+    :legend_channel => ([], "Which channel to put the legend on."),
+    :legend_labels => ([], "Legend labels."),
+    :legend_nbanks => (nothing, "Number of legend columns."),
 
-    # Grid
-    :xgrid => (false, "Whether to show x-axis grid"),
-    :ygrid => (false, "Whether to show y-axis grid"),
-    :xminorgrid => (false, "Whether to show x-axis minor grid"),
-    :yminorgrid => (false, "Whether to show y-axis minor grid"),
+    # Individual axes grids
+    :xgrid => (false, "Show x-axis grid (true/false)"),
+    :ygrid => (false, "Show y-axis grid (true/false)"),
+    :xminorgrid => (false, "Show x-axis minor grid (true/false)"),
+    :yminorgrid => (false, "Show y-axis minor grid (true/false)"),
 
     # Origin lines
-    :add_xy_origin => (true, "Whether to add origin lines at x=0 and y=0"),
+    :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
 
     # Layout parameters (for topo and other layouts)
-    :layout_topo_plot_width => (0.10, "Width of individual plots in topo layout (as fraction of figure width)"),
-    :layout_topo_plot_height => (0.10, "Height of individual plots in topo layout (as fraction of figure height)"),
-    :layout_topo_margin => (0.12, "Margin between plots in topo layout"),
-    :layout_topo_scale_offset_factor => (0.1, "Offset factor for scale plot position in topo layout"),
-    :layout_topo_fallback_scale_x => (0.8, "Fallback x position for scale plot in topo layout"),
-    :layout_topo_fallback_scale_y => (-0.8, "Fallback y position for scale plot in topo layout"),
+    :layout_topo_plot_width => (0.10, "Width of individual plots (fraction of figure width)"),
+    :layout_topo_plot_height => (0.10, "Height of individual plots (fraction of figure height)"),
+    :layout_topo_margin => (0.12, "Margin between plots"),
+    :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
+    :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
     
     # Grid layout parameters
-    :layout_grid_rowgap => (10, "Gap between rows in grid layout (in pixels)"),
-    :layout_grid_colgap => (10, "Gap between columns in grid layout (in pixels)"),
-    :layout_grid_padding => ((10, 10, 10, 10), "Padding around grid layout as (left, right, top, bottom) tuple (in pixels)"),
+    :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
+    :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
     :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
     
     # General layout parameters
-    :layout_figure_padding => ((20, 20, 20, 20), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
-    :layout_aspect_ratio => (nothing, "Aspect ratio for individual plots (width/height). If nothing, automatically determined"),
+    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    # :figure_aspect_ratio => (nothing, "Aspect ratio for individual plots (width/height). If nothing, automatically determined"),
 )
 
 """
@@ -878,10 +872,10 @@ function _setup_erp_control_panel!(
             Label(layout[4, 1], "Conditions", fontsize = 14, font = :bold)
             conditions_layout = GridLayout(layout[5, 1], tellwidth = false, rowgap = 5)
 
-            for (i, dat) in enumerate(dat_subset)
-                cb = Checkbox(conditions_layout[i, 1], checked = condition_checked[i][])
-                Label(conditions_layout[i, 2], dat.condition_name)
-                connect!(condition_checked[i], cb.checked)
+            for (idx, dat) in enumerate(dat_subset)
+                cb = Checkbox(conditions_layout[idx, 1], checked = condition_checked[idx][])
+                Label(conditions_layout[idx, 2], dat.condition_name)
+                connect!(condition_checked[idx], cb.checked)
             end
 
             # Auto-update on condition changes (re-plot)

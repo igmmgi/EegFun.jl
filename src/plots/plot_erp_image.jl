@@ -194,7 +194,6 @@ function plot_erp_image(
             col = mod(findfirst(==(channel), channels) - 1, cols) + 1
             _set_grid_axis_properties!(
                 ax,
-                plot_layout,
                 channel,
                 row,
                 col,
