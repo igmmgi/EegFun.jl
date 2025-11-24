@@ -357,6 +357,7 @@ about the decomposition process.
 - `ica_label::Vector{Symbol}`: Component labels (e.g., [:IC1, :IC2, ...])
 - `layout::Layout`: Layout information for the ICA components (contains channel labels)
 - `removed_activations::OrderedDict{Int, Matrix{Float64}}`: Removed component activations by epoch
+- `kurtosis_signs::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
 """
 struct InfoIca
     unmixing::Matrix{Float64}
@@ -368,6 +369,7 @@ struct InfoIca
     ica_label::Vector{Symbol}
     removed_activations::OrderedDict{Int,Matrix{Float64}}
     layout::Layout  # Layout information for the ICA components
+    is_sub_gaussian::Vector{Bool}  # true = sub-Gaussian, false = super-Gaussian
 end
 
 """
@@ -568,5 +570,6 @@ function Base.copy(ica::InfoIca)::InfoIca
         copy(ica.ica_label),
         copy(ica.removed_activations),
         ica.layout,  # Layout is shared, no need to copy
+        copy(ica.is_sub_gaussian),
     )
 end
