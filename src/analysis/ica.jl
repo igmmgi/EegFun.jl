@@ -5,6 +5,7 @@
             channel_selection::Function = channels(),
             include_extra::Bool = false,
             percentage_of_data::Real = 100.0,
+            algorithm::Symbol = :infomax,
             params::IcaPrms = IcaPrms())
 
 Runs Independent Component Analysis (ICA) on EEG data. Preprocessing (e.g., filtering) should be applied prior to calling this function.
@@ -16,15 +17,19 @@ Runs Independent Component Analysis (ICA) on EEG data. Preprocessing (e.g., filt
 - `channel_selection::Function`: Channel selector (default: layout channels).
 - `include_extra::Bool`: Whether to allow channels outside the layout (e.g., EOG) in selection.
 - `percentage_of_data::Real`: Percentage of good data to use for ICA (default: 100.0). Values < 100 enable faster computation by random subsampling.
-- `params::IcaPrms`: ICA parameters.
+- `algorithm::Symbol`: ICA algorithm to use. Options: `:infomax` (default), `:fastica`, `:sobi`, `:jade`. More algorithms coming soon.
+- `params::IcaPrms`: ICA parameters (algorithm-specific).
 
 # Returns
 `InfoIca` with unmixing, mixing, sphere, variance, and metadata.
 
 # Examples
 ```julia
-# Basic ICA on layout channels
+# Basic ICA on layout channels (Infomax algorithm)
 ica_result = run_ica(dat)
+
+# Use FastICA algorithm (often faster)
+ica_result = run_ica(dat, algorithm = :fastica)
 
 # Excluding extreme samples (quality filtering)
 ica_result = run_ica(dat, sample_selection = samples_not(:is_extreme_value_100))
@@ -46,6 +51,7 @@ function run_ica(
     channel_selection::Function = channels(),
     include_extra::Bool = false,
     percentage_of_data::Real = 100.0,
+    algorithm::Symbol = :infomax,
     params::IcaPrms = IcaPrms(),
 )
     # Create a copy of the data to avoid modifying the original
@@ -82,7 +88,8 @@ function run_ica(
         dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data)
     end
 
-    ica_result = infomax_ica(dat_for_ica, ica_layout, n_components = n_components, params = params)
+    # Dispatch to the appropriate ICA algorithm
+    ica_result = _run_ica_algorithm(dat_for_ica, ica_layout, n_components = n_components, algorithm = algorithm, params = params)
 
     return ica_result
 end
@@ -94,6 +101,8 @@ end
             channel_selection::Function = channels(),
             include_extra::Bool = false,
             remove_duplicates::Bool = true,
+            percentage_of_data::Real = 100.0,
+            algorithm::Symbol = :infomax,
             params::IcaPrms = IcaPrms())
 
 Runs Independent Component Analysis (ICA) on concatenated epoched EEG data.
@@ -113,16 +122,20 @@ and removes them by default, as duplicates can bias ICA decomposition.
 - `include_extra::Bool`: Whether to allow channels outside the layout (e.g., EOG) in selection
 - `remove_duplicates::Bool`: Automatically remove duplicate samples based on samples column (default: true)
 - `percentage_of_data::Real`: Percentage of good data to use for ICA (default: 100.0). Values < 100 enable faster computation by random subsampling.
-- `params::IcaPrms`: ICA parameters
+- `algorithm::Symbol`: ICA algorithm to use. Options: `:infomax` (default), `:fastica`, `:sobi`, `:jade`. More algorithms coming soon.
+- `params::IcaPrms`: ICA parameters (algorithm-specific)
 
 # Returns
 `InfoIca` with unmixing, mixing, sphere, variance, and metadata.
 
 # Examples
 ```julia
-# Basic ICA on concatenated epochs
+# Basic ICA on concatenated epochs (Infomax algorithm)
 epochs = extract_epochs(dat, epoch_conditions, -1, 2)
 ica_result = run_ica(epochs)
+
+# Use FastICA algorithm (often faster)
+ica_result = run_ica(epochs, algorithm = :fastica)
 
 # Excluding artifact samples from each epoch
 ica_result = run_ica(epochs, sample_selection = samples_not(:is_extreme_value_100))
@@ -139,6 +152,7 @@ function run_ica(
     include_extra::Bool = false,
     remove_duplicates::Bool = true,
     percentage_of_data::Real = 100.0,
+    algorithm::Symbol = :infomax,
     params::IcaPrms = IcaPrms(),
 )
     if isempty(epoched_data)
@@ -198,7 +212,8 @@ function run_ica(
     ica_layout = subset_layout(reference_epoch_data.layout, channel_selection = channels(selected_channels))
 
     # Run ICA on concatenated data
-    ica_result = infomax_ica(concatenated_matrix, ica_layout, n_components = n_components, params = params)
+    # Dispatch to the appropriate ICA algorithm
+    ica_result = _run_ica_algorithm(concatenated_matrix, ica_layout, n_components = n_components, algorithm = algorithm, params = params)
 
     return ica_result
 end
@@ -368,6 +383,51 @@ function create_work_arrays(n_components::Int, block_size::Int)
     )
 end
 
+# =============================================================================
+# ICA ALGORITHM DISPATCHER
+# =============================================================================
+
+"""
+    _run_ica_algorithm(dat_ica, layout; n_components, algorithm, params)
+
+Internal dispatcher function that routes to the appropriate ICA algorithm implementation.
+
+# Arguments
+- `dat_ica::Matrix{Float64}`: Data matrix (channels × samples)
+- `layout::Layout`: Layout information
+- `n_components::Int`: Number of ICA components
+- `algorithm::Symbol`: Algorithm to use (`:infomax`, `:fastica`, `:sobi`, `:jade`)
+- `params::IcaPrms`: Algorithm-specific parameters
+
+# Returns
+`InfoIca` result structure
+"""
+function _run_ica_algorithm(
+    dat_ica::Matrix{Float64},
+    layout::Layout;
+    n_components::Int,
+    algorithm::Symbol = :infomax,
+    params::IcaPrms = IcaPrms(),
+)
+    if algorithm == :infomax
+        return infomax_ica(dat_ica, layout, n_components = n_components, params = params)
+    elseif algorithm == :fastica
+        return fastica_ica(dat_ica, layout, n_components = n_components, params = params)
+    elseif algorithm == :sobi
+        error("SOBI not yet implemented. Coming soon!")
+    elseif algorithm == :jade
+        error("JADE not yet implemented. Coming soon!")
+    elseif algorithm == :amica
+        error("AMICA not yet implemented. Coming soon!")
+    else
+        error("Unknown ICA algorithm: $algorithm. Supported algorithms: :infomax, :fastica, :sobi, :jade, :amica")
+    end
+end
+
+# =============================================================================
+# INFOMAX ICA IMPLEMENTATION
+# =============================================================================
+
 function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
 
     # Store original mean before removing it
@@ -494,6 +554,221 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
         layout,
     )
 
+end
+
+# =============================================================================
+# FASTICA IMPLEMENTATION
+# =============================================================================
+
+"""
+    fastica_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
+
+FastICA algorithm implementation using fixed-point iteration.
+
+FastICA is often faster than Infomax and uses a fixed-point iteration scheme
+to maximize non-Gaussianity. This implementation uses the symmetric approach
+(extracting all components simultaneously).
+
+# Arguments
+- `dat_ica::Matrix{Float64}`: Data matrix (channels × samples), should be preprocessed
+- `layout::Layout`: Layout information for channels
+- `n_components::Int`: Number of ICA components to extract
+- `params::IcaPrms`: ICA parameters (uses max_iter, w_change from params)
+
+# Returns
+`InfoIca` with unmixing, mixing, sphere, variance, and metadata.
+"""
+function fastica_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
+    
+    # Store original mean before removing it
+    original_mean = vec(mean(dat_ica, dims = 2))
+    
+    # Center and scale data
+    dat_ica .-= original_mean
+    scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
+    dat_ica ./= scale
+    
+    # PCA reduction
+    n_channels, n_samples = size(dat_ica)
+    F = svd(dat_ica)
+    pca_components = F.U[:, 1:n_components]
+    
+    # PCA projection into workspace
+    workspace = Matrix{Float64}(undef, n_components, n_samples)
+    mul!(workspace, pca_components', dat_ica)
+    
+    # Sphering: reuse original dat_ica memory (resize to smaller dimensions)
+    # Match Infomax preprocessing exactly
+    sphere = inv(sqrt(cov(workspace, dims = 2)))
+    dat_ica = Matrix{Float64}(undef, n_components, n_samples)  # Resize to final dimensions
+    mul!(dat_ica, sphere, workspace)
+    
+    # Data should already be centered after sphering, but ensure it
+    # (sklearn doesn't re-center after whitening, so we match that)
+    
+    # Initialize unmixing matrix (orthogonal random matrix)
+    n_channels = size(dat_ica, 1)
+    n_samples = size(dat_ica, 2)
+    
+    # Initialize weights as random orthogonal matrix
+    weights = Matrix{Float64}(undef, n_components, n_channels)
+    randn!(weights)
+    # Orthogonalize using QR decomposition
+    Q, R = qr(weights')
+    weights = Matrix(Q')  # Transpose to get n_components × n_channels
+    
+    # FastICA parameters
+    max_iter = params.max_iter
+    # sklearn uses tol=1e-4 by default, but we use params.w_change (typically 1e-6)
+    # Use a more lenient tolerance for FastICA to match sklearn's behavior
+    tol = max(params.w_change, 1e-4)  # At least 1e-4 like sklearn
+    contrast_function = :tanh  # Options: :tanh, :gauss, :pow3
+    
+    # Contrast function matching sklearn's logcosh (tanh with alpha=1.0)
+    # sklearn's _logcosh: gx = tanh(x), g_x = mean(1 - tanh(x)^2) along samples
+    function g(x, fun::Symbol)
+        if fun == :tanh
+            return tanh(x)
+        elseif fun == :gauss
+            return x * exp(-x^2 / 2)
+        elseif fun == :pow3
+            return x^3
+        else
+            return tanh(x)  # Default
+        end
+    end
+    
+    function gprime(x, fun::Symbol)
+        if fun == :tanh
+            # sklearn computes: alpha * (1 - tanh(x)^2) where alpha=1.0
+            return 1.0 - tanh(x)^2
+        elseif fun == :gauss
+            return (1 - x^2) * exp(-x^2 / 2)
+        elseif fun == :pow3
+            return 3.0 * x^2
+        else
+            return 1.0 - tanh(x)^2  # Default
+        end
+    end
+    
+    # Deflationary FastICA (one component at a time) - more stable and matches sklearn's _ica_def
+    # Pre-allocate work arrays
+    w = Vector{Float64}(undef, n_channels)
+    w_old = Vector{Float64}(undef, n_channels)
+    w_new = Vector{Float64}(undef, n_channels)
+    wx_vec = Vector{Float64}(undef, n_samples)  # w' * X for one component
+    g_wx_vec = Vector{Float64}(undef, n_samples)
+    
+    # Store final weights (n_components × n_channels)
+    W_final = Matrix{Float64}(undef, n_components, n_channels)
+    
+    # Extract components one at a time (deflationary approach - more stable)
+    for comp in 1:n_components
+        # Initialize this component randomly (like sklearn)
+        randn!(w)
+        w ./= norm(w)
+        
+        # Orthogonalize against previously found components (Gram-Schmidt)
+        if comp > 1
+            for j in 1:(comp - 1)
+                w .-= dot(w, W_final[j, :]) * W_final[j, :]
+            end
+            w ./= norm(w)
+        end
+        
+        # Fixed-point iteration for this component
+        # Following sklearn's _ica_def exactly
+        for iteration in 1:max_iter
+            copyto!(w_old, w)
+            
+            # Compute w' * X for all samples using BLAS (like sklearn: np.dot(w.T, X))
+            # w is n_channels vector, dat_ica is n_channels × n_samples
+            # Result: wx_vec is n_samples vector
+            # Use: wx_vec = dat_ica' * w (equivalent to w' * dat_ica)
+            mul!(wx_vec, transpose(dat_ica), w)
+            
+            # Compute g(w'x) and mean of gprime (like sklearn: gwtx, g_wtx = g(np.dot(w.T, X), fun_args))
+            mean_gprime = 0.0
+            @inbounds for i in 1:n_samples
+                g_wx_vec[i] = g(wx_vec[i], contrast_function)
+                mean_gprime += gprime(wx_vec[i], contrast_function)
+            end
+            mean_gprime /= n_samples
+            
+            # Fixed-point update: w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w
+            # Following sklearn: w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w
+            # Use BLAS: w_new = dat_ica * g_wx_vec / n_samples
+            mul!(w_new, dat_ica, g_wx_vec)
+            w_new ./= n_samples
+            # Subtract mean_gprime * w
+            @. w_new = w_new - mean_gprime * w
+            
+            # Orthogonalize against previously found components (Gram-Schmidt)
+            # Following sklearn: _gs_decorrelation(w1, W, j)
+            if comp > 1
+                for j in 1:(comp - 1)
+                    w_new .-= dot(w_new, W_final[j, :]) * W_final[j, :]
+                end
+            end
+            
+            # Normalize
+            w_new ./= norm(w_new)
+            
+            # Check convergence: lim = abs(abs((w1 * w).sum()) - 1)
+            # Following sklearn's convergence check exactly
+            dot_prod = dot(w_new, w_old)
+            change = abs(abs(dot_prod) - 1.0)
+            
+            # Handle sign flip (for consistency)
+            if dot_prod < 0
+                w_new .*= -1
+            end
+            
+            copyto!(w, w_new)
+            
+            if iteration % 10 == 0 || change < tol
+                @info "FastICA component $comp, iteration $iteration, change = $change"
+            end
+            
+            if change < tol
+                break
+            end
+        end
+        
+        # Store this component
+        copyto!(view(W_final, comp, :), w)
+        
+        if comp % 10 == 0 || comp == n_components
+            @info "FastICA: extracted component $comp of $n_components"
+        end
+    end
+    
+    # Use W_final as the final weights
+    weights = W_final
+    
+    # Final calculations - convert to original space
+    # weights is the unmixing matrix in sphered space
+    # Transform back: unmixing = weights * sphere * pca_components' (same as Infomax)
+    unmixing = weights * sphere * pca_components'
+    mixing = pinv(unmixing)
+    
+    # Calculate variance explained and order
+    # Use original workspace for variance calculation (before sphering)
+    meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, workspace, dims = 2)' ./ (n_components * n_samples - 1))
+    meanvar_normalized = meanvar ./ sum(meanvar)
+    order = sortperm(meanvar_normalized, rev = true)
+    
+    return InfoIca(
+        unmixing[order, :],
+        mixing[:, order],
+        sphere,
+        meanvar_normalized[order],
+        scale,
+        original_mean,
+        [Symbol("IC$i") for i = 1:size(unmixing, 1)],
+        OrderedDict{Int,Matrix{Float64}}(),
+        layout,
+    )
 end
 
 

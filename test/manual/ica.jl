@@ -1,7 +1,7 @@
 using eegfun
 using GLMakie
+using BenchmarkTools
 # using BenchmarkTools
-
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "Flank_C_17.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
@@ -13,7 +13,6 @@ eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 # eegfun.resample!(dat, 4)
 eegfun.is_extreme_value!(dat, 200);
-
 eegfun.channel_difference!(
     dat,
     channel_selection1 = eegfun.channels([:Fp1, :Fp2]),
@@ -26,13 +25,14 @@ eegfun.channel_difference!(
     channel_selection2 = eegfun.channels([:F10]),
     channel_out = :hEOG,
 ); # horizontal EOG = F9 - F10
-
 # ICA on continuous data
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
+# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
+@time ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50, 
+algorithm = :fastica)
 
-eegfun.plot_ica_component_activation(dat, ica_result)AbstractArray
+eegfun.plot_ica_component_activation(dat, ica_result)
 
  # Calculate components for valid samples
 selected_samples = eegfun.get_selected_samples(dat, eegfun.samples_not(:is_extreme_value_200))
