@@ -29,10 +29,12 @@ eegfun.channel_difference!(
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
-@time ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50, 
-algorithm = :fastica)
 
-eegfun.plot_ica_component_activation(dat, ica_result)
+ica_result_fastica = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50, algorithm = :fastica)
+ica_result_infomax = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50, algorithm = :infomax)
+
+eegfun.plot_ica_component_activation(dat, ica_result_fastica)
+eegfun.plot_ica_component_activation(dat, ica_result_infomax)
 
  # Calculate components for valid samples
 selected_samples = eegfun.get_selected_samples(dat, eegfun.samples_not(:is_extreme_value_200))
