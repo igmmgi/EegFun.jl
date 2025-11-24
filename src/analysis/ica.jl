@@ -25,20 +25,14 @@ Runs Independent Component Analysis (ICA) on EEG data. Preprocessing (e.g., filt
 
 # Examples
 ```julia
-# Basic ICA on layout channels (Infomax algorithm)
+# Basic ICA on layout channels (Infomax default algorithm)
 ica_result = run_ica(dat)
 
-# Excluding extreme samples (quality filtering)
+# Excluding extreme samples 
 ica_result = run_ica(dat, sample_selection = samples_not(:is_extreme_value_100))
 
-# Speed up ICA by using only 25% of good data (4x faster)
+# Speed up ICA by using only 25% of good data 
 ica_result = run_ica(dat, sample_selection = samples_not(:is_extreme_value_100), percentage_of_data = 25.0)
-
-# Restrict to specific channels
-ica_result = run_ica(dat, channel_selection = channels([:Fp1, :Fp2, :F3, :F4]))
-
-# Include EOG channels explicitly (use with caution)
-ica_result = run_ica(dat, include_extra = true, channel_selection = channels([:Fp1, :Fp2, :vEOG, :hEOG]))
 ```
 """
 function run_ica(
@@ -65,7 +59,7 @@ function run_ica(
     if isnothing(n_components)
         n_components = length(selected_channels) - 1
     elseif n_components > length(selected_channels)
-        @warn "Requested $n_components components but only $(length(selected_channels)) channels available. Using $(length(selected_channels) - 1) components instead."
+        @minimal_warning "Requested $n_components components but only $(length(selected_channels)) channels available. Using $(length(selected_channels) - 1) components instead."
         n_components = length(selected_channels) - 1
     end
 
@@ -76,6 +70,8 @@ function run_ica(
 
     # Create data matrix and run ICA
     dat_for_ica = create_ica_data_matrix(dat_ica.data, selected_channels, sample_indices)
+
+    # Suubset data if requested
     if percentage_of_data !== 100
         dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data)
     end
@@ -125,7 +121,6 @@ and removes them by default, as duplicates can bias ICA decomposition.
 # Basic ICA on concatenated epochs (Infomax algorithm)
 epochs = extract_epochs(dat, epoch_conditions, -1, 2)
 ica_result = run_ica(epochs)
-
 
 # Excluding artifact samples from each epoch
 ica_result = run_ica(epochs, sample_selection = samples_not(:is_extreme_value_100))
@@ -195,8 +190,7 @@ function run_ica(
     # Create subsetted layout that matches the selected channels  
     ica_layout = subset_layout(reference_epoch_data.layout, channel_selection = channels(selected_channels))
 
-    # Run ICA on concatenated data
-    # Dispatch to the appropriate ICA algorithm
+    # Dispatch to the appropriate ICA algorithm with concatenated data
     ica_result = _run_ica_algorithm(concatenated_matrix, ica_layout, n_components = n_components, algorithm = algorithm, params = params)
 
     return ica_result
@@ -247,7 +241,7 @@ function _check_epoched_data_uniqueness!(concatenated_df::DataFrame; remove_dupl
 
         if remove_duplicates
             unique!(concatenated_df, :samples)
-            @info "Automatically removed $n_duplicates duplicate samples based on samples column. Using $unique_samples unique samples for ICA."
+            @info "Automatically removed $n_duplicates duplicate samples (using $unique_samples unique samples)."
         end
     end
 
@@ -317,14 +311,14 @@ Modifies the matrix in place by returning a subsampled view.
 function _select_subsample!(data_matrix::Matrix{Float64}, percentage::Real)
     percentage <= 0 || percentage > 100 && error("percentage_of_data must be between 0 and 100, got $percentage")
 
-    original_samples = size(data_matrix, 2)
-    target_samples = round(Int, original_samples * percentage / 100)
+    n_original_samples = size(data_matrix, 2)
+    n_target_samples = round(Int, n_original_samples * percentage / 100)
 
     # Random sample selection (columns are samples in data_matrix)
-    sample_cols = randperm(original_samples)[1:target_samples]
+    sample_cols = randperm(n_original_samples)[1:n_target_samples]
     subsampled_matrix = data_matrix[:, sample_cols]
 
-    @info "Random subsampling: using $target_samples of $original_samples samples ($(round(percentage, digits=1))%) for $(round(100/percentage, digits=1))x speedup"
+    @info "Random sample: $n_target_samples of $n_original_samples ($(round(percentage, digits=1))%)"
 
     return subsampled_matrix
 end
@@ -365,7 +359,8 @@ end
 
 
 # TODO: What do we really want to add here?
-# Currently, just a placeholder
+# Currently, just a potential placeholder
+# Always just used fieldtrip (via eeglab)'s implementation for infomax.
 """
     _run_ica_algorithm(dat_ica, layout; n_components, algorithm, params)
 
@@ -434,7 +429,6 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
-    # Keep original Infomax block size formula for algorithmic correctness
     block = min(Int(floor(sqrt(n_samples / 3.0))), 512)
     work = create_work_arrays(n_channels, block)
 
@@ -508,7 +502,9 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
         work.oldweights .= work.weights
         change > params.blowup && (params.l_rate *= params.blowup_fac)
 
-        @info "Step $step, change = $change, lrate = $(params.l_rate), angle = $((params.degconst) * angledelta)"
+        if step == 1 || step % 10 == 0
+            @info Printf.@sprintf("Infomax step %d, change = %.7f, lrate = %.7f, angle = %.1f", step, change, params.l_rate, (params.degconst) * angledelta)
+        end
 
     end
 
@@ -520,7 +516,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
-
+    
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
@@ -531,6 +527,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
         OrderedDict{Int,Matrix{Float64}}(),
         layout,
+        falses(size(work.weights, 1)),  # Regular Infomax: all super-Gaussian (all false)
     )
 
 end
@@ -588,17 +585,15 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
-    # Keep original Infomax block size formula for algorithmic correctness
     block = min(Int(floor(sqrt(n_samples / 3.0))), 512)
     work = create_work_arrays(n_channels, block)
     
     # Extended Infomax: track kurtosis signs for each component
     # Positive kurtosis = super-Gaussian, negative = sub-Gaussian
     # Initialize all as super-Gaussian (standard Infomax behavior)
-    kurtosis_signs = ones(Float64, n_channels)  # +1 for super-Gaussian, -1 for sub-Gaussian
-    old_kurtosis = zeros(Float64, n_channels)  # For momentum smoothing (like MATLAB's extmomentum)
+    is_sub_gaussian = falses(n_channels)  # false = super-Gaussian, true = sub-Gaussian
+    old_kurtosis = zeros(Float64, n_channels)   # momentum smoothing (MATLAB's extmomentum)
     extmomentum = 0.5  # Momentum factor for kurtosis estimates (0.5 = equal weight old/new)
-    @info "Extended Infomax: Starting with all components as super-Gaussian (will adapt based on kurtosis)"
     
     step = 0
     wts_blowup = false
@@ -606,12 +601,12 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
     oldchange = 0.0
     angledelta = 0.0
     
-    # pre-allocate permutation vector and kurtosis computation arrays
+    # pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
-    u_mean = Vector{Float64}(undef, n_channels)  # For kurtosis computation
-    u_centered = Matrix{Float64}(undef, n_channels, block)  # For kurtosis computation
-    old_kurtosis = zeros(Float64, n_channels)  # For momentum smoothing (like MATLAB's extmomentum)
-    extmomentum = 0.5  # Momentum factor for kurtosis estimates (0.5 = equal weight old/new, like MATLAB default)
+    
+    # Cache kurtosis counts (updated only when kurtosis is recalculated)
+    n_super = n_channels  # Start with all super-Gaussian
+    n_sub = 0
     
     @inbounds while step < params.max_iter
         randperm!(permute_indices)
@@ -627,16 +622,14 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
             mul!(work.u, work.weights, work.data_block)
             
             # Extended Infomax: use different nonlinearities based on kurtosis sign
-            # Super-Gaussian (kurtosis > 0): y = 1 - 2/(1 + exp(-u)) (standard Infomax)
-            # Sub-Gaussian (kurtosis < 0): y = -tanh(u)
+            # Super-Gaussian (is_sub_gaussian = false): y = 1 - 2/(1 + exp(-u)) (standard Infomax)
+            # Sub-Gaussian (is_sub_gaussian = true): y = -tanh(u)
             for i in 1:n_channels
-                if kurtosis_signs[i] > 0
-                    # Super-Gaussian: standard Infomax sigmoid
+                if !is_sub_gaussian[i] # Super-Gaussian: standard Infomax sigmoid
                     @inbounds for j in 1:block_size
                         work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
                     end
-                else
-                    # Sub-Gaussian: -tanh(u)
+                else # Sub-Gaussian: -tanh(u)
                     @inbounds for j in 1:block_size
                         work.y[i, j] = -tanh(work.u[i, j])
                     end
@@ -676,14 +669,11 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
         
         # Extended Infomax: update kurtosis signs periodically
         # Compute kurtosis for each component and switch signs accordingly
-        # Following MATLAB runica: compute every 10 steps (equivalent to extblocks)
         # Use random subset for large datasets to match MATLAB behavior
         if step > 10 && step % 10 == 0
-            # Compute activations - use random subset if data is large (like MATLAB)
-            # MATLAB uses kurtsize (typically 1000) for large datasets
-            kurtsize = min(1000, n_samples)
+            # Compute activations - use random subset 
+            kurtsize = min(2000, n_samples)
             if kurtsize < n_samples
-                # Random subset like MATLAB: rp = fix(rand(1,kurtsize)*datalength)
                 rp = randperm(n_samples)[1:kurtsize]
                 activations = work.weights * dat_ica[:, rp]
             else
@@ -694,17 +684,12 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
             kurtosis_values = Vector{Float64}(undef, n_channels)
             
             for i in 1:n_channels
-                # MATLAB: m2 = mean(partact'.^2).^2, m4 = mean(partact'.^4)
-                # kk = (m4./m2)-3.0
-                # This is: kurtosis = mean(u^4) / (mean(u^2))^2 - 3
-                # (assumes zero mean, which is true after sphering)
                 u2_mean_sq = (mean(activations[i, :] .^ 2))^2
                 if u2_mean_sq > eps(Float64)
                     u4_mean = mean(activations[i, :] .^ 4)
                     kurtosis_raw = (u4_mean / u2_mean_sq) - 3.0
                     
-                    # Apply momentum smoothing (like MATLAB's extmomentum)
-                    # This reduces oscillation for components near kurtosis = 0
+                    # Apply momentum smoothing to reduce oscillation for components near kurtosis = 0
                     if old_kurtosis[i] != 0.0
                         kurtosis = extmomentum * old_kurtosis[i] + (1.0 - extmomentum) * kurtosis_raw
                     else
@@ -713,16 +698,12 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
                     old_kurtosis[i] = kurtosis
                     kurtosis_values[i] = kurtosis
                     
-                    # MATLAB: signs = diag(sign(kk+signsbias))
-                    # We use: sign(kurtosis) -> +1 for super-Gaussian, -1 for sub-Gaussian
-                    # MATLAB's signsbias is typically 0, so sign(kk) is what we want
-                    # Use a small threshold to reduce oscillation for near-zero kurtosis
                     kurtosis_threshold = 0.05  # Small threshold to reduce oscillation
-                    old_sign = kurtosis_signs[i]
-                    kurtosis_signs[i] = kurtosis > kurtosis_threshold ? 1.0 : (kurtosis < -kurtosis_threshold ? -1.0 : old_sign)
+                    old_is_sub = is_sub_gaussian[i]
+                    is_sub_gaussian[i] = kurtosis < -kurtosis_threshold ? true : (kurtosis > kurtosis_threshold ? false : old_is_sub)
                     
                     # Track switches for logging
-                    if old_sign != kurtosis_signs[i]
+                    if old_is_sub != is_sub_gaussian[i]
                         n_switched += 1
                     end
                 else
@@ -730,15 +711,9 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
                 end
             end
             
-            # Log kurtosis information
-            n_super = count(kurtosis_signs .> 0)
-            n_sub = count(kurtosis_signs .< 0)
-            if n_switched > 0 || step == 20  # Log on first update or when switches occur
-                mean_kurtosis = mean(kurtosis_values)
-                min_kurtosis = minimum(kurtosis_values)
-                max_kurtosis = maximum(kurtosis_values)
-                @info "Extended Infomax step $step: $n_super super-Gaussian, $n_sub sub-Gaussian components ($n_switched switched), kurtosis range: [$(round(min_kurtosis, digits=2)), $(round(max_kurtosis, digits=2))], mean: $(round(mean_kurtosis, digits=2))"
-            end
+            # Update kurtosis counts
+            n_sub = count(is_sub_gaussian)
+            n_super = n_channels - n_sub
         end
         
         if step > 2
@@ -758,10 +733,9 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
         change > params.blowup && (params.l_rate *= params.blowup_fac)
         
         # Log step info (include kurtosis info for Extended Infomax)
-        if step % 10 == 0 || change < params.w_change
-            n_super = count(kurtosis_signs .> 0)
-            n_sub = count(kurtosis_signs .< 0)
-            @info "Extended Infomax step $step, change = $change, lrate = $(params.l_rate), angle = $((params.degconst) * angledelta), super/sub-Gaussian: $n_super/$n_sub"
+        if step == 1 || step % 10 == 0
+            @info Printf.@sprintf("Extended-Infomax step %d, change = %.7f, lrate = %.7f, angle = %.1f, sup/sub-gauss: %d/%d", 
+                                  step, change, params.l_rate, (params.degconst) * angledelta, n_super, n_sub)
         end
     end
     
@@ -770,15 +744,15 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
     mixing = pinv(work.weights)
     
     # Log final kurtosis distribution
-    n_super_final = count(kurtosis_signs .> 0)
-    n_sub_final = count(kurtosis_signs .< 0)
-    @info "Extended Infomax completed: $n_super_final super-Gaussian, $n_sub_final sub-Gaussian components"
+    n_sub_final = count(is_sub_gaussian)
+    n_super_final = n_channels - n_sub_final
+    @info "Extended Infomax completed: sup/sub-gauss ($n_super_final/$n_sub_final)"
     
     # calculate total variance explained and order
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
-    
+
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
@@ -789,6 +763,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
         [Symbol("IC$i") for i = 1:size(work.weights, 1)],
         OrderedDict{Int,Matrix{Float64}}(),
         layout,
+        is_sub_gaussian[order],  # Extended Infomax: actual sub-Gaussian flags
     )
 end
 
@@ -808,7 +783,6 @@ Remove ICA components from data in-place and store the removed activations in th
 # Example
 ```julia
 dat_cleaned = remove_ica_components!(dat.data, ica_result, [1, 3, 5])
-# Removed activations are now stored in ica_result.removed_activations
 ```
 """
 function remove_ica_components!(dat::DataFrame, ica::InfoIca; component_selection::Function = components())
