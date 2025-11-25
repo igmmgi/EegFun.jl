@@ -11,6 +11,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ylim => (nothing, "Y-axis limits as (min, max) tuple. If nothing, automatically determined"),
     :xlabel => ("Time (S)", "Label for x-axis"),
     :ylabel => ("μV", "Label for y-axis"),
+    :yreversed => (false, "Whether to reverse the y-axis"),
 
     # Title
     :title => ("", "Plot title"),
@@ -63,10 +64,10 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
     :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
     :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
+    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
     
     # General layout parameters
     :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
-    # :figure_aspect_ratio => (nothing, "Aspect ratio for individual plots (width/height). If nothing, automatically determined"),
 )
 
 """
@@ -235,7 +236,8 @@ function plot_erp(
     # Apply channel_selection to determine which channels to plot
     # dat_subset has all channels, but we only plot the selected ones
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
-    all_plot_channels = intersect(all_channels, selected_channels)
+    # Preserve order from selected_channels (user's channel_selection order)
+    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
@@ -254,15 +256,8 @@ function plot_erp(
     # Extract layout_* parameters, remove prefix, and pass to create_layout
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
     
-    # Get figure_padding from layout_kwargs if available (must be set at Figure creation)
-    fig_padding = get(plot_kwargs, :figure_padding, nothing)
-    
     # Create figure and apply layout system
-    fig = if fig_padding !== nothing
-        Figure(title = plot_kwargs[:figure_title], figure_padding = fig_padding)
-    else
-        Figure(title = plot_kwargs[:figure_title])
-    end
+    fig = Figure(title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
     
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
     
@@ -381,7 +376,8 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
     )
     # Apply channel_selection to determine which channels to plot
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
-    all_plot_channels = intersect(all_channels, selected_channels)
+    # Preserve order from selected_channels (user's channel_selection order)
+    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
     _plot_erp!(ax, dat_subset, all_plot_channels; user_provided_color = user_provided_color, plot_kwargs...)
     return ax
 end
@@ -687,7 +683,9 @@ function _compute_dataset_colors(color_val, n_datasets::Int, n_channels::Int, co
     
     # User didn't provide color: use colormap for multiple items, default color for single item
     if n_total > 1
-        return Makie.cgrad(colormap, n_total, categorical = true)
+        # Makie.cgrad returns a gradient, convert to vector of colors
+        gradient = Makie.cgrad(colormap, n_total, categorical = true)
+        return [gradient[i] for i = 1:n_total]
     else
         return [color_val for _ = 1:n_total]  # Use default color for single item
     end

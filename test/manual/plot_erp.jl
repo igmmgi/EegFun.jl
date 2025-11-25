@@ -17,10 +17,20 @@ epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
 
-fig, ax = eegfun.plot_erp(erps, layout = :grid, colormap = :viridis)
-
+fig, ax = eegfun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 2), 
-layout_grid_rowgap = 0, layout_grid_colgap = 0, figure_padding = (150, 150, 150, 150))
+layout_grid_skip_positions = [(2, 1)],
+
+
+fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 3))
+
+fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3, :T8, :F4]), layout = :grid, layout_grid_dims = (3, 4), 
+layout_grid_skip_positions = [(2, 1), (2, 3)])
+
+
+
+fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 4), 
+layout_grid_skip_positions = [(2, 1), (2, 3)], layout_grid_rowgap = 0, layout_grid_colgap = 0, figure_padding = (150, 150, 150, 150))
 
 
 

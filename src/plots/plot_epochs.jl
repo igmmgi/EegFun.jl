@@ -19,20 +19,26 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Line styling
     :linewidth => (1, "Line width for epoch traces"),
-    :avg_linewidth_multiplier =>
-        (2.0, "Multiplier for average line width (average linewidth = linewidth * avg_linewidth_multiplier)"),
+    :avg_linewidth_multiplier => (2.0, "Multiplier for average line width."),
     :trial_alpha => (0.25, "Alpha (transparency) for individual trial traces"),
     :color => (:black, "Color for epoch traces (can be a single color or a vector of colors, one per condition)"),
     :colormap => (:jet, "Colormap for multi-condition plots"),
 
     # Layout configuration
     :layout => (:single, "Layout type: :single, :grid, or :topo"),
-    :layout_plot_width => (0.14, "Width of individual plots in layout"),
-    :layout_plot_height => (0.14, "Height of individual plots in layout"),
-    :layout_margin => (0.02, "Margin between plots in layout"),
-    :layout_show_scale => (true, "Whether to show scale in layout"),
-    :layout_scale_position => ([0.99, 0.01], "Position of scale in layout"),
-    :dims => (nothing, "Grid dimensions as (rows, cols). If nothing, automatically determined"),
+    
+    # Layout parameters (for topo and other layouts)
+    :layout_topo_plot_width => (0.10, "Width of individual plots (fraction of figure width)"),
+    :layout_topo_plot_height => (0.10, "Height of individual plots (fraction of figure height)"),
+    :layout_topo_margin => (0.12, "Margin between plots"),
+    :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
+    :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
+    
+    # Grid layout parameters
+    :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
+    :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
+    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
+    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
 
     # Display options
     :theme_fontsize => (24, "Font size for theme"),
@@ -67,6 +73,10 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :legend_channel => ([], "If plotting multiple plots, within channel to put the legend on."),
     :legend_labels => ([], "If plotting multiple plots, custom labels for conditions."),
     :legend_nbanks => (nothing, "Number of columns for the legend. If nothing, automatically determined."),
+
+    # General layout parameters
+    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+
 )
 
 """
@@ -166,9 +176,8 @@ function plot_epochs(
     kwargs...,
 )::Tuple{Figure,Union{Axis,Vector{Axis}}}
 
-    color_explicitly_set = haskey(kwargs, :color)
+    user_provided_color = haskey(kwargs, :color)
     plot_kwargs = _merge_plot_kwargs(PLOT_EPOCHS_KWARGS, kwargs)
-    plot_kwargs[:_color_explicitly_set] = color_explicitly_set
 
     # Use subset to filter by condition, sample, and epoch - NOT by channel
     # Channel selection is applied later at plot time to keep all channels available for topoplots
@@ -195,7 +204,8 @@ function plot_epochs(
 
     # Apply channel_selection to determine which channels to plot
     selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = include_extra)
-    all_plot_channels = intersect(all_channels, selected_channels)
+    # Preserve order from selected_channels (user's channel_selection order)
+    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
     # Validate we have channels to plot
     isempty(all_plot_channels) && @minimal_error_throw "No channels selected for plotting"
@@ -218,23 +228,24 @@ function plot_epochs(
     # Compute colors - need to account for number of channels when in :single layout
     n_conditions = length(dat_subset)
     n_channels_for_colors = (layout == :single && length(all_plot_channels) > 1) ? length(all_plot_channels) : 1
-    condition_colors_result = _compute_dataset_colors(
+    condition_colors_list = _compute_dataset_colors(
         plot_kwargs[:color],
         n_conditions,
         n_channels_for_colors,
         plot_kwargs[:colormap],
-        plot_kwargs[:_color_explicitly_set],
+        user_provided_color,
     )
-    condition_colors_list = condition_colors_result isa AbstractVector ? 
-        condition_colors_result : 
-        [condition_colors_result[i] for i = 1:length(condition_colors_result)]
 
     @info "plot_epochs: Plotting $(length(all_plot_channels)) channels across $(n_conditions) conditions"
     
-    # Create plot_layout object for unified selection system
-    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout)
+    # Extract layout_* parameters, remove prefix, and pass to create_layout
+    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
     
-    fig = Figure()
+    # Create plot_layout object for unified selection system
+    plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
+    
+    # Create figure with padding (guaranteed to be in plot_kwargs)
+    fig = Figure(figure_padding = plot_kwargs[:figure_padding])
     axes = Axis[]
 
     # Apply theme font size early
@@ -358,7 +369,10 @@ function plot_epochs(
             _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
 
         elseif layout == :grid
-            grid_dims = best_rect(length(all_plot_channels))
+            # Use layout_grid_dims if provided, otherwise calculate best rectangle
+            grid_dims = plot_kwargs[:layout_grid_dims] !== nothing ? 
+                plot_kwargs[:layout_grid_dims] : 
+                best_rect(length(all_plot_channels))
             _plot_epochs_grid_multi!(
                 fig,
                 axes,
@@ -691,9 +705,9 @@ function _plot_epochs_topo_multi!(
     xrange = xrange == 0 ? 1.0 : xrange
     yrange = yrange == 0 ? 1.0 : yrange
 
-    plot_w = get(plot_kwargs, :layout_plot_width, 0.12)
-    plot_h = get(plot_kwargs, :layout_plot_height, 0.12)
-    margin = get(plot_kwargs, :layout_margin, 0.02)
+    plot_w = plot_kwargs[:layout_topo_plot_width]
+    plot_h = plot_kwargs[:layout_topo_plot_height]
+    margin = plot_kwargs[:layout_topo_margin]
 
     # Map channel -> position
     pos_map = Dict{Symbol,Tuple{Float64,Float64}}()
@@ -768,13 +782,16 @@ function _plot_epochs_topo_multi!(
     end
 
     # Optional extra scale axis in bottom-right
-    if plot_kwargs[:layout_show_scale]
+    # Note: This is a custom feature for plot_epochs, not present in plot_erp
+    # Using layout_topo_scale_pos for consistency with the layout system
+    if haskey(plot_kwargs, :layout_show_scale) && plot_kwargs[:layout_show_scale]
+        scale_pos = plot_kwargs[:layout_topo_scale_pos]
         scale_ax = Axis(
             fig[1, 1],
-            width = Relative(plot_kwargs[:layout_plot_width]),
-            height = Relative(plot_kwargs[:layout_plot_height]),
-            halign = plot_kwargs[:layout_scale_position][1],
-            valign = plot_kwargs[:layout_scale_position][2],
+            width = Relative(plot_kwargs[:layout_topo_plot_width]),
+            height = Relative(plot_kwargs[:layout_topo_plot_height]),
+            halign = scale_pos[1],
+            valign = scale_pos[2],
         )
         push!(axes, scale_ax)
         # No data in this axis; just show labels and limits
