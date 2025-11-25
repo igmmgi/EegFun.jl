@@ -155,7 +155,9 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
     # If not specified, calculate dimensions for n_channels + skip_count positions
     n_channels = length(channels)
     if metadata[:grid_dims] !== nothing
-        rows, cols = metadata[:grid_dims]
+        # Validate and auto-correct grid dimensions if too small
+        # Need enough positions for n_channels + skip_count (skip positions still need to be in grid)
+        rows, cols = _validate_dims(metadata[:grid_dims], n_channels + skip_count)
         
         # Validate skip positions are within grid bounds
         if skip_positions !== nothing
@@ -166,6 +168,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
             end
         end
         
+        # Final check: ensure we have enough available positions after skipping
         available_positions = rows * cols - skip_count
         if available_positions < n_channels
             throw(ArgumentError("Grid size ($rows×$cols) with $skip_count skipped positions has only $available_positions available positions, but need $n_channels"))
