@@ -255,12 +255,15 @@ function plot_erp(
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
     
     # Get figure_padding from layout_kwargs if available (must be set at Figure creation)
-    fig_padding = get(layout_kwargs, :figure_padding, nothing)
+    fig_padding = get(plot_kwargs, :figure_padding, nothing)
     
     # Create figure and apply layout system
     fig = if fig_padding !== nothing
+        println("fig_padding: $fig_padding")
+        println("fig_padding: $fig_padding")
         Figure(title = plot_kwargs[:figure_title], figure_padding = fig_padding)
     else
+        println("fig_padding: $fig_padding")
         Figure(title = plot_kwargs[:figure_title])
     end
     
