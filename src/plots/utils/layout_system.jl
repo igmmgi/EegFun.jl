@@ -14,6 +14,7 @@ const LAYOUT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple. If nothing, automatically calculated"),
     :grid_rowgap => (10, "Gap between rows in grid layout (in pixels)"),
     :grid_colgap => (10, "Gap between columns in grid layout (in pixels)"),
+    :grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
     
 )
 
@@ -132,7 +133,57 @@ If not specified, dimensions are calculated automatically.
 function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
     isempty(channels) && throw(ArgumentError("Cannot create grid layout with empty channel list"))
     metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
-    rows, cols = _validate_dims(metadata[:grid_dims], length(channels))
+    
+    # Get skip positions if provided
+    skip_positions = metadata[:grid_skip_positions]
+    skip_count = 0
+    if skip_positions !== nothing
+        # Validate skip positions are tuples
+        for pos in skip_positions
+            if !isa(pos, Tuple) || length(pos) != 2
+                throw(ArgumentError("grid_skip_positions must be a vector of (row, col) tuples, got: $pos"))
+            end
+        end
+        # Convert to Set for faster lookup
+        skip_set = Set(skip_positions)
+        skip_count = length(skip_set)
+        metadata[:grid_skip_positions] = skip_set
+    end
+    
+    # Calculate grid dimensions
+    # If grid_dims is specified, validate it has enough space (accounting for skipped positions)
+    # If not specified, calculate dimensions for n_channels + skip_count positions
+    n_channels = length(channels)
+    if metadata[:grid_dims] !== nothing
+        rows, cols = metadata[:grid_dims]
+        
+        # Validate skip positions are within grid bounds
+        if skip_positions !== nothing
+            for (row, col) in skip_positions
+                if row < 1 || row > rows || col < 1 || col > cols
+                    throw(ArgumentError("Skip position ($row, $col) is outside grid bounds ($rows×$cols)"))
+                end
+            end
+        end
+        
+        available_positions = rows * cols - skip_count
+        if available_positions < n_channels
+            throw(ArgumentError("Grid size ($rows×$cols) with $skip_count skipped positions has only $available_positions available positions, but need $n_channels"))
+        end
+    else
+        # Auto-calculate dimensions for n_channels + skip_count total positions
+        rows, cols = best_rect(n_channels + skip_count)
+        
+        # Validate skip positions are within auto-calculated grid bounds
+        if skip_positions !== nothing
+            for (row, col) in skip_positions
+                if row < 1 || row > rows || col < 1 || col > cols
+                    throw(ArgumentError("Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)"))
+                end
+            end
+        end
+    end
+    
     return PlotLayout(:grid, [rows, cols], [], channels, metadata)
 end
 
@@ -337,17 +388,27 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
 
     elseif plot_layout.type == :grid
         rows, cols = plot_layout.dims
+        skip_positions = get(plot_layout.metadata, :grid_skip_positions, nothing)
         
-        # Create all axes first to establish the grid structure
-        for (idx, channel) in enumerate(plot_layout.channels)
-            row = fld(idx-1, cols) + 1
-            col = mod(idx-1, cols) + 1
-
-            ax = _create_axis(fig, fig[row, col]; kwargs...)
-            _add_axis_and_channel!(axes, channels, ax, channel)
+        channel_idx = 1
+        for row in 1:rows
+            for col in 1:cols
+                is_skipped = skip_positions !== nothing && (row, col) in skip_positions
+                has_channel = channel_idx <= length(plot_layout.channels)
+                if has_channel && !is_skipped
+                    channel = plot_layout.channels[channel_idx]
+                    ax = _create_axis(fig, fig[row, col]; kwargs...)
+                    _add_axis_and_channel!(axes, channels, ax, channel)
+                    channel_idx += 1
+                else # empty axis
+                    ax = _create_axis(fig, fig[row, col]; kwargs...)
+                    hidespines!(ax)
+                    hidedecorations!(ax)
+                end
+            end
         end
         
-        # Apply grid spacing after axes are created (grid structure must exist)
+        # apply grid spacing after axes are created (grid structure is now complete)
         _apply_grid_spacing!(fig, plot_layout)
         
     elseif plot_layout.type == :topo
