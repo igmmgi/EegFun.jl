@@ -827,6 +827,29 @@ function _create_component_activation_plots!(fig, state)
             empty!(topo_ax) # Clear axis if comp_idx is invalid
             topo_ax.title = @sprintf("Invalid IC %d", comp_idx)
         end
+
+        # Add left-click handler to plot component spectrum (only when clicking on the topoplot)
+        # Store the plot index i to dynamically get the current component index (handles page navigation)
+        plot_index = i
+        on(events(topo_ax).mousebutton) do event
+            if event.button == Mouse.left && event.action == Mouse.press
+                # Get mouse position in axis coordinates
+                mouse_pos = mouseposition(topo_ax)
+                mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
+                
+                # Get head radius from plot kwargs (default is 1.0)
+                head_radius = get(state.plot_kwargs, :head_radius, 1.0)
+                
+                # Check if click is within the head circle (centered at 0,0 with radius head_radius)
+                distance_from_center = sqrt(mouse_x^2 + mouse_y^2)
+                if distance_from_center <= head_radius
+                    # Dynamically get the current component index for this plot position
+                    # This ensures correct component is selected even after page navigation
+                    current_comp_idx = _get_component_index(state, plot_index)
+                    plot_component_spectrum(state.ica, state.dat, component_selection = components(current_comp_idx))
+                end
+            end
+        end
     end
 end
 
