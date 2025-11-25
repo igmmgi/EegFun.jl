@@ -592,6 +592,9 @@ function plot_component_spectrum(
     if isempty(selected_components)
         selected_components = 1:size(ica_result.unmixing, 1)
     end
+    
+    # Debug: verify selected components
+    @debug "plot_component_spectrum: selected_components = $selected_components"
     # Apply sample selection
     selected_samples = get_selected_samples(dat, sample_selection)
 
