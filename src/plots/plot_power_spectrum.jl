@@ -22,6 +22,7 @@ const PLOT_POWER_SPECTRUM_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Scale parameters
     :x_scale => (:linear, "X-axis scale: :linear or :log10"),
     :y_scale => (:linear, "Y-axis scale: :linear or :log10"),
+    :unit => (:linear, "Power unit: :linear (μV²/Hz) or :dB (decibels)"),
 
     # Font sizes
     :title_fontsize => (16, "Font size for title"),
@@ -92,6 +93,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     max_freq = plot_kwargs[:max_freq]
     x_scale = plot_kwargs[:x_scale]
     y_scale = plot_kwargs[:y_scale]
+    unit = plot_kwargs[:unit]
     window_function = plot_kwargs[:window_function]
     show_freq_bands = plot_kwargs[:show_freq_bands]
 
@@ -105,6 +107,13 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         @minimal_warning "Invalid y_scale '$y_scale'. Using :linear instead."
         y_scale = :linear
     end
+    
+    # Validate unit parameter
+    valid_units = [:linear, :dB]
+    if !(unit in valid_units)
+        @minimal_warning "Invalid unit '$unit'. Using :linear instead."
+        unit = :linear
+    end
 
     # Define EEG frequency bands
     freq_bands = Dict(
@@ -117,7 +126,9 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
 
     # Set axis labels and title
     ax.xlabel = plot_kwargs[:xlabel]
-    ax.ylabel = plot_kwargs[:ylabel]
+    # Update y-axis label based on unit
+    ylabel_text = unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
+    ax.ylabel = ylabel_text
     ax.title = plot_kwargs[:title]
     ax.titlesize = plot_kwargs[:title_fontsize]
     ax.xlabelsize = plot_kwargs[:label_fontsize]
@@ -142,12 +153,15 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
 
     x_scale_obs = Observable(x_scale)
     y_scale_obs = Observable(y_scale)
+    unit_obs = Observable(unit)
 
     # Add x/y checkboxes for axis types with labels
     x_log_checkbox = Checkbox(controls_area[1, 1], checked = x_scale == :log10)
     Label(controls_area[1, 2], "X: Linear/Log")
     y_log_checkbox = Checkbox(controls_area[2, 1], checked = y_scale == :log10)
     Label(controls_area[2, 2], "Y: Linear/Log")
+    unit_checkbox = Checkbox(controls_area[3, 1], checked = unit == :dB)
+    Label(controls_area[3, 2], "Unit: μV²/Hz/dB")
 
     # Update Observables when checkboxes change
     on(x_log_checkbox.checked) do checked
@@ -155,6 +169,9 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     end
     on(y_log_checkbox.checked) do checked
         y_scale_obs[] = checked ? :log10 : :linear
+    end
+    on(unit_checkbox.checked) do checked
+        unit_obs[] = checked ? :dB : :linear
     end
 
     # Apply initial scale settings
@@ -173,53 +190,89 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     effective_window_size = max(4, effective_window_size)
     
     noverlap = Int(round(effective_window_size * overlap))
-    max_power = 0.0
 
-    # Store frequency and power data for reactive updates
+    # Store frequency and raw power data for reactive updates
     freq_data = []
-    power_data = []
+    power_raw_data = []
+    line_plots = []
 
     @views for ch in channels_to_plot
         signal = df[!, ch]
         # Use effective_window_size instead of window_size
         pgram = DSP.welch_pgram(signal, effective_window_size, noverlap; fs = fs, window = window_function)
-        freqs, psd = DSP.freq(pgram), DSP.power(pgram)
+        freqs, psd_raw = DSP.freq(pgram), DSP.power(pgram)
 
-        # Track max power for y-axis limits
-        max_power = max(max_power, maximum(psd))
+        # Convert power to requested unit
+        if unit == :dB
+            # Convert to dB: 10 * log10(power / reference)
+            # Reference is 1 μV²/Hz (standard in EEG)
+            psd = 10.0 .* log10.(max.(psd_raw, 1e-10))  # Avoid log(0) with small threshold
+        else
+            psd = psd_raw
+        end
 
-        # Store data for reactive updates
+        # Store raw data for reactive updates
         push!(freq_data, freqs)
-        push!(power_data, psd)
+        push!(power_raw_data, psd_raw)
 
-        # Plot this channel's spectrum
-        lines!(
+        # Create observable for power data
+        psd_obs = Observable(psd)
+
+        # Plot this channel's spectrum with observable
+        line_plot = lines!(
             ax,
             freqs,
-            psd,
+            psd_obs,
             label = string(ch),
             linewidth = plot_kwargs[:linewidth],
             alpha = plot_kwargs[:line_alpha],
         )
+        push!(line_plots, (line_plot, psd_obs))
+    end
+
+    # Function to get current power data (converted based on unit)
+    function get_current_power_data(current_unit)
+        if current_unit == :dB
+            return [10.0 .* log10.(max.(psd_raw, 1e-10)) for psd_raw in power_raw_data]
+        else
+            return power_raw_data
+        end
     end
 
     # Apply initial y-axis scale settings (after data is calculated)
+    # This will be handled by update_y_scale, but we need to set initial state
+    initial_power_data = get_current_power_data(unit)
+    all_initial_powers = vcat(initial_power_data...)
+    initial_max = maximum(all_initial_powers)
+    initial_min = minimum(all_initial_powers)
+    
     if y_scale == :log10
         # Calculate valid limits first
-        positive_powers = Base.filter(x -> x > 0, vcat(power_data...))
-        if isempty(positive_powers)
-            log_min, log_max = 0.001, 1.0
+        if unit == :dB
+            # For dB, use linear scale (dB is already logarithmic)
+            ax.yscale = identity
+            ylims!(ax, (initial_min - 5, initial_max + 5))
         else
-            log_min = max(0.001, minimum(positive_powers))
-            log_max = max(log_min * 10, max_power)
+            # For linear units, use log scale
+            positive_powers = Base.filter(x -> x > 0, all_initial_powers)
+            if isempty(positive_powers)
+                log_min, log_max = 0.001, 1.0
+            else
+                log_min = max(0.001, minimum(positive_powers))
+                log_max = max(log_min * 10, initial_max)
+            end
+            # Set valid limits BEFORE changing scale to avoid validation errors
+            ylims!(ax, (log_min, log_max))
+            ax.yscale = log10
         end
-        # Set valid limits BEFORE changing scale to avoid validation errors
-        ylims!(ax, (log_min, log_max))
-        ax.yscale = log10
     else
         # For linear scale, ensure axis is in linear mode first
         ax.yscale = identity
-        ylims!(ax, (0.0, max(0.1, max_power)))
+        if unit == :dB
+            ylims!(ax, (initial_min - 5, initial_max + 5))
+        else
+            ylims!(ax, (0.0, max(0.1, initial_max)))
+        end
     end
 
     # Add frequency band indicators below the x-axis if requested
@@ -273,26 +326,88 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         end
     end
 
+    # Function to update unit
+    function update_unit(new_unit)
+        # Convert power data
+        converted_power_data = get_current_power_data(new_unit)
+        
+        # Update line plots
+        for (i, (_, psd_obs)) in enumerate(line_plots)
+            psd_obs[] = converted_power_data[i]
+        end
+        
+        # Update y-axis label
+        ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
+        
+        # Recalculate max power and update limits
+        all_powers = vcat(converted_power_data...)
+        new_max_power = maximum(all_powers)
+        new_min_power = minimum(all_powers)
+        
+        # Update y-axis scale and limits based on current y_scale setting
+        if y_scale_obs[] == :log10
+            if new_unit == :dB
+                # For dB, use linear scale (dB is already logarithmic)
+                ax.yscale = identity
+                ylims!(ax, (new_min_power - 5, new_max_power + 5))
+            else
+                # For linear units, use log scale
+                positive_powers = Base.filter(x -> x > 0, all_powers)
+                if isempty(positive_powers)
+                    log_min, log_max = 0.001, 1.0
+                else
+                    log_min = max(0.001, minimum(positive_powers))
+                    log_max = max(log_min * 10, new_max_power)
+                end
+                ylims!(ax, (log_min, log_max))
+                ax.yscale = log10
+            end
+        else
+            ax.yscale = identity
+            if new_unit == :dB
+                ylims!(ax, (new_min_power - 5, new_max_power + 5))
+            else
+                ylims!(ax, (0.0, max(0.1, new_max_power)))
+            end
+        end
+    end
+
     # Function to update y-axis scale
     function update_y_scale(scale)
+        current_unit = unit_obs[]
+        current_power_data = get_current_power_data(current_unit)
+        all_powers = vcat(current_power_data...)
+        current_max = maximum(all_powers)
+        current_min = minimum(all_powers)
+        
         if scale == :log10
-            # Calculate valid limits first
-            positive_powers = Base.filter(x -> x > 0, vcat(power_data...))
-            if isempty(positive_powers)
-                # Fallback: no positive values, use safe defaults
-                log_min = 0.001
-                log_max = 1.0
+            if current_unit == :dB
+                # For dB, use linear scale (dB is already logarithmic)
+                ax.yscale = identity
+                ylims!(ax, (current_min - 5, current_max + 5))
             else
-                log_min = max(0.001, minimum(positive_powers))
-                log_max = max(log_min * 10, max_power)  # Ensure reasonable range
+                # Calculate valid limits first
+                positive_powers = Base.filter(x -> x > 0, all_powers)
+                if isempty(positive_powers)
+                    # Fallback: no positive values, use safe defaults
+                    log_min = 0.001
+                    log_max = 1.0
+                else
+                    log_min = max(0.001, minimum(positive_powers))
+                    log_max = max(log_min * 10, current_max)  # Ensure reasonable range
+                end
+                # Set valid limits BEFORE changing scale to avoid validation errors
+                ylims!(ax, (log_min, log_max))
+                ax.yscale = log10
             end
-            # Set valid limits BEFORE changing scale to avoid validation errors
-            ylims!(ax, (log_min, log_max))
-            ax.yscale = log10
         else
             # For linear scale, change scale FIRST to avoid log validation of linear limits
             ax.yscale = identity
-            ylims!(ax, (0.0, max(0.1, max_power)))
+            if current_unit == :dB
+                ylims!(ax, (current_min - 5, current_max + 5))
+            else
+                ylims!(ax, (0.0, max(0.1, current_max)))
+            end
         end
     end
 
@@ -303,6 +418,10 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
 
     on(y_scale_obs) do scale
         update_y_scale(scale)
+    end
+
+    on(unit_obs) do new_unit
+        update_unit(new_unit)
     end
 
 
@@ -325,6 +444,7 @@ Plot power spectrum for specified channels from EEG data with interactive contro
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 200.0)
 - `x_scale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear)
 - `y_scale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear)
+- `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear)
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning)
 - `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true)
 - `show_legend::Bool`: Whether to show the legend (default: true)
@@ -353,6 +473,9 @@ fig, ax = plot_channel_spectrum(dat,
 fig, ax = plot_channel_spectrum(dat, 
     x_scale = :log10, 
     y_scale = :log10)
+
+# With dB units (EEGLAB-style)
+fig, ax = plot_channel_spectrum(dat, unit = :dB)
 ```
 """
 
@@ -412,6 +535,7 @@ Plot power spectrum of ICA component(s) with interactive controls for axis scali
 - `max_freq::Real`: Maximum frequency to display in Hz (default: 100.0).
 - `x_scale::Symbol`: Initial scale for x-axis, one of :linear or :log10 (default: :linear).
 - `y_scale::Symbol`: Initial scale for y-axis, one of :linear or :log10 (default: :linear).
+- `unit::Symbol`: Power unit, one of :linear (μV²/Hz) or :dB (decibels) (default: :linear).
 - `window_function::Function`: Window function to use for spectral estimation (default: DSP.hanning).
 - `show_freq_bands::Bool`: Whether to show frequency band indicators (default: true).
 - `show_legend::Bool`: Whether to show the legend with component variance percentages (default: true).
@@ -446,6 +570,9 @@ plot_component_spectrum(ica_result, dat, component_selection = components(1))
 
 # With sample selection
 plot_component_spectrum(ica_result, dat, component_selection = components(1), sample_selection = samples_not(:is_extreme_value_100))
+
+# With dB units (EEGLAB-style)
+plot_component_spectrum(ica_result, dat, component_selection = components(1), unit = :dB)
 ```
 """
 
