@@ -75,7 +75,7 @@ eegfun.plot_topography(erps[1])
 eegfun.plot_topography(erps)
 
 
-eegfun.plot_topography(erps)
+eegfun.plot_topography(erps, ylim = (-10, 10))
 eegfun.plot_topography(erps[2])
 
 eegfun.plot_topography(erps[1], gridscale = 50)
