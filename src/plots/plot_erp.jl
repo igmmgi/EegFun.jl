@@ -238,6 +238,11 @@ function plot_erp(
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
+    
+    # Check if any channels remain after filtering
+    if isempty(all_plot_channels)
+        @minimal_error_throw "No valid channels found. Selected channels: $selected_channels, Available channels: $all_channels"
+    end
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
@@ -550,6 +555,8 @@ function _prepare_erp_data(
         end
         # After averaging, update all_channels to include the averaged channel
         all_channels = [:avg]
+        # Update channel_selection to select :avg instead of original channels
+        channel_selection = channels(:avg)
     end
 
     return dat_subset, all_channels, channel_selection, original_channels
