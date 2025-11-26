@@ -253,7 +253,7 @@ function plot_topography(
     
     # Set up interactivity for all axes if requested
     if interactive
-        shared_selection_state = _create_shared_topo_selection_state(axes)
+        shared_selection_state = TopoSelectionState(axes)
         _setup_shared_topo_interactivity!(fig, axes, dat, shared_selection_state)
     end
     
@@ -619,39 +619,62 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothi
     _setup_topo_selection!(fig, ax, original_data)
 end
 
+# =============================================================================
+# TOPO SELECTION STATE
+# =============================================================================
+
+"""
+    TopoSelectionState
+
+Simple state for spatial region selection in topographic plots.
+"""
+mutable struct TopoSelectionState
+    active::Observable{Bool}
+    bounds::Observable{Tuple{Float64,Float64,Float64,Float64}}  # x_min, y_min, x_max, y_max
+    visible::Observable{Bool}
+    rectangles::Vector{Vector{Makie.Poly}}  # Store rectangles for each axis: rectangles[axis_idx][rect_idx]
+    bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}  # Store all selection bounds
+    temp_rectangles::Vector{Union{Makie.Poly,Nothing}}  # Temporary rectangles for each axis
+    selected_channels::Vector{Symbol}  # Store selected channel names
+    axes::Vector{Axis}  # All axes that share this selection state
+
+    function TopoSelectionState(axes::Vector{Axis})
+        n_axes = length(axes)
+        # Initialize with empty lists for multiple selections
+        new(
+            Observable(false),
+            Observable((0.0, 0.0, 0.0, 0.0)),
+            Observable(false),
+            [Makie.Poly[] for _ in 1:n_axes],  # Empty vectors for rectangles per axis
+            Observable{Tuple{Float64,Float64,Float64,Float64}}[],  # Empty vector for bounds
+            [nothing for _ in 1:n_axes],  # No temporary rectangles initially
+            Symbol[],  # Empty vector for selected channels
+            axes,  # Store all axes
+        )
+    end
+end
+
 """
     _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state)
 
 Set up shared interactivity for multiple topographic plots.
 """
 function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
-    # Deregister interactions for all axes
-    for ax in axes
-        deregister_interaction!(ax, :rectanglezoom)
-    end
-
+    deregister_interaction!.(axes, :rectanglezoom)
     # Handle keyboard events at the figure level
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
-                # Show help for topography
                 show_plot_help(:topography)
             elseif event.key == Keyboard.up
-                # Scale up all axes
-                for ax in axes
-                    _topo_scale_up!(ax)
-                end
+                _topo_scale_up!.(axes)
             elseif event.key == Keyboard.down
-                # Scale down all axes
-                for ax in axes
-                    _topo_scale_down!(ax)
-                end
+                _topo_scale_down!.(axes)
             end
         end
     end
-
     # Set up shared selection (only once for all axes)
-    _setup_shared_topo_selection!(fig, axes, datasets, shared_selection_state)
+    _setup_shared_topo_selection!(fig, datasets, shared_selection_state)
 end
 
 """
@@ -692,67 +715,18 @@ end
 
 Increase the scale of the topographic plot (zoom in on color range).
 """
-function _topo_scale_up!(ax::Axis)
-    _scale_topo_levels!(ax, 0.8)  # Compress range by 20%
-end
+_topo_scale_up!(ax::Axis) = _scale_topo_levels!(ax, 0.8)  # Compress range by 20%
 
 """
     _topo_scale_down!(ax::Axis)
 
 Decrease the scale of the topographic plot (zoom out from color range).
 """
-function _topo_scale_down!(ax::Axis)
-    _scale_topo_levels!(ax, 1.25)  # Expand range by 25%
-end
+_topo_scale_down!(ax::Axis) = _scale_topo_levels!(ax, 1.25)  # Expand range by 25%
 
 # =============================================================================
 # REGION SELECTION FOR TOPO PLOTS
 # =============================================================================
-
-"""
-    TopoSelectionState
-
-Simple state for spatial region selection in topographic plots.
-"""
-mutable struct TopoSelectionState
-    active::Observable{Bool}
-    bounds::Observable{Tuple{Float64,Float64,Float64,Float64}}  # x_min, y_min, x_max, y_max
-    visible::Observable{Bool}
-    rectangles::Vector{Vector{Makie.Poly}}  # Store rectangles for each axis: rectangles[axis_idx][rect_idx]
-    bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}  # Store all selection bounds
-    temp_rectangles::Vector{Union{Makie.Poly,Nothing}}  # Temporary rectangles for each axis
-    selected_channels::Vector{Symbol}  # Store selected channel names
-    axes::Vector{Axis}  # All axes that share this selection state
-
-    function TopoSelectionState(axes::Vector{Axis})
-        n_axes = length(axes)
-        # Initialize with empty lists for multiple selections
-        new(
-            Observable(false),
-            Observable((0.0, 0.0, 0.0, 0.0)),
-            Observable(false),
-            [Makie.Poly[] for _ in 1:n_axes],  # Empty vectors for rectangles per axis
-            Observable{Tuple{Float64,Float64,Float64,Float64}}[],  # Empty vector for bounds
-            [nothing for _ in 1:n_axes],  # No temporary rectangles initially
-            Symbol[],  # Empty vector for selected channels
-            axes,  # Store all axes
-        )
-    end
-end
-
-# Legacy constructor for single axis (backward compatibility)
-function TopoSelectionState(ax::Axis)
-    return TopoSelectionState([ax])
-end
-
-"""
-    _create_shared_topo_selection_state(axes::Vector{Axis})
-
-Create a shared selection state for multiple axes.
-"""
-function _create_shared_topo_selection_state(axes::Vector{Axis})
-    return TopoSelectionState(axes)
-end
 
 """
     _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
@@ -760,7 +734,7 @@ end
 Set up simple region selection for topographic plots.
 """
 function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
-    selection_state = TopoSelectionState(ax)
+    selection_state = TopoSelectionState([ax])
 
     # Track Shift key state
     shift_pressed = Observable(false)
@@ -788,11 +762,11 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
             if event.action == Mouse.press
                 # Check if Shift is held down
                 if shift_pressed[]
-                    _start_topo_selection!(ax, selection_state, event)
+                    _start_topo_selection!(ax, selection_state)
                 end
             elseif event.action == Mouse.release
                 if selection_state.active[]
-                    _finish_topo_selection!(ax, selection_state, event, original_data)
+                    _finish_topo_selection!(ax, selection_state, original_data)
                 end
             end
         end
@@ -815,18 +789,18 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
     on(events(fig).mouseposition) do pos
         # Only update if mouse is over this axis and selection is active
         if selection_state.active[] && _is_mouse_in_axis(ax, pos)
-            _update_topo_selection!(ax, selection_state, pos)
+            _update_topo_selection!(ax, selection_state)
         end
     end
 end
 
 """
-    _setup_shared_topo_selection!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state)
+    _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_selection_state)
 
 Set up shared region selection for multiple topographic plots.
 Event handlers are set up only once for all axes.
 """
-function _setup_shared_topo_selection!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
+function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_selection_state::TopoSelectionState)
     # Track Shift key state
     shift_pressed = Observable(false)
 
@@ -869,11 +843,11 @@ function _setup_shared_topo_selection!(fig::Figure, axes::Vector{Axis}, datasets
             if event.action == Mouse.press
                 # Check if Shift is held down
                 if shift_pressed[]
-                    _start_topo_selection!(active_ax, shared_selection_state, event)
+                    _start_topo_selection!(active_ax, shared_selection_state)
                 end
             elseif event.action == Mouse.release
                 if shared_selection_state.active[]
-                    _finish_topo_selection!(active_ax, shared_selection_state, event, active_dataset)
+                    _finish_topo_selection!(active_ax, shared_selection_state, active_dataset)
                 end
             end
         end
@@ -900,7 +874,7 @@ function _setup_shared_topo_selection!(fig::Figure, axes::Vector{Axis}, datasets
         if shared_selection_state.active[]
             for check_ax in shared_selection_state.axes
                 if _is_mouse_in_axis(check_ax, pos)
-                    _update_topo_selection!(check_ax, shared_selection_state, pos)
+                    _update_topo_selection!(check_ax, shared_selection_state)
                     break
                 end
             end
@@ -909,16 +883,15 @@ function _setup_shared_topo_selection!(fig::Figure, axes::Vector{Axis}, datasets
 end
 
 """
-    _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event)
+    _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState)
 
 Start spatial region selection in topographic plot.
 """
-function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event::Makie.MouseButtonEvent)
+function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState)
     selection_state.active[] = true
     selection_state.visible[] = true
 
-    # Get mouse position in screen coordinates and convert to axis coordinates
-    screen_pos = events(ax.scene).mouseposition[]
+    # Get mouse position in axis coordinates
     mouse_pos = mouseposition(ax)
     mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
 
@@ -939,11 +912,11 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
     selection_state.temp_rectangles[ax_idx] = poly!(
         ax,
         initial_points,
-        color = (:blue, 0.3),    # Blue with transparency
-        strokecolor = :black,    # Black border
-        strokewidth = 1,         # Thin border
+        color = (:blue, 0.3),    
+        strokecolor = :black,    
+        strokewidth = 1,         
         visible = true,
-        overdraw = true,          # Ensure it's drawn on top
+        overdraw = true,          
     )
     
     # Create temp rectangles on all other axes with same bounds
@@ -961,19 +934,18 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
         end
     end
 
-    _update_topo_selection!(ax, selection_state, mouse_pos)
+    _update_topo_selection!(ax, selection_state)
 end
 
 """
-    _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event)
+    _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, original_data)
 
 Finish spatial region selection in topographic plot.
 """
-function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event::Makie.MouseButtonEvent, original_data = nothing)
+function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, original_data = nothing)
     selection_state.active[] = false
 
-    # Get final mouse position in screen coordinates and convert to axis coordinates
-    screen_pos = events(ax.scene).mouseposition[]
+    # Get final mouse position in axis coordinates
     mouse_pos = mouseposition(ax)
     mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
 
@@ -1014,13 +986,12 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         permanent_rectangle = poly!(
             other_ax,
             rect_points,
-            color = (:blue, 0.3),    # Blue with transparency
-            strokecolor = :black,     # Black border
-            strokewidth = 1,          # Thin border
+            color = (:blue, 0.3),    
+            strokecolor = :black,     
+            strokewidth = 1,          
             visible = true,
-            overdraw = true,           # Ensure it's drawn on top
+            overdraw = true,           
         )
-        # Store the permanent rectangle for this axis
         push!(selection_state.rectangles[other_idx], permanent_rectangle)
     end
 
@@ -1051,14 +1022,13 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
 end
 
 """
-    _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, pos)
+    _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState)
 
 Update the visual selection rectangle for spatial selection.
 """
-function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, pos)
+function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState)
     if selection_state.active[]
-        # pos might be screen coordinates, convert to axis coordinates
-        # Use mouseposition(ax) to get consistent axis coordinates
+        # Get current mouse position in axis coordinates
         axis_pos = mouseposition(ax)
         start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
 
@@ -1085,7 +1055,6 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
             end
         end
 
-
     end
 end
 
@@ -1095,36 +1064,21 @@ end
 Clear all topographic selections and remove all rectangles.
 """
 function _clear_all_topo_selections!(selection_state::TopoSelectionState)
-    # Remove all rectangles from all axes
+    # remove all rectangles from all axes
     for axis_rects in selection_state.rectangles
         for rect in axis_rects
             delete!(rect.parent, rect)
         end
+        empty!(axis_rects)  # Clear the list after deleting
     end
 
-    # Remove temporary rectangles from all axes (only if a selection is in progress)
-    # If selection was finished, temporary rectangles are already removed by _finish_topo_selection!
-    if selection_state.active[]
-        for (idx, temp_rect) in enumerate(selection_state.temp_rectangles)
-            if !isnothing(temp_rect)
-                delete!(temp_rect.parent, temp_rect)
-                selection_state.temp_rectangles[idx] = nothing
-            end
-        end
-    end
-
-    # Clear the lists
-    for axis_rects in selection_state.rectangles
-        empty!(axis_rects)
-    end
+    # clear the state data
     selection_state.bounds_list[] = Tuple{Float64,Float64,Float64,Float64}[]
     empty!(selection_state.selected_channels)
 
-    # Reset state
+    # reset state observables
     selection_state.active[] = false
     selection_state.visible[] = false
-
-
 end
 
 
@@ -1134,13 +1088,7 @@ end
 Find electrodes within the selected spatial region using actual electrode coordinates.
 This approach uses the real layout data from the topographic plot.
 """
-function _find_electrodes_in_region(
-    x_min::Float64,
-    y_min::Float64,
-    x_max::Float64,
-    y_max::Float64,
-    original_data,
-)
+function _find_electrodes_in_region(x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data)
     selected_electrodes = Symbol[]
     for row in eachrow(original_data.layout.data)
         # Check if this electrode is inside the selection rectangle
