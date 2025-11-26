@@ -538,7 +538,7 @@ function show_additional_menu(state, clicked_region_idx = nothing)
 
     # Create the menu figure
     menu_fig = Figure()
-    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)", "Spectrum", "Get Selected Regions"]
+    plot_types = ["Topoplot", "Spectrum", "Get Selected Regions"]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
 
@@ -556,10 +556,8 @@ function show_additional_menu(state, clicked_region_idx = nothing)
                 if selected_data === nothing
                     return  # No data available, just return
                 end
-                if btn.label[] == "Topoplot (multiquadratic)"
+                if btn.label[] == "Topoplot"
                     plot_topography(selected_data, method = :multiquadratic)
-                elseif btn.label[] == "Topoplot (spherical_spline)"
-                    plot_topography(selected_data, method = :spherical_spline)
                 elseif btn.label[] == "Spectrum"
                     plot_channel_spectrum(selected_data)
                 end

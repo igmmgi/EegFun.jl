@@ -361,7 +361,7 @@ using eegfun
             @test selected_single_sym == [:Fz]
 
             # Test channels() - all channels
-            selected_all = eegfun.get_selected_channels(continuous_data, eegfun.channels(); include_meta = false)
+            selected_all = eegfun.get_selected_channels(continuous_data, eegfun.channels(); include_meta = false, include_extra = false)
             @test length(selected_all) == 2
             @test :Fz ∈ selected_all && :Cz ∈ selected_all
 
@@ -378,7 +378,7 @@ using eegfun
             @test selected_invalid == [:Fz]  # Only valid index
 
             # Test channels_not with missing channel - should warn but continue
-            selected_excluded_missing = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([:NonExistent]); include_meta = false)
+            selected_excluded_missing = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([:NonExistent]); include_meta = false, include_extra = false)
             @test length(selected_excluded_missing) == 2  # All channels selected (exclusion didn't match)
 
             # Test channels_not with duplicates - should warn
@@ -387,7 +387,7 @@ using eegfun
             @test :Cz ∈ selected_excluded_dup
 
             # Test mixed types in channels_not - tests the mixed Vector handler
-            selected_mixed = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([1, 2:2]); include_meta = false)
+            selected_mixed = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([1, 2:2]); include_meta = false, include_extra = false)
             @test isempty(selected_mixed)  # Both channels excluded
 
         end

@@ -235,11 +235,9 @@ function plot_erp(
 
     # Apply channel_selection to determine which channels to plot
     # dat_subset has all channels, but we only plot the selected ones
-    # If averaging was done, all_channels will be [:avg], otherwise it will be the selected channels
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
-    # If averaging was done, all_channels is [:avg], so use that; otherwise filter selected_channels
-    all_plot_channels = plot_kwargs[:average_channels] ? all_channels : [ch for ch in selected_channels if ch in all_channels]
+    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
