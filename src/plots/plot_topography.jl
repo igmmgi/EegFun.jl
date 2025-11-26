@@ -69,10 +69,10 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     colorbar_position = pop!(plot_kwargs, :colorbar_position)
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
-    if method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
-    elseif method == :multiquadratic
+    if method == :multiquadratic
         data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
+    elseif method == :spherical_spline
+        data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
     end
 
     ylim = pop!(plot_kwargs, :ylim)
@@ -87,10 +87,9 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     if plot_kwargs[:show_title]
         if plot_kwargs[:title] != ""
             ax.title = plot_kwargs[:title] # Use user-provided title
-        elseif hasproperty(dat, :time) && !isempty(dat.time)
+        else # get time from data 
             time_min, time_max = extrema(dat.time)
-            time_title = @sprintf("%.3f to %.3f s", time_min, time_max)
-            ax.title = time_title
+            ax.title = @sprintf("%.3f to %.3f s", time_min, time_max)
         end
         ax.titlesize = plot_kwargs[:title_fontsize]
     end
@@ -387,14 +386,10 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
         end
     end
 
-    try
-        itp = ScatteredInterpolation.interpolate(Multiquadratic(), points, dat)
-        result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
-        _circle_mask!(result, grid_scale)
-        return result
-    catch e
-        throw(ErrorException("Interpolation failed: $(e)"))
-    end
+    itp = ScatteredInterpolation.interpolate(Multiquadratic(), points, dat)
+    result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
+    _circle_mask!(result, grid_scale)
+    return result
 
 end
 
@@ -606,7 +601,6 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothi
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
-                # Show help for topography
                 show_plot_help(:topography)
             elseif event.key == Keyboard.up
                 _topo_scale_up!(ax)
@@ -661,7 +655,6 @@ Set up shared interactivity for multiple topographic plots.
 """
 function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
     deregister_interaction!.(axes, :rectanglezoom)
-    # Handle keyboard events at the figure level
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
@@ -673,7 +666,6 @@ function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, data
             end
         end
     end
-    # Set up shared selection (only once for all axes)
     _setup_shared_topo_selection!(fig, datasets, shared_selection_state)
 end
 
@@ -687,25 +679,21 @@ Scale the topographic plot levels by the given factor.
 function _scale_topo_levels!(ax::Axis, scale_factor::Float64)
     # Find the Contourf plot in the axis
     for plot in ax.scene.plots
-        if plot isa Makie.Contourf
-            # Get current levels
-            current_levels = plot.levels[]
-            if !isnothing(current_levels)
-                # Calculate new range while keeping it centered
-                level_min, level_max = extrema(current_levels)
-                center = (level_min + level_max) / 2
-                range_size = level_max - level_min
+        current_levels = plot.levels[]
+        if !isnothing(current_levels)
+            # Calculate new range while keeping it centered
+            level_min, level_max = extrema(current_levels)
+            center = (level_min + level_max) / 2
+            range_size = level_max - level_min
 
-                # Scale the range by the factor but keep it centered
-                new_range = range_size * scale_factor
-                new_min = center - new_range / 2
-                new_max = center + new_range / 2
+            # Scale the range by the factor but keep it centered
+            new_range = range_size * scale_factor
+            new_min = center - new_range / 2
+            new_max = center + new_range / 2
 
-                # Create new levels with the same density but scaled range
-                new_levels = range(new_min, new_max, length = length(current_levels))
-                plot.levels[] = new_levels
-                break
-            end
+            # Create new levels with the same density but scaled range
+            plot.levels[] = range(new_min, new_max, length = length(current_levels))
+            break
         end
     end
 end
