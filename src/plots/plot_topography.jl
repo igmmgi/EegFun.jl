@@ -1036,12 +1036,12 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     all_selected_electrodes = Symbol[]
     for bounds in selection_state.bounds_list[]
         x_min, y_min, x_max, y_max = bounds
-        region_electrodes = _find_electrodes_in_region(ax, x_min, y_min, x_max, y_max, original_data)
+        region_electrodes = _find_electrodes_in_region(x_min, y_min, x_max, y_max, original_data)
         append!(all_selected_electrodes, region_electrodes)
     end
 
     unique_electrodes = unique(all_selected_electrodes)
-    @info "N selections: $(length(selection_state.bounds_list[])); Electrodes found: $unique_electrodes"
+    @info "$(length(selection_state.bounds_list[])) regions; Channels: $unique_electrodes"
     
     # Store selected channels in the state
     selection_state.selected_channels = unique_electrodes
@@ -1102,11 +1102,14 @@ function _clear_all_topo_selections!(selection_state::TopoSelectionState)
         end
     end
 
-    # Remove temporary rectangles from all axes
-    for (idx, temp_rect) in enumerate(selection_state.temp_rectangles)
-        if !isnothing(temp_rect)
-            delete!(temp_rect.parent, temp_rect)
-            selection_state.temp_rectangles[idx] = nothing
+    # Remove temporary rectangles from all axes (only if a selection is in progress)
+    # If selection was finished, temporary rectangles are already removed by _finish_topo_selection!
+    if selection_state.active[]
+        for (idx, temp_rect) in enumerate(selection_state.temp_rectangles)
+            if !isnothing(temp_rect)
+                delete!(temp_rect.parent, temp_rect)
+                selection_state.temp_rectangles[idx] = nothing
+            end
         end
     end
 
@@ -1126,56 +1129,25 @@ end
 
 
 """
-    _create_position_channel_map(ax::Axis, original_data=nothing)
-
-Create a mapping from electrode coordinates to electrode labels for the topographic plot.
-This uses the actual layout data from the original plot data.
-"""
-function _create_position_channel_map(ax::Axis, original_data = nothing)
-
-    layout = original_data.layout
-    _ensure_coordinates_2d!(layout)
-
-    # Create mapping from electrode coordinates to labels
-    position_channel_map = Dict()
-    for (i, label) in enumerate(layout.data.label)
-        x = layout.data.x2[i]
-        y = layout.data.y2[i]
-        position_channel_map[(x, y)] = Symbol(label)
-    end
-    return position_channel_map
-end
-
-"""
-    _find_electrodes_in_region(ax::Axis, x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data=nothing)
+    _find_electrodes_in_region(x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data)
 
 Find electrodes within the selected spatial region using actual electrode coordinates.
 This approach uses the real layout data from the topographic plot.
 """
 function _find_electrodes_in_region(
-    ax::Axis,
     x_min::Float64,
     y_min::Float64,
     x_max::Float64,
     y_max::Float64,
-    original_data = nothing,
+    original_data,
 )
-    position_channel_map = _create_position_channel_map(ax, original_data)
-
-    if isempty(position_channel_map)
-        @minimal_warning "No electrode mapping available, returning placeholder"
-        return nothing
-    end
-
-    # Find electrodes within the selected region
     selected_electrodes = Symbol[]
-    for ((x, y), channel) in position_channel_map
+    for row in eachrow(original_data.layout.data)
         # Check if this electrode is inside the selection rectangle
-        if x_min <= x <= x_max && y_min <= y <= y_max
-            push!(selected_electrodes, channel)
+        if x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max
+            push!(selected_electrodes, Symbol(row.label))
         end
     end
-
     return selected_electrodes
 end
 
@@ -1186,90 +1158,50 @@ Show a context menu for plotting selected channels from topography plot.
 Supports both single dataset and multiple datasets (conditions).
 """
 function _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, selected_channels::Vector{Symbol})
-    # Normalize to Vector for consistent handling
+
     datasets_vec = datasets isa Vector ? datasets : [datasets]
     has_multiple_conditions = length(datasets_vec) > 1
     
-    menu_fig = Figure(size = (400, 200))
-    
     plot_types = String[]
-    
     if has_multiple_conditions
-        # All 4 options when multiple conditions
         push!(plot_types, "Separate electrodes, separate conditions")
         push!(plot_types, "Average electrodes, separate conditions")
         push!(plot_types, "Separate electrodes, average conditions")
         push!(plot_types, "Average electrodes, average conditions")
     else
-        # Only 2 options for single condition
         push!(plot_types, "Plot Individual Channels")
         push!(plot_types, "Plot Averaged Channels")
     end
     
+    menu_fig = Figure(size = (400, 200))
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
+    
+    # Define plot configurations: (average_conditions, average_channels, info_msg)
+    plot_configs = has_multiple_conditions ? [
+        (false, false, "separate electrodes, separate conditions"),
+        (false, true, "average electrodes, separate conditions"),
+        (true, false, "separate electrodes, average conditions"),
+        (true, true, "average electrodes, average conditions"),
+    ] : [
+        (false, false, "individual channels"),
+        (false, true, "averaged channels"),
+    ]
     
     for (idx, btn) in enumerate(menu_buttons)
         on(btn.clicks) do n
-            if has_multiple_conditions
-                if idx == 1
-                    # Separate electrodes, separate conditions
-                    @info "Plotting ERP: separate electrodes, separate conditions: $selected_channels"
-                    plot_erp(
-                        datasets_vec;
-                        channel_selection = channels(selected_channels),
-                        average_channels = false,
-                    )
-                elseif idx == 2
-                    # Average electrodes, separate conditions
-                    @info "Plotting ERP: average electrodes, separate conditions: $selected_channels"
-                    plot_erp(
-                        datasets_vec;
-                        channel_selection = channels(selected_channels),
-                        average_channels = true,
-                    )
-                elseif idx == 3
-                    # Separate electrodes, average conditions
-                    @info "Plotting ERP: separate electrodes, average conditions: $selected_channels"
-                    avg_data = _average_conditions(datasets_vec)
-                    plot_erp(
-                        avg_data;
-                        channel_selection = channels(selected_channels),
-                        average_channels = false,
-                    )
-                elseif idx == 4
-                    # Average electrodes, average conditions
-                    @info "Plotting ERP: average electrodes, average conditions: $selected_channels"
-                    avg_data = _average_conditions(datasets_vec)
-                    plot_erp(
-                        avg_data;
-                        channel_selection = channels(selected_channels),
-                        average_channels = true,
-                    )
-                end
-            else
-                # Single condition case
-                if idx == 1
-                    # Plot individual channels
-                    @info "Plotting ERP for individual channels: $selected_channels"
-                    plot_erp(
-                        first(datasets_vec);
-                        channel_selection = channels(selected_channels),
-                        average_channels = false,
-                    )
-                elseif idx == 2
-                    # Plot averaged channels
-                    @info "Plotting ERP for averaged channels: $selected_channels"
-                    plot_erp(
-                        first(datasets_vec);
-                        channel_selection = channels(selected_channels),
-                        average_channels = true,
-                    )
-                end
-            end
+            avg_conditions, avg_channels, msg = plot_configs[idx]
+            
+            # Prepare data: average conditions if needed
+            data_to_plot = avg_conditions ? _average_conditions(datasets_vec) : datasets_vec
+            @info "Plotting ERP: $msg: $selected_channels"
+            plot_erp(
+                data_to_plot;
+                channel_selection = channels(selected_channels),
+                average_channels = avg_channels,
+            )
         end
     end
     
-    # Display menu in a new window
     new_screen = getfield(Main, :GLMakie).Screen()
     display(new_screen, menu_fig)
 end
