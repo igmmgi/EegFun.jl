@@ -1,8 +1,8 @@
-
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
 const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
     :figure_title => ("EEG Topography Plot", "Title for the plot window"),
@@ -13,8 +13,6 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :gridscale => (200, "Grid resolution for interpolation"),
     :colormap => (:jet, "Colormap for the topography"),
     :ylim => (nothing, "Y-axis limits (nothing for auto)"),
-    :colorrange => (nothing, "Color range for the topography. If nothing, automatically determined"),
-    :nan_color => (:transparent, "Color for NaN values"),
 
     # Title parameters
     :title => ("", "Plot title"),
@@ -52,12 +50,10 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
 )
 
-# TODO: What exactly do Recipes offer?
 
 ##########################################
 # 2D topographic plot
 ##########################################
-
 function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout; kwargs...)
 
     # ensure coordinates are 2d and 3d
@@ -108,14 +104,9 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         extendlow = :auto,
         extendhigh = :auto,
         colormap = pop!(plot_kwargs, :colormap),
-        nan_color = pop!(plot_kwargs, :nan_color),
+        nan_color = :transparent
     )
-
-    # Set color range on the contour plot if specified
-    colorrange = pop!(plot_kwargs, :colorrange)
-    if !isnothing(colorrange)
-        co.colorrange = colorrange
-    end
+    co.colorrange = ylim
 
     if pop!(plot_kwargs, :colorbar_plot)
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs...)
@@ -148,12 +139,11 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
-    # Generate window title from dataset
-    title_str = _generate_window_title(dat)
-    set_window_title(title_str)
 
+    set_window_title(_generate_window_title(dat))
     fig = Figure()
     ax = Axis(fig[1, 1])
+
     plot_topography!(
         fig,
         ax,
@@ -203,27 +193,21 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
-    # Generate window title from datasets (like plot_erp)
-    title_str = _generate_window_title(dat)
-    set_window_title(title_str)
-    
+
     n_datasets = length(dat)
-    if n_datasets == 0
-        @minimal_error_throw "Cannot plot empty vector of datasets"
-    end
+    n_datasets == 0 && @minimal_error_throw "Cannot plot empty vector of datasets"
     
     # Calculate optimal grid dimensions
     rows, cols = best_rect(n_datasets)
     
     # Create single figure with subplots
-    # Allocate 2 columns per subplot: one for the plot, one for the colorbar
-    # This ensures each colorbar is positioned next to its subplot
+    set_window_title(_generate_window_title(dat))
     fig = Figure()
     axes = Axis[]
     
     # Plot each dataset in its own subplot
     for (idx, dataset) in enumerate(dat)
-        # Calculate base row/col for this dataset
+
         base_row = div(idx - 1, cols) + 1
         base_col = mod1(idx, cols)
         
@@ -242,13 +226,10 @@ function plot_topography(
         end
         
         # Calculate colorbar position relative to this subplot
-        # Convert kwargs to Dict for modification
         kwargs_dict = Dict{Symbol, Any}(kwargs)
-        # Set colorbar position to be in the column immediately to the right
         kwargs_dict[:colorbar_position] = (colorbar_row, colorbar_col)
         
         # Plot the topography in this subplot
-        # Note: colorbar_position is already in kwargs_dict, so we just pass kwargs_dict
         plot_topography!(
             fig,
             ax,
@@ -264,25 +245,19 @@ function plot_topography(
     total_cols = cols * 2
     for col in 1:total_cols
         if col % 2 == 1
-            # Plot columns: wider (use Fixed or Auto to ensure visibility)
             colsize!(fig.layout, col, Auto())
         else
-            # Colorbar columns: narrower (fixed small width)
             colsize!(fig.layout, col, Fixed(50))
         end
     end
     
     # Set up interactivity for all axes if requested
     if interactive
-        # Create shared selection state for all axes
         shared_selection_state = _create_shared_topo_selection_state(axes)
-        # Set up interactivity with shared state (only once for all axes)
         _setup_shared_topo_interactivity!(fig, axes, dat, shared_selection_state)
     end
     
-    if display_plot
-        display_figure(fig)
-    end
+    display_plot && display_figure(fig)
     
     set_window_title("Makie")
     return fig, axes
@@ -317,13 +292,11 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
-    # Generate window title from dataset
-    title_str = _generate_window_title(dat) * " - Epoch $epoch"
-    set_window_title(title_str)
-    dat_single = convert(dat, epoch)
-    
+
+    set_window_title(_generate_window_title(dat) * " - Epoch $epoch")
     fig = Figure()
     ax = Axis(fig[1, 1])
+
     plot_topography!(
         fig,
         ax,
@@ -338,6 +311,7 @@ function plot_topography(
 
     set_window_title("Makie")
     return fig, ax
+
 end
 
 
