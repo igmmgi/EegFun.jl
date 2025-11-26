@@ -5,6 +5,7 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Display the plot (true/false)"),
     :figure_title => ("ERP Plot", "Title for the plot window"),
+    :interactive => (true, "Enable interactive features (true/false)"),
 
     # Axis limits and labels
     :xlim => (nothing, "X-axis limits as (min, max) tuple. If nothing, automatically determined"),
@@ -26,7 +27,6 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Plot configuration
     :yreversed => (false, "Reverse the y-axis (true/false)"),
     :average_channels => (false, "Average across channels (true/false)"),
-    :interactive => (true, "Enable interactive features (true/false)"),
 
     # Legend parameters - get all Legend attributes with their actual defaults
     # This allows users to control any Legend parameter
@@ -54,8 +54,8 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
 
     # Layout parameters (for topo and other layouts)
-    :layout_topo_plot_width => (0.10, "Width of individual plots (fraction of figure width)"),
-    :layout_topo_plot_height => (0.10, "Height of individual plots (fraction of figure height)"),
+    :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
+    :layout_topo_plot_height => (0.05, "Height of individual plots (fraction of figure height)"),
     :layout_topo_margin => (0.12, "Margin between plots"),
     :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
     :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
@@ -235,9 +235,11 @@ function plot_erp(
 
     # Apply channel_selection to determine which channels to plot
     # dat_subset has all channels, but we only plot the selected ones
+    # If averaging was done, all_channels will be [:avg], otherwise it will be the selected channels
     selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
-    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
+    # If averaging was done, all_channels is [:avg], so use that; otherwise filter selected_channels
+    all_plot_channels = plot_kwargs[:average_channels] ? all_channels : [ch for ch in selected_channels if ch in all_channels]
 
     # set default plot title only for single layouts
     # For grid/topo layouts, we want individual channel names, not a global title
@@ -264,6 +266,7 @@ function plot_erp(
     # For :topo layout, set default legend_channel to last channel if not explicitly set
     if plot_layout.type == :topo && isempty(plot_kwargs[:legend_channel]) && !isempty(all_plot_channels)
         plot_kwargs[:legend_channel] = [all_plot_channels[end]]
+        plot_kwargs[:legend_position] = (5, -2) # and put it a bit outside the plot
     end
     axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
 
@@ -523,18 +526,33 @@ function _prepare_erp_data(
         baseline!.(dat_subset, Ref(baseline_interval))
     end
 
-    # Channel averaging if requested
-    original_channels = nothing
-    if plot_kwargs[:average_channels]
-        @info "Averaging channels for $(length(dat_subset)) datasets"
-        original_channels = channel_labels(dat_subset)
-        dat_subset = channel_average(dat_subset, reduce = true)
-    end
-
     # Extract ALL channel labels (not filtered by channel_selection)
+    # We need this before averaging to know which channels to average
     all_channels = channel_labels(dat_subset)
     extra_channels = extra_labels(dat_subset)
     all_channels = vcat(all_channels, extra_channels)
+    
+    # Apply channel_selection to determine which channels to plot/average
+    selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = true)
+    all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
+
+    # Channel averaging if requested - average only the selected channels
+    original_channels = nothing
+    if plot_kwargs[:average_channels]
+        @info "Averaging channels for $(length(dat_subset)) datasets"
+        original_channels = all_plot_channels
+        # Average only the selected channels, similar to plot_epochs
+        for dat in dat_subset
+            channel_average!(
+                dat;
+                channel_selections = [channels(all_plot_channels)],
+                output_labels = [:avg],
+                reduce = false,
+            )
+        end
+        # After averaging, update all_channels to include the averaged channel
+        all_channels = [:avg]
+    end
 
     return dat_subset, all_channels, channel_selection, original_channels
 end

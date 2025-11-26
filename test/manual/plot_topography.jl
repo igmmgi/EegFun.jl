@@ -3,7 +3,7 @@ using GLMakie
 using BenchmarkTools
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
-data_file = joinpath(@__DIR__, "..", "..", "..", "Flank_C_3.bdf")
+data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
@@ -47,7 +47,11 @@ epoch_cfg = [
 ]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
-eegfun.plot_topography(epochs[1], 1)
+eegfun.plot_topography(epochs[1], 2)
+
+
+
+eegfun.plot_topography(epochs, 1)
 eegfun.plot_topography(epochs[2], 1)
 eegfun.plot_topography(epochs[1], 1, gridscale = 50)
 eegfun.plot_topography(epochs[2], 1, gridscale = 1000)
@@ -67,7 +71,13 @@ eegfun.plot_topography(epochs[2], 1, ylim = (-1, 1))
 erps = eegfun.average_epochs(epochs)
 
 eegfun.plot_topography(erps[1])
+
+eegfun.plot_topography(erps)
+
+
+eegfun.plot_topography(erps)
 eegfun.plot_topography(erps[2])
+
 eegfun.plot_topography(erps[1], gridscale = 50)
 eegfun.plot_topography(erps[2], gridscale = 1000)
 eegfun.plot_topography(erps[1], colormap = :inferno)
