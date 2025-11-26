@@ -5,6 +5,7 @@
 const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
+    :figure_title => ("EEG Topography Plot", "Title for the plot window"),
     :interactive => (true, "Whether to enable interactive features"),
 
     # Topography-specific parameters
@@ -202,7 +203,11 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
-    return plot_topography.(
+    # Generate window title from datasets (like plot_erp)
+    title_str = _generate_window_title(dat)
+    set_window_title(title_str)
+    
+    result = plot_topography.(
         dat;
         channel_selection = channel_selection,
         sample_selection = sample_selection,
@@ -210,6 +215,9 @@ function plot_topography(
         interactive = interactive,
         kwargs...,
     )
+    
+    set_window_title("Makie")
+    return result
 end
 
 
@@ -241,6 +249,11 @@ function plot_topography(
     interactive = true,
     kwargs...,
 )
+    # Generate window title from dataset
+    title_str = _generate_window_title(dat) * " - Epoch $epoch"
+    set_window_title(title_str)
+    dat_single = convert(dat, epoch)
+    
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_topography!(
@@ -255,6 +268,7 @@ function plot_topography(
     interactive && _setup_topo_interactivity!(fig, ax, dat)
     display_plot && display_figure(fig)
 
+    set_window_title("Makie")
     return fig, ax
 end
 
@@ -630,6 +644,7 @@ mutable struct TopoSelectionState
     rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
     bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}  # Store all selection bounds
     temp_rectangle::Union{Makie.Poly,Nothing}  # Temporary rectangle for dragging
+    selected_channels::Vector{Symbol}  # Store selected channel names
 
     function TopoSelectionState(ax::Axis)
         # Initialize with empty lists for multiple selections
@@ -640,6 +655,7 @@ mutable struct TopoSelectionState
             Makie.Poly[],  # Empty vector for rectangles
             Observable{Tuple{Float64,Float64,Float64,Float64}}[],  # Empty vector for bounds
             nothing,  # No temporary rectangle initially
+            Symbol[],  # Empty vector for selected channels
         )
     end
 end
@@ -683,9 +699,15 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
         if event.button == Mouse.left && event.action == Mouse.press && !shift_pressed[]
             _clear_all_topo_selections!(selection_state)
         end
-        if event.button == Mouse.right
-            # TODO: implement right click functionality
-            @info "TODO! :-)"
+        if event.button == Mouse.right && event.action == Mouse.press
+            selected_channels = selection_state.selected_channels
+            if !isempty(selected_channels) && original_data isa ErpData
+                _show_topo_context_menu!(original_data, selected_channels)
+            elseif !isempty(selected_channels)
+                @warn "Cannot plot ERP: data is not ErpData (got $(typeof(original_data)))"
+            else
+                @info "No channels selected. Select channels with Shift+Left Click+Drag, then right-click to plot ERP"
+            end
         end
     end
 
@@ -702,7 +724,7 @@ end
 
 Start spatial region selection in topographic plot.
 """
-function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event)
+function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event::Makie.MouseButtonEvent)
     selection_state.active[] = true
     selection_state.visible[] = true
 
@@ -735,7 +757,7 @@ end
 
 Finish spatial region selection in topographic plot.
 """
-function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event, original_data = nothing)
+function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, event::Makie.MouseButtonEvent, original_data = nothing)
     selection_state.active[] = false
 
     # Get final mouse position in screen coordinates and convert to axis coordinates
@@ -799,6 +821,9 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
 
     unique_electrodes = unique(all_selected_electrodes)
     @info "N selections: $(length(selection_state.bounds_list[])); Electrodes found: $unique_electrodes"
+    
+    # Store selected channels in the state
+    selection_state.selected_channels = unique_electrodes
 
     # Reset active state
     selection_state.active[] = false
@@ -814,11 +839,10 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         # pos might be screen coordinates, convert to axis coordinates
         # Use mouseposition(ax) to get consistent axis coordinates
         axis_pos = mouseposition(ax)
-        mouse_x, mouse_y = axis_pos[1], axis_pos[2]
         start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
 
         # Update bounds with the axis coordinates
-        selection_state.bounds[] = (start_x, start_y, mouse_x, mouse_y)
+        selection_state.bounds[] = (start_x, start_y, axis_pos[1], axis_pos[2])
 
         # Update the temporary rectangle during dragging
         if !isnothing(selection_state.temp_rectangle)
@@ -862,6 +886,7 @@ function _clear_all_topo_selections!(selection_state::TopoSelectionState)
     # Clear the lists
     empty!(selection_state.rectangles)
     selection_state.bounds_list[] = Tuple{Float64,Float64,Float64,Float64}[]
+    empty!(selection_state.selected_channels)
 
     # Reset state
     selection_state.active[] = false
@@ -923,4 +948,47 @@ function _find_electrodes_in_region(
     end
 
     return selected_electrodes
+end
+
+"""
+    _show_topo_context_menu!(original_data, selected_channels)
+
+Show a context menu for plotting selected channels from topography plot.
+"""
+function _show_topo_context_menu!(original_data::ErpData, selected_channels::Vector{Symbol})
+    menu_fig = Figure(size = (300, 150))
+    
+    plot_types = [
+        "Plot Individual Channels",
+        "Plot Averaged Channels",
+    ]
+    
+    menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
+    
+    for (idx, btn) in enumerate(menu_buttons)
+        on(btn.clicks) do n
+            if idx == 1
+                # Plot individual channels
+                @info "Plotting ERP for individual channels: $selected_channels"
+                plot_erp(
+                    original_data;
+                    channel_selection = channels(selected_channels),
+                    average_channels = false,
+                )
+            elseif idx == 2
+                # Plot averaged channels
+                @info "Plotting ERP for averaged channels: $selected_channels"
+                plot_erp(
+                    original_data;
+                    channel_selection = channels(selected_channels),
+                    average_channels = true,
+                )
+            end
+        end
+    end
+    
+    # Display menu in a new window
+    backend = get_makie_backend()
+    new_screen = get_makie_screen(backend)
+    display(new_screen, menu_fig)
 end

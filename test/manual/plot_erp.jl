@@ -19,13 +19,11 @@ epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
 
 
-channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3])
-
-
 
 fig, ax = eegfun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
-fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 2), 
-layout_grid_skip_positions = [(2, 1)],
+
+fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 2), 
+layout_grid_skip_positions = [(2, 1)])
 
 
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 3))
@@ -40,7 +38,7 @@ layout_grid_skip_positions = [(2, 1), (2, 3)], layout_grid_rowgap = 0, layout_gr
 
 
 
-fig, ax = eegfun.plot_erp(erps, layout = :topo)
+fig, ax = eegfun.plot_erp(erps, layout = :topo, legend_width = 300)
 
 
 
