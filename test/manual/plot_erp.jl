@@ -7,6 +7,7 @@ layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
+
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 # EPOCHS -> ERPs
@@ -16,6 +17,11 @@ epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [
              eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[4]])]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
+
+
+channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3])
+
+
 
 fig, ax = eegfun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 2), 
