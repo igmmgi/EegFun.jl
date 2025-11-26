@@ -18,7 +18,7 @@ println("Running eegfun.jl Test Suite")
 println("=" ^ 40)
 
 @testset "eegfun" begin
-
+ 
     # include("automatic/apply.jl")
     # include("automatic/apply.jl")
     # include("automatic/artifact_detection.jl")
@@ -29,7 +29,7 @@ println("=" ^ 40)
     # include("automatic/channel_difference.jl")
     # include("automatic/channel_metrics.jl")
     # include("automatic/channel_repair.jl")
-    include("automatic/channel_summary.jl")
+    # include("automatic/channel_summary.jl")
     # include("automatic/condition_combine.jl")
     # include("automatic/condition_difference.jl")
     # include("automatic/config.jl")

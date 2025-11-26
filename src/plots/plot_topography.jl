@@ -207,17 +207,85 @@ function plot_topography(
     title_str = _generate_window_title(dat)
     set_window_title(title_str)
     
-    result = plot_topography.(
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        display_plot = display_plot,
-        interactive = interactive,
-        kwargs...,
-    )
+    n_datasets = length(dat)
+    if n_datasets == 0
+        @minimal_error_throw "Cannot plot empty vector of datasets"
+    end
+    
+    # Calculate optimal grid dimensions
+    rows, cols = best_rect(n_datasets)
+    
+    # Create single figure with subplots
+    # Allocate 2 columns per subplot: one for the plot, one for the colorbar
+    # This ensures each colorbar is positioned next to its subplot
+    fig = Figure()
+    axes = Axis[]
+    
+    # Plot each dataset in its own subplot
+    for (idx, dataset) in enumerate(dat)
+        # Calculate base row/col for this dataset
+        base_row = div(idx - 1, cols) + 1
+        base_col = mod1(idx, cols)
+        
+        # Each subplot gets 2 columns: plot in first column, colorbar in second
+        plot_row = base_row
+        plot_col = (base_col - 1) * 2 + 1
+        colorbar_row = plot_row
+        colorbar_col = plot_col + 1
+        
+        ax = Axis(fig[plot_row, plot_col])
+        push!(axes, ax)
+        
+        # Set subplot title to condition name if available
+        if hasproperty(dataset, :condition_name) && dataset.condition_name !== ""
+            ax.title = dataset.condition_name
+        end
+        
+        # Calculate colorbar position relative to this subplot
+        # Convert kwargs to Dict for modification
+        kwargs_dict = Dict{Symbol, Any}(kwargs)
+        # Set colorbar position to be in the column immediately to the right
+        kwargs_dict[:colorbar_position] = (colorbar_row, colorbar_col)
+        
+        # Plot the topography in this subplot
+        # Note: colorbar_position is already in kwargs_dict, so we just pass kwargs_dict
+        plot_topography!(
+            fig,
+            ax,
+            dataset;
+            channel_selection = channel_selection,
+            sample_selection = sample_selection,
+            kwargs_dict...,
+        )
+    end
+    
+    # Set column sizes: make colorbar columns narrower than plot columns
+    # This ensures colorbars don't take up too much space while keeping plots visible
+    total_cols = cols * 2
+    for col in 1:total_cols
+        if col % 2 == 1
+            # Plot columns: wider (use Fixed or Auto to ensure visibility)
+            colsize!(fig.layout, col, Auto())
+        else
+            # Colorbar columns: narrower (fixed small width)
+            colsize!(fig.layout, col, Fixed(50))
+        end
+    end
+    
+    # Set up interactivity for all axes if requested
+    if interactive
+        # Create shared selection state for all axes
+        shared_selection_state = _create_shared_topo_selection_state(axes)
+        # Set up interactivity with shared state (only once for all axes)
+        _setup_shared_topo_interactivity!(fig, axes, dat, shared_selection_state)
+    end
+    
+    if display_plot
+        display_figure(fig)
+    end
     
     set_window_title("Makie")
-    return result
+    return fig, axes
 end
 
 
@@ -578,6 +646,41 @@ function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothi
 end
 
 """
+    _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state)
+
+Set up shared interactivity for multiple topographic plots.
+"""
+function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
+    # Deregister interactions for all axes
+    for ax in axes
+        deregister_interaction!(ax, :rectanglezoom)
+    end
+
+    # Handle keyboard events at the figure level
+    on(events(fig).keyboardbutton) do event
+        if event.action == Keyboard.press
+            if event.key == Keyboard.i
+                # Show help for topography
+                show_plot_help(:topography)
+            elseif event.key == Keyboard.up
+                # Scale up all axes
+                for ax in axes
+                    _topo_scale_up!(ax)
+                end
+            elseif event.key == Keyboard.down
+                # Scale down all axes
+                for ax in axes
+                    _topo_scale_down!(ax)
+                end
+            end
+        end
+    end
+
+    # Set up shared selection (only once for all axes)
+    _setup_shared_topo_selection!(fig, axes, datasets, shared_selection_state)
+end
+
+"""
     _scale_topo_levels!(ax::Axis, scale_factor::Float64)
 
 Scale the topographic plot levels by the given factor.
@@ -641,23 +744,40 @@ mutable struct TopoSelectionState
     active::Observable{Bool}
     bounds::Observable{Tuple{Float64,Float64,Float64,Float64}}  # x_min, y_min, x_max, y_max
     visible::Observable{Bool}
-    rectangles::Vector{Makie.Poly}  # Store multiple selection rectangles
+    rectangles::Vector{Vector{Makie.Poly}}  # Store rectangles for each axis: rectangles[axis_idx][rect_idx]
     bounds_list::Observable{Vector{Tuple{Float64,Float64,Float64,Float64}}}  # Store all selection bounds
-    temp_rectangle::Union{Makie.Poly,Nothing}  # Temporary rectangle for dragging
+    temp_rectangles::Vector{Union{Makie.Poly,Nothing}}  # Temporary rectangles for each axis
     selected_channels::Vector{Symbol}  # Store selected channel names
+    axes::Vector{Axis}  # All axes that share this selection state
 
-    function TopoSelectionState(ax::Axis)
+    function TopoSelectionState(axes::Vector{Axis})
+        n_axes = length(axes)
         # Initialize with empty lists for multiple selections
         new(
             Observable(false),
             Observable((0.0, 0.0, 0.0, 0.0)),
             Observable(false),
-            Makie.Poly[],  # Empty vector for rectangles
+            [Makie.Poly[] for _ in 1:n_axes],  # Empty vectors for rectangles per axis
             Observable{Tuple{Float64,Float64,Float64,Float64}}[],  # Empty vector for bounds
-            nothing,  # No temporary rectangle initially
+            [nothing for _ in 1:n_axes],  # No temporary rectangles initially
             Symbol[],  # Empty vector for selected channels
+            axes,  # Store all axes
         )
     end
+end
+
+# Legacy constructor for single axis (backward compatibility)
+function TopoSelectionState(ax::Axis)
+    return TopoSelectionState([ax])
+end
+
+"""
+    _create_shared_topo_selection_state(axes::Vector{Axis})
+
+Create a shared selection state for multiple axes.
+"""
+function _create_shared_topo_selection_state(axes::Vector{Axis})
+    return TopoSelectionState(axes)
 end
 
 """
@@ -684,6 +804,12 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
 
     # Handle mouse events at the figure level
     on(events(fig).mousebutton) do event
+        # Check if mouse is over this specific axis
+        mouse_pos = events(fig).mouseposition[]
+        if !_is_mouse_in_axis(ax, mouse_pos)
+            return
+        end
+        
         if event.button == Mouse.left
             if event.action == Mouse.press
                 # Check if Shift is held down
@@ -713,8 +839,97 @@ function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
 
     # Handle mouse movement for selection dragging
     on(events(fig).mouseposition) do pos
-        if selection_state.active[]
+        # Only update if mouse is over this axis and selection is active
+        if selection_state.active[] && _is_mouse_in_axis(ax, pos)
             _update_topo_selection!(ax, selection_state, pos)
+        end
+    end
+end
+
+"""
+    _setup_shared_topo_selection!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state)
+
+Set up shared region selection for multiple topographic plots.
+Event handlers are set up only once for all axes.
+"""
+function _setup_shared_topo_selection!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
+    # Track Shift key state
+    shift_pressed = Observable(false)
+
+    # Handle keyboard events to track Shift key
+    on(events(fig).keyboardbutton) do event
+        if event.key == Keyboard.left_shift
+            if event.action == Keyboard.press
+                shift_pressed[] = true
+            elseif event.action == Keyboard.release
+                shift_pressed[] = false
+            end
+        end
+    end
+
+    # Handle mouse events at the figure level
+    on(events(fig).mousebutton) do event
+        # Check if mouse is over any of the axes in the shared state
+        mouse_pos = events(fig).mouseposition[]
+        active_ax = nothing
+        active_ax_idx = nothing
+        active_dataset = nothing
+        
+        for (idx, check_ax) in enumerate(shared_selection_state.axes)
+            if _is_mouse_in_axis(check_ax, mouse_pos)
+                active_ax = check_ax
+                active_ax_idx = idx
+                if idx <= length(datasets)
+                    active_dataset = datasets[idx]
+                end
+                break
+            end
+        end
+        
+        # Only process if mouse is over one of the shared axes
+        if active_ax === nothing
+            return
+        end
+        
+        if event.button == Mouse.left
+            if event.action == Mouse.press
+                # Check if Shift is held down
+                if shift_pressed[]
+                    _start_topo_selection!(active_ax, shared_selection_state, event)
+                end
+            elseif event.action == Mouse.release
+                if shared_selection_state.active[]
+                    _finish_topo_selection!(active_ax, shared_selection_state, event, active_dataset)
+                end
+            end
+        end
+        if event.button == Mouse.left && event.action == Mouse.press && !shift_pressed[]
+            _clear_all_topo_selections!(shared_selection_state)
+        end
+        if event.button == Mouse.right && event.action == Mouse.press
+            selected_channels = shared_selection_state.selected_channels
+            # Check if all datasets are ErpData
+            all_erp_data = all(d isa ErpData for d in datasets)
+            if !isempty(selected_channels) && all_erp_data
+                _show_topo_context_menu!(datasets, selected_channels)
+            elseif !isempty(selected_channels)
+                @warn "Cannot plot ERP: data is not ErpData"
+            else
+                @info "No channels selected. Select channels with Shift+Left Click+Drag, then right-click to plot ERP"
+            end
+        end
+    end
+
+    # Handle mouse movement for selection dragging
+    on(events(fig).mouseposition) do pos
+        # Only update if selection is active and mouse is over any shared axis
+        if shared_selection_state.active[]
+            for check_ax in shared_selection_state.axes
+                if _is_mouse_in_axis(check_ax, pos)
+                    _update_topo_selection!(check_ax, shared_selection_state, pos)
+                    break
+                end
+            end
         end
     end
 end
@@ -736,10 +951,18 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
     # Store axis coordinates for spatial selection
     selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
 
-    # Create a temporary rectangle for dragging
+    # Find the index of this axis
+    ax_idx = findfirst(isequal(ax), selection_state.axes)
+    if ax_idx === nothing
+        ax_idx = 1
+    end
+    
+    # Create temporary rectangles for all axes
     initial_points =
         [Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y)]
-    selection_state.temp_rectangle = poly!(
+    
+    # Create temp rectangle on the active axis
+    selection_state.temp_rectangles[ax_idx] = poly!(
         ax,
         initial_points,
         color = (:blue, 0.3),    # Blue with transparency
@@ -748,6 +971,21 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState, e
         visible = true,
         overdraw = true,          # Ensure it's drawn on top
     )
+    
+    # Create temp rectangles on all other axes with same bounds
+    for (other_idx, other_ax) in enumerate(selection_state.axes)
+        if other_idx != ax_idx
+            selection_state.temp_rectangles[other_idx] = poly!(
+                other_ax,
+                initial_points,
+                color = (:blue, 0.3),
+                strokecolor = :black,
+                strokewidth = 1,
+                visible = true,
+                overdraw = true,
+            )
+        end
+    end
 
     _update_topo_selection!(ax, selection_state, mouse_pos)
 end
@@ -779,7 +1017,7 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     push!(current_bounds, final_bounds)
     selection_state.bounds_list[] = current_bounds
 
-    # Create the permanent rectangle for this selection
+    # Create permanent rectangles on ALL axes with the same bounds
     bounds = selection_state.bounds[]
     start_x, start_y = bounds[1], bounds[2]
     end_x, end_y = bounds[3], bounds[4]
@@ -791,24 +1029,33 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         Point2f(Float64(start_x), Float64(end_y)),
     ]
 
-    # Create permanent rectangle
-    permanent_rectangle = poly!(
-        ax,
-        rect_points,
-        color = (:blue, 0.3),    # Blue with transparency
-        strokecolor = :black,     # Black border
-        strokewidth = 1,          # Thin border
-        visible = true,
-        overdraw = true,           # Ensure it's drawn on top
-    )
+    # Find the index of this axis
+    ax_idx = findfirst(isequal(ax), selection_state.axes)
+    if ax_idx === nothing
+        ax_idx = 1
+    end
 
-    # Store the permanent rectangle
-    push!(selection_state.rectangles, permanent_rectangle)
+    # Create permanent rectangles on all axes
+    for (other_idx, other_ax) in enumerate(selection_state.axes)
+        permanent_rectangle = poly!(
+            other_ax,
+            rect_points,
+            color = (:blue, 0.3),    # Blue with transparency
+            strokecolor = :black,     # Black border
+            strokewidth = 1,          # Thin border
+            visible = true,
+            overdraw = true,           # Ensure it's drawn on top
+        )
+        # Store the permanent rectangle for this axis
+        push!(selection_state.rectangles[other_idx], permanent_rectangle)
+    end
 
-    # Remove the temporary rectangle
-    if !isnothing(selection_state.temp_rectangle)
-        delete!(selection_state.temp_rectangle.parent, selection_state.temp_rectangle)
-        selection_state.temp_rectangle = nothing
+    # Remove the temporary rectangles from all axes
+    for (idx, temp_rect) in enumerate(selection_state.temp_rectangles)
+        if !isnothing(temp_rect)
+            delete!(temp_rect.parent, temp_rect)
+            selection_state.temp_rectangles[idx] = nothing
+        end
     end
 
     # Find electrodes within ALL selected spatial regions
@@ -844,22 +1091,24 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         # Update bounds with the axis coordinates
         selection_state.bounds[] = (start_x, start_y, axis_pos[1], axis_pos[2])
 
-        # Update the temporary rectangle during dragging
-        if !isnothing(selection_state.temp_rectangle)
-            bounds = selection_state.bounds[]
-            start_x, start_y = bounds[1], bounds[2]
-            end_x, end_y = bounds[3], bounds[4]
+        # Update the temporary rectangles on all axes during dragging
+        bounds = selection_state.bounds[]
+        start_x, start_y = bounds[1], bounds[2]
+        end_x, end_y = bounds[3], bounds[4]
 
-            # Update rectangle points for the temporary rectangle
-            rect_points = Point2f[
-                Point2f(Float64(start_x), Float64(start_y)),
-                Point2f(Float64(end_x), Float64(start_y)),
-                Point2f(Float64(end_x), Float64(end_y)),
-                Point2f(Float64(start_x), Float64(end_y)),
-            ]
+        # Update rectangle points for the temporary rectangles
+        rect_points = Point2f[
+            Point2f(Float64(start_x), Float64(start_y)),
+            Point2f(Float64(end_x), Float64(start_y)),
+            Point2f(Float64(end_x), Float64(end_y)),
+            Point2f(Float64(start_x), Float64(end_y)),
+        ]
 
-            # Update the temporary rectangle
-            selection_state.temp_rectangle[1] = rect_points
+        # Update temporary rectangles on all axes
+        for temp_rect in selection_state.temp_rectangles
+            if !isnothing(temp_rect)
+                temp_rect[1] = rect_points
+            end
         end
 
 
@@ -872,19 +1121,25 @@ end
 Clear all topographic selections and remove all rectangles.
 """
 function _clear_all_topo_selections!(selection_state::TopoSelectionState)
-    # Remove all rectangles from the scene
-    for rect in selection_state.rectangles
-        delete!(rect.parent, rect)
+    # Remove all rectangles from all axes
+    for axis_rects in selection_state.rectangles
+        for rect in axis_rects
+            delete!(rect.parent, rect)
+        end
     end
 
-    # Remove temporary rectangle if it exists
-    if !isnothing(selection_state.temp_rectangle)
-        delete!(selection_state.temp_rectangle.parent, selection_state.temp_rectangle)
-        selection_state.temp_rectangle = nothing
+    # Remove temporary rectangles from all axes
+    for (idx, temp_rect) in enumerate(selection_state.temp_rectangles)
+        if !isnothing(temp_rect)
+            delete!(temp_rect.parent, temp_rect)
+            selection_state.temp_rectangles[idx] = nothing
+        end
     end
 
     # Clear the lists
-    empty!(selection_state.rectangles)
+    for axis_rects in selection_state.rectangles
+        empty!(axis_rects)
+    end
     selection_state.bounds_list[] = Tuple{Float64,Float64,Float64,Float64}[]
     empty!(selection_state.selected_channels)
 
@@ -951,44 +1206,96 @@ function _find_electrodes_in_region(
 end
 
 """
-    _show_topo_context_menu!(original_data, selected_channels)
+    _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, selected_channels::Vector{Symbol})
 
 Show a context menu for plotting selected channels from topography plot.
+Supports both single dataset and multiple datasets (conditions).
 """
-function _show_topo_context_menu!(original_data::ErpData, selected_channels::Vector{Symbol})
-    menu_fig = Figure(size = (300, 150))
+function _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, selected_channels::Vector{Symbol})
+    # Normalize to Vector for consistent handling
+    datasets_vec = datasets isa Vector ? datasets : [datasets]
+    has_multiple_conditions = length(datasets_vec) > 1
     
-    plot_types = [
-        "Plot Individual Channels",
-        "Plot Averaged Channels",
-    ]
+    menu_fig = Figure(size = (400, 200))
+    
+    plot_types = String[]
+    
+    if has_multiple_conditions
+        # All 4 options when multiple conditions
+        push!(plot_types, "Separate electrodes, separate conditions")
+        push!(plot_types, "Average electrodes, separate conditions")
+        push!(plot_types, "Separate electrodes, average conditions")
+        push!(plot_types, "Average electrodes, average conditions")
+    else
+        # Only 2 options for single condition
+        push!(plot_types, "Plot Individual Channels")
+        push!(plot_types, "Plot Averaged Channels")
+    end
     
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
     
     for (idx, btn) in enumerate(menu_buttons)
         on(btn.clicks) do n
-            if idx == 1
-                # Plot individual channels
-                @info "Plotting ERP for individual channels: $selected_channels"
-                plot_erp(
-                    original_data;
-                    channel_selection = channels(selected_channels),
-                    average_channels = false,
-                )
-            elseif idx == 2
-                # Plot averaged channels
-                @info "Plotting ERP for averaged channels: $selected_channels"
-                plot_erp(
-                    original_data;
-                    channel_selection = channels(selected_channels),
-                    average_channels = true,
-                )
+            if has_multiple_conditions
+                if idx == 1
+                    # Separate electrodes, separate conditions
+                    @info "Plotting ERP: separate electrodes, separate conditions: $selected_channels"
+                    plot_erp(
+                        datasets_vec;
+                        channel_selection = channels(selected_channels),
+                        average_channels = false,
+                    )
+                elseif idx == 2
+                    # Average electrodes, separate conditions
+                    @info "Plotting ERP: average electrodes, separate conditions: $selected_channels"
+                    plot_erp(
+                        datasets_vec;
+                        channel_selection = channels(selected_channels),
+                        average_channels = true,
+                    )
+                elseif idx == 3
+                    # Separate electrodes, average conditions
+                    @info "Plotting ERP: separate electrodes, average conditions: $selected_channels"
+                    avg_data = _average_conditions(datasets_vec)
+                    plot_erp(
+                        avg_data;
+                        channel_selection = channels(selected_channels),
+                        average_channels = false,
+                    )
+                elseif idx == 4
+                    # Average electrodes, average conditions
+                    @info "Plotting ERP: average electrodes, average conditions: $selected_channels"
+                    avg_data = _average_conditions(datasets_vec)
+                    plot_erp(
+                        avg_data;
+                        channel_selection = channels(selected_channels),
+                        average_channels = true,
+                    )
+                end
+            else
+                # Single condition case
+                if idx == 1
+                    # Plot individual channels
+                    @info "Plotting ERP for individual channels: $selected_channels"
+                    plot_erp(
+                        first(datasets_vec);
+                        channel_selection = channels(selected_channels),
+                        average_channels = false,
+                    )
+                elseif idx == 2
+                    # Plot averaged channels
+                    @info "Plotting ERP for averaged channels: $selected_channels"
+                    plot_erp(
+                        first(datasets_vec);
+                        channel_selection = channels(selected_channels),
+                        average_channels = true,
+                    )
+                end
             end
         end
     end
     
     # Display menu in a new window
-    backend = get_makie_backend()
-    new_screen = get_makie_screen(backend)
+    new_screen = getfield(Main, :GLMakie).Screen()
     display(new_screen, menu_fig)
 end

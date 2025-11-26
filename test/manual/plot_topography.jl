@@ -43,10 +43,13 @@ eegfun.plot_topography(dat, title_fontsize = 30)
 # some epoched data
 epoch_cfg = [
     eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
-    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]]),
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
+    eegfun.EpochCondition(name = "ExampleEpoch3", trigger_sequences = [[3]]),
+    eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[4]]),
 ]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
+eegfun.plot_topography(epochs[1], 2)
 eegfun.plot_topography(epochs[1], 2)
 
 
@@ -70,12 +73,14 @@ eegfun.plot_topography(epochs[2], 1, ylim = (-1, 1))
 #################################
 erps = eegfun.average_epochs(epochs)
 
+eegfun.plot_topography(erps)
 eegfun.plot_topography(erps[1])
 
-eegfun.plot_topography(erps)
+eegfun.plot_topography(erps[1:3])
+eegfun.plot_topography(erps[1:2])
 
 
-eegfun.plot_topography(erps, ylim = (-10, 10))
+eegfun.plot_topography(erps, ylim = (-2, 2))
 eegfun.plot_topography(erps[2])
 
 eegfun.plot_topography(erps[1], gridscale = 50)
