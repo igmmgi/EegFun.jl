@@ -978,9 +978,72 @@ conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:l
 conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(dat) in condition_names for dat in x])
 conditions_not(condition_name::String) = x -> .!([_get_condition_name(dat) == condition_name for dat in x])
 
+# Internal helper to validate and preserve order for channel names
+function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
+    # Validate: check for missing channels and duplicates
+    seen = Set{Symbol}()
+    for ch in user_order
+        if ch ∉ selectable_cols
+            @minimal_warning "Channel $(ch) not found in data!"
+        elseif ch ∈ seen
+            @minimal_warning "Channel $(ch) already specified!"
+        else
+            push!(seen, ch)
+        end
+    end
+    
+    # Check if this is channels([...]) or channels_not([...])
+    existing_in_order = [ch for ch in user_order if ch in selectable_cols]
+    existing_in_selected = [ch for ch in existing_in_order if ch in selected]
+    
+    # If all existing channels are in selected, it's channels([...]) - preserve order
+    if !isempty(existing_in_order) && length(existing_in_selected) == length(existing_in_order)
+        result = Symbol[]
+        for ch in user_order
+            if ch ∉ selectable_cols || ch ∈ result
+                continue
+            end
+            push!(result, ch)
+        end
+        return result
+    end
+    return nothing  # Use default order
+end
+
+# Internal helper to validate and preserve order for channel numbers
+function _handle_channel_numbers_order(user_order_numbers, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
+    # Validate: check for invalid indices and duplicates
+    seen = Set{Int}()
+    for i in user_order_numbers
+        if i < 1 || i > length(selectable_cols)
+            @minimal_warning "Channel index $(i) out of range (valid: 1:$(length(selectable_cols)))!"
+        elseif i ∈ seen
+            @minimal_warning "Channel index $(i) already specified!"
+        else
+            push!(seen, i)
+        end
+    end
+    
+    # Check if this is channels([...]) or channels_not([...])
+    valid_indices = [i for i in user_order_numbers if 1 <= i <= length(selectable_cols)]
+    selected_indices = [i for i in valid_indices if selectable_cols[i] in selected]
+    
+    # If all valid indices are in selected, it's channels([...]) - preserve order
+    if !isempty(valid_indices) && length(selected_indices) == length(valid_indices)
+        result = Symbol[]
+        for i in user_order_numbers
+            if i < 1 || i > length(selectable_cols) || selectable_cols[i] ∈ result
+                continue
+            end
+            push!(result, selectable_cols[i])
+        end
+        return result
+    end
+    return nothing  # Use default order
+end
+
 # Helper to select channels/columns based on a predicate (+ which to include)
 function get_selected_channels(dat, channel_selection::Function; include_meta::Bool = true, include_extra::Bool = true)
-
     # Columns/channels in dataframe to include
     metadata_cols = include_meta ? meta_labels(dat) : Symbol[]
     selectable_cols = include_extra ? vcat(channel_labels(dat), extra_labels(dat)) : channel_labels(dat)
@@ -992,71 +1055,15 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
     # Preserve user-specified order if available
     selection_type = typeof(channel_selection)
     if hasfield(selection_type, :channel_names)
-        # channels([Symbol...]) or channels_not([Symbol...]) - validate and optionally preserve order
-        user_order = getfield(channel_selection, :channel_names)
-        existing_in_order = [ch for ch in user_order if ch in selectable_cols]
-        existing_in_selected = [ch for ch in existing_in_order if ch in selected]
-        
-        # Validate: check for missing channels and duplicates
-        seen = Set{Symbol}()
-        for ch in user_order
-            if ch ∉ selectable_cols
-                @minimal_warning "Channel $(ch) not found in data!"
-            elseif ch ∈ seen
-                @minimal_warning "Channel $(ch) already specified!"
-            else
-                push!(seen, ch)
-            end
-        end
-        
-        # If all existing channels from user_order are in selected, it's channels([...]) - preserve order
-        if !isempty(existing_in_order) && length(existing_in_selected) == length(existing_in_order)
-            selected = Symbol[]
-            for ch in user_order
-                if ch ∉ selectable_cols || ch ∈ selected
-                    continue
-                end
-                push!(selected, ch)
-            end
-        end
-        # Otherwise it's channels_not([...]) - use default order from selection_mask
-        
+        user_order_names = getfield(channel_selection, :channel_names)
+        ordered = _handle_channel_names_order(user_order_names, selectable_cols, selected)
+        ordered !== nothing && (selected = ordered)
     elseif hasfield(selection_type, :channel_numbers)
-        # channels([Int...]) or channels_not([Int...]) - validate and optionally preserve order
         user_order_numbers = getfield(channel_selection, :channel_numbers)
-        
-        # Validate: check for invalid indices and duplicates
-        seen = Set{Int}()
-        for i in user_order_numbers
-            if i < 1 || i > length(selectable_cols)
-                @minimal_warning "Channel index $(i) out of range (valid: 1:$(length(selectable_cols)))!"
-            elseif i ∈ seen
-                @minimal_warning "Channel index $(i) already specified!"
-            else
-                push!(seen, i)
-            end
-        end
-        
-        # Check if this is channels([...]) or channels_not([...])
-        # For channels([...]), the indices should be in selected
-        # For channels_not([...]), the indices should NOT be in selected
-        valid_indices = [i for i in user_order_numbers if 1 <= i <= length(selectable_cols)]
-        selected_indices = [i for i in valid_indices if selectable_cols[i] in selected]
-        
-        # If all valid indices are in selected, it's channels([...]) - preserve order
-        if !isempty(valid_indices) && length(selected_indices) == length(valid_indices)
-            selected = Symbol[]
-            for i in user_order_numbers
-                if i < 1 || i > length(selectable_cols) || selectable_cols[i] ∈ selected
-                    continue
-                end
-                push!(selected, selectable_cols[i])
-            end
-        end
-        # Otherwise it's channels_not([...]) - use default order from selection_mask
+        ordered = _handle_channel_numbers_order(user_order_numbers, selectable_cols, selected)
+        ordered !== nothing && (selected = ordered)
     end
 
-    # Return metadata + selected channels
     return vcat(metadata_cols, selected)
 end
 
@@ -1090,13 +1097,11 @@ end
 
 # Helper to select conditions from Vector{ErpData} based on a predicate
 function get_selected_conditions(datasets::Vector{ErpData}, condition_selection::Function)
-    all_indices = 1:length(datasets)
     return findall(condition_selection(datasets))
 end
 
 # Helper to select conditions from Vector{EpochData} based on a predicate
 function get_selected_conditions(datasets::Vector{EpochData}, condition_selection::Function)
-    all_indices = 1:length(datasets)
     return findall(condition_selection(datasets))
 end
 
