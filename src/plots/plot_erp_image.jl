@@ -44,7 +44,6 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
     :layout_topo_plot_height => (0.05, "Height of individual plots (fraction of figure height)"),
     :layout_topo_margin => (0.12, "Margin between plots"),
-    :layout_topo_scale_offset => (0.02, "Offset factor for scale plot position"),
     :layout_topo_scale_pos => ((0.95, 0.05), "Fallback position for scale plot in topo layout as (x, y) tuple"),
     
     # Grid layout parameters
@@ -423,10 +422,13 @@ function plot_erp_image(
     # The key is that all topo elements use absolute positioning within the same grid cell
     # and don't participate in grid size calculations
     if plot_layout.type == :topo && plot_kwargs[:colorbar_plot] && !isempty(heatmaps) && scale_pos !== nothing
-        scale_offset = plot_kwargs[:layout_topo_scale_offset]
+        # Calculate colorbar position: place it to the right of the scale axis
+        # The scale axis width is Relative(plot_kwargs[:layout_topo_plot_width])
+        # We add a small fixed offset (0.02) to position the colorbar next to it
+        # scale_width = plot_kwargs[:layout_topo_plot_width]
+        colorbar_halign = scale_pos[1] + 0.015  # Position to the right of scale axis
         
         # Create colorbar in fig[1, 1] with halign/valign, positioned to the right of scale axis
-        # Use the same corrected valign as the scale axis (absolute value)
         # Use tellwidth=false and tellheight=false to prevent it from affecting grid layout
         Colorbar(
             fig[1, 1],
@@ -434,8 +436,8 @@ function plot_erp_image(
             label = plot_kwargs[:colorbar_label],
             width = plot_kwargs[:colorbar_width],
             height = Relative(plot_kwargs[:layout_topo_plot_height]),
-            halign = scale_pos[1] + scale_offset,
-            valign = scale_pos[2],  # Use absolute value to match scale axis positioning
+            halign = colorbar_halign,
+            valign = scale_pos[2],
             tellwidth = false,
             tellheight = false,
         )
