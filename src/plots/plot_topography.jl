@@ -471,7 +471,7 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
 
     # Find valid grid points (within head and plotting area)
     # Since coordinates are normalized to [-1, 1], the head radius is 1.0
-    valid_mask = (r_2d .<= 1.0) .& (r_2d .<= 1.0)
+    valid_mask = r_2d .<= 1.0
     valid_indices = findall(valid_mask)
 
     if !isempty(valid_indices)
@@ -589,27 +589,33 @@ end
 # =============================================================================
 
 """
-    _setup_topo_interactivity!(fig::Figure, ax::Axis)
+    _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis, Vector{Axis}})
 
-Set up keyboard interactivity for topographic plots.
+Set up keyboard event handlers for topographic plots.
+Handles both single axis and multiple axes.
 """
-function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing)
-
-    deregister_interaction!(ax, :rectanglezoom)
-
-    # Handle keyboard events at the figure level
+function _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis, Vector{Axis}})
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
                 show_plot_help(:topography)
             elseif event.key == Keyboard.up
-                _topo_scale_up!(ax)
+                axes isa Vector ? _topo_scale_up!.(axes) : _topo_scale_up!(axes)
             elseif event.key == Keyboard.down
-                _topo_scale_down!(ax)
+                axes isa Vector ? _topo_scale_down!.(axes) : _topo_scale_down!(axes)
             end
         end
     end
+end
 
+"""
+    _setup_topo_interactivity!(fig::Figure, ax::Axis)
+
+Set up keyboard interactivity for topographic plots.
+"""
+function _setup_topo_interactivity!(fig::Figure, ax::Axis, original_data = nothing)
+    deregister_interaction!(ax, :rectanglezoom)
+    _setup_topo_keyboard_handlers!(fig, ax)
     _setup_topo_selection!(fig, ax, original_data)
 end
 
@@ -655,17 +661,7 @@ Set up shared interactivity for multiple topographic plots.
 """
 function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
     deregister_interaction!.(axes, :rectanglezoom)
-    on(events(fig).keyboardbutton) do event
-        if event.action == Keyboard.press
-            if event.key == Keyboard.i
-                show_plot_help(:topography)
-            elseif event.key == Keyboard.up
-                _topo_scale_up!.(axes)
-            elseif event.key == Keyboard.down
-                _topo_scale_down!.(axes)
-            end
-        end
-    end
+    _setup_topo_keyboard_handlers!(fig, axes)
     _setup_shared_topo_selection!(fig, datasets, shared_selection_state)
 end
 
@@ -716,70 +712,77 @@ _topo_scale_down!(ax::Axis) = _scale_topo_levels!(ax, 1.25)  # Expand range by 2
 # REGION SELECTION FOR TOPO PLOTS
 # =============================================================================
 
+# Rectangle styling constants
+const TOPO_RECT_COLOR = (:blue, 0.3)
+const TOPO_RECT_STROKE_COLOR = :black
+const TOPO_RECT_STROKE_WIDTH = 1
+
+"""
+    _find_active_axis(axes::Vector{Axis}, mouse_pos) -> Union{Axis, Nothing}
+
+Find which axis the mouse is currently over.
+Returns the axis if found, nothing otherwise.
+"""
+function _find_active_axis(axes::Vector{Axis}, mouse_pos)
+    for ax in axes
+        _is_mouse_in_axis(ax, mouse_pos) && return ax
+    end
+    return nothing
+end
+
+"""
+    _find_active_axis_with_dataset(axes::Vector{Axis}, mouse_pos, datasets::Vector)
+
+Find which axis the mouse is currently over, along with its corresponding dataset.
+Returns (axis, dataset) tuple, or (nothing, nothing) if not found.
+"""
+function _find_active_axis_with_dataset(axes::Vector{Axis}, mouse_pos, datasets::Vector)
+    for (idx, ax) in enumerate(axes)
+        if _is_mouse_in_axis(ax, mouse_pos)
+            active_dataset = idx <= length(datasets) ? datasets[idx] : nothing
+            return (ax, active_dataset)
+        end
+    end
+    return (nothing, nothing)
+end
+
+"""
+    _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, rect_points::Vector{Point2f}, 
+                                     is_temporary::Bool)
+
+Create rectangles on all axes with the given points.
+- If `is_temporary`, stores in `temp_rectangles`
+- Otherwise, creates permanent rectangles and stores in `rectangles`
+"""
+function _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, rect_points::Vector{Point2f}, is_temporary::Bool)
+    for (idx, other_ax) in enumerate(selection_state.axes)
+        rect = poly!(
+            other_ax,
+            rect_points,
+            color = TOPO_RECT_COLOR,
+            strokecolor = TOPO_RECT_STROKE_COLOR,
+            strokewidth = TOPO_RECT_STROKE_WIDTH,
+            visible = true,
+            overdraw = true,
+        )
+        
+        if is_temporary
+            selection_state.temp_rectangles[idx] = rect
+        else
+            push!(selection_state.rectangles[idx], rect)
+        end
+    end
+end
+
 """
     _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
 
 Set up simple region selection for topographic plots.
+This is a convenience wrapper for single-axis plots that calls the shared version.
 """
 function _setup_topo_selection!(fig::Figure, ax::Axis, original_data)
     selection_state = TopoSelectionState([ax])
-
-    # Track Shift key state
-    shift_pressed = Observable(false)
-
-    # Handle keyboard events to track Shift key
-    on(events(fig).keyboardbutton) do event
-        if event.key == Keyboard.left_shift
-            if event.action == Keyboard.press
-                shift_pressed[] = true
-            elseif event.action == Keyboard.release
-                shift_pressed[] = false
-            end
-        end
-    end
-
-    # Handle mouse events at the figure level
-    on(events(fig).mousebutton) do event
-        # Check if mouse is over this specific axis
-        mouse_pos = events(fig).mouseposition[]
-        if !_is_mouse_in_axis(ax, mouse_pos)
-            return
-        end
-        
-        if event.button == Mouse.left
-            if event.action == Mouse.press
-                # Check if Shift is held down
-                if shift_pressed[]
-                    _start_topo_selection!(ax, selection_state)
-                end
-            elseif event.action == Mouse.release
-                if selection_state.active[]
-                    _finish_topo_selection!(ax, selection_state, original_data)
-                end
-            end
-        end
-        if event.button == Mouse.left && event.action == Mouse.press && !shift_pressed[]
-            _clear_all_topo_selections!(selection_state)
-        end
-        if event.button == Mouse.right && event.action == Mouse.press
-            selected_channels = selection_state.selected_channels
-            if !isempty(selected_channels) && original_data isa ErpData
-                _show_topo_context_menu!(original_data, selected_channels)
-            elseif !isempty(selected_channels)
-                @warn "Cannot plot ERP: data is not ErpData (got $(typeof(original_data)))"
-            else
-                @info "No channels selected. Select channels with Shift+Left Click+Drag, then right-click to plot ERP"
-            end
-        end
-    end
-
-    # Handle mouse movement for selection dragging
-    on(events(fig).mouseposition) do pos
-        # Only update if mouse is over this axis and selection is active
-        if selection_state.active[] && _is_mouse_in_axis(ax, pos)
-            _update_topo_selection!(ax, selection_state)
-        end
-    end
+    _setup_shared_topo_selection!(fig, [original_data], selection_state)
 end
 
 """
@@ -807,40 +810,27 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
     on(events(fig).mousebutton) do event
         # Check if mouse is over any of the axes in the shared state
         mouse_pos = events(fig).mouseposition[]
-        active_ax = nothing
-        active_ax_idx = nothing
-        active_dataset = nothing
-        
-        for (idx, check_ax) in enumerate(shared_selection_state.axes)
-            if _is_mouse_in_axis(check_ax, mouse_pos)
-                active_ax = check_ax
-                active_ax_idx = idx
-                if idx <= length(datasets)
-                    active_dataset = datasets[idx]
-                end
-                break
-            end
-        end
+        active_ax, active_dataset = _find_active_axis_with_dataset(
+            shared_selection_state.axes, mouse_pos, datasets
+        )
         
         # Only process if mouse is over one of the shared axes
-        if active_ax === nothing
-            return
-        end
+        active_ax === nothing && return
         
         if event.button == Mouse.left
             if event.action == Mouse.press
                 # Check if Shift is held down
                 if shift_pressed[]
                     _start_topo_selection!(active_ax, shared_selection_state)
+                else
+                    # Clear selections if left click without Shift
+                    _clear_all_topo_selections!(shared_selection_state)
                 end
             elseif event.action == Mouse.release
                 if shared_selection_state.active[]
                     _finish_topo_selection!(active_ax, shared_selection_state, active_dataset)
                 end
             end
-        end
-        if event.button == Mouse.left && event.action == Mouse.press && !shift_pressed[]
-            _clear_all_topo_selections!(shared_selection_state)
         end
         if event.button == Mouse.right && event.action == Mouse.press
             selected_channels = shared_selection_state.selected_channels
@@ -860,11 +850,9 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
     on(events(fig).mouseposition) do pos
         # Only update if selection is active and mouse is over any shared axis
         if shared_selection_state.active[]
-            for check_ax in shared_selection_state.axes
-                if _is_mouse_in_axis(check_ax, pos)
-                    _update_topo_selection!(check_ax, shared_selection_state)
-                    break
-                end
+            active_ax = _find_active_axis(shared_selection_state.axes, pos)
+            if active_ax !== nothing
+                _update_topo_selection!(active_ax, shared_selection_state)
             end
         end
     end
@@ -886,41 +874,9 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState)
     # Store axis coordinates for spatial selection
     selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
 
-    # Find the index of this axis
-    ax_idx = findfirst(isequal(ax), selection_state.axes)
-    if ax_idx === nothing
-        ax_idx = 1
-    end
-    
-    # Create temporary rectangles for all axes
-    initial_points =
-        [Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y), Point2f(mouse_x, mouse_y)]
-    
-    # Create temp rectangle on the active axis
-    selection_state.temp_rectangles[ax_idx] = poly!(
-        ax,
-        initial_points,
-        color = (:blue, 0.3),    
-        strokecolor = :black,    
-        strokewidth = 1,         
-        visible = true,
-        overdraw = true,          
-    )
-    
-    # Create temp rectangles on all other axes with same bounds
-    for (other_idx, other_ax) in enumerate(selection_state.axes)
-        if other_idx != ax_idx
-            selection_state.temp_rectangles[other_idx] = poly!(
-                other_ax,
-                initial_points,
-                color = (:blue, 0.3),
-                strokecolor = :black,
-                strokewidth = 1,
-                visible = true,
-                overdraw = true,
-            )
-        end
-    end
+    # Create temporary rectangles for all axes (all points same initially)
+    initial_points = [Point2f(mouse_x, mouse_y) for _ in 1:4]
+    _create_rectangles_on_all_axes!(selection_state, initial_points, true)
 
     _update_topo_selection!(ax, selection_state)
 end
@@ -931,8 +887,6 @@ end
 Finish spatial region selection in topographic plot.
 """
 function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, original_data = nothing)
-    selection_state.active[] = false
-
     # Get final mouse position in axis coordinates
     mouse_pos = mouseposition(ax)
     mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
@@ -952,9 +906,7 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
     selection_state.bounds_list[] = current_bounds
 
     # Create permanent rectangles on ALL axes with the same bounds
-    bounds = selection_state.bounds[]
-    start_x, start_y = bounds[1], bounds[2]
-    end_x, end_y = bounds[3], bounds[4]
+    start_x, start_y, end_x, end_y = final_bounds
 
     rect_points = Point2f[
         Point2f(Float64(start_x), Float64(start_y)),
@@ -963,25 +915,8 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
         Point2f(Float64(start_x), Float64(end_y)),
     ]
 
-    # Find the index of this axis
-    ax_idx = findfirst(isequal(ax), selection_state.axes)
-    if ax_idx === nothing
-        ax_idx = 1
-    end
-
     # Create permanent rectangles on all axes
-    for (other_idx, other_ax) in enumerate(selection_state.axes)
-        permanent_rectangle = poly!(
-            other_ax,
-            rect_points,
-            color = (:blue, 0.3),    
-            strokecolor = :black,     
-            strokewidth = 1,          
-            visible = true,
-            overdraw = true,           
-        )
-        push!(selection_state.rectangles[other_idx], permanent_rectangle)
-    end
+    _create_rectangles_on_all_axes!(selection_state, rect_points, false)
 
     # Remove the temporary rectangles from all axes
     for (idx, temp_rect) in enumerate(selection_state.temp_rectangles)
@@ -1021,12 +956,8 @@ function _update_topo_selection!(ax::Axis, selection_state::TopoSelectionState)
         start_x, start_y = selection_state.bounds[][1], selection_state.bounds[][2]
 
         # Update bounds with the axis coordinates
-        selection_state.bounds[] = (start_x, start_y, axis_pos[1], axis_pos[2])
-
-        # Update the temporary rectangles on all axes during dragging
-        bounds = selection_state.bounds[]
-        start_x, start_y = bounds[1], bounds[2]
-        end_x, end_y = bounds[3], bounds[4]
+        end_x, end_y = axis_pos[1], axis_pos[2]
+        selection_state.bounds[] = (start_x, start_y, end_x, end_y)
 
         # Update rectangle points for the temporary rectangles
         rect_points = Point2f[
@@ -1077,14 +1008,9 @@ Find electrodes within the selected spatial region using actual electrode coordi
 This approach uses the real layout data from the topographic plot.
 """
 function _find_electrodes_in_region(x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data)
-    selected_electrodes = Symbol[]
-    for row in eachrow(original_data.layout.data)
-        # Check if this electrode is inside the selection rectangle
-        if x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max
-            push!(selected_electrodes, Symbol(row.label))
-        end
-    end
-    return selected_electrodes
+    # Filter electrodes that are inside the selection rectangle
+    selected_rows = Base.filter(row -> x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max, eachrow(original_data.layout.data))
+    return [Symbol(row.label) for row in selected_rows]
 end
 
 """
