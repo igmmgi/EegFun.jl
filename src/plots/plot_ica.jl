@@ -100,7 +100,11 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     )
 
     # Add colorbar if requested
-    if plot_kwargs[:colorbar_plot] && component in plot_kwargs[:colorbar_components]
+    # If colorbar_components is empty, show colorbar for all components
+    # Otherwise, only show for components in the list
+    colorbar_components = plot_kwargs[:colorbar_components]
+    should_show_colorbar = plot_kwargs[:colorbar_plot] && (isempty(colorbar_components) || component in colorbar_components)
+    if should_show_colorbar
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
         colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs..., tellwidth = true, tellheight = false)
@@ -200,15 +204,22 @@ function plot_topography(ica::InfoIca; kwargs...)
         # Get colorbar position for this component
         colorbar_position = get(plot_kwargs, :colorbar_position, :right)
 
-        # Convert symbol to tuple
-        if colorbar_position == :right
-            colorbar_offset = (1, 2)
-        elseif colorbar_position == :below
-            colorbar_offset = (2, 1)
-        elseif colorbar_position == :same
-            colorbar_offset = (1, 1)
+        # Convert symbol to tuple or use tuple directly
+        if colorbar_position isa Symbol
+            if colorbar_position == :right
+                colorbar_offset = (1, 2)
+            elseif colorbar_position == :below
+                colorbar_offset = (2, 1)
+            elseif colorbar_position == :same
+                colorbar_offset = (1, 1)
+            else
+                throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
+            end
+        elseif colorbar_position isa Tuple
+            # User provided tuple directly (row_offset, col_offset)
+            colorbar_offset = colorbar_position
         else
-            throw(ArgumentError("colorbar_position must be :right, :below, or :same, got: $colorbar_position"))
+            throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
         end
 
         # Calculate plot and colorbar positions
