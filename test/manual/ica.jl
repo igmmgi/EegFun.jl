@@ -43,43 +43,12 @@ eegfun.plot_ica_component_activation(dat, ica_result_infomax_extended)
 selected_samples = eegfun.get_selected_samples(dat, eegfun.samples_not(:is_extreme_value_200))
 components, n_components = eegfun._prepare_ica_data_matrix(dat, ica_result, selected_samples)
 
-lines(components[1, 1:2000])
-lines!(components[17, 1:2000])
-
-lines(abs.(components[1, 1:4000]))
-lines!(abs.(components[17, 1:4000]))
-
-
 crosscov(components[1, 1:2000], components[17, 1:2000])
-
 corspearman(abs.(zscore(components[1, :])), abs.(zscore(components[17, :])))
-
 
 lp_filter = eegfun.create_filter("lp", "iir", 5.0, dat.sample_rate; order = 3)
 comp1 = eegfun.filtfilt(lp_filter.filter_object, components[1, :])
 comp2 = eegfun.filtfilt(lp_filter.filter_object, components[17, :])
-
-lines(comp1[1:2000])
-lines!(comp2[1:2000])
-
-lines(zscore(comp1[1:2000]))
-lines!(zscore(comp2[1:2000]))
-
-lines(zscore(comp1[300:500]))
-lines!(zscore(comp2[300:500]))
-
-cor(zscore(comp1[300:500]),zscore(comp2[300:500]))
-
-
-
-
-
-corkendall(abs.(zscore(components[1, :])), abs.(zscore(components[17, :])))
-cor(StatsBase.zscore(components[1, 1:2000]), StatsBase.zscore(components[17, 1:2000]))
-
-cor(abs.(components[1, 1:2000]), abs.(components[17, 1:2000]))
-maximum(xcorr(abs.(components[1, 1:2000]), abs.(components[17, 1:2000])))
-xcorr(abs.(components[1, :]), abs.(components[17, :]))
 
 component_artifacts, component_metrics = eegfun.identify_components(
                     dat,
@@ -92,25 +61,22 @@ component_artifacts, component_metrics = eegfun.identify_components(
 eegfun.identify_ecg_components(dat, ica_result; sample_selection = eegfun.samples_not(:is_extreme_value_200))        
 
 
-
-
-
-
-fig, ax, analysis_settings = eegfun.plot_databrowser(dat, ica_result)
+fig, ax, analysis_settings = eegfun.plot_databrowser(dat, ica_result_infomax)
 dat_new = eegfun.apply_analysis_settings(dat, ica_result, analysis_settings)
 eegfun.plot_databrowser(dat_new)
 
 eegfun.plot_topography(
-    ica_result,
+    ica_result_infomax,
     component_selection = eegfun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
-    colorbar_position = :right,
-    colorbar_vertical = true,
-    colorbar_components = [1, 2],
+    colorbar_position = :below,
+    colorbar_vertical = false,
+    colorbar_plot_numbers = [1, 2],
 );
+
 eegfun.plot_topography(
-    ica_result,
+    ica_result_infomax,
     component_selection = eegfun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
@@ -118,9 +84,10 @@ eegfun.plot_topography(
     colorbar_vertical = false,
 );
 
+# TODO: units and colorbar appropriateness for ICA plots???
 
 # Test single component plotting (simplified approach)
-eegfun.plot_topography(ica_result, method = :multiquadratic);
+eegfun.plot_topography(ica_result_infomax, method = :multiquadratic);
 eegfun.plot_topography(ica_result, method = :spherical_spline);
 eegfun.plot_topography(
     ica_result,
@@ -167,8 +134,9 @@ eegfun.plot_topography(
     head_linewidth = 5,
     head_radius = 1.1,
 );
+
 eegfun.plot_topography(
-    ica_result,
+    ica_result_infomax,
     component_selection = eegfun.components(1),
     method = :multiquadratic,
     point_plot = true,
@@ -180,6 +148,7 @@ eegfun.plot_topography(
     head_linewidth = 5,
     colorbar_plot = true,
 );
+
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),

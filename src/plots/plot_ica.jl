@@ -411,6 +411,10 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
     display_plot = pop!(plot_kwargs, :display_plot)
     component_selection = pop!(plot_kwargs, :component_selection)
 
+    # change some defaults
+    plot_kwargs[:point_plot] = false
+    plot_kwargs[:label_plot] = false
+
     # Pass kwargs to constructor
     state = IcaComponentState(
         dat,
