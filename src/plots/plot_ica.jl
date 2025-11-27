@@ -1,9 +1,65 @@
-# TODO: colorbar position seems a bit awkward (+inconsistent) for ICA/standard topoplots
+# TODO: colorbar_position seems a bit awkward 
 # Currently I have (hacky?), settings with :right, :below, :same for colorbar_position
-# or offset positions (e.g., 1,2)
+# or offset positions (e.g., 1,2). Actually, the whole colorbar stuff feels a bit off!
 # MUST BE BETTER WAY TO HANDLE THIS!!!
 
-# Note: PLOT_TOPOGRAPHY_KWARGS is defined in plot_topography.jl
+# Single shared kwargs for all topography plots (both ICA and standard)
+const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+
+    # Display parameters
+    :display_plot => (true, "Whether to display the plot"),
+    :figure_title => ("Topography Plot", "Title for the plot window"),
+    :interactive => (true, "Whether to enable interactive features"),
+
+    # Topography parameters
+    :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
+    :colormap => (:jet, "Colormap for the topography"),
+    :gridscale => (200, "Grid resolution for interpolation"),
+    :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
+    :ylim => (nothing, "Y-axis limits (nothing for auto). For ICA plots, use num_levels instead."),
+    :num_levels => (20, "Number of contour levels (for ICA plots). For standard plots, use ylim instead."),
+
+    # Title parameters
+    :title => ("", "Plot title"),
+    :title_fontsize => (16, "Font size for the title"),
+    :show_title => (true, "Whether to show the title"),
+
+    # Head shape parameters
+    :head_color => (:black, "Color of the head shape outline."),
+    :head_linewidth => (2, "Line width of the head shape outline."),
+    :head_radius => (1.0, "Radius of the head shape in mm."),
+
+    # Electrode point parameters
+    :point_plot => (true, "Whether to plot electrode points."),
+    :point_marker => (:circle, "Marker style for electrode points."),
+    :point_markersize => (12, "Size of electrode point markers."),
+    :point_color => (:black, "Color of electrode points."),
+
+    # Electrode label parameters
+    :label_plot => (true, "Whether to plot electrode labels."),
+    :label_fontsize => (20, "Font size for electrode labels."),
+    :label_color => (:black, "Color of electrode labels."),
+    :label_xoffset => (0, "X-axis offset for electrode labels."),
+    :label_yoffset => (0, "Y-axis offset for electrode labels."),
+
+    # Colorbar parameters - get all Colorbar attributes with their actual defaults
+    [
+        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
+        attr in propertynames(Colorbar)
+    ]...,
+
+    # Override specific colorbar parameters with custom defaults
+    :colorbar_plot => (true, "Whether to display the colorbar"),
+    :colorbar_position => ((1, 2), "Colorbar position as (row, col) tuple, or :right, :below"),
+    :colorbar_label => ("μV", "Label for the colorbar"),
+    :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
+
+    # ICA-specific parameters (ignored for standard topography plots)
+    :use_global_scale => (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
+    :component_selection => (components(), "Function that returns boolean vector for component filtering"),
+
+)
+
 
 
 
