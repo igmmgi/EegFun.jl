@@ -56,7 +56,6 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Layout parameters (for topo and other layouts)
     :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
     :layout_topo_plot_height => (0.05, "Height of individual plots (fraction of figure height)"),
-    :layout_topo_margin => (0.12, "Margin between plots"),
     :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
     :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
     
