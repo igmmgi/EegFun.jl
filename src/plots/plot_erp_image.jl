@@ -44,9 +44,8 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
 
     # Layout parameters (for topo and other layouts)
-    :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
-    :layout_topo_plot_height => (0.05, "Height of individual plots (fraction of figure height)"),
-    :layout_topo_margin => (0.12, "Margin between plots"),
+    :layout_topo_plot_width => (0.07, "Width of individual plots (fraction of figure width)"),
+    :layout_topo_plot_height => (0.07, "Height of individual plots (fraction of figure height)"),
     :layout_topo_scale_pos => ((0.95, 0.05), "Fallback position for scale plot in topo layout as (x, y) tuple"),
     
     # Grid layout parameters
