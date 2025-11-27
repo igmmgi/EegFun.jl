@@ -7,7 +7,7 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :sort_values => (false, "Sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
     :dims => (nothing, "Tuple (rows, cols) for grid layout. default = best_rect(n_columns)."),
-    :bar_color => (:steelblue, "Bar colour."),
+    :bar_color => (:steelblue, "Bar color."),
     :bar_width => (0.8, "Bar width."),
     :bar_alpha => (0.7, "Bar alpha."),
     :error_color => (:black, "Error bar color."),

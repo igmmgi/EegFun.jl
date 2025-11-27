@@ -462,6 +462,22 @@ function _find_active_axis(axes::Vector{Axis}, mouse_pos)
 end
 
 """
+    _find_active_axis_with_dataset(axes::Vector{Axis}, mouse_pos, datasets::Vector)
+
+Find which axis the mouse is currently over, along with its corresponding dataset.
+Returns (axis, dataset) tuple, or (nothing, nothing) if not found.
+"""
+function _find_active_axis_with_dataset(axes::Vector{Axis}, mouse_pos, datasets::Vector)
+    for (idx, ax) in enumerate(axes)
+        if _is_mouse_in_axis(ax, mouse_pos)
+            active_dataset = idx <= length(datasets) ? datasets[idx] : nothing
+            return (ax, active_dataset)
+        end
+    end
+    return (nothing, nothing)
+end
+
+"""
     _setup_keyboard_tracking(fig::Figure)
 
 Set up keyboard event tracking for Shift and Ctrl keys.

@@ -25,7 +25,6 @@ println("=" ^ 40)
     include("automatic/baseline.jl")
     # include("automatic/batch_utils.jl") # TODO: tests seem iffy here!
     include("automatic/channel_average.jl")
-    include("automatic/channel_combine.jl")
     include("automatic/channel_difference.jl")
     include("automatic/channel_metrics.jl")
     include("automatic/channel_repair.jl")

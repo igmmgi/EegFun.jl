@@ -1,9 +1,19 @@
+# =============================================================================
+# NOTE ON SPELLING: COLOR vs COLOUR
+# =============================================================================
+# This codebase uses "color" (American spelling) throughout to maintain
+# consistency with Makie.jl's API, which uses "color" in all its attributes
+# (e.g., colormap, colorbar, strokecolor, etc.). While "colour" may be the
+# preferred spelling in some regions, we follow Makie's convention for
+# consistency and to avoid confusion when working with Makie's API.
+# =============================================================================
 
 function display_figure(fig)
     display(get_makie_screen(get_makie_backend()), fig)
 end
 
 # TODO: I must be doing something wrong here!!! 
+# Must be a better way to do this?
 function get_makie_backend()
     backend_str = string(Makie.current_backend())
     if occursin("GLMakie", backend_str)
@@ -28,6 +38,31 @@ function set_window_title(title::String)
         Makie.current_backend().activate!(title = title)
     end
     # TODO: CairoMakie doesn't support window titles?
+end
+
+"""
+    _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs...)
+
+Create a Figure and Axis with window title set from data.
+
+# Arguments
+- `data`: Data object to generate window title from (passed to `_generate_window_title`)
+- `title_suffix::String`: Optional suffix to append to the generated title
+- `figure_kwargs...`: Keyword arguments passed to `Figure()` constructor
+
+# Returns
+- `fig::Figure`: The created figure
+- `ax::Axis`: The created axis at position `[1, 1]`
+"""
+function _create_figure_with_axis(data; title_suffix::String = "", figure_kwargs...)
+    title = _generate_window_title(data)
+    if !isempty(title_suffix)
+        title = title * title_suffix
+    end
+    set_window_title(title)
+    fig = Figure(; figure_kwargs...)
+    ax = Axis(fig[1, 1])
+    return fig, ax
 end
 
 """
@@ -105,6 +140,7 @@ function _extract_colorbar_kwargs!(plot_kwargs::Dict{Symbol,Any})
         end
     end
 
+    # TODO: what did I need to add this?
     # These cannot be passed to colorbar kwargs
     pop!(colorbar_kwargs, :colormap, nothing)
     pop!(colorbar_kwargs, :limits, nothing)
@@ -240,15 +276,9 @@ function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", 
     ax.yreversed = yreversed
     
     # Set axis limits
-    if xlim !== nothing
-        xmin, xmax = xlim
-        xlims!(ax, xmin, xmax)
-    end
-    
-    if ylim !== nothing
-        ymin, ymax = ylim
-        ylims!(ax, ymin, ymax)
-    end
+    xlim !== nothing && xlims!(ax, xlim[1], xlim[2])
+    ylim !== nothing && ylims!(ax, ylim[1], ylim[2])
+
 end
 
 """
@@ -265,7 +295,7 @@ Add origin lines at x=0 and y=0 to the axis.
 - `linewidth`: Line width of the origin lines
 - `alpha`: Transparency of the origin lines
 """
-function _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 0.5, alpha = 0.7)
+function _set_origin_lines!(ax; add_xy_origin = true, color = :gray, linewidth = 1, alpha = 0.8)
     if add_xy_origin
         hlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
         vlines!(ax, 0, color = color, linewidth = linewidth, alpha = alpha)
@@ -311,9 +341,7 @@ function _split_into_parts(s::String)
 end
 
 """
-    _generate_window_title(datasets; 
-                          max_total_length::Int = 80,
-                          max_name_length::Int = 30)
+    _generate_window_title(datasets; max_total_length::Int = 80, max_name_length::Int = 30)
 
 Generate a window title from datasets, including file names and condition names.
 Handles single and multiple conditions, with automatic shortening if needed.
@@ -354,28 +382,20 @@ function _generate_window_title( datasets::Vector{<:EegData}; max_total_length::
     end
 end
 
-function _generate_window_title(datasets::EegData; max_total_length::Int = 80, max_name_length::Int = 20)
-    return "$(datasets.file):$(datasets.condition_name)"
-end
+_generate_window_title(datasets::EegData) = "$(datasets.file):$(datasets.condition_name)"
 
 """
-    _generate_window_title(datasets::ContinuousData; 
-                          max_total_length::Int = 80,
-                          max_name_length::Int = 30)
+    _generate_window_title(datasets::ContinuousData)
 
 Generate a window title from ContinuousData, using just the filename.
 
 # Arguments
 - `datasets::ContinuousData`: ContinuousData object
-- `max_total_length::Int`: Maximum total length (not used for ContinuousData, kept for consistency)
-- `max_name_length::Int`: Maximum name length (not used for ContinuousData, kept for consistency)
 
 # Returns
 - `String`: Window title string (just the filename)
 """
-function _generate_window_title(datasets::ContinuousData; max_total_length::Int = 80, max_name_length::Int = 20)
-    return datasets.file
-end
+_generate_window_title(datasets::ContinuousData) = datasets.file
 
 """
     _generate_window_title(datasets::Vector{ContinuousData}; 
@@ -403,14 +423,11 @@ function _generate_window_title(datasets::Vector{ContinuousData}; max_total_leng
     first_file = datasets[1].file
     all_same_file = all(dataset.file == first_file for dataset in datasets)
     
-    if all_same_file
-        return first_file
-    else
-        file_names = [data.file for data in datasets]
-        return _shorten_condition_names(file_names; 
-                                     max_total_length = max_total_length, 
-                                     max_name_length = max_name_length)
-    end
+    all_same_file && return first_file
+    
+    file_names = [data.file for data in datasets]
+    return _shorten_condition_names(file_names; max_total_length = max_total_length, max_name_length = max_name_length)
+
 end
 
 """
@@ -430,9 +447,8 @@ Create an intelligent abbreviation of a name by:
 function _abbreviate_name(name::String, common_prefix_parts::Vector{String})
     isempty(common_prefix_parts) && return name
     
+    # abbreviate: take first 2-3 letters of each (or first letter if short)
     name_parts = _split_into_parts(name)
-    
-    # Abbreviate common prefix parts: take first 2-3 letters of each (or first letter if short)
     abbrev_prefix = ""
     for part in common_prefix_parts
         if part == "_"
@@ -476,9 +492,8 @@ function _find_common_prefix_parts(names::Vector{String})
     first_parts = all_parts[1]
     common_parts = String[]
     
-    for i in 1:length(first_parts)
-        part = first_parts[i]
-        if all(length(parts) >= i && parts[i] == part for parts in all_parts)
+    for (i, part) in enumerate(first_parts)
+        if all(get(parts, i, nothing) == part for parts in all_parts)
             push!(common_parts, part)
         else
             break
