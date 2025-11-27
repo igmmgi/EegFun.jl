@@ -15,14 +15,12 @@ eegfun.filter_data!(dat, "hp", 1)
 # Single DataFrameEeg
 #################################
 eegfun.plot_topography(dat)
-eegfun.plot_topography(dat, colorrange = (-0.1, 0.1), ylim = (-0.01, 0.01))
-eegfun.plot_topography(dat, colorrange = (-1.2, 1.2), ylim = (-0.01, 0.01))
-eegfun.plot_topography(dat, colorrange = (-100, 100))
+eegfun.plot_topography(dat, ylim = (-0.01, 0.01))
 eegfun.plot_topography(dat, colorbar_plot = false)
 
 eegfun.plot_topography(dat, method = :spherical_spline)
 eegfun.plot_topography(dat, method = :multiquadratic)
-eegfun.plot_topography(dat, method = :multiquadratic, radius = 1.1)
+eegfun.plot_topography(dat, method = :multiquadratic, head_radius = 0.9)
 eegfun.plot_topography(dat, gridscale = 50)
 eegfun.plot_topography(dat, gridscale = 1000)
 eegfun.plot_topography(dat, colormap = :inferno)
@@ -30,15 +28,12 @@ eegfun.plot_topography(dat, title = "Custom Title", title_fontsize = 30)
 eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6)
 eegfun.plot_topography(dat, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, method = :spherical_spline)
 eegfun.plot_topography(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))
-eegfun.plot_topography(dat, label_fontsize = 30)
+eegfun.plot_topography(dat, label_fontsize = 130)
 eegfun.plot_topography(dat, point_markersize = 30, point_marker = :x)
-eegfun.plot_topography(dat, ylim = (-10, 10))
-eegfun.plot_topography(dat, ylim = (-1, 1))
-eegfun.plot_topography(dat, colorbar_ticksize = 30)
+eegfun.plot_topography(dat, colorbar_ticksize = 130)
 eegfun.plot_topography(dat, colorbar_labelcolor = :red)
-eegfun.plot_topography(dat, colorbar_size = 10)
+eegfun.plot_topography(dat, colorbar_size = 50)
 eegfun.plot_topography(dat, colorbar_size = 20, colorbar_position = (2, 1), colorbar_vertical=false)
-eegfun.plot_topography(dat, title_fontsize = 30)
 
 #################################
 # Epoched DataFrameEeg
@@ -52,7 +47,7 @@ epoch_cfg = [
 ]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 
-eegfun.plot_topography(epochs[1], 2)
+eegfun.plot_topography(epochs, 2)
 eegfun.plot_topography(epochs[1], 2)
 
 

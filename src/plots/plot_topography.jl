@@ -1,39 +1,29 @@
 # =============================================================================
 # DEFAULT KEYWORD ARGUMENTS
 # =============================================================================
+
+# Single shared kwargs for all topography plots (both ICA and standard)
 const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 
     # Display parameters
     :display_plot => (true, "Whether to display the plot"),
-    :figure_title => ("EEG Topography Plot", "Title for the plot window"),
+    :figure_title => ("Topography Plot", "Title for the plot window"),
     :interactive => (true, "Whether to enable interactive features"),
 
-    # Topography-specific parameters
+    # Topography parameters
     :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
-    :gridscale => (200, "Grid resolution for interpolation"),
     :colormap => (:jet, "Colormap for the topography"),
-    :ylim => (nothing, "Y-axis limits (nothing for auto)"),
+    :gridscale => (200, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
+    :ylim => (nothing, "Y-axis limits (nothing for auto). For ICA plots, use num_levels instead."),
+    :num_levels => (20, "Number of contour levels (for ICA plots). For standard plots, use ylim instead."),
 
     # Title parameters
     :title => ("", "Plot title"),
     :title_fontsize => (16, "Font size for the title"),
     :show_title => (true, "Whether to show the title"),
 
-    # Colorbar parameters - get all Colorbar attributes with their actual defaults
-    # This allows users to control any Colorbar parameter
-    [
-        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
-        attr in propertynames(Colorbar)
-    ]...,
-
-    # Override specific colorbar parameters with custom defaults
-    :colorbar_plot => (true, "Whether to display the colorbar"),
-    :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
-    :colorbar_label => ("μV", "Label for the colorbar"),
-    :colorbar_datasets => ([], "Dataset indices (1-based) for which to show colorbars. Empty list shows colorbars for all datasets."),
-
-    # Head shape parameters (reusing layout kwargs)
+    # Head shape parameters
     :head_color => (:black, "Color of the head shape outline."),
     :head_linewidth => (2, "Line width of the head shape outline."),
     :head_radius => (1.0, "Radius of the head shape in mm."),
@@ -50,6 +40,23 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :label_color => (:black, "Color of electrode labels."),
     :label_xoffset => (0, "X-axis offset for electrode labels."),
     :label_yoffset => (0, "Y-axis offset for electrode labels."),
+
+    # Colorbar parameters - get all Colorbar attributes with their actual defaults
+    [
+        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
+        attr in propertynames(Colorbar)
+    ]...,
+
+    # Override specific colorbar parameters with custom defaults
+    :colorbar_plot => (true, "Whether to display the colorbar"),
+    :colorbar_position => ((1, 2), "Colorbar position as (row, col) tuple, or :right, :below"),
+    :colorbar_label => ("μV", "Label for the colorbar"),
+    :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
+
+    # ICA-specific parameters (ignored for standard topography plots)
+    :use_global_scale => (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
+    :component_selection => (components(), "Function that returns boolean vector for component filtering"),
+
 )
 
 
@@ -70,20 +77,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     gridscale = pop!(plot_kwargs, :gridscale)
     colorbar_position = pop!(plot_kwargs, :colorbar_position)
     colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
-    channel_data = mean.(eachcol(dat[!, layout.data.label]))
-    if method == :multiquadratic
-        data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
-    elseif method == :spherical_spline
-        data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
-    end
-
     ylim = pop!(plot_kwargs, :ylim)
-    if isnothing(ylim)
-        # Make ylim symmetric around 0 for balanced topographic visualization
-        data_min, data_max = extrema(data[.!isnan.(data)])
-        max_abs = max(abs(data_min), abs(data_max))
-        ylim = (-max_abs, max_abs)
-    end
 
     # Set title based on user preferences and data
     if plot_kwargs[:show_title]
@@ -94,6 +88,22 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
             ax.title = @sprintf("%.3f to %.3f s", time_min, time_max)
         end
         ax.titlesize = plot_kwargs[:title_fontsize]
+    end
+
+    # Compute interpolated data
+    channel_data = mean.(eachcol(dat[!, layout.data.label]))
+    if method == :multiquadratic
+        data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
+    elseif method == :spherical_spline
+        data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
+    end
+
+    # Calculate ylim if not provided (must be after data is computed)
+    if isnothing(ylim)
+        # Make ylim symmetric around 0 for balanced topographic visualization
+        data_min, data_max = extrema(data[.!isnan.(data)])
+        max_abs = max(abs(data_min), abs(data_max))
+        ylim = (-max_abs, max_abs)
     end
 
     co = contourf!(
@@ -154,7 +164,10 @@ function plot_topography(
         kwargs...,
     )
 
-    interactive && _setup_topo_interactivity!(fig, ax, dat)
+    # Only enable interactivity for ErpData (context menu requires ErpData)
+    if interactive && dat isa ErpData
+        _setup_topo_interactivity!(fig, ax, dat)
+    end
     display_plot && display_figure(fig)
 
     set_window_title("Makie")
@@ -202,7 +215,7 @@ function plot_topography(
     kwargs_dict = Dict{Symbol, Any}(kwargs)
     colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
     user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
-    colorbar_datasets = get(kwargs_dict, :colorbar_datasets, [])
+    colorbar_plot_numbers = get(kwargs_dict, :colorbar_plot_numbers, [])
     dims = get(kwargs_dict, :dims, nothing)
     
     # Calculate grid dimensions for plots
@@ -293,15 +306,11 @@ function plot_topography(
         # Prepare kwargs for this subplot
         subplot_kwargs = copy(kwargs_dict)
         # Determine if this dataset should have a colorbar
-        # If colorbar_datasets is empty, show colorbar for all datasets
+        # If colorbar_plot_numbers is empty, show colorbar for all datasets
         # Otherwise, only show for datasets whose index (1-based) is in the list
-        should_show_colorbar = colorbar_enabled && (isempty(colorbar_datasets) || idx in colorbar_datasets)
+        should_show_colorbar = colorbar_enabled && (isempty(colorbar_plot_numbers) || idx in colorbar_plot_numbers)
         if should_show_colorbar
-            if user_colorbar_position !== nothing
-                subplot_kwargs[:colorbar_position] = (colorbar_row, colorbar_col)
-            else
-                subplot_kwargs[:colorbar_position] = (colorbar_row, colorbar_col)
-            end
+            subplot_kwargs[:colorbar_position] = (colorbar_row, colorbar_col)
         else
             # Disable colorbar for this specific dataset
             subplot_kwargs[:colorbar_plot] = false
@@ -331,8 +340,8 @@ function plot_topography(
         end
     end
     
-    # Set up interactivity for all axes if requested
-    if interactive
+    # Only enable interactivity if all datasets are ErpData (context menu requires ErpData)
+    if interactive && all(d isa ErpData for d in dat)
         shared_selection_state = TopoSelectionState(axes)
         _setup_shared_topo_interactivity!(fig, axes, dat, shared_selection_state)
     end
@@ -341,6 +350,11 @@ function plot_topography(
     
     set_window_title("Makie")
     return fig, axes
+end
+
+function plot_topography(dat::Vector{EpochData}, epoch::Int; kwargs...)
+    @info "Plotting epoch $(epoch) for each dataset in the vector"
+    plot_topography.(dat, Ref(epoch))
 end
 
 
@@ -369,7 +383,6 @@ function plot_topography(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     display_plot = true,
-    interactive = true,
     kwargs...,
 )
 
@@ -386,7 +399,6 @@ function plot_topography(
         kwargs...,
     )
 
-    interactive && _setup_topo_interactivity!(fig, ax, dat)
     display_plot && display_figure(fig)
 
     set_window_title("Makie")
@@ -792,12 +804,6 @@ _topo_scale_down!(ax::Axis) = _scale_topo_levels!(ax, 1.25)  # Expand range by 2
 # =============================================================================
 # REGION SELECTION FOR TOPO PLOTS
 # =============================================================================
-
-# Rectangle styling constants
-const TOPO_RECT_COLOR = (:blue, 0.3)
-const TOPO_RECT_STROKE_COLOR = :black
-const TOPO_RECT_STROKE_WIDTH = 1
-
 """
     _find_active_axis(axes::Vector{Axis}, mouse_pos) -> Union{Axis, Nothing}
 
@@ -840,9 +846,9 @@ function _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, re
         rect = poly!(
             other_ax,
             rect_points,
-            color = TOPO_RECT_COLOR,
-            strokecolor = TOPO_RECT_STROKE_COLOR,
-            strokewidth = TOPO_RECT_STROKE_WIDTH,
+            color = (:blue, 0.3),
+            strokecolor = :black,
+            strokewidth = 1,
             visible = true,
             overdraw = true,
         )
@@ -900,11 +906,9 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
         
         if event.button == Mouse.left
             if event.action == Mouse.press
-                # Check if Shift is held down
                 if shift_pressed[]
                     _start_topo_selection!(active_ax, shared_selection_state)
                 else
-                    # Clear selections if left click without Shift
                     _clear_all_topo_selections!(shared_selection_state)
                 end
             elseif event.action == Mouse.release
@@ -915,14 +919,11 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
         end
         if event.button == Mouse.right && event.action == Mouse.press
             selected_channels = shared_selection_state.selected_channels
-            # Check if all datasets are ErpData
-            all_erp_data = all(d isa ErpData for d in datasets)
-            if !isempty(selected_channels) && all_erp_data
+            if !isempty(selected_channels)
+                # Interactivity is only enabled for ErpData, so we can safely call the context menu
                 _show_topo_context_menu!(datasets, selected_channels)
-            elseif !isempty(selected_channels)
-                @warn "Cannot plot ERP: data is not ErpData"
             else
-                @info "No channels selected. Select channels with Shift+Left Click+Drag, then right-click to plot ERP"
+                @minimal_warning "No channels selected. Select channels with Shift+Left Click+Drag, then right-click to plot ERP"
             end
         end
     end
@@ -1104,31 +1105,49 @@ function _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, sel
 
     datasets_vec = datasets isa Vector ? datasets : [datasets]
     has_multiple_conditions = length(datasets_vec) > 1
+    has_multiple_channels = length(selected_channels) > 1
     
     plot_types = String[]
-    if has_multiple_conditions
-        push!(plot_types, "Separate electrodes, separate conditions")
-        push!(plot_types, "Average electrodes, separate conditions")
-        push!(plot_types, "Separate electrodes, average conditions")
-        push!(plot_types, "Average electrodes, average conditions")
-    else
+    plot_configs = Tuple{Bool, Bool, String}[]
+    
+    if has_multiple_conditions && has_multiple_channels
+        # Multiple conditions and multiple channels: show all 4 options
+        push!(plot_types, "Separate channels, separate conditions")
+        push!(plot_types, "Average channels, separate conditions")
+        push!(plot_types, "Separate channels, average conditions")
+        push!(plot_types, "Average channels, average conditions")
+        plot_configs = [
+            (false, false, "separate channels, separate conditions"),
+            (false, true, "average channels, separate conditions"),
+            (true, false, "separate channels, average conditions"),
+            (true, true, "average channels, average conditions"),
+        ]
+    elseif has_multiple_conditions
+        # Multiple conditions but single channel: only condition averaging options
+        push!(plot_types, "Separate conditions")
+        push!(plot_types, "Average conditions")
+        plot_configs = [
+            (false, false, "separate conditions"),
+            (true, false, "average conditions"),
+        ]
+    elseif has_multiple_channels
+        # Single condition but multiple channels: only channel averaging options
         push!(plot_types, "Plot Individual Channels")
         push!(plot_types, "Plot Averaged Channels")
+        plot_configs = [
+            (false, false, "individual channels"),
+            (false, true, "averaged channels"),
+        ]
+    else
+        # Single condition and single channel: just plot it
+        push!(plot_types, "Plot Channel")
+        plot_configs = [
+            (false, false, "single channel"),
+        ]
     end
     
     menu_fig = Figure(size = (400, 200))
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
-    
-    # Define plot configurations: (average_conditions, average_channels, info_msg)
-    plot_configs = has_multiple_conditions ? [
-        (false, false, "separate electrodes, separate conditions"),
-        (false, true, "average electrodes, separate conditions"),
-        (true, false, "separate electrodes, average conditions"),
-        (true, true, "average electrodes, average conditions"),
-    ] : [
-        (false, false, "individual channels"),
-        (false, true, "averaged channels"),
-    ]
     
     for (idx, btn) in enumerate(menu_buttons)
         on(btn.clicks) do n

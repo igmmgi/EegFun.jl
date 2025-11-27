@@ -3,55 +3,8 @@
 # or offset positions (e.g., 1,2)
 # MUST BE BETTER WAY TO HANDLE THIS!!!
 
-# =============================================================================
-# DEFAULT KEYWORD ARGUMENTS
-# =============================================================================
-const PLOT_ICA_KWARGS = Dict{Symbol,Tuple{Any,String}}(
+# Note: PLOT_TOPOGRAPHY_KWARGS is defined in plot_topography.jl
 
-    # Component selection
-    :component_selection => (components(), "Function that returns boolean vector for component filtering"),
-    :use_global_scale =>
-        (false, "Do multiple topoplots share the same color scale based on min/max across all components?"),
-    :display_plot => (true, "Whether to display the plot"),
-
-    # Topography parameters
-    :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
-    :colormap => (:jet, "Colormap for the topography"),
-    :gridscale => (100, "Grid resolution for interpolation"),
-    :num_levels => (20, "Number of contour levels"),
-
-    # Head shape parameters
-    :head_color => (:black, "Color of the head shape outline"),
-    :head_linewidth => (2, "Line width of the head shape outline"),
-    :head_radius => (1.0, "Radius of the head shape in mm"),
-
-    # Electrode point parameters
-    :point_plot => (false, "Whether to plot electrode points"),
-    :point_marker => (:circle, "Marker style for electrode points"),
-    :point_markersize => (12, "Size of electrode point markers"),
-    :point_color => (:black, "Color of electrode points"),
-
-    # Electrode label parameters
-    :label_plot => (false, "Whether to plot electrode labels"),
-    :label_fontsize => (20, "Font size for electrode labels"),
-    :label_color => (:black, "Color of electrode labels"),
-    :label_xoffset => (0, "X-axis offset for electrode labels"),
-    :label_yoffset => (0, "Y-axis offset for electrode labels"),
-
-    # Grid layout parameters
-    :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
-
-    # Colorbar parameters
-    # Automatically add all Colorbar attributes with their actual defaults
-    # This allows users to control any Colorbar parameter
-    [
-        Symbol("colorbar_$(attr)") => (get(COLORBAR_DEFAULTS, attr, nothing), "Colorbar $(attr) parameter") for
-        attr in propertynames(Colorbar)
-    ]...,
-    :colorbar_plot => (false, "Whether to display colorbars"),
-    :colorbar_position => (:right, "Position for colorbar: :right, :below, or :same"),
-    :colorbar_components => ([], "Component selection for component colorbar plotting"),
-)
 
 
 """
@@ -66,13 +19,13 @@ Internal function to plot a single ICA component topography on existing figure/a
 - `component::Int`: The component index to plot (1-based).
 
 # Keyword Arguments
-$(generate_kwargs_doc(PLOT_ICA_KWARGS))
+$(generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
 - `co`: The contour plot object returned by `contourf!`.
 """
 function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; kwargs...)
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)
@@ -100,10 +53,10 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     )
 
     # Add colorbar if requested
-    # If colorbar_components is empty, show colorbar for all components
+    # If colorbar_plot_numbers is empty, show colorbar for all components
     # Otherwise, only show for components in the list
-    colorbar_components = plot_kwargs[:colorbar_components]
-    should_show_colorbar = plot_kwargs[:colorbar_plot] && (isempty(colorbar_components) || component in colorbar_components)
+    colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
+    should_show_colorbar = plot_kwargs[:colorbar_plot] && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
     if should_show_colorbar
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
         colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
@@ -124,7 +77,7 @@ Plot multiple ICA component topographies in a grid layout within a new Figure.
 # Arguments
 - `ica::InfoIca`: The ICA result object (contains layout information).
 
-$(generate_kwargs_doc(PLOT_ICA_KWARGS))
+$(generate_kwargs_doc(PLOT_TOPOGRAPHY_KWARGS))
 
 # Returns
 - `fig::Figure`: The generated Makie Figure containing the grid of topoplots.
@@ -159,12 +112,9 @@ fig = plot_topography(ica,
 )
 ```
 """
-function plot_topography(ica::InfoIca; kwargs...)
+function plot_topography(ica::InfoIca; component_selection = components(), kwargs...)
 
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
-
-    # Extract commonly used kwargs
-    component_selection = pop!(plot_kwargs, :component_selection)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
     dims = pop!(plot_kwargs, :dims)
     display_plot = pop!(plot_kwargs, :display_plot)
 
@@ -447,19 +397,19 @@ function plot_ica_component_activation(dat::ContinuousData, ica::InfoIca; kwargs
     set_window_title(title_str)
 
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     # ensure coordinates are 2d
     _ensure_coordinates_2d!(ica.layout)
     _ensure_coordinates_3d!(ica.layout)
 
     # Extract commonly used kwargs that are NOT plot call specific from plot_kwargs
-    component_selection = pop!(plot_kwargs, :component_selection)
     n_visible_components = min(10, length(ica.ica_label))
     window_size = min(2000, n_samples(dat))
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     display_plot = pop!(plot_kwargs, :display_plot)
+    component_selection = pop!(plot_kwargs, :component_selection)
 
     # Pass kwargs to constructor
     state = IcaComponentState(
@@ -2044,7 +1994,7 @@ fig = plot_artifact_components(ica, artifacts)
 """
 function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; kwargs...)
     # Merge user kwargs with defaults
-    plot_kwargs = _merge_plot_kwargs(PLOT_ICA_KWARGS, kwargs)
+    plot_kwargs = _merge_plot_kwargs(PLOT_TOPOGRAPHY_KWARGS, kwargs)
 
     # Extract commonly used kwargs
     method = pop!(plot_kwargs, :method)
