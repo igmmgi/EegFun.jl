@@ -196,8 +196,37 @@ function plot_topography(
     n_datasets = length(dat)
     n_datasets == 0 && @minimal_error_throw "Cannot plot empty vector of datasets"
     
-    # Calculate optimal grid dimensions
-    rows, cols = best_rect(n_datasets)
+    # Check if colorbars are enabled and get colorbar position
+    kwargs_dict = Dict{Symbol, Any}(kwargs)
+    colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
+    user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
+    
+    # Calculate optimal grid dimensions for plots
+    plot_rows, plot_cols = best_rect(n_datasets)
+    
+    # Determine layout based on colorbar position
+    if colorbar_enabled && user_colorbar_position !== nothing
+        # User provided custom colorbar position - use it
+        cb_row_offset, cb_col_offset = user_colorbar_position
+        # Calculate total grid size needed
+        # If colorbars are below (cb_row_offset > 1), we need to double the rows
+        if cb_row_offset > 1
+            total_rows = plot_rows * 2
+            total_cols = plot_cols
+        else
+            # Colorbars to the right or other positions
+            total_rows = plot_rows
+            total_cols = plot_cols * 2
+        end
+    elseif colorbar_enabled
+        # Default: colorbars to the right
+        total_rows = plot_rows
+        total_cols = plot_cols * 2
+    else
+        # No colorbars
+        total_rows = plot_rows
+        total_cols = plot_cols
+    end
     
     # Create single figure with subplots
     set_window_title(_generate_window_title(dat))
@@ -206,15 +235,36 @@ function plot_topography(
     
     # Plot each dataset in its own subplot
     for (idx, dataset) in enumerate(dat)
-
-        base_row = div(idx - 1, cols) + 1
-        base_col = mod1(idx, cols)
+        base_row = div(idx - 1, plot_cols) + 1
+        base_col = mod1(idx, plot_cols)
         
-        # Each subplot gets 2 columns: plot in first column, colorbar in second
-        plot_row = base_row
-        plot_col = (base_col - 1) * 2 + 1
-        colorbar_row = plot_row
-        colorbar_col = plot_col + 1
+        if colorbar_enabled && user_colorbar_position !== nothing
+            # User provided custom colorbar position
+            cb_row_offset, cb_col_offset = user_colorbar_position
+            if cb_row_offset > 1
+                # Colorbars below: each plot needs 2 rows
+                plot_row = (base_row - 1) * 2 + 1
+                plot_col = base_col
+                colorbar_row = plot_row + (cb_row_offset - 1)
+                colorbar_col = plot_col + (cb_col_offset - 1)
+            else
+                # Colorbars to the right or other positions
+                plot_row = base_row
+                plot_col = (base_col - 1) * 2 + 1
+                colorbar_row = plot_row + (cb_row_offset - 1)
+                colorbar_col = plot_col + (cb_col_offset - 1)
+            end
+        elseif colorbar_enabled
+            # Default: colorbar to the right - each subplot gets 2 columns
+            plot_row = base_row
+            plot_col = (base_col - 1) * 2 + 1
+            colorbar_row = plot_row
+            colorbar_col = plot_col + 1
+        else
+            # No colorbars
+            plot_row = base_row
+            plot_col = base_col
+        end
         
         ax = Axis(fig[plot_row, plot_col])
         push!(axes, ax)
@@ -224,9 +274,15 @@ function plot_topography(
             ax.title = dataset.condition_name
         end
         
-        # Calculate colorbar position relative to this subplot
-        kwargs_dict = Dict{Symbol, Any}(kwargs)
-        kwargs_dict[:colorbar_position] = (colorbar_row, colorbar_col)
+        # Prepare kwargs for this subplot
+        subplot_kwargs = copy(kwargs_dict)
+        if colorbar_enabled
+            if user_colorbar_position !== nothing
+                subplot_kwargs[:colorbar_position] = (colorbar_row, colorbar_col)
+            else
+                subplot_kwargs[:colorbar_position] = (colorbar_row, colorbar_col)
+            end
+        end
         
         # Plot the topography in this subplot
         plot_topography!(
@@ -235,18 +291,20 @@ function plot_topography(
             dataset;
             channel_selection = channel_selection,
             sample_selection = sample_selection,
-            kwargs_dict...,
+            subplot_kwargs...,
         )
     end
     
-    # Set column sizes: make colorbar columns narrower than plot columns
-    # This ensures colorbars don't take up too much space while keeping plots visible
-    total_cols = cols * 2
-    for col in 1:total_cols
-        if col % 2 == 1
-            colsize!(fig.layout, col, Auto())
-        else
-            colsize!(fig.layout, col, Fixed(50))
+    # Set column sizes only if colorbars are enabled and to the right (default)
+    if colorbar_enabled && (user_colorbar_position === nothing || user_colorbar_position[1] <= 1)
+        # Make colorbar columns narrower than plot columns
+        # This ensures colorbars don't take up too much space while keeping plots visible
+        for col in 1:total_cols
+            if col % 2 == 1
+                colsize!(fig.layout, col, Auto())
+            else
+                colsize!(fig.layout, col, Fixed(50))
+            end
         end
     end
     
