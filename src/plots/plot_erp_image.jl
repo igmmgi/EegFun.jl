@@ -39,6 +39,9 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ygrid => (false, "Show y-axis grid (true/false)"),
     :xminorgrid => (false, "Show x-axis minor grid (true/false)"),
     :yminorgrid => (false, "Show y-axis minor grid (true/false)"),
+    
+    # Origin lines
+    :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
 
     # Layout parameters (for topo and other layouts)
     :layout_topo_plot_width => (0.05, "Width of individual plots (fraction of figure width)"),
@@ -142,13 +145,16 @@ function plot_erp_image(
     user_colorbar_position = plot_kwargs[:colorbar_position]
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
     
+    # Extract layout_* parameters, remove prefix, and pass to create_layout
+    layout_kwargs = _extract_layout_kwargs(plot_kwargs)
+    
     # Create figure and apply layout system
     fig = Figure()
     
     # For grid layouts with colorbars, we need to expand the grid
     if layout == :grid && colorbar_enabled
         # Get the grid dimensions that would be created
-        temp_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
+        temp_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
         rows, cols = temp_layout.dims
         
         # Expand grid to accommodate colorbars (default: to the right)
@@ -171,7 +177,7 @@ function plot_erp_image(
         
         # Create a modified layout with expanded dimensions
         # We'll manually create axes in the expanded grid
-        plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
+        plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
         axes = Axis[]
         channels = Symbol[]
         
@@ -203,7 +209,7 @@ function plot_erp_image(
         end
     else
         # For single or topo layouts, use normal layout system
-        plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout)
+        plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
         axes, channels = _apply_layout!(fig, plot_layout; plot_kwargs...)
     end
 
@@ -348,6 +354,23 @@ function plot_erp_image(
     
     # Then apply layout-specific properties (clears labels on inner axes for grid layouts)
     _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
+    
+    # For plot_erp_image, we want to show tick marks (but not labels) on all axes (including topo layouts)
+    # Override the decoration hiding that _apply_layout_axis_properties! does for topo layouts
+    if plot_layout.type == :topo
+        for ax in axes
+            # Show ticks but hide tick labels (keep spines hidden for topo aesthetic)
+            ax.xticksvisible = true
+            ax.yticksvisible = true
+            ax.xticklabelsvisible = false
+            ax.yticklabelsvisible = false
+        end
+    end
+    
+    # Add origin lines to all axes
+    for ax in axes
+        _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
+    end
 
     # Add scale plot for topo layout (similar to plot_epochs)
     # For topo layouts, all plots are positioned in fig[1, 1] with halign/valign
@@ -357,15 +380,18 @@ function plot_erp_image(
     if plot_layout.type == :topo
         # Get scale position from kwargs
         scale_pos = plot_kwargs[:layout_topo_scale_pos]
-        println("scale_pos: $scale_pos")
+        
+        # Use the same width/height as the channel plots (from layout metadata)
+        # This ensures consistency - channel plots use plot_layout.metadata[:topo_plot_width]
+        scale_width = plot_layout.metadata[:topo_plot_width]
+        scale_height = plot_layout.metadata[:topo_plot_height]
         
         # Create scale axis positioned at the specified location (axis only, no data)
         # This is positioned absolutely in fig[1, 1] using halign/valign, just like topo plots
-        # Position it in the bottom-right corner (halign=0.8, valign should be positive for bottom)
         scale_ax = Axis(
             fig[1, 1],
-            width = Relative(plot_kwargs[:layout_topo_plot_width]),
-            height = Relative(plot_kwargs[:layout_topo_plot_height]),
+            width = Relative(scale_width),
+            height = Relative(scale_height),
             halign = scale_pos[1],  
             valign = scale_pos[2],  
         )
@@ -428,6 +454,9 @@ function plot_erp_image(
         # scale_width = plot_kwargs[:layout_topo_plot_width]
         colorbar_halign = scale_pos[1] + 0.015  # Position to the right of scale axis
         
+        # Get scale height from layout metadata (same as channel plots and scale axis)
+        scale_height = plot_layout.metadata[:topo_plot_height]
+        
         # Create colorbar in fig[1, 1] with halign/valign, positioned to the right of scale axis
         # Use tellwidth=false and tellheight=false to prevent it from affecting grid layout
         Colorbar(
@@ -435,7 +464,7 @@ function plot_erp_image(
             heatmaps[1],
             label = plot_kwargs[:colorbar_label],
             width = plot_kwargs[:colorbar_width],
-            height = Relative(plot_kwargs[:layout_topo_plot_height]),
+            height = Relative(scale_height),
             halign = colorbar_halign,
             valign = scale_pos[2],
             tellwidth = false,
