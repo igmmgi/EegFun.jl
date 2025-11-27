@@ -417,7 +417,6 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     elseif plot_layout.type == :topo
         plot_width = plot_layout.metadata[:topo_plot_width]
         plot_height = plot_layout.metadata[:topo_plot_height]
-        margin = plot_layout.metadata[:topo_margin]
 
         # Compute bounds for normalization
         positions = plot_layout.positions
@@ -430,9 +429,9 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
 
         # For topographic layout, create individual axes positioned using halign/valign with Relative sizing
         for (channel, pos) in zip(plot_layout.channels, positions)
-            # Normalize to [0,1] and clamp to margin bounds
-            halign = clamp((pos[1] - minx) / xrange, margin, 1 - margin)
-            valign = clamp((pos[2] - miny) / yrange, margin, 1 - margin)
+            # Normalize to [0,1] - no margin needed since halign/valign centers the plot at the position
+            halign = (pos[1] - minx) / xrange
+            valign = (pos[2] - miny) / yrange
 
             # Create axis with relative positioning and grid settings
             ax = _create_topo_axis(fig, plot_width, plot_height, halign, valign; kwargs...)
