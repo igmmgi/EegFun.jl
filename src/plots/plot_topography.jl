@@ -13,6 +13,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :gridscale => (200, "Grid resolution for interpolation"),
     :colormap => (:jet, "Colormap for the topography"),
     :ylim => (nothing, "Y-axis limits (nothing for auto)"),
+    :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
 
     # Title parameters
     :title => ("", "Plot title"),
@@ -30,6 +31,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_plot => (true, "Whether to display the colorbar"),
     :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
     :colorbar_label => ("μV", "Label for the colorbar"),
+    :colorbar_datasets => ([], "Dataset indices (1-based) for which to show colorbars. Empty list shows colorbars for all datasets."),
 
     # Head shape parameters (reusing layout kwargs)
     :head_color => (:black, "Color of the head shape outline."),
@@ -200,9 +202,23 @@ function plot_topography(
     kwargs_dict = Dict{Symbol, Any}(kwargs)
     colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
     user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
+    colorbar_datasets = get(kwargs_dict, :colorbar_datasets, [])
+    dims = get(kwargs_dict, :dims, nothing)
     
-    # Calculate optimal grid dimensions for plots
-    plot_rows, plot_cols = best_rect(n_datasets)
+    # Calculate grid dimensions for plots
+    if isnothing(dims)
+        plot_rows, plot_cols = best_rect(n_datasets)
+    else
+        if length(dims) != 2 || any(dims .<= 0)
+            throw(ArgumentError("Invalid dimensions: $dims. Expected [rows, cols] with positive values."))
+        end
+        plot_rows, plot_cols = dims
+        # Validate dimensions
+        total_cells = plot_rows * plot_cols
+        if total_cells < n_datasets
+            throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $n_datasets."))
+        end
+    end
     
     # Determine layout based on colorbar position
     if colorbar_enabled && user_colorbar_position !== nothing
@@ -276,12 +292,19 @@ function plot_topography(
         
         # Prepare kwargs for this subplot
         subplot_kwargs = copy(kwargs_dict)
-        if colorbar_enabled
+        # Determine if this dataset should have a colorbar
+        # If colorbar_datasets is empty, show colorbar for all datasets
+        # Otherwise, only show for datasets whose index (1-based) is in the list
+        should_show_colorbar = colorbar_enabled && (isempty(colorbar_datasets) || idx in colorbar_datasets)
+        if should_show_colorbar
             if user_colorbar_position !== nothing
                 subplot_kwargs[:colorbar_position] = (colorbar_row, colorbar_col)
             else
                 subplot_kwargs[:colorbar_position] = (colorbar_row, colorbar_col)
             end
+        else
+            # Disable colorbar for this specific dataset
+            subplot_kwargs[:colorbar_plot] = false
         end
         
         # Plot the topography in this subplot

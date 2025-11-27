@@ -30,9 +30,9 @@ eegfun.channel_difference!(
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
 
-@time ica_result_infomax = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
-@time ica_result_infomax_extended = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10, algorithm = :infomax_extended)
-@time ica_result_infomax = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10, n_components = 1)
+ica_result_infomax = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
+ica_result_infomax_extended = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10, algorithm = :infomax_extended)
+ica_result_infomax = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10, n_components = 1)
 
 eegfun.plot_ica_component_activation(dat, ica_result_infomax)
 eegfun.plot_component_spectrum(ica_result_infomax, dat, component_selection = eegfun.components(1:70))
@@ -221,7 +221,7 @@ eegfun.plot_topography(
     colorbar_position = :below,
     colorbar_vertical = false,
 );
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
+eegfun.plot_topography(ica_result_infomax, component_selection = eegfun.components(1:4), method = :spherical_spline);
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1:4),
@@ -234,20 +234,25 @@ eegfun.plot_topography(
     method = :spherical_spline,
     colorbar_plot = false,
 );
+
 eegfun.plot_topography(
-    ica_result,
+    ica_result_infomax,
     component_selection = eegfun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
-    colorbar_plot_numbers = [2],
+    colorbar_position = (2, 1),
+    colorbar_vertical = false
 );
+
 eegfun.plot_topography(
-    ica_result,
+    ica_result_infomax,
     component_selection = eegfun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
-    colorbar_plot_numbers = [1, 3],
+    colorbar_components = [1, 3],
 );
+
+
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1:4),
