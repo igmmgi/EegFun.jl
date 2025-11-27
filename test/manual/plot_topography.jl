@@ -18,7 +18,7 @@ eegfun.plot_topography(dat)
 eegfun.plot_topography(dat, colorrange = (-0.1, 0.1), ylim = (-0.01, 0.01))
 eegfun.plot_topography(dat, colorrange = (-1.2, 1.2), ylim = (-0.01, 0.01))
 eegfun.plot_topography(dat, colorrange = (-100, 100))
-eegfun.plot_topography(dat, colorbar_plot = false, colorrange = (-10, 10))
+eegfun.plot_topography(dat, colorbar_plot = false)
 
 eegfun.plot_topography(dat, method = :spherical_spline)
 eegfun.plot_topography(dat, method = :multiquadratic)
@@ -37,7 +37,7 @@ eegfun.plot_topography(dat, ylim = (-1, 1))
 eegfun.plot_topography(dat, colorbar_ticksize = 30)
 eegfun.plot_topography(dat, colorbar_labelcolor = :red)
 eegfun.plot_topography(dat, colorbar_size = 10)
-eegfun.plot_topography(dat, colorbar_size = 20)
+eegfun.plot_topography(dat, colorbar_size = 20, colorbar_position = (2, 1), colorbar_vertical=false)
 eegfun.plot_topography(dat, title_fontsize = 30)
 
 #################################
@@ -77,6 +77,14 @@ eegfun.plot_topography(epochs[2], 1, ylim = (-1, 1))
 erps = eegfun.average_epochs(epochs)
 
 eegfun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2))
+
+eegfun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), 
+colorbar_plot = false)
+
+eegfun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), 
+colorbar_plot = true, colorbar_position = (2, 1), colorbar_vertical = false)
+
+
 eegfun.plot_topography(erps[1])
 
 eegfun.plot_topography(erps[1:3])
