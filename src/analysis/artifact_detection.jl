@@ -37,7 +37,7 @@ function detect_eog_onsets!(
     step_size = div(dat.sample_rate, step_size)
     eog_diff = diff(dat.data[1:step_size:end, channel_in])
     eog_idx = findall(x -> abs(x) >= criterion, eog_diff)
-    eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] * step_size
+    eog_idx = [idx for (i, idx) in enumerate(eog_idx) if i == 1 || (idx - eog_idx[i-1] > 2)] .* step_size
     dat.data[!, channel_out] .= false
     dat.data[eog_idx, channel_out] .= true
     return nothing
@@ -259,27 +259,18 @@ function is_extreme_value!(
         # Initialize artifact flag column for this epoch
         epoch_df[!, channel_out] = falses(nrow(epoch_df))
 
+        # Create sample mask once (same for all channels)
+        sample_mask = falses(nrow(epoch_df))
+        sample_mask[selected_samples] .= true
+        
         if mode == :combined
             for ch in selected_channels
-                extreme_mask = _is_extreme_value(epoch_df[!, ch], threshold)
-                
-                # Apply sample selection
-                sample_mask = falses(length(extreme_mask))
-                sample_mask[selected_samples] .= true
-                extreme_mask = extreme_mask .& sample_mask
-                
-                # Update artifact flag (OR operation)
+                extreme_mask = _is_extreme_value(epoch_df[!, ch], threshold) .& sample_mask
                 epoch_df[!, channel_out] .|= extreme_mask
             end
         else
             for ch in selected_channels
-                extreme_mask = _is_extreme_value(epoch_df[!, ch], threshold)
-                
-                # Apply sample selection
-                sample_mask = falses(length(extreme_mask))
-                sample_mask[selected_samples] .= true
-                extreme_mask = extreme_mask .& sample_mask
-                
+                extreme_mask = _is_extreme_value(epoch_df[!, ch], threshold) .& sample_mask
                 column_name = Symbol("is_extreme_value_$(ch)_$(threshold)")
                 epoch_df[!, column_name] = extreme_mask
             end
@@ -512,9 +503,12 @@ Base.show(io::IO, r::Rejection) =  print(io, "Rejection(:$(r.label), $(r.epoch))
 is_equal_rejection(a::Rejection, b::Rejection) = a.label == b.label && a.epoch == b.epoch
 
 function unique_rejections(rejections::Vector{Rejection})
+    seen = Set{Tuple{Symbol,Int}}()
     out = Rejection[]
     for rejection in rejections
-        if !any(x -> is_equal_rejection(x, rejection), out)
+        key = (rejection.label, rejection.epoch)
+        if key ∉ seen
+            push!(seen, key)
             push!(out, rejection)
         end
     end
@@ -573,7 +567,7 @@ Stores information about which epochs were rejected and why, and optionally trac
 # Fields
 - `name::String`: Name/identifier for this rejection info (e.g., "rejection_step1", "rejection_step2")
 - `info::EpochInfo`: Condition metadata (number, name, n_epochs)
-- `n_artifacts::Int`: Number of epochs after rejection
+- `n_artifacts::Int`: Total number of artifact detections (channel-epoch pairs)
 - `rejected::Vector{Rejection}`: All rejected epochs
 - `z_criterion::Real`: Z-score criterion used for rejection
 - `z_rejections::Union{ZScoreRejectionInfo, Nothing}`: Z-score based rejection info (Nothing if z_criterion = 0)
@@ -867,13 +861,14 @@ function _calculate_epoch_metrics(
             variances = var.(channel_data_all)
             max_values = maximum.(channel_data_all)
             min_values = minimum.(channel_data_all)
-            abs_values = maximum.(abs.(epoch_data) for epoch_data in channel_data_all)
+            abs_values = [maximum(abs, epoch_data) for epoch_data in channel_data_all]
             ranges = max_values .- min_values
             kurtoses = kurtosis.(channel_data_all)
 
             z_scores = zscore.([variances, max_values, min_values, abs_values, ranges, kurtoses])
+            z_metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis]
 
-            for (z_score, metric_key) in zip(z_scores, metric_keys)
+            for (z_score, metric_key) in zip(z_scores, z_metric_keys)
                 bad_epochs = findall(abs.(z_score) .> z_criterion)
                 append!(metrics[metric_key][ch], bad_epochs)
             end
@@ -1117,10 +1112,7 @@ Uses `dat.layout.neighbours` for neighbor information.
 # See also
 - `channel_repairable!`: Analyze which channels can be repaired before calling this function
 """
-function repair_artifacts_neighbor!(
-    dat::EpochData,
-    artifacts::EpochRejectionInfo,
-)
+function repair_artifacts_neighbor!( dat::EpochData, artifacts::EpochRejectionInfo)
     # Check if repaired has been populated
     if isnothing(artifacts.repaired)
         throw(ArgumentError("repaired not populated. Call channel_repairable! first."))

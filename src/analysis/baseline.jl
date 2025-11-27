@@ -19,8 +19,8 @@ function _apply_baseline!(
 )
     # Compute mean baseline interval and apply to each channel
     baseline_means = mean.(eachcol(dat[baseline_interval.start:baseline_interval.stop, channels]))
-    @inbounds for (channel, mean_val) in zip(channels, baseline_means)
-        @views dat[!, channel] .-= mean_val
+    for (channel, mean_val) in zip(channels, baseline_means)
+        dat[!, channel] .-= mean_val
     end
 end
 
@@ -86,8 +86,7 @@ Apply baseline correction in-place to EEG data using the entire time range.
 - Uses the entire time range for baseline calculation
 """
 function baseline!(dat::EegData; channel_selection::Function = channels())
-    baseline_interval = IntervalIndex(start = 1, stop = n_samples(dat))
-    baseline!(dat, baseline_interval; channel_selection = channel_selection)
+    baseline!(dat, IntervalIndex(start = 1, stop = n_samples(dat)); channel_selection = channel_selection)
     return nothing
 end
 
@@ -135,31 +134,20 @@ end
 # generates all non-mutating versions
 @add_nonmutating baseline!
 
-# =============================================================================
-# BATCH BASELINE CORRECTION
-# =============================================================================
-
-"""
-Batch baseline correction for EEG/ERP data.
-"""
 
 #=============================================================================
     BASELINE-SPECIFIC HELPERS
 =============================================================================#
 
+# TODO: actually, these are probably not needed as baseline can just be applied inplace whenever it is needed
+# For now, juse keep for a little bit of consistency with other functions
+
 """Generate default output directory name for baseline operation."""
 function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Union{IntervalIndex,IntervalTime})
-    if baseline_interval isa IntervalTime
-        interval_str = "$(baseline_interval.start)_to_$(baseline_interval.stop)"
-    else  # IntervalIndex
-        interval_str = "$(baseline_interval.start)_to_$(baseline_interval.stop)"
-    end
+    interval_str = "$(baseline_interval.start)_to_$(baseline_interval.stop)"
     joinpath(input_dir, "baseline_$(pattern)_$(interval_str)")
 end
 
-#=============================================================================
-    BASELINE-SPECIFIC PROCESSING
-=============================================================================#
 
 """
 Process a single file through baseline correction pipeline.
@@ -259,12 +247,12 @@ function baseline(
         end
 
         # Validate and normalize baseline interval (converts tuple to IntervalTime, validates structure)
-        normalized_interval = validate_baseline_interval(baseline_interval)
+        baseline_interval = validate_baseline_interval(baseline_interval)
 
         # Setup directories
         output_dir = something(
             output_dir,
-            _default_baseline_output_dir(input_dir, file_pattern, normalized_interval),
+            _default_baseline_output_dir(input_dir, file_pattern, baseline_interval),
         )
         mkpath(output_dir)
 
@@ -277,11 +265,11 @@ function baseline(
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
         # Create processing function with captured parameters
-        @info "Baseline interval: $normalized_interval"
+        @info "Baseline interval: $baseline_interval"
         process_fn = (input_path, output_path) -> _process_baseline_file(
             input_path,
             output_path,
-            normalized_interval,
+            baseline_interval,
             conditions,
         )
 

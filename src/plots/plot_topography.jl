@@ -16,9 +16,8 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     method = pop!(plot_kwargs, :method)
     gridscale = pop!(plot_kwargs, :gridscale)
     colorbar_position = pop!(plot_kwargs, :colorbar_position)
-    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     ylim = pop!(plot_kwargs, :ylim)
-
+    
     # Set title based on user preferences and data
     if plot_kwargs[:show_title]
         if plot_kwargs[:title] != ""
@@ -59,6 +58,8 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     )
     co.colorrange = ylim
 
+    # colorbar
+    colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
     if pop!(plot_kwargs, :colorbar_plot)
         Colorbar(fig[colorbar_position...], co; colorbar_kwargs...)
     end
@@ -104,7 +105,7 @@ function plot_topography(
         kwargs...,
     )
 
-    # Only enable interactivity for ErpData (context menu requires ErpData)
+    # only enable interactivity for ErpData (context menu requires ErpData)
     if interactive && dat isa ErpData
         _setup_topo_interactivity!(fig, ax, dat)
     end
@@ -744,34 +745,7 @@ _topo_scale_down!(ax::Axis) = _scale_topo_levels!(ax, 1.25)  # Expand range by 2
 # =============================================================================
 # REGION SELECTION FOR TOPO PLOTS
 # =============================================================================
-"""
-    _find_active_axis(axes::Vector{Axis}, mouse_pos) -> Union{Axis, Nothing}
 
-Find which axis the mouse is currently over.
-Returns the axis if found, nothing otherwise.
-"""
-function _find_active_axis(axes::Vector{Axis}, mouse_pos)
-    for ax in axes
-        _is_mouse_in_axis(ax, mouse_pos) && return ax
-    end
-    return nothing
-end
-
-"""
-    _find_active_axis_with_dataset(axes::Vector{Axis}, mouse_pos, datasets::Vector)
-
-Find which axis the mouse is currently over, along with its corresponding dataset.
-Returns (axis, dataset) tuple, or (nothing, nothing) if not found.
-"""
-function _find_active_axis_with_dataset(axes::Vector{Axis}, mouse_pos, datasets::Vector)
-    for (idx, ax) in enumerate(axes)
-        if _is_mouse_in_axis(ax, mouse_pos)
-            active_dataset = idx <= length(datasets) ? datasets[idx] : nothing
-            return (ax, active_dataset)
-        end
-    end
-    return (nothing, nothing)
-end
 
 """
     _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, rect_points::Vector{Point2f}, 
