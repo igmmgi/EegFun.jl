@@ -11,12 +11,12 @@ function _calculate_channel_difference!(
 
     # Calculate means in-place
     for channel in channels_in1
-        @views means[:, 1] .+= dat[!, channel]
+        means[:, 1] .+= dat[!, channel]
     end
     means[:, 1] ./= length(channels_in1)
 
     for channel in channels_in2
-        @views means[:, 2] .+= dat[!, channel]
+        means[:, 2] .+= dat[!, channel]
     end
     means[:, 2] ./= length(channels_in2)
 
@@ -79,8 +79,9 @@ function channel_difference!(
     channels_in2_selected = get_selected_channels(dat, channel_selection2, include_meta = false)
     @info "Channel sets: $(channels_in1_selected) vs. $(channels_in2_selected) -> $(channel_out)"
 
-    # Verify channels exist in data
-    missing_channels = [ch for ch in vcat(channels_in1_selected, channels_in2_selected) if ch ∉ all_labels(dat)]
+    # Verify channels exist in data (use unique to avoid redundant checks)
+    all_selected_channels = unique(vcat(channels_in1_selected, channels_in2_selected))
+    missing_channels = [ch for ch in all_selected_channels if ch ∉ all_labels(dat)]
     if !isempty(missing_channels)
         @minimal_error "Missing channels in data: $(missing_channels)"
     end
@@ -88,6 +89,11 @@ function channel_difference!(
     # Check if difference channel already exists
     if channel_out ∈ all_labels(dat)
         @minimal_warning "Overwriting existing channel '$(channel_out)'"
+    end
+
+    # Check if output channel is in the input channel sets (would cause issues)
+    if channel_out ∈ channels_in1_selected || channel_out ∈ channels_in2_selected
+        @minimal_warning "Output channel '$(channel_out)' is also in the input channel sets. This may cause unexpected behavior."
     end
 
     # Calculate channel difference (dispatch handles DataFrame vs Vector{DataFrame})
@@ -100,25 +106,33 @@ end
 @add_nonmutating channel_difference!
 
 """
+    calculate_eog_channels!(dat::EegData, eog_cfg::EogConfig)
     calculate_eog_channels!(dat::EegData, eog_cfg::Dict)
 
-Calculate EOG channels based on configuration dictionary. Modifies the data in place.
+Calculate EOG channels based on configuration. Modifies the data in place.
 
 # Arguments
 - `dat::EegData`: EegData object to modify
-- `eog_cfg::Dict`: Configuration dictionary containing EOG channel settings
+- `eog_cfg::EogConfig`: EOG configuration object (primary method)
+- `eog_cfg::Dict`: Configuration dictionary containing EOG channel settings (convenience method, converted to `EogConfig`)
 
 # Configuration Structure
-The `eog_cfg` should contain:
+The `eog_cfg` (Dict) should contain:
 - `"vEOG_channels"`: Vector of 3 elements: [channels1, channels2, output_name]
 - `"hEOG_channels"`: Vector of 3 elements: [channels1, channels2, output_name]
 
 # Examples
 ```julia
-# Calculate EOG channels based on config
-calculate_eog_channels!(dat, cfg["preprocess"]["eog"])
+# Calculate EOG channels using EogConfig
+eog_cfg = EogConfig(
+    vEOG_criterion = 50.0,
+    hEOG_criterion = 30.0,
+    vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
+    hEOG_channels = [["F9"], ["F10"], ["hEOG"]]
+)
+calculate_eog_channels!(dat, eog_cfg)
 
-# Manual configuration
+# Or using Dict (convenience method)
 eog_cfg = Dict(
     "vEOG_channels" => [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
     "hEOG_channels" => [["F9"], ["F10"], ["hEOG"]]

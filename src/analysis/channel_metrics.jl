@@ -64,8 +64,8 @@ end
                                      sample_selection::Function = samples(),
                                      channel_selection1::Function = channels(),
                                      channel_selection2::Function = channels(),
-                                     include_extra1::Bool = false,
-                                     include_extra2::Bool = false)
+                                     include_extra_selection1::Bool = false,
+                                     include_extra_selection2::Bool = true)
 
 Calculate correlation matrix between two sets of channels using a single sample selection.
 
@@ -77,8 +77,8 @@ and EOG channels using the same time points.
 - `sample_selection::Function`: Function for sample selection (default: samples())
 - `channel_selection1::Function`: Function for channel selection for first set (default: channels())
 - `channel_selection2::Function`: Function for channel selection for second set (default: channels())
-- `include_extra1::Bool`: Whether to include extra channels for first set (default: false)
-- `include_extra2::Bool`: Whether to include extra channels for second set (default: false)
+- `include_extra_selection1::Bool`: Whether to include extra channels for first set (default: false)
+- `include_extra_selection2::Bool`: Whether to include extra channels for second set (default: true)
 
 # Returns
 - `DataFrame`: Correlation matrix with first channel set as rows and second channel set as columns
@@ -104,8 +104,8 @@ cm = correlation_matrix_dual_selection(dat,
     sample_selection = samples(),
     channel_selection1 = channels(),  # EEG channels only
     channel_selection2 = channels([:vEOG, :hEOG]),  # EOG channels
-    include_extra1 = false,  # No extra channels for EEG
-    include_extra2 = true    # Include extra channels for EOG
+    include_extra_selection1 = false,  # No extra channels for EEG
+    include_extra_selection2 = true    # Include extra channels for EOG
 )
 ```
 """
@@ -265,7 +265,7 @@ Calculate joint probability of extreme values in a signal matrix.
 - `discret::Int`: Number of discretization bins
 
 # Returns
-- `Vector{Float64}`: Joint probability values for each channel
+- `Tuple{Vector{Float64}, Vector{Bool}}`: Joint probability values for each channel and rejection flags
 """
 function _joint_probability(signal::AbstractMatrix{Float64}, threshold::Float64, normalize::Int, discret::Int = 1000)
     nbchan = size(signal, 1)
@@ -301,10 +301,19 @@ Compute probability distribution for a data vector.
 - `Vector{Float64}`: Probability distribution (same as probaMap)
 """
 function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Float64}, bins::Int)::Vector{Float64}
+    isempty(data) && @minimal_error_throw "Cannot compute probability for empty data vector"
 
     if bins > 0
         min_val, max_val = extrema(data)
         range_val = max_val - min_val
+        
+        # Handle case where all values are the same (range_val == 0)
+        if range_val == 0
+            # All values are identical - uniform probability
+            fill!(probaMap, 1.0 / length(data))
+            return probaMap
+        end
+        
         sortbox = zeros(Int, bins)
 
         # Single-pass binning and counting
@@ -322,6 +331,14 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
     else
         # Gaussian approximation
         μ, σ = mean(data), std(data)
+        
+        # Handle case where all values are the same (σ == 0)
+        if σ == 0
+            # All values are identical - uniform probability
+            fill!(probaMap, 1.0 / length(data))
+            return probaMap
+        end
+        
         inv_sqrt2pi = 1 / (√(2π))
         @inbounds for (i, x) in enumerate(data)
             z = (x - μ) / σ
@@ -599,7 +616,7 @@ function partition_channels_by_eog_correlation(
         return bad_channels, Symbol[]
     end
 
-    cols_to_use = use_z ? Symbol.("z_" .* String.(eog_channels)) : eog_channels
+    cols_to_use = use_z ? [Symbol("z_$(ch)") for ch in eog_channels] : eog_channels
 
     eog_related = Symbol[]
     for ch in bad_channels

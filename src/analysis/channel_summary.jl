@@ -38,7 +38,7 @@ function _channel_summary_impl(
     !isempty(missing_channels) && @minimal_error_throw("Channels not found in data: $(missing_channels)")
 
     # Check that all sample indices are valid
-    invalid_samples = sample_selection[(sample_selection .< 1).||(sample_selection .> nrow(data))]
+    invalid_samples = sample_selection[(sample_selection .< 1) .| (sample_selection .> nrow(data))]
     !isempty(invalid_samples) && @minimal_error_throw("Invalid sample indices: $(invalid_samples)")
 
     selected_data = @view data[sample_selection, channel_selection]
@@ -303,11 +303,21 @@ function _process_channel_summary_file(
 
     # Select conditions
     data_var = _condition_select(data_var, conditions)
+    
+    # Determine actual condition numbers for tracking
+    # After _condition_select, data_var is filtered but we need original condition numbers
+    condition_numbers = if isnothing(conditions)
+        1:length(data_var) # Use indices as condition numbers (1, 2, 3, ...)
+    elseif conditions isa Int # Single condition specified
+        [conditions]
+    else # Vector of conditions specified
+        conditions
+    end
 
     # Process each condition and collect results
     summary_dfs = DataFrame[]
     for (cond_idx, data) in enumerate(data_var)
-        condition = isnothing(conditions) ? cond_idx : (conditions isa Int ? conditions : conditions[cond_idx])
+        condition = condition_numbers[cond_idx]
 
         # Compute channel summary
         summary_df = eegfun.channel_summary(

@@ -496,7 +496,7 @@ function repair_channels_per_epoch!(
                     for ch in eeg_channels
                         if hasproperty(epoch_df, ch)
                             ch_data = epoch_df[!, ch]
-                            max_val = maximum(abs.(ch_data))
+                            max_val = maximum(abs, ch_data)
                             if max_val > threshold
                                 push!(artifact_channels, ch)
                                 @info "    - Channel $ch: max absolute value = $(round(max_val, sigdigits=3)), threshold = $threshold"
