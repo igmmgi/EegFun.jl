@@ -218,6 +218,7 @@ function plot_erp(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     baseline_interval::BaselineInterval = nothing,
+    return_line_refs::Bool = false,  # Internal parameter, not in PLOT_ERP_KWARGS
     kwargs...,
 )
 
@@ -333,7 +334,12 @@ function plot_erp(
 
     # reset default title
     set_window_title("Makie")
-    return fig, axes
+    # Optionally return line references if requested
+    if return_line_refs
+        return fig, axes, line_refs
+    else
+        return fig, axes
+    end
 end
 
 
