@@ -25,6 +25,7 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 function _validate_analysis_type(analysis_type::String)
     valid_types = [
         "mean_amp", "max_peak", "min_peak", "max_peak_lat", "min_peak_lat",
+        "peak_to_peak_amp", "peak_to_peak_lat",
         "rectified_area", "integral", "positive_area", "negative_area",
         "fractional_area_lat", "fractional_peak_lat"
     ]
@@ -241,6 +242,28 @@ function _compute_measurement(
             return time_col[time_idx[peak_idx]]
         end
         
+    # Peak-to-peak measurements
+    elseif analysis_type in ["peak_to_peak_amp", "peak_to_peak_lat"]
+        local_window = measurement_kwargs[:local_window]
+        
+        # Find both max and min peaks
+        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name, "maximum")
+        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name, "minimum")
+        
+        # Handle cases where peaks weren't found
+        if isnothing(max_val) || isnothing(min_val)
+            @minimal_warning "Channel $channel_name: Could not find both maximum and minimum peaks for peak-to-peak measurement"
+            return NaN
+        end
+        
+        if analysis_type == "peak_to_peak_amp"
+            return max_val - min_val
+        else  # peak_to_peak_lat
+            max_time = time_col[time_idx[max_idx]]
+            min_time = time_col[time_idx[min_idx]]
+            return abs(max_time - min_time)
+        end
+        
     # Area/Integral measurements (in µVs) - compute dt only when needed
     elseif analysis_type in ["rectified_area", "integral", "positive_area", "negative_area"]
         # Edge case: single sample or empty
@@ -273,10 +296,16 @@ function _compute_measurement(
         return _fractional_area_latency(chan_data, selected_times, fraction)
     elseif analysis_type == "fractional_peak_lat"
         isnothing(selected_times) && error("selected_times should not be nothing for fractional_peak_lat")
-        max_abs_idx = argmax(abs.(chan_data))
+        # Find the peak with maximum absolute value using robust detection
+        local_window = measurement_kwargs[:local_window]
+        max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name, "maximum")
+        min_val, min_idx = _compute_peak_measurement(chan_data, :min, local_window, channel_name, "minimum")
+        
+        # Use the peak with larger absolute value
+        peak_idx = abs(max_val) >= abs(min_val) ? max_idx : min_idx
         fraction = measurement_kwargs[:fractional_peak_fraction]
         direction = measurement_kwargs[:fractional_peak_direction]
-        return _fractional_peak_latency(chan_data, selected_times, max_abs_idx, fraction, direction)
+        return _fractional_peak_latency(chan_data, selected_times, peak_idx, fraction, direction)
     end
     
     return nothing
@@ -506,9 +535,13 @@ across specified time windows and saves results to CSV files.
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps", "epochs_cleaned")
 - `analysis_type::String`: Type of measurement:
-  - **Amplitude**: "mean_amp", "max_peak", "min_peak"
-  - **Latency**: "max_peak_lat", "min_peak_lat", "fractional_area_lat", "fractional_peak_lat"
-  - **Area/Integral** (in µVs): "rectified_area", "integral", "positive_area", "negative_area"
+  - **Amplitude**: "mean_amp", "max_peak", "min_peak", "peak_to_peak_amp"
+  - **Latency**: "max_peak_lat", "min_peak_lat", "peak_to_peak_lat", "fractional_area_lat", "fractional_peak_lat"
+  - **Area/Integral** (in µVs): 
+    - "rectified_area": Sum of absolute values (always positive)
+    - "integral": Signed integral (net area, can be positive or negative)
+    - "positive_area": Area of positive values only
+    - "negative_area": Area of negative values only (as absolute value)
   
   Note: Peak measurements use robust detection (local peak with neighbor/average checks) and fall back to simple peak if no robust peak is found.
 - `analysis_window::Function`: Analysis window sample selection predicate (default: samples() - all samples)
