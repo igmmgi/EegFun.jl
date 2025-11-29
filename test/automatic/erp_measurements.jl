@@ -25,7 +25,7 @@ using CSV
         # Test mean amplitude measurement
         result = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -60,7 +60,7 @@ using CSV
 
         output_dir = joinpath(test_dir, "measurements_types")
 
-        for analysis_type in ["max_peak", "min_peak", "max_peak_lat", "min_peak_lat", "peak_to_peak_amp", "peak_to_peak_lat"]
+        for analysis_type in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency", "peak_to_peak_amplitude", "peak_to_peak_latency"]
             result = eegfun.erp_measurements(
                 "erps_cleaned",
                 analysis_type,
@@ -78,16 +78,16 @@ using CSV
                     values = result[!, ch]
                     @test all(isfinite.(values))
 
-                    if analysis_type == "max_peak"
+                    if analysis_type == "max_peak_amplitude"
                         @test all(values .> 0)  # Should be positive
-                    elseif analysis_type == "min_peak"
+                    elseif analysis_type == "min_peak_amplitude"
                         @test all(isfinite.(values))  # Should be finite (may be positive or negative)
-                    elseif analysis_type in ["max_peak_lat", "min_peak_lat"]
+                    elseif analysis_type in ["max_peak_latency", "min_peak_latency"]
                         @test all(0.1 .<= values .<= 0.2)  # Should be in analysis window
-                    elseif analysis_type == "peak_to_peak_lat"
+                    elseif analysis_type == "peak_to_peak_latency"
                         @test all(values .>= 0)  # Should be non-negative (time difference)
                         @test all(values .<= 0.1)  # Should be <= analysis window duration (0.2 - 0.1 = 0.1)
-                    elseif analysis_type == "peak_to_peak_amp"
+                    elseif analysis_type == "peak_to_peak_amplitude"
                         @test all(values .> 0)  # Should be positive (difference between max and min)
                     end
                 end
@@ -145,7 +145,7 @@ using CSV
 
         output_dir = joinpath(test_dir, "measurements_fractional")
 
-        for analysis_type in ["fractional_area_lat", "fractional_peak_lat"]
+        for analysis_type in ["fractional_area_latency", "fractional_peak_latency"]
             result = eegfun.erp_measurements(
                 "erps_fractional",
                 analysis_type,
@@ -181,7 +181,7 @@ using CSV
         # Test local_window
         result1 = eegfun.erp_measurements(
             "erps_kwargs",
-            "max_peak",
+            "max_peak_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -192,7 +192,7 @@ using CSV
         # Test fractional_area_fraction
         result2 = eegfun.erp_measurements(
             "erps_kwargs",
-            "fractional_area_lat",
+            "fractional_area_latency",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -203,7 +203,7 @@ using CSV
         # Test fractional_peak_fraction and fractional_peak_direction
         result3 = eegfun.erp_measurements(
             "erps_kwargs",
-            "fractional_peak_lat",
+            "fractional_peak_latency",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -226,7 +226,7 @@ using CSV
         # Test invalid local_window
         @test_throws Exception eegfun.erp_measurements(
             "erps_validate",
-            "max_peak",
+            "max_peak_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -236,7 +236,7 @@ using CSV
         # Test invalid fractional_area_fraction
         @test_throws Exception eegfun.erp_measurements(
             "erps_validate",
-            "fractional_area_lat",
+            "fractional_area_latency",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -246,7 +246,7 @@ using CSV
         # Test invalid fractional_peak_fraction
         @test_throws Exception eegfun.erp_measurements(
             "erps_validate",
-            "fractional_peak_lat",
+            "fractional_peak_latency",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -256,7 +256,7 @@ using CSV
         # Test invalid fractional_peak_direction
         @test_throws Exception eegfun.erp_measurements(
             "erps_validate",
-            "fractional_peak_lat",
+            "fractional_peak_latency",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -277,7 +277,7 @@ using CSV
 
         result = eegfun.erp_measurements(
             "epochs_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -304,7 +304,7 @@ using CSV
         # Test participant filtering
         result = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             participant_selection = eegfun.participants([1, 2]),
@@ -318,7 +318,7 @@ using CSV
         # Test condition filtering
         result = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             condition_selection = eegfun.conditions([1]),
@@ -344,7 +344,7 @@ using CSV
         # Test specific channel selection
         result = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             channel_selection = eegfun.channels([:Ch1, :Ch2]),
@@ -371,7 +371,7 @@ using CSV
 
         result = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             baseline_window = eegfun.samples((-0.2, 0.0)),
             input_dir = test_dir,
@@ -384,7 +384,7 @@ using CSV
         # Verify measurements are reasonable (should be different from non-baseline corrected)
         result_no_baseline = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -402,7 +402,7 @@ using CSV
         @testset "Invalid input directory" begin
             @test_throws Exception eegfun.erp_measurements(
                 "erps_cleaned",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 input_dir = "/nonexistent/dir",
             )
@@ -418,7 +418,7 @@ using CSV
         end
 
         @testset "Invalid analysis window" begin
-            @test_throws Exception eegfun.erp_measurements("erps_cleaned", "mean_amp", analysis_window = eegfun.samples((0.2, 0.1)), input_dir = test_dir)
+            @test_throws Exception eegfun.erp_measurements("erps_cleaned", "mean_amplitude", analysis_window = eegfun.samples((0.2, 0.1)), input_dir = test_dir)
         end
 
         @testset "Analysis window outside data range" begin
@@ -426,7 +426,7 @@ using CSV
 
             result = eegfun.erp_measurements(
                 "erps_cleaned",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((2.1, 3.0)),
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -443,7 +443,7 @@ using CSV
 
             result = eegfun.erp_measurements(
                 "nonexistent_pattern",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -461,7 +461,7 @@ using CSV
 
             result = eegfun.erp_measurements(
                 "erps_cleaned",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 input_dir = test_dir,
                 participant_selection = eegfun.participants(999),  # Non-existent participant
@@ -480,7 +480,7 @@ using CSV
 
             result = eegfun.erp_measurements(
                 "erps_cleaned",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 input_dir = test_dir,
                 participant_selection = eegfun.participants(999),  # Non-existent participant
@@ -503,7 +503,7 @@ using CSV
             # Baseline window with no samples (outside data range)
             result = eegfun.erp_measurements(
                 "erps_baseline_edge",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 baseline_window = eegfun.samples((10.0, 11.0)),  # No samples in this range
                 input_dir = test_dir,
@@ -527,7 +527,7 @@ using CSV
             # Very narrow window (might result in single sample)
             result = eegfun.erp_measurements(
                 "erps_single",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.1001)),  # Very narrow window
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -552,7 +552,7 @@ using CSV
             # Select no channels
             result = eegfun.erp_measurements(
                 "erps_nochannels",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 channel_selection = eegfun.channels(Symbol[]),
                 input_dir = test_dir,
@@ -571,7 +571,7 @@ using CSV
 
             result = eegfun.erp_measurements(
                 "erps_cleaned",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 input_dir = test_dir,
                 output_dir = custom_dir,
@@ -583,10 +583,10 @@ using CSV
         end
 
         @testset "Auto-generated output directory" begin
-            result = eegfun.erp_measurements("erps_cleaned", "mean_amp", analysis_window = eegfun.samples((0.1, 0.2)), input_dir = test_dir)
+            result = eegfun.erp_measurements("erps_cleaned", "mean_amplitude", analysis_window = eegfun.samples((0.1, 0.2)), input_dir = test_dir)
 
             # Should create directory with pattern-based name
-            expected_dir = joinpath(test_dir, "measurements_mean_amp")
+            expected_dir = joinpath(test_dir, "measurements_mean_amplitude")
             @test isdir(expected_dir)
         end
     end
@@ -596,7 +596,7 @@ using CSV
 
         result = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             participant_selection = eegfun.participants(1),
@@ -632,7 +632,7 @@ using CSV
 
         result = eegfun.erp_measurements(
             "erps_cleaned",
-            "mean_amp",
+            "mean_amplitude",
             analysis_window = eegfun.samples((0.1, 0.2)),
             input_dir = test_dir,
             output_dir = output_dir,
@@ -688,7 +688,7 @@ using CSV
             
             result = eegfun.erp_measurements(
                 "mean_test",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output"),
@@ -709,10 +709,10 @@ using CSV
             file_path = joinpath(known_test_dir, "1_peak_test.jld2")
             jldsave(file_path; data = [erp])
             
-            # Test max_peak
+            # Test max_peak_amplitude
             result = eegfun.erp_measurements(
                 "peak_test",
-                "max_peak",
+                "max_peak_amplitude",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_peak"),
@@ -723,10 +723,10 @@ using CSV
             # Should be close to peak value (allowing for sampling/discretization)
             @test isapprox(result[1, :Ch1], peak_value, rtol = 0.01)
             
-            # Test max_peak_lat
+            # Test max_peak_latency
             result_lat = eegfun.erp_measurements(
                 "peak_test",
-                "max_peak_lat",
+                "max_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_peak_lat"),
@@ -737,7 +737,7 @@ using CSV
             # Latency should be close to peak_time
             @test isapprox(result_lat[1, :Ch1], peak_time, rtol = 0.01)
             
-            # Test min_peak with inverted signal
+            # Test min_peak_amplitude with inverted signal
             min_peak_time = 0.5
             min_peak_value = -1.0
             erp_min = create_known_signal_erp(1, 1, t -> (t - min_peak_time)^2 - 1.0, t_start = 0.0, t_end = 1.0)
@@ -747,7 +747,7 @@ using CSV
             
             result_min = eegfun.erp_measurements(
                 "min_peak_test",
-                "min_peak",
+                "min_peak_amplitude",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_min"),
@@ -756,10 +756,10 @@ using CSV
             @test result_min isa DataFrame
             @test isapprox(result_min[1, :Ch1], min_peak_value, rtol = 0.01)
             
-            # Test min_peak_lat
+            # Test min_peak_latency
             result_min_lat = eegfun.erp_measurements(
                 "min_peak_test",
-                "min_peak_lat",
+                "min_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_min_lat"),
@@ -785,10 +785,10 @@ using CSV
             file_path = joinpath(known_test_dir, "1_peak_to_peak_test.jld2")
             jldsave(file_path; data = [erp])
             
-            # Test peak_to_peak_amp
+            # Test peak_to_peak_amplitude
             result_amp = eegfun.erp_measurements(
                 "peak_to_peak_test",
-                "peak_to_peak_amp",
+                "peak_to_peak_amplitude",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_peak_to_peak_amp"),
@@ -799,10 +799,10 @@ using CSV
             # Peak-to-peak should be max - min = 1.0 - (-1.0) = 2.0
             @test isapprox(result_amp[1, :Ch1], max_peak_value - min_peak_value, rtol = 0.05)
             
-            # Test peak_to_peak_lat
+            # Test peak_to_peak_latency
             result_lat = eegfun.erp_measurements(
                 "peak_to_peak_test",
-                "peak_to_peak_lat",
+                "peak_to_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 input_dir = known_test_dir,
                 output_dir = joinpath(known_test_dir, "output_peak_to_peak_lat"),
@@ -1014,7 +1014,7 @@ using CSV
             # Test with small local_window (should find robust peak)
             result = eegfun.erp_measurements(
                 "robust_peak_test",
-                "max_peak",
+                "max_peak_amplitude",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 local_window = 5,
                 input_dir = known_test_dir,
@@ -1028,7 +1028,7 @@ using CSV
             # Test latency
             result_lat = eegfun.erp_measurements(
                 "robust_peak_test",
-                "max_peak_lat",
+                "max_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 local_window = 5,
                 input_dir = known_test_dir,
@@ -1051,7 +1051,7 @@ using CSV
             # Test fraction = 0.0 (should return start time)
             result_0 = eegfun.erp_measurements(
                 "frac_area_edge_test",
-                "fractional_area_lat",
+                "fractional_area_latency",
                 analysis_window = eegfun.samples((t_start, t_end)),
                 fractional_area_fraction = 0.0,
                 input_dir = known_test_dir,
@@ -1063,7 +1063,7 @@ using CSV
             # Test fraction = 1.0 (should return end time)
             result_1 = eegfun.erp_measurements(
                 "frac_area_edge_test",
-                "fractional_area_lat",
+                "fractional_area_latency",
                 analysis_window = eegfun.samples((t_start, t_end)),
                 fractional_area_fraction = 1.0,
                 input_dir = known_test_dir,
@@ -1082,7 +1082,7 @@ using CSV
             # For fraction 0.25: t = √(2 * 0.5 * 0.25) = √0.25 = 0.5
             result_25 = eegfun.erp_measurements(
                 "frac_area_edge_test",
-                "fractional_area_lat",
+                "fractional_area_latency",
                 analysis_window = eegfun.samples((t_start, t_end)),
                 fractional_area_fraction = fraction,
                 input_dir = known_test_dir,
@@ -1107,7 +1107,7 @@ using CSV
             # Test fraction = 0.0 (should return start/end depending on direction)
             result_onset_0 = eegfun.erp_measurements(
                 "frac_peak_edge_test",
-                "fractional_peak_lat",
+                "fractional_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 fractional_peak_fraction = 0.0,
                 fractional_peak_direction = :onset,
@@ -1119,7 +1119,7 @@ using CSV
             
             result_offset_0 = eegfun.erp_measurements(
                 "frac_peak_edge_test",
-                "fractional_peak_lat",
+                "fractional_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 fractional_peak_fraction = 0.0,
                 fractional_peak_direction = :offset,
@@ -1132,7 +1132,7 @@ using CSV
             # Test fraction = 1.0 (should return peak time)
             result_onset_1 = eegfun.erp_measurements(
                 "frac_peak_edge_test",
-                "fractional_peak_lat",
+                "fractional_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 fractional_peak_fraction = 1.0,
                 fractional_peak_direction = :onset,
@@ -1164,7 +1164,7 @@ using CSV
             
             result = eegfun.erp_measurements(
                 "frac_area_test",
-                "fractional_area_lat",
+                "fractional_area_latency",
                 analysis_window = eegfun.samples((t_start, t_end)),
                 fractional_area_fraction = fraction,
                 input_dir = known_test_dir,
@@ -1201,7 +1201,7 @@ using CSV
             expected_onset = peak_time * fraction  # Linear: value = (peak/peak_time) * t, so t = value * peak_time / peak
             result_onset = eegfun.erp_measurements(
                 "frac_peak_test",
-                "fractional_peak_lat",
+                "fractional_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 fractional_peak_fraction = fraction,
                 fractional_peak_direction = :onset,
@@ -1219,7 +1219,7 @@ using CSV
             expected_offset = peak_time + (peak_value - target_value) * (1.0 - peak_time) / peak_value
             result_offset = eegfun.erp_measurements(
                 "frac_peak_test",
-                "fractional_peak_lat",
+                "fractional_peak_latency",
                 analysis_window = eegfun.samples((0.0, 1.0)),
                 fractional_peak_fraction = fraction,
                 fractional_peak_direction = :offset,
@@ -1242,7 +1242,7 @@ using CSV
             
             result = eegfun.erp_measurements(
                 "baseline_test",
-                "mean_amp",
+                "mean_amplitude",
                 analysis_window = eegfun.samples((0.1, 0.2)),
                 baseline_window = eegfun.samples((-0.2, 0.0)),
                 input_dir = known_test_dir,
