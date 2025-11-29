@@ -242,6 +242,40 @@ end
 # FUNCTION CALL LOGGING
 # ============================================================================
 
+"""Helper to extract content between matching parentheses starting at given index."""
+function _extract_paren_content(str::String, start_idx::Int)::String
+    paren_count = 1
+    for i in (start_idx + 1):length(str)
+        if str[i] == '('
+            paren_count += 1
+        elseif str[i] == ')'
+            paren_count -= 1
+            paren_count == 0 && return str[(start_idx + 1):(i - 1)]
+        end
+    end
+    return ""
+end
+
+"""Helper to parse closure representation and extract function name and args."""
+function _parse_closure_repr(repr_str::String)::Union{Tuple{String,String},Nothing}
+    # Pattern: eegfun.var"#samples##4#samples##5"{Tuple{Int64, Int64}}((0, 1))
+    # Extract function name from var"#name##..."
+    func_match = match(r"var\"#([^#]+)##", repr_str)
+    isnothing(func_match) && return nothing
+    
+    # Extract arguments: find last }( (end of type params, start of args)
+    brace_paren_range = findlast("}(", repr_str)
+    if !isnothing(brace_paren_range)
+        args_str = _extract_paren_content(repr_str, last(brace_paren_range))
+    else
+        # Fallback: try simple pattern without type parameters
+        paren_match = match(r"\(([^)]*)\)$", repr_str)
+        args_str = isnothing(paren_match) ? "" : paren_match.captures[1]
+    end
+    
+    return (func_match.captures[1], args_str)
+end
+
 """Helper to format a single kwarg value for logging."""
 function _format_kwarg_value(k::Symbol, v)::String
     if v === nothing
@@ -249,14 +283,17 @@ function _format_kwarg_value(k::Symbol, v)::String
     elseif isa(v, String)
         return "\"$v\""
     elseif isa(v, Function)
-        # Special handling for common predicate functions
-        if k in (:channel_selection, :component_selection, :epoch_selection, :sample_selection)
-            return "<predicate>"
-        else
-            # Try to get a readable function name
-            func_str = string(v)
-            return occursin("#", func_str) ? "<function>" : func_str
+        repr_str = repr(v)
+        parsed = _parse_closure_repr(repr_str)
+        if !isnothing(parsed)
+            func_name, args_str = parsed
+            if isempty(args_str)
+                return "eegfun.$func_name()"
+            else
+                return "eegfun.$func_name($args_str)"
+            end
         end
+        return repr_str
     else
         return string(v)
     end
@@ -295,14 +332,6 @@ end
 Macro to automatically log a function call by capturing local variables.
 Any local variables not listed in the tuple are automatically captured as kwargs.
 
-# Examples
-```julia
-function my_function(x, y, z; opt1=1, opt2="test")
-    @log_call "my_function" (x, y, z)
-    # Logs: Function call: my_function(x, y, z; opt1=1, opt2="test")
-end
-```
-
 # Notes
 - Positional arguments must be listed explicitly in the tuple
 - Keyword arguments are automatically captured from local variables
@@ -323,3 +352,4 @@ macro log_call(func_name, args_tuple)
         _log_function_call($(esc(func_name)), [$(esc.(args_tuple.args)...)], kwargs_dict)
     end
 end
+
