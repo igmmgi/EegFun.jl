@@ -949,6 +949,7 @@ channels(channel_name::Symbol) = x -> x .== channel_name
 channels(channel_number::Int) = channels([channel_number])
 channels(channel_numbers::Union{Vector{Int},UnitRange}) = x -> [i in channel_numbers for i = 1:length(x)]
 channels(channel_ranges::Vector{UnitRange{Int}}) = x -> [i in union(channel_ranges...) for i = 1:length(x)]
+channels(predicate::Function) = predicate  # Allow custom function predicates
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
@@ -971,6 +972,7 @@ end
 components() = x -> fill(true, length(x))  # Default: select all components given
 components(component_numbers::Union{Vector{Int},UnitRange}) = x -> [i in component_numbers for i = 1:length(x)]
 components(component_number::Int) = x -> x .== component_number
+components(predicate::Function) = predicate  # Allow custom function predicates
 components_not(component_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in component_numbers for i = 1:length(x)])
 components_not(component_number::Int) = x -> .!(x .== component_number)
 
@@ -984,6 +986,8 @@ function samples(time_window::Tuple{Real,Real})
     end
     return x -> (x[!, :time] .>= time_window[1]) .& (x[!, :time] .<= time_window[2])
 end
+# Allow custom function predicates
+samples(predicate::Function) = predicate
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
 samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])
@@ -994,6 +998,7 @@ samples_and_not(columns::Vector{Symbol}) = x -> .!(all(x[!, col] for col in colu
 epochs() = x -> fill(true, length(x))  # Default: select all epochs given
 epochs(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> [i in epoch_numbers for i in x]
 epochs(epoch_number::Int) = x -> x .== epoch_number
+epochs(predicate::Function) = predicate  # Allow custom function predicates
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
@@ -1005,6 +1010,7 @@ _get_condition_name(dat::EpochData)::String = dat.condition_name
 participants() = x -> fill(true, length(x))  # Default: select all participants given
 participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
 participants(participant_id::Int) = x -> x .== participant_id
+participants(predicate::Function) = predicate  # Allow custom function predicates
 participants_not(participant_ids::Union{Vector{Int},UnitRange}) = x -> .!([id in participant_ids for id in x])
 participants_not(participant_id::Int) = x -> .!(x .== participant_id)
 
@@ -1014,6 +1020,7 @@ conditions(condition_indices::Union{Vector{Int},UnitRange}) = x -> [i in conditi
 conditions(condition_index::Int) = x -> [i == condition_index for i = 1:length(x)]
 conditions(condition_names::Vector{String}) = x -> [_get_condition_name(dat) in condition_names for dat in x]
 conditions(condition_name::String) = x -> [_get_condition_name(dat) == condition_name for dat in x]
+conditions(predicate::Function) = predicate  # Allow custom function predicates
 conditions_not(condition_indices::Union{Vector{Int},UnitRange}) = x -> .!([i in condition_indices for i = 1:length(x)])
 conditions_not(condition_index::Int) = x -> .!([i == condition_index for i = 1:length(x)])
 conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(dat) in condition_names for dat in x])
