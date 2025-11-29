@@ -358,7 +358,7 @@ function realign(
 
     try
         @info "Batch realignment started at $(now())"
-        @log_call "realign" (file_pattern, realignment_column)
+        @log_call "realign"
 
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

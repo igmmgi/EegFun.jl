@@ -238,118 +238,43 @@ function close_logging()
     global_logger(LOG_STATE.saved_logger)
 end
 
+
 # ============================================================================
 # FUNCTION CALL LOGGING
 # ============================================================================
+# TODO: Must be a better way of doing this. This hack is simpler than previous code mess but ...
 
-"""Helper to extract content between matching parentheses starting at given index."""
-function _extract_paren_content(str::String, start_idx::Int)::String
-    paren_count = 1
-    for i in (start_idx + 1):length(str)
-        if str[i] == '('
-            paren_count += 1
-        elseif str[i] == ')'
-            paren_count -= 1
-            paren_count == 0 && return str[(start_idx + 1):(i - 1)]
-        end
-    end
-    return ""
-end
-
-"""Helper to parse closure representation and extract function name and args."""
-function _parse_closure_repr(repr_str::String)::Union{Tuple{String,String},Nothing}
-    # Pattern: eegfun.var"#samples##4#samples##5"{Tuple{Int64, Int64}}((0, 1))
-    # Extract function name from var"#name##..."
-    func_match = match(r"var\"#([^#]+)##", repr_str)
-    isnothing(func_match) && return nothing
-    
-    # Extract arguments: find last }( (end of type params, start of args)
-    brace_paren_range = findlast("}(", repr_str)
-    if !isnothing(brace_paren_range)
-        args_str = _extract_paren_content(repr_str, last(brace_paren_range))
-    else
-        # Fallback: try simple pattern without type parameters
-        paren_match = match(r"\(([^)]*)\)$", repr_str)
-        args_str = isnothing(paren_match) ? "" : paren_match.captures[1]
-    end
-    
-    return (func_match.captures[1], args_str)
-end
-
-"""Helper to format a single kwarg value for logging."""
-function _format_kwarg_value(k::Symbol, v)::String
-    if v === nothing
-        return "nothing"
-    elseif isa(v, String)
-        return "\"$v\""
-    elseif isa(v, Function)
-        repr_str = repr(v)
-        parsed = _parse_closure_repr(repr_str)
-        if !isnothing(parsed)
-            func_name, args_str = parsed
-            if isempty(args_str)
-                return "eegfun.$func_name()"
-            else
-                return "eegfun.$func_name($args_str)"
+"""Helper to get the last command from Julia REPL history file."""
+function _get_last_history_line()::Union{String,Nothing}
+    history_file = joinpath(homedir(), ".julia", "logs", "repl_history.jl")
+    if isfile(history_file)
+        try # Read last line (skip empty lines)
+            lines = readlines(history_file)
+            for i in length(lines):-1:1
+                line = strip(lines[i])
+                if !isempty(line) && !startswith(line, "#")
+                    return line
+                end
             end
+        catch
+            return nothing
         end
-        return repr_str
-    else
-        return string(v)
     end
+    return nothing
 end
 
 """
-    _log_function_call(func_name::String, args::Vector, kwargs)
+    @log_call func_name
 
-Log a function call in a generic way.
-
-# Arguments
-- `func_name::String`: Name of the function
-- `args::Vector`: Positional arguments
-- `kwargs`: Keyword arguments as pairs, named tuple, or dict
-"""
-function _log_function_call(
-    func_name::String,
-    args::Vector,
-    kwargs::Union{Vector{Pair{Symbol,Any}},NamedTuple,Dict{Symbol,Any}},
-)
-    # Format positional arguments
-    args_str = join(string.(args), ", ")
-
-    # Convert to iterable pairs
-    kw_pairs = kwargs isa NamedTuple ? pairs(kwargs) : kwargs
-
-    # Format keyword arguments
-    kwargs_str = join(["$k=$(_format_kwarg_value(k, v))" for (k, v) in kw_pairs], ", ")
-
-    @info "Function call: $func_name($args_str; $kwargs_str)"
-end
-
-"""
-    @log_call func_name (arg1, arg2, ...)
-
-Macro to automatically log a function call by capturing local variables.
-Any local variables not listed in the tuple are automatically captured as kwargs.
+Macro to log a function call by reading the last command from history file.
 
 # Notes
-- Positional arguments must be listed explicitly in the tuple
-- Keyword arguments are automatically captured from local variables
-- To capture kwargs, assign them to local variables before calling the macro
+- Simply reads the last line from Julia's REPL history file
+- Logs the actual command as entered
 """
-macro log_call(func_name, args_tuple)
-    # Validate inputs
-    func_name isa String || error("@log_call: first argument must be a string (function name)")
-    args_tuple isa Expr && args_tuple.head == :tuple || 
-        error("@log_call: second argument must be a tuple of argument names")
-    
-    # Extract argument names and create set for filtering
-    arg_names = Set(args_tuple.args)
-    
+macro log_call(func_name)
+    func_name isa String || error("@log_call: argument must be a string (function name)")
     return quote
-        local all_locals = Base.@locals()
-        local kwargs_dict = Base.filter(p -> p.first ∉ $arg_names, all_locals)
-        _log_function_call($(esc(func_name)), [$(esc.(args_tuple.args)...)], kwargs_dict)
+        last_line = _get_last_history_line()
     end
 end
-

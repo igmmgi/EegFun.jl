@@ -200,7 +200,7 @@ function grand_average(
 
     try
         @info "Batch grand averaging started at $(now())"
-        @log_call "grand_average" (file_pattern,)
+        @log_call "grand_average"
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

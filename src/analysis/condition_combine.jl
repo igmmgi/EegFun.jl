@@ -138,7 +138,7 @@ function condition_combine(
     try
 
         @info ""
-        @log_call "condition_combine" (file_pattern, condition_groups)
+        @log_call "condition_combine"
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

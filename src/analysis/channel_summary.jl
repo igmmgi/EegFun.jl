@@ -402,7 +402,7 @@ function channel_summary(
 
     try
         @info "Batch channel summary started at $(now())"
-        @log_call "channel_summary" (file_pattern,)
+        @log_call "channel_summary"
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

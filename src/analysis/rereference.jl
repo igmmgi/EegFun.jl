@@ -228,7 +228,7 @@ function rereference(
 
     try
         @info "Batch rereferencing started at $(now())"
-        @log_call "rereference" (file_pattern,)
+        @log_call "rereference"
 
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
