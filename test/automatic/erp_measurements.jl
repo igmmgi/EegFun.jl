@@ -31,9 +31,9 @@ using CSV
             output_dir = output_dir,
         )
 
-        @test result isa DataFrame
-        @test nrow(result) == 6  # 3 participants × 2 conditions
-        @test ncol(result) >= 5  # participant, condition, condition_name, Ch1, Ch2, Ch3
+        @test result isa eegfun.ErpMeasurementsResult
+        @test nrow(result.data) == 6  # 3 participants × 2 conditions
+        @test ncol(result.data) >= 5  # participant, condition, condition_name, Ch1, Ch2, Ch3
 
         # Verify output file was created
         @test isdir(output_dir)
@@ -69,13 +69,13 @@ using CSV
                 output_dir = output_dir,
             )
 
-            @test result isa DataFrame
-            @test nrow(result) == 6
+            @test result isa eegfun.ErpMeasurementsResult
+            @test nrow(result.data) == 6
 
             # Verify measurements are reasonable
             for ch in [:Ch1, :Ch2, :Ch3]
-                if hasproperty(result, ch)
-                    values = result[!, ch]
+                if hasproperty(result.data, ch)
+                    values = result.data[!, ch]
                     @test all(isfinite.(values))
 
                     if analysis_type == "max_peak_amplitude"
@@ -114,13 +114,13 @@ using CSV
                 output_dir = output_dir,
             )
 
-            @test result isa DataFrame
-            @test nrow(result) == 4  # 2 participants × 2 conditions
+            @test result isa eegfun.ErpMeasurementsResult
+            @test nrow(result.data) == 4  # 2 participants × 2 conditions
 
             # Verify measurements are finite
             for ch in [:Ch1, :Ch2, :Ch3]
-                if hasproperty(result, ch)
-                    values = result[!, ch]
+                if hasproperty(result.data, ch)
+                    values = result.data[!, ch]
                     @test all(isfinite.(values))
 
                     if analysis_type == "rectified_area"
@@ -154,13 +154,13 @@ using CSV
                 output_dir = output_dir,
             )
 
-            @test result isa DataFrame
-            @test nrow(result) == 4  # 2 participants × 2 conditions
+            @test result isa eegfun.ErpMeasurementsResult
+            @test nrow(result.data) == 4  # 2 participants × 2 conditions
 
             # Verify measurements are finite and in time range
             for ch in [:Ch1, :Ch2, :Ch3]
-                if hasproperty(result, ch)
-                    values = result[!, ch]
+                if hasproperty(result.data, ch)
+                    values = result.data[!, ch]
                     @test all(isfinite.(values))
                     @test all(0.1 .<= values .<= 0.2)  # Should be in analysis window
                 end
@@ -187,7 +187,7 @@ using CSV
             output_dir = output_dir,
             local_window = 5,
         )
-        @test result1 isa DataFrame
+        @test result1 isa eegfun.ErpMeasurementsResult
 
         # Test fractional_area_fraction
         result2 = eegfun.erp_measurements(
@@ -198,7 +198,7 @@ using CSV
             output_dir = output_dir,
             fractional_area_fraction = 0.3,
         )
-        @test result2 isa DataFrame
+        @test result2 isa eegfun.ErpMeasurementsResult
 
         # Test fractional_peak_fraction and fractional_peak_direction
         result3 = eegfun.erp_measurements(
@@ -210,7 +210,7 @@ using CSV
             fractional_peak_fraction = 0.7,
             fractional_peak_direction = :offset,
         )
-        @test result3 isa DataFrame
+        @test result3 isa eegfun.ErpMeasurementsResult
     end
 
     @testset "Kwargs validation" begin
@@ -283,11 +283,11 @@ using CSV
             output_dir = output_dir,
         )
 
-        @test result isa DataFrame
-        @test nrow(result) == 40  # 2 participants × 2 conditions × 10 epochs each
+        @test result isa eegfun.ErpMeasurementsResult
+        @test nrow(result.data) == 40  # 2 participants × 2 conditions × 10 epochs each
 
         # Verify epoch column is present
-        @test "epoch" in names(result)
+        @test "epoch" in names(result.data)
     end
 
     @testset "Participant and condition filtering" begin
@@ -311,9 +311,9 @@ using CSV
             output_dir = output_dir,
         )
 
-        @test result isa DataFrame
-        @test nrow(result) == 4  # 2 participants × 2 conditions
-        @test all(result.participant .∈ [[1, 2]])
+        @test result isa eegfun.ErpMeasurementsResult
+        @test nrow(result.data) == 4  # 2 participants × 2 conditions
+        @test all(result.data.participant .∈ [[1, 2]])
 
         # Test condition filtering
         result = eegfun.erp_measurements(
@@ -325,9 +325,9 @@ using CSV
             output_dir = output_dir,
         )
 
-        @test result isa DataFrame
-        @test nrow(result) == 3  # 3 participants × 1 condition
-        @test all(result.condition .== 1)
+        @test result isa eegfun.ErpMeasurementsResult
+        @test nrow(result.data) == 3  # 3 participants × 1 condition
+        @test all(result.data.condition .== 1)
     end
 
     @testset "Channel selection" begin
@@ -351,11 +351,11 @@ using CSV
             output_dir = output_dir,
         )
 
-        @test result isa DataFrame
-        @test nrow(result) == 6
-        @test "Ch1" in names(result)
-        @test "Ch2" in names(result)
-        @test "Ch3" ∉ names(result)  # Ch3 should be excluded
+        @test result isa eegfun.ErpMeasurementsResult
+        @test nrow(result.data) == 6
+        @test "Ch1" in names(result.data)
+        @test "Ch2" in names(result.data)
+        @test "Ch3" ∉ names(result.data)  # Ch3 should be excluded
     end
 
     @testset "Baseline correction" begin
@@ -378,8 +378,8 @@ using CSV
             output_dir = output_dir,
         )
 
-        @test result isa DataFrame
-        @test nrow(result) == 6
+        @test result isa eegfun.ErpMeasurementsResult
+        @test nrow(result.data) == 6
 
         # Verify measurements are reasonable (should be different from non-baseline corrected)
         result_no_baseline = eegfun.erp_measurements(
@@ -392,8 +392,8 @@ using CSV
 
         # Values should be different due to baseline correction
         for ch in [:Ch1, :Ch2, :Ch3]
-            if hasproperty(result, ch) && hasproperty(result_no_baseline, ch)
-                @test !all(result[!, ch] .== result_no_baseline[!, ch])
+            if hasproperty(result.data, ch) && hasproperty(result_no_baseline.data, ch)
+                @test !all(result.data[!, ch] .== result_no_baseline.data[!, ch])
             end
         end
     end
@@ -511,7 +511,7 @@ using CSV
             )
 
             # Should still work (baseline skipped if no samples)
-            @test result isa DataFrame
+            @test result isa eegfun.ErpMeasurementsResult
         end
 
         @testset "Single sample analysis window" begin
@@ -535,7 +535,7 @@ using CSV
 
             # Should handle gracefully
             if !isnothing(result)
-                @test result isa DataFrame
+                @test result isa eegfun.ErpMeasurementsResult
             end
         end
 
@@ -604,15 +604,15 @@ using CSV
         )
 
         # Verify participant ID extraction
-        @test all(result.participant .== 1)
+        @test all(result.data.participant .== 1)
 
         # Verify condition numbers
-        @test all(result.condition .∈ [[1, 2]])
+        @test all(result.data.condition .∈ [[1, 2]])
 
         # Verify measurements are finite
         for ch in [:Ch1, :Ch2, :Ch3]
-            if hasproperty(result, ch)
-                @test all(isfinite.(result[!, ch]))
+            if hasproperty(result.data, ch)
+                @test all(isfinite.(result.data[!, ch]))
             end
         end
 
@@ -621,8 +621,8 @@ using CSV
         channel_cols = [:Ch1, :Ch2, :Ch3]
 
         for (i, col) in enumerate(metadata_cols)
-            if hasproperty(result, col)
-                @test names(result)[i] == string(col)
+            if hasproperty(result.data, col)
+                @test names(result.data)[i] == string(col)
             end
         end
     end
@@ -694,9 +694,9 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output"),
             )
             
-            @test result isa DataFrame
-            @test nrow(result) == 1
-            @test isapprox(result[1, :Ch1], constant_value, rtol = 1e-6)
+            @test result isa eegfun.ErpMeasurementsResult
+            @test nrow(result.data) == 1
+            @test isapprox(result.data[1, :Ch1], constant_value, rtol = 1e-6)
         end
         
         @testset "Peak amplitude and latency" begin
@@ -718,10 +718,10 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_peak"),
             )
             
-            @test result isa DataFrame
-            @test nrow(result) == 1
+            @test result isa eegfun.ErpMeasurementsResult
+            @test nrow(result.data) == 1
             # Should be close to peak value (allowing for sampling/discretization)
-            @test isapprox(result[1, :Ch1], peak_value, rtol = 0.01)
+            @test isapprox(result.data[1, :Ch1], peak_value, rtol = 0.01)
             
             # Test max_peak_latency
             result_lat = eegfun.erp_measurements(
@@ -732,10 +732,10 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_peak_lat"),
             )
             
-            @test result_lat isa DataFrame
-            @test nrow(result_lat) == 1
+            @test result_lat isa eegfun.ErpMeasurementsResult
+            @test nrow(result_lat.data) == 1
             # Latency should be close to peak_time
-            @test isapprox(result_lat[1, :Ch1], peak_time, rtol = 0.01)
+            @test isapprox(result_lat.data[1, :Ch1], peak_time, rtol = 0.01)
             
             # Test min_peak_amplitude with inverted signal
             min_peak_time = 0.5
@@ -753,8 +753,8 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_min"),
             )
             
-            @test result_min isa DataFrame
-            @test isapprox(result_min[1, :Ch1], min_peak_value, rtol = 0.01)
+            @test result_min isa eegfun.ErpMeasurementsResult
+            @test isapprox(result_min.data[1, :Ch1], min_peak_value, rtol = 0.01)
             
             # Test min_peak_latency
             result_min_lat = eegfun.erp_measurements(
@@ -765,8 +765,8 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_min_lat"),
             )
             
-            @test result_min_lat isa DataFrame
-            @test isapprox(result_min_lat[1, :Ch1], min_peak_time, rtol = 0.01)
+            @test result_min_lat isa eegfun.ErpMeasurementsResult
+            @test isapprox(result_min_lat.data[1, :Ch1], min_peak_time, rtol = 0.01)
         end
         
         @testset "Peak-to-peak measurements" begin
@@ -794,10 +794,10 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_peak_to_peak_amp"),
             )
             
-            @test result_amp isa DataFrame
-            @test nrow(result_amp) == 1
+            @test result_amp isa eegfun.ErpMeasurementsResult
+            @test nrow(result_amp.data) == 1
             # Peak-to-peak should be max - min = 1.0 - (-1.0) = 2.0
-            @test isapprox(result_amp[1, :Ch1], max_peak_value - min_peak_value, rtol = 0.05)
+            @test isapprox(result_amp.data[1, :Ch1], max_peak_value - min_peak_value, rtol = 0.05)
             
             # Test peak_to_peak_latency
             result_lat = eegfun.erp_measurements(
@@ -808,11 +808,11 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_peak_to_peak_lat"),
             )
             
-            @test result_lat isa DataFrame
-            @test nrow(result_lat) == 1
+            @test result_lat isa eegfun.ErpMeasurementsResult
+            @test nrow(result_lat.data) == 1
             # Peak-to-peak latency should be |max_time - min_time| = |0.25 - 0.75| = 0.5
             expected_lat_diff = abs(max_peak_time - min_peak_time)
-            @test isapprox(result_lat[1, :Ch1], expected_lat_diff, rtol = 0.05)
+            @test isapprox(result_lat.data[1, :Ch1], expected_lat_diff, rtol = 0.05)
         end
         
         @testset "Area measurements" begin
@@ -836,8 +836,8 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_area"),
             )
             
-            @test result isa DataFrame
-            @test isapprox(result[1, :Ch1], expected_area, rtol = 0.01)
+            @test result isa eegfun.ErpMeasurementsResult
+            @test isapprox(result.data[1, :Ch1], expected_area, rtol = 0.01)
             
             # Test integral (same for constant)
             result_int = eegfun.erp_measurements(
@@ -848,7 +848,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_integral"),
             )
             
-            @test isapprox(result_int[1, :Ch1], expected_area, rtol = 0.01)
+            @test isapprox(result_int.data[1, :Ch1], expected_area, rtol = 0.01)
             
             # Test positive_area (same for positive constant)
             result_pos = eegfun.erp_measurements(
@@ -859,7 +859,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_pos"),
             )
             
-            @test isapprox(result_pos[1, :Ch1], expected_area, rtol = 0.01)
+            @test isapprox(result_pos.data[1, :Ch1], expected_area, rtol = 0.01)
             
             # Test negative_area (should be 0 for positive constant)
             result_neg = eegfun.erp_measurements(
@@ -870,7 +870,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_neg"),
             )
             
-            @test isapprox(result_neg[1, :Ch1], 0.0, atol = 0.01)
+            @test isapprox(result_neg.data[1, :Ch1], 0.0, atol = 0.01)
             
             # Test with negative constant
             neg_value = -2.0
@@ -888,7 +888,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_neg2"),
             )
             
-            @test isapprox(result_neg2[1, :Ch1], expected_neg_area, rtol = 0.01)
+            @test isapprox(result_neg2.data[1, :Ch1], expected_neg_area, rtol = 0.01)
             
             # Test rectified_area with negative constant (should be same as negative_area)
             result_rect_neg = eegfun.erp_measurements(
@@ -899,7 +899,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_rect_neg"),
             )
             
-            @test isapprox(result_rect_neg[1, :Ch1], expected_neg_area, rtol = 0.01)
+            @test isapprox(result_rect_neg.data[1, :Ch1], expected_neg_area, rtol = 0.01)
             
             # Test integral with negative constant (should be negative)
             result_int_neg = eegfun.erp_measurements(
@@ -911,7 +911,7 @@ using CSV
             )
             
             expected_integral_neg = neg_value * (t_end - t_start)
-            @test isapprox(result_int_neg[1, :Ch1], expected_integral_neg, rtol = 0.01)
+            @test isapprox(result_int_neg.data[1, :Ch1], expected_integral_neg, rtol = 0.01)
             
             # Test positive_area with negative constant (should be 0)
             result_pos_neg = eegfun.erp_measurements(
@@ -922,7 +922,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_pos_neg"),
             )
             
-            @test isapprox(result_pos_neg[1, :Ch1], 0.0, atol = 0.01)
+            @test isapprox(result_pos_neg.data[1, :Ch1], 0.0, atol = 0.01)
         end
         
         @testset "Mixed positive/negative area measurements" begin
@@ -961,7 +961,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_mixed_int"),
             )
             
-            @test isapprox(result_int[1, :Ch1], expected_integral, atol = 0.01)
+            @test isapprox(result_int.data[1, :Ch1], expected_integral, atol = 0.01)
             
             # Test positive_area
             result_pos = eegfun.erp_measurements(
@@ -972,7 +972,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_mixed_pos"),
             )
             
-            @test isapprox(result_pos[1, :Ch1], expected_positive_area, rtol = 0.01)
+            @test isapprox(result_pos.data[1, :Ch1], expected_positive_area, rtol = 0.01)
             
             # Test negative_area
             result_neg = eegfun.erp_measurements(
@@ -983,7 +983,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_mixed_neg"),
             )
             
-            @test isapprox(result_neg[1, :Ch1], expected_negative_area, rtol = 0.01)
+            @test isapprox(result_neg.data[1, :Ch1], expected_negative_area, rtol = 0.01)
             
             # Test rectified_area
             result_rect = eegfun.erp_measurements(
@@ -994,7 +994,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_mixed_rect"),
             )
             
-            @test isapprox(result_rect[1, :Ch1], expected_rectified_area, rtol = 0.01)
+            @test isapprox(result_rect.data[1, :Ch1], expected_rectified_area, rtol = 0.01)
         end
         
         @testset "Robust peak detection" begin
@@ -1021,9 +1021,9 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_robust"),
             )
             
-            @test result isa DataFrame
+            @test result isa eegfun.ErpMeasurementsResult
             # Should find the main peak, not the small oscillations
-            @test result[1, :Ch1] > 0.9  # Should be close to 1.0
+            @test result.data[1, :Ch1] > 0.9  # Should be close to 1.0
             
             # Test latency
             result_lat = eegfun.erp_measurements(
@@ -1035,7 +1035,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_robust_lat"),
             )
             
-            @test isapprox(result_lat[1, :Ch1], peak_time, rtol = 0.05)
+            @test isapprox(result_lat.data[1, :Ch1], peak_time, rtol = 0.05)
         end
         
         @testset "Fractional area latency edge cases" begin
@@ -1058,7 +1058,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_0"),
             )
             
-            @test isapprox(result_0[1, :Ch1], t_start, rtol = 0.01)
+            @test isapprox(result_0.data[1, :Ch1], t_start, rtol = 0.01)
             
             # Test fraction = 1.0 (should return end time)
             result_1 = eegfun.erp_measurements(
@@ -1070,7 +1070,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_1"),
             )
             
-            @test isapprox(result_1[1, :Ch1], t_end, rtol = 0.01)
+            @test isapprox(result_1.data[1, :Ch1], t_end, rtol = 0.01)
             
             # Test fraction = 0.25
             # For linear signal y = t: cumulative area = t²/2
@@ -1089,7 +1089,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_25"),
             )
             
-            @test isapprox(result_25[1, :Ch1], expected_latency, rtol = 0.05)
+            @test isapprox(result_25.data[1, :Ch1], expected_latency, rtol = 0.05)
         end
         
         @testset "Fractional peak latency edge cases" begin
@@ -1115,7 +1115,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_peak_onset_0"),
             )
             
-            @test isapprox(result_onset_0[1, :Ch1], 0.0, rtol = 0.01)
+            @test isapprox(result_onset_0.data[1, :Ch1], 0.0, rtol = 0.01)
             
             result_offset_0 = eegfun.erp_measurements(
                 "frac_peak_edge_test",
@@ -1127,7 +1127,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_peak_offset_0"),
             )
             
-            @test isapprox(result_offset_0[1, :Ch1], 1.0, rtol = 0.01)
+            @test isapprox(result_offset_0.data[1, :Ch1], 1.0, rtol = 0.01)
             
             # Test fraction = 1.0 (should return peak time)
             result_onset_1 = eegfun.erp_measurements(
@@ -1140,7 +1140,7 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_peak_onset_1"),
             )
             
-            @test isapprox(result_onset_1[1, :Ch1], peak_time, rtol = 0.01)
+            @test isapprox(result_onset_1.data[1, :Ch1], peak_time, rtol = 0.01)
         end
         
         @testset "Fractional area latency" begin
@@ -1171,8 +1171,8 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_area"),
             )
             
-            @test result isa DataFrame
-            @test isapprox(result[1, :Ch1], expected_latency, rtol = 0.05)  # Allow some tolerance for discretization
+            @test result isa eegfun.ErpMeasurementsResult
+            @test isapprox(result.data[1, :Ch1], expected_latency, rtol = 0.05)  # Allow some tolerance for discretization
         end
         
         @testset "Fractional peak latency" begin
@@ -1209,8 +1209,8 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_peak_onset"),
             )
             
-            @test result_onset isa DataFrame
-            @test isapprox(result_onset[1, :Ch1], expected_onset, rtol = 0.05)
+            @test result_onset isa eegfun.ErpMeasurementsResult
+            @test isapprox(result_onset.data[1, :Ch1], expected_onset, rtol = 0.05)
             
             # Test offset direction
             # After peak: value = peak - (peak/(1-peak_time)) * (t - peak_time)
@@ -1227,8 +1227,8 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_frac_peak_offset"),
             )
             
-            @test result_offset isa DataFrame
-            @test isapprox(result_offset[1, :Ch1], expected_offset, rtol = 0.05)
+            @test result_offset isa eegfun.ErpMeasurementsResult
+            @test isapprox(result_offset.data[1, :Ch1], expected_offset, rtol = 0.05)
         end
         
         @testset "Baseline correction" begin
@@ -1249,9 +1249,9 @@ using CSV
                 output_dir = joinpath(known_test_dir, "output_baseline"),
             )
             
-            @test result isa DataFrame
+            @test result isa eegfun.ErpMeasurementsResult
             # After baseline correction, mean should be close to 0
-            @test isapprox(result[1, :Ch1], 0.0, atol = 0.1)
+            @test isapprox(result.data[1, :Ch1], 0.0, atol = 0.1)
         end
         
         # Cleanup
