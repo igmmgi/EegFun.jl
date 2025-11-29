@@ -191,18 +191,28 @@ function _overlay_measurements!(
 )
     # Find matching row in measurements DataFrame
     # Match by condition and channel
-    matching_rows = measurements_df[
-        (measurements_df.condition .== dataset.condition) .& 
-        (hasproperty(measurements_df, channel) .& .!isnan.(measurements_df[!, channel])),
-        :,
-    ]
+    # Also check for participant if available
+    condition_mask = measurements_df.condition .== dataset.condition
+    
+    # If measurements_df has participant column and dataset has participant info, filter by that too
+    if hasproperty(measurements_df, :participant) && hasproperty(dataset, :participant)
+        participant_mask = measurements_df.participant .== dataset.participant
+        condition_mask = condition_mask .& participant_mask
+    end
+    
+    # Check for valid channel data
+    channel_mask = hasproperty(measurements_df, channel) .& .!isnan.(measurements_df[!, channel])
+    
+    matching_rows = measurements_df[condition_mask .& channel_mask, :]
     
     if isempty(matching_rows)
+        @debug "No matching measurements for condition $(dataset.condition), channel $channel"
         return  # No measurements for this condition/channel
     end
     
     # Get measurement value for this channel
     if !hasproperty(matching_rows, channel)
+        @debug "Channel $channel not found in matching rows for condition $(dataset.condition)"
         return
     end
     
@@ -360,10 +370,23 @@ function _overlay_measurements!(
     elseif analysis_type in ["rectified_area", "integral", "positive_area", "negative_area"]
         # Shade analysis window with linked visibility and color
         y_min, y_max = extrema(channel_data[time_mask])
-        # Use the line color with transparency for the band
-        band!(ax, time_min, time_max, low = y_min, high = y_max,
-              color = marker_color, 
+        
+        # Get concrete color value (not Observable) for poly
+        concrete_color = marker_color isa Observable ? marker_color[] : marker_color
+        
+        # Create rectangle vertices: bottom-left, bottom-right, top-right, top-left
+        rect_vertices = [
+            Point2f(time_min, y_min),
+            Point2f(time_max, y_min),
+            Point2f(time_max, y_max),
+            Point2f(time_min, y_max),
+        ]
+        
+        # Use poly! to create a filled rectangle (same approach as mean_amplitude)
+        poly!(ax, rect_vertices,
+              color = concrete_color,
               alpha = 0.15,
+              strokewidth = 0,
               visible = marker_visible)
         
         # Add text label with linked visibility and color
@@ -371,21 +394,96 @@ function _overlay_measurements!(
         mid_y = (y_min + y_max) / 2
         text!(ax, mid_time, mid_y,
               text = Printf.@sprintf("%s: %.2f μVs", analysis_type, measurement_value),
-              align = (:center, :center), color = marker_color, fontsize = 9, visible = marker_visible)
+              align = (:center, :center), color = marker_color, fontsize = 14, visible = marker_visible)
               
-    elseif analysis_type in ["fractional_area_latency", "fractional_peak_latency"]
-        # Draw vertical line at fractional latency with linked visibility and color
+    elseif analysis_type == "fractional_area_latency"
+        # Fractional area latency: time point where a fraction of the total area has been accumulated
         latency = measurement_value
         
         if time_min <= latency <= time_max
-            vlines!(ax, latency, color = marker_color, linewidth = 2, linestyle = :dash, visible = marker_visible)
+            # Draw vertical line at fractional latency
+            # Use solid line with condition-specific color (from marker_color)
+            vlines!(ax, latency, 
+                    color = marker_color, 
+                    linewidth = 2, 
+                    linestyle = :solid, 
+                    visible = marker_visible)
             
+            # Get amplitude at this latency for label placement
             latency_idx = argmin(abs.(time_data .- latency))
             latency_amp = channel_data[latency_idx]
             
+            # More descriptive label explaining what this represents
+            # Include condition name if available to distinguish between conditions
+            label_text = if hasproperty(dataset, :condition_name) && !isempty(dataset.condition_name)
+                Printf.@sprintf("%s: %.3f s", dataset.condition_name, latency)
+            else
+                Printf.@sprintf("Frac Area: %.3f s", latency)
+            end
+            
             text!(ax, latency, latency_amp,
-                  text = Printf.@sprintf("%s: %.3f s", analysis_type, latency),
-                  align = (:center, :bottom), color = marker_color, fontsize = 9, visible = marker_visible)
+                  text = label_text,
+                  align = (:center, :bottom), color = marker_color, fontsize = 14, visible = marker_visible)
+        end
+        
+    elseif analysis_type == "fractional_peak_latency"
+        # Fractional peak latency: time point where signal reaches a fraction of peak amplitude
+        latency = measurement_value
+        
+        if time_min <= latency <= time_max
+            # Find the peak in the window to show context
+            # Use robust peak detection to match what was used in the measurement
+            window_data = channel_data[time_mask]
+            window_times = time_data[time_mask]
+            
+            # Find both max and min peaks, use the one with larger absolute value
+            max_idx = argmax(window_data)
+            min_idx = argmin(window_data)
+            max_amp = window_data[max_idx]
+            min_amp = window_data[min_idx]
+            
+            if abs(max_amp) >= abs(min_amp)
+                peak_idx = max_idx
+                peak_amp = max_amp
+            else
+                peak_idx = min_idx
+                peak_amp = min_amp
+            end
+            peak_time = window_times[peak_idx]
+            
+            # Get concrete color for peak line (use same color as plot line)
+            concrete_color = marker_color isa Observable ? marker_color[] : marker_color
+            
+            # Draw vertical line at peak location (for context) - use solid line with same color
+            # Make sure it's visible and distinct from fractional latency line
+            vlines!(ax, peak_time, 
+                    color = concrete_color, 
+                    linewidth = 1.5, 
+                    linestyle = :solid, 
+                    alpha = 0.7, 
+                    visible = marker_visible)
+            
+            # Draw vertical line at fractional latency - use dashed line to distinguish
+            vlines!(ax, latency, 
+                    color = marker_color, 
+                    linewidth = 2, 
+                    linestyle = :solid, 
+                    visible = marker_visible)
+            
+            # Get amplitude at fractional latency for label placement
+            latency_idx = argmin(abs.(time_data .- latency))
+            latency_amp = channel_data[latency_idx]
+            
+            # More descriptive label showing both peak and fractional latency
+            if abs(latency - peak_time) > 0.01
+                text!(ax, latency, latency_amp,
+                      text = Printf.@sprintf("Frac: %.3f s\nPeak: %.3f s", latency, peak_time),
+                      align = (:center, :bottom), color = marker_color, fontsize = 11, visible = marker_visible)
+            else
+                text!(ax, latency, latency_amp,
+                      text = Printf.@sprintf("Frac Peak: %.3f s", latency),
+                      align = (:center, :bottom), color = marker_color, fontsize = 14, visible = marker_visible)
+            end
         end
         
     elseif analysis_type == "peak_to_peak_amplitude"
