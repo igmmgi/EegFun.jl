@@ -950,7 +950,13 @@ components_not(component_number::Int) = x -> .!(x .== component_number)
 # Helper function predicates for easier sample filtering
 samples() = x -> fill(true, nrow(x))
 samples(column::Symbol) = x -> x[!, column]
-samples(time_window::Tuple{Real,Real}) = x -> (x[!, :time] .>= time_window[1]) .& (x[!, :time] .<= time_window[2])
+function samples(time_window::Tuple{Real,Real})
+    # Validate that start <= end
+    if time_window[1] > time_window[2]
+        @minimal_error_throw "Invalid time window: start ($(time_window[1])) must be <= end ($(time_window[2]))"
+    end
+    return x -> (x[!, :time] .>= time_window[1]) .& (x[!, :time] .<= time_window[2])
+end
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
 samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])

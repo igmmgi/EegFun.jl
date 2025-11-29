@@ -43,20 +43,6 @@ end
     ERP-MEASUREMENTS-SPECIFIC HELPERS
 =============================================================================#
 
-"""Extract participant ID from filename, returns Int."""
-function _extract_participant_id(filename::String)
-    parts = split(replace(filename, ".jld2" => ""), "_")
-    participant_str = findfirst(p -> !isempty(p) && all(isdigit, p), parts)
-
-    if participant_str === nothing # No numeric ID found, use hash of filename
-        participant = hash(filename) % 10000
-        @info "  No numeric participant ID found in filename, using hash: $participant"
-        return participant
-    else # Numeric ID found, use it
-        return parse(Int, parts[participant_str])
-    end
-end
-
 """
 Find robust peak (peak that is larger than neighbors and local averages).
 Returns (peak_value, peak_index) or (nothing, nothing) if no robust peak found.
@@ -119,12 +105,33 @@ function _fractional_area_latency(
     time_col::AbstractVector,
     fraction::Float64
 )
+    # Edge cases
+    if isempty(data) || isempty(time_col)
+        return NaN
+    end
+    
+    if length(data) == 1
+        return time_col[1]
+    end
+    
     # Compute cumulative area (integral)
     dt = mean(diff(time_col))
     cumulative = cumsum(data) .* dt
     total_area = cumulative[end]
     
+    # Handle zero or very small area
+    if abs(total_area) < 1e-10
+        return time_col[1]  # Return start if no area
+    end
+    
     target_area = total_area * fraction
+    
+    # Handle fraction = 0.0 or 1.0
+    if fraction <= 0.0
+        return time_col[1]
+    elseif fraction >= 1.0
+        return time_col[end]
+    end
     
     # Find first point where cumulative area >= target
     idx = findfirst(x -> x >= target_area, cumulative)
@@ -144,7 +151,18 @@ function _fractional_peak_latency(
     fraction::Float64,
     direction::Symbol  # :onset (before peak) or :offset (after peak)
 )
+    # Edge cases
+    if isempty(data) || isempty(time_col) || peak_idx < 1 || peak_idx > length(data)
+        return NaN
+    end
+    
     peak_val = data[peak_idx]
+    
+    # Handle zero peak
+    if abs(peak_val) < 1e-10
+        return time_col[peak_idx]
+    end
+    
     target_val = peak_val * fraction
     
     if direction == :onset
@@ -225,7 +243,18 @@ function _compute_measurement(
         
     # Area/Integral measurements (in µVs) - compute dt only when needed
     elseif analysis_type in ["rectified_area", "integral", "positive_area", "negative_area"]
-        dt = length(selected_times) > 1 ? mean(diff(selected_times)) : 0.0
+        # Edge case: single sample or empty
+        if length(selected_times) <= 1 || length(chan_data) <= 1
+            return 0.0
+        end
+        
+        dt = mean(diff(selected_times))
+        
+        # Handle case where dt is zero or very small (shouldn't happen with valid time data)
+        if dt <= 0.0
+            @minimal_warning "Channel $channel_name: time step is <= 0, returning 0.0 for area measurement"
+            return 0.0
+        end
         
         if analysis_type == "rectified_area"
             return sum(abs.(chan_data)) * dt
@@ -265,6 +294,21 @@ function _process_dataframe_measurements(
     participant::Int,
     measurement_kwargs::Dict{Symbol,Any},
 )
+    # Basic validation
+    if isempty(df)
+        @minimal_warning "DataFrame is empty"
+        return nothing
+    end
+    
+    if !hasproperty(df, :time)
+        @minimal_error_throw "DataFrame must have a :time column"
+    end
+    
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected"
+        return nothing
+    end
+    
     # Find time column and apply analysis window predicate
     time_col = df[!, :time]
     sample_mask = analysis_window(df)
@@ -281,8 +325,6 @@ function _process_dataframe_measurements(
         selected_times = @view time_col[time_idx]
     end
 
-    # Build row as NamedTuple (much faster than DataFrame)
-    # Start with metadata
     metadata_pairs = Pair{Symbol,Any}[:participant => participant]
     if hasproperty(df, :condition)
         push!(metadata_pairs, :condition => df[1, :condition])
@@ -330,7 +372,6 @@ function _process_measurements_file(
 
     # Load data (using load_data which finds by type)
     data_var = load_data(filepath)
-    
     if isnothing(data_var)
         @minimal_warning "No data variables found in $filename"
         return nothing
@@ -342,12 +383,11 @@ function _process_measurements_file(
         return nothing
     end
 
-    # Select conditions
-    data_var = _condition_select(data_var, condition_selection)
+    # Select conditions using get_selected_conditions (more general than _condition_select)
+    selected_indices = get_selected_conditions(data_var, condition_selection)
+    isempty(selected_indices) && @minimal_error "No conditions left following condition selection in $filename"
+    data_var = data_var[selected_indices]
     
-    if isempty(data_var)
-        return nothing
-    end
 
     # Get selected channels from first data
     first_data = data_var[1]
@@ -532,6 +572,27 @@ function erp_measurements(
 
         # Merge measurement kwargs with defaults
         measurement_kwargs = _merge_plot_kwargs(ERP_MEASUREMENTS_KWARGS, kwargs)
+        
+        # Validate measurement kwargs
+        local_window = measurement_kwargs[:local_window]
+        if local_window < 1
+            @minimal_error_throw "local_window must be >= 1, got: $local_window"
+        end
+        
+        fractional_area_fraction = measurement_kwargs[:fractional_area_fraction]
+        if fractional_area_fraction < 0.0 || fractional_area_fraction > 1.0
+            @minimal_error_throw "fractional_area_fraction must be in [0.0, 1.0], got: $fractional_area_fraction"
+        end
+        
+        fractional_peak_fraction = measurement_kwargs[:fractional_peak_fraction]
+        if fractional_peak_fraction < 0.0 || fractional_peak_fraction > 1.0
+            @minimal_error_throw "fractional_peak_fraction must be in [0.0, 1.0], got: $fractional_peak_fraction"
+        end
+        
+        fractional_peak_direction = measurement_kwargs[:fractional_peak_direction]
+        if fractional_peak_direction !== :onset && fractional_peak_direction !== :offset
+            @minimal_error_throw "fractional_peak_direction must be :onset or :offset, got: $fractional_peak_direction"
+        end
 
         # Setup directories
         output_dir = something(output_dir, _default_measurements_output_dir(input_dir, analysis_type))
@@ -578,6 +639,14 @@ function erp_measurements(
                     @minimal_warning "  ✗ No measurements extracted from $file"
                 end
             catch e
+                # Re-throw invalid window errors (user errors that should propagate)
+                # @minimal_error_throw throws ErrorException
+                if e isa ErrorException
+                    error_msg = e.msg
+                    if occursin("invalid", lowercase(error_msg)) && occursin("window", lowercase(error_msg))
+                        rethrow(e)
+                    end
+                end
                 @error "Error processing $file" exception=(e, catch_backtrace())
                 error_count += 1
             end
