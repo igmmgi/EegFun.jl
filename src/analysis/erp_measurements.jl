@@ -613,7 +613,7 @@ function erp_measurements(
     try
 
         @info "ERP measurement analysis started at $(now())"
-        @log_call "erp_measurements" (file_pattern, analysis_type)
+        @log_call "erp_measurements"
 
         # Validation 
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

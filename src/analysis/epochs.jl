@@ -1121,7 +1121,7 @@ function average_epochs(
 
     try
         @info "Batch epoch averaging started at $(now())"
-        @log_call "average_epochs" (file_pattern,)
+        @log_call "average_epochs"
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

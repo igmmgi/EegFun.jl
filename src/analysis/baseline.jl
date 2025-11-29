@@ -239,7 +239,7 @@ function baseline(
     try
         @info ""
         @info "Batch baseline correction started at $(now())"
-        @log_call "baseline" (file_pattern, baseline_interval)
+        @log_call "baseline"
 
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

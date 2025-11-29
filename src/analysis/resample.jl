@@ -404,7 +404,7 @@ function resample(
 
     try
         @info "Batch resampling started at $(now())"
-        @log_call "resample" (file_pattern, factor)
+        @log_call "resample"
 
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

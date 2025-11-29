@@ -331,7 +331,7 @@ function jackknife_average(
 
     try
         @info "Batch jackknife averaging started at $(now())"
-        @log_call "jackknife_average" (file_pattern,)
+        @log_call "jackknife_average"
 
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

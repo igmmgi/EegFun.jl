@@ -363,7 +363,7 @@ function lrp(
 
     try
         @info "Batch LRP calculation started at $(now())"
-        @log_call "lrp" (file_pattern, condition_pairs)
+        @log_call "lrp"
 
         # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

@@ -194,7 +194,7 @@ function condition_difference(
 
     try
         @info "Batch condition differencing started at $(now())"
-        @log_call "condition_difference" (file_pattern, condition_pairs)
+        @log_call "condition_difference"
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

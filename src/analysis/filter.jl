@@ -565,7 +565,7 @@ function filter(
     try
         @info ""
         @info "Batch filtering started at $(now())"
-        @log_call "filter" (file_pattern, cutoff_freq)
+        @log_call "filter"
 
         # Validation 
         if (error_msg = _validate_input_dir(input_dir)) !== nothing

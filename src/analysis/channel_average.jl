@@ -264,7 +264,7 @@ function channel_average(
 
     try
         @info "Batch channel averaging started at $(now())"
-        @log_call "channel_average" (file_pattern, channel_selections)
+        @log_call "channel_average"
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
