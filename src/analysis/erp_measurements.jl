@@ -7,7 +7,7 @@ Batch ERP measurements (amplitude, latency) for EEG/ERP data.
 =============================================================================#
 const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Robust peak detection
-    :local_window => (3, "Window size (in samples) for robust peak detection. Peak must be larger than neighbors and local averages within this window."),
+    :local_window => (3, "Number of samples on each side of peak for robust peak detection (total window = 2*local_window + 1). Peak must be larger than neighbors and local averages within this window."),
     
     # Fractional area latency
     :fractional_area_fraction => (0.5, "Fraction for fractional area latency (0.0-1.0). Finds latency where this fraction of area is to the left."),
@@ -24,10 +24,10 @@ const ERP_MEASUREMENTS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 """Validate analysis type, returning error message or nothing."""
 function _validate_analysis_type(analysis_type::String)
     valid_types = [
-        "mean_amp", "max_peak", "min_peak", "max_peak_lat", "min_peak_lat",
-        "peak_to_peak_amp", "peak_to_peak_lat",
+        "mean_amplitude", "max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency",
+        "peak_to_peak_amplitude", "peak_to_peak_latency",
         "rectified_area", "integral", "positive_area", "negative_area",
-        "fractional_area_lat", "fractional_peak_lat"
+        "fractional_area_latency", "fractional_peak_latency"
     ]
     analysis_type ∉ valid_types &&
         return "Analysis type must be one of: $(join(valid_types, ", ")). Got: $analysis_type"
@@ -51,27 +51,29 @@ Returns (peak_value, peak_index) or (nothing, nothing) if no robust peak found.
 function _find_robust_peak(
     data::AbstractVector,
     peak_type::Symbol;  # :max or :min
-    local_window::Int = 3
+    local_window::Int = 3  # Number of samples on each side (ERPLAB "Neighborhood" parameter)
 )
     n = length(data)
-    if local_window >= n
-        @minimal_warning "local_window ($local_window) is >= data length ($n), cannot detect robust peak"
+    total_window = 2 * local_window + 1
+    
+    if total_window > n
+        @minimal_warning "local_window ($local_window) requires $(total_window) samples but data has only $n, cannot detect robust peak"
         return (nothing, nothing)
     elseif local_window > n ÷ 2
         @minimal_warning "local_window ($local_window) is > 50% of data length ($n), may be too large for robust peak detection"
     end
     
-    half_window = div(local_window, 2)
     valid_peaks = Tuple{Float64,Int}[]  # Store (value, index) for all valid peaks
     
-    for i in (half_window + 1):(n - half_window)
+    for i in (local_window + 1):(n - local_window)
         val = data[i]
         
         # Use views to avoid allocations
-        left_view = @view data[(i - half_window):(i - 1)]
-        right_view = @view data[(i + 1):(i + half_window)]
+        left_view = @view data[(i - local_window):(i - 1)]
+        right_view = @view data[(i + 1):(i + local_window)]
         
         # Check if this is a local peak (unified logic for max/min)
+        # ERPLAB checks: (i) peak > both adjacent points, (ii) peak > average of neighbors
         is_peak = if peak_type == :max
             val > data[i-1] && val > data[i+1] &&
             val > mean(left_view) && val > mean(right_view)
@@ -115,10 +117,9 @@ function _fractional_area_latency(
         return time_col[1]
     end
     
-    # Compute cumulative area (integral)
+    # Compute total area using rectangular integration (fine for uniform sampling)
     dt = mean(diff(time_col))
-    cumulative = cumsum(data) .* dt
-    total_area = cumulative[end]
+    total_area = sum(data) * dt
     
     # Handle zero or very small area
     if abs(total_area) < 1e-10
@@ -134,11 +135,27 @@ function _fractional_area_latency(
         return time_col[end]
     end
     
-    # Find first point where cumulative area >= target
-    idx = findfirst(x -> x >= target_area, cumulative)
-    isnothing(idx) && return time_col[end]
+    # Use binary search (like ERPLAB) for more accurate fractional area latency
+    n = length(time_col)
+    plow = 1
+    phigh = n
     
-    return time_col[idx]
+    while plow <= phigh
+        pmid = round(Int, (plow + phigh) / 2)
+        # Compute cumulative area up to pmid
+        cumulative_area = sum(data[1:pmid]) * dt
+        
+        if cumulative_area > target_area
+            phigh = pmid - 1
+        elseif cumulative_area < target_area
+            plow = pmid + 1
+        else
+            break  # Exact match found
+        end
+    end
+    
+    # Return the latency at the found index
+    return time_col[min(plow, n)]
 end
 
 """
@@ -197,8 +214,9 @@ function _compute_peak_measurement(
     measurement_name::String,
 )
     n_samples = length(chan_data)
-    if local_window >= n_samples
-        @minimal_warning "Channel $channel_name: local_window ($local_window) >= analysis window length ($n_samples samples). Cannot detect robust peak, using simple $measurement_name."
+    total_window = 2 * local_window + 1
+    if total_window > n_samples
+        @minimal_warning "Channel $channel_name: local_window ($local_window, total window $total_window) > analysis window length ($n_samples samples). Cannot detect robust peak, using simple $measurement_name."
     end
     
     peak_val, peak_idx = _find_robust_peak(chan_data, peak_type; local_window=local_window)
@@ -223,27 +241,27 @@ function _compute_measurement(
     measurement_kwargs::Dict{Symbol,Any},
     channel_name::Symbol,
 )
-    if analysis_type == "mean_amp"
+    if analysis_type == "mean_amplitude"
         return mean(chan_data)
         
     # Peak measurements (use robust detection with fallback to simple)
-    elseif analysis_type in ["max_peak", "min_peak", "max_peak_lat", "min_peak_lat"]
+    elseif analysis_type in ["max_peak_amplitude", "min_peak_amplitude", "max_peak_latency", "min_peak_latency"]
         peak_type = startswith(analysis_type, "max") ? :max : :min
         local_window = measurement_kwargs[:local_window]
-        measurement_name = analysis_type == "max_peak" ? "maximum" :
-                          analysis_type == "min_peak" ? "minimum" :
-                          analysis_type == "max_peak_lat" ? "maximum latency" : "minimum latency"
+        measurement_name = analysis_type == "max_peak_amplitude" ? "maximum" :
+                          analysis_type == "min_peak_amplitude" ? "minimum" :
+                          analysis_type == "max_peak_latency" ? "maximum latency" : "minimum latency"
         
         peak_val, peak_idx = _compute_peak_measurement(chan_data, peak_type, local_window, channel_name, measurement_name)
         
-        if analysis_type in ["max_peak", "min_peak"]
+        if analysis_type in ["max_peak_amplitude", "min_peak_amplitude"]
             return peak_val
         else  # latency measurements
             return time_col[time_idx[peak_idx]]
         end
         
     # Peak-to-peak measurements
-    elseif analysis_type in ["peak_to_peak_amp", "peak_to_peak_lat"]
+    elseif analysis_type in ["peak_to_peak_amplitude", "peak_to_peak_latency"]
         local_window = measurement_kwargs[:local_window]
         
         # Find both max and min peaks
@@ -256,9 +274,9 @@ function _compute_measurement(
             return NaN
         end
         
-        if analysis_type == "peak_to_peak_amp"
+        if analysis_type == "peak_to_peak_amplitude"
             return max_val - min_val
-        else  # peak_to_peak_lat
+        else  # peak_to_peak_latency
             max_time = time_col[time_idx[max_idx]]
             min_time = time_col[time_idx[min_idx]]
             return abs(max_time - min_time)
@@ -279,6 +297,8 @@ function _compute_measurement(
             return 0.0
         end
         
+        # Use rectangular integration (sum * dt) - perfectly fine for uniformly sampled data
+        # For uniform sampling (which EEG/ERP data always is), this is equivalent to trapezoidal
         if analysis_type == "rectified_area"
             return sum(abs.(chan_data)) * dt
         elseif analysis_type == "integral"
@@ -290,12 +310,12 @@ function _compute_measurement(
         end
         
     # Fractional latency measurements
-    elseif analysis_type == "fractional_area_lat"
-        isnothing(selected_times) && error("selected_times should not be nothing for fractional_area_lat")
+    elseif analysis_type == "fractional_area_latency"
+        isnothing(selected_times) && error("selected_times should not be nothing for fractional_area_latency")
         fraction = measurement_kwargs[:fractional_area_fraction]
         return _fractional_area_latency(chan_data, selected_times, fraction)
-    elseif analysis_type == "fractional_peak_lat"
-        isnothing(selected_times) && error("selected_times should not be nothing for fractional_peak_lat")
+    elseif analysis_type == "fractional_peak_latency"
+        isnothing(selected_times) && error("selected_times should not be nothing for fractional_peak_latency")
         # Find the peak with maximum absolute value using robust detection
         local_window = measurement_kwargs[:local_window]
         max_val, max_idx = _compute_peak_measurement(chan_data, :max, local_window, channel_name, "maximum")
@@ -330,7 +350,7 @@ function _process_dataframe_measurements(
     end
     
     if !hasproperty(df, :time)
-        @minimal_error_throw "DataFrame must have a :time column"
+        @minimal_error "DataFrame must have a :time column"
     end
     
     if isempty(selected_channels)
@@ -350,7 +370,7 @@ function _process_dataframe_measurements(
 
     # Pre-compute selected times once (used by area/fractional measurements)
     selected_times = nothing
-    if analysis_type in ["rectified_area", "integral", "positive_area", "negative_area", "fractional_area_lat", "fractional_peak_lat"]
+    if analysis_type in ["rectified_area", "integral", "positive_area", "negative_area", "fractional_area_latency", "fractional_peak_latency"]
         selected_times = @view time_col[time_idx]
     end
 
@@ -535,8 +555,8 @@ across specified time windows and saves results to CSV files.
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps", "epochs_cleaned")
 - `analysis_type::String`: Type of measurement:
-  - **Amplitude**: "mean_amp", "max_peak", "min_peak", "peak_to_peak_amp"
-  - **Latency**: "max_peak_lat", "min_peak_lat", "peak_to_peak_lat", "fractional_area_lat", "fractional_peak_lat"
+  - **Amplitude**: "mean_amplitude", "max_peak_amplitude", "min_peak_amplitude", "peak_to_peak_amplitude"
+  - **Latency**: "max_peak_latency", "min_peak_latency", "peak_to_peak_latency", "fractional_area_latency", "fractional_peak_latency"
   - **Area/Integral** (in µVs): 
     - "rectified_area": Sum of absolute values (always positive)
     - "integral": Signed integral (net area, can be positive or negative)
@@ -560,16 +580,16 @@ across specified time windows and saves results to CSV files.
 # Examples
 ```julia
 # Mean amplitude between 100-200 ms with baseline
-erp_measurements("erps", "mean_amp", analysis_window=samples((0.1, 0.2)), baseline_window=samples((-0.2, 0.0)))
+erp_measurements("erps", "mean_amplitude", analysis_window=samples((0.1, 0.2)), baseline_window=samples((-0.2, 0.0)))
 
 # Maximum peak between 300-500 ms for specific participants
-erp_measurements("erps", "max_peak", analysis_window=samples((0.3, 0.5)), participant_selection=participants([1, 2, 3]), condition_selection=conditions([1, 2]))
+erp_measurements("erps", "max_peak_amplitude", analysis_window=samples((0.3, 0.5)), participant_selection=participants([1, 2, 3]), condition_selection=conditions([1, 2]))
 
 # Exclude specific participants
-erp_measurements("erps", "max_peak", analysis_window=samples((0.3, 0.5)), participant_selection=participants_not([10, 11]))
+erp_measurements("erps", "max_peak_amplitude", analysis_window=samples((0.3, 0.5)), participant_selection=participants_not([10, 11]))
 
 # Minimum peak for specific channels
-erp_measurements("erps", "min_peak", analysis_window=samples((0.0, 0.6)), channel_selection=channels([:Fz, :Cz, :Pz]))
+erp_measurements("erps", "min_peak_amplitude", analysis_window=samples((0.0, 0.6)), channel_selection=channels([:Fz, :Cz, :Pz]))
 ```
 """
 function erp_measurements(
@@ -597,10 +617,10 @@ function erp_measurements(
 
         # Validation 
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
+            @minimal_error error_msg
         end
         if (error_msg = _validate_analysis_type(analysis_type)) !== nothing
-            @minimal_error_throw(error_msg)
+            @minimal_error error_msg
         end
 
         # Merge measurement kwargs with defaults
@@ -609,22 +629,22 @@ function erp_measurements(
         # Validate measurement kwargs
         local_window = measurement_kwargs[:local_window]
         if local_window < 1
-            @minimal_error_throw "local_window must be >= 1, got: $local_window"
+            @minimal_error "local_window must be >= 1, got: $local_window"
         end
         
         fractional_area_fraction = measurement_kwargs[:fractional_area_fraction]
         if fractional_area_fraction < 0.0 || fractional_area_fraction > 1.0
-            @minimal_error_throw "fractional_area_fraction must be in [0.0, 1.0], got: $fractional_area_fraction"
+            @minimal_error "fractional_area_fraction must be in [0.0, 1.0], got: $fractional_area_fraction"
         end
         
         fractional_peak_fraction = measurement_kwargs[:fractional_peak_fraction]
         if fractional_peak_fraction < 0.0 || fractional_peak_fraction > 1.0
-            @minimal_error_throw "fractional_peak_fraction must be in [0.0, 1.0], got: $fractional_peak_fraction"
+            @minimal_error "fractional_peak_fraction must be in [0.0, 1.0], got: $fractional_peak_fraction"
         end
         
         fractional_peak_direction = measurement_kwargs[:fractional_peak_direction]
         if fractional_peak_direction !== :onset && fractional_peak_direction !== :offset
-            @minimal_error_throw "fractional_peak_direction must be :onset or :offset, got: $fractional_peak_direction"
+            @minimal_error "fractional_peak_direction must be :onset or :offset, got: $fractional_peak_direction"
         end
 
         # Setup directories
