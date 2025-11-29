@@ -617,10 +617,10 @@ function erp_measurements(
 
         # Validation 
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error error_msg
+            @minimal_error_throw error_msg
         end
         if (error_msg = _validate_analysis_type(analysis_type)) !== nothing
-            @minimal_error error_msg
+            @minimal_error_throw error_msg
         end
 
         # Merge measurement kwargs with defaults
