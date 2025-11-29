@@ -373,6 +373,40 @@ struct InfoIca
 end
 
 """
+    ErpMeasurementsResult
+
+Stores ERP measurement results with metadata about the analysis.
+
+This type contains the measurement results DataFrame along with metadata
+about the analysis type and window used, allowing the plotting function to
+automatically use the correct parameters.
+
+# Fields
+- `data::DataFrame`: DataFrame containing measurement results
+- `analysis_type::String`: Type of measurement (e.g., "mean_amplitude", "max_peak_latency")
+- `analysis_window::Function`: Analysis window predicate function used
+- `baseline_window::Function`: Baseline window predicate function used (if any)
+"""
+struct ErpMeasurementsResult
+    data::DataFrame
+    analysis_type::String
+    analysis_window::Function
+    analysis_window_desc::String
+    baseline_window::Union{Function,Nothing}
+    baseline_window_desc::String
+end
+
+# Make it show as a DataFrame for convenience
+function Base.show(io::IO, result::ErpMeasurementsResult)
+    println(io, "ErpMeasurementsResult")
+    println(io, "  Analysis type: $(getfield(result, :analysis_type))")
+    println(io, "  Analysis window: $(getfield(result, :analysis_window_desc))")
+    println(io, "  Baseline window: $(getfield(result, :baseline_window_desc))")
+    println(io, "\nResults:")
+    show(io, getfield(result, :data))
+end
+
+"""
     TriggerInfo
 
 Stores trigger count information in a DataFrame format with pretty printing support.
