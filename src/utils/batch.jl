@@ -27,14 +27,29 @@ end
     PURE FUNCTIONS (no side effects)
 =============================================================================#
 
+"""Extract participant ID from filename, returns Int."""
+function _extract_participant_id(filename::String)
+    parts = split(replace(filename, ".jld2" => ""), "_")
+    participant_str = findfirst(p -> !isempty(p) && all(isdigit, p), parts)
+
+    if participant_str === nothing
+        # No numeric ID found, use hash of filename
+        participant = hash(filename) % 10000
+        @info "  No numeric participant ID found in filename, using hash: $participant"
+        return participant
+    else
+        return parse(Int, parts[participant_str])
+    end
+end
+
 """
-    find_batch_files(pattern::String, dir::String; participants=nothing)
+    find_batch_files(pattern::String, dir::String; participants=participants())
 
 Find JLD2 files matching pattern and optional participant filter.
 
 Returns vector of filenames (not full paths).
 """
-function _find_batch_files(pattern::String, dir::String; participants = nothing)
+function _find_batch_files(pattern::String, dir::String; participants::Function = participants())
     all_files = readdir(dir)
 
     # Filter by pattern and extension
@@ -42,12 +57,10 @@ function _find_batch_files(pattern::String, dir::String; participants = nothing)
         endswith(f, ".jld2") && contains(f, pattern)
     end
 
-    # Filter by participant if specified
-    if participants !== nothing
-        files = _filter_files(files; include = participants)
-    end
-
-    return files
+    # Extract participant IDs from filenames and filter using predicate
+    participant_ids = [_extract_participant_id(f) for f in files]
+    mask = participants(participant_ids)
+    return files[mask]
 end
 
 """
@@ -76,25 +89,17 @@ function load_data(filepath::String)
 end
 
 """
-    _condition_select(data, conditions)
+    _condition_select(data, condition_selection)
 
-Filter data by condition indices.
+Filter data by condition selection predicate.
 
-Returns filtered data or original if `conditions` is `nothing`.
+Returns filtered data.
 """
-function _condition_select(data, conditions)
-    isnothing(conditions) && return data
+function _condition_select(data, condition_selection::Function)
     isempty(data) && return data
-    condition_nums = conditions isa Int ? [conditions] : conditions
-
-    # Check if all requested conditions exist
-    max_condition = length(data)
-    invalid_conditions = condition_nums[condition_nums .> max_condition]
-    if !isempty(invalid_conditions)
-        throw(ArgumentError("Requested conditions $invalid_conditions exceed available conditions (1:$max_condition)"))
-    end
-
-    return data[condition_nums]
+    condition_indices = 1:length(data)
+    mask = condition_selection(collect(condition_indices))
+    return data[mask]
 end
 
 """

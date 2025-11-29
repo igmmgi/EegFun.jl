@@ -14,11 +14,6 @@ function _validate_analysis_type(analysis_type::String)
     return nothing
 end
 
-"""Validate analysis window, returning error message or nothing."""
-function _validate_analysis_window(window::Tuple{Real,Real})
-    window[1] >= window[2] && return "Analysis window start must be before end. Got: $window"
-    return nothing
-end
 
 """Generate default output directory name for ERP measurements."""
 function _default_measurements_output_dir(input_dir::String, analysis_type::String)
@@ -75,19 +70,17 @@ Returns named tuple with metadata and channel measurements.
 function _process_dataframe_measurements(
     df::DataFrame,
     selected_channels::Vector{Symbol},
-    analysis_window::Tuple{Real,Real},
+    analysis_window::Function,
     analysis_type::String,
     participant::Int,
-    condition::Int,
-    has_condition_name::Bool,
-    has_epoch::Bool,
 )
-    # Find time column and analysis window indices (optimization #4)
+    # Find time column and apply analysis window predicate
     time_col = df[!, :time]
-    time_idx = findall(t -> analysis_window[1] <= t <= analysis_window[2], time_col)
+    sample_mask = analysis_window(df)
+    time_idx = findall(sample_mask)
 
     if isempty(time_idx)
-        @minimal_warning "No time points found in analysis window $(analysis_window) for condition $condition"
+        @minimal_warning "No time points found matching analysis window"
         return nothing
     end
 
@@ -103,22 +96,25 @@ function _process_dataframe_measurements(
         channel_values[i] = chan_symbol => value
     end
 
+    # Get metadata from DataFrame if available
+    condition = hasproperty(df, :condition) ? df[1, :condition] : nothing
+    condition_name = hasproperty(df, :condition_name) ? df[1, :condition_name] : nothing
+    epoch = hasproperty(df, :epoch) ? df[1, :epoch] : nothing
+
     # Build named tuple with metadata and channel values
-    if has_condition_name && has_epoch
-        return (;
-            participant,
-            condition,
-            condition_name = df[1, :condition_name],
-            epoch = df[1, :epoch],
-            channel_values...,
-        )
-    elseif has_condition_name
-        return (; participant, condition, condition_name = df[1, :condition_name], channel_values...)
-    elseif has_epoch
-        return (; participant, condition, epoch = df[1, :epoch], channel_values...)
-    else
-        return (; participant, condition, channel_values...)
+    metadata = (participant=participant,)
+    
+    if condition !== nothing
+        metadata = merge(metadata, (condition=condition,))
     end
+    if condition_name !== nothing
+        metadata = merge(metadata, (condition_name=condition_name,))
+    end
+    if epoch !== nothing
+        metadata = merge(metadata, (epoch=epoch,))
+    end
+
+    return merge(metadata, NamedTuple(channel_values))
 end
 
 #=============================================================================
@@ -131,10 +127,10 @@ Returns Vector of named tuples (one per condition/epoch).
 """
 function _process_measurements_file(
     filepath::String,
-    analysis_window::Tuple{Real,Real},
+    analysis_window::Function,
     analysis_type::String,
-    baseline_interval::Union{Tuple{Real,Real},Nothing},
-    conditions,
+    baseline_window::Function,
+    condition_selection::Function,
     channel_selection::Function,
 )
     filename = basename(filepath)
@@ -157,14 +153,12 @@ function _process_measurements_file(
     end
 
     # Select conditions
-    data_var = _condition_select(data_var, conditions)
+    data_var = _condition_select(data_var, condition_selection)
 
     # Process each condition
     results = []
 
     for (cond_idx, data) in enumerate(data_var)
-        condition = cond_idx
-
         # Get metadata columns from the original data object
         metadata_cols = meta_labels(data)
 
@@ -177,41 +171,46 @@ function _process_measurements_file(
             [data.data]
         end
 
-        # Apply baseline correction if specified
-        if baseline_interval !== nothing
-            # Convert time interval to index interval
-            time_col = dfs_to_process[1][!, :time]
-            baseline_start_idx = findfirst(x -> x >= baseline_interval[1], time_col)
-            baseline_end_idx = findlast(x -> x <= baseline_interval[2], time_col)
+        # Apply baseline correction if baseline window is specified (not default all samples)
+        first_df = dfs_to_process[1]
+        baseline_mask = baseline_window(first_df)
+        baseline_indices = findall(baseline_mask)
+        
+        # Skip baseline if window matches all samples (default) or no samples
+        if length(baseline_indices) < nrow(first_df) && !isempty(baseline_indices)
+            # Get channel columns (exclude metadata)
+            all_channels = setdiff(propertynames(first_df), metadata_cols)
+            # channels() returns a predicate that operates on a vector, not individual elements
+            eeg_channels = all_channels[channels()(all_channels)]
 
-            if isnothing(baseline_start_idx) || isnothing(baseline_end_idx)
-                @minimal_warning "Baseline interval $(baseline_interval) is outside data range. Skipping baseline correction."
+            if !isempty(eeg_channels)
+                # Use existing baseline infrastructure from baseline.jl
+                interval = IntervalIndex(start = first(baseline_indices), stop = last(baseline_indices))
+                @info "Applying baseline correction to $(length(eeg_channels)) channels over interval: $(first(baseline_indices)) to $(last(baseline_indices))"
+                _apply_baseline!(dfs_to_process, eeg_channels, interval)
             else
-                # Get channel columns (exclude metadata)
-                all_channels = setdiff(propertynames(dfs_to_process[1]), metadata_cols)
-                # channels() returns a predicate that operates on a vector, not individual elements
-                eeg_channels = all_channels[channels()(all_channels)]
-
-                if !isempty(eeg_channels)
-                    # Use existing baseline infrastructure from baseline.jl
-                    interval = IntervalIndex(start = baseline_start_idx, stop = baseline_end_idx)
-                    @info "Applying baseline correction to $(length(eeg_channels)) channels over interval: $(baseline_start_idx) to $(baseline_end_idx)"
-                    _apply_baseline!(dfs_to_process, eeg_channels, interval)
-                else
-                    @minimal_warning "No EEG channels found for baseline correction"
-                end
+                @minimal_warning "No EEG channels found for baseline correction"
             end
+        elseif isempty(baseline_indices)
+            @minimal_warning "Baseline window matched no samples. Skipping baseline correction."
         end
 
-        # Get selected channels from first df
-        first_df = dfs_to_process[1]
+        # Get selected channels from first df (reuse from baseline section above)
         all_channels = setdiff(propertynames(first_df), metadata_cols)
         # Channel selection predicate operates on the entire vector
         selected_channels = all_channels[channel_selection(all_channels)]
 
-        # Check for condition_name and epoch columns once per condition (optimization #2)
-        has_condition_name = hasproperty(first_df, :condition_name)
-        has_epoch = hasproperty(first_df, :epoch)
+        # Add condition and condition_name to DataFrames if not present and available from data object
+        if (data isa ErpData || data isa EpochData)
+            for df in dfs_to_process
+                if !hasproperty(df, :condition)
+                    insertcols!(df, 1, :condition => data.condition)
+                end
+                if !hasproperty(df, :condition_name)
+                    insertcols!(df, hasproperty(df, :condition) ? 2 : 1, :condition_name => data.condition_name)
+                end
+            end
+        end
 
         # Process each dataframe (epoch or single ERP)
         for df in dfs_to_process
@@ -221,9 +220,6 @@ function _process_measurements_file(
                 analysis_window,
                 analysis_type,
                 participant,
-                condition,
-                has_condition_name,
-                has_epoch,
             )
 
             if !isnothing(row_data)
@@ -240,12 +236,13 @@ end
 =============================================================================#
 
 """
-    erp_measurements(file_pattern::String, analysis_window::Tuple{Real, Real}, analysis_type::String;
-                    input_dir::String = pwd(),
-                    baseline_interval::Union{Tuple{Real, Real}, Nothing} = nothing,
-                    participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                    conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+    erp_measurements(file_pattern::String, analysis_type::String;
+                    analysis_window::Function = samples(),
+                    baseline_window::Function = samples(),
+                    participant_selection::Function = participants(),
+                    condition_selection::Function = conditions(),
                     channel_selection::Function = channels(),
+                    input_dir::String = pwd(),
                     output_dir::Union{String, Nothing} = nothing,
                     output_file::String = "erp_measurements")
 
@@ -256,12 +253,11 @@ across specified time windows and saves results to CSV files.
 
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps", "epochs_cleaned")
-- `analysis_window::Tuple{Real, Real}`: Time window for analysis in seconds (e.g., (0.1, 0.2))
 - `analysis_type::String`: Type of measurement ("mean_amp", "max_peak", "min_peak", "max_peak_lat", "min_peak_lat")
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `baseline_interval::Union{Tuple{Real, Real}, Nothing}`: Baseline interval in seconds (e.g., (-0.2, 0.0))
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
-- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
+- `analysis_window::Function`: Analysis window sample selection predicate (default: samples() - all samples)
+- `baseline_window::Function`: Baseline window sample selection predicate (default: samples() - all samples, baseline skipped)
+- `participant_selection::Function`: Participant selection predicate (default: participants() - all)
+- `condition_selection::Function`: Condition selection predicate (default: conditions() - all)
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 - `output_file::String`: Base name for output files (default: "erp_measurements")
@@ -269,26 +265,27 @@ across specified time windows and saves results to CSV files.
 # Examples
 ```julia
 # Mean amplitude between 100-200 ms with baseline
-erp_measurements("erps", (0.1, 0.2), "mean_amp", baseline_interval=(-0.2, 0.0))
+erp_measurements("erps", "mean_amp", analysis_window=samples((0.1, 0.2)), baseline_window=samples((-0.2, 0.0)))
 
 # Maximum peak between 300-500 ms for specific participants
-erp_measurements("erps", (0.3, 0.5), "max_peak", 
-                participants=[1, 2, 3], conditions=[1, 2])
+erp_measurements("erps", "max_peak", analysis_window=samples((0.3, 0.5)), participant_selection=participants([1, 2, 3]), condition_selection=conditions([1, 2]))
+
+# Exclude specific participants
+erp_measurements("erps", "max_peak", analysis_window=samples((0.3, 0.5)), participant_selection=participants_not([10, 11]))
 
 # Minimum peak for specific channels
-erp_measurements("erps", (0.0, 0.6), "min_peak",
-                channel_selection=channels([:Fz, :Cz, :Pz]))
+erp_measurements("erps", "min_peak", analysis_window=samples((0.0, 0.6)), channel_selection=channels([:Fz, :Cz, :Pz]))
 ```
 """
 function erp_measurements(
     file_pattern::String,
-    analysis_window::Tuple{Real,Real},
     analysis_type::String;
-    input_dir::String = pwd(),
-    baseline_interval::Union{Tuple{Real,Real},Nothing} = nothing,
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    analysis_window::Function = samples(),
+    baseline_window::Function = samples(),
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
+    input_dir::String = pwd(),
     output_dir::Union{String,Nothing} = nothing,
     output_file::String = "erp_measurements",
 )
@@ -299,7 +296,7 @@ function erp_measurements(
 
     try
         @info "ERP measurement analysis started at $(now())"
-        @log_call "erp_measurements" (file_pattern, analysis_window, analysis_type)
+        @log_call "erp_measurements" (file_pattern, analysis_type)
 
         # Validation (early return on error)
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
@@ -310,23 +307,15 @@ function erp_measurements(
             @minimal_error_throw(error_msg)
         end
 
-        if (error_msg = _validate_analysis_window(analysis_window)) !== nothing
-            @minimal_error_throw(error_msg)
-        end
-
         # Setup directories
         output_dir = something(output_dir, _default_measurements_output_dir(input_dir, analysis_type))
         mkpath(output_dir)
 
         # Log analysis parameters
         @info "Analysis type: $analysis_type"
-        @info "Analysis window: $(analysis_window[1])s to $(analysis_window[2])s"
-        if baseline_interval !== nothing
-            @info "Baseline interval: $(baseline_interval[1])s to $(baseline_interval[2])s"
-        end
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir; participants = participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
@@ -349,8 +338,8 @@ function erp_measurements(
                     input_path,
                     analysis_window,
                     analysis_type,
-                    baseline_interval,
-                    conditions,
+                    baseline_window,
+                    condition_selection,
                     channel_selection,
                 )
 
@@ -378,22 +367,12 @@ function erp_measurements(
         # Convert to DataFrame
         results_df = DataFrame(all_results)
 
-        # Reorder columns: participant, condition, optional metadata, then channels in original order
-        metadata_cols = [:participant, :condition]
-
-        # Add optional metadata columns if present
-        if hasproperty(results_df, :condition_name)
-            push!(metadata_cols, :condition_name)
-        end
+        # Sort by participant, then condition (and epoch if present)
+        sort_cols = [:participant, :condition]
         if hasproperty(results_df, :epoch)
-            push!(metadata_cols, :epoch)
+            push!(sort_cols, :epoch)
         end
-
-        # Get channel columns (everything else)
-        channel_cols = [col for col in names(results_df) if Symbol(col) ∉ metadata_cols]
-
-        # Reorder
-        select!(results_df, metadata_cols..., channel_cols...)
+        sort!(results_df, sort_cols)
 
         # Save results
         output_csv = joinpath(output_dir, "$(output_file).csv")
