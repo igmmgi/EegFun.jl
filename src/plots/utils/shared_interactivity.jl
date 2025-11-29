@@ -629,9 +629,6 @@ function _setup_channel_selection_events!(
             _clear_all_shared_channel_selections!(fig, selection_state)
         end
 
-        if event.button == Mouse.right && event.action == Mouse.press
-            @info "TODO: implement right click functionality for $layout_type"
-        end
     end
 
     # Mouse movement
