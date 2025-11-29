@@ -950,6 +950,7 @@ components_not(component_number::Int) = x -> .!(x .== component_number)
 # Helper function predicates for easier sample filtering
 samples() = x -> fill(true, nrow(x))
 samples(column::Symbol) = x -> x[!, column]
+samples(time_window::Tuple{Real,Real}) = x -> (x[!, :time] .>= time_window[1]) .& (x[!, :time] .<= time_window[2])
 samples_or(columns::Vector{Symbol}) = x -> any(x[!, col] for col in columns)
 samples_and(columns::Vector{Symbol}) = x -> all(x[!, col] for col in columns)
 samples_not(column::Symbol) = x -> .!(x[!, column])
@@ -966,6 +967,13 @@ epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 # Helper to extract condition name from ErpData or EpochData
 _get_condition_name(dat::ErpData)::String = dat.condition_name
 _get_condition_name(dat::EpochData)::String = dat.condition_name
+
+# Helper function predicates for easier participant filtering (for Vector{Int} of participant IDs)
+participants() = x -> fill(true, length(x))  # Default: select all participants given
+participants(participant_ids::Union{Vector{Int},UnitRange}) = x -> [id in participant_ids for id in x]
+participants(participant_id::Int) = x -> x .== participant_id
+participants_not(participant_ids::Union{Vector{Int},UnitRange}) = x -> .!([id in participant_ids for id in x])
+participants_not(participant_id::Int) = x -> .!(x .== participant_id)
 
 # Helper function predicates for easier condition filtering (for Vector{ErpData} and Vector{EpochData})
 conditions() = x -> fill(true, length(x))  # Default: select all conditions given
