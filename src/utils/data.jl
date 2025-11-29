@@ -393,6 +393,33 @@ duration(dat::MultiDataFrameEeg)::Float64 =
 duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
     hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ?
     last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
+duration(dat::Vector{T}) where {T <: EegData} =
+    isempty(dat) ? 0.0 : duration(dat[1])
+
+
+"""
+    time(dat::EegData) -> Vector{Float64}
+    time(df::DataFrame) -> Vector{Float64}
+
+Get the time column from the EEG data or DataFrame as a vector.
+
+# Arguments
+- `dat::EegData`: The EEG data object
+- `df::DataFrame`: A DataFrame with a `:time` column
+
+# Returns
+- `Vector{Float64}`: The time column values
+"""
+time(dat::SingleDataFrameEeg)::Vector{Float64} =
+    hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
+time(dat::MultiDataFrameEeg)::Vector{Float64} =
+    hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
+time(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
+    hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
+time(dat::Vector{T}) where {T <: EegData} =
+    isempty(dat) ? Float64[] : time(dat[1])
+time(df::DataFrame)::Vector{Float64} =
+    hasproperty(df, :time) ? df[!, :time] : Float64[]
 
 
 """

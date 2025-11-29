@@ -729,7 +729,48 @@ function erp_measurements(
         @info "Saved $(nrow(results_df)) measurement(s) to: $output_csv"
         @info "Analysis complete! Processed $processed_count files successfully, $error_count errors"
 
-        return results_df
+        # Evaluate predicates on actual data to get readable descriptions
+        # Load the first file to get actual time range
+        analysis_window_desc = "custom"
+        baseline_window_desc = baseline_window === nothing ? "none" : "custom"
+        
+        if !isempty(files)
+            try
+                println("Loading data from $(files[1])")
+                first_file = joinpath(input_dir, files[1])
+                data = load_data(first_file)
+
+    mask = analysis_window(data[1].data)
+
+
+
+                selected_times = time(data)[mask]
+                time_min = round(minimum(selected_times), digits=3)
+                time_max = round(maximum(selected_times), digits=3)
+                analysis_window_desc = "$time_min:$time_max S"
+                mask = baseline_window(data[1].data)
+                selected_times = time(data)[mask]
+                time_min = round(minimum(selected_times), digits=3)
+                time_max = round(maximum(selected_times), digits=3)
+                baseline_window_desc = "$time_min:$time_max S"
+                
+            catch
+                println("Error loading data: ")
+                # If loading fails, use "custom" descriptions
+            end
+        else
+            @minimal_warning "No files found"
+        end
+
+        # Return as ErpMeasurementsResult with metadata
+        return ErpMeasurementsResult(
+            results_df,
+            analysis_type,
+            analysis_window,
+            analysis_window_desc,
+            baseline_window,
+            baseline_window_desc,
+        )
 
     finally
         _cleanup_logging(log_file, output_dir)

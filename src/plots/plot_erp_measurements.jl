@@ -1,4 +1,12 @@
 """
+    plot_erp_with_measurements(measurements::ErpMeasurementsResult, erp_data::Union{String, ErpData, Vector{ErpData}};
+                               analysis_window::Union{Function,Nothing} = nothing,
+                               layout::Union{Symbol, PlotLayout} = :single,
+                               channel_selection::Function = channels(),
+                               condition_selection::Function = conditions(),
+                               participant_selection::Function = participants(),
+                               kwargs...)
+
     plot_erp_with_measurements(measurements_df::DataFrame, erp_data::Union{String, ErpData, Vector{ErpData}}, analysis_type::String;
                                analysis_window::Function = samples(),
                                layout::Union{Symbol, PlotLayout} = :single,
@@ -9,7 +17,7 @@
 
 Plot ERP data with measurement overlays from erp_measurements results.
 
-This function takes a DataFrame of measurement results (from `erp_measurements`) and overlays
+This function takes measurement results (from `erp_measurements`) and overlays
 the corresponding measurement markers on ERP plots. The type of overlay depends on `analysis_type`:
 - Peak measurements: vertical lines at peak latencies with amplitude labels
 - Mean amplitude: shaded region showing analysis window with mean value label
@@ -17,10 +25,11 @@ the corresponding measurement markers on ERP plots. The type of overlay depends 
 - Fractional latencies: vertical lines at fractional latency points
 
 # Arguments
-- `measurements_df::DataFrame`: DataFrame from `erp_measurements` containing measurement results
+- `measurements::ErpMeasurementsResult`: Results from `erp_measurements` (preferred - automatically uses correct analysis_window)
+- `measurements_df::DataFrame`: DataFrame from `erp_measurements` (legacy - requires analysis_type parameter)
 - `erp_data::Union{String, ErpData, Vector{ErpData}}`: ERP data to plot (filepath or data object)
-- `analysis_type::String`: Type of measurement to overlay (must match the measurement type in DataFrame)
-- `analysis_window::Function`: Analysis window predicate (used to shade the analysis region)
+- `analysis_type::String`: Type of measurement to overlay (only needed for DataFrame input)
+- `analysis_window::Union{Function,Nothing}`: Analysis window predicate (optional - uses value from ErpMeasurementsResult if not provided)
 - `layout::Union{Symbol, PlotLayout}`: Plot layout (same as `plot_erp`)
 - `channel_selection::Function`: Channel selection predicate
 - `condition_selection::Function`: Condition selection predicate
@@ -29,15 +38,48 @@ the corresponding measurement markers on ERP plots. The type of overlay depends 
 
 # Examples
 ```julia
-# Get measurements
+# Get measurements (returns ErpMeasurementsResult)
 results = erp_measurements("erps_good", "max_peak_amplitude", 
                           analysis_window = samples((0.1, 0.3)))
 
-# Plot with measurement overlays
-plot_erp_with_measurements(results, "erps_good.jld2", "max_peak_amplitude",
-                          analysis_window = samples((0.1, 0.3)))
+# Plot with measurement overlays (automatically uses correct analysis_window)
+plot_erp_with_measurements(results, "erps_good.jld2")
+
+# Access DataFrame directly
+results.data  # or just use results as a DataFrame
 ```
 """
+function plot_erp_with_measurements(
+    measurements::ErpMeasurementsResult,
+    erp_data::Union{String, ErpData, Vector{ErpData}};
+    analysis_window::Union{Function,Nothing} = nothing,
+    layout::Union{Symbol, PlotLayout} = :single,
+    channel_selection::Function = channels(),
+    condition_selection::Function = conditions(),
+    participant_selection::Function = participants(),
+    kwargs...,
+)
+    # Use analysis_window from measurements if not provided
+    analysis_window = something(analysis_window, measurements.analysis_window)
+    
+    # Extract DataFrame and analysis type from measurements
+    measurements_df = measurements.data
+    analysis_type = measurements.analysis_type
+    
+    return _plot_erp_with_measurements_impl(
+        measurements_df,
+        erp_data,
+        analysis_type,
+        analysis_window,
+        layout,
+        channel_selection,
+        condition_selection,
+        participant_selection,
+        kwargs...,
+    )
+end
+
+# Backward compatibility: allow DataFrame input (but require analysis_type)
 function plot_erp_with_measurements(
     measurements_df::DataFrame,
     erp_data::Union{String, ErpData, Vector{ErpData}},
@@ -47,6 +89,31 @@ function plot_erp_with_measurements(
     channel_selection::Function = channels(),
     condition_selection::Function = conditions(),
     participant_selection::Function = participants(),
+    kwargs...,
+)
+    return _plot_erp_with_measurements_impl(
+        measurements_df,
+        erp_data,
+        analysis_type,
+        analysis_window,
+        layout,
+        channel_selection,
+        condition_selection,
+        participant_selection,
+        kwargs...,
+    )
+end
+
+# Internal implementation function
+function _plot_erp_with_measurements_impl(
+    measurements_df::DataFrame,
+    erp_data::Union{String, ErpData, Vector{ErpData}},
+    analysis_type::String,
+    analysis_window::Function,
+    layout::Union{Symbol, PlotLayout},
+    channel_selection::Function,
+    condition_selection::Function,
+    participant_selection::Function,
     kwargs...,
 )
     # Extract return_line_refs from kwargs if user passed it (unlikely, but handle it)
