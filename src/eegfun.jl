@@ -21,6 +21,7 @@ using ScatteredInterpolation
 
 # Utilities
 using DocStringExtensions
+using Distributions
 using Logging
 using LoggingExtras
 using OrderedCollections
@@ -69,6 +70,7 @@ include("analysis/condition_difference.jl")
 include("analysis/erp_measurements.jl")
 include("analysis/epochs.jl")
 include("analysis/filter.jl")
+include("analysis/statistics.jl")
 include("analysis/gfp.jl")
 include("analysis/grand_average.jl")
 include("analysis/ica.jl")

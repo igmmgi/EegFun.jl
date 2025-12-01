@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>"]
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 BiosemiDataFormat = "d1c37e40-cd17-11e8-241b-47481c954d91"
 BrainVisionDataFormat = "a1c37e40-cd17-11e8-241b-47481c954d92"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -16,6 +17,7 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+HypothesisTests = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -37,6 +39,7 @@ BiosemiDataFormat = {rev = "master", url = "https://github.com/igmmgi/BiosemiDat
 BrainVisionDataFormat = {rev = "main", url = "https://github.com/igmmgi/BrainVisionDataFormat.jl.git"}
 
 [compat]
+BenchmarkTools = "1.6.3"
 BiosemiDataFormat = "0.1.0"
 BrainVisionDataFormat = "0.1.0"
 CSV = "0.10.0"
@@ -48,6 +51,7 @@ Distributions = "0.25.120"
 DocStringExtensions = "0.9.5"
 FFTW = "1.0.0"
 GLMakie = "0.13.2"
+HypothesisTests = "0.11.6"
 JLD2 = "0.5.15"
 LoggingExtras = "1.0.0"
 Makie = "0.24.0"
@@ -65,6 +69,7 @@ Coverage = "a2441757-f6aa-5fb2-8edb-039e3f45d037"
 CoverageTools = "c36e975a-824b-4404-a568-ef97ca766997"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterTools = "35a29f4d-8980-5a13-9543-d66fff28ecb8"
+HypothesisTests = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
@@ -72,4 +77,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [targets]
 dev = ["Revise", "JuliaFormatter"]
 docs = ["Documenter", "DocumenterTools"]
-test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools"]
+test = ["Test", "Coverage", "CoverageTools", "BenchmarkTools", "HypothesisTests"]
