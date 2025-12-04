@@ -98,6 +98,7 @@ include("plots/utils/layout_system.jl")
 include("plots/utils/shared_interactivity.jl")
 
 include("plots/plot_artifacts.jl")
+include("plots/plot_statistics.jl")
 include("plots/plot_channel_summary.jl")
 include("plots/plot_correlation_heatmap.jl")
 include("plots/plot_databrowser.jl")
