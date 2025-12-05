@@ -41,7 +41,7 @@ end
 
 """
     plot_analytic_ttest(result::Union{AnalyticTTestResult, ClusterPermutationResult}, 
-                        prepared::PermutationTestData;
+                        prepared::StatisticalTestData;
                         channel::Symbol,
                         plot_erp::Bool = true,
                         plot_difference::Bool = false,
@@ -56,7 +56,7 @@ Works with both `AnalyticTTestResult` (from `analytic_ttest`) and `ClusterPermut
 
 # Arguments
 - `result::Union{AnalyticTTestResult, ClusterPermutationResult}`: Results from `analytic_ttest` or `cluster_permutation_test`
-- `prepared::PermutationTestData`: Prepared data used for the test
+- `prepared::StatisticalTestData`: Prepared data used for the test
 - `channel::Symbol`: Channel/electrode to plot
 - `plot_erp::Bool`: Whether to plot ERP waveforms (condition averages) (default: true)
 - `plot_difference::Bool`: Whether to plot difference wave (A-B) (default: false)
@@ -89,7 +89,7 @@ fig = plot_analytic_ttest(result_cluster, prepared, channel=:PO7,
 """
 function plot_analytic_ttest(
     result::Union{AnalyticTTestResult, ClusterPermutationResult},
-    prepared::PermutationTestData;
+    prepared::StatisticalTestData;
     channel::Symbol,
     plot_erp::Bool = true,
     plot_difference::Bool = false,
@@ -143,8 +143,8 @@ function plot_analytic_ttest(
     end
     
     # Get condition averages for this channel
-    cond_A_avg = vec(mean(prepared.data_A[:, channel_idx, :], dims=1))
-    cond_B_avg = vec(mean(prepared.data_B[:, channel_idx, :], dims=1))
+    cond_A_avg = vec(mean(prepared.data1[:, channel_idx, :], dims=1))
+    cond_B_avg = vec(mean(prepared.data2[:, channel_idx, :], dims=1))
     
     # Calculate difference: A - B
     # When A = B, difference = 0
@@ -207,9 +207,9 @@ function plot_analytic_ttest(
     # Plot condition averages (ERP waveforms)
     if plot_erp
         lines!(ax, time_points, cond_A_avg, 
-               color = :blue, linewidth = 2, label = prepared.condition_A)
+               color = :blue, linewidth = 2, label = prepared.condition1)
         lines!(ax, time_points, cond_B_avg, 
-               color = :red, linewidth = 2, label = prepared.condition_B)
+               color = :red, linewidth = 2, label = prepared.condition2)
     end
     
     # Initialize diff_offset for use in significance markers

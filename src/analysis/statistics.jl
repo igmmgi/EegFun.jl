@@ -185,9 +185,9 @@ end
 # ===================
 
 """
-    PermutationTestData
+    StatisticalTestData
 
-Stores prepared data for cluster-based permutation tests.
+Stores prepared data for statistical tests (both permutation and analytic tests).
 
 # Fields
 - `design::Symbol`: Design type - `:paired` or `:independent`
@@ -201,44 +201,44 @@ Stores prepared data for cluster-based permutation tests.
 - `condition_B::String`: Condition/group B name
 - `layout::Layout`: Layout object for spatial clustering
 """
-struct PermutationTestData
+struct StatisticalTestData
     design::Symbol
-    data_A::Array{Float64, 3}  # [participants × electrodes × time]
-    data_B::Array{Float64, 3}  # [participants × electrodes × time]
-    participants_A::Vector{Int}
-    participants_B::Vector{Int}
+    data1::Array{Float64, 3}  # [participants × electrodes × time]
+    data2::Array{Float64, 3}  # [participants × electrodes × time]
+    ids1::Vector{Int}
+    ids2::Vector{Int}
     electrodes::Vector{Symbol}
     time_points::Vector{Float64}
-    condition_A::String
-    condition_B::String
+    condition1::String
+    condition2::String
     layout::Layout
 end
 
-function Base.show(io::IO, data::PermutationTestData)
-    n_participants_A = length(data.participants_A)
-    n_participants_B = length(data.participants_B)
+function Base.show(io::IO, data::StatisticalTestData)
+    n_participants1 = length(data.ids1)
+    n_participants2 = length(data.ids2)
     n_electrodes = length(data.electrodes)
     n_time_points = length(data.time_points)
     time_range = isempty(data.time_points) ? "N/A" : "$(first(data.time_points)) to $(last(data.time_points)) s"
     
-    println(io, "PermutationTestData")
+    println(io, "StatisticalTestData")
     println(io, "├─ Design: $(data.design)")
-    println(io, "├─ Condition A ($(data.condition_A)): $n_participants_A participants")
-    println(io, "├─ Condition B ($(data.condition_B)): $n_participants_B participants")
+    println(io, "├─ Condition 1 ($(data.condition1)): $n_participants1 participants")
+    println(io, "├─ Condition 2 ($(data.condition2)): $n_participants2 participants")
     println(io, "├─ Electrodes: $n_electrodes")
     println(io, "├─ Time points: $n_time_points ($time_range)")
-    println(io, "├─ Data dimensions: $(size(data.data_A)) (participants × electrodes × time)")
+    println(io, "├─ Data dimensions: $(size(data.data1)) (participants × electrodes × time)")
     print(io, "└─ Layout: $(n_electrodes) channels")
 end
 
 """
-    prepare_permutation_data(erps_A::Vector{ErpData}, erps_B::Vector{ErpData}; 
+    prepare_statistical_test_data(erps_A::Vector{ErpData}, erps_B::Vector{ErpData}; 
                              design::Symbol = :paired,
                              channel_selection::Function = channels(),
                              sample_selection::Function = samples(),
                              baseline_window::Function = samples())
 
-    prepare_permutation_data(file_pattern::String, condition_A, condition_B;
+    prepare_statistical_test_data(file_pattern::String, condition_A, condition_B;
                              design::Symbol = :paired,
                              input_dir::String = pwd(),
                              participant_selection::Function = participants(),
@@ -246,7 +246,7 @@ end
                              sample_selection::Function = samples(),
                              baseline_window::Function = samples())
 
-Prepare ErpData for cluster-based permutation tests.
+Prepare ErpData for statistical tests (permutation and analytic tests).
 
 Organizes ErpData into participant × electrode × time arrays for statistical analysis.
 Validates the design and ensures data consistency across conditions.
@@ -271,7 +271,7 @@ Validates the design and ensures data consistency across conditions.
 - `baseline_window::Function`: Baseline window sample selection predicate (default: samples() - all samples, baseline skipped). Use `samples((start, end))` for baseline window.
 
 # Returns
-- `PermutationTestData`: Prepared data structure ready for permutation testing
+- `StatisticalTestData`: Prepared data structure ready for statistical testing
 
 # Examples
 ```julia
@@ -280,10 +280,10 @@ using eegfun
 # Direct data version - work with already-loaded ErpData
 erps_condition_A = load_erps("condition_A")  # Vector of ErpData
 erps_condition_B = load_erps("condition_B")  # Vector of ErpData
-prepared = prepare_permutation_data(erps_condition_A, erps_condition_B, design = :paired)
+prepared = prepare_statistical_test_data(erps_condition_A, erps_condition_B, design = :paired)
 
 # File-based version - load from files
-prepared = prepare_permutation_data(
+prepared = prepare_statistical_test_data(
     "erps_cleaned",
     condition_A = 1,
     condition_B = 2,
@@ -292,7 +292,7 @@ prepared = prepare_permutation_data(
 )
 
 # With time window selection and baseline correction
-prepared = prepare_permutation_data(
+prepared = prepare_statistical_test_data(
     "erps_cleaned",
     1,
     2;
@@ -303,7 +303,7 @@ prepared = prepare_permutation_data(
 ```
 """
 # Direct data version
-function prepare_permutation_data(erps_A::Vector{ErpData}, erps_B::Vector{ErpData}; 
+function prepare_statistical_test_data(erps_A::Vector{ErpData}, erps_B::Vector{ErpData}; 
                                    design::Symbol = :paired,
                                    channel_selection::Function = channels(),
                                    sample_selection::Function = samples(),
@@ -491,22 +491,22 @@ function prepare_permutation_data(erps_A::Vector{ErpData}, erps_B::Vector{ErpDat
         end
     end
     
-    return PermutationTestData(
+    return StatisticalTestData(
         design,
-        data_A,
-        data_B,
-        participants_A,
-        participants_B,
+        data_A,  # maps to data1
+        data_B,  # maps to data2
+        participants_A,  # maps to ids1
+        participants_B,  # maps to ids2
         electrodes,
         time_points,
-        condition_A,
-        condition_B,
+        condition_A,  # maps to condition1
+        condition_B,  # maps to condition2
         layout
     )
 end
 
 # File-based version (convenience wrapper)
-function prepare_permutation_data(
+function prepare_statistical_test_data(
     file_pattern::String,
     condition_A,
     condition_B;
@@ -585,7 +585,7 @@ function prepare_permutation_data(
     erps_B = all_erps_by_condition[cond_num_B]
     
     # Call the main preparation function
-    return prepare_permutation_data(
+    return prepare_statistical_test_data(
         erps_A, 
         erps_B; 
         design = design, 
@@ -678,7 +678,7 @@ struct ClusterPermutationResult
     cluster_type::Symbol
     cluster_statistic::Symbol
     min_cluster_size::Int
-    critical_t_values::Array{Float64, 2}
+    critical_t_values::Union{Array{Float64, 2}, Tuple{Float64, Float64}, Tuple{Array{Float64, 2}, Array{Float64, 2}}}
 end
 
 function Base.show(io::IO, result::ClusterPermutationResult)
@@ -768,7 +768,7 @@ end
 # ===================
 
 """
-    validate_permutation_inputs(prepared::PermutationTestData, 
+    validate_permutation_inputs(prepared::StatisticalTestData, 
                                 n_permutations::Int,
                                 threshold::Float64,
                                 cluster_type::Symbol,
@@ -779,7 +779,7 @@ end
 Validate inputs for cluster permutation test.
 
 # Arguments
-- `prepared::PermutationTestData`: Prepared data
+- `prepared::StatisticalTestData`: Prepared data
 - `n_permutations::Int`: Number of permutations
 - `threshold::Float64`: P-value threshold
 - `cluster_type::Symbol`: Type of clustering
@@ -791,7 +791,7 @@ Validate inputs for cluster permutation test.
 - `ArgumentError`: If any validation fails
 """
 function validate_permutation_inputs(
-    prepared::PermutationTestData,
+    prepared::StatisticalTestData,
     n_permutations::Int,
     threshold::Float64,
     cluster_type::Symbol,
@@ -806,13 +806,13 @@ function validate_permutation_inputs(
     
     # Validate minimum participants
     if prepared.design == :paired
-        if length(prepared.participants_A) < 2
-            error("Paired design requires at least 2 participants, got $(length(prepared.participants_A))")
+        if length(prepared.ids1) < 2
+            error("Paired design requires at least 2 participants, got $(length(prepared.ids1))")
         end
     else
-        if length(prepared.participants_A) < 2 || length(prepared.participants_B) < 2
+        if length(prepared.ids1) < 2 || length(prepared.ids2) < 2
             error("Independent design requires at least 2 participants per group, " *
-                  "got $(length(prepared.participants_A)) and $(length(prepared.participants_B))")
+                  "got $(length(prepared.ids1)) and $(length(prepared.ids2))")
         end
     end
     
@@ -863,43 +863,48 @@ end
 # ===================
 
 """
-    compute_t_matrix(prepared::PermutationTestData)
+    compute_t_matrix(prepared::StatisticalTestData; tail::Symbol = :both)
 
-Compute t-statistics for all electrode × time points.
+Compute t-statistics and p-values for all electrode × time points.
 
 # Arguments
-- `prepared::PermutationTestData`: Prepared data for permutation test
+- `prepared::StatisticalTestData`: Prepared data for statistical test
+- `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
 
 # Returns
 - `t_matrix::Array{Float64, 2}`: T-statistics [electrodes × time]
 - `df_matrix::Array{Float64, 2}`: Degrees of freedom [electrodes × time]
+- `p_matrix::Array{Float64, 2}`: P-values [electrodes × time]
 
 # Examples
 ```julia
-t_matrix, df_matrix = compute_t_matrix(prepared)
+t_matrix, df_matrix, p_matrix = compute_t_matrix(prepared, tail=:both)
 ```
 """
-function compute_t_matrix(prepared::PermutationTestData)
+function compute_t_matrix(prepared::StatisticalTestData; tail::Symbol = :both)
     n_electrodes = length(prepared.electrodes)
     n_time = length(prepared.time_points)
     t_matrix = Array{Float64, 2}(undef, n_electrodes, n_time)
     df_matrix = Array{Float64, 2}(undef, n_electrodes, n_time)
+    p_matrix = Array{Float64, 2}(undef, n_electrodes, n_time)
     
-    for e_idx in 1:n_electrodes
+    @inbounds for e_idx in 1:n_electrodes
         for t_idx in 1:n_time
-            data_A = prepared.data_A[:, e_idx, t_idx]
-            data_B = prepared.data_B[:, e_idx, t_idx]
+            # Use views to avoid copying data
+            data_A = view(prepared.data1, :, e_idx, t_idx)
+            data_B = view(prepared.data2, :, e_idx, t_idx)
             
             if prepared.design == :paired
-                result = paired_ttest(data_A, data_B)
+                result = paired_ttest(data_A, data_B, tail=tail)
             else
-                result = independent_ttest(data_A, data_B)
+                result = independent_ttest(data_A, data_B, tail=tail)
             end
             t_matrix[e_idx, t_idx] = result.t
             df_matrix[e_idx, t_idx] = result.df
+            p_matrix[e_idx, t_idx] = result.p
         end
     end
-    return t_matrix, df_matrix
+    return t_matrix, df_matrix, p_matrix
 end
 
 """
@@ -1064,6 +1069,351 @@ function threshold_t_matrix_parametric(
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
+end
+
+"""
+    compute_nonparametric_threshold_common(permutation_t_matrices::Array{Float64, 3},
+                                          alpha::Float64 = 0.05,
+                                          tail::Symbol = :both)
+
+Compute a single non-parametric threshold from pooled permutation distribution (common threshold).
+
+# Arguments
+- `permutation_t_matrices::Array{Float64, 3}`: T-statistics from all permutations [electrodes × time × permutations]
+- `alpha::Float64`: Significance level (default: 0.05)
+- `tail::Symbol`: Test tail - `:both` (two-tailed), `:left`, or `:right` (default: `:both`)
+
+# Returns
+- `threshold_positive::Float64`: Threshold for positive t-values
+- `threshold_negative::Float64`: Threshold for negative t-values (absolute value)
+
+# Examples
+```julia
+thresh_pos, thresh_neg = compute_nonparametric_threshold_common(perm_t_matrices, 0.05, :both)
+```
+"""
+function compute_nonparametric_threshold_common(
+    permutation_t_matrices::Array{Float64, 3},
+    alpha::Float64 = 0.05,
+    tail::Symbol = :both
+)
+    n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
+    
+    if tail == :both
+        # Two-tailed: collect all absolute t-values
+        all_t_values = Float64[]
+        sizehint!(all_t_values, n_electrodes * n_time * n_permutations)
+        
+        for perm_idx in 1:n_permutations
+            for i in 1:n_electrodes
+                for j in 1:n_time
+                    t_val = permutation_t_matrices[i, j, perm_idx]
+                    if !isnan(t_val) && !isinf(t_val)
+                        push!(all_t_values, abs(t_val))
+                    end
+                end
+            end
+        end
+        
+        if isempty(all_t_values)
+            error("No valid t-values found in permutation distribution")
+        end
+        
+        # Compute (1 - alpha/2) percentile for two-tailed
+        percentile_level = 1.0 - (alpha / 2.0)
+        threshold = quantile(all_t_values, percentile_level)
+        
+        return threshold, threshold
+        
+    elseif tail == :right
+        # One-tailed right: collect all positive t-values
+        all_t_values = Float64[]
+        sizehint!(all_t_values, n_electrodes * n_time * n_permutations)
+        
+        for perm_idx in 1:n_permutations
+            for i in 1:n_electrodes
+                for j in 1:n_time
+                    t_val = permutation_t_matrices[i, j, perm_idx]
+                    if !isnan(t_val) && !isinf(t_val) && t_val > 0
+                        push!(all_t_values, t_val)
+                    end
+                end
+            end
+        end
+        
+        if isempty(all_t_values)
+            error("No valid positive t-values found in permutation distribution")
+        end
+        
+        percentile_level = 1.0 - alpha
+        threshold = quantile(all_t_values, percentile_level)
+        
+        return threshold, NaN
+        
+    elseif tail == :left
+        # One-tailed left: collect all negative t-values (absolute values)
+        all_t_values = Float64[]
+        sizehint!(all_t_values, n_electrodes * n_time * n_permutations)
+        
+        for perm_idx in 1:n_permutations
+            for i in 1:n_electrodes
+                for j in 1:n_time
+                    t_val = permutation_t_matrices[i, j, perm_idx]
+                    if !isnan(t_val) && !isinf(t_val) && t_val < 0
+                        push!(all_t_values, abs(t_val))
+                    end
+                end
+            end
+        end
+        
+        if isempty(all_t_values)
+            error("No valid negative t-values found in permutation distribution")
+        end
+        
+        percentile_level = 1.0 - alpha
+        threshold = quantile(all_t_values, percentile_level)
+        
+        return NaN, threshold
+        
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
+    end
+end
+
+"""
+    compute_nonparametric_threshold_individual(permutation_t_matrices::Array{Float64, 3},
+                                               alpha::Float64 = 0.05,
+                                               tail::Symbol = :both)
+
+Compute point-specific non-parametric thresholds from permutation distribution (individual thresholds).
+
+# Arguments
+- `permutation_t_matrices::Array{Float64, 3}`: T-statistics from all permutations [electrodes × time × permutations]
+- `alpha::Float64`: Significance level (default: 0.05)
+- `tail::Symbol`: Test tail - `:both` (two-tailed), `:left`, or `:right` (default: `:both`)
+
+# Returns
+- `thresholds_positive::Array{Float64, 2}`: Point-specific thresholds for positive t-values [electrodes × time]
+- `thresholds_negative::Array{Float64, 2}`: Point-specific thresholds for negative t-values [electrodes × time]
+
+# Examples
+```julia
+thresh_pos, thresh_neg = compute_nonparametric_threshold_individual(perm_t_matrices, 0.05, :both)
+```
+"""
+function compute_nonparametric_threshold_individual(
+    permutation_t_matrices::Array{Float64, 3},
+    alpha::Float64 = 0.05,
+    tail::Symbol = :both
+)
+    n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
+    
+    thresholds_positive = Array{Float64, 2}(undef, n_electrodes, n_time)
+    thresholds_negative = Array{Float64, 2}(undef, n_electrodes, n_time)
+    
+    if tail == :both
+        # Two-tailed: for each point, compute (1 - alpha/2) percentile
+        percentile_level = 1.0 - (alpha / 2.0)
+        
+        for i in 1:n_electrodes
+            for j in 1:n_time
+                # Collect t-values at this point across all permutations
+                t_values = Float64[]
+                sizehint!(t_values, n_permutations)
+                
+                for perm_idx in 1:n_permutations
+                    t_val = permutation_t_matrices[i, j, perm_idx]
+                    if !isnan(t_val) && !isinf(t_val)
+                        push!(t_values, abs(t_val))
+                    end
+                end
+                
+                if isempty(t_values)
+                    thresholds_positive[i, j] = NaN
+                    thresholds_negative[i, j] = NaN
+                else
+                    threshold = quantile(t_values, percentile_level)
+                    thresholds_positive[i, j] = threshold
+                    thresholds_negative[i, j] = threshold
+                end
+            end
+        end
+        
+    elseif tail == :right
+        # One-tailed right: for each point, compute (1 - alpha) percentile of positive values
+        percentile_level = 1.0 - alpha
+        
+        for i in 1:n_electrodes
+            for j in 1:n_time
+                # Collect positive t-values at this point
+                t_values = Float64[]
+                sizehint!(t_values, n_permutations)
+                
+                for perm_idx in 1:n_permutations
+                    t_val = permutation_t_matrices[i, j, perm_idx]
+                    if !isnan(t_val) && !isinf(t_val) && t_val > 0
+                        push!(t_values, t_val)
+                    end
+                end
+                
+                if isempty(t_values)
+                    thresholds_positive[i, j] = NaN
+                else
+                    thresholds_positive[i, j] = quantile(t_values, percentile_level)
+                end
+                thresholds_negative[i, j] = NaN
+            end
+        end
+        
+    elseif tail == :left
+        # One-tailed left: for each point, compute (1 - alpha) percentile of negative values (absolute)
+        percentile_level = 1.0 - alpha
+        
+        for i in 1:n_electrodes
+            for j in 1:n_time
+                # Collect negative t-values at this point (absolute values)
+                t_values = Float64[]
+                sizehint!(t_values, n_permutations)
+                
+                for perm_idx in 1:n_permutations
+                    t_val = permutation_t_matrices[i, j, perm_idx]
+                    if !isnan(t_val) && !isinf(t_val) && t_val < 0
+                        push!(t_values, abs(t_val))
+                    end
+                end
+                
+                thresholds_positive[i, j] = NaN
+                if isempty(t_values)
+                    thresholds_negative[i, j] = NaN
+                else
+                    thresholds_negative[i, j] = quantile(t_values, percentile_level)
+                end
+            end
+        end
+        
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
+    end
+    
+    return thresholds_positive, thresholds_negative
+end
+
+"""
+    threshold_t_matrix_nonparametric(t_matrix::Array{Float64, 2},
+                                     thresholds_positive::Union{Float64, Array{Float64, 2}},
+                                     thresholds_negative::Union{Float64, Array{Float64, 2}},
+                                     tail::Symbol = :both)
+
+Threshold t-matrix using non-parametric thresholds.
+
+# Arguments
+- `t_matrix::Array{Float64, 2}`: T-statistics [electrodes × time]
+- `thresholds_positive::Union{Float64, Array{Float64, 2}}`: Threshold(s) for positive t-values (scalar for common, matrix for individual)
+- `thresholds_negative::Union{Float64, Array{Float64, 2}}`: Threshold(s) for negative t-values (scalar for common, matrix for individual)
+- `tail::Symbol`: Test tail - `:both` (two-tailed), `:left`, or `:right` (default: `:both`)
+
+# Returns
+- `mask_positive::BitArray{2}`: Mask for positive significant points [electrodes × time]
+- `mask_negative::BitArray{2}`: Mask for negative significant points [electrodes × time]
+
+# Examples
+```julia
+# Common threshold (scalar)
+mask_pos, mask_neg = threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, :both)
+
+# Individual thresholds (matrices)
+mask_pos, mask_neg = threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, :both)
+```
+"""
+function threshold_t_matrix_nonparametric(
+    t_matrix::Array{Float64, 2},
+    thresholds_positive::Union{Float64, Array{Float64, 2}},
+    thresholds_negative::Union{Float64, Array{Float64, 2}},
+    tail::Symbol = :both
+)
+    n_electrodes, n_time = size(t_matrix)
+    mask_positive = BitArray{2}(undef, n_electrodes, n_time)
+    mask_negative = BitArray{2}(undef, n_electrodes, n_time)
+    
+    # Determine if thresholds are scalar (common) or matrix (individual)
+    is_common = isa(thresholds_positive, Float64)
+    
+    if tail == :both
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            
+            if isnan(t_val) || isinf(t_val)
+                mask_positive[i] = false
+                mask_negative[i] = false
+            else
+                # Get threshold for this point
+                if is_common
+                    thresh_pos = thresholds_positive::Float64
+                    thresh_neg = thresholds_negative::Float64
+                else
+                    thresh_pos = thresholds_positive[i]
+                    thresh_neg = thresholds_negative[i]
+                end
+                
+                if isnan(thresh_pos) || isnan(thresh_neg)
+                    mask_positive[i] = false
+                    mask_negative[i] = false
+                else
+                    mask_positive[i] = t_val > thresh_pos
+                    mask_negative[i] = t_val < -thresh_neg
+                end
+            end
+        end
+        
+    elseif tail == :right
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            
+            if isnan(t_val) || isinf(t_val)
+                mask_positive[i] = false
+            else
+                if is_common
+                    thresh_pos = thresholds_positive::Float64
+                else
+                    thresh_pos = thresholds_positive[i]
+                end
+                
+                if isnan(thresh_pos)
+                    mask_positive[i] = false
+                else
+                    mask_positive[i] = t_val > thresh_pos
+                end
+            end
+            mask_negative[i] = false
+        end
+        
+    elseif tail == :left
+        for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            
+            if isnan(t_val) || isinf(t_val)
+                mask_negative[i] = false
+            else
+                if is_common
+                    thresh_neg = thresholds_negative::Float64
+                else
+                    thresh_neg = thresholds_negative[i]
+                end
+                
+                if isnan(thresh_neg)
+                    mask_negative[i] = false
+                else
+                    mask_negative[i] = t_val < -thresh_neg
+                end
+            end
+            mask_positive[i] = false
+        end
+        
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
+    end
+    
+    return mask_positive, mask_negative
 end
 
 # ===================
@@ -1611,12 +1961,12 @@ end
 # ===================
 
 """
-    shuffle_labels(prepared::PermutationTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
+    shuffle_labels(prepared::StatisticalTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
 
 Shuffle condition/group labels for permutation test.
 
 # Arguments
-- `prepared::PermutationTestData`: Prepared data
+- `prepared::StatisticalTestData`: Prepared data
 - `rng::AbstractRNG`: Random number generator (default: global RNG)
 
 # Returns
@@ -1627,13 +1977,13 @@ Shuffle condition/group labels for permutation test.
 For paired design: randomly swap A/B labels within each participant.
 For independent design: randomly shuffle participants between groups.
 """
-function shuffle_labels(prepared::PermutationTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
+function shuffle_labels(prepared::StatisticalTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
     if prepared.design == :paired
         # Paired: randomly swap A/B within each participant
-        shuffled_A = copy(prepared.data_A)
-        shuffled_B = copy(prepared.data_B)
+        shuffled_A = copy(prepared.data1)
+        shuffled_B = copy(prepared.data2)
         
-        n_participants = size(prepared.data_A, 1)
+        n_participants = size(prepared.data1, 1)
         for p_idx in 1:n_participants
             if rand(rng, Bool)
                 # Swap conditions for this participant
@@ -1645,13 +1995,13 @@ function shuffle_labels(prepared::PermutationTestData, rng::AbstractRNG = Random
         
     else
         # Independent: randomly shuffle participants between groups
-        n_A = size(prepared.data_A, 1)
-        n_B = size(prepared.data_B, 1)
+        n_A = size(prepared.data1, 1)
+        n_B = size(prepared.data2, 1)
         n_total = n_A + n_B
         
         # Combine all participants
-        all_data = cat(prepared.data_A, prepared.data_B, dims=1)
-        all_participants = vcat(prepared.participants_A, prepared.participants_B)
+        all_data = cat(prepared.data1, prepared.data2, dims=1)
+        all_participants = vcat(prepared.ids1, prepared.ids2)
         
         # Shuffle indices
         shuffled_indices = collect(1:n_total)
@@ -1666,32 +2016,129 @@ function shuffle_labels(prepared::PermutationTestData, rng::AbstractRNG = Random
 end
 
 """
-    run_permutations(prepared::PermutationTestData,
+    collect_permutation_t_matrices(prepared::StatisticalTestData,
+                                   n_permutations::Int,
+                                   random_seed::Union{Int, Nothing} = nothing,
+                                   show_progress::Bool = true)
+
+Run permutations and collect t-matrices for non-parametric thresholding.
+
+# Arguments
+- `prepared::StatisticalTestData`: Prepared data
+- `n_permutations::Int`: Number of permutations
+- `random_seed::Union{Int, Nothing}`: Random seed (default: nothing)
+- `show_progress::Bool`: Show progress bar (default: true)
+
+# Returns
+- `permutation_t_matrices::Array{Float64, 3}`: T-statistics from all permutations [electrodes × time × permutations]
+
+# Examples
+```julia
+perm_t_matrices = collect_permutation_t_matrices(prepared, 1000)
+```
+"""
+function collect_permutation_t_matrices(
+    prepared::StatisticalTestData,
+    n_permutations::Int,
+    random_seed::Union{Int, Nothing} = nothing,
+    show_progress::Bool = true
+)
+    # Set random seed if provided
+    if random_seed !== nothing
+        rng = MersenneTwister(random_seed)
+    else
+        rng = Random.GLOBAL_RNG
+    end
+    
+    # Get dimensions from first permutation
+    shuffled_A, shuffled_B = shuffle_labels(prepared, rng)
+    shuffled_prepared = StatisticalTestData(
+        prepared.design,
+        shuffled_A,
+        shuffled_B,
+        prepared.ids1,
+        prepared.ids2,
+        prepared.electrodes,
+        prepared.time_points,
+        prepared.condition1,
+        prepared.condition2,
+        prepared.layout
+    )
+    t_matrix_sample, _, _ = compute_t_matrix(shuffled_prepared)
+    n_electrodes, n_time = size(t_matrix_sample)
+    
+    # Pre-allocate array for all t-matrices
+    permutation_t_matrices = Array{Float64, 3}(undef, n_electrodes, n_time, n_permutations)
+    
+    # Progress bar
+    if show_progress
+        progress = Progress(n_permutations, desc="Collecting permutation t-matrices: ", showspeed=true)
+    end
+    
+    for perm_idx in 1:n_permutations
+        # Shuffle labels
+        shuffled_A, shuffled_B = shuffle_labels(prepared, rng)
+        
+        # Create temporary StatisticalTestData with shuffled data
+        shuffled_prepared = StatisticalTestData(
+            prepared.design,
+            shuffled_A,
+            shuffled_B,
+            prepared.ids1,
+            prepared.ids2,
+            prepared.electrodes,
+            prepared.time_points,
+            prepared.condition1,
+            prepared.condition2,
+            prepared.layout
+        )
+        
+        # Compute t-matrix for shuffled data
+        t_matrix_perm, _, _ = compute_t_matrix(shuffled_prepared)
+        permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
+        
+        if show_progress
+            next!(progress)
+        end
+    end
+    
+    return permutation_t_matrices
+end
+
+"""
+    run_permutations(prepared::StatisticalTestData,
                      n_permutations::Int,
                      threshold::Float64,
-                     critical_t_values::Array{Float64, 2},
+                     critical_t_values::Union{Array{Float64, 2}, Tuple{Float64, Float64}, Tuple{Array{Float64, 2}, Array{Float64, 2}}},
                      spatial_connectivity::SparseMatrixCSC{Bool},
                      cluster_type::Symbol,
                      cluster_statistic::Symbol,
                      tail::Symbol,
                      min_cluster_size::Int,
+                     min_num_neighbors::Int,
                      random_seed::Union{Int, Nothing} = nothing,
-                     show_progress::Bool = true)
+                     show_progress::Bool = true;
+                     permutation_t_matrices::Union{Nothing, Array{Float64, 3}} = nothing)
 
 Run permutation loop to generate distribution of maximum cluster statistics.
 
 # Arguments
-- `prepared::PermutationTestData`: Prepared data
+- `prepared::StatisticalTestData`: Prepared data
 - `n_permutations::Int`: Number of permutations
 - `threshold::Float64`: P-value threshold
-- `critical_t_values::Array{Float64, 2}`: Critical t-values
+- `critical_t_values`: Critical t-values - can be:
+  - `Array{Float64, 2}` for parametric (common critical t-values)
+  - `Tuple{Float64, Float64}` for non-parametric common (positive, negative thresholds)
+  - `Tuple{Array{Float64, 2}, Array{Float64, 2}}` for non-parametric individual (positive, negative threshold matrices)
 - `spatial_connectivity::SparseMatrixCSC{Bool}`: Connectivity matrix
 - `cluster_type::Symbol`: Type of clustering
 - `cluster_statistic::Symbol`: Cluster statistic type
 - `tail::Symbol`: Test tail
 - `min_cluster_size::Int`: Minimum cluster size
+- `min_num_neighbors::Int`: Minimum number of neighbors for pre-filtering
 - `random_seed::Union{Int, Nothing}`: Random seed (default: nothing)
 - `show_progress::Bool`: Show progress bar (default: true)
+- `permutation_t_matrices::Union{Nothing, Array{Float64, 3}}`: Pre-computed t-matrices from permutations (optional, for non-parametric)
 
 # Returns
 - `permutation_max_positive::Vector{Float64}`: Max cluster stats from permutations (positive)
@@ -1700,14 +2147,14 @@ Run permutation loop to generate distribution of maximum cluster statistics.
 # Examples
 ```julia
 perm_pos, perm_neg = run_permutations(prepared, 1000, 0.05, critical_t, conn, 
-                                     :spatiotemporal, :sum, :both, 0)
+                                     :spatiotemporal, :sum, :both, 0, 0)
 ```
 """
 function run_permutations(
-    prepared::PermutationTestData,
+    prepared::StatisticalTestData,
     n_permutations::Int,
     threshold::Float64,
-    critical_t_values::Array{Float64, 2},
+    critical_t_values,
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
     cluster_statistic::Symbol,
@@ -1715,10 +2162,18 @@ function run_permutations(
     min_cluster_size::Int,
     min_num_neighbors::Int,
     random_seed::Union{Int, Nothing} = nothing,
-    show_progress::Bool = true
+    show_progress::Bool = true;
+    permutation_t_matrices::Union{Nothing, Array{Float64, 3}} = nothing
 )
-    # Set random seed if provided
-    if random_seed !== nothing
+    # Determine thresholding type from critical_t_values type
+    is_parametric = isa(critical_t_values, Array{Float64, 2})
+    is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && 
+                               isa(critical_t_values[1], Float64)
+    is_nonparametric_individual = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && 
+                                  isa(critical_t_values[1], Array{Float64, 2})
+    
+    # Set random seed if provided (only if not using pre-computed t-matrices)
+    if random_seed !== nothing && permutation_t_matrices === nothing
         rng = MersenneTwister(random_seed)
     else
         rng = Random.GLOBAL_RNG
@@ -1735,30 +2190,55 @@ function run_permutations(
     end
     
     for perm_idx in 1:n_permutations
-        # Shuffle labels
-        shuffled_A, shuffled_B = shuffle_labels(prepared, rng)
+        # Get t-matrix: either from pre-computed or compute new
+        if permutation_t_matrices !== nothing
+            # Use pre-computed t-matrix
+            t_matrix_perm = permutation_t_matrices[:, :, perm_idx]
+            # For non-parametric, we don't need df_matrix for thresholding
+            df_matrix_perm = Array{Float64, 2}(undef, size(t_matrix_perm))  # Dummy, not used
+        else
+            # Compute new t-matrix
+            shuffled_A, shuffled_B = shuffle_labels(prepared, rng)
+            
+            # Create temporary StatisticalTestData with shuffled data
+            shuffled_prepared = StatisticalTestData(
+                prepared.design,
+                shuffled_A,
+                shuffled_B,
+                prepared.ids1,
+                prepared.ids2,
+                prepared.electrodes,
+                prepared.time_points,
+                prepared.condition1,
+                prepared.condition2,
+                prepared.layout
+            )
+            
+            # Compute t-matrix for shuffled data
+            t_matrix_perm, df_matrix_perm, _ = compute_t_matrix(shuffled_prepared)
+        end
         
-        # Create temporary PermutationTestData with shuffled data
-        shuffled_prepared = PermutationTestData(
-            prepared.design,
-            shuffled_A,
-            shuffled_B,
-            prepared.participants_A,
-            prepared.participants_B,
-            prepared.electrodes,
-            prepared.time_points,
-            prepared.condition_A,
-            prepared.condition_B,
-            prepared.layout
-        )
-        
-        # Compute t-matrix for shuffled data
-        t_matrix_perm, df_matrix_perm = compute_t_matrix(shuffled_prepared)
-        
-        # Threshold
-        mask_pos_perm, mask_neg_perm = threshold_t_matrix_parametric(
-            t_matrix_perm, df_matrix_perm, critical_t_values, tail
-        )
+        # Threshold based on type
+        if is_parametric
+            # Parametric thresholding
+            mask_pos_perm, mask_neg_perm = threshold_t_matrix_parametric(
+                t_matrix_perm, df_matrix_perm, critical_t_values, tail
+            )
+        elseif is_nonparametric_common
+            # Non-parametric common thresholding
+            thresh_pos, thresh_neg = critical_t_values
+            mask_pos_perm, mask_neg_perm = threshold_t_matrix_nonparametric(
+                t_matrix_perm, thresh_pos, thresh_neg, tail
+            )
+        elseif is_nonparametric_individual
+            # Non-parametric individual thresholding
+            thresh_pos_mat, thresh_neg_mat = critical_t_values
+            mask_pos_perm, mask_neg_perm = threshold_t_matrix_nonparametric(
+                t_matrix_perm, thresh_pos_mat, thresh_neg_mat, tail
+            )
+        else
+            error("Invalid critical_t_values type for thresholding")
+        end
         
         # Pre-filter masks (same as observed data)
         if min_num_neighbors > 0
@@ -1786,7 +2266,9 @@ function run_permutations(
             _, neg_stats_perm = compute_cluster_statistics(
                 neg_clusters_perm, t_matrix_perm, prepared.electrodes, cluster_statistic
             )
-            max_neg = isempty(neg_stats_perm) ? 0.0 : maximum(neg_stats_perm)
+            # For negative clusters, the statistic is negative (sum of negative t-values)
+            # The most extreme negative value is the MINIMUM (most negative), not maximum
+            max_neg = isempty(neg_stats_perm) ? 0.0 : minimum(neg_stats_perm)
         else
             max_neg = 0.0
         end
@@ -1846,8 +2328,17 @@ function compute_cluster_pvalues(
     for (i, cluster) in enumerate(clusters)
         cluster_stat = cluster_stats[i]
         
-        # Count permutations with max >= observed (add 1 for standard correction)
-        count_exceed = sum(permutation_max .>= cluster_stat) + 1
+        # For positive clusters: count permutations with max >= observed
+        # For negative clusters: count permutations with max <= observed (more extreme negative)
+        # FieldTrip approach: compare observed to permutation distribution
+        if cluster.polarity == :positive
+            # Positive clusters: larger is more extreme
+            count_exceed = sum(permutation_max .>= cluster_stat) + 1
+        else
+            # Negative clusters: more negative (smaller) is more extreme
+            # permutation_max contains minimum (most negative) values from each permutation
+            count_exceed = sum(permutation_max .<= cluster_stat) + 1
+        end
         p_value = count_exceed / (n_permutations + 1)
         
         is_significant = p_value < alpha
@@ -1867,7 +2358,7 @@ end
 # ===================
 
 """
-    cluster_permutation_test(prepared::PermutationTestData;
+    cluster_permutation_test(prepared::StatisticalTestData;
                              n_permutations::Int = 1000,
                              threshold::Float64 = 0.05,
                              threshold_method::Symbol = :parametric,
@@ -1882,7 +2373,7 @@ end
 Perform cluster-based permutation test on prepared ERP data.
 
 # Arguments
-- `prepared::PermutationTestData`: Prepared data from `prepare_permutation_data`
+- `prepared::StatisticalTestData`: Prepared data from `prepare_statistical_test_data`
 - `n_permutations::Int`: Number of permutations (default: 1000)
 - `threshold::Float64`: P-value threshold (default: 0.05)
 - `threshold_method::Symbol`: Threshold method - `:parametric` (default), `:nonparametric_individual`, or `:nonparametric_common`
@@ -1900,7 +2391,7 @@ Perform cluster-based permutation test on prepared ERP data.
 # Examples
 ```julia
 # Prepare data
-prepared = prepare_permutation_data("erps_good", 1, 2, design=:paired, input_dir="data/")
+prepared = prepare_statistical_test_data("erps_good", 1, 2, design=:paired, input_dir="data/")
 
 # Run permutation test
 result = cluster_permutation_test(prepared, n_permutations=1000, threshold=0.05)
@@ -1911,7 +2402,7 @@ println("Found ", length(result.negative_clusters), " negative clusters")
 ```
 """
 function cluster_permutation_test(
-    prepared::PermutationTestData;
+    prepared::StatisticalTestData;
     n_permutations::Int = 1000,
     threshold::Float64 = 0.05,
     threshold_method::Symbol = :parametric,
@@ -1928,25 +2419,78 @@ function cluster_permutation_test(
         prepared, n_permutations, threshold, cluster_type, cluster_statistic, tail, min_cluster_size
     )
     
-    # Only parametric thresholding is implemented for now
-    if threshold_method != :parametric
-        error("Only :parametric thresholding is currently implemented. " *
+    # Validate threshold method
+    if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
+        error("threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " *
               "Got :$threshold_method")
     end
     
     # Compute observed t-matrix and df-matrix
     @info "Computing t-statistics..."
-    t_matrix, df_matrix = compute_t_matrix(prepared)
+    t_matrix, df_matrix, _ = compute_t_matrix(prepared)
     
-    # Compute critical t-values
-    @info "Computing critical t-values..."
-    critical_t_values = compute_critical_t_values(df_matrix, threshold, tail)
-    
-    # Threshold observed data
-    @info "Thresholding observed data..."
-    mask_positive, mask_negative = threshold_t_matrix_parametric(
-        t_matrix, df_matrix, critical_t_values, tail
-    )
+    # Handle different thresholding methods
+    if threshold_method == :parametric
+        # Parametric thresholding: compute critical t-values from t-distribution
+        @info "Computing parametric critical t-values..."
+        critical_t_values = compute_critical_t_values(df_matrix, threshold, tail)
+        
+        # Threshold observed data
+        @info "Thresholding observed data (parametric)..."
+        mask_positive, mask_negative = threshold_t_matrix_parametric(
+            t_matrix, df_matrix, critical_t_values, tail
+        )
+        
+        # Store for later use in permutations
+        threshold_for_permutations = critical_t_values
+        permutation_t_matrices = nothing
+        
+    elseif threshold_method == :nonparametric_common
+        # Non-parametric common: run all permutations first to get threshold
+        @info "Collecting permutation t-matrices for non-parametric common thresholding..."
+        permutation_t_matrices = collect_permutation_t_matrices(
+            prepared, n_permutations, random_seed, show_progress
+        )
+        
+        # Compute common threshold from permutation distribution
+        @info "Computing non-parametric common threshold..."
+        thresh_pos, thresh_neg = compute_nonparametric_threshold_common(
+            permutation_t_matrices, threshold, tail
+        )
+        critical_t_values = (thresh_pos, thresh_neg)
+        
+        # Threshold observed data
+        @info "Thresholding observed data (non-parametric common)..."
+        mask_positive, mask_negative = threshold_t_matrix_nonparametric(
+            t_matrix, thresh_pos, thresh_neg, tail
+        )
+        
+        # Store for later use in permutations
+        threshold_for_permutations = critical_t_values
+        
+    elseif threshold_method == :nonparametric_individual
+        # Non-parametric individual: run all permutations first to get thresholds
+        @info "Collecting permutation t-matrices for non-parametric individual thresholding..."
+        permutation_t_matrices = collect_permutation_t_matrices(
+            prepared, n_permutations, random_seed, show_progress
+        )
+        
+        # Compute individual thresholds from permutation distribution
+        @info "Computing non-parametric individual thresholds..."
+        thresh_pos_mat, thresh_neg_mat = compute_nonparametric_threshold_individual(
+            permutation_t_matrices, threshold, tail
+        )
+        critical_t_values = (thresh_pos_mat, thresh_neg_mat)
+        
+        # Threshold observed data
+        @info "Thresholding observed data (non-parametric individual)..."
+        mask_positive, mask_negative = threshold_t_matrix_nonparametric(
+            t_matrix, thresh_pos_mat, thresh_neg_mat, tail
+        )
+        
+        # Store for later use in permutations
+        threshold_for_permutations = critical_t_values
+    end
     
     # Build connectivity matrix
     @info "Building connectivity matrix..."
@@ -1986,12 +2530,18 @@ function cluster_permutation_test(
         )
     end
     
-    # Run permutations
-    @info "Running $n_permutations permutations..."
+    # Run permutations for cluster-level inference
+    # For non-parametric methods, we reuse the stored t-matrices
+    if threshold_method == :parametric
+        @info "Running $n_permutations permutations for cluster-level inference..."
+    else
+        @info "Running $n_permutations permutations for cluster-level inference (reusing stored t-matrices)..."
+    end
     permutation_max_positive, permutation_max_negative = run_permutations(
-        prepared, n_permutations, threshold, critical_t_values, spatial_connectivity,
+        prepared, n_permutations, threshold, threshold_for_permutations, spatial_connectivity,
         cluster_type, cluster_statistic, tail, min_cluster_size, min_num_neighbors,
-        random_seed, show_progress
+        random_seed, show_progress;
+        permutation_t_matrices = permutation_t_matrices
     )
     
     # Compute p-values
@@ -2097,25 +2647,44 @@ Compute p-values from t-statistics.
 function compute_p_matrix(t_matrix::Array{Float64, 2}, df_matrix::Array{Float64, 2}, tail::Symbol = :both)
     p_matrix = Array{Float64, 2}(undef, size(t_matrix))
     
-    for i in eachindex(t_matrix)
-        t_val = t_matrix[i]
-        df = df_matrix[i]
-        
-        if isnan(t_val) || isnan(df) || isinf(t_val) || isinf(df) || df <= 0
-            p_matrix[i] = NaN
-            continue
+    if tail == :both
+        @inbounds for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            df = df_matrix[i]
+            
+            if isnan(t_val) || isnan(df) || isinf(t_val) || isinf(df) || df <= 0
+                p_matrix[i] = NaN
+            else
+                dist = TDist(df)
+                p_matrix[i] = 2 * (1 - cdf(dist, abs(t_val)))
+            end
         end
-        
-        dist = TDist(df)
-        if tail == :both
-            p_matrix[i] = 2 * (1 - cdf(dist, abs(t_val)))
-        elseif tail == :left
-            p_matrix[i] = cdf(dist, t_val)
-        elseif tail == :right
-            p_matrix[i] = 1 - cdf(dist, t_val)
-        else
-            error("tail must be :both, :left, or :right, got :$tail")
+    elseif tail == :left
+        @inbounds for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            df = df_matrix[i]
+            
+            if isnan(t_val) || isnan(df) || isinf(t_val) || isinf(df) || df <= 0
+                p_matrix[i] = NaN
+            else
+                dist = TDist(df)
+                p_matrix[i] = cdf(dist, t_val)
+            end
         end
+    elseif tail == :right
+        @inbounds for i in eachindex(t_matrix)
+            t_val = t_matrix[i]
+            df = df_matrix[i]
+            
+            if isnan(t_val) || isnan(df) || isinf(t_val) || isinf(df) || df <= 0
+                p_matrix[i] = NaN
+            else
+                dist = TDist(df)
+                p_matrix[i] = 1 - cdf(dist, t_val)
+            end
+        end
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
     end
     
     return p_matrix
@@ -2170,7 +2739,7 @@ function apply_multiple_comparison_correction(
 end
 
 """
-    analytic_ttest(prepared::PermutationTestData;
+    analytic_ttest(prepared::StatisticalTestData;
                   alpha::Float64 = 0.05,
                   tail::Symbol = :both,
                   correction_method::Symbol = :no)
@@ -2178,7 +2747,7 @@ end
 Perform analytic (parametric) t-test without permutation (FieldTrip's 'analytic' method).
 
 # Arguments
-- `prepared::PermutationTestData`: Prepared data from `prepare_permutation_data`
+- `prepared::StatisticalTestData`: Prepared data from `prepare_statistical_test_data`
 - `alpha::Float64`: Significance threshold (default: 0.05)
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
 - `correction_method::Symbol`: Multiple comparison correction - `:no` (default) or `:bonferroni`
@@ -2196,7 +2765,7 @@ result = analytic_ttest(prepared, alpha=0.05, correction_method=:bonferroni)
 ```
 """
 function analytic_ttest(
-    prepared::PermutationTestData;
+    prepared::StatisticalTestData;
     alpha::Float64 = 0.05,
     tail::Symbol = :both,
     correction_method::Symbol = :no
@@ -2206,41 +2775,24 @@ function analytic_ttest(
         error("correction_method must be :no or :bonferroni. Got :$correction_method")
     end
     
-    # Compute t-statistics and degrees of freedom
-    @info "Computing t-statistics..."
-    t_matrix, df_matrix = compute_t_matrix(prepared)
-    
-    # Compute p-values
-    @info "Computing p-values..."
-    p_matrix = compute_p_matrix(t_matrix, df_matrix, tail)
+    # Compute t-statistics, degrees of freedom, and p-values in one pass
+    t_matrix, df_matrix, p_matrix = compute_t_matrix(prepared, tail=tail)
     
     # Apply multiple comparison correction
-    @info "Applying $(correction_method) correction for multiple comparisons..."
     corrected_mask = apply_multiple_comparison_correction(p_matrix, alpha, correction_method)
     
-    # Create positive and negative masks based on t-values
-    mask_positive = BitArray{2}(undef, size(t_matrix))
-    mask_negative = BitArray{2}(undef, size(t_matrix))
-    
-    for i in eachindex(t_matrix)
-        t_val = t_matrix[i]
-        is_sig = corrected_mask[i]
-        
-        if isnan(t_val) || !is_sig
-            mask_positive[i] = false
-            mask_negative[i] = false
-        else
-            if tail == :both
-                mask_positive[i] = t_val > 0
-                mask_negative[i] = t_val < 0
-            elseif tail == :right
-                mask_positive[i] = true
-                mask_negative[i] = false
-            elseif tail == :left
-                mask_positive[i] = false
-                mask_negative[i] = true
-            end
-        end
+    # Create positive and negative masks based on t-values (vectorized)
+    if tail == :both
+        mask_positive = corrected_mask .& .!isnan.(t_matrix) .& (t_matrix .> 0)
+        mask_negative = corrected_mask .& .!isnan.(t_matrix) .& (t_matrix .< 0)
+    elseif tail == :right
+        mask_positive = corrected_mask .& .!isnan.(t_matrix)
+        mask_negative = falses(size(t_matrix))
+    elseif tail == :left
+        mask_positive = falses(size(t_matrix))
+        mask_negative = corrected_mask .& .!isnan.(t_matrix)
+    else
+        error("tail must be :both, :left, or :right, got :$tail")
     end
     
     result = AnalyticTTestResult(
