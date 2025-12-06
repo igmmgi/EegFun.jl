@@ -14,6 +14,7 @@ Each section includes explanations of when and why to use each method.
 """
 
 using eegfun
+using BenchmarkTools
 
 println("\n" * "="^80)
 println("TUTORIAL: Statistical Analysis Options for ERP Data")
@@ -43,7 +44,7 @@ input_dir = "/home/ian/Documents/Julia/output_data/filtered_erps_good_lp_30hz"
 file_pattern = "erps_good"
 
 println("Preparing data...")
-prepared = eegfun.prepare_statistical_test_data(
+@btime prepared = eegfun.prepare_statistical_test_data(
     file_pattern,  # Pattern to match ERP files
     1,             # Condition A (first condition to compare)
     2;             # Condition B (second condition to compare)
@@ -100,7 +101,7 @@ This is mainly useful for demonstration or when you only test a few points.
 Equivalent to FieldTrip: method='analytic', corrMethod='no'
 """)
 
-@btime result_analytic_no = eegfun.analytic_ttest(
+result_analytic_no = eegfun.analytic_ttest(
     prepared,
     alpha = 0.05,           # Significance threshold
     tail = :both,           # Two-tailed test (:both, :left, or :right)
@@ -112,6 +113,10 @@ println("\nNote: This test found ",
         count(result_analytic_no.significant_mask_positive) + 
         count(result_analytic_no.significant_mask_negative), 
         " significant points (likely many false positives!)")
+
+fig = eegfun.plot_analytic_ttest(result_analytic_no, prepared, channel = :PO8, plot_erp = true, 
+plot_difference = false, show_significance = true, show_critical_t = true)
+display(fig)
 
 # ----------------------------------------------------------------------------
 # Option 2b: Analytic t-test with BONFERRONI correction
@@ -135,6 +140,11 @@ result_analytic_bonf = eegfun.analytic_ttest(
     tail = :both,
     correction_method = :bonferroni  # Bonferroni correction
 )
+
+fig = eegfun.plot_analytic_ttest(result_analytic_bonf, prepared, channel = :PO8, plot_erp = true, 
+plot_difference = false, show_significance = true, show_critical_t = true)
+display(fig)
+
 
 println(result_analytic_bonf)
 println("\nNote: Bonferroni correction is very conservative - compare the")
@@ -210,7 +220,6 @@ Parameters explained:
 - n_permutations: Number of permutations (1000 is standard, more is better)
 - threshold: Significance level (0.05 = 5%)
 - threshold_method: :parametric (uses t-distribution)
-- min_cluster_size: Minimum points in cluster (0 = no filtering)
 - min_num_neighbors: Pre-filter isolated points (FieldTrip's minNumChannels)
   - Removes points with fewer than N neighboring significant points
   - Helps reduce noise before clustering
@@ -226,11 +235,13 @@ result_cluster_parametric = eegfun.cluster_permutation_test(
     threshold_method = :parametric,  # Use t-distribution for thresholding
     cluster_type = :spatiotemporal,  # Cluster in space AND time
     cluster_statistic = :sum,     # Sum of t-values in cluster (default)
-    min_cluster_size = 0,         # No minimum cluster size
     min_num_neighbors = 3,       # Pre-filter: need 3+ neighbors
     tail = :both,                 # Two-tailed test
     show_progress = true          # Show progress bar
 )
+
+fig = eegfun.plot_analytic_ttest(result_cluster_parametric, prepared, channel = :PO8, plot_erp = true, plot_difference = false, show_significance = true, show_critical_t = true)
+display(fig)
 
 println(result_cluster_parametric)
 
@@ -262,14 +273,13 @@ Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster',
                           clusterThreshold='nonparametric_common'
 """)
 
-result_cluster_nonparametric_common = eegfun.cluster_permutation_test(
+@btime result_cluster_nonparametric_common = eegfun.cluster_permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
     threshold_method = :nonparametric_common,  # Non-parametric common threshold
     cluster_type = :spatiotemporal,
     cluster_statistic = :sum,
-    min_cluster_size = 0,
     min_num_neighbors = 3,
     tail = :both,
     show_progress = true
@@ -314,7 +324,6 @@ result_cluster_nonparametric_individual = eegfun.cluster_permutation_test(
     threshold_method = :nonparametric_common,  # Non-parametric individual thresholds
     cluster_type = :spatiotemporal,
     cluster_statistic = :sum,
-    min_cluster_size = 0,
     min_num_neighbors = 3,
     tail = :both,
     show_progress = true
@@ -485,7 +494,6 @@ KEY PARAMETERS TO CONSIDER:
 
 - n_permutations: More = more accurate (1000 is standard, 10000 for publication)
 - min_num_neighbors: Pre-filters noise (3 is common, 0 = no filtering)
-- min_cluster_size: Filters small clusters (0 = no filtering, higher = stricter)
 - cluster_statistic: :sum (default), :max, :size, or :wcm
 - cluster_type: :spatiotemporal (default), :spatial, or :temporal
 

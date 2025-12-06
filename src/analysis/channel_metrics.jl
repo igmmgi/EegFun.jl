@@ -432,7 +432,7 @@ function add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:
     numeric_columns = Base.filter(col -> eltype(df[!, col]) <: Number && !(col in exclude_columns), names(df))
     
     if isempty(numeric_columns)
-        @warn "No numeric columns found for z-score calculation"
+        @minimal_error "No numeric columns found for z-score calculation"
         return df
     end
     

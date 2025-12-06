@@ -32,13 +32,7 @@ Create a difference wave by subtracting ERP2 from ERP1.
 """
 function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2::Int, diff_cond::Int)
     # Validate that both ERPs have the same structure
-    if nrow(erp1.data) != nrow(erp2.data)
-        @minimal_error_throw("ERPs have different numbers of time points: $(nrow(erp1.data)) vs $(nrow(erp2.data))")
-    end
-
-    if erp1.sample_rate != erp2.sample_rate
-        @minimal_error_throw("ERPs have different sample rates: $(erp1.sample_rate) vs $(erp2.sample_rate)")
-    end
+    have_same_structure(erp1, erp2) || @minimal_error_throw("ERPs have inconsistent structure")
 
     # Get EEG channels (exclude metadata columns)
     metadata_cols = meta_labels(erp1)
@@ -192,6 +186,7 @@ function condition_difference(
     log_file = "condition_difference.log"
     setup_global_logging(log_file)
 
+    result = (success = 0, errors = 0)  # Default return value
     try
         @info "Batch condition differencing started at $(now())"
         @log_call "condition_difference"
@@ -214,28 +209,30 @@ function condition_difference(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir, participants)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
+            result = (success = 0, errors = 0)
+        else
+            @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+            @info "Condition pairs: $condition_pairs"
+
+            # Create processing function with captured parameters
+            process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
+
+            # Execute batch operation
+            results =
+                _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Creating differences")
+
+            result = _log_batch_summary(results, output_dir)
         end
-
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        @info "Condition pairs: $condition_pairs"
-
-        # Create processing function with captured parameters
-        process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
-
-        # Execute batch operation
-        results =
-            _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Creating differences")
-
-        _log_batch_summary(results, output_dir)
 
     finally
         _cleanup_logging(log_file, output_dir)
     end
+
+    return result
 end
 
 """

@@ -414,7 +414,7 @@ function channel_summary(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir, participants)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"

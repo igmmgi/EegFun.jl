@@ -177,7 +177,7 @@ function _plot_erp_with_measurements_impl(
     
     # Debug: check if line_refs was returned
     if line_refs === nothing
-        @warn "line_refs is nothing after plot_erp call. This means interactive=false or return_line_refs=false. Check plot_erp implementation."
+        @minimal_warning "line_refs is nothing after plot_erp call. This means interactive=false or return_line_refs=false. Check plot_erp implementation."
     end
     
     # Get selected channels from first dataset
@@ -207,7 +207,7 @@ function _plot_erp_with_measurements_impl(
             end
         end
     else
-        @warn "line_refs is nothing - markers won't be linked to plot lines. Ensure interactive=true."
+        @minimal_warning "line_refs is nothing - markers won't be linked to plot lines. Ensure interactive=true."
     end
     
     # Determine which channels are plotted on which axes

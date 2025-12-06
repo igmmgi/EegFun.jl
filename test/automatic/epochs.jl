@@ -662,7 +662,7 @@ end
 
             # Verify log contains expected information
             log_contents = read(log_file, String)
-            @test contains(log_contents, "Batch epoch averaging started")
+            @test contains(log_contents, "Batch epoch averaging started at")
             @test contains(log_contents, "average_epochs")
             @test contains(log_contents, "epochs_cleaned")
         end

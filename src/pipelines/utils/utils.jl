@@ -649,7 +649,7 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
     files = _find_batch_files(file_pattern, input_dir)
     
     if isempty(files)
-        @warn "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
         return DataFrame(electrode = Symbol[], n_participants = Int[])
     end
     
@@ -667,7 +667,7 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
                 end
             end
         catch e
-            @warn "Failed to load artifact info from $file_path: $e"
+            @minimal_warning "Failed to load artifact info from $file_path: $e"
         end
     end
     
@@ -791,7 +791,7 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
     files = _find_batch_files(file_pattern, input_dir)
     
     if isempty(files)
-        @warn "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
+        @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
         return DataFrame(
             file = String[],
             total_components = Int[],
@@ -821,7 +821,7 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
                 end
             end
         catch e
-            @warn "Failed to load artifact info from $file_path: $e"
+            @minimal_warning "Failed to load artifact info from $file_path: $e"
         end
     end
     

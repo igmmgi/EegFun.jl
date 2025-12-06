@@ -118,7 +118,7 @@ function plot_analytic_ttest(
     # Get data for this channel
     time_points = result.time_points
     t_values = result.t_matrix[channel_idx, :]
-    df_values = result.df_matrix[channel_idx, :]
+    df = result.df
     
     # Get p-values if available (only for AnalyticTTestResult)
     p_values = if isa(result, AnalyticTTestResult)
@@ -152,57 +152,60 @@ function plot_analytic_ttest(
     # When A < B, difference < 0 (negative)
     diff_wave = cond_A_avg .- cond_B_avg
     
+    # Pre-compute critical t-values if needed for significance bars or critical t lines
+    critical_t_pos = nothing
+    critical_t_neg = nothing
+    if (show_significance || show_critical_t) && plot_tvalues
+        if isa(result, AnalyticTTestResult)
+            # Compute critical t-values for this channel from df and alpha
+            n_time = length(time_points)
+            critical_t_pos = Vector{Float64}(undef, n_time)
+            critical_t_neg = Vector{Float64}(undef, n_time)
+            
+            alpha_per_tail = alpha / 2.0  # Two-tailed
+            
+            if !isnan(df) && !isinf(df) && df > 0
+                dist = TDist(df)
+                crit_t = quantile(dist, 1.0 - alpha_per_tail)
+                fill!(critical_t_pos, crit_t)
+                fill!(critical_t_neg, -crit_t)
+            else
+                fill!(critical_t_pos, NaN)
+                fill!(critical_t_neg, NaN)
+            end
+        else
+            # For ClusterPermutationResult, use the pre-computed critical_t_values
+            critical_t_channel = result.critical_t_values[channel_idx, :]
+            critical_t_pos = critical_t_channel
+            critical_t_neg = -critical_t_channel
+        end
+    end
+    
     # Create figure
     fig = Figure(size = (800, 600))
     
-    # Determine if we need dual axes (when plotting both amplitude and t-values)
-    needs_dual_axes = (plot_erp || plot_difference) && plot_tvalues
-    
-    if needs_dual_axes
-        # Create two axes: one for ERP/difference, one for t-values
-        # Get title suffix based on result type
-        title_suffix = if isa(result, AnalyticTTestResult)
-            "Analytic t-test ($(result.correction_method))"
-        else
-            "Cluster permutation test ($(result.threshold_method))"
-        end
-        
-        ax_erp = Axis(fig[1, 1],
-            xlabel = "Time (s)",
-            ylabel = "Amplitude (μV)",
-            title = "$channel - $title_suffix"
-        )
-        ax_t = Axis(fig[1, 1],
-            xlabel = "Time (s)",
-            ylabel = "t-statistic",
-            yaxisposition = :right
-        )
-        # Hide x-axis label on second axis
-        ax_t.xlabelvisible = false
-        # Link x-axes so they stay synchronized
-        linkxaxes!(ax_erp, ax_t)
-        ax = ax_erp  # Use ERP axis for condition averages and difference
+    # Always use single axis (no dual axes)
+    # Get title suffix based on result type
+    title_suffix = if isa(result, AnalyticTTestResult)
+        "Analytic t-test ($(result.correction_method))"
     else
-        # Single axis
-        if plot_tvalues
-            ylabel_str = "t-statistic"
-        else
-            ylabel_str = "Amplitude (μV)"
-        end
-        # Get title suffix based on result type
-        title_suffix = if isa(result, AnalyticTTestResult)
-            "Analytic t-test ($(result.correction_method))"
-        else
-            "Cluster permutation test ($(result.threshold_method))"
-        end
-        
-        ax = Axis(fig[1, 1],
-            xlabel = "Time (s)",
-            ylabel = ylabel_str,
-            title = "$channel - $title_suffix"
-        )
-        ax_t = nothing  # No second axis
+        "Cluster permutation test ($(result.threshold_method))"
     end
+    
+    # Determine y-axis label
+    if plot_tvalues && (plot_erp || plot_difference)
+        ylabel_str = "Amplitude (μV) / t-statistic"
+    elseif plot_tvalues
+        ylabel_str = "t-statistic"
+    else
+        ylabel_str = "Amplitude (μV)"
+    end
+    
+    ax = Axis(fig[1, 1],
+        xlabel = "Time (s)",
+        ylabel = ylabel_str,
+        title = "$channel - $title_suffix"
+    )
     
     # Plot condition averages (ERP waveforms)
     if plot_erp
@@ -256,22 +259,22 @@ function plot_analytic_ttest(
     
     # Plot t-values (if requested)
     if plot_tvalues
-        # Determine which axis to use for t-values
-        t_ax = needs_dual_axes ? ax_t : ax
-        
-        # Plot t-value line
-        lines!(t_ax, time_points, t_values,
+        # Plot t-value line on same axis
+        lines!(ax, time_points, t_values,
                color = :purple, linewidth = 2, linestyle = :solid, label = "t-statistic")
         
-        # Add zero line for t-values
-        hlines!(t_ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
-        if !needs_dual_axes
-            vlines!(t_ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
+        # Add zero line for t-values (only if not already added for difference wave)
+        if !plot_difference
+            hlines!(ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
+            vlines!(ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
         end
     end
     
     # Show significance regions as grey bars at y=0 (or bottom spine)
     if show_significance
+        # Use the result's significance masks, which already have the correction applied
+        # For AnalyticTTestResult, these masks reflect the correction method (no correction or Bonferroni)
+        # For ClusterPermutationResult, these masks reflect cluster-level significance
         sig_pos = result.significant_mask_positive[channel_idx, :]
         sig_neg = result.significant_mask_negative[channel_idx, :]
         sig_any = sig_pos .| sig_neg  # Any significance (positive or negative)
@@ -280,16 +283,15 @@ function plot_analytic_ttest(
             # Find continuous significant regions
             sig_regions = find_continuous_regions(sig_any, time_points)
             
-            # Determine which axis to use for significance bars
-            # Use the amplitude axis if plotting difference/ERP, otherwise use t-value axis
-            sig_ax = plot_difference || plot_erp ? ax : (needs_dual_axes ? ax_t : ax)
+            # Always use the single axis for significance bars
+            sig_ax = ax
             
             # Calculate bar position and height based on data range and user preference
             if sig_bar_position isa Float64
                 # User specified custom position
                 bar_y = sig_bar_position
                 # Calculate height based on data range
-                if plot_tvalues && !needs_dual_axes && !plot_difference && !plot_erp
+                if plot_tvalues && !plot_difference && !plot_erp
                     t_range = maximum(t_values[.!isnan.(t_values)]) - minimum(t_values[.!isnan.(t_values)])
                     bar_height = t_range * 0.02  # 2% of range
                 elseif plot_difference || plot_erp
@@ -306,7 +308,7 @@ function plot_analytic_ttest(
             elseif sig_bar_position == :zero
                 # Always place at y=0
                 bar_y = 0.0
-                if plot_tvalues && !needs_dual_axes && !plot_difference && !plot_erp
+                if plot_tvalues && !plot_difference && !plot_erp
                     t_range = maximum(t_values[.!isnan.(t_values)]) - minimum(t_values[.!isnan.(t_values)])
                     bar_height = t_range * 0.02
                 elseif plot_difference || plot_erp
@@ -322,7 +324,7 @@ function plot_analytic_ttest(
                 end
             elseif sig_bar_position == :bottom
                 # Always place at bottom of plot
-                if plot_tvalues && !needs_dual_axes && !plot_difference && !plot_erp
+                if plot_tvalues && !plot_difference && !plot_erp
                     t_min = minimum(t_values[.!isnan.(t_values)])
                     t_max = maximum(t_values[.!isnan.(t_values)])
                     t_range = t_max - t_min
@@ -345,7 +347,7 @@ function plot_analytic_ttest(
                 end
             else  # :auto (default)
                 # Automatic positioning: y=0 if visible, otherwise at bottom
-                if plot_tvalues && !needs_dual_axes && !plot_difference && !plot_erp
+                if plot_tvalues && !plot_difference && !plot_erp
                     # For t-value only plot, place bars at bottom of t-value range
                     t_min = minimum(t_values[.!isnan.(t_values)])
                     t_max = maximum(t_values[.!isnan.(t_values)])
@@ -395,42 +397,12 @@ function plot_analytic_ttest(
     end
     
     # Show critical t-values if requested (only relevant for t-value plots)
-    if show_critical_t && plot_tvalues
-        # Get critical t-values - different approach for each result type
-        if isa(result, AnalyticTTestResult)
-            # Compute critical t-values for this channel from df and alpha
-            critical_t_pos = similar(df_values)
-            critical_t_neg = similar(df_values)
-            
-            alpha_per_tail = alpha / 2.0  # Two-tailed
-            for i in eachindex(df_values)
-                df = df_values[i]
-                if !isnan(df) && !isinf(df) && df > 0
-                    dist = TDist(df)
-                    crit_t = quantile(dist, 1.0 - alpha_per_tail)
-                    # For two-tailed test: symmetric around zero
-                    critical_t_pos[i] = crit_t
-                    critical_t_neg[i] = -crit_t  # Should be exactly -crit_t for symmetry
-                else
-                    critical_t_pos[i] = NaN
-                    critical_t_neg[i] = NaN
-                end
-            end
-        else
-            # For ClusterPermutationResult, use the pre-computed critical_t_values
-            critical_t_channel = result.critical_t_values[channel_idx, :]
-            critical_t_pos = critical_t_channel
-            critical_t_neg = -critical_t_channel  # Should be symmetric
-        end
-        
-        # Determine which axis to use for critical t-values
-        t_ax = needs_dual_axes ? ax_t : ax
-        
-        # Plot critical t boundaries on t-value scale (symmetric around zero)
+    if show_critical_t && plot_tvalues && critical_t_pos !== nothing
+        # Plot critical t boundaries on same axis (symmetric around zero)
         # These are the actual critical t-values, not scaled to amplitude
-        lines!(t_ax, time_points, critical_t_pos, 
+        lines!(ax, time_points, critical_t_pos, 
                color = :grey, linewidth = 2, linestyle = :dashdot, label = "Critical t+")
-        lines!(t_ax, time_points, critical_t_neg, 
+        lines!(ax, time_points, critical_t_neg, 
                color = :grey, linewidth = 2, linestyle = :dashdot, label = "Critical t-")
     end
     

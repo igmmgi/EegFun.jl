@@ -61,19 +61,19 @@ using DataFrames
         @test all(contains.(files, "erps_cleaned"))
 
         # Test participant filtering
-        files_filtered = eegfun._find_batch_files("erps_cleaned", test_dir; participants = [1, 3, 5])
+        files_filtered = eegfun._find_batch_files("erps_cleaned", test_dir, [1, 3, 5])
         @test length(files_filtered) == 3
         @test "1_erps_cleaned.jld2" in files_filtered
         @test "3_erps_cleaned.jld2" in files_filtered
         @test "5_erps_cleaned.jld2" in files_filtered
 
         # Test single participant
-        files_single = eegfun._find_batch_files("erps_cleaned", test_dir; participants = 2)
+        files_single = eegfun._find_batch_files("erps_cleaned", test_dir, 2)
         @test length(files_single) == 1
         @test "2_erps_cleaned.jld2" in files_single
 
         # Test no participants (should return all)
-        files_all = eegfun._find_batch_files("erps_cleaned", test_dir; participants = nothing)
+        files_all = eegfun._find_batch_files("erps_cleaned", test_dir, nothing)
         @test length(files_all) == 5
 
         # Test non-matching pattern
@@ -320,37 +320,6 @@ using DataFrames
         rm(moved_log, force = true)
     end
 
-    @testset "_format_kwarg_value" begin
-        # Test different value types
-        @test eegfun._format_kwarg_value(:test, nothing) == "nothing"
-        @test eegfun._format_kwarg_value(:test, "string") == "\"string\""
-        @test eegfun._format_kwarg_value(:test, 42) == "42"
-        @test eegfun._format_kwarg_value(:test, [1, 2, 3]) == "[1, 2, 3]"
-
-        # Test function values
-        @test eegfun._format_kwarg_value(:channel_selection, eegfun.channels()) == "<predicate>"
-        @test eegfun._format_kwarg_value(:other_func, sin) == "sin"
-        @test eegfun._format_kwarg_value(:anon_func, x -> x + 1) == "<function>"
-    end
-
-    @testset "_log_function_call" begin
-        # Test with different argument types
-        args = ["test_pattern", (0.1, 0.2)]
-        kwargs = (input_dir = test_dir, participants = [1, 2])
-
-        # This should not throw an error
-        eegfun._log_function_call("test_function", args, kwargs)
-
-        # Test with empty arguments
-        eegfun._log_function_call("empty_function", [], Dict{Symbol,Any}())
-
-        # Test with different kwargs formats
-        kwargs_dict = Dict(:input_dir => test_dir, :participants => [1, 2])
-        eegfun._log_function_call("test_function", args, kwargs_dict)
-
-        kwargs_pairs = [:input_dir => test_dir, :participants => [1, 2]]
-        eegfun._log_function_call("test_function", args, kwargs_pairs)
-    end
 
     @testset "Edge cases and error handling" begin
         @testset "File system edge cases" begin

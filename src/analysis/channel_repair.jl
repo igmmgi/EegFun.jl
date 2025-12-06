@@ -243,7 +243,7 @@ function _repair_channels_spherical!(
     for (i, ch) in enumerate(channels)
         idx = findfirst(x -> x == ch, layout.label)
         if isnothing(idx)
-            @warn "Channel $ch not found in layout, using (0,0,0)"
+            @minimal_warning "Channel $ch not found in layout, using (0,0,0)"
             continue
         end
         coords[i, :] = [layout.x3[idx], layout.y3[idx], layout.z3[idx]]

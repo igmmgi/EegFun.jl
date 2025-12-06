@@ -241,7 +241,9 @@ end
 
             result = eegfun.rereference("nonexistent_pattern", input_dir = test_dir, output_dir = output_dir)
 
-            @test result === nothing
+            @test result isa NamedTuple
+            @test result.success == 0
+            @test result.errors == 0
         end
 
         @testset "Files with no recognized data variable" begin
@@ -267,20 +269,27 @@ end
 
     @testset "Edge cases" begin
         @testset "Empty data files" begin
+            # Use a separate directory to avoid interference from other tests
+            empty_test_dir = mktempdir()
+            
             # Create file with empty data
-            empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
+            empty_file = joinpath(empty_test_dir, "empty_erps_cleaned.jld2")
             jldsave(empty_file; data = eegfun.ErpData[])
+            
+            # Create the unrecognized file
+            unrecognized_file = joinpath(empty_test_dir, "999_unrecognized_erps_cleaned.jld2")
+            jldsave(unrecognized_file; other_data = "test")
 
-            output_dir = joinpath(test_dir, "rereferenced_empty")
+            output_dir = joinpath(empty_test_dir, "rereferenced_empty")
 
             result = eegfun.rereference(
                 "erps_cleaned",
-                input_dir = test_dir,
-                participants = 999,  # Non-existent participant
+                input_dir = empty_test_dir,
+                participants = nothing,  # Process all files to get both empty and unrecognized
                 output_dir = output_dir,
             )
 
-            # Should return BatchResult since both empty_erps_cleaned.jld2 and 999_unrecognized_erps_cleaned.jld2 have no participant number
+            # Should return NamedTuple with both empty file (success) and unrecognized file (error)
             @test result !== nothing
             @test result.success == 1  # Only the empty file gets processed successfully
             @test result.errors == 1   # One error for the unrecognized file
@@ -356,7 +365,9 @@ end
             )
 
             @test isdir(custom_dir)
-            @test length(readdir(custom_dir)) == 5
+            # Should have 3 output files (participants 1-3) + 1 log file = 4 files
+            # (The 999_unrecognized file fails processing so no output is created)
+            @test length(readdir(custom_dir)) == 4
         end
 
         @testset "Auto-generated output directory" begin
@@ -385,7 +396,8 @@ end
         # Verify log content contains expected information
         log_content = read(log_file, String)
         @test occursin("Batch rereferencing started", log_content)
-        @test occursin("Found 5 JLD2 files", log_content)
+        # Should find 4 files: 3 participant files + 1 unrecognized file (which fails)
+        @test occursin("Found 4 JLD2 files", log_content)
         @test occursin("Reference settings: avg", log_content)
         @test occursin("Batch operation complete", log_content)
     end
@@ -437,7 +449,9 @@ end
                 @test length(readdir(output_dir)) > 0
             else
                 # These patterns shouldn't match any files
-                @test result === nothing
+                @test result isa NamedTuple
+                @test result.success == 0
+                @test result.errors == 0
             end
         end
     end

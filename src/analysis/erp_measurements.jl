@@ -655,7 +655,7 @@ function erp_measurements(
         @info "Analysis type: $analysis_type"
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants = participant_selection)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing

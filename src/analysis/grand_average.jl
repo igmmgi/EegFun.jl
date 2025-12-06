@@ -31,18 +31,9 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     end
 
     # Validate that all ERPs have the same structure
+    have_same_structure(erps) || @minimal_error_throw("ERPs have inconsistent structure")
+    
     first_erp = erps[1]
-    sample_rate = first_erp.sample_rate
-    n_timepoints = nrow(first_erp.data)
-
-    for (i, erp) in enumerate(erps[2:end])
-        if erp.sample_rate != sample_rate
-            @minimal_error_throw("ERP $i has different sample rate: $(erp.sample_rate) vs $(sample_rate)")
-        end
-        if nrow(erp.data) != n_timepoints
-            @minimal_error_throw("ERP $i has different number of time points: $(nrow(erp.data)) vs $(n_timepoints)")
-        end
-    end
 
     # Get metadata columns and EEG channels
     metadata_cols = meta_labels(first_erp)
@@ -216,7 +207,7 @@ function grand_average(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir, participants)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
