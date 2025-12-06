@@ -40,9 +40,9 @@ function find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
 end
 
 """
-    plot_analytic_ttest(result::Union{AnalyticTTestResult, ClusterPermutationResult}, 
-                        prepared::StatisticalTestData;
+    plot_analytic_ttest(result::Union{AnalyticTTestResult, ClusterPermutationResult};
                         channel::Symbol,
+                        prepared::Union{StatisticalTestData, Nothing} = nothing,
                         plot_erp::Bool = true,
                         plot_difference::Bool = false,
                         plot_tvalues::Bool = false,
@@ -56,8 +56,8 @@ Works with both `AnalyticTTestResult` (from `analytic_ttest`) and `ClusterPermut
 
 # Arguments
 - `result::Union{AnalyticTTestResult, ClusterPermutationResult}`: Results from `analytic_ttest` or `cluster_permutation_test`
-- `prepared::StatisticalTestData`: Prepared data used for the test
 - `channel::Symbol`: Channel/electrode to plot
+- `prepared::Union{StatisticalTestData, Nothing}`: Prepared data (optional, only needed for `ClusterPermutationResult` when plotting ERPs)
 - `plot_erp::Bool`: Whether to plot ERP waveforms (condition averages) (default: true)
 - `plot_difference::Bool`: Whether to plot difference wave (A-B) (default: false)
 - `plot_tvalues::Bool`: Whether to plot t-statistics (default: false)
@@ -76,21 +76,21 @@ Works with both `AnalyticTTestResult` (from `analytic_ttest`) and `ClusterPermut
 
 # Examples
 ```julia
-# With analytic t-test results
+# With analytic t-test results (no prepared needed)
 result_analytic = analytic_ttest(prepared, correction_method=:no)
-fig = plot_analytic_ttest(result_analytic, prepared, channel=:PO7, 
+fig = plot_analytic_ttest(result_analytic, channel=:PO7, 
                          plot_erp=true, plot_difference=true, show_significance=true)
 
-# With cluster permutation test results
+# With cluster permutation test results (prepared needed for ERP plotting)
 result_cluster = cluster_permutation_test(prepared, n_permutations=1000)
-fig = plot_analytic_ttest(result_cluster, prepared, channel=:PO7, 
+fig = plot_analytic_ttest(result_cluster, channel=:PO7, prepared=prepared,
                          plot_erp=true, plot_difference=true, show_significance=true, show_critical_t=true)
 ```
 """
 function plot_analytic_ttest(
-    result::Union{AnalyticTTestResult, ClusterPermutationResult},
-    prepared::StatisticalTestData;
+    result::Union{AnalyticTTestResult, ClusterPermutationResult};
     channel::Symbol,
+    prepared::Union{StatisticalTestData, Nothing} = nothing,
     plot_erp::Bool = true,
     plot_difference::Bool = false,
     plot_tvalues::Bool = false,
@@ -117,12 +117,22 @@ function plot_analytic_ttest(
     
     # Get data for this channel
     time_points = result.time_points
-    t_values = result.t_matrix[channel_idx, :]
-    df = result.df
+    t_values = if isa(result, AnalyticTTestResult)
+        result.stat_matrix.t[channel_idx, :]
+    else
+        result.t_matrix[channel_idx, :]
+    end
+    df = if isa(result, AnalyticTTestResult)
+        result.test_info.df
+    else
+        # For ClusterPermutationResult, we don't have df in test_info
+        # This should not happen in practice, but provide a fallback
+        error("ClusterPermutationResult does not have df in test_info")
+    end
     
     # Get p-values if available (only for AnalyticTTestResult)
     p_values = if isa(result, AnalyticTTestResult)
-        result.p_matrix[channel_idx, :]
+        result.stat_matrix.p[channel_idx, :]
     else
         # For ClusterPermutationResult, we don't have p_matrix, but we don't need it for plotting
         similar(t_values, Float64)  # Dummy array, won't be used
@@ -130,21 +140,39 @@ function plot_analytic_ttest(
     
     # Get alpha and tail for critical t-value computation (if needed)
     alpha = if isa(result, AnalyticTTestResult)
-        result.alpha
+        result.test_info.alpha
     else
         # For ClusterPermutationResult, use the threshold (which is typically alpha)
         result.threshold
     end
     
     tail = if isa(result, AnalyticTTestResult)
-        result.tail
+        result.test_info.tail
     else
         :both  # Cluster permutation tests are typically two-tailed
     end
     
     # Get condition averages for this channel
-    cond_A_avg = vec(mean(prepared.data1[:, channel_idx, :], dims=1))
-    cond_B_avg = vec(mean(prepared.data2[:, channel_idx, :], dims=1))
+    if isa(result, AnalyticTTestResult)
+        # Use grand averages from result.data
+        cond_A_erp = result.data[1]
+        cond_B_erp = result.data[2]
+        channel_col = findfirst(==(channel), channel_labels(cond_A_erp))
+        channel_col === nothing && error("Channel $channel not found in result data")
+        cond_A_avg = cond_A_erp.data[!, channel_col]
+        cond_B_avg = cond_B_erp.data[!, channel_col]
+        # Use time from ErpData for ERP plotting (full time range)
+        erp_time_points = cond_A_erp.data[!, :time]
+    else
+        # For ClusterPermutationResult, need prepared data
+        if prepared === nothing
+            error("prepared::StatisticalTestData is required for ClusterPermutationResult when plotting ERPs")
+        end
+        cond_A_avg = vec(mean(prepared.analysis.data[1][:, channel_idx, :], dims=1))
+        cond_B_avg = vec(mean(prepared.analysis.data[2][:, channel_idx, :], dims=1))
+        # Use analysis time points for ClusterPermutationResult
+        erp_time_points = time_points
+    end
     
     # Calculate difference: A - B
     # When A = B, difference = 0
@@ -187,7 +215,7 @@ function plot_analytic_ttest(
     # Always use single axis (no dual axes)
     # Get title suffix based on result type
     title_suffix = if isa(result, AnalyticTTestResult)
-        "Analytic t-test ($(result.correction_method))"
+        "Analytic t-test ($(result.test_info.correction_method))"
     else
         "Cluster permutation test ($(result.threshold_method))"
     end
@@ -209,10 +237,20 @@ function plot_analytic_ttest(
     
     # Plot condition averages (ERP waveforms)
     if plot_erp
-        lines!(ax, time_points, cond_A_avg, 
-               color = :blue, linewidth = 2, label = prepared.condition1)
-        lines!(ax, time_points, cond_B_avg, 
-               color = :red, linewidth = 2, label = prepared.condition2)
+        cond_A_name = if isa(result, AnalyticTTestResult)
+            result.data[1].condition_name
+        else
+            prepared === nothing ? "Condition 1" : prepared.data[1].condition_name
+        end
+        cond_B_name = if isa(result, AnalyticTTestResult)
+            result.data[2].condition_name
+        else
+            prepared === nothing ? "Condition 2" : prepared.data[2].condition_name
+        end
+        lines!(ax, erp_time_points, cond_A_avg, 
+               color = :blue, linewidth = 2, label = cond_A_name)
+        lines!(ax, erp_time_points, cond_B_avg, 
+               color = :red, linewidth = 2, label = cond_B_name)
     end
     
     # Initialize diff_offset for use in significance markers
@@ -237,7 +275,7 @@ function plot_analytic_ttest(
             hlines!(ax, [diff_offset], color = (:gray, 0.7), linewidth = 1, linestyle = :dot)
             
             # Add text annotation to clarify: this line represents zero difference
-            text!(ax, time_points[end] * 0.98, diff_offset, 
+            text!(ax, erp_time_points[end] * 0.98, diff_offset, 
                   text = "0 μV (A=B)", 
                   align = (:right, :center), 
                   color = :gray, 
@@ -249,7 +287,7 @@ function plot_analytic_ttest(
             diff_label = "Difference (A-B)"
         end
         
-        lines!(ax, time_points, diff_wave_plot, 
+        lines!(ax, erp_time_points, diff_wave_plot, 
                color = :black, linewidth = 2, linestyle = :dash, label = diff_label)
         
         # Add zero lines
@@ -275,8 +313,16 @@ function plot_analytic_ttest(
         # Use the result's significance masks, which already have the correction applied
         # For AnalyticTTestResult, these masks reflect the correction method (no correction or Bonferroni)
         # For ClusterPermutationResult, these masks reflect cluster-level significance
-        sig_pos = result.significant_mask_positive[channel_idx, :]
-        sig_neg = result.significant_mask_negative[channel_idx, :]
+        sig_pos = if isa(result, AnalyticTTestResult)
+            result.masks.positive[channel_idx, :]
+        else
+            result.significant_mask_positive[channel_idx, :]
+        end
+        sig_neg = if isa(result, AnalyticTTestResult)
+            result.masks.negative[channel_idx, :]
+        else
+            result.significant_mask_negative[channel_idx, :]
+        end
         sig_any = sig_pos .| sig_neg  # Any significance (positive or negative)
         
         if any(sig_any)

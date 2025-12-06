@@ -68,20 +68,22 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     return ErpData("grand_avg", cond_num, grand_avg_cond_name, grand_avg_data, first_erp.layout, first_erp.sample_rate, first_erp.analysis_info, total_epochs)
 end
 
+grand_average(erps::Vector{ErpData}, cond_num::Int) = _create_grand_average(erps, cond_num)
+
 """
 Load and group ERP data by condition from multiple files.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs.
 """
-function _load_and_group_erps(files::Vector{String}, input_dir::String, conditions)
-    all_erps_by_condition = Dict{Int,Vector{ErpData}}()
+function _load_and_group_erps(files::Vector{String}, input_dir::String, conditions::Vector{Int})
 
+    files = sort(files, by=natural_sort_key)
+    all_erps_by_condition = OrderedDict{Int,Vector{ErpData}}()
     for (i, file) in enumerate(files)
         input_path = joinpath(input_dir, file)
         @info "Loading: $file ($i/$(length(files)))"
 
         # Load ERP data (using load_data which finds by type)
         erps_data = load_data(input_path)
-        
         if isnothing(erps_data)
             @minimal_warning "No data variables found in $file. Skipping."
             continue
@@ -93,22 +95,23 @@ function _load_and_group_erps(files::Vector{String}, input_dir::String, conditio
             continue
         end
 
-        # Select conditions
-        erps_data = _condition_select(erps_data, conditions)
-
-        # Group ERPs by condition
+        # Group ERPs by condition number
         for erp in erps_data
-            # For ErpData, condition is stored in the struct
             cond_num = erp.condition
-            if !haskey(all_erps_by_condition, cond_num)
-                all_erps_by_condition[cond_num] = ErpData[]
-            end
-            push!(all_erps_by_condition[cond_num], erp)
+            push!(get!(all_erps_by_condition, cond_num, ErpData[]), erp)
         end
     end
 
-    return all_erps_by_condition
+    conditions === nothing && return all_erps_by_condition
+
+    # Filter by condition numbers if specified
+    return OrderedDict(cond_num => all_erps_by_condition[cond_num] 
+                          for cond_num in conditions 
+                          if haskey(all_erps_by_condition, cond_num))
+
 end
+
+_load_and_group_erps(files::Vector{String}, input_dir::String, conditions::Int) = _load_and_group_erps(files, input_dir, [conditions])
 
 """
 Create grand averages for all conditions in the grouped data.
