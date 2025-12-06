@@ -6,7 +6,7 @@ and other statistical analyses. Functions are provided to compute t-values and/o
 p-values for paired and independent sample t-tests.
 """
 
-# Use NamedTuple for result type as seems lighter than full struct
+# this seems a bit lighter than a full struct
 const TTestResult = NamedTuple{(:df, :t, :p), Tuple{Float64, Float64, Float64}}
 
 # Format t-value and p-value for display
@@ -34,25 +34,6 @@ Compute paired t-test with degrees of freedom, t-statistic, and p-value.
 # Returns
 - `TTestResult`: Struct containing `df` (degrees of freedom), `t` (t-statistic), and `p` (p-value).
   Returns `NaN` for p-value if t-value is `NaN` or `Inf`.
-
-# Examples
-```julia
-using eegfun
-
-# Two-tailed test
-condition_A = [1.0, 2.0, 3.0, 4.0, 5.0]
-condition_B = [1.5, 2.5, 3.5, 4.5, 5.5]
-result = paired_ttest(condition_A, condition_B)
-# Prints: t(4) = -0.7071, p = 0.5129
-
-# Access individual values
-result.df  # degrees of freedom
-result.t   # t-statistic
-result.p   # p-value
-
-# One-tailed p-value (testing if A < B)
-result = paired_ttest(condition_A, condition_B, tail = :left)
-```
 """
 function paired_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = :both)
 
@@ -115,33 +96,12 @@ Assumes equal variances (standard independent t-test).
 # Returns
 - `TTestResult`: Struct containing `df` (degrees of freedom), `t` (t-statistic), and `p` (p-value).
   Returns `NaN` for p-value if t-value is `NaN` or `Inf`.
-
-# Examples
-```julia
-using eegfun
-
-# Two-tailed test
-group_A = [1.0, 2.0, 3.0, 4.0, 5.0]
-group_B = [6.0, 7.0, 8.0, 9.0, 10.0]
-result = independent_ttest(group_A, group_B)
-# Prints: t(8) = -5.0000, p = 0.0011
-
-# Access individual values
-result.df  # degrees of freedom
-result.t   # t-statistic
-result.p   # p-value
-
-# One-tailed p-value (testing if A < B)
-result = independent_ttest(group_A, group_B, tail = :left)
-```
 """
 function independent_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = :both)
 
     # Validate input lengths
     n_A, n_B = length(x), length(y)
-    if n_A < 2 || n_B < 2
-        error("Independent t-test requires at least 2 observations per group")
-    end
+    n_A < 2 || n_B < 2 && error("Independent t-test requires at least 2 observations per group")
     
     df = n_A + n_B - 2  # degrees of freedom for independent t-test
     
@@ -183,9 +143,25 @@ function independent_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = 
 end
 
 
-# ===================
-# DATA PREPARATION
-# ===================
+# ======================================
+# DATA PREPARATION FOR STATISTICAL TESTS
+# ======================================
+
+"""
+    AnalysisData
+
+Core data structure for statistical test computations.
+
+# Fields
+- `design::Symbol`: Design type - `:paired` or `:independent`
+- `data::Vector{Array{Float64, 3}}`: Data for conditions 1 and 2 [condition1, condition2], each [participants × electrodes × time]
+- `time_points::Vector{Float64}`: Time points in seconds for the analysis window
+"""
+struct AnalysisData
+    design::Symbol                   # :paired vs. :independent
+    data::Vector{Array{Float64, 3}}  # [condition1, condition2] - each [participants × electrodes × time]
+    time_points::Vector{Float64}     # analysis window
+end
 
 """
     StatisticalTestData
@@ -193,45 +169,37 @@ end
 Stores prepared data for statistical tests (both permutation and analytic tests).
 
 # Fields
-- `design::Symbol`: Design type - `:paired` or `:independent`
-- `data_A::Array{Float64, 3}`: Data for condition/group A [participants × electrodes × time]
-- `data_B::Array{Float64, 3}`: Data for condition/group B [participants × electrodes × time]
-- `participants_A::Vector{Int}`: Participant IDs for condition/group A
-- `participants_B::Vector{Int}`: Participant IDs for condition/group B
-- `electrodes::Vector{Symbol}`: Electrode labels
-- `time_points::Vector{Float64}`: Time points in seconds
-- `condition_A::String`: Condition/group A name
-- `condition_B::String`: Condition/group B name
-- `layout::Layout`: Layout object for spatial clustering
+- `data::Vector{ErpData}`: Grand average ERPs for conditions 1 and 2 (for visualization/storage)
+- `analysis::AnalysisData`: Core analysis data (design, data arrays, time points)
 """
 struct StatisticalTestData
-    design::Symbol
-    data1::Array{Float64, 3}  # [participants × electrodes × time]
-    data2::Array{Float64, 3}  # [participants × electrodes × time]
-    ids1::Vector{Int}
-    ids2::Vector{Int}
-    electrodes::Vector{Symbol}
-    time_points::Vector{Float64}
-    condition1::String
-    condition2::String
-    layout::Layout
+    data::Vector{ErpData}
+    analysis::AnalysisData
 end
 
 function Base.show(io::IO, data::StatisticalTestData)
-    n_participants1 = length(data.ids1)
-    n_participants2 = length(data.ids2)
-    n_electrodes = length(data.electrodes)
-    n_time_points = length(data.time_points)
-    time_range = isempty(data.time_points) ? "N/A" : "$(first(data.time_points)) to $(last(data.time_points)) s"
+    # Helper to format time range
+    time_range_str(times) = isempty(times) ? "N/A" : "$(first(times)) to $(last(times)) s"
     
+    # Get dimensions
+    n_participants1 = size(data.analysis.data[1], 1)
+    n_participants2 = size(data.analysis.data[2], 1)
+    
+    # Get summary info from grand averages
+    n_electrodes1 = length(channel_labels(data.data[1]))
+    n_electrodes2 = length(channel_labels(data.data[2]))
+    time_range1_str = time_range_str(data.data[1].data[!, :time])
+    time_range2_str = time_range_str(data.data[2].data[!, :time])
+    analysis_time_range = time_range_str(data.analysis.time_points)
+
     println(io, "StatisticalTestData")
-    println(io, "├─ Design: $(data.design)")
-    println(io, "├─ Condition 1 ($(data.condition1)): $n_participants1 participants")
-    println(io, "├─ Condition 2 ($(data.condition2)): $n_participants2 participants")
-    println(io, "├─ Electrodes: $n_electrodes")
-    println(io, "├─ Time points: $n_time_points ($time_range)")
-    println(io, "├─ Data dimensions: $(size(data.data1)) (participants × electrodes × time)")
-    print(io, "└─ Layout: $(n_electrodes) channels")
+    println(io, "├─ Design: $(data.analysis.design)")
+    println(io, "├─ Condition 1 ($(data.data[1].condition_name)): $n_participants1 participants")
+    println(io, "│  └─ $(n_electrodes1) channels, $time_range1_str, $(data.data[1].sample_rate) Hz")
+    println(io, "├─ Condition 2 ($(data.data[2].condition_name)): $n_participants2 participants")
+    println(io, "│  └─ $(n_electrodes2) channels, $time_range2_str, $(data.data[2].sample_rate) Hz")
+    println(io, "├─ Analysis time points: $analysis_time_range")
+    println(io, "└─ Analysis dimensions: $(size(data.analysis.data[1])) (participants × electrodes × time)")
 end
 
 """
@@ -246,6 +214,7 @@ end
                              input_dir::String = pwd(),
                              participant_selection::Function = participants(),
                              channel_selection::Function = channels(),
+                             analysis_window::Function = samples(),
                              sample_selection::Function = samples(),
                              baseline_window::Function = samples())
 
@@ -270,40 +239,12 @@ Validates the design and ensures data consistency across conditions.
 - `input_dir::String`: Directory containing JLD2 files (default: current directory)
 - `participant_selection::Function`: Function to filter participants (default: all)
 - `channel_selection::Function`: Function to filter channels (default: all)
-- `sample_selection::Function`: Function to select time points (default: all samples). Use `samples((start, end))` for time windows.
+- `analysis_window::Function`: Analysis window sample selection predicate (default: samples() - all samples). Use `samples((start, end))` for time windows. If provided, takes precedence over `sample_selection`.
+- `sample_selection::Function`: Function to select time points (default: all samples). Use `samples((start, end))` for time windows. Used if `analysis_window` is not provided (defaults to `samples()`).
 - `baseline_window::Function`: Baseline window sample selection predicate (default: samples() - all samples, baseline skipped). Use `samples((start, end))` for baseline window.
 
 # Returns
 - `StatisticalTestData`: Prepared data structure ready for statistical testing
-
-# Examples
-```julia
-using eegfun
-
-# Direct data version - work with already-loaded ErpData
-erps_condition1 = load_erps("condition1")  # Vector of ErpData
-erps_condition2 = load_erps("condition2")  # Vector of ErpData
-data = prepare_statistical_test_data(erps_condition1, erps_condition2, design = :paired)
-
-# File-based version - load from files
-data = prepare_statistical_test_data(
-    "erps_cleaned",
-    condition1 = 1,
-    condition2 = 2,
-    design = :paired,
-    input_dir = "data/erps"
-)
-
-# With time window selection and baseline correction
-data = prepare_statistical_test_data(
-    "erps_cleaned",
-    condition1 = 1,
-    condition2 = 2;
-    design = :paired,
-    sample_selection = samples((0.0, 1.0)),  # Analysis window: 0 to 1 second
-    baseline_window = samples((-0.2, 0.0))   # Baseline: -0.2 to 0 seconds
-)
-```
 """
 
 # Direct data version
@@ -311,7 +252,9 @@ function prepare_statistical_test_data(condition1::Vector{ErpData}, condition2::
                                    design::Symbol = :paired,
                                    channel_selection::Function = channels(),
                                    sample_selection::Function = samples(),
-                                   baseline_window::Function = samples())
+                                   baseline_window::Function = samples(),
+                                   analysis_window::Function = samples())
+
     # Validate design
     design in (:paired, :independent) || error("design must be :paired or :independent, got :$design")
     
@@ -322,242 +265,115 @@ function prepare_statistical_test_data(condition1::Vector{ErpData}, condition2::
     # Validate design
     if design == :paired # Paired design: same participants in both conditions, in the same order
         if participants1 != participants2
-            error("Paired design requires same participants in both conditions " *
-                  "Condition 1: $participants1 vs. Condition 2: $participants2")
+            @minimal_error "Paired design requires same participants in both conditions"
         end
-    else # Independent design: different participants (or allow overlap)
+    elseif design == :independent # Independent design: different participants (or allow overlap)
         if length(participants1) < 2 || length(participants2) < 2
-            error("Independent design requires at least 2 participants per group. " *
-                  "Got $(length(participants1)) and $(length(participants2))")
+            @minimal_error "Independent design requires at least 2 participants per group"
         end
+    else
+        @minimal_error("Invalid design: $design")
     end
     
     # Validate all ERPs have same structure within each condition
     have_same_structure(condition1) || error("Condition 1: ERPs have inconsistent structure")
     have_same_structure(condition2) || error("Condition 2: ERPs have inconsistent structure")
-    
-    # Validate structures match between conditions
     have_same_structure(condition1[1], condition2[1]) || error("Condition 1 vs. 2: ERPs have inconsistent structure")
 
-    # Apply baseline correction if baseline_window is specified (not default all samples)
-    # Make copies of ERPs to avoid modifying originals
-    condition1 = [copy(data) for data in condition1]
-    condition2 = [copy(data) for data in condition2]
+    condition1 = subset(
+        condition1;
+        channel_selection = channel_selection,  
+        sample_selection = sample_selection,
+    )
+    isempty(condition1) && @minimal_error_throw "No data matched the selection criteria!"
+
+    condition2 = subset(
+        condition2;
+        channel_selection = channel_selection,  
+        sample_selection = sample_selection,
+    )
+    isempty(condition2) && @minimal_error_throw "No data matched the selection criteria!"
    
-    # Apply baseline correction using predicate (baseline! handles conversion and skipping)
+    # baseline 
     baseline!.(condition1, Ref(baseline_window))
     baseline!.(condition2, Ref(baseline_window))
 
-    # Get all electrodes from first ERP (use copied version after baseline)
-    first_erp_1_final = condition1[1]
-    first_erp_2_final = condition2[1]
-    all_electrodes_1 = channel_labels(first_erp_1_final)
-    all_electrodes_2 = channel_labels(first_erp_2_final)
-    
-    # Check electrodes match
-    if all_electrodes_1 != all_electrodes_2
-        error("Electrodes must match across conditions. " *
-              "Condition 1: $all_electrodes_1, Condition 2: $all_electrodes_2")
-    end
-    
-    # Apply channel selection
-    channel_mask = channel_selection(all_electrodes_1)
-    electrodes = all_electrodes_1[channel_mask]
-    
-    if isempty(electrodes)
-        error("No electrodes selected after applying channel_selection")
-    end
-    
-    # Apply sample selection to get time points
-    # Sample selection predicate operates on DataFrame and returns boolean vector
-    sample_mask_1 = sample_selection(first_erp_1_final.data)
-    sample_mask_2 = sample_selection(first_erp_2_final.data)
-    
-    # Get selected time points
-    time_points_1 = first_erp_1_final.data[sample_mask_1, :time]
-    time_points_2 = first_erp_2_final.data[sample_mask_2, :time]
-    
-    # Check time points match (or align them)
-    if time_points_1 != time_points_2
-        @minimal_warning "Time points differ between conditions. Using intersection."
-        # Use intersection of time points
-        common_times = intersect(time_points_1, time_points_2)
-        if isempty(common_times)
-            error("No common time points between conditions after sample selection")
-        end
-        time_points = sort(common_times)
-    else
-        time_points = time_points_1
-    end
-    
-    if isempty(time_points)
-        error("No time points selected after applying sample_selection")
-    end
-    
-    # Get layout (use from first ERP - layout is not modified by baseline)
-    layout = first_erp_1_final.layout
-    
-    # Extract data arrays: [participants × electrodes × time]
-    n_participants_1 = length(condition1)
-    n_participants_2 = length(condition2)
+    # create grand averages for ease of use in plotting results
+    condition1_avg = grand_average(condition1, 1)
+    condition2_avg = grand_average(condition2, 2)
+
+    # create second subset with analysis_window for statistical tests
+    condition1 = subset(
+        condition1;
+        channel_selection = channel_selection,
+        sample_selection = analysis_window,
+    )
+    isempty(condition1) && @minimal_error_throw "No data matched the analysis window criteria!"
+
+    condition2 = subset(
+        condition2;
+        channel_selection = channel_selection,
+        sample_selection = analysis_window,
+    )
+    isempty(condition2) && @minimal_error_throw "No data matched the analysis window criteria!"
+
+    # Get dimensions and metadata from analysis subset
+    electrodes = channel_labels(condition1[1])
     n_electrodes = length(electrodes)
+    time_points = condition1[1].data[!, :time]
     n_time = length(time_points)
     
-    data_1 = Array{Float64, 3}(undef, n_participants_1, n_electrodes, n_time)
-    data_2 = Array{Float64, 3}(undef, n_participants_2, n_electrodes, n_time)
-    
-    # Fill data arrays
-    for (p_idx, erp) in enumerate(condition1)
-        # Apply sample selection to this ERP
-        sample_mask = sample_selection(erp.data)
-        erp_times = erp.data[sample_mask, :time]
-        
-        # Get time indices for selected time points
-        time_indices = [findfirst(==(t), erp_times) for t in time_points]
-        
-        # Extract electrode data from selected samples
-        for (e_idx, electrode) in enumerate(electrodes)
-            selected_data = erp.data[sample_mask, electrode]
-            for (t_idx, time_idx) in enumerate(time_indices)
-                if time_idx !== nothing
-                    data_1[p_idx, e_idx, t_idx] = selected_data[time_idx]
-                else
-                    data_1[p_idx, e_idx, t_idx] = NaN
-                end
-            end
-        end
-    end
-    
-    for (p_idx, erp) in enumerate(condition2)
-        # Apply sample selection to this ERP
-        sample_mask = sample_selection(erp.data)
-        erp_times = erp.data[sample_mask, :time]
-        
-        # Get time indices for selected time points
-        time_indices = [findfirst(==(t), erp_times) for t in time_points]
-        
-        # Extract electrode data from selected samples
-        for (e_idx, electrode) in enumerate(electrodes)
-            selected_data = erp.data[sample_mask, electrode]
-            for (t_idx, time_idx) in enumerate(time_indices)
-                if time_idx !== nothing
-                    data_2[p_idx, e_idx, t_idx] = selected_data[time_idx]
-                else
-                    data_2[p_idx, e_idx, t_idx] = NaN
-                end
-            end
-        end
-    end
+    # Extract data arrays: [participants × electrodes × time]
+    condition1 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims=1)
+    condition2 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims=1)
     
     return StatisticalTestData(
-        design,
-        data_1,  # maps to data1
-        data_2,  # maps to data2
-        participants1,  # maps to ids1
-        participants2,  # maps to ids2
-        electrodes,
-        time_points,
-        condition1[1].condition_name,  
-        condition2[1].condition_name,  
-        layout
+        [condition1_avg, condition2_avg],
+        AnalysisData(design, [condition1, condition2], time_points),
     )
 end
 
 # File-based version (convenience wrapper)
 function prepare_statistical_test_data(
     file_pattern::String,
-    condition_A,
-    condition_B;
+    conditions::Vector{Int};
     design::Symbol = :paired,
     input_dir::String = pwd(),
     participant_selection::Function = participants(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    baseline_window::Function = samples()
+    baseline_window::Function = samples(),
+    analysis_window::Function = samples(),
 )
+    # Validate conditions vector
+    length(conditions) == 2 || @minimal_error("conditions must be a vector of exactly 2 condition numbers, got $(length(conditions))")
+    
     # Find files
     files = _find_batch_files(file_pattern, input_dir, participant_selection)
-    if isempty(files)
-        error("No JLD2 files found matching pattern '$file_pattern' in $input_dir")
-    end
+    isempty(files) && @minimal_error_throw "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
     
-    # Load and group ERPs by condition (similar to grand_average.jl)
-    all_erps_by_condition = Dict{Int,Vector{ErpData}}()
+    # Load and group ERPs by condition 
+    all_erps_by_condition = _load_and_group_erps(files, input_dir, conditions)
     
-    for file in files
-        input_path = joinpath(input_dir, file)
-        
-        # Load ERP data (using load_data which finds by type)
-        erps_data = load_data(input_path)
-        
-        if isnothing(erps_data)
-            @minimal_warning "No data variables found in $file. Skipping."
-            continue
-        end
-        
-        # Validate that data is Vector{ErpData}
-        if !(erps_data isa Vector{<:ErpData})
-            @minimal_warning "Invalid data type in $file: expected Vector{ErpData}, got $(typeof(erps_data)). Skipping."
-            continue
-        end
-        
-        # Group ERPs by condition
-        for erp in erps_data
-            cond_num = erp.condition
-            if !haskey(all_erps_by_condition, cond_num)
-                all_erps_by_condition[cond_num] = ErpData[]
-            end
-            push!(all_erps_by_condition[cond_num], erp)
-        end
-    end
-    
-    # Convert condition identifiers to condition numbers if needed
-    function get_condition_number(cond_id, erps_by_cond)
-        if cond_id isa Int
-            return cond_id
-        elseif cond_id isa String
-            # Find condition number by name
-            for (cond_num, erps) in erps_by_cond
-                if !isempty(erps) && erps[1].condition_name == cond_id
-                    return cond_num
-                end
-            end
-            error("Condition name '$cond_id' not found in data")
-        else
-            error("condition_A and condition_B must be Int or String, got $(typeof(cond_id))")
-        end
-    end
-    
-    cond_num_A = get_condition_number(condition_A, all_erps_by_condition)
-    cond_num_B = get_condition_number(condition_B, all_erps_by_condition)
-    
-    # Get ERPs for each condition
-    if !haskey(all_erps_by_condition, cond_num_A)
-        error("Condition $cond_num_A not found in data")
-    end
-    if !haskey(all_erps_by_condition, cond_num_B)
-        error("Condition $cond_num_B not found in data")
-    end
-    
-    erps_A = all_erps_by_condition[cond_num_A]
-    erps_B = all_erps_by_condition[cond_num_B]
+    # ERPs for each condition
+    !haskey(all_erps_by_condition, conditions[1]) && @minimal_error("Condition $(conditions[1]) not found in data")
+    !haskey(all_erps_by_condition, conditions[2]) && @minimal_error("Condition $(conditions[2]) not found in data")
     
     # Call the main preparation function
     return prepare_statistical_test_data(
-        erps_A, 
-        erps_B; 
-        design = design, 
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        baseline_window = baseline_window
-    )
+         all_erps_by_condition[conditions[1]], 
+         all_erps_by_condition[conditions[2]]; 
+         design = design, 
+         channel_selection = channel_selection,
+         sample_selection = sample_selection,
+         baseline_window = baseline_window,
+         analysis_window = analysis_window
+     )
 end
 
-# ===================
+# ======================================
 # CLUSTER PERMUTATION TESTS
-# ===================
-
-using SparseArrays
+# ======================================
 
 """
     Cluster
@@ -591,16 +407,13 @@ end
 Stores complete results from a cluster-based permutation test.
 
 # Fields
-- `test_type::Symbol`: `:paired` or `:independent`
-- `design::Symbol`: Design type (same as test_type)
+- `design::Symbol`: Design type - `:paired` or `:independent`
 - `t_matrix::Array{Float64, 2}`: T-statistics [electrodes × time]
 - `df::Float64`: Degrees of freedom (constant across all electrodes/time points)
 - `significant_mask_positive::BitArray{2}`: Positive significant points [electrodes × time]
 - `significant_mask_negative::BitArray{2}`: Negative significant points [electrodes × time]
-- `positive_clusters::Vector{Cluster}`: Positive clusters
-- `negative_clusters::Vector{Cluster}`: Negative clusters
-- `cluster_stats_positive::Vector{Float64}`: Cluster statistics for positive clusters
-- `cluster_stats_negative::Vector{Float64}`: Cluster statistics for negative clusters
+- `positive_clusters::Vector{Cluster}`: Positive clusters (each Cluster contains its cluster_stat)
+- `negative_clusters::Vector{Cluster}`: Negative clusters (each Cluster contains its cluster_stat)
 - `n_permutations::Int`: Number of permutations performed
 - `permutation_max_positive::Vector{Float64}`: Maximum cluster stats from permutations (positive)
 - `permutation_max_negative::Vector{Float64}`: Maximum cluster stats from permutations (negative)
@@ -614,7 +427,6 @@ Stores complete results from a cluster-based permutation test.
 - `critical_t_values::Array{Float64, 2}`: Critical t-values used [electrodes × time]
 """
 struct ClusterPermutationResult
-    test_type::Symbol
     design::Symbol
     t_matrix::Array{Float64, 2}
     df::Float64
@@ -622,8 +434,6 @@ struct ClusterPermutationResult
     significant_mask_negative::BitArray{2}
     positive_clusters::Vector{Cluster}
     negative_clusters::Vector{Cluster}
-    cluster_stats_positive::Vector{Float64}
-    cluster_stats_negative::Vector{Float64}
     n_permutations::Int
     permutation_max_positive::Vector{Float64}
     permutation_max_negative::Vector{Float64}
@@ -648,11 +458,11 @@ function Base.show(io::IO, result::ClusterPermutationResult)
     n_sig_neg = count(c -> c.is_significant, result.negative_clusters)
     
     # Count significant points
-    n_sig_pos_points = count(result.significant_mask_positive)
-    n_sig_neg_points = count(result.significant_mask_negative)
+    n_sig_pos_points = count(result.masks.positive)
+    n_sig_neg_points = count(result.masks.negative)
     
     println(io, "ClusterPermutationResult")
-    println(io, "├─ Test type: $(result.test_type) ($(result.design))")
+    println(io, "├─ Design: $(result.design)")
     println(io, "├─ Permutations: $(result.n_permutations)")
     println(io, "├─ Threshold: $(result.threshold) ($(result.threshold_method))")
     println(io, "├─ Cluster type: $(result.cluster_type)")
@@ -718,6 +528,11 @@ function Base.show(io::IO, result::ClusterPermutationResult)
     end
 end
 
+
+
+
+
+
 # ===================
 # PHASE 0: VALIDATION
 # ===================
@@ -752,19 +567,21 @@ function validate_permutation_inputs(
     tail::Symbol
 )
     # Validate design
-    if prepared.design ∉ (:paired, :independent)
-        error("Design must be :paired or :independent, got :$(prepared.design)")
+    if prepared.analysis.design ∉ (:paired, :independent)
+        error("Design must be :paired or :independent, got :$(prepared.analysis.design)")
     end
     
     # Validate minimum participants
-    if prepared.design == :paired
-        if length(prepared.ids1) < 2
-            error("Paired design requires at least 2 participants, got $(length(prepared.ids1))")
+    n_participants1 = size(prepared.analysis.data[1], 1)
+    n_participants2 = size(prepared.analysis.data[2], 1)
+    if prepared.analysis.design == :paired
+        if n_participants1 < 2
+            error("Paired design requires at least 2 participants, got $n_participants1")
         end
     else
-        if length(prepared.ids1) < 2 || length(prepared.ids2) < 2
+        if n_participants1 < 2 || n_participants2 < 2
             error("Independent design requires at least 2 participants per group, " *
-                  "got $(length(prepared.ids1)) and $(length(prepared.ids2))")
+                  "got $n_participants1 and $n_participants2")
         end
     end
     
@@ -793,12 +610,17 @@ function validate_permutation_inputs(
         error("tail must be :both, :left, or :right, got :$tail")
     end
     
+    # Extract commonly used fields from grand_average ErpData
+    electrodes = channel_labels(prepared.data[1])
+    time_points = prepared.analysis.time_points
+    layout = prepared.data[1].layout
+    
     # Validate Layout.neighbours for spatial clustering
     if cluster_type ∈ (:spatial, :spatiotemporal)
-        if isnothing(prepared.layout.neighbours)
+        if isnothing(layout.neighbours)
             @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (40.0)."
             # Compute neighbours if missing (using default criterion)
-            get_layout_neighbours_xy!(prepared.layout, 40.0)
+            get_layout_neighbours_xy!(layout, 40.0)
         end
     end
     
@@ -990,7 +812,7 @@ end
 
 # Original version for backward compatibility
 function compute_t_matrix(prepared::StatisticalTestData; tail::Symbol = :both)
-    return compute_t_matrix(prepared.data1, prepared.data2, prepared.design, tail=tail)
+    return compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail=tail)
 end
 
 """
@@ -2369,9 +2191,9 @@ end
 
 # Original version for backward compatibility
 function shuffle_labels(prepared::StatisticalTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
-    shuffled_A = similar(prepared.data1)
-    shuffled_B = similar(prepared.data2)
-    return shuffle_labels!(shuffled_A, shuffled_B, prepared.data1, prepared.data2, prepared.design, rng)
+    shuffled_A = similar(prepared.analysis.data[1])
+    shuffled_B = similar(prepared.analysis.data[2])
+    return shuffle_labels!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
 end
 
 """
@@ -2410,12 +2232,12 @@ function collect_permutation_t_matrices(
     end
     
     # Get dimensions from first permutation (using optimized functions)
-    shuffled_A_buffer = similar(prepared.data1)
-    shuffled_B_buffer = similar(prepared.data2)
+    shuffled_A_buffer = similar(prepared.analysis.data[1])
+    shuffled_B_buffer = similar(prepared.analysis.data[2])
     shuffle_labels!(shuffled_A_buffer, shuffled_B_buffer,
-                   prepared.data1, prepared.data2, prepared.design, rng)
+                   prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
     t_matrix_sample, _, _ = compute_t_matrix(
-        shuffled_A_buffer, shuffled_B_buffer, prepared.design
+        shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design
     )
     n_electrodes, n_time = size(t_matrix_sample)
     
@@ -2428,17 +2250,17 @@ function collect_permutation_t_matrices(
     end
     
     # Pre-allocate buffers for shuffling (reuse across permutations)
-    shuffled_A_buffer = similar(prepared.data1)
-    shuffled_B_buffer = similar(prepared.data2)
+    shuffled_A_buffer = similar(prepared.analysis.data[1])
+    shuffled_B_buffer = similar(prepared.analysis.data[2])
     
     for perm_idx in 1:n_permutations
         # Shuffle labels using pre-allocated buffers
         shuffle_labels!(shuffled_A_buffer, shuffled_B_buffer,
-                       prepared.data1, prepared.data2, prepared.design, rng)
+                       prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
         
         # Compute t-matrix directly from arrays (no StatisticalTestData needed)
         t_matrix_perm, _, _ = compute_t_matrix(
-            shuffled_A_buffer, shuffled_B_buffer, prepared.design
+            shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design
         )
         permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
         
@@ -2527,24 +2349,28 @@ function run_permutations(
     sizehint!(permutation_max_negative, n_permutations)
     
     # Pre-allocate buffers (reuse across all permutations)
-    shuffled_A_buffer = similar(prepared.data1)
-    shuffled_B_buffer = similar(prepared.data2)
-    mask_pos_buffer = BitArray{2}(undef, size(prepared.data1, 2), size(prepared.data1, 3))
-    mask_neg_buffer = BitArray{2}(undef, size(prepared.data1, 2), size(prepared.data1, 3))
+    shuffled_A_buffer = similar(prepared.analysis.data[1])
+    shuffled_B_buffer = similar(prepared.analysis.data[2])
+    mask_pos_buffer = BitArray{2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+    mask_neg_buffer = BitArray{2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
     
     # Pre-allocate all buffers for paired design (reuse across permutations)
-    if prepared.design == :paired
-        diff_buffer = similar(prepared.data1)
-        mean1_buffer = Array{Float64, 2}(undef, size(prepared.data1, 2), size(prepared.data1, 3))
-        mean2_buffer = Array{Float64, 2}(undef, size(prepared.data1, 2), size(prepared.data1, 3))
-        mean_diff_buffer = Array{Float64, 2}(undef, size(prepared.data1, 2), size(prepared.data1, 3))
-        std_diff_buffer = Array{Float64, 2}(undef, size(prepared.data1, 2), size(prepared.data1, 3))
+    if prepared.analysis.design == :paired
+        diff_buffer = similar(prepared.analysis.data[1])
+        mean1_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        mean2_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        mean_diff_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        std_diff_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
     else
         diff_buffer = mean1_buffer = mean2_buffer = mean_diff_buffer = std_diff_buffer = nothing
     end
     
+    # Extract commonly used fields from grand_average ErpData
+    electrodes = channel_labels(prepared.data[1])
+    time_points = prepared.analysis.time_points
+    
     # Pre-allocate electrode lookup (reused across all permutations)
-    electrode_to_idx = Dict(e => i for (i, e) in enumerate(prepared.electrodes))
+    electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
     
     # Progress bar
     if show_progress
@@ -2558,9 +2384,9 @@ function run_permutations(
         else
             # Shuffle and compute t-matrix
             shuffle_labels!(shuffled_A_buffer, shuffled_B_buffer,
-                           prepared.data1, prepared.data2, prepared.design, rng)
+                           prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
             t_matrix_perm, _, _ = compute_t_matrix(
-                shuffled_A_buffer, shuffled_B_buffer, prepared.design,
+                shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design,
                 diff_buffer=diff_buffer,
                 mean1_buffer=mean1_buffer,
                 mean2_buffer=mean2_buffer,
@@ -2597,7 +2423,7 @@ function run_permutations(
         
         # Find clusters
         pos_clusters_perm, neg_clusters_perm = find_clusters(
-            mask_pos_buffer, mask_neg_buffer, prepared.electrodes, prepared.time_points,
+            mask_pos_buffer, mask_neg_buffer, electrodes, time_points,
             spatial_connectivity, cluster_type
         )
         
@@ -2838,10 +2664,15 @@ function cluster_permutation_test(
         threshold_for_permutations = critical_t_values
     end
     
+    # Extract commonly used fields from grand_average ErpData
+    electrodes = channel_labels(prepared.data[1])
+    time_points = prepared.analysis.time_points
+    layout = prepared.data[1].layout
+    
     # Build connectivity matrix
     @info "Building connectivity matrix..."
     spatial_connectivity, _, _ = build_connectivity_matrix(
-        prepared.electrodes, prepared.layout, cluster_type
+        electrodes, layout, cluster_type
     )
     
     # Pre-filter masks to remove isolated points (FieldTrip's minNumChannels approach)
@@ -2854,7 +2685,7 @@ function cluster_permutation_test(
     # Find observed clusters
     @info "Finding observed clusters..."
     positive_clusters, negative_clusters = find_clusters(
-        mask_positive, mask_negative, prepared.electrodes, prepared.time_points,
+        mask_positive, mask_negative, electrodes, time_points,
         spatial_connectivity, cluster_type
     )
     
@@ -2865,14 +2696,14 @@ function cluster_permutation_test(
     if !isempty(positive_clusters)
         @info "Computing cluster statistics for $(length(positive_clusters)) positive clusters..."
         positive_clusters, cluster_stats_positive = compute_cluster_statistics(
-            positive_clusters, t_matrix, prepared.electrodes, cluster_statistic
+            positive_clusters, t_matrix, electrodes, cluster_statistic
         )
     end
     
     if !isempty(negative_clusters)
         @info "Computing cluster statistics for $(length(negative_clusters)) negative clusters..."
         negative_clusters, cluster_stats_negative = compute_cluster_statistics(
-            negative_clusters, t_matrix, prepared.electrodes, cluster_statistic
+            negative_clusters, t_matrix, electrodes, cluster_statistic
         )
     end
     
@@ -2921,7 +2752,7 @@ function cluster_permutation_test(
         if cluster.is_significant
             # Find electrode indices
             for electrode in cluster.electrodes
-                e_idx = findfirst(==(electrode), prepared.electrodes)
+                e_idx = findfirst(==(electrode), electrodes)
                 if e_idx !== nothing
                     for t_idx in cluster.time_indices
                         if 1 <= t_idx <= size(significant_mask_positive, 2)
@@ -2938,7 +2769,7 @@ function cluster_permutation_test(
         if cluster.is_significant
             # Find electrode indices
             for electrode in cluster.electrodes
-                e_idx = findfirst(==(electrode), prepared.electrodes)
+                e_idx = findfirst(==(electrode), electrodes)
                 if e_idx !== nothing
                     for t_idx in cluster.time_indices
                         if 1 <= t_idx <= size(significant_mask_negative, 2)
@@ -2952,22 +2783,19 @@ function cluster_permutation_test(
     
     # Assemble results
     result = ClusterPermutationResult(
-        prepared.design,
-        prepared.design,
+        prepared.analysis.design,
         t_matrix,
         df,
         significant_mask_positive,
         significant_mask_negative,
         positive_clusters,
         negative_clusters,
-        cluster_stats_positive,
-        cluster_stats_negative,
         n_permutations,
         permutation_max_positive,
         permutation_max_negative,
         random_seed,
-        prepared.electrodes,
-        prepared.time_points,
+        electrodes,
+        time_points,
         threshold,
         threshold_method,
         cluster_type,
@@ -2991,27 +2819,36 @@ Stores results from an analytic (parametric) t-test without permutation.
 
 # Fields
 - `test_type::Symbol`: `:paired` or `:independent`
-- `t_matrix::Array{Float64, 2}`: T-statistics [electrodes × time]
-- `p_matrix::Array{Float64, 2}`: P-values [electrodes × time]
-- `df::Float64`: Degrees of freedom (constant across all electrodes/time points)
-- `significant_mask_positive::BitArray{2}`: Positive significant points [electrodes × time]
-- `significant_mask_negative::BitArray{2}`: Negative significant points [electrodes × time]
-- `correction_method::Symbol`: Multiple comparison correction method used
-- `alpha::Float64`: Significance threshold used
-- `tail::Symbol`: Test tail used
+- `test_info::TestInfo`: Test configuration (type, df, alpha, tail, correction_method)
+- `data::Vector{ErpData}`: Grand average ERPs for conditions 1 and 2 (for visualization/storage)
+- `stat_matrix::StatMatrix`: Statistical results containing `t` (t-statistics) and `p` (p-values) [electrodes × time]
+- `masks::Masks`: Significance masks containing `positive` and `negative` significant points [electrodes × time]
 - `electrodes::Vector{Symbol}`: Electrode labels
 - `time_points::Vector{Float64}`: Time points in seconds
 """
-struct AnalyticTTestResult
-    test_type::Symbol
-    t_matrix::Array{Float64, 2}
-    p_matrix::Array{Float64, 2}
+struct TestInfo
+    type::Symbol
     df::Float64
-    significant_mask_positive::BitArray{2}
-    significant_mask_negative::BitArray{2}
-    correction_method::Symbol
     alpha::Float64
     tail::Symbol
+    correction_method::Symbol
+end
+
+struct StatMatrix
+    t::Array{Float64, 2}
+    p::Array{Float64, 2}
+end
+
+struct Masks
+    positive::BitArray{2}
+    negative::BitArray{2}
+end
+
+struct AnalyticTTestResult
+    test_info::TestInfo
+    data::Vector{ErpData}
+    stat_matrix::StatMatrix
+    masks::Masks
     electrodes::Vector{Symbol}
     time_points::Vector{Float64}
 end
@@ -3169,6 +3006,9 @@ function analytic_ttest(
     tail::Symbol = :both,
     correction_method::Symbol = :no
 )
+    # Extract commonly used fields from grand_average ErpData
+    electrodes = channel_labels(prepared.data[1])
+    
     # Validate correction method
     if !(correction_method in (:no, :bonferroni))
         error("correction_method must be :no or :bonferroni. Got :$correction_method")
@@ -3203,18 +3043,27 @@ function analytic_ttest(
         error("tail must be :both, :left, or :right, got :$tail")
     end
     
-    result = AnalyticTTestResult(
-        prepared.design,
-        t_matrix,
-        p_matrix,
+    # Extract commonly used fields from grand_average ErpData
+    electrodes = channel_labels(prepared.data[1])
+    
+    test_info = TestInfo(
+        prepared.analysis.design,
         df,
-        mask_positive,
-        mask_negative,
-        correction_method,
         alpha,
         tail,
-        prepared.electrodes,
-        prepared.time_points
+        correction_method
+    )
+    
+    stat_matrix = StatMatrix(t_matrix, p_matrix)
+    masks = Masks(mask_positive, mask_negative)
+    
+    result = AnalyticTTestResult(
+        test_info,
+        prepared.data,
+        stat_matrix,
+        masks,
+        electrodes,
+        prepared.analysis.time_points
     )
     
     n_sig_pos = count(mask_positive)
@@ -3229,14 +3078,16 @@ function Base.show(io::IO, result::AnalyticTTestResult)
     n_time_points = length(result.time_points)
     time_range = isempty(result.time_points) ? "N/A" : "$(first(result.time_points)) to $(last(result.time_points)) s"
     
-    n_sig_pos = count(result.significant_mask_positive)
-    n_sig_neg = count(result.significant_mask_negative)
+    n_sig_pos = count(result.masks.positive)
+    n_sig_neg = count(result.masks.negative)
     
     println(io, "AnalyticTTestResult")
-    println(io, "├─ Test type: $(result.test_type)")
-    println(io, "├─ Alpha: $(result.alpha)")
-    println(io, "├─ Tail: $(result.tail)")
-    println(io, "├─ Correction method: $(result.correction_method)")
+    println(io, "├─ Test info")
+    println(io, "│  ├─ Type: $(result.test_info.type)")
+    println(io, "│  ├─ DF: $(result.test_info.df)")
+    println(io, "│  ├─ Alpha: $(result.test_info.alpha)")
+    println(io, "│  ├─ Tail: $(result.test_info.tail)")
+    println(io, "│  └─ Correction method: $(result.test_info.correction_method)")
     println(io, "├─ Data dimensions: $n_electrodes electrodes × $n_time_points time points ($time_range)")
     println(io, "└─ Significant points: $n_sig_pos positive, $n_sig_neg negative")
 end

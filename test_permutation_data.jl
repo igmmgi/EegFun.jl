@@ -43,17 +43,18 @@ The prepare_statistical_test_data() function handles all of this.
 input_dir = "/home/ian/Documents/Julia/output_data/filtered_erps_good_lp_30hz"
 file_pattern = "erps_good"
 
+
 println("Preparing data...")
-@btime prepared = eegfun.prepare_statistical_test_data(
+prepared = eegfun.prepare_statistical_test_data(
     file_pattern,  # Pattern to match ERP files
-    1,             # Condition A (first condition to compare)
-    2;             # Condition B (second condition to compare)
+    [1,2],      # Conditions to compare
     design = :paired,  # :paired for within-subject, :independent for between-subject
     input_dir = input_dir,
     participant_selection = eegfun.participants(3:18),  # Select participants 3-18
     channel_selection = eegfun.channels(1:72),  # Select all 72 channels
-    sample_selection = eegfun.samples((0.0, 2.0)),  # Analysis window: 0-2 seconds
+    sample_selection = eegfun.samples((-0.5, 2.0)),  # Analysis window: 0-2 seconds
     baseline_window = eegfun.samples((-0.2, 0.0)),  # Baseline: -200 to 0 ms
+    analysis_window = eegfun.samples((0.1, 1.0)),  # Analysis window: 0-2 seconds
 )
 
 println("✓ Data prepared successfully!")
@@ -141,7 +142,7 @@ result_analytic_bonf = eegfun.analytic_ttest(
     correction_method = :bonferroni  # Bonferroni correction
 )
 
-fig = eegfun.plot_analytic_ttest(result_analytic_bonf, prepared, channel = :PO8, plot_erp = true, 
+fig = eegfun.plot_analytic_ttest(result_analytic_no, channel = :PO9, plot_erp = true, 
 plot_difference = false, show_significance = true, show_critical_t = true)
 display(fig)
 

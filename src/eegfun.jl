@@ -20,19 +20,20 @@ using NativeFileDialog
 using ScatteredInterpolation
 
 # Utilities
-using DocStringExtensions
+using Dates
 using Distributions
+using DocStringExtensions
 using Logging
 using LoggingExtras
 using OrderedCollections
+using PrettyTables
 using Printf
 using ProgressMeter
+using Random
+using SparseArrays
 using Statistics
 using StatsBase
-using Random
-using Dates
 using TOML
-using PrettyTables
 
 # Julia standard library
 # using Base.Threads
