@@ -52,7 +52,7 @@ function get_cols_by_group(dat::EegData, group::Symbol)
         isempty(layout_channels) && return Symbol[]
         last_channel_idx = findlast(col -> col == layout_channels[end], labels)
         if isnothing(last_channel_idx)
-            @warn "Last channel label $(layout_channels[end]) not found in data columns. Available columns: $(labels)"
+            @minimal_warning "Last channel label $(layout_channels[end]) not found in data columns. Available columns: $(labels)"
             return Symbol[]  # Return empty array instead of throwing error
         end
         return labels[(last_channel_idx+1):end]
@@ -396,6 +396,83 @@ duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
 duration(dat::Vector{T}) where {T <: EegData} =
     isempty(dat) ? 0.0 : duration(dat[1])
 
+
+"""
+    have_same_structure(dat1::EegData, dat2::EegData) -> Bool
+    have_same_structure(dats::Vector{<:EegData}) -> Bool
+
+Check if EegData objects have the same structure (sample rate, number of samples, channel labels, and time vectors).
+
+# Arguments
+- `dat1::EegData`, `dat2::EegData`: Two EegData objects to compare
+- `dats::Vector{<:EegData}`: Vector of EegData objects to compare
+
+# Returns
+- `Bool`: `true` if all objects have the same sample rate, number of samples, channel labels, and time vectors
+
+# Examples
+```julia
+# Check if two ERPs have the same structure
+have_same_structure(erp1, erp2)
+
+# Check if all ERPs in a vector have the same structure
+have_same_structure(erps)
+```
+"""
+function have_same_structure(dat1::EegData, dat2::EegData)::Bool
+    if sample_rate(dat1) != sample_rate(dat2) 
+        @minimal_error_throw("Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        return false
+    end
+    if n_samples(dat1) != n_samples(dat2) 
+        @minimal_error_throw("Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        return false
+    end
+    if channel_labels(dat1) != channel_labels(dat2) 
+        @minimal_error_throw("Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        return false
+    end
+    # Check time vectors match (if they exist)
+    time1 = time(dat1)
+    time2 = time(dat2)
+    if !isempty(time1) && !isempty(time2) && !all(time1 .≈ time2)
+        @minimal_error_throw("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        return false
+    end
+    return true
+end
+
+function have_same_structure(dats::Vector{<:EegData})::Bool
+    isempty(dats) && return true
+    length(dats) == 1 && return true
+   
+    sample_rates = sample_rate.(dats)
+    n_samps = n_samples.(dats)
+    ch_labels = channel_labels.(dats)
+    time_vectors = time.(dats)
+    
+    if !all(x -> x == sample_rates[1], sample_rates)
+        @minimal_error_throw("Inconsistent sample rates")
+        return false
+    end
+    if !all(x -> x == n_samps[1], n_samps)
+        @minimal_error_throw("Inconsistent number of samples")
+        return false
+    end
+    if !all(x -> x == ch_labels[1], ch_labels)
+        @minimal_error_throw("Inconsistent channel labels")
+        return false
+    end
+    # Check time vectors match (if they exist)
+    first_time = time_vectors[1]
+    if !isempty(first_time)
+        if !all(tv -> !isempty(tv) && all(tv .≈ first_time), time_vectors)
+            @minimal_error_throw("Inconsistent time vectors")
+            return false
+        end
+    end
+    return true
+end
 
 """
     time(dat::EegData) -> Vector{Float64}
@@ -930,11 +1007,11 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
     elseif log_level == :info
         @info "\n\n$table_output\n"
     elseif log_level == :warn
-        @warn "\n\n$table_output\n"
+        @minimal_warning "\n\n$table_output\n"
     elseif log_level == :error
         @error "\n\n$table_output\n"
     else
-        @warn "Unknown log level: $log_level, using :info instead"
+        @minimal_warning "Unknown log level: $log_level, using :info instead"
         @info "\n\n$table_output\n"
     end
     
@@ -1550,7 +1627,7 @@ function _extract_triggers_from_markers(
             push!(unique_values, marker.value)
             valid_markers += 1
         else
-            @warn "Marker sample $sample_idx out of bounds (1:$n_samples), skipping"
+            @minimal_warning "Marker sample $sample_idx out of bounds (1:$n_samples), skipping"
         end
     end
 

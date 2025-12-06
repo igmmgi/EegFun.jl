@@ -580,7 +580,7 @@ function filter(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir, participants)
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
@@ -588,7 +588,7 @@ function filter(
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
         # Create processing function with captured parameters
-        @info "Filter settings: $filter_type filter, cutoff: $cutoff_freq Hz"
+        @info "Filter settings: filter_type=\"$filter_type\", cutoff: $cutoff_freq Hz"
         process_fn = (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, conditions)
 
         # Execute batch operation

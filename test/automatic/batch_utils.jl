@@ -89,7 +89,7 @@ using DataFrames
         @test "2_erps_cleaned.jld2" in files_single
 
         # Test no participants (should return all)
-        files_all = eegfun._find_batch_files("erps_cleaned", test_dir; participants = nothing)
+        files_all = eegfun._find_batch_files("erps_cleaned", test_dir, nothing)
         @test length(files_all) == 5
 
         # Test non-matching pattern
@@ -401,62 +401,6 @@ using DataFrames
         @test isfile(log_file_same)  # Should still exist (not moved to itself)
     end
 
-    @testset "_format_kwarg_value" begin
-        # Test different value types
-        @test eegfun._format_kwarg_value(:test, nothing) == "nothing"
-        @test eegfun._format_kwarg_value(:test, "string") == "\"string\""
-        @test eegfun._format_kwarg_value(:test, 42) == "42"
-        @test eegfun._format_kwarg_value(:test, 3.14) == "3.14"
-        @test eegfun._format_kwarg_value(:test, [1, 2, 3]) == "[1, 2, 3]"
-        @test eegfun._format_kwarg_value(:test, [:a, :b, :c]) == "[:a, :b, :c]"
-
-        # Test function values
-        @test eegfun._format_kwarg_value(:channel_selection, eegfun.channels()) == "<predicate>"
-        @test eegfun._format_kwarg_value(:component_selection, eegfun.channels()) == "<predicate>"
-        @test eegfun._format_kwarg_value(:epoch_selection, eegfun.channels()) == "<predicate>"
-        @test eegfun._format_kwarg_value(:sample_selection, eegfun.channels()) == "<predicate>"
-        @test eegfun._format_kwarg_value(:other_func, sin) == "sin"
-        @test eegfun._format_kwarg_value(:anon_func, x -> x + 1) == "<function>"
-
-        # Test with different function types
-        my_func(x) = x + 1
-        @test eegfun._format_kwarg_value(:my_func, my_func) == "my_func"
-
-        # Test with complex types
-        @test eegfun._format_kwarg_value(:test, (1, 2, 3)) == "(1, 2, 3)"
-        @test eegfun._format_kwarg_value(:test, Dict(:a => 1, :b => 2)) isa String
-    end
-
-    @testset "_log_function_call" begin
-        # Test with different argument types
-        args = ["test_pattern", (0.1, 0.2)]
-        kwargs = (input_dir = test_dir, participants = [1, 2])
-
-        # This should not throw an error
-        eegfun._log_function_call("test_function", args, kwargs)
-
-        # Test with empty arguments
-        eegfun._log_function_call("empty_function", [], Dict{Symbol,Any}())
-
-        # Test with different kwargs formats
-        kwargs_dict = Dict(:input_dir => test_dir, :participants => [1, 2])
-        eegfun._log_function_call("test_function", args, kwargs_dict)
-
-        kwargs_pairs = [:input_dir => test_dir, :participants => [1, 2]]
-        eegfun._log_function_call("test_function", args, kwargs_pairs)
-
-        # Test with complex arguments
-        complex_args = [1, "string", [1, 2, 3], (:a, :b)]
-        complex_kwargs = (opt1 = nothing, opt2 = "value", opt3 = sin)
-        eegfun._log_function_call("complex_function", complex_args, complex_kwargs)
-
-        # Test with empty kwargs
-        eegfun._log_function_call("no_kwargs", args, NamedTuple())
-
-        # Test with function in kwargs
-        func_kwargs = (channel_selection = eegfun.channels(), other = x -> x + 1)
-        eegfun._log_function_call("func_kwargs", [], func_kwargs)
-    end
 
     @testset "@log_call macro" begin
         # Test @log_call with function name and tuple of positional args
@@ -497,10 +441,6 @@ using DataFrames
         result = test_func4(opt1 = 3, opt2 = "test")
         @test result == 3
 
-        # Note: Macro error testing is complex because macros are expanded at parse time.
-        # The macro will error during compilation if used incorrectly (e.g., wrong argument types),
-        # but testing this requires compile-time evaluation which is beyond the scope of runtime tests.
-        # The macro is tested above through successful usage patterns with various argument counts.
     end
 
     @testset "Edge cases and error handling" begin

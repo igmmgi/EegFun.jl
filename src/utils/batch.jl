@@ -42,26 +42,35 @@ function _extract_participant_id(filename::String)
     end
 end
 
+
 """
-    find_batch_files(pattern::String, dir::String; participants=participants())
+    find_batch_files(pattern::String, dir::String; participants=nothing)
+    find_batch_files(pattern::String, dir::String; participants::Function)
 
 Find JLD2 files matching pattern and optional participant filter.
 
 Returns vector of filenames (not full paths).
 """
-function _find_batch_files(pattern::String, dir::String; participants::Function = participants())
-    all_files = readdir(dir)
+# Method for Function predicate
+function _find_batch_files(pattern::String, dir::String, participant_selection::Function = participants())
 
     # Filter by pattern and extension
+    all_files = readdir(dir)
     files = Base.filter(all_files) do f
         endswith(f, ".jld2") && contains(f, pattern)
     end
 
-    # Extract participant IDs from filenames and filter using predicate
-    participant_ids = [_extract_participant_id(f) for f in files]
-    mask = participants(participant_ids)
+    # extract ids from filenames  and apply predicate mask
+    ids = [_extract_participant_id(f) for f in files]
+    mask = participant_selection(ids)
     return files[mask]
 end
+
+# create predicate like input participants()
+_find_batch_files(pattern::String, dir::String, participants::Int) = _find_batch_files(pattern, dir, x -> x .== participants)
+_find_batch_files(pattern::String, dir::String, participants::Vector{Int}) = _find_batch_files(pattern, dir, x -> [id in participants for id in x])
+_find_batch_files(pattern::String, dir::String, participants::Nothing) = _find_batch_files(pattern, dir, x -> fill(true, length(x)))
+
 
 """
     load_data(filepath::String)
@@ -78,11 +87,9 @@ function load_data(filepath::String)
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing
         
-        if length(keys_list) == 1
-            # Single variable - return it directly
+        if length(keys_list) == 1 # Single variable - return it directly
             return file[keys_list[1]]
-        else
-            # Multiple variables - return a Dict
+        else # Multiple variables - return a Dict
             return Dict(k => file[k] for k in keys_list)
         end
     end
@@ -95,12 +102,30 @@ Filter data by condition selection predicate.
 
 Returns filtered data.
 """
-function _condition_select(data, condition_selection::Function)
+function _condition_select(data, condition_selection::Function = conditions())
     isempty(data) && return data
     condition_indices = 1:length(data)
-    mask = condition_selection(collect(condition_indices))
+    mask = condition_selection(condition_indices)
     return data[mask]
 end
+
+"""
+    _condition_select(data, condition_selection)
+
+Filter data by condition selection predicate.
+
+Returns filtered data.
+"""
+function _condition_select(data, condition_selection::Vector{Int})
+    isempty(data) && return data
+    isnothing(condition_selection) && return data
+    # Ensure we always return a vector, even for single Int selection
+    return data[condition_selection]
+end
+
+_condition_select(data, condition_selection::Int) = _condition_select(data, [condition_selection])
+_condition_select(data, condition_selection::Nothing) = _condition_select(data, x -> fill(true, length(x)))
+
 
 """
     validate_input_dir(dir::String)

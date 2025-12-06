@@ -68,7 +68,7 @@ function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function 
     @info "Calculating lateralized readiness potential (LRP)"
 
     # Validate inputs
-    _validate_lrp_inputs(erp_left, erp_right)
+    have_same_structure(erp_left, erp_right) || @minimal_error_throw("Left and right ERPs have inconsistent structure")
 
     # Get selected left/odd channels and find their right/even pairs
     pairs = _get_channel_pairs_from_selection(erp_left, erp_right, channel_selection)
@@ -92,29 +92,6 @@ end
 #=============================================================================
     INTERNAL HELPER FUNCTIONS
 =============================================================================#
-
-"""
-Validate that the two ERP datasets are compatible for LRP calculation.
-"""
-function _validate_lrp_inputs(erp_left::ErpData, erp_right::ErpData)
-    # Check sample rates match
-    if erp_left.sample_rate != erp_right.sample_rate
-        @minimal_error_throw("Sample rates differ: left=$(erp_left.sample_rate) Hz, right=$(erp_right.sample_rate) Hz")
-    end
-
-    # Check time points match
-    if nrow(erp_left.data) != nrow(erp_right.data)
-        @minimal_error_throw("Number of time points differ: left=$(nrow(erp_left.data)), right=$(nrow(erp_right.data))")
-    end
-
-    # Check time vectors match
-    if !all(erp_left.data.time .≈ erp_right.data.time)
-        @minimal_error_throw("Time vectors differ between left and right datasets")
-    end
-
-    return nothing
-end
-
 
 """
 Parse channel label to extract letters and digits.
@@ -379,7 +356,7 @@ function lrp(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir, participants)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"

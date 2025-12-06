@@ -164,11 +164,18 @@ function _process_rereference_file(filepath::String, output_path::String, refere
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
-    # Select conditions
-    data = _condition_select(data, conditions)
+        # Select conditions
+        data = _condition_select(data, conditions)
 
-    # Apply rereferencing (mutates data in-place)
-    rereference!.(data, reference_selection)
+        # Handle empty data (valid case - just save empty vector)
+        if isempty(data)
+            jldsave(output_path; data = data)
+            ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
+            return BatchResult(true, filename, "Rereferenced to $ref_str (empty data)")
+        end
+
+        # Apply rereferencing (mutates data in-place)
+        rereference!.(data, reference_selection)
 
     # Save (always use "data" as variable name since load_data finds by type)
     jldsave(output_path; data = data)
@@ -226,6 +233,7 @@ function rereference(
     log_file = "rereference.log"
     setup_global_logging(log_file)
 
+    result = (success = 0, errors = 0)  # Default return value
     try
         @info "Batch rereferencing started at $(now())"
         @log_call "rereference"
@@ -241,28 +249,30 @@ function rereference(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir, participants)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-            return nothing
+            result = (success = 0, errors = 0)
+        else
+            ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
+            @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
+            @info "Reference settings: $ref_str"
+
+            # Create processing function with captured parameters
+            process_fn =
+                (input_path, output_path) ->
+                    _process_rereference_file(input_path, output_path, reference_selection, conditions)
+
+            # Execute batch operation
+            results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Rereferencing")
+
+            result = _log_batch_summary(results, output_dir)
         end
-
-        ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
-        @info "Reference settings: $ref_str"
-
-        # Create processing function with captured parameters
-        process_fn =
-            (input_path, output_path) ->
-                _process_rereference_file(input_path, output_path, reference_selection, conditions)
-
-        # Execute batch operation
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Rereferencing")
-
-        _log_batch_summary(results, output_dir)
 
     finally
         _cleanup_logging(log_file, output_dir)
     end
+
+    return result
 end

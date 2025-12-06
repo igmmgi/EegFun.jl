@@ -278,3 +278,5 @@ macro log_call(func_name)
         last_line = _get_last_history_line()
     end
 end
+
+

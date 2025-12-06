@@ -1424,7 +1424,7 @@ function plot_eog_component_features(identified_comps::Dict, metrics_df::DataFra
 
     # Check if data is empty
     if isempty(metrics_df) || isempty(vEOG_corr_z) || isempty(hEOG_corr_z)
-        @warn "Could not plot eye component features, input DataFrame or z-scores are empty."
+        @minimal_warning "Could not plot eye component features, input DataFrame or z-scores are empty."
         return Figure() # Return empty figure
     end
 
@@ -2087,7 +2087,7 @@ function plot_artifact_components(ica::InfoIca, artifacts::ArtifactComponents; k
 
     # If no components, return empty figure
     if isempty(component_types)
-        @warn "No artifact components found to plot"
+        @minimal_warning "No artifact components found to plot"
         fig = Figure()
         Label(fig[1, 1], "No artifact components found", fontsize = 16)
         return fig

@@ -15,21 +15,8 @@ function _validate_jackknife_params(erps::Vector{ErpData})
     length(erps) < 2 && return "Need at least 2 participants for jackknife averaging"
 
     # Validate that all ERPs have the same structure
-    first_erp = erps[1]
-    sample_rate = first_erp.sample_rate
-    n_timepoints = nrow(first_erp.data)
-    channels = propertynames(first_erp.data)
-
-    for (i, erp) in enumerate(erps[2:end])
-        if erp.sample_rate != sample_rate
-            return "ERP $(i+1) has different sample rate: $(erp.sample_rate) vs $(sample_rate)"
-        end
-        if nrow(erp.data) != n_timepoints
-            return "ERP $(i+1) has different number of time points: $(nrow(erp.data)) vs $(n_timepoints)"
-        end
-        if propertynames(erp.data) != channels
-            return "ERP $(i+1) has different channels"
-        end
+    if !have_same_structure(erps)
+        return "ERPs have inconsistent structure (sample rate, number of samples, or channel labels)"
     end
 
     return nothing
@@ -343,7 +330,7 @@ function jackknife_average(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir; participants)
+        files = _find_batch_files(file_pattern, input_dir, participants)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
