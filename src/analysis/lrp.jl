@@ -281,7 +281,7 @@ end
     lrp(file_pattern::String, condition_pairs::Vector{Tuple{Int,Int}};
         input_dir::String = pwd(),
         channel_selection::Function = channels(),
-        participants::Union{Int, Vector{Int}, Nothing} = nothing,
+        participant_selection::Function = participants(),
         output_dir::Union{String, Nothing} = nothing)
 
 Calculate LRP from ERP data in JLD2 files and save to a new directory.
@@ -294,7 +294,7 @@ lateralized readiness potential for specified condition pairs.
 - `condition_pairs::Vector{Tuple{Int,Int}}`: Pairs of condition indices (left, right)
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
 - `channel_selection::Function`: Channel predicate for selecting left/odd channels (default: all lateral pairs)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
 
 # Examples
@@ -330,7 +330,7 @@ function lrp(
     condition_pairs::Vector{Tuple{Int,Int}};
     input_dir::String = pwd(),
     channel_selection::Function = channels(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -356,7 +356,7 @@ function lrp(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"

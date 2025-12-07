@@ -150,7 +150,7 @@ end
 Process a single file through rereferencing pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_rereference_file(filepath::String, output_path::String, reference_selection, conditions)
+function _process_rereference_file(filepath::String, output_path::String, reference_selection, condition_selection::Function)
     filename = basename(filepath)
 
     # Load data
@@ -165,7 +165,7 @@ function _process_rereference_file(filepath::String, output_path::String, refere
     end
 
         # Select conditions
-        data = _condition_select(data, conditions)
+        data = _condition_select(data, condition_selection)
 
         # Handle empty data (valid case - just save empty vector)
         if isempty(data)
@@ -192,8 +192,8 @@ end
     rereference(file_pattern::String; 
                input_dir::String = pwd(), 
                reference_selection::Union{Symbol, Vector{Symbol}} = :avg, 
-               participants::Union{Int, Vector{Int}, Nothing} = nothing,
-               conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+               participant_selection::Function = participants(),
+               condition_selection::Function = conditions(),
                output_dir::Union{String, Nothing} = nothing)
 
 Rereference EEG/ERP data from JLD2 files and save to a new directory.
@@ -204,8 +204,8 @@ Rereference EEG/ERP data from JLD2 files and save to a new directory.
 - `reference_selection::Union{Symbol, Vector{Symbol}}`: Reference channels, can be:
   - Special symbols: `:avg` (average reference), `:mastoid` (M1+M2)
   - Channel names: `[:Cz]`, `[:M1, :M2]`, etc.
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
-- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition number(s) to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
+- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on reference settings)
 
 # Example
@@ -224,8 +224,8 @@ function rereference(
     file_pattern::String;
     input_dir::String = pwd(),
     reference_selection::Union{Symbol,Vector{Symbol}} = :avg,
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -249,7 +249,7 @@ function rereference(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
@@ -262,7 +262,7 @@ function rereference(
             # Create processing function with captured parameters
             process_fn =
                 (input_path, output_path) ->
-                    _process_rereference_file(input_path, output_path, reference_selection, conditions)
+                    _process_rereference_file(input_path, output_path, reference_selection, condition_selection)
 
             # Execute batch operation
             results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Rereferencing")

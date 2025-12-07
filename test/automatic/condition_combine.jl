@@ -66,7 +66,7 @@ using Statistics
                 [[1, 2], [3, 4]],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = 2,
+                participant_selection = eegfun.participants(2),
             )
 
             @test result.success == 1
@@ -84,7 +84,7 @@ using Statistics
                 [[1, 2], [3, 4]],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = [1, 3],
+                participant_selection = eegfun.participants([1, 3]),
             )
 
             @test result.success == 2

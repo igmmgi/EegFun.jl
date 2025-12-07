@@ -170,7 +170,7 @@ function _process_channel_average_file(
     output_path::String,
     channel_selections::Vector{<:Function},
     output_labels::Vector{Symbol},
-    conditions,
+    condition_selection::Function,
     reduce::Bool,
 )
     filename = basename(filepath)
@@ -187,7 +187,7 @@ function _process_channel_average_file(
     end
 
     # Select conditions
-    data = _condition_select(data, conditions)
+    data = _condition_select(data, condition_selection)
 
     # Apply channel averaging to each data item
     foreach(data) do item
@@ -205,8 +205,8 @@ end
     channel_average(file_pattern::String, channel_selections::Vector{Function}; 
                     output_labels::Union{Vector{Symbol}, Nothing} = nothing,
                     input_dir::String = pwd(), 
-                    participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                    conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                    participant_selection::Function = participants(),
+                    condition_selection::Function = conditions(),
                     output_dir::Union{String, Nothing} = nothing,
                     reduce::Bool = false)
 
@@ -220,8 +220,8 @@ and saves the resulting data with new averaged channels to a new directory.
 - `channel_selections::Vector{Function}`: Channel selection predicates (e.g., `[channels([:Fp1, :Fp2]), channels([:PO7, :PO8])]`)
 - `output_labels::Union{Vector{Symbol}, Nothing}`: Labels for averaged channels (default: auto-generated from selection)
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
-- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
+- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 - `reduce::Bool`: Whether to keep only averaged channels (true) or append to existing (false, default)
 
@@ -252,8 +252,8 @@ function channel_average(
     channel_selections::Vector{<:Function};
     output_labels::Union{Vector{Symbol},Nothing} = nothing,
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
     reduce::Bool = false,
 )
@@ -288,7 +288,7 @@ function channel_average(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
@@ -307,7 +307,7 @@ function channel_average(
                 output_path,
                 channel_selections,
                 output_labels,
-                conditions,
+                condition_selection,
                 reduce,
             )
 

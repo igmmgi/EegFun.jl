@@ -347,7 +347,7 @@ end
 """
     resample(file_pattern::String, factor::Int;
             input_dir::String = pwd(),
-            participants::Union{Int, Vector{Int}, Nothing} = nothing,
+            participant_selection::Function = participants(),
             output_dir::Union{String, Nothing} = nothing)
 
 Batch resample data files and save to a new directory.
@@ -359,7 +359,7 @@ by the specified factor.
 - `file_pattern::String`: Pattern to match files (e.g., "continuous", "epochs", "erp")
 - `factor::Int`: Downsampling factor
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
 
 # Examples
@@ -394,7 +394,7 @@ function resample(
     file_pattern::String,
     factor::Int;
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -420,7 +420,7 @@ function resample(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"

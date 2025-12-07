@@ -576,7 +576,7 @@ end
             output_dir = joinpath(test_dir, "averaged_participant")
 
             result =
-                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, participants = 1)
+                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants(1))
 
             @test result.success == 1
             @test result.errors == 0
@@ -591,7 +591,7 @@ end
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = [1, 2],
+                participant_selection = eegfun.participants([1, 2]),
             )
 
             @test result.success == 2
@@ -604,7 +604,7 @@ end
             output_dir = joinpath(test_dir, "averaged_condition")
 
             result =
-                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, conditions = 1)
+                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(1))
 
             @test result.success == 2
 
@@ -621,7 +621,7 @@ end
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                conditions = [1, 2],
+                condition_selection = eegfun.conditions([1, 2]),
             )
 
             @test result.success == 2
@@ -707,12 +707,13 @@ end
             output_dir = joinpath(test_dir, "averaged_invalid_condition")
 
             # Request condition 5 when only 2 exist
+            # With predicate-based selection, this results in empty selection but successful processing
             result =
-                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, conditions = 5)
+                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(5))
 
-            # Should fail for all files
-            @test result.success == 0
-            @test result.errors == 2
+            # Files are processed successfully but with empty condition selection
+            @test result.success == 2
+            @test result.errors == 0
         end
 
         @testset "Return value structure" begin
@@ -766,8 +767,8 @@ end
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = 1,
-                conditions = 1,
+                participant_selection = eegfun.participants(1),
+                condition_selection = eegfun.conditions(1),
             )
 
             @test result.success == 1

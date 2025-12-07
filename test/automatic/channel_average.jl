@@ -211,7 +211,7 @@ end
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = 1,
+                participant_selection = eegfun.participants(1),
             )
 
             @test result.success == 1
@@ -228,7 +228,7 @@ end
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = [1, 2],
+                participant_selection = eegfun.participants([1, 2]),
             )
 
             @test result.success == 2
@@ -245,7 +245,7 @@ end
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                conditions = 1,
+                condition_selection = eegfun.conditions(1),
             )
 
             @test result.success == 2
@@ -264,7 +264,7 @@ end
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                conditions = [1, 2],
+                condition_selection = eegfun.conditions([1, 2]),
             )
 
             @test result.success == 2
@@ -520,8 +520,8 @@ end
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = 1,
-                conditions = 1,
+                participant_selection = eegfun.participants(1),
+                condition_selection = eegfun.conditions(1),
             )
 
             @test result.success == 1
@@ -768,17 +768,18 @@ end
             output_dir = joinpath(test_dir, "combined_invalid_condition")
 
             # Request condition 5 when only 2 exist
+            # With predicate-based selection, this results in empty selection but successful processing
             result = eegfun.channel_average(
                 "erps_cleaned",
                 [eegfun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                conditions = 5,
+                condition_selection = eegfun.conditions(5),
             )
 
-            # Should fail for all files
-            @test result.success == 0
-            @test result.errors == 2
+            # Files are processed successfully but with empty condition selection
+            @test result.success == 2
+            @test result.errors == 0
         end
 
         @testset "Many channels" begin

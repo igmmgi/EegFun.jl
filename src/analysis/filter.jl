@@ -487,7 +487,7 @@ end
 Process a single file through filtering pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_filter_file(filepath::String, output_path::String, filter_type::String, cutoff_freq::Real, conditions)
+function _process_filter_file(filepath::String, output_path::String, filter_type::String, cutoff_freq::Real, condition_selection::Function)
     filename = basename(filepath)
 
     # Load data
@@ -502,7 +502,7 @@ function _process_filter_file(filepath::String, output_path::String, filter_type
     end
 
     # Select conditions
-    data = _condition_select(data, conditions)
+    data = _condition_select(data, condition_selection)
 
     # Apply filter (mutates data in-place)
     filter_data!.(data, filter_type, cutoff_freq)
@@ -521,8 +521,8 @@ end
     filter(file_pattern::String, cutoff_freq::Real; 
            input_dir::String = pwd(), 
            filter_type::String = "lp", 
-           participants::Union{Int, Vector{Int}, Nothing} = nothing,
-           conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+           participant_selection::Function = participants(),
+           condition_selection::Function = conditions(),
            output_dir::Union{String, Nothing} = nothing)
 
 Filter EEG/ERP data from JLD2 files and save to a new directory.
@@ -532,8 +532,8 @@ Filter EEG/ERP data from JLD2 files and save to a new directory.
 - `cutoff_freq::Real`: Cutoff frequency in Hz
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
 - `filter_type::String`: Type of filter ("lp", "hp")
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
-- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition number(s) to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
+- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on filter settings)
 
 # Example
@@ -553,8 +553,8 @@ function filter(
     cutoff_freq::Real;
     input_dir::String = pwd(),
     filter_type::String = "lp",
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -580,7 +580,7 @@ function filter(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
@@ -589,7 +589,7 @@ function filter(
 
         # Create processing function with captured parameters
         @info "Filter settings: filter_type=\"$filter_type\", cutoff: $cutoff_freq Hz"
-        process_fn = (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, conditions)
+        process_fn = (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Filtering")
