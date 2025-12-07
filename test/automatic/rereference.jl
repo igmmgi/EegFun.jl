@@ -201,7 +201,7 @@ end
         result = eegfun.rereference(
             "erps_cleaned",
             input_dir = test_dir,
-            participants = [1, 2],
+            participant_selection = eegfun.participants([1, 2]),
             reference_selection = :avg,
             output_dir = output_dir,
         )
@@ -215,7 +215,7 @@ end
         result = eegfun.rereference(
             "erps_cleaned",
             input_dir = test_dir,
-            conditions = [1],
+            condition_selection = eegfun.conditions([1]),
             reference_selection = :avg,
             output_dir = output_dir2,
         )
@@ -256,7 +256,7 @@ end
             result = eegfun.rereference(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participants = 999,  # This should match the file but fail processing
+                participant_selection = eegfun.participants(999),  # This should match the file but fail processing
                 output_dir = output_dir,
             )
 
@@ -285,7 +285,7 @@ end
             result = eegfun.rereference(
                 "erps_cleaned",
                 input_dir = empty_test_dir,
-                participants = nothing,  # Process all files to get both empty and unrecognized
+                # Process all files to get both empty and unrecognized
                 output_dir = output_dir,
             )
 
@@ -318,8 +318,8 @@ end
         result = eegfun.rereference(
             "erps_cleaned",
             input_dir = test_dir,
-            participants = 1,
-            conditions = [1],
+            participant_selection = eegfun.participants(1),
+            condition_selection = eegfun.conditions([1]),
             reference_selection = :avg,
             output_dir = output_dir,
         )
@@ -408,8 +408,8 @@ end
         result = eegfun.rereference(
             "erps_cleaned",
             input_dir = test_dir,
-            participants = 1,
-            conditions = [1],
+            participant_selection = eegfun.participants(1),
+            condition_selection = eegfun.conditions([1]),
             reference_selection = :avg,
             output_dir = output_dir,
         )

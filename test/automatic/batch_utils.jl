@@ -5,6 +5,7 @@ Test suite for src/analysis/batch_utils.jl
 using Test
 using JLD2
 using DataFrames
+using Logging
 
 @testset "Batch Utils" begin
     # Create temporary test directory
@@ -77,14 +78,14 @@ using DataFrames
         @test all(contains.(files, "erps_cleaned"))
 
         # Test participant filtering
-        files_filtered = eegfun._find_batch_files("erps_cleaned", test_dir; participants = [1, 3, 5])
+        files_filtered = eegfun._find_batch_files("erps_cleaned", test_dir, eegfun.participants([1, 3, 5]))
         @test length(files_filtered) == 3
         @test "1_erps_cleaned.jld2" in files_filtered
         @test "3_erps_cleaned.jld2" in files_filtered
         @test "5_erps_cleaned.jld2" in files_filtered
 
         # Test single participant
-        files_single = eegfun._find_batch_files("erps_cleaned", test_dir; participants = 2)
+        files_single = eegfun._find_batch_files("erps_cleaned", test_dir, eegfun.participants(2))
         @test length(files_single) == 1
         @test "2_erps_cleaned.jld2" in files_single
 
@@ -403,10 +404,9 @@ using DataFrames
 
 
     @testset "@log_call macro" begin
-        # Test @log_call with function name and tuple of positional args
-        # This is the only supported form after simplification
+        # Test @log_call with function name only (current simplified form)
         function test_func1(x, y; opt1 = 1, opt2 = "test")
-            eegfun.@log_call "test_func1" (x, y)
+            eegfun.@log_call "test_func1"
             return x + y + opt1
         end
 
@@ -414,27 +414,27 @@ using DataFrames
         result = test_func1(1, 2; opt1 = 3, opt2 = "test")
         @test result == 6
 
-        # Test @log_call with multiple positional args
+        # Test @log_call with different function name
         function test_func2(x, y, z; opt1 = 1)
-            eegfun.@log_call "test_func2" (x, y, z)
+            eegfun.@log_call "test_func2"
             return x + y + z + opt1
         end
 
         result = test_func2(1, 2, 3; opt1 = 4)
         @test result == 10
 
-        # Test @log_call with single positional arg
+        # Test @log_call in function with single arg
         function test_func3(x; opt1 = 1)
-            eegfun.@log_call "test_func3" (x,)
+            eegfun.@log_call "test_func3"
             return x + opt1
         end
 
         result = test_func3(5; opt1 = 2)
         @test result == 7
 
-        # Test @log_call with no positional args (empty tuple)
+        # Test @log_call in function with no positional args
         function test_func4(; opt1 = 1, opt2 = "test")
-            eegfun.@log_call "test_func4" ()
+            eegfun.@log_call "test_func4"
             return opt1
         end
 
@@ -472,13 +472,15 @@ using DataFrames
         end
 
         @testset "Batch operation edge cases" begin
-            # Test with empty file list
-            results = eegfun._run_batch_operation(
-                (x, y) -> eegfun.BatchResult(true, "test", "ok"),
-                String[],
-                test_dir,
-                test_dir,
-            )
+            # Test with empty file list (use NullLogger to avoid stream issues)
+            results = with_logger(NullLogger()) do
+                eegfun._run_batch_operation(
+                    (x, y) -> eegfun.BatchResult(true, "test", "ok"),
+                    String[],
+                    test_dir,
+                    test_dir,
+                )
+            end
             @test isempty(results)
 
             # Test with very long filenames
@@ -488,12 +490,14 @@ using DataFrames
             jldsave(long_file_path; data = erps)
 
             files_long = [long_filename]
-            results_long = eegfun._run_batch_operation(
-                (x, y) -> eegfun.BatchResult(true, basename(x), "Success"),
-                files_long,
-                test_dir,
-                test_dir,
-            )
+            results_long = with_logger(NullLogger()) do
+                eegfun._run_batch_operation(
+                    (x, y) -> eegfun.BatchResult(true, basename(x), "Success"),
+                    files_long,
+                    test_dir,
+                    test_dir,
+                )
+            end
             @test length(results_long) == 1
             @test results_long[1].success == true
         end
@@ -501,8 +505,8 @@ using DataFrames
         @testset "Condition selection edge cases" begin
             data = [create_test_erp_data(1, i) for i = 1:5]
 
-            # Test with out-of-bounds indices (throws ArgumentError for indices > length)
-            @test_throws ArgumentError eegfun._condition_select(data, [10])
+            # Test with out-of-bounds indices (throws BoundsError for indices > length)
+            @test_throws BoundsError eegfun._condition_select(data, [10])
 
             # Test with negative indices (throws BoundsError from array indexing)
             @test_throws BoundsError eegfun._condition_select(data, [-1])
@@ -542,12 +546,17 @@ using DataFrames
             output_dir = joinpath(test_dir, "integration_output")
             mkpath(output_dir)
 
-            results = eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+            # Use NullLogger to avoid stream initialization issues during tests
+            results = with_logger(NullLogger()) do
+                eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+            end
             @test length(results) == 3
             @test all(r.success for r in results)
 
-            # Log summary
-            summary = eegfun._log_batch_summary(results, output_dir)
+            # Log summary (also with NullLogger)
+            summary = with_logger(NullLogger()) do
+                eegfun._log_batch_summary(results, output_dir)
+            end
             @test summary.success == 3
             @test summary.errors == 0
         end

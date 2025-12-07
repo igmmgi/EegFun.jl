@@ -1041,7 +1041,7 @@ end
 Process a single epochs file through averaging pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_average_file(filepath::String, output_path::String, conditions)
+function _process_average_file(filepath::String, output_path::String, condition_selection::Function)
     filename = basename(filepath)
 
     # Load data
@@ -1056,7 +1056,7 @@ function _process_average_file(filepath::String, output_path::String, conditions
     end
 
     # Select conditions
-    epochs_data = _condition_select(epochs_data, conditions)
+    epochs_data = _condition_select(epochs_data, condition_selection)
 
     # Average epochs for each condition
     erps_data = average_epochs.(epochs_data)
@@ -1074,8 +1074,8 @@ end
 """
     average_epochs(file_pattern::String; 
                        input_dir::String = pwd(), 
-                       participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                       conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                       participant_selection::Function = participants(),
+                       condition_selection::Function = conditions(),
                        output_dir::Union{String, Nothing} = nothing)
 
 Batch process epoch data files to create averaged ERP data.
@@ -1086,8 +1086,8 @@ and saves the resulting ERP data to a new directory.
 # Arguments
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "epochs_cleaned", "epochs_original")
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
-- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
+- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 
 # Examples
@@ -1110,8 +1110,8 @@ average_epochs("epochs_cleaned",
 function average_epochs(
     file_pattern::String;
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -1138,7 +1138,7 @@ function average_epochs(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
@@ -1154,7 +1154,7 @@ function average_epochs(
             output_file = basename(output_path)
             transformed_file = replace(output_file, "epochs" => "erps")
             transformed_output_path = joinpath(dirname(output_path), transformed_file)
-            _process_average_file(input_path, transformed_output_path, conditions)
+            _process_average_file(input_path, transformed_output_path, condition_selection)
         end
 
         # Execute batch operation

@@ -56,7 +56,7 @@ using DataFrames
 
         # Test with specific participants
         result =
-            eegfun.grand_average("erps_cleaned", input_dir = test_dir, participants = [1, 2, 3], output_dir = output_dir)
+            eegfun.grand_average("erps_cleaned", input_dir = test_dir, participant_selection = eegfun.participants([1, 2, 3]), output_dir = output_dir)
 
         @test isdir(output_dir)
         grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
@@ -72,7 +72,7 @@ using DataFrames
         output_dir = joinpath(test_dir, "grand_average_conditions")
 
         # Test with specific conditions
-        result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, conditions = [1, 2], output_dir = output_dir)
+        result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, condition_selection = eegfun.conditions([1, 2]), output_dir = output_dir)
 
         @test isdir(output_dir)
         grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
@@ -90,8 +90,8 @@ using DataFrames
         result = eegfun.grand_average(
             "erps_cleaned",
             input_dir = test_dir,
-            participants = [1, 2],
-            conditions = [1],
+            participant_selection = eegfun.participants([1, 2]),
+            condition_selection = eegfun.conditions([1]),
             output_dir = output_dir,
         )
 
@@ -145,7 +145,7 @@ using DataFrames
             result = eegfun.grand_average(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participants = 999,  # Non-existent participant
+                participant_selection = eegfun.participants(999),  # Non-existent participant
                 output_dir = output_dir,
             )
 
@@ -158,7 +158,7 @@ using DataFrames
             output_dir = joinpath(test_dir, "grand_average_single")
 
             result =
-                eegfun.grand_average("erps_cleaned", input_dir = test_dir, participants = [1], output_dir = output_dir)
+                eegfun.grand_average("erps_cleaned", input_dir = test_dir, participant_selection = eegfun.participants([1]), output_dir = output_dir)
 
             @test result === nothing
         end
@@ -179,7 +179,7 @@ using DataFrames
             result = eegfun.grand_average(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participants = [1, 2, 5],
+                participant_selection = eegfun.participants([1, 2, 5]),
                 output_dir = output_dir,
             )
 
@@ -199,7 +199,7 @@ using DataFrames
             result = eegfun.grand_average(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participants = 999,  # Non-existent participant
+                participant_selection = eegfun.participants(999),  # Non-existent participant
                 output_dir = output_dir,
             )
 
@@ -213,8 +213,8 @@ using DataFrames
         result = eegfun.grand_average(
             "erps_cleaned",
             input_dir = test_dir,
-            participants = [1, 2],
-            conditions = [1],
+            participant_selection = eegfun.participants([1, 2]),
+            condition_selection = eegfun.conditions([1]),
             output_dir = output_dir,
         )
 

@@ -195,7 +195,7 @@ using DataFrames
             # Note: pattern "lrp" matches both "_lrp" and "_multi_lrp" files
             # So we need to check the actual output corresponds to input files
             result =
-                eegfun.jackknife_average("lrp", input_dir = test_dir, participants = [1, 2, 3], output_dir = output_dir)
+                eegfun.jackknife_average("lrp", input_dir = test_dir, participant_selection = eegfun.participants([1, 2, 3]), output_dir = output_dir)
 
             @test isdir(output_dir)
 
@@ -221,7 +221,7 @@ using DataFrames
 
             # Test with specific conditions
             result =
-                eegfun.jackknife_average("multi_lrp", input_dir = test_dir, conditions = [1], output_dir = output_dir)
+                eegfun.jackknife_average("multi_lrp", input_dir = test_dir, condition_selection = eegfun.conditions([1]), output_dir = output_dir)
 
             @test isdir(output_dir)
 
@@ -330,7 +330,7 @@ using DataFrames
             output_dir = joinpath(test_dir, "jackknife_structure")
 
             result =
-                eegfun.jackknife_average("lrp", input_dir = test_dir, participants = [1, 2], output_dir = output_dir)
+                eegfun.jackknife_average("lrp", input_dir = test_dir, participant_selection = eegfun.participants([1, 2]), output_dir = output_dir)
 
             jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "data")
 

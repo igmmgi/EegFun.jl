@@ -465,7 +465,7 @@ using JLD2
                 output_dir = joinpath(tmpdir, "resampled")
 
                 # Process only participants 2 and 4
-                eegfun.resample("continuous", 2, input_dir = tmpdir, participants = [2, 4], output_dir = output_dir)
+                eegfun.resample("continuous", 2, input_dir = tmpdir, participant_selection = eegfun.participants([2, 4]), output_dir = output_dir)
 
                 # Check only selected participants were processed
                 @test !isfile(joinpath(output_dir, "1_continuous.jld2"))

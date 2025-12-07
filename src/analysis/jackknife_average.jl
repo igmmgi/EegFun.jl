@@ -112,7 +112,7 @@ end
 Load ERP/LRP data from multiple files and organize by condition.
 Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs from all participants.
 """
-function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, conditions, data_var::String)
+function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String, condition_selection::Function, data_var::String)
     # data_var parameter kept for backwards compatibility but not used - load_data() finds by type
     all_erps_by_condition = Dict{Int,Vector{ErpData}}()
     participant_ids = Int[]
@@ -146,7 +146,7 @@ function _load_and_group_for_jackknife(files::Vector{String}, input_dir::String,
         end
 
         # Select conditions if specified
-        data = _condition_select(data, conditions)
+        data = _condition_select(data, condition_selection)
 
         # Group by condition
         for erp in data
@@ -244,8 +244,8 @@ end
 """
     jackknife_average(file_pattern::String;
                       input_dir::String = pwd(),
-                      participants::Union{Int, Vector{Int}, Nothing} = nothing,
-                      conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+                      participant_selection::Function = participants(),
+                      condition_selection::Function = conditions(),
                       output_dir::Union{String, Nothing} = nothing,
                       data_var::String = "lrp")
 
@@ -257,8 +257,8 @@ and creates jackknife (leave-one-out) averages for each participant and conditio
 # Arguments
 - `file_pattern::String`: Pattern to match files (e.g., "lrp", "erps_cleaned")
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
-- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition numbers to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
+- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 - `data_var::String`: Deprecated parameter kept for backwards compatibility. Data is now loaded using `load_data()` which finds data by type.
 
@@ -307,8 +307,8 @@ participant_1_jackknife = load("jackknife_lrp/1_lrp.jld2", "data")
 function jackknife_average(
     file_pattern::String;
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
     data_var::String = "lrp",
 )
@@ -330,7 +330,7 @@ function jackknife_average(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
@@ -345,7 +345,7 @@ function jackknife_average(
         @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
         # Load and group data by condition (data_var parameter kept for backwards compatibility but not used)
-        erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, conditions, data_var)
+        erps_by_condition, participant_ids = _load_and_group_for_jackknife(files, input_dir, condition_selection, data_var)
 
         if isempty(erps_by_condition)
             @minimal_warning "No valid data found in any files"

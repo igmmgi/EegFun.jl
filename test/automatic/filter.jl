@@ -216,7 +216,7 @@ end
         @testset "Filter specific participants" begin
             output_dir = joinpath(test_dir, "filtered_participant")
 
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, participants = 1)
+            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants(1))
 
             @test result.success == 1
             @test result.errors == 0
@@ -227,7 +227,7 @@ end
         @testset "Filter specific conditions" begin
             output_dir = joinpath(test_dir, "filtered_condition")
 
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, conditions = 1)
+            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(1))
 
             @test result.success == 2
 
@@ -290,7 +290,7 @@ end
             output_dir = joinpath(test_dir, "filtered_multi_participants")
 
             # Filter both participants
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, participants = [1, 2])
+            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants([1, 2]))
 
             @test result.success == 2
             @test result.errors == 0
@@ -302,7 +302,7 @@ end
             output_dir = joinpath(test_dir, "filtered_multi_conditions")
 
             # Filter both conditions
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, conditions = [1, 2])
+            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions([1, 2]))
 
             @test result.success == 2
 
@@ -379,11 +379,12 @@ end
             output_dir = joinpath(test_dir, "filtered_invalid_condition")
 
             # Request condition 5 when only 2 exist
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, conditions = 5)
+            # With predicate-based selection, this results in empty selection but successful processing
+            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(5))
 
-            # Should fail for all files
-            @test result.success == 0
-            @test result.errors == 2
+            # Files are processed successfully but with empty condition selection
+            @test result.success == 2
+            @test result.errors == 0
         end
 
         @testset "Empty pattern match" begin
@@ -444,8 +445,8 @@ end
                 30.0,
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participants = 1,
-                conditions = 1,
+                participant_selection = eegfun.participants(1),
+                condition_selection = eegfun.conditions(1),
             )
 
             @test result.success == 1

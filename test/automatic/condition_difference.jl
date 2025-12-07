@@ -68,7 +68,7 @@ using CSV
             "erps_cleaned",
             [(1, 2)],
             input_dir = test_dir,
-            participants = 2,
+            participant_selection = eegfun.participants(2),
             output_dir = output_dir,
         )
 
@@ -112,7 +112,7 @@ using CSV
             "erps_cleaned",
             [(1, 2), (3, 4)],
             input_dir = test_dir,
-            participants = 99,
+            participant_selection = eegfun.participants(99),
             output_dir = output_dir,
         )
 
@@ -156,7 +156,7 @@ using CSV
             "erps_cleaned",
             [(1, 2)],
             input_dir = test_dir,
-            participants = 1,
+            participant_selection = eegfun.participants(1),
             output_dir = output_dir,
         )
 
@@ -195,7 +195,7 @@ using CSV
                 "erps_cleaned",
                 [(1, 1)],
                 input_dir = test_dir,
-                participants = 1,
+                participant_selection = eegfun.participants(1),
                 output_dir = output_dir,
             )
 
@@ -244,7 +244,7 @@ using CSV
                 "erps_cleaned",
                 [(1, 2)],
                 input_dir = test_dir,
-                participants = 999,  # Non-existent participant
+                participant_selection = eegfun.participants(999),  # Non-existent participant
                 output_dir = output_dir,
             )
 

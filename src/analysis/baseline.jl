@@ -231,7 +231,7 @@ function _process_baseline_file(
     filepath::String,
     output_path::String,
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
-    conditions,
+    condition_selection::Function,
 )
     filename = basename(filepath)
 
@@ -247,7 +247,7 @@ function _process_baseline_file(
     end
 
     # Select conditions
-    data = _condition_select(data, conditions)
+    data = _condition_select(data, condition_selection)
 
     # Apply baseline correction (mutates data in-place)
     baseline!.(data, Ref(baseline_interval))
@@ -262,7 +262,7 @@ function _process_baseline_file(
     filepath::String,
     output_path::String,
     baseline_selection::Function,
-    conditions,
+    condition_selection::Function,
 )
     filename = basename(filepath)
 
@@ -278,7 +278,7 @@ function _process_baseline_file(
     end
 
     # Select conditions
-    data = _condition_select(data, conditions)
+    data = _condition_select(data, condition_selection)
 
     # Apply baseline correction using predicate (mutates data in-place)
     baseline!.(data, Ref(baseline_selection))
@@ -296,8 +296,8 @@ end
 """
     baseline(file_pattern::String, baseline_interval; 
              input_dir::String = pwd(), 
-             participants::Union{Int, Vector{Int}, Nothing} = nothing,
-             conditions::Union{Int, Vector{Int}, Nothing} = nothing,
+             participant_selection::Function = participants(),
+             condition_selection::Function = conditions(),
              output_dir::Union{String, Nothing} = nothing)
 
 Apply baseline correction to EEG/ERP data from JLD2 files and save to a new directory.
@@ -310,8 +310,8 @@ Apply baseline correction to EEG/ERP data from JLD2 files and save to a new dire
   - `IntervalIndex`: Index interval struct (e.g., `IntervalIndex(start=1, stop=51)`)
   - `Function`: Sample selection predicate (e.g., `samples((start, end))`)
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
-- `conditions::Union{Int, Vector{Int}, Nothing}`: Condition number(s) to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
+- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on baseline settings)
 
 # Example
@@ -336,8 +336,8 @@ function baseline(
     file_pattern::String,
     baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}};
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -366,7 +366,7 @@ function baseline(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
@@ -379,7 +379,7 @@ function baseline(
             input_path,
             output_path,
             baseline_interval,
-            conditions,
+            condition_selection,
         )
 
         # Execute batch operation
@@ -402,14 +402,13 @@ function baseline(
     file_pattern::String,
     baseline_selection::Function;
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
-    conditions::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
     # Convert predicate to interval by loading a sample file
     # (The interval-based version will handle all file finding, validation, etc.)
-    participant_selection = isnothing(participants) ? participants() : participants(participants)
-    files = _find_batch_files(file_pattern, input_dir; participants = participant_selection)
+    files = _find_batch_files(file_pattern, input_dir, participant_selection)
     sample_data = load_data(joinpath(input_dir, files[1]))
     first_item = sample_data isa Vector{<:Union{ErpData,EpochData}} ? sample_data[1] : sample_data
     sample_df = first_item.data isa Vector{DataFrame} ? first_item.data[1] : first_item.data
@@ -421,7 +420,7 @@ function baseline(
     baseline_interval = IntervalIndex(start = first(baseline_indices), stop = last(baseline_indices))
     baseline(file_pattern, baseline_interval; 
              input_dir = input_dir,
-             participants = participants,
-             conditions = conditions,
+             participant_selection = participant_selection,
+             condition_selection = condition_selection,
              output_dir = output_dir)
 end

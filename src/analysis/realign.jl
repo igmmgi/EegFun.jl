@@ -302,7 +302,7 @@ end
 """
     realign(file_pattern::String, realignment_column::Symbol;
             input_dir::String = pwd(),
-            participants::Union{Int, Vector{Int}, Nothing} = nothing,
+            participant_selection::Function = participants(),
             output_dir::Union{String, Nothing} = nothing)
 
 Batch realign epoched data from JLD2 files and save to a new directory.
@@ -314,7 +314,7 @@ data to a different time point specified by a column in the epoch DataFrames.
 - `file_pattern::String`: Pattern to match files (e.g., "epochs", "epochs_cleaned")
 - `realignment_column::Symbol`: Column name containing realignment times (e.g., `:rt`, `:response_time`)
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant number(s) to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory)
 
 # Examples
@@ -348,7 +348,7 @@ function realign(
     file_pattern::String,
     realignment_column::Symbol;
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -370,7 +370,7 @@ function realign(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"

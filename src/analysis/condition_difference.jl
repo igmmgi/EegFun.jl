@@ -138,7 +138,7 @@ end
 """
     condition_difference(file_pattern::String, condition_pairs; 
                          input_dir::String = pwd(), 
-                         participants::Union{Int, Vector{Int}, Nothing} = nothing,
+                         participant_selection::Function = participants(),
                          output_dir::Union{String, Nothing} = nothing)
 
 Batch process ERP data files to create condition difference waves.
@@ -152,7 +152,7 @@ by subtracting EEG channel columns, and saves the resulting difference waves to 
   - `Vector{Tuple{Int, Int}}`: e.g., `[(1,2), (3,4)]`
   - `Vector{Vector{Int}}`: e.g., `[[1,2], [3,4]]`
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `participants::Union{Int, Vector{Int}, Nothing}`: Participant numbers to process (default: all)
+- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: auto-generated)
 
 # Examples
@@ -178,7 +178,7 @@ function condition_difference(
     file_pattern::String,
     condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}};
     input_dir::String = pwd(),
-    participants::Union{Int,Vector{Int},Nothing} = nothing,
+    participant_selection::Function = participants(),
     output_dir::Union{String,Nothing} = nothing,
 )
 
@@ -209,7 +209,7 @@ function condition_difference(
         mkpath(output_dir)
 
         # Find files
-        files = _find_batch_files(file_pattern, input_dir, participants)
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
 
         if isempty(files)
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"

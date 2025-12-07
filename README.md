@@ -22,6 +22,7 @@ Alpha level 0.1 :-)
 
 ## 📋 TODO
 
+- ☐ Batch functions need to deal with bad input options (e.g., conditions missing and so on)
 - ☐ Add more visualization options
 - ☐ Improve documentation and examples
 - ☐ Add more filetypes (separate packages?)
