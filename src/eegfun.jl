@@ -41,6 +41,7 @@ using TOML
 # Core types
 include("types/core.jl")
 include("types/pipeline.jl")
+include("types/statistics.jl")
 
 # Utility functions
 include("utils/error.jl")
@@ -71,6 +72,7 @@ include("analysis/condition_difference.jl")
 include("analysis/erp_measurements.jl")
 include("analysis/epochs.jl")
 include("analysis/filter.jl")
+include("analysis/statistics_ttest.jl")
 include("analysis/statistics.jl")
 include("analysis/gfp.jl")
 include("analysis/grand_average.jl")
