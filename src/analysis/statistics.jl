@@ -142,11 +142,6 @@ function independent_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = 
     return (df = df, t = t, p = p)
 end
 
-
-# ======================================
-# DATA PREPARATION FOR STATISTICAL TESTS
-# ======================================
-
 """
     AnalysisData
 
@@ -163,6 +158,7 @@ struct AnalysisData
     time_points::Vector{Float64}     # analysis window
 end
 
+
 """
     StatisticalTestData
 
@@ -178,7 +174,6 @@ struct StatisticalTestData
 end
 
 function Base.show(io::IO, data::StatisticalTestData)
-    # Helper to format time range
     time_range_str(times) = isempty(times) ? "N/A" : "$(first(times)) to $(last(times)) s"
     
     # Get dimensions
@@ -202,21 +197,24 @@ function Base.show(io::IO, data::StatisticalTestData)
     println(io, "└─ Analysis dimensions: $(size(data.analysis.data[1])) (participants × electrodes × time)")
 end
 
+
 """
-    prepare_statistical_test_data(condition1::Vector{ErpData}, condition2::Vector{ErpData}; 
+    prepare_statistical_test_data(erps::Vector{ErpData};
                              design::Symbol = :paired,
+                             condition_selection::Function = conditions([1, 2]),
                              channel_selection::Function = channels(),
                              sample_selection::Function = samples(),
-                             baseline_window::Function = samples())
+                             baseline_window::Function = samples(),
+                             analysis_window::Function = samples())
 
-    prepare_statistical_test_data(file_pattern::String, condition1, condition2;
-                             design::Symbol = :paired,
+    prepare_statistical_test_data(file_pattern::String, design::Symbol;
                              input_dir::String = pwd(),
                              participant_selection::Function = participants(),
+                             condition_selection::Function = conditions([1, 2]),
                              channel_selection::Function = channels(),
-                             analysis_window::Function = samples(),
                              sample_selection::Function = samples(),
-                             baseline_window::Function = samples())
+                             baseline_window::Function = samples(),
+                             analysis_window::Function = samples())
 
 Prepare ErpData for statistical tests (permutation and analytic tests).
 
@@ -224,39 +222,55 @@ Organizes ErpData into participant × electrode × time arrays for statistical a
 Validates the design and ensures data consistency across conditions.
 
 # Arguments (Direct data version)
-- `condition1::Vector{ErpData}`: ERPs for condition/group 1 (one per participant)
-- `condition2::Vector{ErpData}`: ERPs for condition/group 2 (one per participant)
+- `erps::Vector{ErpData}`: ERPs containing data for multiple conditions/participants
 - `design::Symbol`: Design type - `:paired` (same participants in both conditions) or `:independent` (different participants)
-- `channel_selection::Function`: Function to filter channels (default: all channels)
-- `sample_selection::Function`: Function to select time points (default: all samples). Use `samples((start, end))` for time windows.
-- `baseline_window::Function`: Baseline window sample selection predicate (default: samples() - all samples, baseline skipped). Use `samples((start, end))` for baseline window.
+- `condition_selection::Function`: Predicate to select exactly 2 conditions for comparison (default: `conditions([1, 2])`)
+- `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
+- `sample_selection::Function`: Predicate to select time points (default: `samples()` - all samples). Use `samples((start, end))` for time windows.
+- `baseline_window::Function`: Baseline window sample selection predicate (default: `samples()` - all samples, baseline skipped). Use `samples((start, end))` for baseline window.
+- `analysis_window::Function`: Analysis window sample selection predicate (default: `samples()` - all samples). Use `samples((start, end))` for analysis time windows.
 
 # Arguments (File-based version)
 - `file_pattern::String`: Pattern to match JLD2 files (e.g., "erps_cleaned")
-- `condition1`: Condition identifier for group 1 (Int or String)
-- `condition2`: Condition identifier for group 2 (Int or String)
 - `design::Symbol`: Design type - `:paired` (same participants in both conditions) or `:independent` (different participants)
 - `input_dir::String`: Directory containing JLD2 files (default: current directory)
-- `participant_selection::Function`: Function to filter participants (default: all)
-- `channel_selection::Function`: Function to filter channels (default: all)
-- `analysis_window::Function`: Analysis window sample selection predicate (default: samples() - all samples). Use `samples((start, end))` for time windows. If provided, takes precedence over `sample_selection`.
-- `sample_selection::Function`: Function to select time points (default: all samples). Use `samples((start, end))` for time windows. Used if `analysis_window` is not provided (defaults to `samples()`).
-- `baseline_window::Function`: Baseline window sample selection predicate (default: samples() - all samples, baseline skipped). Use `samples((start, end))` for baseline window.
+- `participant_selection::Function`: Predicate to filter participants (default: `participants()` - all participants)
+- `condition_selection::Function`: Predicate to select exactly 2 conditions for comparison (default: `conditions([1, 2])`)
+- `channel_selection::Function`: Predicate to filter channels (default: `channels()` - all channels)
+- `sample_selection::Function`: Predicate to select time points (default: `samples()` - all samples). Use `samples((start, end))` for time windows.
+- `baseline_window::Function`: Baseline window sample selection predicate (default: `samples()` - all samples, baseline skipped). Use `samples((start, end))` for baseline window.
+- `analysis_window::Function`: Analysis window sample selection predicate (default: `samples()` - all samples). Use `samples((start, end))` for analysis time windows.
 
 # Returns
 - `StatisticalTestData`: Prepared data structure ready for statistical testing
 """
 
 # Direct data version
-function prepare_statistical_test_data(condition1::Vector{ErpData}, condition2::Vector{ErpData}; 
-                                   design::Symbol = :paired,
-                                   channel_selection::Function = channels(),
-                                   sample_selection::Function = samples(),
-                                   baseline_window::Function = samples(),
-                                   analysis_window::Function = samples())
-
+function prepare_statistical_test_data(
+    erps::Vector{ErpData};
+    design::Symbol = :paired,
+    condition_selection::Function = conditions([1, 2]),
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    baseline_window::Function = samples(),
+    analysis_window::Function = samples(),
+)
+    # Group all ERPs by condition first
+    erps_by_condition = group_by_condition(erps)
+    
+    # Apply condition selection to the sorted condition numbers
+    all_cond_nums = collect(keys(erps_by_condition))  # Already sorted by group_by_condition
+    selected_mask = condition_selection(1:length(all_cond_nums))
+    selected_cond_nums = all_cond_nums[selected_mask]
+    
+    # Validate exactly 2 conditions
+    length(selected_cond_nums) == 2 || @minimal_error_throw "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
+    
+    condition1 = erps_by_condition[selected_cond_nums[1]]
+    condition2 = erps_by_condition[selected_cond_nums[2]]
+    
     # Validate design
-    design in (:paired, :independent) || error("design must be :paired or :independent, got :$design")
+    design in (:paired, :independent) || @minimal_error "design must be :paired or :independent, got :$design"
     
     # Extract participant IDs from filenames (using utility from batch.jl)
     participants1 = [_extract_participant_id(basename(data.file)) for data in condition1]
@@ -271,14 +285,12 @@ function prepare_statistical_test_data(condition1::Vector{ErpData}, condition2::
         if length(participants1) < 2 || length(participants2) < 2
             @minimal_error "Independent design requires at least 2 participants per group"
         end
-    else
-        @minimal_error("Invalid design: $design")
     end
     
     # Validate all ERPs have same structure within each condition
-    have_same_structure(condition1) || error("Condition 1: ERPs have inconsistent structure")
-    have_same_structure(condition2) || error("Condition 2: ERPs have inconsistent structure")
-    have_same_structure(condition1[1], condition2[1]) || error("Condition 1 vs. 2: ERPs have inconsistent structure")
+    have_same_structure(condition1) || @minimal_error("Condition 1: ERPs have inconsistent structure")
+    have_same_structure(condition2) || @minimal_error("Condition 2: ERPs have inconsistent structure")
+    have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
 
     condition1 = subset(
         condition1;
@@ -299,8 +311,8 @@ function prepare_statistical_test_data(condition1::Vector{ErpData}, condition2::
     baseline!.(condition2, Ref(baseline_window))
 
     # create grand averages for ease of use in plotting results
-    condition1_avg = grand_average(condition1, 1)
-    condition2_avg = grand_average(condition2, 2)
+    condition1_avg = grand_average(condition1, selected_cond_nums[1])
+    condition2_avg = grand_average(condition2, selected_cond_nums[2])
 
     # create second subset with analysis_window for statistical tests
     condition1 = subset(
@@ -331,44 +343,36 @@ function prepare_statistical_test_data(condition1::Vector{ErpData}, condition2::
         [condition1_avg, condition2_avg],
         AnalysisData(design, [condition1, condition2], time_points),
     )
+
 end
+
 
 # File-based version (convenience wrapper)
 function prepare_statistical_test_data(
     file_pattern::String,
-    conditions::Vector{Int};
-    design::Symbol = :paired,
+    design::Symbol;
     input_dir::String = pwd(),
     participant_selection::Function = participants(),
+    condition_selection::Function = conditions([1, 2]),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     baseline_window::Function = samples(),
     analysis_window::Function = samples(),
 )
-    # Validate conditions vector
-    length(conditions) == 2 || @minimal_error("conditions must be a vector of exactly 2 condition numbers, got $(length(conditions))")
+    # Load all ERPs
+    all_erps = load_all_data(ErpData, file_pattern; input_dir = input_dir, participant_selection = participant_selection)
+    isempty(all_erps) && @minimal_error_throw "No valid ERP data found matching pattern '$file_pattern' in $input_dir"
     
-    # Find files
-    files = _find_batch_files(file_pattern, input_dir, participant_selection)
-    isempty(files) && @minimal_error_throw "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
-    
-    # Load and group ERPs by condition 
-    all_erps_by_condition = _load_and_group_erps(files, input_dir, conditions)
-    
-    # ERPs for each condition
-    !haskey(all_erps_by_condition, conditions[1]) && @minimal_error("Condition $(conditions[1]) not found in data")
-    !haskey(all_erps_by_condition, conditions[2]) && @minimal_error("Condition $(conditions[2]) not found in data")
-    
-    # Call the main preparation function
+    # Call the main preparation function (handles grouping and condition selection)
     return prepare_statistical_test_data(
-         all_erps_by_condition[conditions[1]], 
-         all_erps_by_condition[conditions[2]]; 
-         design = design, 
-         channel_selection = channel_selection,
-         sample_selection = sample_selection,
-         baseline_window = baseline_window,
-         analysis_window = analysis_window
-     )
+        all_erps;
+        design = design,
+        condition_selection = condition_selection,
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        baseline_window = baseline_window,
+        analysis_window = analysis_window,
+    )
 end
 
 # ======================================
@@ -3020,7 +3024,6 @@ function analytic_ttest(
     # Apply multiple comparison correction
     corrected_mask = apply_multiple_comparison_correction(p_matrix, alpha, correction_method)
     
-    # Debug: Print correction info
     if correction_method == :bonferroni
         n_comparisons = count(!isnan, p_matrix)
         bonferroni_alpha = alpha / n_comparisons

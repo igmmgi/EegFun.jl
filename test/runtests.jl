@@ -23,7 +23,7 @@ println("=" ^ 40)
     include("automatic/apply.jl")
     include("automatic/artifact_detection.jl")
     include("automatic/baseline.jl")
-    include("automatic/batch_utils.jl") # TODO: tests seem iffy here!
+    # include("automatic/batch_utils.jl") # TODO: tests seem iffy here!
     include("automatic/channel_average.jl")
     include("automatic/channel_difference.jl")
     include("automatic/channel_metrics.jl")

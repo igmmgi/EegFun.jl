@@ -47,14 +47,14 @@ file_pattern = "erps_good"
 println("Preparing data...")
 prepared = eegfun.prepare_statistical_test_data(
     file_pattern,  # Pattern to match ERP files
-    [1,2],      # Conditions to compare
-    design = :paired,  # :paired for within-subject, :independent for between-subject
+    :paired;       # :paired for within-subject, :independent for between-subject
     input_dir = input_dir,
     participant_selection = eegfun.participants(3:18),  # Select participants 3-18
-    channel_selection = eegfun.channels(1:72),  # Select all 72 channels
-    sample_selection = eegfun.samples((-0.5, 2.0)),  # Analysis window: 0-2 seconds
-    baseline_window = eegfun.samples((-0.2, 0.0)),  # Baseline: -200 to 0 ms
-    analysis_window = eegfun.samples((0.1, 1.0)),  # Analysis window: 0-2 seconds
+    condition_selection = eegfun.conditions([1, 2]),    # Conditions to compare
+    channel_selection = eegfun.channels(1:72),          # Select all 72 channels
+    sample_selection = eegfun.samples((-0.5, 2.0)),     # Full time window
+    baseline_window = eegfun.samples((-0.2, 0.0)),      # Baseline: -200 to 0 ms
+    analysis_window = eegfun.samples((0.1, 1.0)),       # Analysis window: 100-1000 ms
 )
 
 println("✓ Data prepared successfully!")
