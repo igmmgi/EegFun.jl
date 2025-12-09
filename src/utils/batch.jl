@@ -128,6 +128,101 @@ _condition_select(data, condition_selection::Nothing) = _condition_select(data, 
 
 
 """
+    load_all_data(files::Vector{String}, input_dir::String)
+    load_all_data(::Type{T}, files::Vector{String}, input_dir::String) where {T}
+    load_all_data(file_pattern::String; input_dir, participant_selection)
+    load_all_data(::Type{T}, file_pattern::String; input_dir, participant_selection) where {T}
+
+Load all data from files into a flat vector.
+
+# Arguments (Vector version)
+- `files::Vector{String}`: Filenames to load (not full paths)
+- `input_dir::String`: Directory containing the files
+
+# Arguments (Pattern version)
+- `file_pattern::String`: Pattern to match files (e.g., "erps", "epochs")
+- `input_dir::String`: Directory containing the files (default: current directory)
+- `participant_selection::Function`: Predicate to filter participants (default: all)
+
+# Type Parameter
+- `T` (optional): Filter to only load data of this type (e.g., `ErpData`, `EpochData`)
+
+# Returns
+- `Vector`: All data from all files combined (typed if T specified)
+"""
+function load_all_data(files::Vector{String}, input_dir::String)
+    all_data = EegData[]
+    for (i, file) in enumerate(sort(files, by=natural_sort_key))
+        input_path = joinpath(input_dir, file)
+        @info "Loading: $file ($i/$(length(files)))"
+        file_data = load_data(input_path)
+        isnothing(file_data) && continue
+        if file_data isa Vector{<:EegData}
+            append!(all_data, file_data)
+        elseif file_data isa EegData
+            push!(all_data, file_data)
+        end
+    end
+    return all_data
+end
+
+function load_all_data(::Type{T}, files::Vector{String}, input_dir::String) where {T}
+    all_data = T[]
+    for (i, file) in enumerate(sort(files, by=natural_sort_key))
+        input_path = joinpath(input_dir, file)
+        @info "Loading: $file ($i/$(length(files)))"
+        file_data = load_data(input_path)
+        isnothing(file_data) && continue
+        file_data isa Vector{<:T} || continue
+        append!(all_data, file_data)
+    end
+    return all_data
+end
+
+# Pattern-based versions
+function load_all_data(
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+)
+    files = _find_batch_files(file_pattern, input_dir, participant_selection)
+    return load_all_data(files, input_dir)
+end
+
+function load_all_data(
+    ::Type{T},
+    file_pattern::String;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+) where {T}
+    files = _find_batch_files(file_pattern, input_dir, participant_selection)
+    return load_all_data(T, files, input_dir)
+end
+
+
+"""
+    group_by_condition(erps::Vector{<:ErpData})
+
+Group ERPs by their condition number.
+
+# Arguments
+- `erps::Vector{<:ErpData}`: ERPs to group
+
+# Returns
+- `OrderedDict{Int, Vector{ErpData}}`: ERPs grouped by condition number (sorted)
+"""
+function group_by_condition(erps::Vector{<:ErpData})
+    grouped = OrderedDict{Int, Vector{ErpData}}()
+    for erp in erps
+        cond_num = erp.condition
+        push!(get!(grouped, cond_num, ErpData[]), erp)
+    end
+    # Sort by condition number
+    return OrderedDict(sort(collect(grouped), by=first))
+end
+
+
+"""
     validate_input_dir(dir::String)
 
 Validate input directory exists, returning error message or nothing.

@@ -72,40 +72,20 @@ grand_average(erps::Vector{ErpData}, cond_num::Int) = _create_grand_average(erps
 
 """
 Load and group ERP data by condition from multiple files.
-Returns Dict{Int, Vector{ErpData}} mapping condition number to ERPs.
+Returns OrderedDict{Int, Vector{ErpData}} mapping condition number to ERPs.
 """
 function _load_and_group_erps(files::Vector{String}, input_dir::String, condition_selection::Function)
-
-    files = sort(files, by=natural_sort_key)
-    all_erps_by_condition = OrderedDict{Int,Vector{ErpData}}()
-    for (i, file) in enumerate(files)
-        input_path = joinpath(input_dir, file)
-        @info "Loading: $file ($i/$(length(files)))"
-
-        # Load ERP data (using load_data which finds by type)
-        erps_data = load_data(input_path)
-        if isnothing(erps_data)
-            @minimal_warning "No data variables found in $file. Skipping."
-            continue
-        end
-        
-        # Validate that data is Vector{ErpData}
-        if !(erps_data isa Vector{<:ErpData})
-            @minimal_warning "Invalid data type in $file: expected Vector{ErpData}, got $(typeof(erps_data)). Skipping."
-            continue
-        end
-
-        # Select conditions using the predicate
-        erps_data = _condition_select(erps_data, condition_selection)
-
-        # Group ERPs by condition number
-        for erp in erps_data
-            cond_num = erp.condition
-            push!(get!(all_erps_by_condition, cond_num, ErpData[]), erp)
-        end
-    end
-
-    return all_erps_by_condition
+    # Load all ERPs and group by condition
+    all_erps = load_all_data(ErpData, files, input_dir)
+    erps_by_condition = group_by_condition(all_erps)
+    
+    # Apply condition selection to the sorted condition numbers
+    all_cond_nums = collect(keys(erps_by_condition))  # Already sorted
+    selected_mask = condition_selection(1:length(all_cond_nums))
+    selected_cond_nums = all_cond_nums[selected_mask]
+    
+    # Return only the selected conditions
+    return OrderedDict(num => erps_by_condition[num] for num in selected_cond_nums)
 end
 
 """
