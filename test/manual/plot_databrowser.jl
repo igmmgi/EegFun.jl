@@ -1,5 +1,5 @@
 using eegfun
-using GLMakie
+# using GLMakie
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "Flank_C_3.bdf")

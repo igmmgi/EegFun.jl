@@ -1078,6 +1078,6 @@ function _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, sel
         end
     end
     
-    new_screen = getfield(Main, :GLMakie).Screen()
+    new_screen = GLMakie.Screen()
     display(new_screen, menu_fig)
 end

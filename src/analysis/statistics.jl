@@ -7,9 +7,9 @@ and analytic t-tests for EEG/ERP data.
 
 
 """
-    prepare_statistical_test_data(erps::Vector{ErpData}; design::Symbol = :paired, condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), sample_selection::Function = samples(), baseline_window::Function = samples(), analysis_window::Function = samples())
+    prepare_condition_comparison(erps::Vector{ErpData}; design::Symbol = :paired, condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), sample_selection::Function = samples(), baseline_window::Function = samples(), analysis_window::Function = samples())
 
-Prepare ErpData for statistical tests (permutation and analytic tests).
+Prepare ErpData for comparing two conditions in statistical tests (permutation and analytic tests).
 
 Organizes ErpData into participant × electrode × time arrays for statistical analysis.
 Validates the design and ensures data consistency across conditions.
@@ -26,7 +26,7 @@ Validates the design and ensures data consistency across conditions.
 # Returns
 - `StatisticalTestData`: Prepared data structure ready for statistical testing
 """
-function prepare_statistical_test_data(
+function prepare_condition_comparison(
     erps::Vector{ErpData};
     design::Symbol = :paired,
     condition_selection::Function = conditions([1, 2]),
@@ -53,18 +53,14 @@ function prepare_statistical_test_data(
     design ∉ (:paired, :independent) && @minimal_error "design must be :paired or :independent, got :$design"
     
     # Extract participant IDs from filenames (using utility from batch.jl)
-    participants1 = [_extract_participant_id(basename(data.file)) for data in condition1]
-    participants2 = [_extract_participant_id(basename(data.file)) for data in condition2]
+    vps1 = [_extract_participant_id(basename(data.file)) for data in condition1]
+    vps2 = [_extract_participant_id(basename(data.file)) for data in condition2]
     
     # Validate design
     if design == :paired # Paired design: same participants in both conditions, in the same order
-        if participants1 != participants2
-            @minimal_error "Paired design requires same participants in both conditions"
-        end
+        vps1 != vps2 && @minimal_error "Paired design requires same participants in both conditions"
     elseif design == :independent # Independent design: different participants (or allow overlap)
-        if length(participants1) < 2 || length(participants2) < 2
-            @minimal_error "Independent design requires at least 2 participants per group"
-        end
+        length(vps1) < 2 || length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
     end
     
     # Validate all ERPs have same structure within each condition
@@ -148,7 +144,7 @@ This is a convenience wrapper around the direct data version.
 # Returns
 - `StatisticalTestData`: Prepared data structure ready for statistical testing
 """
-function prepare_statistical_test_data(
+function prepare_condition_comparison(
     file_pattern::String,
     design::Symbol;
     input_dir::String = pwd(),
@@ -163,7 +159,7 @@ function prepare_statistical_test_data(
     all_erps = load_all_data(ErpData, file_pattern; input_dir = input_dir, participant_selection = participant_selection)
     isempty(all_erps) && @minimal_error_throw "No valid ERP data found matching pattern '$file_pattern' in $input_dir"
     
-    return prepare_statistical_test_data(
+    return prepare_condition_comparison(
         all_erps;
         design = design,
         condition_selection = condition_selection,
@@ -325,11 +321,13 @@ function compute_t_matrix(
         end
         
         # Compute t-statistics: t = mean_diff / (std_diff / sqrt(n))
+        # Use in-place assignment to fill pre-allocated t_matrix
         # Handle division by zero
         zero_std_mask = std_diff .== 0.0
         zero_mean_mask = mean_diff .== 0.0
         
-        t_matrix = mean_diff ./ (std_diff ./ sqrt(n_participants))
+        # Fill pre-allocated t_matrix in-place
+        t_matrix .= mean_diff ./ (std_diff ./ sqrt(n_participants))
         # Where std is zero: NaN if mean is also zero, Inf otherwise
         t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
         t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
@@ -338,7 +336,8 @@ function compute_t_matrix(
         df = Float64(n_participants - 1)
         
         # Compute p-values using internal function (avoids code duplication)
-        p_matrix = _compute_p_matrix(t_matrix, df, tail)
+        # Use pre-allocated p_matrix buffer
+        p_matrix = _compute_p_matrix(t_matrix, df, tail, p_matrix)
         
     else
         # Independent design: need to loop (but df is constant across all points)
@@ -1059,7 +1058,7 @@ function build_connectivity_matrix(
         # This will be handled differently - we'll build it per time dimension
         # For now, return identity (will be handled in cluster finding)
         n_time = 1  # Placeholder, actual time dimension handled separately
-        connectivity = sparse(Bool[1], Bool[1], Bool[true], 1, 1)
+        connectivity = sparse(Int[1], Int[1], Bool[true], 1, 1)
         return connectivity, n_electrodes, n_time
         
     elseif cluster_type == :spatiotemporal
@@ -2098,7 +2097,7 @@ end
 Perform cluster-based permutation test on prepared ERP data.
 
 # Arguments
-- `prepared::StatisticalTestData`: Prepared data from `prepare_statistical_test_data`
+- `prepared::StatisticalTestData`: Prepared data from `prepare_condition_comparison`
 - `n_permutations::Int`: Number of permutations (default: 1000)
 - `threshold::Float64`: P-value threshold (default: 0.05)
 - `threshold_method::Symbol`: Threshold method - `:parametric` (default), `:nonparametric_individual`, or `:nonparametric_common`
@@ -2115,7 +2114,7 @@ Perform cluster-based permutation test on prepared ERP data.
 # Examples
 ```julia
 # Prepare data
-prepared = prepare_statistical_test_data("erps_good", 1, 2, design=:paired, input_dir="data/")
+prepared = prepare_condition_comparison("erps_good", 1, 2, design=:paired, input_dir="data/")
 
 # Run permutation test
 result = cluster_permutation_test(prepared, n_permutations=1000, threshold=0.05)
@@ -2376,8 +2375,12 @@ end
 # ANALYTIC T-TEST (Non-permutation)
 # ===================
 
-function _compute_p_matrix(t_matrix::Array{Float64, 2}, df::Float64, tail::Symbol)
-    p_matrix = Array{Float64, 2}(undef, size(t_matrix))
+function _compute_p_matrix(t_matrix::Array{Float64, 2}, df::Float64, tail::Symbol, p_matrix_buffer::Union{Nothing, Array{Float64, 2}} = nothing)
+    if p_matrix_buffer !== nothing
+        p_matrix = p_matrix_buffer
+    else
+        p_matrix = Array{Float64, 2}(undef, size(t_matrix))
+    end
     dist = TDist(df)
     @inbounds for i in eachindex(t_matrix)
         t_val = t_matrix[i]
@@ -2408,7 +2411,7 @@ end
 Perform analytic (parametric) t-test without permutation (FieldTrip's 'analytic' method).
 
 # Arguments
-- `prepared::StatisticalTestData`: Prepared data from `prepare_statistical_test_data`
+- `prepared::StatisticalTestData`: Prepared data from `prepare_condition_comparison`
 - `alpha::Float64`: Significance threshold (default: 0.05)
 - `tail::Symbol`: Test tail - `:both` (default), `:left`, or `:right`
 - `correction_method::Symbol`: Multiple comparison correction - `:no` (default) or `:bonferroni`
