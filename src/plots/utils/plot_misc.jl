@@ -9,23 +9,16 @@
 # =============================================================================
 
 function display_figure(fig)
-    display(get_makie_screen(get_makie_backend()), fig)
-end
-
-# TODO: I must be doing something wrong here!!! 
-# Must be a better way to do this?
-function get_makie_backend()
-    backend_str = string(Makie.current_backend())
-    if occursin("GLMakie", backend_str)
-        return :GLMakie
-    elseif occursin("CairoMakie", backend_str)
-        return :CairoMakie
+    backend = Makie.current_backend()
+    screen = if backend == GLMakie
+        GLMakie.Screen()
+    elseif backend == CairoMakie
+        CairoMakie.Screen()
     else
-        @minimal_error "Makie backend not found"
+        @minimal_error "Unsupported Makie backend: $backend"
     end
+    display(screen, fig)
 end
-
-get_makie_screen(makie_backend::Symbol) = getfield(Main, makie_backend).Screen()
 
 """
     set_window_title(title::String)
@@ -33,8 +26,7 @@ get_makie_screen(makie_backend::Symbol) = getfield(Main, makie_backend).Screen()
 Set the window title for GLMakie. Does nothing for CairoMakie (which doesn't support window titles).
 """
 function set_window_title(title::String)
-    backend = get_makie_backend()
-    if backend == :GLMakie
+    if Makie.current_backend() == GLMakie
         Makie.current_backend().activate!(title = title)
     end
     # TODO: CairoMakie doesn't support window titles?

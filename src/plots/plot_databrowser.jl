@@ -565,7 +565,7 @@ function show_additional_menu(state, clicked_region_idx = nothing)
         end
     end
 
-    new_screen = getfield(Main, :GLMakie).Screen()
+    new_screen = GLMakie.Screen()
     display(new_screen, menu_fig)
 end
 
@@ -673,7 +673,7 @@ function _channel_repair_menu(state, selected_channels, ax)
         end
     end
 
-    new_screen = getfield(Main, :GLMakie).Screen()
+    new_screen = GLMakie.Screen()
     display(new_screen, menu_fig)
 end
 

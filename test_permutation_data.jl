@@ -21,7 +21,7 @@ input_dir = "/home/ian/Documents/Julia/output_data/filtered_erps_good_lp_30hz"
 file_pattern = "erps_good"
 
 println("Preparing data...")
-prepared = eegfun.prepare_statistical_test_data(
+prepared = eegfun.prepare_condition_comparison(
     file_pattern,  # Pattern to match ERP files
     :paired;       # :paired for within-subject, :independent for between-subject
     input_dir = input_dir,
@@ -44,12 +44,11 @@ result_analytic_no = eegfun.analytic_ttest(
 )
 
 fig = eegfun.plot_analytic_ttest(result_analytic_no, channel = :PO8, plot_erp = true, plot_difference = false, show_significance = true, show_critical_t = true)
-display(fig)
 
 # ----------------------------------------------------------------------------
 # Option 2b: Analytic t-test with BONFERRONI correction
 # ----------------------------------------------------------------------------
-@btime result_analytic_bonf = eegfun.analytic_ttest(
+result_analytic_bonf = eegfun.analytic_ttest(
     prepared,
     alpha = 0.05,
     tail = :both,
@@ -57,7 +56,6 @@ display(fig)
 )
 
 fig = eegfun.plot_analytic_ttest(result_analytic_bonf, channel = :PO8, plot_erp = true, plot_difference = false, show_significance = true, show_critical_t = true)
-display(fig)
 
 
 println(result_analytic_bonf)
@@ -174,6 +172,162 @@ result_cluster_nonparametric_individual = eegfun.cluster_permutation_test(
 )
 
 println(result_cluster_nonparametric_individual)
+
+# ============================================================================
+# PART 3.5: CLUSTER TYPE OPTIONS
+# ============================================================================
+println("\n" * "="^80)
+println("PART 3.5: Cluster Type Options")
+println("="^80)
+println("""
+The cluster_type parameter determines how points are grouped into clusters.
+Different cluster types are useful for different research questions.
+""")
+
+# ----------------------------------------------------------------------------
+# Option 3d: Spatial Clustering Only
+# ----------------------------------------------------------------------------
+println("\n" * "-"^80)
+println("Option 3d: SPATIAL Clustering")
+println("-"^80)
+println("""
+Spatial clustering groups adjacent electrodes at the same time point.
+This is useful when you want to find spatially contiguous effects
+regardless of their temporal duration.
+
+Use when:
+- You're interested in spatial patterns (e.g., which brain regions)
+- Temporal duration is less important
+- You want to find effects that span multiple electrodes simultaneously
+
+Example: Finding which electrode groups show effects at any time point.
+""")
+
+result_cluster_spatial = eegfun.cluster_permutation_test(
+    prepared,
+    n_permutations = 1000,
+    threshold = 0.05,
+    threshold_method = :parametric,
+    cluster_type = :spatial,  # Only spatial adjacency
+    cluster_statistic = :sum,
+    min_num_neighbors = 3,
+    tail = :both,
+    show_progress = true
+)
+
+println(result_cluster_spatial)
+println("\nSpatial clusters found:")
+println("  Positive clusters: ", length(result_cluster_spatial.clusters.positive))
+println("  Negative clusters: ", length(result_cluster_spatial.clusters.negative))
+
+# ----------------------------------------------------------------------------
+# Option 3e: Temporal Clustering Only
+# ----------------------------------------------------------------------------
+println("\n" * "-"^80)
+println("Option 3e: TEMPORAL Clustering")
+println("-"^80)
+println("""
+Temporal clustering groups consecutive time points at the same electrode.
+This is useful when you want to find temporally contiguous effects
+regardless of their spatial extent.
+
+Use when:
+- You're interested in temporal dynamics (e.g., when effects occur)
+- Spatial extent is less important
+- You want to find effects that persist over time at individual electrodes
+
+Example: Finding sustained effects at specific electrodes over time.
+""")
+
+result_cluster_temporal = eegfun.cluster_permutation_test(
+    prepared,
+    n_permutations = 1000,
+    threshold = 0.05,
+    threshold_method = :parametric,
+    cluster_type = :temporal,  # Only temporal adjacency
+    cluster_statistic = :sum,
+    min_num_neighbors = 0,  # Not applicable for temporal-only
+    tail = :both,
+    show_progress = true
+)
+
+println(result_cluster_temporal)
+println("\nTemporal clusters found:")
+println("  Positive clusters: ", length(result_cluster_temporal.clusters.positive))
+println("  Negative clusters: ", length(result_cluster_temporal.clusters.negative))
+
+# ----------------------------------------------------------------------------
+# Option 3f: Spatiotemporal Clustering (Default)
+# ----------------------------------------------------------------------------
+println("\n" * "-"^80)
+println("Option 3f: SPATIOTEMPORAL Clustering (Default)")
+println("-"^80)
+println("""
+Spatiotemporal clustering groups points that are adjacent in space OR time.
+This is the most common choice for ERP/EEG data because it captures
+effects that are contiguous in both dimensions.
+
+Use when:
+- You want to find effects that are contiguous in space and/or time
+- This is the standard approach for most ERP/EEG analyses
+- You want maximum sensitivity to detect neural responses
+
+Example: Finding ERP components that show spatial and temporal clustering.
+""")
+
+result_cluster_spatiotemporal = eegfun.cluster_permutation_test(
+    prepared,
+    n_permutations = 1000,
+    threshold = 0.05,
+    threshold_method = :parametric,
+    cluster_type = :spatiotemporal,  # Both spatial and temporal
+    cluster_statistic = :sum,
+    min_num_neighbors = 3,
+    tail = :both,
+    show_progress = true
+)
+
+println(result_cluster_spatiotemporal)
+println("\nSpatiotemporal clusters found:")
+println("  Positive clusters: ", length(result_cluster_spatiotemporal.clusters.positive))
+println("  Negative clusters: ", length(result_cluster_spatiotemporal.clusters.negative))
+
+# ----------------------------------------------------------------------------
+# Comparison of Cluster Types
+# ----------------------------------------------------------------------------
+println("\n" * "-"^80)
+println("Comparison of Cluster Types")
+println("-"^80)
+println("""
+Different cluster types will find different patterns:
+
+Spatial only:
+- Finds spatially contiguous effects
+- May split temporally separated effects into multiple clusters
+- Useful for identifying brain regions
+
+Temporal only:
+- Finds temporally contiguous effects
+- May split spatially separated effects into multiple clusters
+- Useful for identifying time windows
+
+Spatiotemporal (default):
+- Finds effects contiguous in space OR time
+- Most sensitive (finds more clusters)
+- Standard approach for ERP/EEG data
+- Recommended for most analyses
+
+The same data can produce different numbers of clusters depending on
+the cluster_type, because the clustering algorithm groups points differently.
+""")
+
+println("\nCluster counts comparison:")
+println("  Spatial:          ", length(result_cluster_spatial.clusters.positive), " positive, ", 
+        length(result_cluster_spatial.clusters.negative), " negative")
+println("  Temporal:         ", length(result_cluster_temporal.clusters.positive), " positive, ", 
+        length(result_cluster_temporal.clusters.negative), " negative")
+println("  Spatiotemporal:  ", length(result_cluster_spatiotemporal.clusters.positive), " positive, ", 
+        length(result_cluster_spatiotemporal.clusters.negative), " negative")
 
 # ============================================================================
 # PART 4: COMPARISON OF METHODS
