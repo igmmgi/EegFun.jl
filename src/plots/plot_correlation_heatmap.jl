@@ -128,11 +128,13 @@ function plot_correlation_heatmap!(fig::Figure, ax::Axis, corr_df::DataFrame; kw
     end
 
     # Configure grid using the new axis styling function
-    _set_axis_grid!(ax; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     # Create the heatmap
     heatmap!(

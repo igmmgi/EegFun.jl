@@ -163,10 +163,7 @@ using OrderedCollections
         @testset "multiple dataset counting" begin
             raw_triggers = [0, 1, 1, 1, 0, 2, 2, 0, 0]
             cleaned_triggers = eegfun._clean_triggers(raw_triggers)
-            result = eegfun._trigger_count_impl(
-                [raw_triggers, cleaned_triggers],
-                ["raw_count", "cleaned_count"],
-            )
+            result = eegfun._trigger_count_impl([raw_triggers, cleaned_triggers], ["raw_count", "cleaned_count"])
             @test isa(result, eegfun.TriggerInfo)
             @test size(result.data, 1) == 2
             @test result.data.trigger == [1, 2]
@@ -185,8 +182,7 @@ using OrderedCollections
         @testset "with triggers_info" begin
             triggers = [0, 1, 1, 0, 2, 2, 0]
             triggers_info = ["", "S 1", "", "", "S 2", "", ""]
-            result =
-                eegfun._trigger_count_impl([triggers], ["count"], triggers_info = triggers_info)
+            result = eegfun._trigger_count_impl([triggers], ["count"], triggers_info = triggers_info)
             @test isa(result, eegfun.TriggerInfo)
             @test size(result.data, 1) == 2
             @test result.data.trigger == [1, 2]
@@ -197,10 +193,7 @@ using OrderedCollections
 
         @testset "custom column names" begin
             triggers = [0, 1, 0, 2, 0]
-            result = eegfun._trigger_count_impl(
-                [triggers],
-                ["custom_count"],
-            )
+            result = eegfun._trigger_count_impl([triggers], ["custom_count"])
             @test isa(result, eegfun.TriggerInfo)
             @test names(result.data) == ["trigger", "custom_count"]
             @test size(result.data, 1) == 2

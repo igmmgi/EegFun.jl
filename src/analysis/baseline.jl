@@ -89,29 +89,25 @@ Apply baseline correction in-place to EEG data using a predicate function.
 - If the predicate selects all samples (default), baseline correction is skipped
 - If the predicate selects no samples, a warning is issued and baseline is skipped
 """
-function baseline!(
-    dat::EegData,
-    baseline_selection::Function;
-    channel_selection::Function = channels(),
-)
+function baseline!(dat::EegData, baseline_selection::Function; channel_selection::Function = channels())
     # Apply predicate to get baseline mask
     baseline_mask = baseline_selection(dat.data)
     baseline_indices = findall(baseline_mask)
-    
+
     # Skip baseline if window matches all samples (default) or no samples
     if isempty(baseline_indices)
         @minimal_warning "Baseline selection predicate matched no samples. Skipping baseline correction."
         return nothing
     end
-    
+
     if length(baseline_indices) >= n_samples(dat)
         # Predicate selected all samples (default case) - skip baseline
         return nothing
     end
-    
+
     # Convert to interval
     baseline_interval = IntervalIndex(start = first(baseline_indices), stop = last(baseline_indices))
-    
+
     # Call the interval-based method
     baseline!(dat, baseline_interval; channel_selection = channel_selection)
     return nothing
@@ -173,11 +169,7 @@ Apply baseline correction in-place to a vector of EpochData objects using a pred
 - Modifies each EpochData in the vector in-place by subtracting the baseline mean
 - The predicate function is applied to each epoch's data DataFrame to determine the baseline window
 """
-function baseline!(
-    dat::Vector{EpochData},
-    baseline_selection::Function;
-    channel_selection::Function = channels(),
-)
+function baseline!(dat::Vector{EpochData}, baseline_selection::Function; channel_selection::Function = channels())
     baseline!.(dat, Ref(baseline_selection); channel_selection = channel_selection)
     return nothing
 end
@@ -212,7 +204,11 @@ end
 # For now, juse keep for a little bit of consistency with other functions
 
 """Generate default output directory name for baseline operation."""
-function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_interval::Union{IntervalIndex,IntervalTime})
+function _default_baseline_output_dir(
+    input_dir::String,
+    pattern::String,
+    baseline_interval::Union{IntervalIndex,IntervalTime},
+)
     interval_str = "$(baseline_interval.start)_to_$(baseline_interval.stop)"
     joinpath(input_dir, "baseline_$(pattern)_$(interval_str)")
 end
@@ -359,10 +355,7 @@ function baseline(
         baseline_interval = validate_baseline_interval(baseline_interval)
 
         # Setup directories
-        output_dir = something(
-            output_dir,
-            _default_baseline_output_dir(input_dir, file_pattern, baseline_interval),
-        )
+        output_dir = something(output_dir, _default_baseline_output_dir(input_dir, file_pattern, baseline_interval))
         mkpath(output_dir)
 
         # Find files
@@ -375,21 +368,12 @@ function baseline(
 
         # Create processing function with captured parameters
         @info "Baseline interval: $baseline_interval"
-        process_fn = (input_path, output_path) -> _process_baseline_file(
-            input_path,
-            output_path,
-            baseline_interval,
-            condition_selection,
-        )
+        process_fn =
+            (input_path, output_path) ->
+                _process_baseline_file(input_path, output_path, baseline_interval, condition_selection)
 
         # Execute batch operation
-        results = _run_batch_operation(
-            process_fn,
-            files,
-            input_dir,
-            output_dir;
-            operation_name = "Baseline correction",
-        )
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Baseline correction")
 
         _log_batch_summary(results, output_dir)
 
@@ -412,15 +396,18 @@ function baseline(
     sample_data = load_data(joinpath(input_dir, files[1]))
     first_item = sample_data isa Vector{<:Union{ErpData,EpochData}} ? sample_data[1] : sample_data
     sample_df = first_item.data isa Vector{DataFrame} ? first_item.data[1] : first_item.data
-    
+
     baseline_indices = findall(baseline_selection(sample_df))
     isempty(baseline_indices) && error("Baseline selection matched no samples")
     length(baseline_indices) >= nrow(sample_df) && return nothing
-    
+
     baseline_interval = IntervalIndex(start = first(baseline_indices), stop = last(baseline_indices))
-    baseline(file_pattern, baseline_interval; 
-             input_dir = input_dir,
-             participant_selection = participant_selection,
-             condition_selection = condition_selection,
-             output_dir = output_dir)
+    baseline(
+        file_pattern,
+        baseline_interval;
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+        condition_selection = condition_selection,
+        output_dir = output_dir,
+    )
 end

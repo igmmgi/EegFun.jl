@@ -52,12 +52,13 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_plot => (true, "Whether to display the colorbar"),
     :colorbar_position => ((1, 2), "Colorbar position as (row, col) tuple, or :right, :below"),
     :colorbar_label => ("μV", "Label for the colorbar"),
-    :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
+    :colorbar_plot_numbers =>
+        ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
 
     # ICA-specific parameters (ignored for standard topography plots)
-    :use_global_scale => (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
+    :use_global_scale =>
+        (false, "Do multiple ICA topoplots share the same color scale based on min/max across all components?"),
     :component_selection => (components(), "Function that returns boolean vector for component filtering"),
-
 )
 
 
@@ -112,7 +113,8 @@ function _plot_topography!(fig::Figure, ax::Axis, ica::InfoIca, component::Int; 
     # If colorbar_plot_numbers is empty, show colorbar for all components
     # Otherwise, only show for components in the list
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
-    should_show_colorbar = plot_kwargs[:colorbar_plot] && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
+    should_show_colorbar =
+        plot_kwargs[:colorbar_plot] && (isempty(colorbar_plot_numbers) || component in colorbar_plot_numbers)
     if should_show_colorbar
         colorbar_kwargs = _extract_colorbar_kwargs!(plot_kwargs)
         colorbar_position = pop!(plot_kwargs, :colorbar_position, (1, 2))
@@ -219,13 +221,21 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
             elseif colorbar_position == :same
                 colorbar_offset = (1, 1)
             else
-                throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
+                throw(
+                    ArgumentError(
+                        "colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position",
+                    ),
+                )
             end
         elseif colorbar_position isa Tuple
             # User provided tuple directly (row_offset, col_offset)
             colorbar_offset = colorbar_position
         else
-            throw(ArgumentError("colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position"))
+            throw(
+                ArgumentError(
+                    "colorbar_position must be :right, :below, :same, or a tuple (row, col), got: $colorbar_position",
+                ),
+            )
         end
 
         # Calculate plot and colorbar positions
@@ -857,10 +867,10 @@ function _create_component_activation_plots!(fig, state)
                 # Get mouse position in axis coordinates
                 mouse_pos = mouseposition(topo_ax)
                 mouse_x, mouse_y = mouse_pos[1], mouse_pos[2]
-                
+
                 # Get head radius from plot kwargs (default is 1.0)
                 head_radius = get(state.plot_kwargs, :head_radius, 1.0)
-                
+
                 # Check if click is within the head circle (centered at 0,0 with radius head_radius)
                 distance_from_center = sqrt(mouse_x^2 + mouse_y^2)
                 if distance_from_center <= head_radius

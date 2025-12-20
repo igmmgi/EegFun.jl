@@ -393,8 +393,7 @@ duration(dat::MultiDataFrameEeg)::Float64 =
 duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
     hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ?
     last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
-duration(dat::Vector{T}) where {T <: EegData} =
-    isempty(dat) ? 0.0 : duration(dat[1])
+duration(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? 0.0 : duration(dat[1])
 
 
 """
@@ -420,23 +419,31 @@ have_same_structure(erps)
 ```
 """
 function have_same_structure(dat1::EegData, dat2::EegData)::Bool
-    if sample_rate(dat1) != sample_rate(dat2) 
-        @minimal_error_throw("Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+    if sample_rate(dat1) != sample_rate(dat2)
+        @minimal_error_throw(
+            "Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
+        )
         return false
     end
-    if n_samples(dat1) != n_samples(dat2) 
-        @minimal_error_throw("Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+    if n_samples(dat1) != n_samples(dat2)
+        @minimal_error_throw(
+            "Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
+        )
         return false
     end
-    if channel_labels(dat1) != channel_labels(dat2) 
-        @minimal_error_throw("Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+    if channel_labels(dat1) != channel_labels(dat2)
+        @minimal_error_throw(
+            "Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
+        )
         return false
     end
     # Check time vectors match (if they exist)
     time1 = time(dat1)
     time2 = time(dat2)
     if !isempty(time1) && !isempty(time2) && !all(time1 .≈ time2)
-        @minimal_error_throw("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
+        @minimal_error_throw(
+            "Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
+        )
         return false
     end
     return true
@@ -445,12 +452,12 @@ end
 function have_same_structure(dats::Vector{<:EegData})::Bool
     isempty(dats) && return true
     length(dats) == 1 && return true
-   
+
     sample_rates = sample_rate.(dats)
     n_samps = n_samples.(dats)
     ch_labels = channel_labels.(dats)
     time_vectors = time.(dats)
-    
+
     if !all(x -> x == sample_rates[1], sample_rates)
         @minimal_error_throw("Inconsistent sample rates")
         return false
@@ -487,16 +494,12 @@ Get the time column from the EEG data or DataFrame as a vector.
 # Returns
 - `Vector{Float64}`: The time column values
 """
-time(dat::SingleDataFrameEeg)::Vector{Float64} =
-    hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
-time(dat::MultiDataFrameEeg)::Vector{Float64} =
-    hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
+time(dat::SingleDataFrameEeg)::Vector{Float64} = hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
+time(dat::MultiDataFrameEeg)::Vector{Float64} = hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
 time(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
     hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
-time(dat::Vector{T}) where {T <: EegData} =
-    isempty(dat) ? Float64[] : time(dat[1])
-time(df::DataFrame)::Vector{Float64} =
-    hasproperty(df, :time) ? df[!, :time] : Float64[]
+time(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time(dat[1])
+time(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :time] : Float64[]
 
 
 """
@@ -873,7 +876,16 @@ end
 
 Internal helper to create ErpData from subset DataFrame.
 """
-function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int, condition::Int, condition_name::String, file::String)
+function _create_subset(
+    data_subset::DataFrame,
+    layout,
+    sample_rate::Int,
+    analysis_info,
+    n_epochs::Int,
+    condition::Int,
+    condition_name::String,
+    file::String,
+)
     return ErpData(file, condition, condition_name, data_subset, layout, sample_rate, analysis_info, n_epochs)
 end
 
@@ -882,7 +894,15 @@ end
 
 Internal helper to create EpochData from subset DataFrames.
 """
-function _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info, condition::Int, condition_name::String, file::String)
+function _create_subset(
+    data_subset::Vector{DataFrame},
+    layout,
+    sample_rate::Int,
+    analysis_info,
+    condition::Int,
+    condition_name::String,
+    file::String,
+)
     return EpochData(file, condition, condition_name, data_subset, layout, sample_rate, analysis_info)
 end
 
@@ -909,7 +929,16 @@ function subset(
     selected_channels, selected_samples, layout_subset =
         _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
-    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.n_epochs, dat.condition, dat.condition_name, dat.file)
+    return _create_subset(
+        dat_subset,
+        layout_subset,
+        dat.sample_rate,
+        dat.analysis_info,
+        dat.n_epochs,
+        dat.condition,
+        dat.condition_name,
+        dat.file,
+    )
 end
 
 function subset(
@@ -922,7 +951,15 @@ function subset(
     selected_epochs, selected_channels, selected_samples, layout_subset =
         _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
-    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.condition, dat.condition_name, dat.file)
+    return _create_subset(
+        dat_subset,
+        layout_subset,
+        dat.sample_rate,
+        dat.analysis_info,
+        dat.condition,
+        dat.condition_name,
+        dat.file,
+    )
 end
 
 function subset(
@@ -935,7 +972,7 @@ function subset(
     # First filter by condition_selection
     selected_conditions = get_selected_conditions(datasets, condition_selection)
     datasets_filtered = datasets[selected_conditions]
-    
+
     # Then apply channel and sample selection to each dataset
     return subset.(
         datasets_filtered;
@@ -956,7 +993,7 @@ function subset(
     # First filter by condition_selection
     selected_conditions = get_selected_conditions(datasets, condition_selection)
     datasets_filtered = datasets[selected_conditions]
-    
+
     # Then apply channel, sample, and epoch selection to each dataset
     return subset.(
         datasets_filtered;
@@ -1000,7 +1037,7 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
         io_context = IOContext(output_io, :displaysize => (2000, 2000))
         pretty_table(io_context, df; kwargs...)
     end
-    
+
     # Log with specified level
     if log_level == :debug
         @debug "\n\n$table_output\n"
@@ -1014,7 +1051,7 @@ function log_pretty_table(df::DataFrame; log_level::Symbol = :info, kwargs...)
         @minimal_warning "Unknown log level: $log_level, using :info instead"
         @info "\n\n$table_output\n"
     end
-    
+
     return nothing
 end
 
@@ -1030,20 +1067,21 @@ channels(predicate::Function) = predicate  # Allow custom function predicates
 channels_not(channel_names::Vector{Symbol}) = x -> .!(x .∈ Ref(channel_names))
 channels_not(channel_name::Symbol) = x -> .!(x .== channel_name)
 channels_not(channel_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in channel_numbers for i = 1:length(x)])
-channels_not(mixed::Vector) = x -> begin
-    # Handle mixed Int and UnitRange{Int} (e.g., [-2, 1:10])
-    combined = Set{Int}()
-    for item in mixed
-        if item isa Int
-            push!(combined, item)
-        elseif item isa UnitRange{Int}
-            union!(combined, item)
-        else
-            throw(ArgumentError("channels_not() only accepts Int or UnitRange{Int}, got $(typeof(item))"))
+channels_not(mixed::Vector) =
+    x -> begin
+        # Handle mixed Int and UnitRange{Int} (e.g., [-2, 1:10])
+        combined = Set{Int}()
+        for item in mixed
+            if item isa Int
+                push!(combined, item)
+            elseif item isa UnitRange{Int}
+                union!(combined, item)
+            else
+                throw(ArgumentError("channels_not() only accepts Int or UnitRange{Int}, got $(typeof(item))"))
+            end
         end
+        .!([i in combined for i = 1:length(x)])
     end
-    .!([i in combined for i = 1:length(x)])
-end
 
 # Helper function predicates for easier component filtering
 components() = x -> fill(true, length(x))  # Default: select all components given
@@ -1104,7 +1142,11 @@ conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(d
 conditions_not(condition_name::String) = x -> .!([_get_condition_name(dat) == condition_name for dat in x])
 
 # Internal helper to validate and preserve order for channel names
-function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
+function _handle_channel_names_order(
+    user_order::Vector{Symbol},
+    selectable_cols::Vector{Symbol},
+    selected::Vector{Symbol},
+)
     # Validate: check for missing channels and duplicates
     seen = Set{Symbol}()
     for ch in user_order
@@ -1116,11 +1158,11 @@ function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols
             push!(seen, ch)
         end
     end
-    
+
     # Check if this is channels([...]) or channels_not([...])
     existing_in_order = [ch for ch in user_order if ch in selectable_cols]
     existing_in_selected = [ch for ch in existing_in_order if ch in selected]
-    
+
     # If all existing channels are in selected, it's channels([...]) - preserve order
     if !isempty(existing_in_order) && length(existing_in_selected) == length(existing_in_order)
         result = Symbol[]
@@ -1148,11 +1190,11 @@ function _handle_channel_numbers_order(user_order_numbers, selectable_cols::Vect
             push!(seen, i)
         end
     end
-    
+
     # Check if this is channels([...]) or channels_not([...])
     valid_indices = [i for i in user_order_numbers if 1 <= i <= length(selectable_cols)]
     selected_indices = [i for i in valid_indices if selectable_cols[i] in selected]
-    
+
     # If all valid indices are in selected, it's channels([...]) - preserve order
     if !isempty(valid_indices) && length(selected_indices) == length(valid_indices)
         result = Symbol[]
@@ -1176,7 +1218,7 @@ function get_selected_channels(dat, channel_selection::Function; include_meta::B
     # Apply channel selection to non-metadata columns
     selection_mask = channel_selection(selectable_cols)
     selected = selectable_cols[selection_mask]
-    
+
     # Preserve user-specified order if available
     selection_type = typeof(channel_selection)
     if hasfield(selection_type, :channel_names)
@@ -1453,11 +1495,7 @@ df = create_eeg_dataframe(biosemi_data)
 function create_eeg_dataframe(dat::BiosemiDataFormat.BiosemiData)::DataFrame
     @info "create_eeg_dataframe: Creating EEG DataFrame"
     df = hcat(
-        DataFrame(
-            time = dat.time,
-            sample = 1:length(dat.time),
-            triggers = _clean_triggers(dat.triggers.raw),
-        ),
+        DataFrame(time = dat.time, sample = 1:length(dat.time), triggers = _clean_triggers(dat.triggers.raw)),
         DataFrame(Float64.(dat.data), Symbol.(dat.header.channel_labels[1:(end-1)])),  # assumes last channel is trigger
     )
     return df
@@ -1548,12 +1586,7 @@ function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataF
 
     # Create the DataFrame 
     df = hcat(
-        DataFrame(
-            time = time,
-            sample = sample,
-            triggers = triggers,
-            triggers_info = triggers_info,
-        ),
+        DataFrame(time = time, sample = sample, triggers = triggers, triggers_info = triggers_info),
         DataFrame(dat.data, channel_labels),
     );
 

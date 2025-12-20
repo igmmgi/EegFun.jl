@@ -61,11 +61,7 @@ function create_test_epoch_data(;
     for condition in conditions
         dfs = DataFrame[]
         for epoch = 1:n_epochs
-            df = DataFrame(
-                time = t,
-                sample = 1:n,
-                epoch = fill(epoch, n),
-            )
+            df = DataFrame(time = t, sample = 1:n, epoch = fill(epoch, n))
 
             # Add EEG channels with some signal structure
             for ch in channel_labels
@@ -77,7 +73,10 @@ function create_test_epoch_data(;
             push!(dfs, df)
         end
 
-        push!(condition_data, eegfun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, analysis_info))
+        push!(
+            condition_data,
+            eegfun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, analysis_info),
+        )
     end
 
     # Return single EpochData if only one condition, otherwise return Vector{EpochData}

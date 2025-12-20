@@ -217,7 +217,7 @@ using DataFrames
 
     @testset "Edge Cases" begin
         test_layout = create_test_layout()
-        
+
         # Test empty channel list - should throw ArgumentError for empty channels
         @test_throws ArgumentError eegfun.create_layout(:grid, Symbol[], test_layout; grid_dims = (1, 1))
 

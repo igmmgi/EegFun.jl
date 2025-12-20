@@ -619,7 +619,7 @@ function extract_epochs(dat::ContinuousData, condition::Int, epoch_condition::Ep
 
     # Get file name from ContinuousData struct field
     file_name = dat.file
-    
+
     return EpochData(file_name, condition, epoch_condition.name, epochs, dat.layout, dat.sample_rate, dat.analysis_info)
 end
 
@@ -674,27 +674,36 @@ function average_epochs(dat::EpochData)
     # Ensure we have some channels to average
     isempty(eeg_channels) && @minimal_error_throw("No EEG channels found to average")
 
-        # Concatenate all epochs with error handling
-        try
-            all_epochs = reduce(vcat, dat.data)
+    # Concatenate all epochs with error handling
+    try
+        all_epochs = reduce(vcat, dat.data)
 
-            # Verify we have time column
-            if !hasproperty(all_epochs, :time)
-                @minimal_error_throw("Missing required column 'time' for epoch averaging")
-            end
+        # Verify we have time column
+        if !hasproperty(all_epochs, :time)
+            @minimal_error_throw("Missing required column 'time' for epoch averaging")
+        end
 
-            # Group by time only (condition/condition_name are constant in struct)
-            # Count epochs by grouping by time
-            erp = combine(
-                groupby(all_epochs, [:time]),
-                eeg_channels .=> mean .=> eeg_channels,  # Average the EEG channels
-            )
-            
-            # Count epochs - each unique time point should have same number of epochs
-            # We can check by seeing how many epochs we concatenated
-            n_epochs = length(dat.data)
+        # Group by time only (condition/condition_name are constant in struct)
+        # Count epochs by grouping by time
+        erp = combine(
+            groupby(all_epochs, [:time]),
+            eeg_channels .=> mean .=> eeg_channels,  # Average the EEG channels
+        )
 
-            return ErpData(dat.file, dat.condition, dat.condition_name, erp, dat.layout, dat.sample_rate, dat.analysis_info, n_epochs)
+        # Count epochs - each unique time point should have same number of epochs
+        # We can check by seeing how many epochs we concatenated
+        n_epochs = length(dat.data)
+
+        return ErpData(
+            dat.file,
+            dat.condition,
+            dat.condition_name,
+            erp,
+            dat.layout,
+            dat.sample_rate,
+            dat.analysis_info,
+            n_epochs,
+        )
     catch e
         @minimal_error_throw("Failed to average epochs: $(e)")
     end
@@ -869,7 +878,15 @@ function reject_epochs(dat::EpochData, bad_columns::Vector{Symbol})
     end
 
     # Return new EpochData with only good epochs (preserve struct fields)
-    return EpochData(dat.file, dat.condition, dat.condition_name, good_epochs, dat.layout, dat.sample_rate, dat.analysis_info)
+    return EpochData(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
+        good_epochs,
+        dat.layout,
+        dat.sample_rate,
+        dat.analysis_info,
+    )
 end
 
 """
@@ -1149,13 +1166,14 @@ function average_epochs(
 
         # Create processing function with captured parameters
         # Transform output filenames: replace "epochs" with "erps"
-        process_fn = (input_path, output_path) -> begin
-            # Transform filename: replace "epochs" with "erps" in the output filename
-            output_file = basename(output_path)
-            transformed_file = replace(output_file, "epochs" => "erps")
-            transformed_output_path = joinpath(dirname(output_path), transformed_file)
-            _process_average_file(input_path, transformed_output_path, condition_selection)
-        end
+        process_fn =
+            (input_path, output_path) -> begin
+                # Transform filename: replace "epochs" with "erps" in the output filename
+                output_file = basename(output_path)
+                transformed_file = replace(output_file, "epochs" => "erps")
+                transformed_output_path = joinpath(dirname(output_path), transformed_file)
+                _process_average_file(input_path, transformed_output_path, condition_selection)
+            end
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Averaging")

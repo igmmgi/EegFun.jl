@@ -58,15 +58,18 @@ const PLOT_ERP_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :layout_topo_plot_height => (0.05, "Height of individual plots (fraction of figure height)"),
     :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
     :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
-    
+
     # Grid layout parameters
     :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
     :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
-    
+    :layout_grid_dims =>
+        (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
+    :layout_grid_skip_positions =>
+        (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+
     # General layout parameters
-    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    :figure_padding =>
+        ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 )
 
 """
@@ -235,10 +238,11 @@ function plot_erp(
 
     # Apply channel_selection to determine which channels to plot
     # dat_subset has all channels, but we only plot the selected ones
-    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    selected_channels =
+        get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
-    
+
     # Check if any channels remain after filtering
     if isempty(all_plot_channels)
         @minimal_error_throw "No valid channels found. Selected channels: $selected_channels, Available channels: $all_channels"
@@ -260,12 +264,12 @@ function plot_erp(
 
     # Extract layout_* parameters, remove prefix, and pass to create_layout
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
-    
+
     # Create figure and apply layout system
     fig = Figure(title = plot_kwargs[:figure_title], figure_padding = plot_kwargs[:figure_padding])
-    
+
     plot_layout = create_layout(layout, all_plot_channels, first(dat_subset).layout; layout_kwargs...)
-    
+
     # For :topo layout, set default legend_channel to last channel if not explicitly set
     if plot_layout.type == :topo && isempty(plot_kwargs[:legend_channel]) && !isempty(all_plot_channels)
         plot_kwargs[:legend_channel] = [all_plot_channels[end]]
@@ -285,7 +289,14 @@ function plot_erp(
         channels_to_plot = plot_layout.type == :single ? all_plot_channels : [channel]
         @info "plot_erp ($layout): $(print_vector(channels_to_plot))"
         ax_line_refs = plot_kwargs[:interactive] ? line_refs[ax_idx] : nothing
-        leg = _plot_erp!(ax, dat_subset, channels_to_plot; line_refs = ax_line_refs, user_provided_color = user_provided_color, plot_kwargs...)
+        leg = _plot_erp!(
+            ax,
+            dat_subset,
+            channels_to_plot;
+            line_refs = ax_line_refs,
+            user_provided_color = user_provided_color,
+            plot_kwargs...,
+        )
         if plot_kwargs[:interactive] && legend_refs !== nothing
             legend_refs[ax_idx] = leg
         end
@@ -315,8 +326,9 @@ function plot_erp(
         _setup_erp_control_panel!(fig, dat_subset, axes, baseline_interval, line_refs, condition_checked_ref)
 
         # Create right-click handler that has access to condition visibility
-        right_click_handler = (selection_state, mouse_x, data) -> 
-            _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
+        right_click_handler =
+            (selection_state, mouse_x, data) ->
+                _handle_erp_right_click!(selection_state, mouse_x, data, condition_checked_ref)
 
         # Set up selection system that works for all layouts
         _setup_unified_selection!(fig, axes, selection_state, dat_subset, plot_layout, right_click_handler)
@@ -386,7 +398,8 @@ function plot_erp!(fig::Figure, ax::Axis, datasets::Vector{ErpData}; kwargs...)
         baseline_interval = baseline_interval,
     )
     # Apply channel_selection to determine which channels to plot
-    selected_channels = get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
+    selected_channels =
+        get_selected_channels(first(dat_subset), channel_selection_func; include_meta = false, include_extra = true)
     # Preserve order from selected_channels (user's channel_selection order)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
     _plot_erp!(ax, dat_subset, all_plot_channels; user_provided_color = user_provided_color, plot_kwargs...)
@@ -539,9 +552,10 @@ function _prepare_erp_data(
     all_channels = channel_labels(dat_subset)
     extra_channels = extra_labels(dat_subset)
     all_channels = vcat(all_channels, extra_channels)
-    
+
     # Apply channel_selection to determine which channels to plot/average
-    selected_channels = get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = true)
+    selected_channels =
+        get_selected_channels(first(dat_subset), channel_selection; include_meta = false, include_extra = true)
     all_plot_channels = [ch for ch in selected_channels if ch in all_channels]
 
     # Channel averaging if requested - average only the selected channels
@@ -577,16 +591,13 @@ end
 function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
 
     menu_fig = Figure()
-    
+
     # Filter by visible conditions to determine if we have multiple visible conditions
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
     has_multiple_conditions = data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1
-    
-    plot_types = [
-        "Topoplot (multiquadratic)", 
-        "Topoplot (spherical_spline)",
-    ]
-    
+
+    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)"]
+
     # Only add average options if multiple visible conditions
     if has_multiple_conditions
         push!(plot_types, "Topoplot (average, multiquadratic)")
@@ -654,7 +665,7 @@ function _filter_visible_conditions(data, condition_checked_ref)
 
     # Filter by visible conditions
     visible_data = [data[i] for i in eachindex(data) if condition_checked[i][]]
-    
+
     # Return single ErpData if only one visible, otherwise Vector
     return length(visible_data) == 1 ? visible_data[1] : visible_data
 end
@@ -676,10 +687,19 @@ function _average_conditions(erps::Vector{ErpData})
     # Reuse _create_grand_average - it averages ErpData together (same logic for conditions or participants)
     # Use first condition number as cond_num (doesn't matter for averaging)
     avg_erp = _create_grand_average(erps, first(erps).condition)
-    
+
     # Update condition name to reflect averaging across conditions
     avg_cond_name = "avg_" * join([erp.condition_name for erp in erps], "_")
-    return ErpData(avg_erp.file, avg_erp.condition, avg_cond_name, avg_erp.data, avg_erp.layout, avg_erp.sample_rate, avg_erp.analysis_info, avg_erp.n_epochs)
+    return ErpData(
+        avg_erp.file,
+        avg_erp.condition,
+        avg_cond_name,
+        avg_erp.data,
+        avg_erp.layout,
+        avg_erp.sample_rate,
+        avg_erp.analysis_info,
+        avg_erp.n_epochs,
+    )
 end
 
 """
@@ -698,17 +718,17 @@ Colors cycle across all channel-dataset combinations.
 """
 function _compute_dataset_colors(color_val, n_datasets::Int, n_channels::Int, colormap, user_provided_color::Bool)
     n_total = n_datasets * n_channels
-    
+
     # If user provided a vector of colors, use those (cycle if needed)
     if color_val isa Vector
         return [color_val[(i-1)%length(color_val)+1] for i = 1:n_total]
     end
-    
+
     # If user provided a single color, use it for all items
     if user_provided_color
         return [color_val for _ = 1:n_total]
     end
-    
+
     # User didn't provide color: use colormap for multiple items, default color for single item
     if n_total > 1
         # Makie.cgrad returns a gradient, convert to vector of colors
@@ -822,7 +842,9 @@ function _setup_erp_control_panel!(
     axes::Vector{Axis},
     baseline_interval::BaselineInterval,
     line_refs::Union{Vector{<:Dict},Nothing} = nothing,
-    condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(nothing),
+    condition_checked_ref::Ref{Union{Vector{Observable{Bool}},Nothing}} = Ref{Union{Vector{Observable{Bool}},Nothing}}(
+        nothing,
+    ),
 )
 
     control_fig = Ref{Union{Figure,Nothing}}(nothing)

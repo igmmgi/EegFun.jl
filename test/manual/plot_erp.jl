@@ -11,10 +11,12 @@ dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 # EPOCHS -> ERPs
-epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]), 
-             eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
-             eegfun.EpochCondition(name = "ExampleEpoch3", trigger_sequences = [[3]]), 
-             eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[4]])]
+epoch_cfg = [
+    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2]]),
+    eegfun.EpochCondition(name = "ExampleEpoch3", trigger_sequences = [[3]]),
+    eegfun.EpochCondition(name = "ExampleEpoch4", trigger_sequences = [[4]]),
+]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
 
@@ -22,19 +24,42 @@ erps = eegfun.average_epochs(epochs)
 
 fig, ax = eegfun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)
 
-fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 2), 
-layout_grid_skip_positions = [(2, 1)])
+fig, ax = eegfun.plot_erp(
+    erps,
+    channel_selection = eegfun.channels([:F3, :Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]),
+    layout = :grid,
+    layout_grid_dims = (3, 2),
+    layout_grid_skip_positions = [(2, 1)],
+)
 
 
-fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 3))
+fig, ax = eegfun.plot_erp(
+    erps,
+    channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]),
+    layout = :grid,
+    layout_grid_dims = (3, 3),
+)
 
-fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3, :T8, :F4]), layout = :grid, layout_grid_dims = (3, 4), 
-layout_grid_skip_positions = [(2, 1), (2, 3)])
+fig, ax = eegfun.plot_erp(
+    erps,
+    channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3, :T8, :F4]),
+    layout = :grid,
+    layout_grid_dims = (3, 4),
+    layout_grid_skip_positions = [(2, 1), (2, 3)],
+)
 
 
 
-fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]), layout = :grid, layout_grid_dims = (3, 4), 
-layout_grid_skip_positions = [(2, 1), (2, 3)], layout_grid_rowgap = 0, layout_grid_colgap = 0, figure_padding = (150, 150, 150, 150))
+fig, ax = eegfun.plot_erp(
+    erps,
+    channel_selection = eegfun.channels([:Cz, :PO7, :PO8, :Fp1, :Fp2, :F3]),
+    layout = :grid,
+    layout_grid_dims = (3, 4),
+    layout_grid_skip_positions = [(2, 1), (2, 3)],
+    layout_grid_rowgap = 0,
+    layout_grid_colgap = 0,
+    figure_padding = (150, 150, 150, 150),
+)
 
 
 
@@ -49,7 +74,12 @@ fig, ax = eegfun.plot_erp(erps[1], average_channels = false, colormap = :viridis
 fig, ax = eegfun.plot_erp(erps, average_channels = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = true)
 fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = false)
-fig, ax = eegfun.plot_erp(erps, channel_selection = eegfun.channels([:Cz, :PO7, :PO8]), average_channels = false, legend_nbanks = 3)
+fig, ax = eegfun.plot_erp(
+    erps,
+    channel_selection = eegfun.channels([:Cz, :PO7, :PO8]),
+    average_channels = false,
+    legend_nbanks = 3,
+)
 fig, ax = eegfun.plot_erp([erps[1], erps[1]], channel_selection = eegfun.channels([:PO8]))
 
 # ERP Plots (:grid)
@@ -67,20 +97,20 @@ ax1 = Axis(fig[1, 1])
 ax2 = Axis(fig[1, 1], width = Relative(0.2), height = Relative(0.2), halign = 0, valign = 0)
 eegfun.plot_erp!(fig, ax1, erps, average_channels = true)
 eegfun.plot_topography!(
-     fig,
-     ax2,
-     erps[1];
-     point_plot = false,
-     label_plot = false,
-     colorbar_plot = true,
-     colorbar_width = Relative(0.03),
-     colorbar_height = Relative(0.2),
-     colorbar_tellheight = false,
-     colorbar_tellwidth = false,
-     colorbar_position = (1, 1),
-     colorbar_halign = 0.25,
-     colorbar_valign = 0,
-     colorbar_flipaxis = true,
+    fig,
+    ax2,
+    erps[1];
+    point_plot = false,
+    label_plot = false,
+    colorbar_plot = true,
+    colorbar_width = Relative(0.03),
+    colorbar_height = Relative(0.2),
+    colorbar_tellheight = false,
+    colorbar_tellwidth = false,
+    colorbar_position = (1, 1),
+    colorbar_halign = 0.25,
+    colorbar_valign = 0,
+    colorbar_flipaxis = true,
 )
 fig
 

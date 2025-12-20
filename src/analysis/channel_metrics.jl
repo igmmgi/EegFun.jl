@@ -118,19 +118,18 @@ function correlation_matrix_dual_selection(
     include_extra_selection2::Bool = true,
 )::DataFrame
     # Get selected channels for both sets with separate include_extra settings
-    selected_channels1 = get_selected_channels(dat, channel_selection1; include_meta = false, include_extra = include_extra_selection1)
-    selected_channels2 = get_selected_channels(dat, channel_selection2; include_meta = false, include_extra = include_extra_selection2)
-    
+    selected_channels1 =
+        get_selected_channels(dat, channel_selection1; include_meta = false, include_extra = include_extra_selection1)
+    selected_channels2 =
+        get_selected_channels(dat, channel_selection2; include_meta = false, include_extra = include_extra_selection2)
+
     isempty(selected_channels1) && @minimal_error_throw "No channels selected for first channel set"
     isempty(selected_channels2) && @minimal_error_throw "No channels selected for second channel set"
-    
+
     # Get selected samples (same for both channel sets)
     selected_samples = get_selected_samples(dat, sample_selection)
-    
-    return _correlation_matrix_dual_selection(
-        dat.data, 
-        selected_samples, selected_channels1, selected_channels2
-    )
+
+    return _correlation_matrix_dual_selection(dat.data, selected_samples, selected_channels1, selected_channels2)
 end
 
 """
@@ -157,18 +156,18 @@ function _correlation_matrix_dual_selection(
     # Get data for both channel sets using the same sample selection
     data1 = select(dat, selected_channels1)[selected_samples, :]
     data2 = select(dat, selected_channels2)[selected_samples, :]
-    
+
     # Convert to matrices and calculate correlations
     matrix1 = Matrix(data1)  # channels1 × samples
     matrix2 = Matrix(data2)  # channels2 × samples
-    
+
     # Calculate correlation matrix: channels1 × channels2
     corr_matrix = cor(matrix1, matrix2)
-    
+
     # Create DataFrame with proper column and row names
     df = DataFrame(corr_matrix, selected_channels2)
     insertcols!(df, 1, :row => selected_channels1)
-    
+
     return df
 end
 
@@ -306,14 +305,14 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
     if bins > 0
         min_val, max_val = extrema(data)
         range_val = max_val - min_val
-        
+
         # Handle case where all values are the same (range_val == 0)
         if range_val == 0
             # All values are identical - uniform probability
             fill!(probaMap, 1.0 / length(data))
             return probaMap
         end
-        
+
         sortbox = zeros(Int, bins)
 
         # Single-pass binning and counting
@@ -331,14 +330,14 @@ function compute_probability!(probaMap::Vector{Float64}, data::AbstractVector{Fl
     else
         # Gaussian approximation
         μ, σ = mean(data), std(data)
-        
+
         # Handle case where all values are the same (σ == 0)
         if σ == 0
             # All values are identical - uniform probability
             fill!(probaMap, 1.0 / length(data))
             return probaMap
         end
-        
+
         inv_sqrt2pi = 1 / (√(2π))
         @inbounds for (i, x) in enumerate(data)
             z = (x - μ) / σ
@@ -430,17 +429,17 @@ add_zscore_columns!(cm, [:row, :channel_name])
 function add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
     # Get numeric columns (excluding specified columns)
     numeric_columns = Base.filter(col -> eltype(df[!, col]) <: Number && !(col in exclude_columns), names(df))
-    
+
     if isempty(numeric_columns)
         @minimal_error "No numeric columns found for z-score calculation"
         return df
     end
-    
+
     # Add z-score columns for each numeric column
     for col in numeric_columns
         z_col_name = Symbol("z_$(col)")
         values = df[!, col]
-        
+
         # Calculate z-scores (handle case where all values are the same)
         if std(values) == 0
             df[!, z_col_name] = zeros(length(values))
@@ -448,7 +447,7 @@ function add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:
             df[!, z_col_name] = (values .- mean(values)) ./ std(values)
         end
     end
-    
+
     return df
 end
 
@@ -517,19 +516,20 @@ add_zscore_columns!(cm)
 ```
 """
 function correlation_matrix_eog(
-    dat::SingleDataFrameEeg, 
+    dat::SingleDataFrameEeg,
     eog_cfg::EogConfig;
     sample_selection::Function = samples(),
     channel_selection::Function = channels(),
     include_extra::Bool = false,
 )::DataFrame
     # Call the dual selection function
-    return correlation_matrix_dual_selection(dat;
+    return correlation_matrix_dual_selection(
+        dat;
         sample_selection = sample_selection,
         channel_selection1 = channel_selection,
         channel_selection2 = channels(get_eog_channels(eog_cfg)),
         include_extra_selection1 = include_extra,
-        include_extra_selection2 = true  # EOG channels are typically extra channels
+        include_extra_selection2 = true,  # EOG channels are typically extra channels
     )
 end
 
@@ -565,20 +565,20 @@ bad_channels = identify_bad_channels(summary_df, joint_prob_df, zvar_criterion =
 ```
 """
 function identify_bad_channels(
-    summary_df::DataFrame, 
-    joint_prob_df::DataFrame; 
-    zvar_criterion::Real = 3.0
+    summary_df::DataFrame,
+    joint_prob_df::DataFrame;
+    zvar_criterion::Real = 3.0,
 )::Vector{Symbol}
-    
+
     # Identify bad channels based on z-variance criterion
     bad_by_zvar = summary_df[abs.(summary_df.zvar) .> zvar_criterion, :channel]
-    
+
     # Identify bad channels based on joint probability criterion
     bad_by_jp = joint_prob_df[joint_prob_df.rejection, :channel]
-    
+
     # Combine both criteria (union of bad channels)
     all_bad_channels = unique(vcat(bad_by_zvar, bad_by_jp))
-    
+
     return all_bad_channels
 end
 
@@ -655,13 +655,13 @@ repairable_channels = check_channel_neighbors(bad_channels, layout)
 ```
 """
 function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::Vector{Symbol}
-    
+
     if isempty(bad_channels)
         return bad_channels
     end
-    
+
     repairable_channels = Symbol[]
-    
+
     for bad_ch in bad_channels
         # Check if this channel has neighbors defined in the layout
         if !isnothing(layout.neighbours) && haskey(layout.neighbours, bad_ch)
@@ -674,7 +674,6 @@ function check_channel_neighbors(bad_channels::Vector{Symbol}, layout::Layout)::
             end
         end
     end
-    
+
     return repairable_channels
 end
-

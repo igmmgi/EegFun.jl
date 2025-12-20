@@ -62,7 +62,16 @@ function _create_difference_wave(erp1::ErpData, erp2::ErpData, cond1::Int, cond2
     min_epochs = min(erp1.n_epochs, erp2.n_epochs)
     diff_condition_name = "difference_$(cond1)_$(cond2)"
 
-    return ErpData(erp1.file, diff_cond, diff_condition_name, diff_data, erp1.layout, erp1.sample_rate, erp1.analysis_info, min_epochs)
+    return ErpData(
+        erp1.file,
+        diff_cond,
+        diff_condition_name,
+        diff_data,
+        erp1.layout,
+        erp1.sample_rate,
+        erp1.analysis_info,
+        min_epochs,
+    )
 end
 
 """
@@ -78,11 +87,11 @@ function _condition_difference_process_file(
 
     # Load data (using load_data which finds by type)
     erps_data = load_data(filepath)
-    
+
     if isnothing(erps_data)
         return BatchResult(false, filename, "No data variables found")
     end
-    
+
     # Validate that data is Vector{ErpData}
     if !(erps_data isa Vector{<:ErpData})
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData}, got $(typeof(erps_data))")
@@ -205,7 +214,8 @@ function condition_difference(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
+        output_dir =
+            something(output_dir, _condition_difference_default_output_dir(input_dir, file_pattern, condition_pairs))
         mkpath(output_dir)
 
         # Find files
@@ -219,7 +229,9 @@ function condition_difference(
             @info "Condition pairs: $condition_pairs"
 
             # Create processing function with captured parameters
-            process_fn = (input_path, output_path) -> _condition_difference_process_file(input_path, output_path, condition_pairs)
+            process_fn =
+                (input_path, output_path) ->
+                    _condition_difference_process_file(input_path, output_path, condition_pairs)
 
             # Execute batch operation
             results =

@@ -226,10 +226,7 @@ trigger_counts.data.cleaned_count
 function trigger_count(dat::BiosemiDataFormat.BiosemiData)::TriggerInfo
     # Get cleaned trigger data (onset detection only)
     cleaned_triggers = _clean_triggers(dat.triggers.raw)
-    return _trigger_count_impl(
-        [dat.triggers.raw, cleaned_triggers],
-        ["raw_count", "cleaned_count"],
-    )
+    return _trigger_count_impl([dat.triggers.raw, cleaned_triggers], ["raw_count", "cleaned_count"])
 end
 
 # =============================================================================

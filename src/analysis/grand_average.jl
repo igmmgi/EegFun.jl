@@ -32,7 +32,7 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
 
     # Validate that all ERPs have the same structure
     have_same_structure(erps) || @minimal_error_throw("ERPs have inconsistent structure")
-    
+
     first_erp = erps[1]
 
     # Get metadata columns and EEG channels
@@ -65,7 +65,16 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
     grand_avg_cond_name = "grand_avg_$(first_erp.condition_name)"
 
     # Use the layout and analysis info from the first ERP
-    return ErpData("grand_avg", cond_num, grand_avg_cond_name, grand_avg_data, first_erp.layout, first_erp.sample_rate, first_erp.analysis_info, total_epochs)
+    return ErpData(
+        "grand_avg",
+        cond_num,
+        grand_avg_cond_name,
+        grand_avg_data,
+        first_erp.layout,
+        first_erp.sample_rate,
+        first_erp.analysis_info,
+        total_epochs,
+    )
 end
 
 grand_average(erps::Vector{ErpData}, cond_num::Int) = _create_grand_average(erps, cond_num)
@@ -78,12 +87,12 @@ function _load_and_group_erps(files::Vector{String}, input_dir::String, conditio
     # Load all ERPs and group by condition
     all_erps = load_all_data(ErpData, files, input_dir)
     erps_by_condition = group_by_condition(all_erps)
-    
+
     # Apply condition selection to the sorted condition numbers
     all_cond_nums = collect(keys(erps_by_condition))  # Already sorted
     selected_mask = condition_selection(1:length(all_cond_nums))
     selected_cond_nums = all_cond_nums[selected_mask]
-    
+
     # Return only the selected conditions
     return OrderedDict(num => erps_by_condition[num] for num in selected_cond_nums)
 end

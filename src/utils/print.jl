@@ -28,7 +28,7 @@ from the package root.
 # Returns
 - `String`: The version string from Project.toml, or "unknown" if not available/problem
 """
-function get_package_version(;package_name::String = "eegfun")
+function get_package_version(; package_name::String = "eegfun")
     try
         pkg_path = Base.find_package(package_name)
         version = "unknown"
@@ -76,7 +76,7 @@ function print_config(config, io::IO = stdout)
     config_with_meta["metadata"] = OrderedDict(
         "julia_version" => string(VERSION),
         "eegfun_version" => get_package_version(package_name = "eegfun"),
-        "date" => string(now())
+        "date" => string(now()),
     )
 
     # Copy config content, ensuring string keys and skipping any existing metadata

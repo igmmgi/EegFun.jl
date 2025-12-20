@@ -160,24 +160,24 @@ function _generate_processing_loop(num_steps::Int, subsections_per_step::Int)
                 # CUSTOM PROCESSING STEPS
                 # ========================================================================
 """
-    
+
     # Generate steps with subsections
-    for step_num in 1:num_steps
+    for step_num = 1:num_steps
         content *= "\n                @info section(\"Step $step_num\")\n"
-        
-        for sub_num in 1:subsections_per_step
+
+        for sub_num = 1:subsections_per_step
             content *= "                @info subsection(\"Step $step_num.$sub_num\")\n"
             content *= "                # Your code here...\n"
             if sub_num < subsections_per_step
                 content *= "\n"
             end
         end
-        
+
         if step_num < num_steps
             content *= "\n"
         end
     end
-    
+
     content *= """
                 
                 @info section("End of Processing")
@@ -311,47 +311,47 @@ function generate_pipeline_template(
 )
     # Build template from sections
     template_parts = String[]
-    
+
     # Header
     push!(template_parts, _generate_header())
-    
+
     # Function signature
     push!(template_parts, _generate_function_signature(function_name))
-    
+
     # Function preamble
     push!(template_parts, _generate_function_preamble(function_name))
-    
+
     # Setup section (if enabled)
     if options.include_setup
         push!(template_parts, _generate_setup_section())
     end
-    
+
     # Processing loop
     push!(template_parts, _generate_processing_loop(options.num_steps, options.subsections_per_step))
-    
+
     # Summary section (if enabled)
     if options.include_summary
         push!(template_parts, _generate_summary_section())
     end
-    
+
     # Error handling
     push!(template_parts, _generate_error_handling())
-    
+
     # Usage example (if enabled)
     if options.include_usage_example
         push!(template_parts, _generate_usage_example(function_name))
     end
-    
+
     # Combine all parts
     template_content = join(template_parts, "")
-    
+
     # Write the template to file
     open(output_file, "w") do io
         write(io, template_content)
     end
-    
+
     @info "Pipeline template generated: $output_file"
     @info "Edit the template to add your custom processing steps"
-    
+
     return output_file
 end

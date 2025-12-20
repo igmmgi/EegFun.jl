@@ -306,7 +306,7 @@ function _process_channel_summary_file(
 
     # Select conditions
     data_var = _condition_select(data_var, condition_selection)
-    
+
     # Determine actual condition numbers for tracking
     # After _condition_select, data_var is filtered but we need original condition numbers
     condition_numbers = 1:length(data_var)
@@ -431,7 +431,13 @@ function channel_summary(
             input_path = joinpath(input_dir, file)
 
             result, summary_dfs = try
-                _process_channel_summary_file(input_path, condition_selection, sample_selection, channel_selection, include_extra)
+                _process_channel_summary_file(
+                    input_path,
+                    condition_selection,
+                    sample_selection,
+                    channel_selection,
+                    include_extra,
+                )
             catch e
                 @error "Error processing $file" exception=(e, catch_backtrace())
                 (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])

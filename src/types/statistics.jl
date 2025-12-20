@@ -10,11 +10,13 @@ t-test results, cluster permutation test results, and analytic t-test results.
 # ==============
 
 # this seems a bit lighter than a full struct
-const TTestResult = NamedTuple{(:df, :t, :p), Tuple{Float64, Float64, Float64}}
+const TTestResult = NamedTuple{(:df, :t, :p),Tuple{Float64,Float64,Float64}}
 
 # Format t-value and p-value for display
 function Base.show(io::IO, result::TTestResult)
-    t_str = isnan(result.t) ? "NaN" : (isinf(result.t) ? (result.t > 0 ? "Inf" : "-Inf") : Printf.@sprintf("%.4f", result.t))
+    t_str =
+        isnan(result.t) ? "NaN" :
+        (isinf(result.t) ? (result.t > 0 ? "Inf" : "-Inf") : Printf.@sprintf("%.4f", result.t))
     p_str = isnan(result.p) ? "NaN" : Printf.@sprintf("%.4f", result.p)
     df_str = isnan(result.df) ? "NaN" : string(round(Int, result.df))
     print(io, "t($df_str) = $t_str, p = $p_str")
@@ -36,7 +38,7 @@ Stores core analysis data for statistical tests.
 """
 struct AnalysisData
     design::Symbol                   # :paired vs. :independent
-    data::Vector{Array{Float64, 3}}  # [condition1, condition2] - each [participants × electrodes × time]
+    data::Vector{Array{Float64,3}}  # [condition1, condition2] - each [participants × electrodes × time]
     time_points::Vector{Float64}     # analysis window
 end
 
@@ -57,11 +59,11 @@ end
 
 function Base.show(io::IO, data::StatisticalTestData)
     time_range_str(times) = isempty(times) ? "N/A" : "$(first(times)) to $(last(times)) s"
-    
+
     # Get dimensions
     n_participants1 = size(data.analysis.data[1], 1)
     n_participants2 = size(data.analysis.data[2], 1)
-    
+
     # Get summary info from grand averages
     n_electrodes1 = length(channel_labels(data.data[1]))
     n_electrodes2 = length(channel_labels(data.data[2]))
@@ -102,7 +104,7 @@ struct Cluster
     id::Int
     electrodes::Vector{Symbol}
     time_indices::Vector{Int}
-    time_range::Tuple{Float64, Float64}
+    time_range::Tuple{Float64,Float64}
     cluster_stat::Float64
     p_value::Float64
     is_significant::Bool
@@ -126,7 +128,7 @@ struct ClusterInfo
     cluster_type::Symbol
     cluster_statistic::Symbol
     n_permutations::Int
-    random_seed::Union{Int, Nothing}
+    random_seed::Union{Int,Nothing}
 end
 
 # ==============
@@ -152,7 +154,7 @@ struct TestInfo
     alpha::Float64
     tail::Symbol
     correction_method::Symbol
-    cluster_info::Union{ClusterInfo, Nothing}
+    cluster_info::Union{ClusterInfo,Nothing}
 end
 
 """
@@ -165,8 +167,8 @@ Stores t-statistics and p-values matrices.
 - `p::Union{Array{Float64, 2}, Nothing}`: P-values [electrodes × time] (nothing for cluster permutation)
 """
 struct StatMatrix
-    t::Array{Float64, 2}
-    p::Union{Array{Float64, 2}, Nothing}
+    t::Array{Float64,2}
+    p::Union{Array{Float64,2},Nothing}
 end
 
 """
@@ -254,27 +256,27 @@ struct ClusterPermutationResult <: StatisticalTestResult
     permutation_distribution::PermutationDistribution
     electrodes::Vector{Symbol}
     time_points::Vector{Float64}
-    critical_t::Union{Array{Float64, 2}, Tuple{Float64, Float64}, Tuple{Array{Float64, 2}, Array{Float64, 2}}}
+    critical_t::Union{Array{Float64,2},Tuple{Float64,Float64},Tuple{Array{Float64,2},Array{Float64,2}}}
 end
 
 function Base.show(io::IO, result::ClusterPermutationResult)
     n_electrodes = length(result.electrodes)
     n_time_points = length(result.time_points)
     time_range = isempty(result.time_points) ? "N/A" : "$(first(result.time_points)) to $(last(result.time_points)) s"
-    
+
     n_pos_clusters = length(result.clusters.positive)
     n_neg_clusters = length(result.clusters.negative)
     n_sig_pos = count(c -> c.is_significant, result.clusters.positive)
     n_sig_neg = count(c -> c.is_significant, result.clusters.negative)
-    
+
     # Count significant points
     n_sig_pos_points = count(result.masks.positive)
     n_sig_neg_points = count(result.masks.negative)
-    
+
     # Extract nested fields for readability
     test_info = result.test_info
     cluster_info = test_info.cluster_info
-    
+
     println(io, "ClusterPermutationResult")
     println(io, "├─ Design: $(test_info.type)")
     println(io, "├─ Degrees of freedom: $(round(Int, test_info.df))")
@@ -285,7 +287,7 @@ function Base.show(io::IO, result::ClusterPermutationResult)
     println(io, "├─ Data dimensions: $n_electrodes electrodes × $n_time_points time points ($time_range)")
     println(io, "├─ Significant points: $n_sig_pos_points positive, $n_sig_neg_points negative")
     println(io, "├─ Clusters found: $n_pos_clusters positive, $n_neg_clusters negative")
-    
+
     if n_sig_pos > 0 || n_sig_neg > 0
         print(io, "├─ Significant clusters: ")
         if n_sig_pos > 0
@@ -300,39 +302,45 @@ function Base.show(io::IO, result::ClusterPermutationResult)
     else
         println(io, "├─ Significant clusters: 0")
     end
-    
+
     # Show only significant cluster details
     if n_sig_pos > 0 || n_sig_neg > 0
         println(io, "└─ Significant cluster details:")
-        
+
         if n_sig_pos > 0
             println(io, "   Positive clusters:")
             sig_clusters = [c for c in result.clusters.positive if c.is_significant]
-            
+
             for cluster in sig_clusters
                 sig_marker = "✓"
                 p_str = cluster.p_value < 0.001 ? "<0.001" : Printf.@sprintf("%.3f", cluster.p_value)
                 stat_str = Printf.@sprintf("%.2f", cluster.cluster_stat)
                 time_str = "$(cluster.time_range[1])-$(cluster.time_range[2]) s"
                 n_elec = length(cluster.electrodes)
-                println(io, "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str")
+                println(
+                    io,
+                    "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str",
+                )
             end
         end
-        
+
         if n_sig_neg > 0
             println(io, "   Negative clusters:")
             sig_clusters = [c for c in result.clusters.negative if c.is_significant]
-            
+
             for cluster in sig_clusters
                 sig_marker = "✓"
                 p_str = cluster.p_value < 0.001 ? "<0.001" : Printf.@sprintf("%.3f", cluster.p_value)
                 stat_str = Printf.@sprintf("%.2f", cluster.cluster_stat)
                 time_str = "$(cluster.time_range[1])-$(cluster.time_range[2]) s"
                 n_elec = length(cluster.electrodes)
-                println(io, "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str")
+                println(
+                    io,
+                    "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str",
+                )
             end
         end
-        
+
         if cluster_info.random_seed !== nothing
             println(io, "   Random seed: $(cluster_info.random_seed)")
         end
@@ -371,10 +379,10 @@ function Base.show(io::IO, result::AnalyticTTestResult)
     n_electrodes = length(result.electrodes)
     n_time_points = length(result.time_points)
     time_range = isempty(result.time_points) ? "N/A" : "$(first(result.time_points)) to $(last(result.time_points)) s"
-    
+
     n_sig_pos = count(result.masks.positive)
     n_sig_neg = count(result.masks.negative)
-    
+
     println(io, "AnalyticTTestResult")
     println(io, "├─ Test info")
     println(io, "│  ├─ Type: $(result.test_info.type)")
@@ -385,4 +393,3 @@ function Base.show(io::IO, result::AnalyticTTestResult)
     println(io, "├─ Data dimensions: $n_electrodes electrodes × $n_time_points time points ($time_range)")
     println(io, "└─ Significant points: $n_sig_pos positive, $n_sig_neg negative")
 end
-

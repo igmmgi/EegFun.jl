@@ -179,7 +179,7 @@ using Random
         # Boundary windows (too wide) → warnings, returns empty or partial epochs
         ep11 = eegfun.extract_epochs(dat, 11, ec1, -1.0, 0.02)
         @test eegfun.n_epochs(ep11) == 0  # All epochs out of bounds, returns empty
-        
+
         ep12 = eegfun.extract_epochs(dat, 12, ec1, -0.01, 2.0)
         @test eegfun.n_epochs(ep12) == 0  # All epochs out of bounds, returns empty
     end
@@ -200,7 +200,15 @@ using Random
         # Multiple conditions
         ec_other = eegfun.EpochCondition(name = "seq123b", trigger_sequences = [[1, 2, 3]], reference_index = 2)
         eps2 = eegfun.extract_epochs(dat, 11, ec_other, win[1], win[2])
-        mixed = eegfun.EpochData(eps.file, eps.condition, eps.condition_name, vcat(eps.data, eps2.data), eps.layout, eps.sample_rate, eps.analysis_info)
+        mixed = eegfun.EpochData(
+            eps.file,
+            eps.condition,
+            eps.condition_name,
+            vcat(eps.data, eps2.data),
+            eps.layout,
+            eps.sample_rate,
+            eps.analysis_info,
+        )
         erp_mixed = eegfun.average_epochs(mixed)
         # Mixed epochs from different conditions, but averaged into single ERP
         @test erp_mixed isa eegfun.ErpData
@@ -215,7 +223,15 @@ using Random
                 epoch = [1, 1],
             ),
         ]
-        em = eegfun.EpochData(eps.file, eps.condition, eps.condition_name, only_meta, eps.layout, eps.sample_rate, eps.analysis_info)
+        em = eegfun.EpochData(
+            eps.file,
+            eps.condition,
+            eps.condition_name,
+            only_meta,
+            eps.layout,
+            eps.sample_rate,
+            eps.analysis_info,
+        )
         @test_throws Any eegfun.average_epochs(em)
     end
 
@@ -250,7 +266,15 @@ using Random
         @test_throws ErrorException eegfun.reject_epochs(eps, :does_not_exist)
 
         # Empty EpochData → error (current implementation validates first epoch)
-        empty_ep = eegfun.EpochData(eps.file, eps.condition, eps.condition_name, DataFrame[], eps.layout, eps.sample_rate, eps.analysis_info)
+        empty_ep = eegfun.EpochData(
+            eps.file,
+            eps.condition,
+            eps.condition_name,
+            DataFrame[],
+            eps.layout,
+            eps.sample_rate,
+            eps.analysis_info,
+        )
         @test_throws Any eegfun.reject_epochs(empty_ep, :is_bad)
     end
 
@@ -531,7 +555,10 @@ end
                     eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
                 # EpochData constructor: (file, condition, condition_name, data, layout, sample_rate, analysis_info)
-                push!(epochs, eegfun.EpochData("test_data", cond, "condition_$cond", dfs, layout, fs, eegfun.AnalysisInfo()))
+                push!(
+                    epochs,
+                    eegfun.EpochData("test_data", cond, "condition_$cond", dfs, layout, fs, eegfun.AnalysisInfo()),
+                )
             end
 
             return epochs
@@ -575,8 +602,12 @@ end
         @testset "Average specific participants" begin
             output_dir = joinpath(test_dir, "averaged_participant")
 
-            result =
-                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants(1))
+            result = eegfun.average_epochs(
+                "epochs_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = eegfun.participants(1),
+            )
 
             @test result.success == 1
             @test result.errors == 0
@@ -603,8 +634,12 @@ end
         @testset "Average specific conditions" begin
             output_dir = joinpath(test_dir, "averaged_condition")
 
-            result =
-                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(1))
+            result = eegfun.average_epochs(
+                "epochs_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions(1),
+            )
 
             @test result.success == 2
 
@@ -708,8 +743,12 @@ end
 
             # Request condition 5 when only 2 exist
             # With predicate-based selection, this results in empty selection but successful processing
-            result =
-                eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(5))
+            result = eegfun.average_epochs(
+                "epochs_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions(5),
+            )
 
             # Files are processed successfully but with empty condition selection
             @test result.success == 2
@@ -847,7 +886,8 @@ end
             # We'll test this by creating a minimal epochs structure
             layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            empty_epoch = eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 256, eegfun.AnalysisInfo())
+            empty_epoch =
+                eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 256, eegfun.AnalysisInfo())
             jldsave(joinpath(empty_epochs_dir, "1_epochs_empty.jld2"); data = [empty_epoch])
 
             output_dir = joinpath(test_dir, "averaged_empty")

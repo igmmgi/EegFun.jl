@@ -46,8 +46,7 @@ eegfun.plot_my_data_gui()
 function plot_gui()
 
     # Create the main figure with minimal padding
-    fig = Figure(size = (700, 800), title = "Plot GUI", backgroundcolor = :white, 
-    figure_padding = (5, 10, 10, 10))
+    fig = Figure(size = (700, 800), title = "Plot GUI", backgroundcolor = :white, figure_padding = (5, 10, 10, 10))
 
     # Try and make sizing adaptive?
     function setup_adaptive_sizing(fig)
@@ -78,14 +77,14 @@ function plot_gui()
     # Create main layout with 2-column structure
     # We'll add spacing by using column sizing with Relative widths
     main_layout = GridLayout(fig[1, 1:2], rowgap = 10)
-    
+
     # Column 1: File & Data Selection
     # File Type Section - Place this first to create column 1
     Label(main_layout[1, 1], "File Type", fontsize = ui_style.label_font, font = :bold)
-    
+
     # Column 2: Settings - Place this first to create column 2
     Label(main_layout[1, 2], "Settings", fontsize = ui_style.label_font, font = :bold)
-    
+
     # Now that both columns exist, set their widths to create spacing
     colsize!(main_layout, 1, Relative(0.45))  # First column takes 45% of width
     colsize!(main_layout, 2, Relative(0.45))  # Second column takes 45% of width

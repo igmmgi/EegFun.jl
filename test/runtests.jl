@@ -18,7 +18,7 @@ println("Running eegfun.jl Test Suite")
 println("=" ^ 40)
 
 @testset "eegfun" begin
- 
+
     include("automatic/apply.jl")
     include("automatic/apply.jl")
     include("automatic/artifact_detection.jl")

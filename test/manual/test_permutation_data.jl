@@ -40,10 +40,17 @@ result_analytic_no = eegfun.analytic_ttest(
     prepared,
     alpha = 0.05,           # Significance threshold
     tail = :both,           # Two-tailed test (:both, :left, or :right)
-    correction_method = :no # No multiple comparison correction
+    correction_method = :no, # No multiple comparison correction
 )
 
-fig = eegfun.plot_analytic_ttest(result_analytic_no, channel = :PO8, plot_erp = true, plot_difference = false, show_significance = true, show_critical_t = true)
+fig = eegfun.plot_analytic_ttest(
+    result_analytic_no,
+    channel = :PO8,
+    plot_erp = true,
+    plot_difference = false,
+    show_significance = true,
+    show_critical_t = true,
+)
 
 # ----------------------------------------------------------------------------
 # Option 2b: Analytic t-test with BONFERRONI correction
@@ -52,10 +59,17 @@ result_analytic_bonf = eegfun.analytic_ttest(
     prepared,
     alpha = 0.05,
     tail = :both,
-    correction_method = :bonferroni  # Bonferroni correction
+    correction_method = :bonferroni,  # Bonferroni correction
 )
 
-fig = eegfun.plot_analytic_ttest(result_analytic_bonf, channel = :PO8, plot_erp = true, plot_difference = false, show_significance = true, show_critical_t = true)
+fig = eegfun.plot_analytic_ttest(
+    result_analytic_bonf,
+    channel = :PO8,
+    plot_erp = true,
+    plot_difference = false,
+    show_significance = true,
+    show_critical_t = true,
+)
 
 
 println(result_analytic_bonf)
@@ -79,10 +93,17 @@ println("      number of significant points to the uncorrected test above.")
     cluster_statistic = :sum,     # Sum of t-values in cluster (default)
     min_num_neighbors = 3,       # Pre-filter: need 3+ neighbors
     tail = :both,                 # Two-tailed test
-    show_progress = true          # Show progress bar
+    show_progress = true,          # Show progress bar
 )
 
-fig = eegfun.plot_analytic_ttest(result_cluster_parametric, channel = :PO8, plot_erp = true, plot_difference = false, show_significance = true, show_critical_t = true)
+fig = eegfun.plot_analytic_ttest(
+    result_cluster_parametric,
+    channel = :PO8,
+    plot_erp = true,
+    plot_difference = false,
+    show_significance = true,
+    show_critical_t = true,
+)
 display(fig)
 
 println(result_cluster_parametric)
@@ -124,7 +145,7 @@ Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster',
     cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
-    show_progress = true
+    show_progress = true,
 )
 
 println(result_cluster_nonparametric_common)
@@ -168,7 +189,7 @@ result_cluster_nonparametric_individual = eegfun.cluster_permutation_test(
     cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
-    show_progress = true
+    show_progress = true,
 )
 
 println(result_cluster_nonparametric_individual)
@@ -212,7 +233,7 @@ result_cluster_spatial = eegfun.cluster_permutation_test(
     cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
-    show_progress = true
+    show_progress = true,
 )
 
 println(result_cluster_spatial)
@@ -248,7 +269,7 @@ result_cluster_temporal = eegfun.cluster_permutation_test(
     cluster_statistic = :sum,
     min_num_neighbors = 0,  # Not applicable for temporal-only
     tail = :both,
-    show_progress = true
+    show_progress = true,
 )
 
 println(result_cluster_temporal)
@@ -284,7 +305,7 @@ result_cluster_spatiotemporal = eegfun.cluster_permutation_test(
     cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
-    show_progress = true
+    show_progress = true,
 )
 
 println(result_cluster_spatiotemporal)
@@ -322,12 +343,27 @@ the cluster_type, because the clustering algorithm groups points differently.
 """)
 
 println("\nCluster counts comparison:")
-println("  Spatial:          ", length(result_cluster_spatial.clusters.positive), " positive, ", 
-        length(result_cluster_spatial.clusters.negative), " negative")
-println("  Temporal:         ", length(result_cluster_temporal.clusters.positive), " positive, ", 
-        length(result_cluster_temporal.clusters.negative), " negative")
-println("  Spatiotemporal:  ", length(result_cluster_spatiotemporal.clusters.positive), " positive, ", 
-        length(result_cluster_spatiotemporal.clusters.negative), " negative")
+println(
+    "  Spatial:          ",
+    length(result_cluster_spatial.clusters.positive),
+    " positive, ",
+    length(result_cluster_spatial.clusters.negative),
+    " negative",
+)
+println(
+    "  Temporal:         ",
+    length(result_cluster_temporal.clusters.positive),
+    " positive, ",
+    length(result_cluster_temporal.clusters.negative),
+    " negative",
+)
+println(
+    "  Spatiotemporal:  ",
+    length(result_cluster_spatiotemporal.clusters.positive),
+    " positive, ",
+    length(result_cluster_spatiotemporal.clusters.negative),
+    " negative",
+)
 
 # ============================================================================
 # PART 4: COMPARISON OF METHODS
@@ -343,22 +379,52 @@ println("\n" * "-"^80)
 println("Significant Clusters Found:")
 println("-"^80)
 println("\nParametric thresholding:")
-println("  Positive clusters: ", count(c -> c.is_significant, result_cluster_parametric.clusters.positive), 
-        " significant out of ", length(result_cluster_parametric.clusters.positive), " total")
-println("  Negative clusters: ", count(c -> c.is_significant, result_cluster_parametric.clusters.negative),
-        " significant out of ", length(result_cluster_parametric.clusters.negative), " total")
+println(
+    "  Positive clusters: ",
+    count(c -> c.is_significant, result_cluster_parametric.clusters.positive),
+    " significant out of ",
+    length(result_cluster_parametric.clusters.positive),
+    " total",
+)
+println(
+    "  Negative clusters: ",
+    count(c -> c.is_significant, result_cluster_parametric.clusters.negative),
+    " significant out of ",
+    length(result_cluster_parametric.clusters.negative),
+    " total",
+)
 
 println("\nNon-parametric common thresholding:")
-println("  Positive clusters: ", count(c -> c.is_significant, result_cluster_nonparametric_common.clusters.positive),
-        " significant out of ", length(result_cluster_nonparametric_common.clusters.positive), " total")
-println("  Negative clusters: ", count(c -> c.is_significant, result_cluster_nonparametric_common.clusters.negative),
-        " significant out of ", length(result_cluster_nonparametric_common.clusters.negative), " total")
+println(
+    "  Positive clusters: ",
+    count(c -> c.is_significant, result_cluster_nonparametric_common.clusters.positive),
+    " significant out of ",
+    length(result_cluster_nonparametric_common.clusters.positive),
+    " total",
+)
+println(
+    "  Negative clusters: ",
+    count(c -> c.is_significant, result_cluster_nonparametric_common.clusters.negative),
+    " significant out of ",
+    length(result_cluster_nonparametric_common.clusters.negative),
+    " total",
+)
 
 println("\nNon-parametric individual thresholding:")
-println("  Positive clusters: ", count(c -> c.is_significant, result_cluster_nonparametric_individual.clusters.positive),
-        " significant out of ", length(result_cluster_nonparametric_individual.clusters.positive), " total")
-println("  Negative clusters: ", count(c -> c.is_significant, result_cluster_nonparametric_individual.clusters.negative),
-        " significant out of ", length(result_cluster_nonparametric_individual.clusters.negative), " total")
+println(
+    "  Positive clusters: ",
+    count(c -> c.is_significant, result_cluster_nonparametric_individual.clusters.positive),
+    " significant out of ",
+    length(result_cluster_nonparametric_individual.clusters.positive),
+    " total",
+)
+println(
+    "  Negative clusters: ",
+    count(c -> c.is_significant, result_cluster_nonparametric_individual.clusters.negative),
+    " significant out of ",
+    length(result_cluster_nonparametric_individual.clusters.negative),
+    " total",
+)
 
 println("\n" * "-"^80)
 println("Interpretation:")
@@ -408,12 +474,12 @@ println("\n" * "-"^80)
 println("Example 1: ERP Waveforms Only")
 println("-"^80)
 fig1 = eegfun.plot_analytic_ttest(
-    result_analytic_no, 
-    prepared, 
+    result_analytic_no,
+    prepared,
     channel = :PO7,
     plot_erp = true,
     plot_difference = false,
-    show_significance = false
+    show_significance = false,
 )
 display(fig1)
 
@@ -428,7 +494,7 @@ fig2 = eegfun.plot_analytic_ttest(
     plot_erp = false,
     plot_difference = true,
     show_significance = true,
-    show_critical_t = true
+    show_critical_t = true,
 )
 display(fig2)
 
@@ -449,7 +515,7 @@ fig3 = eegfun.plot_analytic_ttest(
     show_significance = true,
     show_critical_t = true,
     sig_bar_position = 4.0,
-    sig_bar_color = (:gray, 0.6)
+    sig_bar_color = (:gray, 0.6),
 )
 display(fig3)
 

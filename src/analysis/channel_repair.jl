@@ -29,7 +29,13 @@ repair_channels!(dat, [:Fp1, :Fp2], method=:spherical_spline)
 repair_channels!(dat, [:Fp1], method=:spherical_spline, m=6, lambda=1e-6)
 ```
 """
-function repair_channels!(data, channels_to_repair; method::Symbol = :neighbor_interpolation, repair_info = nothing, kwargs...)
+function repair_channels!(
+    data,
+    channels_to_repair;
+    method::Symbol = :neighbor_interpolation,
+    repair_info = nothing,
+    kwargs...,
+)
     # repair_info is only used for ContinuousData, not for EpochData (tracking is in EpochRejectionInfo)
     if method == :neighbor_interpolation
         _repair_channels_neighbor!(data, channels_to_repair; repair_info = repair_info, kwargs...)
@@ -47,7 +53,13 @@ end
 @add_nonmutating repair_channels!
 
 # Helper function for neighbor interpolation
-function _repair_channels_neighbor!(data, channels_to_repair; neighbours_dict = nothing, repair_info = nothing, kwargs...)
+function _repair_channels_neighbor!(
+    data,
+    channels_to_repair;
+    neighbours_dict = nothing,
+    repair_info = nothing,
+    kwargs...,
+)
     if isnothing(neighbours_dict)
         # For data objects, get neighbors from layout
         if hasfield(typeof(data), :layout)
@@ -115,7 +127,7 @@ function _repair_channels_neighbor!(
             !isnothing(repair_info) && push!(repair_info.skipped, bad_ch)
             continue
         end
-        
+
         # Require at least 2 neighbors for meaningful interpolation
         if length(neighbours.channels) < 2
             @minimal_warning "Channel $bad_ch has only $(length(neighbours.channels)) neighbor(s), need at least 2 for repair, skipping"
@@ -144,7 +156,7 @@ function _repair_channels_neighbor!(
         end
 
         @info "Repaired channel $bad_ch using weighted neighbor interpolation with neighbors: $(neighbours.channels)"
-        
+
         # Track successful repair
         if !isnothing(repair_info)
             push!(repair_info.repaired, bad_ch)
@@ -288,7 +300,7 @@ function _repair_channels_spherical!(
         end
 
         @info "Repaired channel $bad_ch using spherical spline interpolation"
-        
+
         # Track successful repair
         !isnothing(repair_info) && push!(repair_info.repaired, bad_ch)
     end
@@ -314,7 +326,15 @@ function _repair_channels_spherical!(
     channels = Symbol.(data.layout.data.label)
     data_matrix = Matrix(data.data[:, channels])'
 
-    _repair_channels_spherical!(data_matrix, channels_to_repair, channels, data.layout.data; m = m, lambda = lambda, repair_info = repair_info)
+    _repair_channels_spherical!(
+        data_matrix,
+        channels_to_repair,
+        channels,
+        data.layout.data;
+        m = m,
+        lambda = lambda,
+        repair_info = repair_info,
+    )
 
     # Update the data
     data.data[:, channels] = data_matrix'
@@ -471,28 +491,28 @@ channels_repaired, epochs_repaired = repair_channels_per_epoch!(
 ```
 """
 function repair_channels_per_epoch!(
-    epochs_list::Vector{EpochData}, 
-    layout::Layout, 
-    threshold::Real, 
-    artifact_col::Symbol
-)::Tuple{Vector{Symbol}, Int}
-    
+    epochs_list::Vector{EpochData},
+    layout::Layout,
+    threshold::Real,
+    artifact_col::Symbol,
+)::Tuple{Vector{Symbol},Int}
+
     channels_with_artifacts = Symbol[]
     epochs_repaired = 0
-    
+
     for (condition_idx, epoch_data) in enumerate(epochs_list)
-        for epoch_idx in 1:length(epoch_data.data)
+        for epoch_idx = 1:length(epoch_data.data)
             epoch_df = epoch_data.data[epoch_idx]
-            
+
             if hasproperty(epoch_df, artifact_col)
                 if any(epoch_df[!, artifact_col])
                     @info "Condition $condition_idx, Epoch $epoch_idx: Artifacts detected"
-                    
+
                     eeg_channels = channel_labels(epoch_data)
-                    
+
                     # Find which specific channels have artifacts (exceed threshold) in this epoch
                     artifact_channels = Symbol[]
-                    
+
                     for ch in eeg_channels
                         if hasproperty(epoch_df, ch)
                             ch_data = epoch_df[!, ch]
@@ -503,7 +523,7 @@ function repair_channels_per_epoch!(
                             end
                         end
                     end
-                    
+
                     if !isempty(artifact_channels)
                         # Check if any of these channels have good neighbors and can be repaired
                         repaired_in_epoch = Symbol[]
@@ -526,7 +546,7 @@ function repair_channels_per_epoch!(
                                 @info "    - Channel $ch: No neighbor information available in layout"
                             end
                         end
-                        
+
                         if !isempty(repaired_in_epoch)
                             epochs_repaired += 1
                         end
@@ -535,10 +555,9 @@ function repair_channels_per_epoch!(
             end
         end
     end
-    
+
     @info "Per-epoch repair summary: Repaired $(length(channels_with_artifacts)) unique channels across $(epochs_repaired) epochs"
     @info "Channels repaired: $(channels_with_artifacts)"
-    
+
     return (channels_with_artifacts, epochs_repaired)
 end
-

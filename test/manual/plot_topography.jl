@@ -33,7 +33,7 @@ eegfun.plot_topography(dat, point_markersize = 30, point_marker = :x)
 eegfun.plot_topography(dat, colorbar_ticksize = 130)
 eegfun.plot_topography(dat, colorbar_labelcolor = :red)
 eegfun.plot_topography(dat, colorbar_size = 50)
-eegfun.plot_topography(dat, colorbar_size = 20, colorbar_position = (2, 1), colorbar_vertical=false)
+eegfun.plot_topography(dat, colorbar_size = 20, colorbar_position = (2, 1), colorbar_vertical = false)
 
 #################################
 # Epoched DataFrameEeg
@@ -73,14 +73,29 @@ erps = eegfun.average_epochs(epochs)
 
 eegfun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2))
 
-eegfun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), 
-colorbar_datasets = [4], dims = (1, 4))
+eegfun.plot_topography(
+    erps,
+    sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6,
+    ylim = (-2, 2),
+    colorbar_datasets = [4],
+    dims = (1, 4),
+)
 
-eegfun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), 
-colorbar_plot = false)
+eegfun.plot_topography(
+    erps,
+    sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6,
+    ylim = (-2, 2),
+    colorbar_plot = false,
+)
 
-eegfun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), 
-colorbar_plot = true, colorbar_position = (2, 1), colorbar_vertical = false)
+eegfun.plot_topography(
+    erps,
+    sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6,
+    ylim = (-2, 2),
+    colorbar_plot = true,
+    colorbar_position = (2, 1),
+    colorbar_vertical = false,
+)
 
 
 eegfun.plot_topography(erps[1])

@@ -26,17 +26,17 @@ function paired_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = :both
 
     # validate equal lengths
     length(x) == length(y) || error("Paired t-test requires equal sample sizes")
-    
+
     n = length(x)
     n < 2 && return (df = NaN, t = NaN, p = NaN)  # Need at least 2 observations
-    
+
     df = n - 1  # degrees of freedom for paired t-test
-    
+
     # Compute mean and std of differences 
     diff = x .- y
     mean_diff = mean(diff)
     std_diff = std(diff, corrected = true)  # Sample standard deviation (n-1)
-    
+
     # Compute t-value
     if std_diff == 0.0
         if mean_diff == 0.0
@@ -47,10 +47,10 @@ function paired_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = :both
     else
         t = mean_diff / (std_diff / sqrt(n))
     end
-    
+
     # Handle edge cases
     (isnan(t) || isinf(t)) && return (df = df, t = t, p = NaN)
-    
+
     # Compute p-value
     dist = TDist(df)
     if tail == :both # Two-tailed test
@@ -62,7 +62,7 @@ function paired_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = :both
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
-    
+
     return (df = df, t = t, p = p)
 end
 
@@ -89,17 +89,17 @@ function independent_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = 
     # Validate input lengths
     n_A, n_B = length(x), length(y)
     (n_A < 2 || n_B < 2) && error("Independent t-test requires at least 2 observations per group")
-    
+
     df = n_A + n_B - 2  # degrees of freedom for independent t-test
-    
+
     # Compute means and variances (Statistics.jl is already optimized with SIMD)
     mean_x, mean_y = mean(x), mean(y)
-    
+
     # Pooled variance (assuming equal variances)
     var_x = var(x, corrected = true)
     var_y = var(y, corrected = true)
     pooled_var = ((n_A - 1) * var_x + (n_B - 1) * var_y) / df
-    
+
     # Compute t-value
     if pooled_var == 0.0
         if mean_x == mean_y
@@ -110,10 +110,10 @@ function independent_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = 
     else
         t = (mean_x - mean_y) / sqrt(pooled_var * (1/n_A + 1/n_B))
     end
-    
+
     # Handle edge cases
     (isnan(t) || isinf(t)) && return (df = df, t = t, p = NaN)
-    
+
     # Compute p-value
     dist = TDist(df)
     if tail == :both # Two-tailed test
@@ -125,7 +125,6 @@ function independent_ttest(x::AbstractVector, y::AbstractVector; tail::Symbol = 
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
-    
+
     return (df = df, t = t, p = p)
 end
-

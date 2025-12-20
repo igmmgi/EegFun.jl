@@ -32,14 +32,15 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :colorbar_position => ((1, 2), "Position of the colorbar as (row, col) tuple"),
     :colorbar_width => (30, "Width of the colorbar in pixels"),
     :colorbar_label => ("μV", "Label for the colorbar"),
-    :colorbar_plot_numbers => ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
+    :colorbar_plot_numbers =>
+        ([], "Plot indices for which to show colorbars. Empty list shows colorbars for all plots."),
 
     # Grid
     :xgrid => (false, "Show x-axis grid (true/false)"),
     :ygrid => (false, "Show y-axis grid (true/false)"),
     :xminorgrid => (false, "Show x-axis minor grid (true/false)"),
     :yminorgrid => (false, "Show y-axis minor grid (true/false)"),
-    
+
     # Origin lines
     :add_xy_origin => (true, "Add origin lines at x=0 and y=0 (true/false)"),
 
@@ -47,15 +48,18 @@ const PLOT_ERP_IMAGE_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :layout_topo_plot_width => (0.07, "Width of individual plots (fraction of figure width)"),
     :layout_topo_plot_height => (0.07, "Height of individual plots (fraction of figure height)"),
     :layout_topo_scale_pos => ((0.95, 0.05), "Fallback position for scale plot in topo layout as (x, y) tuple"),
-    
+
     # Grid layout parameters
     :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
     :layout_grid_colgap => (10, "Gap between columns (in pixels)"),
-    :layout_grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
-    :layout_grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
-    
+    :layout_grid_dims =>
+        (nothing, "Grid dimensions as (rows, cols) tuple for grid layouts. If nothing, automatically determined"),
+    :layout_grid_skip_positions =>
+        (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
+
     # General layout parameters
-    :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
+    :figure_padding =>
+        ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 )
 
 """
@@ -143,19 +147,19 @@ function plot_erp_image(
     colorbar_enabled = plot_kwargs[:colorbar_plot]
     user_colorbar_position = plot_kwargs[:colorbar_position]
     colorbar_plot_numbers = plot_kwargs[:colorbar_plot_numbers]
-    
+
     # Extract layout_* parameters, remove prefix, and pass to create_layout
     layout_kwargs = _extract_layout_kwargs(plot_kwargs)
-    
+
     # Create figure and apply layout system
     fig = Figure()
-    
+
     # For grid layouts with colorbars, we need to expand the grid
     if layout == :grid && colorbar_enabled
         # Get the grid dimensions that would be created
         temp_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
         rows, cols = temp_layout.dims
-        
+
         # Expand grid to accommodate colorbars (default: to the right)
         if user_colorbar_position !== nothing && user_colorbar_position isa Tuple
             cb_row_offset, cb_col_offset = user_colorbar_position
@@ -173,18 +177,18 @@ function plot_erp_image(
             total_rows = rows
             total_cols = cols * 2
         end
-        
+
         # Create a modified layout with expanded dimensions
         # We'll manually create axes in the expanded grid
         plot_layout = create_layout(layout, all_plot_channels, dat_subset.layout; layout_kwargs...)
         axes = Axis[]
         channels = Symbol[]
-        
+
         # Create axes in the expanded grid
         for (idx, channel) in enumerate(plot_layout.channels)
             base_row = div(idx - 1, cols) + 1
             base_col = mod1(idx, cols)
-            
+
             if user_colorbar_position !== nothing && user_colorbar_position isa Tuple
                 cb_row_offset, cb_col_offset = user_colorbar_position
                 if cb_row_offset > 1
@@ -201,7 +205,7 @@ function plot_erp_image(
                 plot_row = base_row
                 plot_col = (base_col - 1) * 2 + 1
             end
-            
+
             ax = Axis(fig[plot_row, plot_col])
             push!(axes, ax)
             push!(channels, channel)
@@ -296,7 +300,7 @@ function plot_erp_image(
             else
                 false
             end
-            
+
             if should_show_colorbar
                 if plot_layout.type == :single
                     # Single layout: use provided position
@@ -313,7 +317,7 @@ function plot_erp_image(
                     idx = findfirst(==(channel), channels)
                     base_row = div(idx - 1, cols) + 1
                     base_col = mod1(idx, cols)
-                    
+
                     if user_colorbar_position !== nothing && user_colorbar_position isa Tuple
                         cb_row_offset, cb_col_offset = user_colorbar_position
                         if cb_row_offset > 1
@@ -336,7 +340,7 @@ function plot_erp_image(
                         colorbar_row = plot_row
                         colorbar_col = plot_col + 1
                     end
-                    
+
                     Colorbar(
                         fig[colorbar_row, colorbar_col],
                         hm,
@@ -350,10 +354,10 @@ function plot_erp_image(
 
     # Apply axis properties to all axes (sets labels on all axes first)
     _apply_axis_properties!.(axes; plot_kwargs...)
-    
+
     # Then apply layout-specific properties (clears labels on inner axes for grid layouts)
     _apply_layout_axis_properties!(axes, plot_layout; plot_kwargs...)
-    
+
     # For plot_erp_image, we want to show tick marks (but not labels) on all axes (including topo layouts)
     # Override the decoration hiding that _apply_layout_axis_properties! does for topo layouts
     if plot_layout.type == :topo
@@ -365,7 +369,7 @@ function plot_erp_image(
             ax.yticklabelsvisible = false
         end
     end
-    
+
     # Add origin lines to all axes
     for ax in axes
         _set_origin_lines!(ax; add_xy_origin = plot_kwargs[:add_xy_origin])
@@ -379,31 +383,31 @@ function plot_erp_image(
     if plot_layout.type == :topo
         # Get scale position from kwargs
         scale_pos = plot_kwargs[:layout_topo_scale_pos]
-        
+
         # Use the same width/height as the channel plots (from layout metadata)
         # This ensures consistency - channel plots use plot_layout.metadata[:topo_plot_width]
         scale_width = plot_layout.metadata[:topo_plot_width]
         scale_height = plot_layout.metadata[:topo_plot_height]
-        
+
         # Create scale axis positioned at the specified location (axis only, no data)
         # This is positioned absolutely in fig[1, 1] using halign/valign, just like topo plots
         scale_ax = Axis(
             fig[1, 1],
             width = Relative(scale_width),
             height = Relative(scale_height),
-            halign = scale_pos[1],  
-            valign = scale_pos[2],  
+            halign = scale_pos[1],
+            valign = scale_pos[2],
         )
         push!(axes, scale_ax)
-        
+
         # Make sure the scale axis is visible - don't hide decorations like other topo axes
         # The scale axis should show all labels and decorations
-        
+
         # Set up scale axis properties (show time and epoch labels)
         # Use the same approach as plot_epochs
         scale_ax.title = ""
         tmin, tmax = extrema(dat_subset.data[1].time)
-        
+
         # Set axis limits first
         if !isnothing(plot_kwargs[:xlim])
             xlims!(scale_ax, plot_kwargs[:xlim])
@@ -411,7 +415,7 @@ function plot_erp_image(
             xlims!(scale_ax, (tmin, tmax))
         end
         ylims!(scale_ax, (1, length(dat_subset.data)))
-        
+
         # Use _set_axis_properties! like plot_epochs does
         _set_axis_properties!(
             scale_ax;
@@ -421,7 +425,7 @@ function plot_erp_image(
             ylabel = plot_kwargs[:ylabel],
             yreversed = plot_kwargs[:yreversed],
         )
-        
+
         # Use _set_axis_grid! like plot_epochs does
         _set_axis_grid!(
             scale_ax;
@@ -430,13 +434,13 @@ function plot_erp_image(
             xminorgrid = plot_kwargs[:xminorgrid],
             yminorgrid = plot_kwargs[:yminorgrid],
         )
-        
+
         # Ensure scale axis spines are visible (unlike other topo axes which have spines hidden)
         scale_ax.bottomspinevisible = true
         scale_ax.topspinevisible = true
         scale_ax.leftspinevisible = true
         scale_ax.rightspinevisible = true
-        
+
         # Add origin lines like plot_epochs does (if the parameter exists)
         add_xy_origin = get(plot_kwargs, :add_xy_origin, true)
         _set_origin_lines!(scale_ax; add_xy_origin = add_xy_origin)
@@ -452,10 +456,10 @@ function plot_erp_image(
         # We add a small fixed offset (0.02) to position the colorbar next to it
         # scale_width = plot_kwargs[:layout_topo_plot_width]
         colorbar_halign = scale_pos[1] + 0.015  # Position to the right of scale axis
-        
+
         # Get scale height from layout metadata (same as channel plots and scale axis)
         scale_height = plot_layout.metadata[:topo_plot_height]
-        
+
         # Create colorbar in fig[1, 1] with halign/valign, positioned to the right of scale axis
         # Use tellwidth=false and tellheight=false to prevent it from affecting grid layout
         Colorbar(

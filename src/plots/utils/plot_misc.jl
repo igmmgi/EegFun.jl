@@ -176,7 +176,7 @@ function _extract_legend_kwargs(plot_kwargs::Dict{Symbol,Any}; exclude_positioni
             end
         end
     end
-  
+
     # TODO: I do not know why this is needed? Bug here? Bug Makie axislegend?
     # Without it legend_position is ignored!
     # Remove positioning attributes that conflict with explicit position parameter
@@ -201,11 +201,11 @@ Does not mutate plot_kwargs - only reads from it.
 """
 function _extract_layout_kwargs(plot_kwargs::Dict{Symbol,Any})
     layout_kwargs = Dict{Symbol,Any}()
-    
+
     # Get all layout parameter names from LAYOUT_KWARGS
     # These are the base names (keys in LAYOUT_KWARGS, e.g., :topo_plot_width, :grid_rowgap)
     layout_param_names = keys(LAYOUT_KWARGS)
-    
+
     # For each known layout parameter, check if it exists with layout_ prefix
     for param_name in layout_param_names
         layout_key = Symbol("layout_$(param_name)")
@@ -216,7 +216,7 @@ function _extract_layout_kwargs(plot_kwargs::Dict{Symbol,Any})
             end
         end
     end
-    
+
     return layout_kwargs
 end
 
@@ -266,7 +266,7 @@ function _set_axis_properties!(ax; xlim = nothing, ylim = nothing, xlabel = "", 
     ax.xlabel = xlabel
     ax.ylabel = ylabel
     ax.yreversed = yreversed
-    
+
     # Set axis limits
     xlim !== nothing && xlims!(ax, xlim[1], xlim[2])
     ylim !== nothing && ylims!(ax, ylim[1], ylim[2])
@@ -315,7 +315,7 @@ function _split_into_parts(s::String)
     # Pattern: ([A-Z][a-z]*|[a-z]+)(\d*) - word with optional trailing digits, (_) - underscore, (\d+) - standalone digits
     parts = String[]
     pattern = r"([A-Z][a-z]*|[a-z]+)(\d*)|(_)|(\d+)"
-    
+
     for m in eachmatch(pattern, s)
         if m.captures[3] !== nothing  # Underscore
             push!(parts, "_")
@@ -328,7 +328,7 @@ function _split_into_parts(s::String)
             !isempty(digits) && push!(parts, digits)
         end
     end
-    
+
     return parts
 end
 
@@ -351,26 +351,30 @@ If datasets have different file names, uses format: "FileX:Cond1, FileY:Cond2"
 # Returns
 - `String`: Window title string
 """
-function _generate_window_title( datasets::Vector{<:EegData}; max_total_length::Int = 80, max_name_length::Int = 20)
+function _generate_window_title(datasets::Vector{<:EegData}; max_total_length::Int = 80, max_name_length::Int = 20)
 
     isempty(datasets) && return ""
-    length(datasets) == 1 && return "$(datasets[1].file):$(datasets[1].condition_name)" 
+    length(datasets) == 1 && return "$(datasets[1].file):$(datasets[1].condition_name)"
 
     # Check if all datasets have the same file name
     first_file = datasets[1].file
     all_same_file = all(dataset.file == first_file for dataset in datasets)
-    
-    if all_same_file 
+
+    if all_same_file
         condition_names = [data.condition_name for data in datasets]
-        condition_str = _shorten_condition_names(condition_names; 
-                                                max_total_length = max_total_length - length(first_file) - 2, 
-                                                max_name_length = max_name_length)
+        condition_str = _shorten_condition_names(
+            condition_names;
+            max_total_length = max_total_length - length(first_file) - 2,
+            max_name_length = max_name_length,
+        )
         return "$first_file: $condition_str"
     else
         file_condition_pairs = ["$(data.file):$(data.condition_name)" for data in datasets]
-        return _shorten_condition_names(file_condition_pairs; 
-                                       max_total_length = max_total_length, 
-                                       max_name_length = max_name_length)
+        return _shorten_condition_names(
+            file_condition_pairs;
+            max_total_length = max_total_length,
+            max_name_length = max_name_length,
+        )
     end
 end
 
@@ -414,9 +418,9 @@ function _generate_window_title(datasets::Vector{ContinuousData}; max_total_leng
     # Check if all datasets have the same file name
     first_file = datasets[1].file
     all_same_file = all(dataset.file == first_file for dataset in datasets)
-    
+
     all_same_file && return first_file
-    
+
     file_names = [data.file for data in datasets]
     return _shorten_condition_names(file_names; max_total_length = max_total_length, max_name_length = max_name_length)
 
@@ -438,7 +442,7 @@ Create an intelligent abbreviation of a name by:
 """
 function _abbreviate_name(name::String, common_prefix_parts::Vector{String})
     isempty(common_prefix_parts) && return name
-    
+
     # abbreviate: take first 2-3 letters of each (or first letter if short)
     name_parts = _split_into_parts(name)
     abbrev_prefix = ""
@@ -455,10 +459,10 @@ function _abbreviate_name(name::String, common_prefix_parts::Vector{String})
             end
         end
     end
-    
+
     # Get the unique suffix parts (everything after the common prefix)
-    unique_suffix = join(name_parts[length(common_prefix_parts)+1:end], "")
-    
+    unique_suffix = join(name_parts[(length(common_prefix_parts)+1):end], "")
+
     return abbrev_prefix * unique_suffix
 end
 
@@ -476,14 +480,14 @@ Find common prefix parts across a list of names, splitting on uppercase letters 
 function _find_common_prefix_parts(names::Vector{String})
     isempty(names) && return String[]
     length(names) == 1 && return String[]
-    
+
     # Split all names into parts
     all_parts = [_split_into_parts(name) for name in names]
-    
+
     # Find common prefix parts
     first_parts = all_parts[1]
     common_parts = String[]
-    
+
     for (i, part) in enumerate(first_parts)
         if all(get(parts, i, nothing) == part for parts in all_parts)
             push!(common_parts, part)
@@ -491,7 +495,7 @@ function _find_common_prefix_parts(names::Vector{String})
             break
         end
     end
-    
+
     # Don't use if too short (less than 2 parts)
     return length(common_parts) >= 2 ? common_parts : String[]
 end
@@ -564,18 +568,18 @@ function _shorten_condition_names(
     if avg_abbreviated >= avg_original * 0.8
         abbreviated_names = condition_names
     end
-    
+
     # Truncate individual names and join
     final_names = [length(n) > max_name_length ? n[1:max_name_length] * "…" : n for n in abbreviated_names]
     full_string = join(final_names, separator)
-    
+
     # If still too long, show first N and last N
     if length(full_string) > max_total_length && length(condition_names) > 2 * show_ends
         first_part = join(final_names[1:show_ends], separator)
-        last_part = join(final_names[(end - show_ends + 1):end], separator)
+        last_part = join(final_names[(end-show_ends+1):end], separator)
         return first_part * separator * "…" * separator * last_part
     end
-    
+
     return full_string
 end
 

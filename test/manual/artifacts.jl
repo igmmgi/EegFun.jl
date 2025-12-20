@@ -102,7 +102,8 @@ eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, z_criterion = 0, abs_criterion = 150)
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 
-bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, z_criterion = 1, abs_criterion = 0, z_measures = [:variance, :range])
+bad_epochs =
+    eegfun.detect_bad_epochs_automatic(epochs, z_criterion = 1, abs_criterion = 0, z_measures = [:variance, :range])
 eegfun.plot_artifact_detection(epochs[1], bad_epochs[1], ylim = (-100, 100))
 
 
@@ -121,7 +122,13 @@ eegfun.plot_artifact_detection(epochs[1], bad_epochs[1])
 bad_epochs = eegfun.detect_bad_epochs_automatic(epochs, abs_criterion = 200, z_criterion = 0)
 bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], dims = (4, 4))
 bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_info = bad_epochs[1], dims = (4, 4))
-bad_epochs_manual = eegfun.detect_bad_epochs_interactive(epochs[1], artifact_info = bad_epochs[1], dims = (4, 4), ylim = (-100, 100), xlim = (-1, 2))
+bad_epochs_manual = eegfun.detect_bad_epochs_interactive(
+    epochs[1],
+    artifact_info = bad_epochs[1],
+    dims = (4, 4),
+    ylim = (-100, 100),
+    xlim = (-1, 2),
+)
 
 
 eegfun.unique_rejections(bad_epochs[1].rejected)

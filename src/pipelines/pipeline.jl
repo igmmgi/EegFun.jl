@@ -84,10 +84,10 @@ function preprocess(config::String; log_level::Symbol = :info)
         # Track processing results
         processed_files = 0
         failed_files = String[]
-        
+
         for (file_idx, data_file) in enumerate(raw_data_files)
             @info "Processing file $file_idx/$(length(raw_data_files)): $(basename(data_file))"
-            
+
             try
 
                 # Individual file processing
@@ -116,7 +116,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 @info section("Marking epoch windows")
                 @info "Epoch windows: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
                 mark_epoch_windows!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
-                
+
                 ################### REREFERENCE DATA ###################
                 @info section("Rereference")
                 rereference!(dat, preprocess_cfg.reference_channel)
@@ -143,7 +143,8 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 # Calculate correlations between all channels and EOG channels (epoch window)
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch window)")
-                hEOG_vEOG_cm_epoch = eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
+                hEOG_vEOG_cm_epoch =
+                    eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
                 eegfun.add_zscore_columns!(hEOG_vEOG_cm_epoch)
                 log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)")
 
@@ -157,7 +158,10 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 if cfg["files"]["output"]["save_epoch_data_original"]
                     @info "Saving epoch data (original)"
-                    jldsave(make_output_filename(output_directory, data_file, "_epochs_original"); data = epochs_original)
+                    jldsave(
+                        make_output_filename(output_directory, data_file, "_epochs_original");
+                        data = epochs_original,
+                    )
                 end
 
                 if cfg["files"]["output"]["save_erp_data_original"]
@@ -207,24 +211,28 @@ function preprocess(config::String; log_level::Symbol = :info)
                 @info subsubsection("Bad Channels")
                 bad_channels_whole_dataset = identify_bad_channels(summary_whole_dataset, cjp_whole_dataset)
                 bad_channels_epoch_window = identify_bad_channels(summary_epoch_window, cjp_epoch_window)
-                
+
                 # Separate identification within whole dataset and epoch windows and taking common seems more reliable
                 bad_channels = intersect(bad_channels_whole_dataset, bad_channels_epoch_window)
-               
+
                 # Some channels may be classified as "bad" due to EOG-related activity.
                 # Partition into non-EOG-related (retain) and EOG-related (prob. handled better via ICA later).
                 bad_channels_non_eog_related, bad_channels_eog_related = partition_channels_by_eog_correlation(
-                    bad_channels, hEOG_vEOG_cm_epoch;
-                    eog_channels = [:hEOG, :vEOG], threshold = 0.3, use_z = false,
+                    bad_channels,
+                    hEOG_vEOG_cm_epoch;
+                    eog_channels = [:hEOG, :vEOG],
+                    threshold = 0.3,
+                    use_z = false,
                 )
-               
+
                 @info "Bad channels (non-EOG related): $(length(bad_channels_non_eog_related)) channels - $(bad_channels_non_eog_related)"
                 @info "Bad channels (EOG related): $(length(bad_channels_eog_related)) channels - $(bad_channels_eog_related)"
-                
+
                 # Analyze which channels can be repaired (needed for ICA and repair steps)
                 continuous_repair_info = nothing
                 if !isempty(bad_channels_non_eog_related)
-                    continuous_repair_info = create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
+                    continuous_repair_info =
+                        create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
                     channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, layout)
                 end
 
@@ -235,12 +243,16 @@ function preprocess(config::String; log_level::Symbol = :info)
                 component_artifacts = nothing  # Initialize in case ICA is not applied
                 if preprocess_cfg.ica.apply
                     @info section("ICA")
-                    
+
                     dat_ica = copy(dat) # we need a copy of the data for the ICA
-                    
+
                     if !isnothing(continuous_repair_info) && !isempty(continuous_repair_info.repaired)
                         @info subsection("Removing repairable bad channels for ICA")
-                        dat_ica = subset(dat_ica, channel_selection = channels_not(continuous_repair_info.repaired), include_extra = true)
+                        dat_ica = subset(
+                            dat_ica,
+                            channel_selection = channels_not(continuous_repair_info.repaired),
+                            include_extra = true,
+                        )
                         @info "Removed $(length(continuous_repair_info.repaired)) repairable channels for ICA: $(continuous_repair_info.repaired)"
                     end
 
@@ -272,16 +284,15 @@ function preprocess(config::String; log_level::Symbol = :info)
                     log_pretty_table(component_metrics[:eog_metrics]; title = "EOG Component Metrics")
                     log_pretty_table(component_metrics[:ecg_metrics]; title = "ECG Component Metrics")
                     log_pretty_table(component_metrics[:line_noise_metrics]; title = "Line Noise Component Metrics")
-                    log_pretty_table(component_metrics[:channel_noise_metrics]; title = "Channel Noise Component Metrics")
+                    log_pretty_table(
+                        component_metrics[:channel_noise_metrics];
+                        title = "Channel Noise Component Metrics",
+                    )
 
                     @info subsection("Removing ICA components")
                     all_removed_components = get_all_ica_components(component_artifacts)
                     @info "Removed $(length(all_removed_components)) ICA components" component_artifacts
-                    remove_ica_components!(
-                        dat,
-                        ica,
-                        component_selection = components(all_removed_components),
-                    )
+                    remove_ica_components!(dat, ica, component_selection = components(all_removed_components))
 
                     # save ica results
                     if cfg["files"]["output"]["save_ica_data"]
@@ -340,14 +351,14 @@ function preprocess(config::String; log_level::Symbol = :info)
                 channel_repairable!(rejection_info_step1, epochs[1].layout)
                 @info "" # formatting
                 @info rejection_info_step1
-                
+
                 #################### CHANNEL REPAIR PER EPOCH ###################
                 # Repair channels identified in rejection_step1 before rejecting epochs
                 # This may save epochs that would otherwise be rejected
                 @info section("Channel Repair per Epoch")
                 repair_artifacts!(epochs, rejection_info_step1)
 
-                 #################### SAVE EPOCH DATA ###################
+                #################### SAVE EPOCH DATA ###################
                 if cfg["files"]["output"]["save_epoch_data_cleaned"]
                     @info "Saving epoch data (cleaned)"
                     jldsave(make_output_filename(output_directory, data_file, "_epochs_cleaned"); data = epochs)
@@ -365,7 +376,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 channel_repairable!(rejection_info_step2, epochs[1].layout)
                 @info "" # formatting
                 @info rejection_info_step2
-                
+
                 #################### COMPARE REJECTION STEPS ###################
                 @info subsection("Rejection Step Comparison (before vs after repair)")
                 rejection_comparison = compare_rejections(rejection_info_step1, rejection_info_step2)
@@ -390,7 +401,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 #################### EPOCH REJECTION ###################
                 @info subsection("Rejecting bad epochs")
                 epochs = reject_epochs(epochs, rejection_info_step2)
-                
+
                 #################### SAVE ARTIFACT INFO ###################
                 # Collect all artifact-related info into a single structure
                 @info subsection("Artifact Information")
@@ -403,7 +414,11 @@ function preprocess(config::String; log_level::Symbol = :info)
                 @info "Saved artifact info: $(artifact_info)"
 
                 #################### LOG EPOCH COUNTS AND STORE FOR SUMMARY ###################
-                df = log_epochs_table(epochs_original, epochs, title = "Epoch counts per condition (after repair and rejection):")
+                df = log_epochs_table(
+                    epochs_original,
+                    epochs,
+                    title = "Epoch counts per condition (after repair and rejection):",
+                )
                 push!(all_epoch_counts, df)
 
                 #################### SAVE EPOCH DATA ###################
@@ -445,7 +460,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 title = "Electrode Repairs at Continuous Level: Number of Participants Affected",
             )
         end
-        
+
         # Print ICA component summary (load from saved artifact info files)
         @info subsection("ICA Component Removal Summary")
         ica_per_file, ica_avg = summarize_ica_components("_artifact_info", input_dir = output_directory)
@@ -467,8 +482,16 @@ function preprocess(config::String; log_level::Symbol = :info)
             epoch_summary, file_summary = _epoch_and_file_summary(all_epoch_counts)
             # Merge with existing summaries (replaces data for files that already exist)
             merged_epoch_summary, merged_file_summary = _merge_summaries(epoch_summary, file_summary, output_directory)
-            log_pretty_table(merged_epoch_summary, title = "Combined epoch counts across all files:", alignment = [:l, :r, :l, :r, :r, :r])
-            log_pretty_table(merged_file_summary, title = "Average percentage per condition (averaged across conditions):", alignment = [:l, :r])
+            log_pretty_table(
+                merged_epoch_summary,
+                title = "Combined epoch counts across all files:",
+                alignment = [:l, :r, :l, :r, :r, :r],
+            )
+            log_pretty_table(
+                merged_file_summary,
+                title = "Average percentage per condition (averaged across conditions):",
+                alignment = [:l, :r],
+            )
             @info "Mean percentage (averaged across all conditions and files): $(round(mean(merged_file_summary.percentage), digits = 1)) %"
             jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
             jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
@@ -485,4 +508,3 @@ function preprocess(config::String; log_level::Symbol = :info)
     end
 
 end
-

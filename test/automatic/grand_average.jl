@@ -55,8 +55,12 @@ using DataFrames
         output_dir = joinpath(test_dir, "grand_average_filtered")
 
         # Test with specific participants
-        result =
-            eegfun.grand_average("erps_cleaned", input_dir = test_dir, participant_selection = eegfun.participants([1, 2, 3]), output_dir = output_dir)
+        result = eegfun.grand_average(
+            "erps_cleaned",
+            input_dir = test_dir,
+            participant_selection = eegfun.participants([1, 2, 3]),
+            output_dir = output_dir,
+        )
 
         @test isdir(output_dir)
         grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
@@ -72,7 +76,12 @@ using DataFrames
         output_dir = joinpath(test_dir, "grand_average_conditions")
 
         # Test with specific conditions
-        result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, condition_selection = eegfun.conditions([1, 2]), output_dir = output_dir)
+        result = eegfun.grand_average(
+            "erps_cleaned",
+            input_dir = test_dir,
+            condition_selection = eegfun.conditions([1, 2]),
+            output_dir = output_dir,
+        )
 
         @test isdir(output_dir)
         grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")
@@ -157,8 +166,12 @@ using DataFrames
         @testset "Single participant (should skip grand average)" begin
             output_dir = joinpath(test_dir, "grand_average_single")
 
-            result =
-                eegfun.grand_average("erps_cleaned", input_dir = test_dir, participant_selection = eegfun.participants([1]), output_dir = output_dir)
+            result = eegfun.grand_average(
+                "erps_cleaned",
+                input_dir = test_dir,
+                participant_selection = eegfun.participants([1]),
+                output_dir = output_dir,
+            )
 
             @test result === nothing
         end
@@ -284,7 +297,7 @@ using DataFrames
         # Use a separate directory to avoid matching files from earlier tests
         separate_test_dir = joinpath(test_dir, "different_counts")
         mkpath(separate_test_dir)
-        
+
         # Create scenario where some conditions have more participants than others
         # 3 participants have condition 1
         for participant = 1:3

@@ -52,27 +52,24 @@ using eegfun
         # Test 6: Channel repair (neighbor interpolation)
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 5)
         # Create a layout with neighbors for repair
-        layout_df = DataFrame(
-            label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5],
-            inc = zeros(5),
-            azi = zeros(5)
-        )
+        layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Ch4, :Ch5], inc = zeros(5), azi = zeros(5))
         # Create neighbors dict manually for testing
         neighbours_dict = OrderedCollections.OrderedDict(
             :Ch1 => eegfun.Neighbours([:Ch2, :Ch3], [1.0, 1.0], [1.0, 1.0]),
             :Ch2 => eegfun.Neighbours([:Ch1, :Ch3, :Ch4], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
             :Ch3 => eegfun.Neighbours([:Ch1, :Ch2, :Ch4], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
             :Ch4 => eegfun.Neighbours([:Ch2, :Ch3, :Ch5], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]),
-            :Ch5 => eegfun.Neighbours([:Ch3, :Ch4], [1.0, 1.0], [1.0, 1.0])
+            :Ch5 => eegfun.Neighbours([:Ch3, :Ch4], [1.0, 1.0], [1.0, 1.0]),
         )
         layout = eegfun.Layout(layout_df, neighbours_dict, nothing)
         dat.layout = layout
-        
+
         # Set a channel to NaN to test repair
         dat.data[!, :Ch3] .= NaN
         original_ch3 = copy(dat.data.Ch3)
-        
-        settings = eegfun.AnalysisSettings(0.0, 0.0, :none, [:Ch3], :neighbor_interpolation, Tuple{Float64,Float64}[], Int[])
+
+        settings =
+            eegfun.AnalysisSettings(0.0, 0.0, :none, [:Ch3], :neighbor_interpolation, Tuple{Float64,Float64}[], Int[])
         eegfun.apply_analysis_settings!(dat, settings)
         # Ch3 should be repaired (no longer all NaN)
         @test !all(isequal(NaN), dat.data.Ch3)
@@ -147,10 +144,10 @@ using eegfun
     @testset "apply_analysis_settings! - with ICA" begin
         # Create test data
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 3)
-        
+
         # Create mock ICA result
         ica_result = eegfun.run_ica(dat, n_components = 2)
-        
+
         # Test without ICA component removal
         settings = eegfun.AnalysisSettings(0.1, 40.0, :avg, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         eegfun.apply_analysis_settings!(dat, ica_result, settings)
@@ -162,7 +159,7 @@ using eegfun
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 3)
         ica_result = eegfun.run_ica(dat, n_components = 2)
         original_n_channels = eegfun.n_channels(dat)
-        
+
         settings = eegfun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], [1])
         eegfun.apply_analysis_settings!(dat, ica_result, settings)
         # After removing 1 component, should still have same number of channels
@@ -183,8 +180,10 @@ using eegfun
     @testset "apply_analysis_settings! - Observable support" begin
         # Test with Observable (Makie.jl)
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 3)
-        settings = eegfun.Observable(eegfun.AnalysisSettings(0.1, 40.0, :avg, Symbol[], :none, Tuple{Float64,Float64}[], Int[]))
-        
+        settings = eegfun.Observable(
+            eegfun.AnalysisSettings(0.1, 40.0, :avg, Symbol[], :none, Tuple{Float64,Float64}[], Int[]),
+        )
+
         eegfun.apply_analysis_settings!(dat, settings)
         @test dat.analysis_info.hp_filter == 0.1
         @test dat.analysis_info.lp_filter == 40.0
@@ -193,8 +192,9 @@ using eegfun
         # Test with Observable and ICA
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 3)
         ica_result = eegfun.run_ica(dat, n_components = 2)
-        settings = eegfun.Observable(eegfun.AnalysisSettings(0.1, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], [1]))
-        
+        settings =
+            eegfun.Observable(eegfun.AnalysisSettings(0.1, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], [1]))
+
         eegfun.apply_analysis_settings!(dat, ica_result, settings)
         @test dat.analysis_info.hp_filter == 0.1
     end
@@ -204,29 +204,29 @@ using eegfun
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 3)
         original_hp = dat.analysis_info.hp_filter
         original_lp = dat.analysis_info.lp_filter
-        
+
         settings = eegfun.AnalysisSettings(0.1, 40.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         dat_new = eegfun.apply_analysis_settings(dat, settings)
-        
+
         # Original should be unchanged
         @test dat.analysis_info.hp_filter == original_hp
         @test dat.analysis_info.lp_filter == original_lp
-        
+
         # New data should be modified
         @test dat_new.analysis_info.hp_filter == 0.1
         @test dat_new.analysis_info.lp_filter == 40.0
-        
+
         # Test with ICA
         dat = create_test_data(n = 1000, fs = 1000, n_channels = 3)
         ica_result = eegfun.run_ica(dat, n_components = 2)
         original_hp = dat.analysis_info.hp_filter
-        
+
         settings = eegfun.AnalysisSettings(0.1, 0.0, :none, Symbol[], :none, Tuple{Float64,Float64}[], [1])
         dat_new = eegfun.apply_analysis_settings(dat, ica_result, settings)
-        
+
         # Original should be unchanged
         @test dat.analysis_info.hp_filter == original_hp
-        
+
         # New data should be modified
         @test dat_new.analysis_info.hp_filter == 0.1
     end
@@ -268,4 +268,3 @@ using eegfun
         # Should complete without error
     end
 end
-

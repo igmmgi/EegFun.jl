@@ -145,11 +145,16 @@ for (i, gfp_data) in enumerate(gfp_results)
 end
 ```
 """
-function gfp(dat::Vector{ErpData}; condition_selection::Function = conditions(), channel_selection::Function = channels(), normalize::Bool = false)::Vector{DataFrame}
+function gfp(
+    dat::Vector{ErpData};
+    condition_selection::Function = conditions(),
+    channel_selection::Function = channels(),
+    normalize::Bool = false,
+)::Vector{DataFrame}
 
     # Apply condition_selection first
     dat_filtered = dat[get_selected_conditions(dat, condition_selection)]
-    
+
     @info "Calculating GFP for $(length(dat_filtered)) dataset(s)"
 
     results = DataFrame[]
@@ -416,7 +421,7 @@ function gfp_and_dissimilarity(
 
     # Apply condition_selection first
     dat_filtered = dat[get_selected_conditions(dat, condition_selection)]
-    
+
     @info "Calculating GFP and Global Dissimilarity for $(length(dat_filtered)) dataset(s)"
 
     results = DataFrame[]

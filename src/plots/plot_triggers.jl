@@ -342,11 +342,13 @@ function plot_trigger_overview(trigger_times, trigger_values, trigger_count; kwa
     ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), string.(trigger_count.keys)))
 
     # Set grid using the shared function
-    _set_axis_grid!(ax; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     # Pre-compute trigger data for each type to avoid repeated filtering
     trigger_data = Dict{Int,Vector{Float64}}()
@@ -413,11 +415,13 @@ function plot_trigger_overview(dat::ContinuousData; kwargs...)
         ax = Axis(fig[1, 1], yticks = (1:length(trigger_count.keys), [trigger_labels[k] for k in trigger_count.keys]))
 
         # Set grid using the shared function
-        _set_axis_grid!(ax; 
-                         xgrid = plot_kwargs[:xgrid], 
-                         ygrid = plot_kwargs[:ygrid],
-                         xminorgrid = plot_kwargs[:xminorgrid], 
-                         yminorgrid = plot_kwargs[:yminorgrid])
+        _set_axis_grid!(
+            ax;
+            xgrid = plot_kwargs[:xgrid],
+            ygrid = plot_kwargs[:ygrid],
+            xminorgrid = plot_kwargs[:xminorgrid],
+            yminorgrid = plot_kwargs[:yminorgrid],
+        )
 
         # Pre-compute trigger data for each type
         trigger_data = Dict{Int,Vector{Float64}}()
@@ -596,11 +600,13 @@ function _create_interactive_trigger_plot(
     ax = Axis(fig[1, 1])
 
     # Set grid using the shared function
-    _set_axis_grid!(ax; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     # Add trigger count legend entries (with or without trigger info)
     has_info = any(!isempty, trigger_info)

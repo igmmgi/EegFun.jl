@@ -123,7 +123,8 @@ function plot_gfp(
     if show_dissimilarity
         # Calculate both GFP and dissimilarity
         results = [
-            gfp_and_dissimilarity(dat; channel_selection = channel_selection, normalize = normalize) for dat in datasets_filtered
+            gfp_and_dissimilarity(dat; channel_selection = channel_selection, normalize = normalize) for
+            dat in datasets_filtered
         ]
     else
         # Calculate only GFP
@@ -205,11 +206,13 @@ function plot_gfp(
     _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
     # Set grid using the shared function
-    _set_axis_grid!(ax_gfp; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax_gfp;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     if plot_kwargs[:add_x_origin]
         vlines!(ax_gfp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -250,11 +253,13 @@ function plot_gfp(
         _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
         # Set grid using the shared function
-        _set_axis_grid!(ax_diss; 
-                         xgrid = plot_kwargs[:xgrid], 
-                         ygrid = plot_kwargs[:ygrid],
-                         xminorgrid = plot_kwargs[:xminorgrid], 
-                         yminorgrid = plot_kwargs[:yminorgrid])
+        _set_axis_grid!(
+            ax_diss;
+            xgrid = plot_kwargs[:xgrid],
+            ygrid = plot_kwargs[:ygrid],
+            xminorgrid = plot_kwargs[:xminorgrid],
+            yminorgrid = plot_kwargs[:yminorgrid],
+        )
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_diss, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -348,11 +353,13 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
     _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
     # Set grid using the shared function
-    _set_axis_grid!(ax_gfp; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax_gfp;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     if plot_kwargs[:add_x_origin]
         vlines!(ax_gfp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -385,11 +392,13 @@ function plot_gfp(gfp_data::DataFrame; kwargs...)
         _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
         # Set grid using the shared function
-        _set_axis_grid!(ax_diss; 
-                         xgrid = plot_kwargs[:xgrid], 
-                         ygrid = plot_kwargs[:ygrid],
-                         xminorgrid = plot_kwargs[:xminorgrid], 
-                         yminorgrid = plot_kwargs[:yminorgrid])
+        _set_axis_grid!(
+            ax_diss;
+            xgrid = plot_kwargs[:xgrid],
+            ygrid = plot_kwargs[:ygrid],
+            xminorgrid = plot_kwargs[:xminorgrid],
+            yminorgrid = plot_kwargs[:yminorgrid],
+        )
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_diss, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -481,11 +490,13 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
     _set_axis_properties!(ax_gfp; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
     # Set grid using the shared function
-    _set_axis_grid!(ax_gfp; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax_gfp;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     if plot_kwargs[:add_x_origin]
         vlines!(ax_gfp, [0.0], color = :black, linewidth = 1, linestyle = :dash)
@@ -525,11 +536,13 @@ function plot_gfp(gfp_data::Vector{DataFrame}; kwargs...)
         _set_axis_properties!(ax_diss; xlim = plot_kwargs[:xlim], ylim = plot_kwargs[:ylim])
 
         # Set grid using the shared function
-        _set_axis_grid!(ax_diss; 
-                         xgrid = plot_kwargs[:xgrid], 
-                         ygrid = plot_kwargs[:ygrid],
-                         xminorgrid = plot_kwargs[:xminorgrid], 
-                         yminorgrid = plot_kwargs[:yminorgrid])
+        _set_axis_grid!(
+            ax_diss;
+            xgrid = plot_kwargs[:xgrid],
+            ygrid = plot_kwargs[:ygrid],
+            xminorgrid = plot_kwargs[:xminorgrid],
+            yminorgrid = plot_kwargs[:yminorgrid],
+        )
 
         if plot_kwargs[:add_x_origin]
             vlines!(ax_diss, [0.0], color = :black, linewidth = 1, linestyle = :dash)

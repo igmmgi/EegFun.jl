@@ -16,7 +16,8 @@ eegfun.is_extreme_value!(dat, 100)
 
 # channel joint probability
 channel_joint_probability = eegfun.channel_joint_probability(dat)
-channel_joint_probability = eegfun.channel_joint_probability(dat, sample_selection = eegfun.samples_not(:is_extreme_value_100))
+channel_joint_probability =
+    eegfun.channel_joint_probability(dat, sample_selection = eegfun.samples_not(:is_extreme_value_100))
 
 
 # Calculate EOG signals
@@ -37,7 +38,8 @@ eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 
 # Calculate correlations between all channels and EOG channels
-cm = eegfun.correlation_matrix_dual_selection(dat, 
+cm = eegfun.correlation_matrix_dual_selection(
+    dat,
     sample_selection = eegfun.samples(),  # All samples
     channel_selection1 = eegfun.channels(),  # All EEG channels
     channel_selection2 = eegfun.channels([:vEOG, :hEOG]),  # EOG channels
