@@ -121,7 +121,15 @@ using JLD2
         # Add epoch identifiers to the versions that will be filtered
         df1.epoch = fill(1, nrow(df1))
         df2.epoch = fill(2, nrow(df2))
-        ep = eegfun.EpochData(base.file, 1, "condition_1", [df1, df2], base.layout, base.sample_rate, eegfun.AnalysisInfo())
+        ep = eegfun.EpochData(
+            base.file,
+            1,
+            "condition_1",
+            [df1, df2],
+            base.layout,
+            base.sample_rate,
+            eegfun.AnalysisInfo(),
+        )
         eegfun.filter_data!(ep, "hp", 0.5)
         @test ep.analysis_info.hp_filter == 0.5
         @test !all(ep.data[1].Ch1 .== df1o.Ch1)
@@ -132,7 +140,16 @@ using JLD2
         # Build ERP from base
         base = create_test_data(; n = 2000, fs = 1000)
         erp_df = select(base.data, [:time, :Ch1, :Ch2])
-        erp = eegfun.ErpData(base.file, 1, "condition_1", copy(erp_df, copycols = true), base.layout, base.sample_rate, eegfun.AnalysisInfo(), 25)
+        erp = eegfun.ErpData(
+            base.file,
+            1,
+            "condition_1",
+            copy(erp_df, copycols = true),
+            base.layout,
+            base.sample_rate,
+            eegfun.AnalysisInfo(),
+            25,
+        )
         erp_orig = copy(erp)
         eegfun.filter_data!(erp, "lp", 30.0; order = 3)
         @test erp.analysis_info.lp_filter == 30.0
@@ -216,7 +233,13 @@ end
         @testset "Filter specific participants" begin
             output_dir = joinpath(test_dir, "filtered_participant")
 
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants(1))
+            result = eegfun.filter(
+                "erps",
+                30.0,
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = eegfun.participants(1),
+            )
 
             @test result.success == 1
             @test result.errors == 0
@@ -227,7 +250,13 @@ end
         @testset "Filter specific conditions" begin
             output_dir = joinpath(test_dir, "filtered_condition")
 
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(1))
+            result = eegfun.filter(
+                "erps",
+                30.0,
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions(1),
+            )
 
             @test result.success == 2
 
@@ -290,7 +319,13 @@ end
             output_dir = joinpath(test_dir, "filtered_multi_participants")
 
             # Filter both participants
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants([1, 2]))
+            result = eegfun.filter(
+                "erps",
+                30.0,
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = eegfun.participants([1, 2]),
+            )
 
             @test result.success == 2
             @test result.errors == 0
@@ -302,7 +337,13 @@ end
             output_dir = joinpath(test_dir, "filtered_multi_conditions")
 
             # Filter both conditions
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions([1, 2]))
+            result = eegfun.filter(
+                "erps",
+                30.0,
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions([1, 2]),
+            )
 
             @test result.success == 2
 
@@ -380,7 +421,13 @@ end
 
             # Request condition 5 when only 2 exist
             # With predicate-based selection, this results in empty selection but successful processing
-            result = eegfun.filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(5))
+            result = eegfun.filter(
+                "erps",
+                30.0,
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions(5),
+            )
 
             # Files are processed successfully but with empty condition selection
             @test result.success == 2

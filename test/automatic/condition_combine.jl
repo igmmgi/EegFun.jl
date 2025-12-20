@@ -142,11 +142,7 @@ using Statistics
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception eegfun.condition_combine(
-                "epochs_cleaned",
-                [[1, 2]],
-                input_dir = "/nonexistent/path",
-            )
+            @test_throws Exception eegfun.condition_combine("epochs_cleaned", [[1, 2]], input_dir = "/nonexistent/path")
 
             # Invalid pattern (doesn't contain 'epochs')
             @test_throws Exception eegfun.condition_combine("erps_cleaned", [[1, 2]], input_dir = test_dir)
@@ -597,8 +593,7 @@ using Statistics
 
             # Combine
             output_dir = joinpath(test_dir, "combined_many_ch")
-            result =
-                eegfun.condition_combine("epochs_many", [[1, 2]], input_dir = many_ch_dir, output_dir = output_dir)
+            result = eegfun.condition_combine("epochs_many", [[1, 2]], input_dir = many_ch_dir, output_dir = output_dir)
 
             @test result.success == 1
 

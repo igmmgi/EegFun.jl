@@ -10,10 +10,10 @@ using Logging
 @testset "Batch Utils" begin
     # Create temporary test directory
     test_dir = mktempdir()
-    
+
     # Save initial global logger state to restore later
     initial_logger = global_logger()
-    
+
     # Track log files created in current directory for cleanup
     created_log_files = String[]
 
@@ -391,7 +391,7 @@ using Logging
 
         # Clean up the moved file
         rm(moved_log, force = true)
-        
+
         # Remove from tracking since it was moved
         filter!(f -> f != log_file, created_log_files)
 
@@ -474,12 +474,7 @@ using Logging
         @testset "Batch operation edge cases" begin
             # Test with empty file list (use NullLogger to avoid stream issues)
             results = with_logger(NullLogger()) do
-                eegfun._run_batch_operation(
-                    (x, y) -> eegfun.BatchResult(true, "test", "ok"),
-                    String[],
-                    test_dir,
-                    test_dir,
-                )
+                eegfun._run_batch_operation((x, y) -> eegfun.BatchResult(true, "test", "ok"), String[], test_dir, test_dir)
             end
             @test isempty(results)
 
@@ -564,18 +559,23 @@ using Logging
 
     # Cleanup: Restore global logger state and remove any leftover log files
     # Helper to safely execute cleanup operations
-    safe_cleanup(f) = try; f(); catch; end
-    
+    safe_cleanup(f) =
+        try
+            ;
+            f();
+        catch
+            ;
+        end
+
     # Close any open global logging and restore initial logger
     safe_cleanup(() -> eegfun.close_global_logging())
     global_logger(initial_logger)
-    
+
     # Clean up log files created in current directory
     for log_file in created_log_files
         safe_cleanup(() -> isfile(log_file) && rm(log_file, force = true))
     end
-    
+
     # Remove test directory
     safe_cleanup(() -> rm(test_dir, recursive = true))
 end
-

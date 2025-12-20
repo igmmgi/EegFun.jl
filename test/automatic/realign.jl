@@ -314,7 +314,13 @@ end
         output_dir = joinpath(test_dir, "realigned_filtered")
 
         # Process only participants 1 and 2
-        result = eegfun.realign("epochs", :rt, input_dir = test_dir, participant_selection = eegfun.participants([1, 2]), output_dir = output_dir)
+        result = eegfun.realign(
+            "epochs",
+            :rt,
+            input_dir = test_dir,
+            participant_selection = eegfun.participants([1, 2]),
+            output_dir = output_dir,
+        )
 
         @test isdir(output_dir)
 

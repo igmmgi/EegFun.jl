@@ -80,7 +80,16 @@ using DataFrames
             # Create ERPs with different sample rates
             erp1 = create_test_erp_data(1, 1)
             erp2 = create_test_erp_data(2, 1)
-            erp2 = eegfun.ErpData(erp2.file, erp2.condition, erp2.condition_name, erp2.data, erp2.layout, 500, erp2.analysis_info, erp2.n_epochs)  # Different sample rate
+            erp2 = eegfun.ErpData(
+                erp2.file,
+                erp2.condition,
+                erp2.condition_name,
+                erp2.data,
+                erp2.layout,
+                500,
+                erp2.analysis_info,
+                erp2.n_epochs,
+            )  # Different sample rate
 
             @test_throws Exception eegfun.jackknife_average([erp1, erp2])
         end
@@ -112,7 +121,16 @@ using DataFrames
             # Create ERPs with specific n_epochs
             erps = [create_test_erp_data(i, 1) for i = 1:4]
             for (i, erp) in enumerate(erps)
-                erps[i] = eegfun.ErpData(erp.file, erp.condition, erp.condition_name, erp.data, erp.layout, erp.sample_rate, erp.analysis_info, i * 10)
+                erps[i] = eegfun.ErpData(
+                    erp.file,
+                    erp.condition,
+                    erp.condition_name,
+                    erp.data,
+                    erp.layout,
+                    erp.sample_rate,
+                    erp.analysis_info,
+                    i * 10,
+                )
             end
 
             jackknife_results = eegfun.jackknife_average(erps)
@@ -194,8 +212,12 @@ using DataFrames
             # Test with specific participants
             # Note: pattern "lrp" matches both "_lrp" and "_multi_lrp" files
             # So we need to check the actual output corresponds to input files
-            result =
-                eegfun.jackknife_average("lrp", input_dir = test_dir, participant_selection = eegfun.participants([1, 2, 3]), output_dir = output_dir)
+            result = eegfun.jackknife_average(
+                "lrp",
+                input_dir = test_dir,
+                participant_selection = eegfun.participants([1, 2, 3]),
+                output_dir = output_dir,
+            )
 
             @test isdir(output_dir)
 
@@ -220,8 +242,12 @@ using DataFrames
             output_dir = joinpath(test_dir, "jackknife_cond_filter")
 
             # Test with specific conditions
-            result =
-                eegfun.jackknife_average("multi_lrp", input_dir = test_dir, condition_selection = eegfun.conditions([1]), output_dir = output_dir)
+            result = eegfun.jackknife_average(
+                "multi_lrp",
+                input_dir = test_dir,
+                condition_selection = eegfun.conditions([1]),
+                output_dir = output_dir,
+            )
 
             @test isdir(output_dir)
 
@@ -329,8 +355,12 @@ using DataFrames
         @testset "Output structure" begin
             output_dir = joinpath(test_dir, "jackknife_structure")
 
-            result =
-                eegfun.jackknife_average("lrp", input_dir = test_dir, participant_selection = eegfun.participants([1, 2]), output_dir = output_dir)
+            result = eegfun.jackknife_average(
+                "lrp",
+                input_dir = test_dir,
+                participant_selection = eegfun.participants([1, 2]),
+                output_dir = output_dir,
+            )
 
             jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "data")
 

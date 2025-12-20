@@ -51,7 +51,7 @@ catch e
 end
 ```
 """
-macro minimal_stacktrace(msg, e, max_lines=5)
+macro minimal_stacktrace(msg, e, max_lines = 5)
     quote
         bt = catch_backtrace()
         error_msg = sprint(showerror, $(esc(e)), bt)

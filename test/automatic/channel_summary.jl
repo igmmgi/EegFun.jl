@@ -150,7 +150,8 @@ using CSV
             # Test empty epoch data
             empty_layout =
                 eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
-            empty_epochs = eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, eegfun.AnalysisInfo())
+            empty_epochs =
+                eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, eegfun.AnalysisInfo())
             @test_throws Exception eegfun.channel_summary(empty_epochs)
         end
 
@@ -277,7 +278,12 @@ end # eegfun testset
         @testset "Summary specific participants" begin
             output_dir = joinpath(test_dir, "summary_participant")
 
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants(1))
+            eegfun.channel_summary(
+                "erps_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = eegfun.participants(1),
+            )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
             @test isfile(csv_file)
@@ -291,7 +297,12 @@ end # eegfun testset
         @testset "Summary multiple participants" begin
             output_dir = joinpath(test_dir, "summary_multi_participants")
 
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir, participant_selection = eegfun.participants([1, 2]))
+            eegfun.channel_summary(
+                "erps_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                participant_selection = eegfun.participants([1, 2]),
+            )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
             results = CSV.read(csv_file, DataFrame)
@@ -305,7 +316,12 @@ end # eegfun testset
         @testset "Summary specific conditions" begin
             output_dir = joinpath(test_dir, "summary_condition")
 
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(1))
+            eegfun.channel_summary(
+                "erps_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions(1),
+            )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
             results = CSV.read(csv_file, DataFrame)
@@ -318,7 +334,12 @@ end # eegfun testset
         @testset "Summary multiple conditions" begin
             output_dir = joinpath(test_dir, "summary_multi_conditions")
 
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions([1, 2]))
+            eegfun.channel_summary(
+                "erps_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions([1, 2]),
+            )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
             results = CSV.read(csv_file, DataFrame)
@@ -461,7 +482,12 @@ end # eegfun testset
             output_dir = joinpath(test_dir, "summary_invalid_condition")
 
             # Request condition 5 when only 2 exist
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir, condition_selection = eegfun.conditions(5))
+            eegfun.channel_summary(
+                "erps_cleaned",
+                input_dir = test_dir,
+                output_dir = output_dir,
+                condition_selection = eegfun.conditions(5),
+            )
 
             # Should produce empty results
             csv_file = joinpath(output_dir, "channel_summary.csv")

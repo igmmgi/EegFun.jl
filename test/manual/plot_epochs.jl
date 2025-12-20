@@ -14,8 +14,10 @@ eegfun.is_extreme_value!(dat, 500);
 eegfun.mark_epoch_windows!(dat, [1, 2, 3, 4], [-0.5, 2.0]) # simple epoch marking with trigger 1 and 3
 
 # EPOCHS
-epoch_cfg = [eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [2]]), 
-             eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3], [4]])]
+epoch_cfg = [
+    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [2]]),
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3], [4]]),
+]
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -0.5, 2)
 
 eegfun.plot_epochs(epochs[1], layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2]))

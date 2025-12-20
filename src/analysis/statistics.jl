@@ -33,55 +33,50 @@ function prepare_condition_comparison(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     baseline_window::Function = samples(),
-    analysis_window::Function = samples()
+    analysis_window::Function = samples(),
 )
     # Group all ERPs by condition first
     erps_by_condition = group_by_condition(erps)
-    
+
     # Apply condition selection to the sorted condition numbers
     all_cond_nums = collect(keys(erps_by_condition))  # Already sorted by group_by_condition
     selected_mask = condition_selection(1:length(all_cond_nums))
     selected_cond_nums = all_cond_nums[selected_mask]
-    
+
     # Validate exactly 2 conditions
-    length(selected_cond_nums) == 2 || @minimal_error_throw "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
-    
+    length(selected_cond_nums) == 2 ||
+        @minimal_error_throw "Statistical tests require exactly 2 conditions, got $(length(selected_cond_nums)): $selected_cond_nums. Use condition_selection to select exactly 2 conditions."
+
     condition1 = erps_by_condition[selected_cond_nums[1]]
     condition2 = erps_by_condition[selected_cond_nums[2]]
-    
+
     # Validate design
     design ∉ (:paired, :independent) && @minimal_error "design must be :paired or :independent, got :$design"
-    
+
     # Extract participant IDs from filenames (using utility from batch.jl)
     vps1 = [_extract_participant_id(basename(data.file)) for data in condition1]
     vps2 = [_extract_participant_id(basename(data.file)) for data in condition2]
-    
+
     # Validate design
     if design == :paired # Paired design: same participants in both conditions, in the same order
         vps1 != vps2 && @minimal_error "Paired design requires same participants in both conditions"
     elseif design == :independent # Independent design: different participants (or allow overlap)
-        length(vps1) < 2 || length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
+        length(vps1) < 2 ||
+            length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
     end
-    
+
     # Validate all ERPs have same structure within each condition
     have_same_structure(condition1) || @minimal_error("Condition 1: ERPs have inconsistent structure")
     have_same_structure(condition2) || @minimal_error("Condition 2: ERPs have inconsistent structure")
-    have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
+    have_same_structure(condition1[1], condition2[1]) ||
+        @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
 
-    condition1 = subset(
-        condition1;
-        channel_selection = channel_selection,  
-        sample_selection = sample_selection,
-    )
+    condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = sample_selection)
     isempty(condition1) && @minimal_error_throw "No data matched the selection criteria!"
 
-    condition2 = subset(
-        condition2;
-        channel_selection = channel_selection,  
-        sample_selection = sample_selection,
-    )
+    condition2 = subset(condition2; channel_selection = channel_selection, sample_selection = sample_selection)
     isempty(condition2) && @minimal_error_throw "No data matched the selection criteria!"
-   
+
     # baseline 
     baseline!.(condition1, Ref(baseline_window))
     baseline!.(condition2, Ref(baseline_window))
@@ -91,18 +86,10 @@ function prepare_condition_comparison(
     condition2_avg = grand_average(condition2, selected_cond_nums[2])
 
     # create second subset with analysis_window for statistical tests
-    condition1 = subset(
-        condition1;
-        channel_selection = channel_selection,
-        sample_selection = analysis_window,
-    )
+    condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = analysis_window)
     isempty(condition1) && @minimal_error_throw "No data matched the analysis window criteria!"
 
-    condition2 = subset(
-        condition2;
-        channel_selection = channel_selection,
-        sample_selection = analysis_window,
-    )
+    condition2 = subset(condition2; channel_selection = channel_selection, sample_selection = analysis_window)
     isempty(condition2) && @minimal_error_throw "No data matched the analysis window criteria!"
 
     # Get dimensions and metadata from analysis subset
@@ -110,11 +97,13 @@ function prepare_condition_comparison(
     n_electrodes = length(electrodes)
     time_points = condition1[1].data[!, :time]
     n_time = length(time_points)
-    
+
     # Extract data arrays: [participants × electrodes × time]
-    condition1 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims=1)
-    condition2 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims=1)
-    
+    condition1 =
+        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
+    condition2 =
+        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
+
     return StatisticalTestData(
         [condition1_avg, condition2_avg],
         AnalysisData(design, [condition1, condition2], time_points),
@@ -153,12 +142,13 @@ function prepare_condition_comparison(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     baseline_window::Function = samples(),
-    analysis_window::Function = samples()
+    analysis_window::Function = samples(),
 )
     # just load all appropriate data and call the main preparation function
-    all_erps = load_all_data(ErpData, file_pattern; input_dir = input_dir, participant_selection = participant_selection)
+    all_erps =
+        load_all_data(ErpData, file_pattern; input_dir = input_dir, participant_selection = participant_selection)
     isempty(all_erps) && @minimal_error_throw "No valid ERP data found matching pattern '$file_pattern' in $input_dir"
-    
+
     return prepare_condition_comparison(
         all_erps;
         design = design,
@@ -201,15 +191,17 @@ function validate_permutation_inputs(
     threshold::Float64,
     cluster_type::Symbol,
     cluster_statistic::Symbol,
-    tail::Symbol
+    tail::Symbol,
 )
     # Some basic validations 
     n_permutations < 1 && @minimal_error "n_permutations must be >= 1, got $n_permutations"
     threshold <= 0.0 || threshold >= 1.0 && @minimal_error "threshold must be between 0 and 1, got $threshold"
-    cluster_type ∉ (:spatial, :temporal, :spatiotemporal) && @minimal_error "cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type"
-    cluster_statistic ∉ (:sum, :max, :size, :wcm) && @minimal_error "cluster_statistic must be :sum, :max, :size, or :wcm, got :$cluster_statistic"
+    cluster_type ∉ (:spatial, :temporal, :spatiotemporal) &&
+        @minimal_error "cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type"
+    cluster_statistic ∉ (:sum, :max, :size, :wcm) &&
+        @minimal_error "cluster_statistic must be :sum, :max, :size, or :wcm, got :$cluster_statistic"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right, got :$tail"
-    
+
     # Auto-compute neighbours if missing (only when needed for spatial clustering)
     if cluster_type ∈ (:spatial, :spatiotemporal)
         if isnothing(prepared.data[1].layout.neighbours)
@@ -223,7 +215,7 @@ function validate_permutation_inputs(
             end
         end
     end
-    
+
     return nothing
 end
 
@@ -254,21 +246,21 @@ t_matrix, df, p_matrix = compute_t_matrix(prepared, tail=:both)
 # Vectorized computation to avoid function call overhead and allocations
 # Can accept pre-allocated buffers to avoid allocations
 function compute_t_matrix(
-    data1::Array{Float64, 3},
-    data2::Array{Float64, 3},
+    data1::Array{Float64,3},
+    data2::Array{Float64,3},
     design::Symbol;
     tail::Symbol = :both,
-    mean1_buffer::Union{Nothing, Array{Float64, 2}} = nothing,
-    mean2_buffer::Union{Nothing, Array{Float64, 2}} = nothing,
-    mean_diff_buffer::Union{Nothing, Array{Float64, 2}} = nothing,
-    std_diff_buffer::Union{Nothing, Array{Float64, 2}} = nothing
+    mean1_buffer::Union{Nothing,Array{Float64,2}} = nothing,
+    mean2_buffer::Union{Nothing,Array{Float64,2}} = nothing,
+    mean_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
+    std_diff_buffer::Union{Nothing,Array{Float64,2}} = nothing,
 )
     n_participants, n_electrodes, n_time = size(data1)
-    t_matrix = Array{Float64, 2}(undef, n_electrodes, n_time)
-    p_matrix = Array{Float64, 2}(undef, n_electrodes, n_time)
-    
+    t_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
+    p_matrix = Array{Float64,2}(undef, n_electrodes, n_time)
+
     if design == :paired
-        
+
         # Compute mean of differences: mean(data1 - data2) = mean(data1) - mean(data2)
         # Use pre-allocated buffers if provided, otherwise allocate
         if mean1_buffer !== nothing
@@ -276,25 +268,25 @@ function compute_t_matrix(
             mean2 = mean2_buffer
             mean_diff = mean_diff_buffer
         else
-            mean1 = Array{Float64, 2}(undef, n_electrodes, n_time)
-            mean2 = Array{Float64, 2}(undef, n_electrodes, n_time)
-            mean_diff = Array{Float64, 2}(undef, n_electrodes, n_time)
+            mean1 = Array{Float64,2}(undef, n_electrodes, n_time)
+            mean2 = Array{Float64,2}(undef, n_electrodes, n_time)
+            mean_diff = Array{Float64,2}(undef, n_electrodes, n_time)
         end
-        
+
         # Compute means and std of differences in one pass (avoids diff array allocation)
         if std_diff_buffer !== nothing
             std_diff = std_diff_buffer
         else
-            std_diff = Array{Float64, 2}(undef, n_electrodes, n_time)
+            std_diff = Array{Float64,2}(undef, n_electrodes, n_time)
         end
-        
-        @inbounds for e_idx in 1:n_electrodes
-            @inbounds for t_idx in 1:n_time
+
+        @inbounds for e_idx = 1:n_electrodes
+            @inbounds for t_idx = 1:n_time
                 sum1 = 0.0
                 sum2 = 0.0
                 sum_diff = 0.0
                 sum_diff_sq = 0.0
-                for p_idx in 1:n_participants
+                for p_idx = 1:n_participants
                     val1 = data1[p_idx, e_idx, t_idx]
                     val2 = data2[p_idx, e_idx, t_idx]
                     diff_val = val1 - val2
@@ -307,11 +299,11 @@ function compute_t_matrix(
                 mean2_val = sum2 / n_participants
                 mean_diff_val = sum_diff / n_participants
                 mean_diff[e_idx, t_idx] = mean_diff_val
-                
+
                 # Compute variance: var = mean(x^2) - mean(x)^2, then std = sqrt(var * n/(n-1))
                 variance = (sum_diff_sq / n_participants) - (mean_diff_val * mean_diff_val)
                 std_diff[e_idx, t_idx] = sqrt(variance * n_participants / (n_participants - 1))
-                
+
                 # Only store mean1/mean2 if buffers were provided
                 if mean1_buffer !== nothing
                     mean1[e_idx, t_idx] = mean1_val
@@ -319,47 +311,47 @@ function compute_t_matrix(
                 end
             end
         end
-        
+
         # Compute t-statistics: t = mean_diff / (std_diff / sqrt(n))
         # Use in-place assignment to fill pre-allocated t_matrix
         # Handle division by zero
         zero_std_mask = std_diff .== 0.0
         zero_mean_mask = mean_diff .== 0.0
-        
+
         # Fill pre-allocated t_matrix in-place
         t_matrix .= mean_diff ./ (std_diff ./ sqrt(n_participants))
         # Where std is zero: NaN if mean is also zero, Inf otherwise
         t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
         t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
-        
+
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)
-        
+
         # Compute p-values using internal function (avoids code duplication)
         # Use pre-allocated p_matrix buffer
         p_matrix = _compute_p_matrix(t_matrix, df, tail, p_matrix)
-        
+
     else
         # Independent design: need to loop (but df is constant across all points)
         result = nothing
-        @inbounds for e_idx in 1:n_electrodes
-            @inbounds for t_idx in 1:n_time
+        @inbounds for e_idx = 1:n_electrodes
+            @inbounds for t_idx = 1:n_time
                 data_A = view(data1, :, e_idx, t_idx)
                 data_B = view(data2, :, e_idx, t_idx)
-                result = independent_ttest(data_A, data_B, tail=tail)
+                result = independent_ttest(data_A, data_B, tail = tail)
                 t_matrix[e_idx, t_idx] = result.t
                 p_matrix[e_idx, t_idx] = result.p
             end
         end
         df = result.df
     end
-    
+
     return t_matrix, df, p_matrix
 end
 
 # Original version for backward compatibility
 function compute_t_matrix(prepared::StatisticalTestData; tail::Symbol = :both)
-    return compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail=tail)
+    return compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)
 end
 
 """
@@ -386,17 +378,17 @@ critical_t = compute_critical_t_values(df, size(t_matrix), 0.05, :both)
 """
 function compute_critical_t_values(
     df::Float64,
-    matrix_size::Tuple{Int, Int},
+    matrix_size::Tuple{Int,Int},
     alpha::Float64 = 0.05,
-    tail::Symbol = :both
+    tail::Symbol = :both,
 )
-    critical_t_values = Array{Float64, 2}(undef, matrix_size)
-    
+    critical_t_values = Array{Float64,2}(undef, matrix_size)
+
     if isnan(df) || isinf(df) || df <= 0
         fill!(critical_t_values, NaN)
         return critical_t_values
     end
-    
+
     dist = TDist(df)
     if tail == :both
         alpha_per_tail = alpha / 2.0
@@ -411,7 +403,7 @@ function compute_critical_t_values(
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
-    
+
     return critical_t_values
 end
 
@@ -441,21 +433,21 @@ mask_pos, mask_neg = threshold_t_matrix_parametric(t_matrix, critical_t, :both)
 ```
 """
 function threshold_t_matrix_parametric(
-    t_matrix::Array{Float64, 2},
-    critical_t_values::Array{Float64, 2},
-    tail::Symbol = :both
+    t_matrix::Array{Float64,2},
+    critical_t_values::Array{Float64,2},
+    tail::Symbol = :both,
 )
     n_electrodes, n_time = size(t_matrix)
-    
+
     if tail == :both
         # Two-tailed: significant if |t| > critical_t
         mask_positive = BitArray{2}(undef, n_electrodes, n_time)
         mask_negative = BitArray{2}(undef, n_electrodes, n_time)
-        
+
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
             crit_t = critical_t_values[i]
-            
+
             if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
                 mask_positive[i] = false
                 mask_negative[i] = false
@@ -464,45 +456,45 @@ function threshold_t_matrix_parametric(
                 mask_negative[i] = t_val < -crit_t
             end
         end
-        
+
         return mask_positive, mask_negative
-        
+
     elseif tail == :right
         # One-tailed right: significant if t > critical_t
         mask_positive = BitArray{2}(undef, n_electrodes, n_time)
         mask_negative = falses(n_electrodes, n_time)
-        
+
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
             crit_t = critical_t_values[i]
-            
+
             if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
                 mask_positive[i] = false
             else
                 mask_positive[i] = t_val > crit_t
             end
         end
-        
+
         return mask_positive, mask_negative
-        
+
     elseif tail == :left
         # One-tailed left: significant if t < critical_t
         mask_positive = falses(n_electrodes, n_time)
         mask_negative = BitArray{2}(undef, n_electrodes, n_time)
-        
+
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
             crit_t = critical_t_values[i]
-            
+
             if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
                 mask_negative[i] = false
             else
                 mask_negative[i] = t_val < crit_t
             end
         end
-        
+
         return mask_positive, mask_negative
-        
+
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
@@ -512,15 +504,15 @@ end
 function threshold_t_matrix_parametric!(
     mask_positive::BitArray{2},
     mask_negative::BitArray{2},
-    t_matrix::Array{Float64, 2},
-    critical_t_values::Array{Float64, 2},
-    tail::Symbol = :both
+    t_matrix::Array{Float64,2},
+    critical_t_values::Array{Float64,2},
+    tail::Symbol = :both,
 )
     if tail == :both
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
             crit_t = critical_t_values[i]
-            
+
             if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
                 mask_positive[i] = false
                 mask_negative[i] = false
@@ -534,7 +526,7 @@ function threshold_t_matrix_parametric!(
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
             crit_t = critical_t_values[i]
-            
+
             if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
                 mask_positive[i] = false
             else
@@ -546,7 +538,7 @@ function threshold_t_matrix_parametric!(
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
             crit_t = critical_t_values[i]
-            
+
             if isnan(t_val) || isnan(crit_t) || isinf(t_val) || isinf(crit_t)
                 mask_negative[i] = false
             else
@@ -580,20 +572,20 @@ thresh_pos, thresh_neg = compute_nonparametric_threshold_common(perm_t_matrices,
 ```
 """
 function compute_nonparametric_threshold_common(
-    permutation_t_matrices::Array{Float64, 3},
+    permutation_t_matrices::Array{Float64,3},
     alpha::Float64 = 0.05,
-    tail::Symbol = :both
+    tail::Symbol = :both,
 )
     n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
-    
+
     if tail == :both
         # Two-tailed: collect all absolute t-values
         all_t_values = Float64[]
         sizehint!(all_t_values, n_electrodes * n_time * n_permutations)
-        
-        for perm_idx in 1:n_permutations
-            for i in 1:n_electrodes
-                for j in 1:n_time
+
+        for perm_idx = 1:n_permutations
+            for i = 1:n_electrodes
+                for j = 1:n_time
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val)
                         push!(all_t_values, abs(t_val))
@@ -601,25 +593,25 @@ function compute_nonparametric_threshold_common(
                 end
             end
         end
-        
+
         if isempty(all_t_values)
             error("No valid t-values found in permutation distribution")
         end
-        
+
         # Compute (1 - alpha/2) percentile for two-tailed
         percentile_level = 1.0 - (alpha / 2.0)
         threshold = quantile(all_t_values, percentile_level)
-        
+
         return threshold, threshold
-        
+
     elseif tail == :right
         # One-tailed right: collect all positive t-values
         all_t_values = Float64[]
         sizehint!(all_t_values, n_electrodes * n_time * n_permutations)
-        
-        for perm_idx in 1:n_permutations
-            for i in 1:n_electrodes
-                for j in 1:n_time
+
+        for perm_idx = 1:n_permutations
+            for i = 1:n_electrodes
+                for j = 1:n_time
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val > 0
                         push!(all_t_values, t_val)
@@ -627,24 +619,24 @@ function compute_nonparametric_threshold_common(
                 end
             end
         end
-        
+
         if isempty(all_t_values)
             error("No valid positive t-values found in permutation distribution")
         end
-        
+
         percentile_level = 1.0 - alpha
         threshold = quantile(all_t_values, percentile_level)
-        
+
         return threshold, NaN
-        
+
     elseif tail == :left
         # One-tailed left: collect all negative t-values (absolute values)
         all_t_values = Float64[]
         sizehint!(all_t_values, n_electrodes * n_time * n_permutations)
-        
-        for perm_idx in 1:n_permutations
-            for i in 1:n_electrodes
-                for j in 1:n_time
+
+        for perm_idx = 1:n_permutations
+            for i = 1:n_electrodes
+                for j = 1:n_time
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val < 0
                         push!(all_t_values, abs(t_val))
@@ -652,16 +644,16 @@ function compute_nonparametric_threshold_common(
                 end
             end
         end
-        
+
         if isempty(all_t_values)
             error("No valid negative t-values found in permutation distribution")
         end
-        
+
         percentile_level = 1.0 - alpha
         threshold = quantile(all_t_values, percentile_level)
-        
+
         return NaN, threshold
-        
+
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
@@ -689,32 +681,32 @@ thresh_pos, thresh_neg = compute_nonparametric_threshold_individual(perm_t_matri
 ```
 """
 function compute_nonparametric_threshold_individual(
-    permutation_t_matrices::Array{Float64, 3},
+    permutation_t_matrices::Array{Float64,3},
     alpha::Float64 = 0.05,
-    tail::Symbol = :both
+    tail::Symbol = :both,
 )
     n_electrodes, n_time, n_permutations = size(permutation_t_matrices)
-    
-    thresholds_positive = Array{Float64, 2}(undef, n_electrodes, n_time)
-    thresholds_negative = Array{Float64, 2}(undef, n_electrodes, n_time)
-    
+
+    thresholds_positive = Array{Float64,2}(undef, n_electrodes, n_time)
+    thresholds_negative = Array{Float64,2}(undef, n_electrodes, n_time)
+
     if tail == :both
         # Two-tailed: for each point, compute (1 - alpha/2) percentile
         percentile_level = 1.0 - (alpha / 2.0)
-        
-        for i in 1:n_electrodes
-            for j in 1:n_time
+
+        for i = 1:n_electrodes
+            for j = 1:n_time
                 # Collect t-values at this point across all permutations
                 t_values = Float64[]
                 sizehint!(t_values, n_permutations)
-                
-                for perm_idx in 1:n_permutations
+
+                for perm_idx = 1:n_permutations
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val)
                         push!(t_values, abs(t_val))
                     end
                 end
-                
+
                 if isempty(t_values)
                     thresholds_positive[i, j] = NaN
                     thresholds_negative[i, j] = NaN
@@ -725,24 +717,24 @@ function compute_nonparametric_threshold_individual(
                 end
             end
         end
-        
+
     elseif tail == :right
         # One-tailed right: for each point, compute (1 - alpha) percentile of positive values
         percentile_level = 1.0 - alpha
-        
-        for i in 1:n_electrodes
-            for j in 1:n_time
+
+        for i = 1:n_electrodes
+            for j = 1:n_time
                 # Collect positive t-values at this point
                 t_values = Float64[]
                 sizehint!(t_values, n_permutations)
-                
-                for perm_idx in 1:n_permutations
+
+                for perm_idx = 1:n_permutations
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val > 0
                         push!(t_values, t_val)
                     end
                 end
-                
+
                 if isempty(t_values)
                     thresholds_positive[i, j] = NaN
                 else
@@ -751,24 +743,24 @@ function compute_nonparametric_threshold_individual(
                 thresholds_negative[i, j] = NaN
             end
         end
-        
+
     elseif tail == :left
         # One-tailed left: for each point, compute (1 - alpha) percentile of negative values (absolute)
         percentile_level = 1.0 - alpha
-        
-        for i in 1:n_electrodes
-            for j in 1:n_time
+
+        for i = 1:n_electrodes
+            for j = 1:n_time
                 # Collect negative t-values at this point (absolute values)
                 t_values = Float64[]
                 sizehint!(t_values, n_permutations)
-                
-                for perm_idx in 1:n_permutations
+
+                for perm_idx = 1:n_permutations
                     t_val = permutation_t_matrices[i, j, perm_idx]
                     if !isnan(t_val) && !isinf(t_val) && t_val < 0
                         push!(t_values, abs(t_val))
                     end
                 end
-                
+
                 thresholds_positive[i, j] = NaN
                 if isempty(t_values)
                     thresholds_negative[i, j] = NaN
@@ -777,11 +769,11 @@ function compute_nonparametric_threshold_individual(
                 end
             end
         end
-        
+
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
-    
+
     return thresholds_positive, thresholds_negative
 end
 
@@ -813,22 +805,22 @@ mask_pos, mask_neg = threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, 
 ```
 """
 function threshold_t_matrix_nonparametric(
-    t_matrix::Array{Float64, 2},
-    thresholds_positive::Union{Float64, Array{Float64, 2}},
-    thresholds_negative::Union{Float64, Array{Float64, 2}},
-    tail::Symbol = :both
+    t_matrix::Array{Float64,2},
+    thresholds_positive::Union{Float64,Array{Float64,2}},
+    thresholds_negative::Union{Float64,Array{Float64,2}},
+    tail::Symbol = :both,
 )
     n_electrodes, n_time = size(t_matrix)
     mask_positive = BitArray{2}(undef, n_electrodes, n_time)
     mask_negative = BitArray{2}(undef, n_electrodes, n_time)
-    
+
     # Determine if thresholds are scalar (common) or matrix (individual)
     is_common = isa(thresholds_positive, Float64)
-    
+
     if tail == :both
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            
+
             if isnan(t_val) || isinf(t_val)
                 mask_positive[i] = false
                 mask_negative[i] = false
@@ -841,7 +833,7 @@ function threshold_t_matrix_nonparametric(
                     thresh_pos = thresholds_positive[i]
                     thresh_neg = thresholds_negative[i]
                 end
-                
+
                 if isnan(thresh_pos) || isnan(thresh_neg)
                     mask_positive[i] = false
                     mask_negative[i] = false
@@ -851,11 +843,11 @@ function threshold_t_matrix_nonparametric(
                 end
             end
         end
-        
+
     elseif tail == :right
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            
+
             if isnan(t_val) || isinf(t_val)
                 mask_positive[i] = false
             else
@@ -864,7 +856,7 @@ function threshold_t_matrix_nonparametric(
                 else
                     thresh_pos = thresholds_positive[i]
                 end
-                
+
                 if isnan(thresh_pos)
                     mask_positive[i] = false
                 else
@@ -873,11 +865,11 @@ function threshold_t_matrix_nonparametric(
             end
             mask_negative[i] = false
         end
-        
+
     elseif tail == :left
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            
+
             if isnan(t_val) || isinf(t_val)
                 mask_negative[i] = false
             else
@@ -886,7 +878,7 @@ function threshold_t_matrix_nonparametric(
                 else
                     thresh_neg = thresholds_negative[i]
                 end
-                
+
                 if isnan(thresh_neg)
                     mask_negative[i] = false
                 else
@@ -895,11 +887,11 @@ function threshold_t_matrix_nonparametric(
             end
             mask_positive[i] = false
         end
-        
+
     else
         error("tail must be :both, :left, or :right, got :$tail")
     end
-    
+
     return mask_positive, mask_negative
 end
 
@@ -907,18 +899,18 @@ end
 function threshold_t_matrix_nonparametric!(
     mask_positive::BitArray{2},
     mask_negative::BitArray{2},
-    t_matrix::Array{Float64, 2},
-    thresholds_positive::Union{Float64, Array{Float64, 2}},
-    thresholds_negative::Union{Float64, Array{Float64, 2}},
-    tail::Symbol = :both
+    t_matrix::Array{Float64,2},
+    thresholds_positive::Union{Float64,Array{Float64,2}},
+    thresholds_negative::Union{Float64,Array{Float64,2}},
+    tail::Symbol = :both,
 )
     # Determine if thresholds are scalar (common) or matrix (individual)
     is_common = isa(thresholds_positive, Float64)
-    
+
     if tail == :both
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            
+
             if isnan(t_val) || isinf(t_val)
                 mask_positive[i] = false
                 mask_negative[i] = false
@@ -931,7 +923,7 @@ function threshold_t_matrix_nonparametric!(
                     thresh_pos = thresholds_positive[i]
                     thresh_neg = thresholds_negative[i]
                 end
-                
+
                 if isnan(thresh_pos) || isnan(thresh_neg)
                     mask_positive[i] = false
                     mask_negative[i] = false
@@ -945,7 +937,7 @@ function threshold_t_matrix_nonparametric!(
         fill!(mask_negative, false)
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            
+
             if isnan(t_val) || isinf(t_val)
                 mask_positive[i] = false
             else
@@ -961,7 +953,7 @@ function threshold_t_matrix_nonparametric!(
         fill!(mask_positive, false)
         for i in eachindex(t_matrix)
             t_val = t_matrix[i]
-            
+
             if isnan(t_val) || isinf(t_val)
                 mask_negative[i] = false
             else
@@ -1009,13 +1001,9 @@ For temporal only, it's just consecutive time points.
 conn, n_elec, n_time = build_connectivity_matrix(electrodes, layout, :spatiotemporal)
 ```
 """
-function build_connectivity_matrix(
-    electrodes::Vector{Symbol},
-    layout::Layout,
-    cluster_type::Symbol
-)
+function build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, cluster_type::Symbol)
     n_electrodes = length(electrodes)
-    
+
     if cluster_type == :spatial
         # Spatial only: [electrodes × electrodes] matrix
         # Build from Layout.neighbours
@@ -1023,15 +1011,15 @@ function build_connectivity_matrix(
             @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (40.0)."
             get_layout_neighbours_xy!(layout, 40.0)
         end
-        
+
         # Build adjacency matrix
         I = Int[]
         J = Int[]
-        
+
         for (e_idx, electrode) in enumerate(electrodes)
             # Note: No self-connections - FieldTrip doesn't include them in clustering
             # Self-connections are only used for pre-filtering (minNumChannels)
-            
+
             # Get neighbours from layout
             if haskey(layout.neighbours, electrode)
                 neighbours = layout.neighbours[electrode]
@@ -1048,11 +1036,11 @@ function build_connectivity_matrix(
                 end
             end
         end
-        
+
         # Create sparse matrix
         connectivity = sparse(I, J, true, n_electrodes, n_electrodes)
         return connectivity, n_electrodes, 1
-        
+
     elseif cluster_type == :temporal
         # Temporal only: consecutive time points
         # This will be handled differently - we'll build it per time dimension
@@ -1060,7 +1048,7 @@ function build_connectivity_matrix(
         n_time = 1  # Placeholder, actual time dimension handled separately
         connectivity = sparse(Int[1], Int[1], Bool[true], 1, 1)
         return connectivity, n_electrodes, n_time
-        
+
     elseif cluster_type == :spatiotemporal
         # Spatiotemporal: combine spatial and temporal
         # Matrix size: [electrodes × time] × [electrodes × time]
@@ -1070,15 +1058,15 @@ function build_connectivity_matrix(
             @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (40.0)."
             get_layout_neighbours_xy!(layout, 40.0)
         end
-        
+
         # Build spatial adjacency (same as spatial case)
         I = Int[]
         J = Int[]
-        
+
         for (e_idx, electrode) in enumerate(electrodes)
             # Note: No self-connections - FieldTrip doesn't include them in clustering
             # Self-connections are only used for pre-filtering (minNumChannels)
-            
+
             if haskey(layout.neighbours, electrode)
                 neighbours = layout.neighbours[electrode]
                 for neighbour in neighbours.channels
@@ -1092,10 +1080,10 @@ function build_connectivity_matrix(
                 end
             end
         end
-        
+
         spatial_connectivity = sparse(I, J, true, n_electrodes, n_electrodes)
         return spatial_connectivity, n_electrodes, 1  # Time dimension handled separately
-        
+
     else
         error("cluster_type must be :spatial, :temporal, or :spatiotemporal, got :$cluster_type")
     end
@@ -1132,45 +1120,45 @@ filtered_mask = prefilter_mask_by_neighbors(mask, spatial_connectivity, 3)
 function prefilter_mask_by_neighbors(
     mask::BitArray{2},
     spatial_connectivity::SparseMatrixCSC{Bool},
-    min_num_neighbors::Int
+    min_num_neighbors::Int,
 )
     if min_num_neighbors <= 0
         return mask  # No filtering if min_num_neighbors is 0 or negative
     end
-    
+
     n_electrodes, n_time = size(mask)
     filtered_mask = copy(mask)
-    
+
     # Make spatial connectivity symmetric (as FieldTrip does)
     # spatial_connectivity should already be symmetric, but ensure it
     spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
-    
+
     # Iterative removal until no more points are removed
     # FieldTrip approach: for each (time, frequency) element, count how many
     # neighboring significant channels it has. If fewer than min_num_neighbors, remove it.
     n_removed = 1
     while n_removed > 0
         n_removed = 0
-        
+
         # For each time point
-        for t_idx in 1:n_time
+        for t_idx = 1:n_time
             # Count neighbors for each electrode at this time point
-            for e_idx in 1:n_electrodes
+            for e_idx = 1:n_electrodes
                 if !filtered_mask[e_idx, t_idx]
                     continue  # Skip non-significant points
                 end
-                
+
                 # Count how many neighboring significant channels this point has
                 # FieldTrip's minNumChannels includes the channel itself in the count
                 # Note: spatial_conn_sym does NOT include self-connections (removed for clustering)
                 # So we need to explicitly count self
                 neighbor_count = filtered_mask[e_idx, t_idx] ? 1 : 0  # Count self if significant
-                for n_e_idx in 1:n_electrodes
+                for n_e_idx = 1:n_electrodes
                     if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && filtered_mask[n_e_idx, t_idx]
                         neighbor_count += 1
                     end
                 end
-                
+
                 # Remove point if total neighbor count (including self) is less than min_num_neighbors
                 # This matches FieldTrip: (onoff.*nsigneighb) < minnbchan
                 if neighbor_count < min_num_neighbors
@@ -1180,7 +1168,7 @@ function prefilter_mask_by_neighbors(
             end
         end
     end
-    
+
     return filtered_mask
 end
 
@@ -1188,41 +1176,41 @@ end
 function prefilter_mask_by_neighbors!(
     mask::BitArray{2},
     spatial_connectivity::SparseMatrixCSC{Bool},
-    min_num_neighbors::Int
+    min_num_neighbors::Int,
 )
     if min_num_neighbors <= 0
         return  # No filtering if min_num_neighbors is 0 or negative
     end
-    
+
     n_electrodes, n_time = size(mask)
-    
+
     # Make spatial connectivity symmetric (as FieldTrip does)
     spatial_conn_sym = spatial_connectivity .| spatial_connectivity'
-    
+
     # Iterative removal until no more points are removed
     n_removed = 1
     while n_removed > 0
         n_removed = 0
-        
+
         # For each time point
-        for t_idx in 1:n_time
+        for t_idx = 1:n_time
             # Count neighbors for each electrode at this time point
-            for e_idx in 1:n_electrodes
+            for e_idx = 1:n_electrodes
                 if !mask[e_idx, t_idx]
                     continue  # Skip non-significant points
                 end
-                
+
                 # Count how many neighboring significant channels this point has
                 # FieldTrip's minNumChannels includes the channel itself in the count
                 # Note: spatial_conn_sym does NOT include self-connections (removed for clustering)
                 # So we need to explicitly count self
                 neighbor_count = mask[e_idx, t_idx] ? 1 : 0  # Count self if significant
-                for n_e_idx in 1:n_electrodes
+                for n_e_idx = 1:n_electrodes
                     if e_idx != n_e_idx && spatial_conn_sym[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
                         neighbor_count += 1
                     end
                 end
-                
+
                 # Remove point if total neighbor count is less than min_num_neighbors
                 if neighbor_count < min_num_neighbors
                     mask[e_idx, t_idx] = false
@@ -1251,9 +1239,18 @@ Create new Cluster objects with the specified polarity, copying all other fields
 """
 function set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
     @assert polarity in (:positive, :negative) "polarity must be :positive or :negative"
-    return [Cluster(c.id, c.electrodes, c.time_indices, c.time_range,
-                    c.cluster_stat, c.p_value, c.is_significant, polarity)
-            for c in clusters]
+    return [
+        Cluster(
+            c.id,
+            c.electrodes,
+            c.time_indices,
+            c.time_range,
+            c.cluster_stat,
+            c.p_value,
+            c.is_significant,
+            polarity,
+        ) for c in clusters
+    ]
 end
 
 """
@@ -1285,87 +1282,87 @@ function find_clusters_connected_components(
     electrodes::Vector{Symbol},
     time_points::Vector{Float64},
     spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol
+    cluster_type::Symbol,
 )
     n_electrodes, n_time = size(mask)
     clusters = Cluster[]
-    
+
     if !any(mask)
         # No significant points
         return clusters
     end
-    
+
     # Label matrix to track which cluster each point belongs to
     cluster_labels = zeros(Int, n_electrodes, n_time)
     current_cluster_id = 0
-    
+
     # Helper function to get neighbors of a point
     function get_neighbors(e_idx::Int, t_idx::Int)
-        neighbors = Tuple{Int, Int}[]
-        
+        neighbors = Tuple{Int,Int}[]
+
         if cluster_type == :spatial
             # Spatial: neighbors are spatially adjacent electrodes at same time
-            for n_e_idx in 1:n_electrodes
+            for n_e_idx = 1:n_electrodes
                 if spatial_connectivity[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
                     push!(neighbors, (n_e_idx, t_idx))
                 end
             end
-            
+
         elseif cluster_type == :temporal
             # Temporal: neighbors are same electrode at adjacent time points
-            if t_idx > 1 && mask[e_idx, t_idx - 1]
+            if t_idx > 1 && mask[e_idx, t_idx-1]
                 push!(neighbors, (e_idx, t_idx - 1))
             end
-            if t_idx < n_time && mask[e_idx, t_idx + 1]
+            if t_idx < n_time && mask[e_idx, t_idx+1]
                 push!(neighbors, (e_idx, t_idx + 1))
             end
-            
+
         elseif cluster_type == :spatiotemporal
             # Spatiotemporal: both spatial and temporal neighbors
             # Spatial neighbors at same time
-            for n_e_idx in 1:n_electrodes
+            for n_e_idx = 1:n_electrodes
                 if spatial_connectivity[e_idx, n_e_idx] && mask[n_e_idx, t_idx]
                     push!(neighbors, (n_e_idx, t_idx))
                 end
             end
             # Temporal neighbors at same electrode
-            if t_idx > 1 && mask[e_idx, t_idx - 1]
+            if t_idx > 1 && mask[e_idx, t_idx-1]
                 push!(neighbors, (e_idx, t_idx - 1))
             end
-            if t_idx < n_time && mask[e_idx, t_idx + 1]
+            if t_idx < n_time && mask[e_idx, t_idx+1]
                 push!(neighbors, (e_idx, t_idx + 1))
             end
         end
-        
+
         return neighbors
     end
-    
+
     # BFS to find connected components
-    for e_idx in 1:n_electrodes
-        for t_idx in 1:n_time
+    for e_idx = 1:n_electrodes
+        for t_idx = 1:n_time
             # Skip if not significant or already labeled
             if !mask[e_idx, t_idx] || cluster_labels[e_idx, t_idx] > 0
                 continue
             end
-            
+
             # Start new cluster
             current_cluster_id += 1
             cluster_electrodes = Set{Symbol}()
             cluster_time_indices = Set{Int}()
-            
+
             # BFS queue
             queue = [(e_idx, t_idx)]
             cluster_labels[e_idx, t_idx] = current_cluster_id
             push!(cluster_electrodes, electrodes[e_idx])
             push!(cluster_time_indices, t_idx)
-            
+
             # BFS traversal
             while !isempty(queue)
                 current_e, current_t = popfirst!(queue)
-                
+
                 # Get neighbors
                 neighbors = get_neighbors(current_e, current_t)
-                
+
                 for (n_e, n_t) in neighbors
                     if cluster_labels[n_e, n_t] == 0
                         # Not yet visited
@@ -1376,14 +1373,14 @@ function find_clusters_connected_components(
                     end
                 end
             end
-            
+
             # Convert Set to sorted Vector efficiently
             time_indices_vec = sort([t for t in cluster_time_indices])
             time_range = (time_points[time_indices_vec[1]], time_points[time_indices_vec[end]])
-            
+
             # Convert Set to Vector efficiently
             electrodes_vec = [e for e in cluster_electrodes]
-            
+
             cluster = Cluster(
                 current_cluster_id,
                 electrodes_vec,
@@ -1392,12 +1389,12 @@ function find_clusters_connected_components(
                 0.0,  # cluster_stat - will be computed later
                 1.0,  # p_value - will be computed later
                 false,  # is_significant - will be set by caller (temporary)
-                :positive  # polarity - will be set by caller (temporary)
+                :positive,  # polarity - will be set by caller (temporary)
             )
             push!(clusters, cluster)
         end
     end
-    
+
     return clusters
 end
 
@@ -1434,20 +1431,18 @@ function find_clusters(
     electrodes::Vector{Symbol},
     time_points::Vector{Float64},
     spatial_connectivity::SparseMatrixCSC{Bool},
-    cluster_type::Symbol
+    cluster_type::Symbol,
 )
     # Find positive clusters
-    positive_clusters_raw = find_clusters_connected_components(
-        mask_positive, electrodes, time_points, spatial_connectivity, cluster_type
-    )
+    positive_clusters_raw =
+        find_clusters_connected_components(mask_positive, electrodes, time_points, spatial_connectivity, cluster_type)
     positive_clusters = set_cluster_polarity(positive_clusters_raw, :positive)
-    
+
     # Find negative clusters
-    negative_clusters_raw = find_clusters_connected_components(
-        mask_negative, electrodes, time_points, spatial_connectivity, cluster_type
-    )
+    negative_clusters_raw =
+        find_clusters_connected_components(mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
     negative_clusters = set_cluster_polarity(negative_clusters_raw, :negative)
-    
+
     return positive_clusters, negative_clusters
 end
 
@@ -1481,23 +1476,23 @@ clusters, stats = compute_cluster_statistics(clusters, t_matrix, electrodes, :su
 # Helper function with electrode mapping
 function _compute_cluster_statistics(
     clusters::Vector{Cluster},
-    t_matrix::Array{Float64, 2},
+    t_matrix::Array{Float64,2},
     electrodes::Vector{Symbol},
-    statistic_type::Symbol = :sum
+    statistic_type::Symbol = :sum,
 )
     if isempty(clusters)
         return Cluster[], Float64[]
     end
-    
+
     updated_clusters = Cluster[]
     cluster_stats = Float64[]
-    
+
     # Create electrode index lookup
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
-    
+
     for cluster in clusters
         cluster_stat = 0.0
-        
+
         if statistic_type == :sum
             # Sum of t-values within cluster
             for electrode in cluster.electrodes
@@ -1508,7 +1503,7 @@ function _compute_cluster_statistics(
                     end
                 end
             end
-            
+
         elseif statistic_type == :max
             # Maximum t-value in cluster
             cluster_stat = -Inf
@@ -1524,11 +1519,11 @@ function _compute_cluster_statistics(
             if cluster_stat == -Inf
                 cluster_stat = 0.0
             end
-            
+
         elseif statistic_type == :size
             # Number of points in cluster
             cluster_stat = Float64(length(cluster.electrodes) * length(cluster.time_indices))
-            
+
         elseif statistic_type == :wcm
             # Weighted cluster mass (simplified version)
             # WCM = sum(|t|^weight), default weight = 1.0
@@ -1545,16 +1540,22 @@ function _compute_cluster_statistics(
         else
             error("statistic_type must be :sum, :max, :size, or :wcm, got :$statistic_type")
         end
-        
+
         # Update cluster with statistic
         updated_cluster = Cluster(
-            cluster.id, cluster.electrodes, cluster.time_indices, cluster.time_range,
-            cluster_stat, cluster.p_value, cluster.is_significant, cluster.polarity
+            cluster.id,
+            cluster.electrodes,
+            cluster.time_indices,
+            cluster.time_range,
+            cluster_stat,
+            cluster.p_value,
+            cluster.is_significant,
+            cluster.polarity,
         )
         push!(updated_clusters, updated_cluster)
         push!(cluster_stats, cluster_stat)
     end
-    
+
     return updated_clusters, cluster_stats
 end
 
@@ -1562,20 +1563,20 @@ end
 # Avoids creating new Cluster objects
 function _compute_cluster_statistics_only(
     clusters::Vector{Cluster},
-    t_matrix::Array{Float64, 2},
-    electrode_to_idx::Dict{Symbol, Int},
-    statistic_type::Symbol = :sum
+    t_matrix::Array{Float64,2},
+    electrode_to_idx::Dict{Symbol,Int},
+    statistic_type::Symbol = :sum,
 )
     if isempty(clusters)
         return Float64[]
     end
-    
+
     cluster_stats = Float64[]
     sizehint!(cluster_stats, length(clusters))
-    
+
     for cluster in clusters
         cluster_stat = 0.0
-        
+
         if statistic_type == :sum
             # Sum of t-values within cluster
             for electrode in cluster.electrodes
@@ -1587,7 +1588,7 @@ function _compute_cluster_statistics_only(
                     end
                 end
             end
-            
+
         elseif statistic_type == :max
             # Maximum t-value in cluster
             cluster_stat = -Inf
@@ -1603,11 +1604,11 @@ function _compute_cluster_statistics_only(
             if cluster_stat == -Inf
                 cluster_stat = 0.0
             end
-            
+
         elseif statistic_type == :size
             # Number of points in cluster
             cluster_stat = Float64(length(cluster.electrodes) * length(cluster.time_indices))
-            
+
         elseif statistic_type == :wcm
             # Weighted cluster mass
             weight = 1.0
@@ -1623,19 +1624,19 @@ function _compute_cluster_statistics_only(
         else
             error("statistic_type must be :sum, :max, :size, or :wcm, got :$statistic_type")
         end
-        
+
         push!(cluster_stats, cluster_stat)
     end
-    
+
     return cluster_stats
 end
 
 # Public wrapper
 function compute_cluster_statistics(
     clusters::Vector{Cluster},
-    t_matrix::Array{Float64, 2},
+    t_matrix::Array{Float64,2},
     electrodes::Vector{Symbol},
-    statistic_type::Symbol = :sum
+    statistic_type::Symbol = :sum,
 )
     return _compute_cluster_statistics(clusters, t_matrix, electrodes, statistic_type)
 end
@@ -1664,31 +1665,30 @@ For independent design: randomly shuffle participants between groups.
 # Optimized version that accepts raw arrays and reuses buffers
 # Generate swap mask for paired design (avoids copying arrays)
 function generate_swap_mask(n_participants::Int, rng::AbstractRNG = Random.GLOBAL_RNG)
-    return BitVector([rand(rng, Bool) for _ in 1:n_participants])
+    return BitVector([rand(rng, Bool) for _ = 1:n_participants])
 end
 
 function shuffle_labels!(
-    shuffled_A::Array{Float64, 3},
-    shuffled_B::Array{Float64, 3},
-    data1::Array{Float64, 3},
-    data2::Array{Float64, 3},
+    shuffled_A::Array{Float64,3},
+    shuffled_B::Array{Float64,3},
+    data1::Array{Float64,3},
+    data2::Array{Float64,3},
     design::Symbol,
-    rng::AbstractRNG = Random.GLOBAL_RNG
+    rng::AbstractRNG = Random.GLOBAL_RNG,
 )
     if design == :paired
         # Paired: copy data first (copyto! is optimized), then swap slices in-place
         copyto!(shuffled_A, data1)
         copyto!(shuffled_B, data2)
-        
+
         n_participants = size(data1, 1)
-        for p_idx in 1:n_participants
+        for p_idx = 1:n_participants
             if rand(rng, Bool)
                 # Swap conditions for this participant in-place
-                shuffled_A[p_idx, :, :], shuffled_B[p_idx, :, :] = 
-                    shuffled_B[p_idx, :, :], shuffled_A[p_idx, :, :]
+                shuffled_A[p_idx, :, :], shuffled_B[p_idx, :, :] = shuffled_B[p_idx, :, :], shuffled_A[p_idx, :, :]
             end
         end
-        
+
     else
         # Independent: randomly shuffle participants between groups
         n_A = size(data1, 1)
@@ -1696,44 +1696,44 @@ function shuffle_labels!(
         n_total = n_A + n_B
         n_electrodes = size(data1, 2)
         n_time = size(data1, 3)
-        
+
         # Use shuffled_A as temporary storage for combined data (needs to be large enough)
         # Ensure shuffled_A is large enough (it should be, but check)
         if size(shuffled_A, 1) < n_total
             error("shuffled_A buffer too small for independent design")
         end
-        
+
         # Copy data1 and data2 into shuffled_A (temporary combined storage)
         copyto!(shuffled_A, 1, data1, 1, n_A * n_electrodes * n_time)
         copyto!(shuffled_A, n_A * n_electrodes * n_time + 1, data2, 1, n_B * n_electrodes * n_time)
-        
+
         # Shuffle indices
         shuffled_indices = collect(1:n_total)
         shuffle!(rng, shuffled_indices)
-        
+
         # Copy shuffled data to output arrays
         # Use shuffled_B as temporary storage to avoid overwriting while reading
-        for i in 1:n_total
+        for i = 1:n_total
             src_idx = shuffled_indices[i]
-            for e_idx in 1:n_electrodes
-                for t_idx in 1:n_time
+            for e_idx = 1:n_electrodes
+                for t_idx = 1:n_time
                     shuffled_B[i, e_idx, t_idx] = shuffled_A[src_idx, e_idx, t_idx]
                 end
             end
         end
-        
+
         # Split into groups
-        for i in 1:n_A
-            for e_idx in 1:n_electrodes
-                for t_idx in 1:n_time
+        for i = 1:n_A
+            for e_idx = 1:n_electrodes
+                for t_idx = 1:n_time
                     shuffled_A[i, e_idx, t_idx] = shuffled_B[i, e_idx, t_idx]
                 end
             end
         end
-        for i in 1:n_B
-            for e_idx in 1:n_electrodes
-                for t_idx in 1:n_time
-                    shuffled_B[i, e_idx, t_idx] = shuffled_B[n_A + i, e_idx, t_idx]
+        for i = 1:n_B
+            for e_idx = 1:n_electrodes
+                for t_idx = 1:n_time
+                    shuffled_B[i, e_idx, t_idx] = shuffled_B[n_A+i, e_idx, t_idx]
                 end
             end
         end
@@ -1745,7 +1745,14 @@ end
 function shuffle_labels(prepared::StatisticalTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
     shuffled_A = similar(prepared.analysis.data[1])
     shuffled_B = similar(prepared.analysis.data[2])
-    return shuffle_labels!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
+    return shuffle_labels!(
+        shuffled_A,
+        shuffled_B,
+        prepared.analysis.data[1],
+        prepared.analysis.data[2],
+        prepared.analysis.design,
+        rng,
+    )
 end
 
 """
@@ -1773,8 +1780,8 @@ perm_t_matrices = collect_permutation_t_matrices(prepared, 1000)
 function collect_permutation_t_matrices(
     prepared::StatisticalTestData,
     n_permutations::Int,
-    random_seed::Union{Int, Nothing} = nothing,
-    show_progress::Bool = true
+    random_seed::Union{Int,Nothing} = nothing,
+    show_progress::Bool = true,
 )
     # Set random seed if provided
     if random_seed !== nothing
@@ -1782,45 +1789,53 @@ function collect_permutation_t_matrices(
     else
         rng = Random.GLOBAL_RNG
     end
-    
+
     # Get dimensions from first permutation (using optimized functions)
     shuffled_A_buffer = similar(prepared.analysis.data[1])
     shuffled_B_buffer = similar(prepared.analysis.data[2])
-    shuffle_labels!(shuffled_A_buffer, shuffled_B_buffer,
-                   prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
-    t_matrix_sample, _, _ = compute_t_matrix(
-        shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design
+    shuffle_labels!(
+        shuffled_A_buffer,
+        shuffled_B_buffer,
+        prepared.analysis.data[1],
+        prepared.analysis.data[2],
+        prepared.analysis.design,
+        rng,
     )
+    t_matrix_sample, _, _ = compute_t_matrix(shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design)
     n_electrodes, n_time = size(t_matrix_sample)
-    
+
     # Pre-allocate array for all t-matrices
-    permutation_t_matrices = Array{Float64, 3}(undef, n_electrodes, n_time, n_permutations)
-    
+    permutation_t_matrices = Array{Float64,3}(undef, n_electrodes, n_time, n_permutations)
+
     # Progress bar
     if show_progress
-        progress = Progress(n_permutations, desc="Collecting permutation t-matrices: ", showspeed=true)
+        progress = Progress(n_permutations, desc = "Collecting permutation t-matrices: ", showspeed = true)
     end
-    
+
     # Pre-allocate buffers for shuffling (reuse across permutations)
     shuffled_A_buffer = similar(prepared.analysis.data[1])
     shuffled_B_buffer = similar(prepared.analysis.data[2])
-    
-    for perm_idx in 1:n_permutations
+
+    for perm_idx = 1:n_permutations
         # Shuffle labels using pre-allocated buffers
-        shuffle_labels!(shuffled_A_buffer, shuffled_B_buffer,
-                       prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
-        
-        # Compute t-matrix directly from arrays (no StatisticalTestData needed)
-        t_matrix_perm, _, _ = compute_t_matrix(
-            shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design
+        shuffle_labels!(
+            shuffled_A_buffer,
+            shuffled_B_buffer,
+            prepared.analysis.data[1],
+            prepared.analysis.data[2],
+            prepared.analysis.design,
+            rng,
         )
+
+        # Compute t-matrix directly from arrays (no StatisticalTestData needed)
+        t_matrix_perm, _, _ = compute_t_matrix(shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design)
         permutation_t_matrices[:, :, perm_idx] = t_matrix_perm
-        
+
         if show_progress
             next!(progress)
         end
     end
-    
+
     return permutation_t_matrices
 end
 
@@ -1877,135 +1892,146 @@ function run_permutations(
     cluster_statistic::Symbol,
     tail::Symbol,
     min_num_neighbors::Int,
-    random_seed::Union{Int, Nothing} = nothing,
+    random_seed::Union{Int,Nothing} = nothing,
     show_progress::Bool = true;
-    permutation_t_matrices::Union{Nothing, Array{Float64, 3}} = nothing
+    permutation_t_matrices::Union{Nothing,Array{Float64,3}} = nothing,
 )
     # Determine thresholding type from critical_t_values type
-    is_parametric = isa(critical_t_values, Array{Float64, 2})
-    is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && 
-                               isa(critical_t_values[1], Float64)
-    is_nonparametric_individual = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && 
-                                  isa(critical_t_values[1], Array{Float64, 2})
-    
+    is_parametric = isa(critical_t_values, Array{Float64,2})
+    is_nonparametric_common =
+        isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
+    is_nonparametric_individual =
+        isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Array{Float64,2})
+
     # Set random seed if provided (only if not using pre-computed t-matrices)
     if random_seed !== nothing && permutation_t_matrices === nothing
         rng = MersenneTwister(random_seed)
     else
         rng = Random.GLOBAL_RNG
     end
-    
+
     permutation_max_positive = Float64[]
     permutation_max_negative = Float64[]
     sizehint!(permutation_max_positive, n_permutations)
     sizehint!(permutation_max_negative, n_permutations)
-    
+
     # Pre-allocate buffers (reuse across all permutations)
     shuffled_A_buffer = similar(prepared.analysis.data[1])
     shuffled_B_buffer = similar(prepared.analysis.data[2])
     mask_pos_buffer = BitArray{2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
     mask_neg_buffer = BitArray{2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-    
+
     # Pre-allocate all buffers for paired design (reuse across permutations)
     if prepared.analysis.design == :paired
-        mean1_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        mean2_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        mean_diff_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        std_diff_buffer = Array{Float64, 2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        mean1_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        mean2_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        mean_diff_buffer =
+            Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        std_diff_buffer =
+            Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
     else
         mean1_buffer = mean2_buffer = mean_diff_buffer = std_diff_buffer = nothing
     end
-    
+
     # Extract commonly used fields from grand_average ErpData
     electrodes = channel_labels(prepared.data[1])
     time_points = prepared.analysis.time_points
-    
+
     # Pre-allocate electrode lookup (reused across all permutations)
     electrode_to_idx = Dict(e => i for (i, e) in enumerate(electrodes))
-    
+
     # Progress bar
     if show_progress
-        progress = Progress(n_permutations, desc="Permutations: ", showspeed=true)
+        progress = Progress(n_permutations, desc = "Permutations: ", showspeed = true)
     end
-    
-    for perm_idx in 1:n_permutations
+
+    for perm_idx = 1:n_permutations
         # Get t-matrix: either from pre-computed or compute new
         if permutation_t_matrices !== nothing
             t_matrix_perm = permutation_t_matrices[:, :, perm_idx]
         else
             # Shuffle and compute t-matrix
-            shuffle_labels!(shuffled_A_buffer, shuffled_B_buffer,
-                           prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
+            shuffle_labels!(
+                shuffled_A_buffer,
+                shuffled_B_buffer,
+                prepared.analysis.data[1],
+                prepared.analysis.data[2],
+                prepared.analysis.design,
+                rng,
+            )
             t_matrix_perm, _, _ = compute_t_matrix(
-                shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design,
-                mean1_buffer=mean1_buffer,
-                mean2_buffer=mean2_buffer,
-                mean_diff_buffer=mean_diff_buffer,
-                std_diff_buffer=std_diff_buffer
+                shuffled_A_buffer,
+                shuffled_B_buffer,
+                prepared.analysis.design,
+                mean1_buffer = mean1_buffer,
+                mean2_buffer = mean2_buffer,
+                mean_diff_buffer = mean_diff_buffer,
+                std_diff_buffer = std_diff_buffer,
             )
         end
-        
+
         # Threshold (fill pre-allocated masks)
         if is_parametric
-            threshold_t_matrix_parametric!(
-                mask_pos_buffer, mask_neg_buffer,
-                t_matrix_perm, critical_t_values, tail
-            )
+            threshold_t_matrix_parametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, critical_t_values, tail)
         elseif is_nonparametric_common
             thresh_pos, thresh_neg = critical_t_values
             threshold_t_matrix_nonparametric!(
-                mask_pos_buffer, mask_neg_buffer,
-                t_matrix_perm, thresh_pos, thresh_neg, tail
+                mask_pos_buffer,
+                mask_neg_buffer,
+                t_matrix_perm,
+                thresh_pos,
+                thresh_neg,
+                tail,
             )
         elseif is_nonparametric_individual
             thresh_pos_mat, thresh_neg_mat = critical_t_values
             threshold_t_matrix_nonparametric!(
-                mask_pos_buffer, mask_neg_buffer,
-                t_matrix_perm, thresh_pos_mat, thresh_neg_mat, tail
+                mask_pos_buffer,
+                mask_neg_buffer,
+                t_matrix_perm,
+                thresh_pos_mat,
+                thresh_neg_mat,
+                tail,
             )
         end
-        
+
         # Pre-filter masks (modify in place)
         if min_num_neighbors > 0
             prefilter_mask_by_neighbors!(mask_pos_buffer, spatial_connectivity, min_num_neighbors)
             prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
         end
-        
+
         # Find clusters
-        pos_clusters_perm, neg_clusters_perm = find_clusters(
-            mask_pos_buffer, mask_neg_buffer, electrodes, time_points,
-            spatial_connectivity, cluster_type
-        )
-        
+        pos_clusters_perm, neg_clusters_perm =
+            find_clusters(mask_pos_buffer, mask_neg_buffer, electrodes, time_points, spatial_connectivity, cluster_type)
+
         # Compute statistics without creating new Cluster objects (use pre-allocated lookup)
         if !isempty(pos_clusters_perm)
-            pos_stats_perm = _compute_cluster_statistics_only(
-                pos_clusters_perm, t_matrix_perm, electrode_to_idx, cluster_statistic
-            )
+            pos_stats_perm =
+                _compute_cluster_statistics_only(pos_clusters_perm, t_matrix_perm, electrode_to_idx, cluster_statistic)
             max_pos = isempty(pos_stats_perm) ? 0.0 : maximum(pos_stats_perm)
         else
             max_pos = 0.0
         end
-        
+
         if !isempty(neg_clusters_perm)
-            neg_stats_perm = _compute_cluster_statistics_only(
-                neg_clusters_perm, t_matrix_perm, electrode_to_idx, cluster_statistic
-            )
+            neg_stats_perm =
+                _compute_cluster_statistics_only(neg_clusters_perm, t_matrix_perm, electrode_to_idx, cluster_statistic)
             # For negative clusters, the statistic is negative (sum of negative t-values)
             # The most extreme negative value is the MINIMUM (most negative), not maximum
             max_neg = isempty(neg_stats_perm) ? 0.0 : minimum(neg_stats_perm)
         else
             max_neg = 0.0
         end
-        
+
         push!(permutation_max_positive, max_pos)
         push!(permutation_max_negative, max_neg)
-        
+
         if show_progress
             next!(progress)
         end
     end
-    
+
     return permutation_max_positive, permutation_max_negative
 end
 
@@ -2042,17 +2068,17 @@ function compute_cluster_pvalues(
     cluster_stats::Vector{Float64},
     permutation_max::Vector{Float64},
     n_permutations::Int,
-    alpha::Float64 = 0.05
+    alpha::Float64 = 0.05,
 )
     if isempty(clusters)
         return Cluster[]
     end
-    
+
     updated_clusters = Cluster[]
-    
+
     for (i, cluster) in enumerate(clusters)
         cluster_stat = cluster_stats[i]
-        
+
         # For positive clusters: count permutations with max >= observed
         # For negative clusters: count permutations with max <= observed (more extreme negative)
         # FieldTrip approach: compare observed to permutation distribution
@@ -2065,16 +2091,22 @@ function compute_cluster_pvalues(
             count_exceed = sum(permutation_max .<= cluster_stat) + 1
         end
         p_value = count_exceed / (n_permutations + 1)
-        
+
         is_significant = p_value < alpha
-        
+
         updated_cluster = Cluster(
-            cluster.id, cluster.electrodes, cluster.time_indices, cluster.time_range,
-            cluster_stat, p_value, is_significant, cluster.polarity
+            cluster.id,
+            cluster.electrodes,
+            cluster.time_indices,
+            cluster.time_range,
+            cluster_stat,
+            p_value,
+            is_significant,
+            cluster.polarity,
         )
         push!(updated_clusters, updated_cluster)
     end
-    
+
     return updated_clusters
 end
 
@@ -2133,130 +2165,111 @@ function cluster_permutation_test(
     cluster_statistic::Symbol = :sum,
     min_num_neighbors::Int = 0,
     tail::Symbol = :both,
-    random_seed::Union{Int, Nothing} = nothing,
-    show_progress::Bool = true
+    random_seed::Union{Int,Nothing} = nothing,
+    show_progress::Bool = true,
 )
     # Validate inputs
-    validate_permutation_inputs(
-        prepared, n_permutations, threshold, cluster_type, cluster_statistic, tail
-    )
-    
+    validate_permutation_inputs(prepared, n_permutations, threshold, cluster_type, cluster_statistic, tail)
+
     # Validate threshold method
     if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
-        error("threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " *
-              "Got :$threshold_method")
+        error(
+            "threshold_method must be :parametric, :nonparametric_common, or :nonparametric_individual. " *
+            "Got :$threshold_method",
+        )
     end
-    
+
     # Compute observed t-matrix and df
     @info "Computing t-statistics..."
     t_matrix, df, _ = compute_t_matrix(prepared)
-    
+
     # Handle different thresholding methods
     if threshold_method == :parametric
         # Parametric thresholding: compute critical t-values from t-distribution
         @info "Computing parametric critical t-values..."
         critical_t_values = compute_critical_t_values(df, size(t_matrix), threshold, tail)
-        
+
         # Threshold observed data
         @info "Thresholding observed data (parametric)..."
-        mask_positive, mask_negative = threshold_t_matrix_parametric(
-            t_matrix, critical_t_values, tail
-        )
-        
+        mask_positive, mask_negative = threshold_t_matrix_parametric(t_matrix, critical_t_values, tail)
+
         # Store for later use in permutations
         threshold_for_permutations = critical_t_values
         permutation_t_matrices = nothing
-        
+
     elseif threshold_method == :nonparametric_common
         # Non-parametric common: run all permutations first to get threshold
         @info "Collecting permutation t-matrices for non-parametric common thresholding..."
-        permutation_t_matrices = collect_permutation_t_matrices(
-            prepared, n_permutations, random_seed, show_progress
-        )
-        
+        permutation_t_matrices = collect_permutation_t_matrices(prepared, n_permutations, random_seed, show_progress)
+
         # Compute common threshold from permutation distribution
         @info "Computing non-parametric common threshold..."
-        thresh_pos, thresh_neg = compute_nonparametric_threshold_common(
-            permutation_t_matrices, threshold, tail
-        )
+        thresh_pos, thresh_neg = compute_nonparametric_threshold_common(permutation_t_matrices, threshold, tail)
         critical_t_values = (thresh_pos, thresh_neg)
-        
+
         # Threshold observed data
         @info "Thresholding observed data (non-parametric common)..."
-        mask_positive, mask_negative = threshold_t_matrix_nonparametric(
-            t_matrix, thresh_pos, thresh_neg, tail
-        )
-        
+        mask_positive, mask_negative = threshold_t_matrix_nonparametric(t_matrix, thresh_pos, thresh_neg, tail)
+
         # Store for later use in permutations
         threshold_for_permutations = critical_t_values
-        
+
     elseif threshold_method == :nonparametric_individual
         # Non-parametric individual: run all permutations first to get thresholds
         @info "Collecting permutation t-matrices for non-parametric individual thresholding..."
-        permutation_t_matrices = collect_permutation_t_matrices(
-            prepared, n_permutations, random_seed, show_progress
-        )
-        
+        permutation_t_matrices = collect_permutation_t_matrices(prepared, n_permutations, random_seed, show_progress)
+
         # Compute individual thresholds from permutation distribution
         @info "Computing non-parametric individual thresholds..."
-        thresh_pos_mat, thresh_neg_mat = compute_nonparametric_threshold_individual(
-            permutation_t_matrices, threshold, tail
-        )
+        thresh_pos_mat, thresh_neg_mat =
+            compute_nonparametric_threshold_individual(permutation_t_matrices, threshold, tail)
         critical_t_values = (thresh_pos_mat, thresh_neg_mat)
-        
+
         # Threshold observed data
         @info "Thresholding observed data (non-parametric individual)..."
-        mask_positive, mask_negative = threshold_t_matrix_nonparametric(
-            t_matrix, thresh_pos_mat, thresh_neg_mat, tail
-        )
-        
+        mask_positive, mask_negative = threshold_t_matrix_nonparametric(t_matrix, thresh_pos_mat, thresh_neg_mat, tail)
+
         # Store for later use in permutations
         threshold_for_permutations = critical_t_values
     end
-    
+
     # Extract commonly used fields from grand_average ErpData
     electrodes = channel_labels(prepared.data[1])
     time_points = prepared.analysis.time_points
     layout = prepared.data[1].layout
-    
+
     # Build connectivity matrix
     @info "Building connectivity matrix..."
-    spatial_connectivity, _, _ = build_connectivity_matrix(
-        electrodes, layout, cluster_type
-    )
-    
+    spatial_connectivity, _, _ = build_connectivity_matrix(electrodes, layout, cluster_type)
+
     # Pre-filter masks to remove isolated points (FieldTrip's minNumChannels approach)
     if min_num_neighbors > 0
         @info "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
         mask_positive = prefilter_mask_by_neighbors(mask_positive, spatial_connectivity, min_num_neighbors)
         mask_negative = prefilter_mask_by_neighbors(mask_negative, spatial_connectivity, min_num_neighbors)
     end
-    
+
     # Find observed clusters
     @info "Finding observed clusters..."
-    positive_clusters, negative_clusters = find_clusters(
-        mask_positive, mask_negative, electrodes, time_points,
-        spatial_connectivity, cluster_type
-    )
-    
+    positive_clusters, negative_clusters =
+        find_clusters(mask_positive, mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
+
     # Compute observed cluster statistics
     cluster_stats_positive = Float64[]
     cluster_stats_negative = Float64[]
-    
+
     if !isempty(positive_clusters)
         @info "Computing cluster statistics for $(length(positive_clusters)) positive clusters..."
-        positive_clusters, cluster_stats_positive = compute_cluster_statistics(
-            positive_clusters, t_matrix, electrodes, cluster_statistic
-        )
+        positive_clusters, cluster_stats_positive =
+            compute_cluster_statistics(positive_clusters, t_matrix, electrodes, cluster_statistic)
     end
-    
+
     if !isempty(negative_clusters)
         @info "Computing cluster statistics for $(length(negative_clusters)) negative clusters..."
-        negative_clusters, cluster_stats_negative = compute_cluster_statistics(
-            negative_clusters, t_matrix, electrodes, cluster_statistic
-        )
+        negative_clusters, cluster_stats_negative =
+            compute_cluster_statistics(negative_clusters, t_matrix, electrodes, cluster_statistic)
     end
-    
+
     # Run permutations for cluster-level inference
     # For non-parametric methods, we reuse the stored t-matrices
     if threshold_method == :parametric
@@ -2264,39 +2277,53 @@ function cluster_permutation_test(
     else
         @info "Running $n_permutations permutations for cluster-level inference (reusing stored t-matrices)..."
     end
-        permutation_max_positive, permutation_max_negative = run_permutations(
-        prepared, n_permutations, threshold, threshold_for_permutations, spatial_connectivity,
-        cluster_type, cluster_statistic, tail, min_num_neighbors,
-        random_seed, show_progress;
-        permutation_t_matrices = permutation_t_matrices
+    permutation_max_positive, permutation_max_negative = run_permutations(
+        prepared,
+        n_permutations,
+        threshold,
+        threshold_for_permutations,
+        spatial_connectivity,
+        cluster_type,
+        cluster_statistic,
+        tail,
+        min_num_neighbors,
+        random_seed,
+        show_progress;
+        permutation_t_matrices = permutation_t_matrices,
     )
-    
+
     # Compute p-values
     @info "Computing p-values..."
     if !isempty(positive_clusters)
         positive_clusters = compute_cluster_pvalues(
-            positive_clusters, cluster_stats_positive, permutation_max_positive,
-            n_permutations, threshold
+            positive_clusters,
+            cluster_stats_positive,
+            permutation_max_positive,
+            n_permutations,
+            threshold,
         )
         # Sort: significant first, then by cluster statistic (largest first)
         sort!(positive_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
-    
+
     if !isempty(negative_clusters)
         negative_clusters = compute_cluster_pvalues(
-            negative_clusters, cluster_stats_negative, permutation_max_negative,
-            n_permutations, threshold
+            negative_clusters,
+            cluster_stats_negative,
+            permutation_max_negative,
+            n_permutations,
+            threshold,
         )
         # Sort: significant first, then by cluster statistic (largest absolute value first)
         sort!(negative_clusters, by = c -> (!c.is_significant, -abs(c.cluster_stat)))
     end
-    
+
     # Create significance masks that only include points from SIGNIFICANT clusters
     # This is the key difference: cluster permutation tests report significance at the cluster level,
     # not the individual point level. Only points that are part of significant clusters are marked as significant.
     significant_mask_positive = falses(size(mask_positive))
     significant_mask_negative = falses(size(mask_negative))
-    
+
     # Mark points from significant positive clusters
     for cluster in positive_clusters
         if cluster.is_significant
@@ -2313,7 +2340,7 @@ function cluster_permutation_test(
             end
         end
     end
-    
+
     # Mark points from significant negative clusters
     for cluster in negative_clusters
         if cluster.is_significant
@@ -2330,30 +2357,24 @@ function cluster_permutation_test(
             end
         end
     end
-    
+
     # Assemble nested structs
-    cluster_info = ClusterInfo(
-        threshold_method,
-        cluster_type,
-        cluster_statistic,
-        n_permutations,
-        random_seed
-    )
-    
+    cluster_info = ClusterInfo(threshold_method, cluster_type, cluster_statistic, n_permutations, random_seed)
+
     test_info = TestInfo(
         prepared.analysis.design,
         df,
         threshold,
         :both,  # cluster permutation tests are two-tailed
         :cluster_permutation,
-        cluster_info
+        cluster_info,
     )
-    
+
     stat_matrix = StatMatrix(t_matrix, nothing)
     masks = Masks(significant_mask_positive, significant_mask_negative)
     clusters = Clusters(positive_clusters, negative_clusters)
     permutation_dist = PermutationDistribution(permutation_max_positive, permutation_max_negative)
-    
+
     result = ClusterPermutationResult(
         test_info,
         prepared.data,
@@ -2363,11 +2384,11 @@ function cluster_permutation_test(
         permutation_dist,
         electrodes,
         time_points,
-        critical_t_values
+        critical_t_values,
     )
-    
+
     @info "Permutation test complete. Found $(length(clusters.positive)) positive and $(length(clusters.negative)) negative clusters."
-    
+
     return result
 end
 
@@ -2375,11 +2396,16 @@ end
 # ANALYTIC T-TEST (Non-permutation)
 # ===================
 
-function _compute_p_matrix(t_matrix::Array{Float64, 2}, df::Float64, tail::Symbol, p_matrix_buffer::Union{Nothing, Array{Float64, 2}} = nothing)
+function _compute_p_matrix(
+    t_matrix::Array{Float64,2},
+    df::Float64,
+    tail::Symbol,
+    p_matrix_buffer::Union{Nothing,Array{Float64,2}} = nothing,
+)
     if p_matrix_buffer !== nothing
         p_matrix = p_matrix_buffer
     else
-        p_matrix = Array{Float64, 2}(undef, size(t_matrix))
+        p_matrix = Array{Float64,2}(undef, size(t_matrix))
     end
     dist = TDist(df)
     @inbounds for i in eachindex(t_matrix)
@@ -2397,7 +2423,7 @@ function _compute_p_matrix(t_matrix::Array{Float64, 2}, df::Float64, tail::Symbo
     return p_matrix
 end
 
-function _create_significance_mask(p_matrix::Array{Float64, 2}, alpha::Float64, method::Symbol)
+function _create_significance_mask(p_matrix::Array{Float64,2}, alpha::Float64, method::Symbol)
     method == :bonferroni && (alpha = alpha / count(!isnan, p_matrix))
     return .!isnan.(p_matrix) .& (p_matrix .<= alpha)
 end
@@ -2429,18 +2455,19 @@ function analytic_ttest(
     prepared::StatisticalTestData;
     alpha::Float64 = 0.05,
     tail::Symbol = :both,
-    correction_method::Symbol = :no
+    correction_method::Symbol = :no,
 )
 
-    correction_method ∉ (:no, :bonferroni) && @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
+    correction_method ∉ (:no, :bonferroni) &&
+        @minimal_error "correction_method must be :no or :bonferroni. Got :$correction_method"
     tail ∉ (:both, :left, :right) && @minimal_error "tail must be :both, :left, or :right. Got :$tail"
-   
+
     # Compute t-statistics, degrees of freedom, and p-values in one pass
-    t_matrix, df, p_matrix = compute_t_matrix(prepared, tail=tail)
-    
+    t_matrix, df, p_matrix = compute_t_matrix(prepared, tail = tail)
+
     # Create significance mask (with optional correction)
     corrected_mask = _create_significance_mask(p_matrix, alpha, correction_method)
-    
+
     if correction_method == :bonferroni
         n_comparisons = count(!isnan, p_matrix)
         bonferroni_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
@@ -2448,7 +2475,7 @@ function analytic_ttest(
         n_sig_bonferroni = count(corrected_mask)
         @info "Bonferroni correction: n_comparisons=$n_comparisons, bonferroni_alpha=$bonferroni_alpha, uncorrected_sig=$n_sig_uncorrected, bonferroni_sig=$n_sig_bonferroni"
     end
-    
+
     # Create positive and negative masks based on t-values (vectorized)
     if tail == :both
         mask_positive = corrected_mask .& .!isnan.(t_matrix) .& (t_matrix .> 0)
@@ -2460,24 +2487,24 @@ function analytic_ttest(
         mask_positive = falses(size(t_matrix))
         mask_negative = corrected_mask .& .!isnan.(t_matrix)
     end
-    
+
     test_info = TestInfo(
         prepared.analysis.design,
         df,
         alpha,
         tail,
         correction_method,
-        nothing  # cluster_info is nothing for analytic tests
+        nothing,  # cluster_info is nothing for analytic tests
     )
-    
+
     stat_matrix = StatMatrix(t_matrix, p_matrix)
     masks = Masks(mask_positive, mask_negative)
-    
+
     # Validate df before computing critical t-value
     if isnan(df) || isinf(df) || df <= 0
         @minimal_error "Invalid degrees of freedom: df=$df!"
     end
-    
+
     # Compute critical t-value
     dist = TDist(df)
     if tail == :both
@@ -2487,7 +2514,7 @@ function analytic_ttest(
     else  # :left
         critical_t = quantile(dist, alpha)
     end
-    
+
     result = AnalyticTTestResult(
         test_info,
         prepared.data,
@@ -2495,10 +2522,10 @@ function analytic_ttest(
         masks,
         channel_labels(prepared.data[1]),
         prepared.analysis.time_points,
-        critical_t
+        critical_t,
     )
-    
+
     @info "Analytic t-test complete: $(count(mask_positive)) +ve, $(count(mask_negative)) -ve significant points."
-    
+
     return result
 end

@@ -246,11 +246,11 @@ function _process_lrp_file(
 
     # Load data (using load_data which finds by type)
     erps_data = load_data(filepath)
-    
+
     if isnothing(erps_data)
         return BatchResult(false, filename, "No data variables found")
     end
-    
+
     # Validate that data is Vector{ErpData}
     if !(erps_data isa Vector{<:ErpData})
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData}, got $(typeof(erps_data))")
@@ -429,7 +429,7 @@ function lrp(
 
     # Apply condition_selection first
     erps_filtered = erps[get_selected_conditions(erps, condition_selection)]
-    
+
     @info "Calculating LRP for $(length(condition_pairs)) condition pair(s) from $(length(erps_filtered)) condition(s)"
 
     lrp_results = ErpData[]
@@ -539,7 +539,16 @@ function _calculate_lrp(erp_left::ErpData, erp_right::ErpData, pairs::Vector{Tup
     # Use minimum n_epochs as conservative estimate
     min_epochs = min(erp_left.n_epochs, erp_right.n_epochs)
     # LRP doesn't have a condition number, use 0 as placeholder
-    return ErpData(erp_left.file, 0, "lrp", lrp_df, lrp_layout, erp_left.sample_rate, copy(erp_left.analysis_info), min_epochs)
+    return ErpData(
+        erp_left.file,
+        0,
+        "lrp",
+        lrp_df,
+        lrp_layout,
+        erp_left.sample_rate,
+        copy(erp_left.analysis_info),
+        min_epochs,
+    )
 end
 
 

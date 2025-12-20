@@ -45,12 +45,10 @@ eegfun.detect_eog_onsets!(dat, 50, :vEOG, :is_vEOG)
 eegfun.detect_eog_onsets!(dat, 30, :hEOG, :is_hEOG)
 
 # Calculate correlations between all channels and EOG channels
-cm = eegfun.correlation_matrix_dual_selection(dat, 
+cm = eegfun.correlation_matrix_dual_selection(
+    dat,
     sample_selection = eegfun.samples(),  # All samples
     channel_selection1 = eegfun.channels(),  # All EEG channels
     channel_selection2 = eegfun.channels([:vEOG, :hEOG]),  # EOG channels
 )
 eegfun.add_zscore_columns!(cm)
-
-
-

@@ -107,7 +107,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         @minimal_warning "Invalid y_scale '$y_scale'. Using :linear instead."
         y_scale = :linear
     end
-    
+
     # Validate unit parameter
     valid_units = [:linear, :dB]
     if !(unit in valid_units)
@@ -137,11 +137,13 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
     # Configure grid using the new axis styling function
-    _set_axis_grid!(ax; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     # Create interactive controls in the figure
     controls_area = fig[1, 2] = GridLayout()
@@ -188,7 +190,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     effective_window_size = min(window_size, n_samples)
     # Ensure window_size is at least 4 samples for meaningful FFT
     effective_window_size = max(4, effective_window_size)
-    
+
     noverlap = Int(round(effective_window_size * overlap))
 
     # Store frequency and raw power data for reactive updates
@@ -245,7 +247,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     all_initial_powers = vcat(initial_power_data...)
     initial_max = maximum(all_initial_powers)
     initial_min = minimum(all_initial_powers)
-    
+
     if y_scale == :log10
         # Calculate valid limits first
         if unit == :dB
@@ -330,20 +332,20 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
     function update_unit(new_unit)
         # Convert power data
         converted_power_data = get_current_power_data(new_unit)
-        
+
         # Update line plots
         for (i, (_, psd_obs)) in enumerate(line_plots)
             psd_obs[] = converted_power_data[i]
         end
-        
+
         # Update y-axis label
         ax.ylabel = new_unit == :dB ? "Power Spectral Density (dB)" : plot_kwargs[:ylabel]
-        
+
         # Recalculate max power and update limits
         all_powers = vcat(converted_power_data...)
         new_max_power = maximum(all_powers)
         new_min_power = minimum(all_powers)
-        
+
         # Update y-axis scale and limits based on current y_scale setting
         if y_scale_obs[] == :log10
             if new_unit == :dB
@@ -379,7 +381,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
         all_powers = vcat(current_power_data...)
         current_max = maximum(all_powers)
         current_min = minimum(all_powers)
-        
+
         if scale == :log10
             if current_unit == :dB
                 # For dB, use linear scale (dB is already logarithmic)
@@ -592,7 +594,7 @@ function plot_component_spectrum(
     if isempty(selected_components)
         selected_components = 1:size(ica_result.unmixing, 1)
     end
-    
+
     # Debug: verify selected components
     @debug "plot_component_spectrum: selected_components = $selected_components"
     # Apply sample selection

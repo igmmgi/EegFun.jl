@@ -48,7 +48,8 @@ function run_ica(
     # Create a copy of the data to avoid modifying the original
     dat_ica = copy(dat)
 
-    selected_channels = get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
+    selected_channels =
+        get_selected_channels(dat_ica, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && error("No channels available after applying channel filter")
 
     # Get samples to use using predicate
@@ -77,7 +78,8 @@ function run_ica(
     end
 
     # Dispatch to the appropriate ICA algorithm
-    ica_result = _run_ica_algorithm(dat_for_ica, ica_layout, n_components = n_components, algorithm = algorithm, params = params)
+    ica_result =
+        _run_ica_algorithm(dat_for_ica, ica_layout, n_components = n_components, algorithm = algorithm, params = params)
 
     return ica_result
 end
@@ -191,7 +193,13 @@ function run_ica(
     ica_layout = subset_layout(reference_epoch_data.layout, channel_selection = channels(selected_channels))
 
     # Dispatch to the appropriate ICA algorithm with concatenated data
-    ica_result = _run_ica_algorithm(concatenated_matrix, ica_layout, n_components = n_components, algorithm = algorithm, params = params)
+    ica_result = _run_ica_algorithm(
+        concatenated_matrix,
+        ica_layout,
+        n_components = n_components,
+        algorithm = algorithm,
+        params = params,
+    )
 
     return ica_result
 end
@@ -497,7 +505,13 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
         change > params.blowup && (params.l_rate *= params.blowup_fac)
 
         if step == 1 || step % 10 == 0
-            @info Printf.@sprintf("Infomax step %d, change = %.7f, lrate = %.7f, angle = %.1f", step, change, params.l_rate, (params.degconst) * angledelta)
+            @info Printf.@sprintf(
+                "Infomax step %d, change = %.7f, lrate = %.7f, angle = %.1f",
+                step,
+                change,
+                params.l_rate,
+                (params.degconst) * angledelta
+            )
         end
 
     end
@@ -510,7 +524,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
     meanvar_normalized = meanvar ./ sum(meanvar)
     order = sortperm(meanvar_normalized, rev = true)
-    
+
     return InfoIca(
         work.weights[order, :],
         mixing[:, order],
@@ -556,86 +570,86 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
 
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
-    
+
     # Center and scale data
     dat_ica .-= original_mean
     scale = sqrt(norm((dat_ica * dat_ica') / size(dat_ica, 2)))
     dat_ica ./= scale
-    
+
     # PCA reduction - optimized for speed
     n_channels, n_samples = size(dat_ica)
     F = svd(dat_ica)
     pca_components = F.U[:, 1:n_components]
-    
+
     # PCA projection into workspace
     workspace = Matrix{Float64}(undef, n_components, n_samples)
     mul!(workspace, pca_components', dat_ica)
-    
+
     # Sphering: reuse original dat_ica memory (resize to smaller dimensions)
     sphere = inv(sqrt(cov(workspace, dims = 2)))
     dat_ica = Matrix{Float64}(undef, n_components, n_samples)  # Resize to final dimensions
     mul!(dat_ica, sphere, workspace)
-    
+
     # initialize
     n_channels = size(dat_ica, 1)
     n_samples = size(dat_ica, 2)
     block = min(Int(floor(sqrt(n_samples / 3.0))), 512)
     work = create_work_arrays(n_channels, block)
-    
+
     # Extended Infomax: track kurtosis signs for each component
     # Positive kurtosis = super-Gaussian, negative = sub-Gaussian
     # Initialize all as super-Gaussian (standard Infomax behavior)
     is_sub_gaussian = falses(n_channels)  # false = super-Gaussian, true = sub-Gaussian
     old_kurtosis = zeros(Float64, n_channels)   # momentum smoothing (MATLAB's extmomentum)
     extmomentum = 0.5  # Momentum factor for kurtosis estimates (0.5 = equal weight old/new)
-    
+
     step = 0
     wts_blowup = false
     change = 0.0
     oldchange = 0.0
     angledelta = 0.0
-    
+
     # pre-allocate permutation vector
     permute_indices = Vector{Int}(undef, n_samples)
-    
+
     # Cache kurtosis counts (updated only when kurtosis is recalculated)
     n_super = n_channels  # Start with all super-Gaussian
     n_sub = 0
-    
+
     @inbounds while step < params.max_iter
         randperm!(permute_indices)
-        
+
         for t = 1:block:n_samples
             block_end = min(t + block - 1, n_samples)
             block_size = block_end - t + 1
-            
+
             # extract data block
             copyto!(view(work.data_block, :, 1:block_size), view(dat_ica, :, view(permute_indices, t:block_end)))
-            
+
             # forward pass
             mul!(work.u, work.weights, work.data_block)
-            
+
             # Extended Infomax: use different nonlinearities based on kurtosis sign
             # Super-Gaussian (is_sub_gaussian = false): y = 1 - 2/(1 + exp(-u)) (standard Infomax)
             # Sub-Gaussian (is_sub_gaussian = true): y = -tanh(u)
-            for i in 1:n_channels
+            for i = 1:n_channels
                 if !is_sub_gaussian[i] # Super-Gaussian: standard Infomax sigmoid
-                    @inbounds for j in 1:block_size
+                    @inbounds for j = 1:block_size
                         work.y[i, j] = 1.0 - 2.0 / (1.0 + exp(-work.u[i, j]))
                     end
                 else # Sub-Gaussian: -tanh(u)
-                    @inbounds for j in 1:block_size
+                    @inbounds for j = 1:block_size
                         work.y[i, j] = -tanh(work.u[i, j])
                     end
                 end
             end
-            
+
             # update weights 
             mul!(work.wu_term, work.y, transpose(work.u))
             work.bi_weights .= work.BI .+ work.wu_term
             mul!(work.weights_temp, work.bi_weights, work.weights)
             @. work.weights += params.l_rate * work.weights_temp
-            
+
             # boom?
             if maximum(abs, work.weights) > params.max_weight
                 wts_blowup = true
@@ -643,14 +657,14 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
                 break
             end
         end
-        
+
         if !wts_blowup
             work.oldweights .-= work.weights
             step += 1
             work.delta .= reshape(work.oldweights, 1, :)
             change = dot(work.delta, work.delta)
         end
-        
+
         if wts_blowup || isnan(change) || isinf(change)
             step = 0
             change = NaN
@@ -660,7 +674,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
             work.oldweights .= work.startweights
             continue
         end
-        
+
         # Extended Infomax: update kurtosis signs periodically
         # Compute kurtosis for each component and switch signs accordingly
         # Use random subset for large datasets to match MATLAB behavior
@@ -673,16 +687,16 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
             else
                 activations = work.weights * dat_ica
             end
-            
+
             n_switched = 0
             kurtosis_values = Vector{Float64}(undef, n_channels)
-            
-            for i in 1:n_channels
+
+            for i = 1:n_channels
                 u2_mean_sq = (mean(activations[i, :] .^ 2))^2
                 if u2_mean_sq > eps(Float64)
                     u4_mean = mean(activations[i, :] .^ 4)
                     kurtosis_raw = (u4_mean / u2_mean_sq) - 3.0
-                    
+
                     # Apply momentum smoothing to reduce oscillation for components near kurtosis = 0
                     if old_kurtosis[i] != 0.0
                         kurtosis = extmomentum * old_kurtosis[i] + (1.0 - extmomentum) * kurtosis_raw
@@ -691,11 +705,12 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
                     end
                     old_kurtosis[i] = kurtosis
                     kurtosis_values[i] = kurtosis
-                    
+
                     kurtosis_threshold = 0.05  # Small threshold to reduce oscillation
                     old_is_sub = is_sub_gaussian[i]
-                    is_sub_gaussian[i] = kurtosis < -kurtosis_threshold ? true : (kurtosis > kurtosis_threshold ? false : old_is_sub)
-                    
+                    is_sub_gaussian[i] =
+                        kurtosis < -kurtosis_threshold ? true : (kurtosis > kurtosis_threshold ? false : old_is_sub)
+
                     # Track switches for logging
                     if old_is_sub != is_sub_gaussian[i]
                         n_switched += 1
@@ -704,12 +719,12 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
                     kurtosis_values[i] = 0.0
                 end
             end
-            
+
             # Update kurtosis counts
             n_sub = count(is_sub_gaussian)
             n_super = n_channels - n_sub
         end
-        
+
         if step > 2
             angledelta = acos(clamp(dot(work.delta, work.olddelta) / sqrt(change * oldchange), -1, 1))
             if params.degconst * angledelta > params.anneal_deg
@@ -722,26 +737,33 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
             work.olddelta .= work.delta
             oldchange = change
         end
-        
+
         work.oldweights .= work.weights
         change > params.blowup && (params.l_rate *= params.blowup_fac)
-        
+
         # Log step info (include kurtosis info for Extended Infomax)
         if step == 1 || step % 10 == 0
-            @info Printf.@sprintf("Extended-Infomax step %d, change = %.7f, lrate = %.7f, angle = %.1f, sup/sub-gauss: %d/%d", 
-                                  step, change, params.l_rate, (params.degconst) * angledelta, n_super, n_sub)
+            @info Printf.@sprintf(
+                "Extended-Infomax step %d, change = %.7f, lrate = %.7f, angle = %.1f, sup/sub-gauss: %d/%d",
+                step,
+                change,
+                params.l_rate,
+                (params.degconst) * angledelta,
+                n_super,
+                n_sub
+            )
         end
     end
-    
+
     # Final calculations
     work.weights = work.weights * sphere * pca_components'
     mixing = pinv(work.weights)
-    
+
     # Log final kurtosis distribution
     n_sub_final = count(is_sub_gaussian)
     n_super_final = n_channels - n_sub_final
     @info "Extended Infomax completed: sup/sub-gauss ($n_super_final/$n_sub_final)"
-    
+
     # calculate total variance explained and order
     meanvar = vec(sum(abs2, mixing, dims = 1) .* sum(abs2, dat_ica, dims = 2)' ./ (n_components * n_samples - 1))
     meanvar_normalized = meanvar ./ sum(meanvar)
@@ -1052,11 +1074,11 @@ function _prepare_ica_data_matrix(dat::ContinuousData, ica::InfoIca, selected_sa
     dat_matrix = permutedims(Matrix(data_subset_df))
     dat_matrix .-= mean(dat_matrix, dims = 2)
     dat_matrix ./= ica.scale
-    
+
     # Calculate components
     components = ica.unmixing * dat_matrix
     n_components = size(components, 1)
-    
+
     return components, n_components
 end
 
@@ -1177,7 +1199,7 @@ function identify_eog_components(
 
         spatial_corrs = fill(NaN, n_components)
         secondary_components = Int[]
-        
+
         if !isempty(remaining_components) && !isempty(primary_components)
             # Calculate spatial correlations (topographies) between remaining components and each primary component taking max correlation
             spatial_corrs_remaining = zeros(length(remaining_components))
@@ -1191,50 +1213,58 @@ function identify_eog_components(
                 end
                 spatial_corrs_remaining[idx] = max_corr
             end
-            
+
             # Map spatial correlations back to original component indices
             spatial_corrs[remaining_components] = spatial_corrs_remaining
-            
+
             # Find secondary components (spatial correlation > min_correlation)
             secondary_idx = findall(spatial_corrs_remaining .> min_corr_threshold)
             secondary_components = remaining_components[secondary_idx]
         end
-        
+
         return spatial_corrs, secondary_components
     end
 
     # Function to calculate lagged correlations between idenitified vEOG/hEOG components and remaining components (used in Step2) 
-    function calculate_lagged_correlations(remaining_components, primary_components, components_matrix, lp_filter, max_lag_samples, lag_step)
+    function calculate_lagged_correlations(
+        remaining_components,
+        primary_components,
+        components_matrix,
+        lp_filter,
+        max_lag_samples,
+        lag_step,
+    )
 
         lagged_corrs = fill(NaN, n_components)
         if isempty(remaining_components) || isempty(primary_components)
             return lagged_corrs
         end
-        
+
         # Pre-filter all primary EOG components (they don't depend on remaining components)
-        eog_components_filtered = Dict{Int, Vector{Float64}}()
+        eog_components_filtered = Dict{Int,Vector{Float64}}()
         for eog_comp_idx in primary_components
-            eog_components_filtered[eog_comp_idx] = abs.(filtfilt(lp_filter.filter_object, components_matrix[eog_comp_idx, :]))
+            eog_components_filtered[eog_comp_idx] =
+                abs.(filtfilt(lp_filter.filter_object, components_matrix[eog_comp_idx, :]))
         end
-        
+
         for comp_idx in remaining_components
             # Apply low-pass filter to remove high-frequency noise
             comp_ts = abs.(filtfilt(lp_filter.filter_object, components_matrix[comp_idx, :]))
-            
+
             max_corr = 0.0
             for eog_comp_idx in primary_components
                 eog_comp_ts = eog_components_filtered[eog_comp_idx]
                 # Use crosscor to compute correlations at all lags, then take maximum absolute value
-                corrs = crosscor( eog_comp_ts, comp_ts, -max_lag_samples:lag_step:max_lag_samples)
+                corrs = crosscor(eog_comp_ts, comp_ts, (-max_lag_samples):lag_step:max_lag_samples)
                 max_corr_val = maximum(abs.(corrs))
                 if max_corr_val > max_corr
                     max_corr = max_corr_val
                 end
             end
-            
+
             lagged_corrs[comp_idx] = max_corr
         end
-        
+
         return lagged_corrs
     end
 
@@ -1248,35 +1278,37 @@ function identify_eog_components(
     # Step 1: Always calculate correlations and z-scores (used in both single-step and two-step modes)
     vEOG_corrs = calculate_correlations(vEOG)
     hEOG_corrs = calculate_correlations(hEOG)
-    
+
     vEOG_corr_z = StatsBase.zscore(vEOG_corrs)
     hEOG_corr_z = StatsBase.zscore(hEOG_corrs)
-    
+
     # Identify primary components (components meeting both z-score and correlation thresholds)
     primary_vEOG = findall((abs.(vEOG_corr_z) .> z_threshold) .& (abs.(vEOG_corrs) .> min_correlation))
     primary_hEOG = findall((abs.(hEOG_corr_z) .> z_threshold) .& (abs.(hEOG_corrs) .> min_correlation))
-    
+
     # Step 2: Always calculate spatial and temporal correlations between identified components and remaining
     remaining_vEOG = setdiff(1:n_components, primary_vEOG)
     remaining_hEOG = setdiff(1:n_components, primary_hEOG)
-    
+
     # Calculate vEOG/hEOG step2: spatial correlations with primary vEOG/hEOG components
     vEOG_spatial_corr, _ = calculate_spatial_correlations(remaining_vEOG, primary_vEOG, ica.mixing, min_correlation)
     hEOG_spatial_corr, _ = calculate_spatial_correlations(remaining_hEOG, primary_hEOG, ica.mixing, min_correlation)
-    
+
     # Calculate vEOG/hEOG step2: lagged correlations with primary vEOG/hEOG components
     # Create low-pass filter for component time series (EOG artifacts are typically < 15 Hz)
     lp_filter = create_filter("lp", "iir", 10.0, dat.sample_rate; order = 3)
-    
+
     # Lag range: +- 100ms  
     # Convert to samples based on sample rate
     max_lag_samples = round(Int, 100.0 * dat.sample_rate / 1000.0) # 100 ms lag
     lag_step = max(1, round(Int, 5.0 * dat.sample_rate / 1000.0)) # 5 ms step
-    
+
     # Calculate lagged correlations for vEOG and hEOG
-    vEOG_temporal_corr = calculate_lagged_correlations(remaining_vEOG, primary_vEOG, components, lp_filter, max_lag_samples, lag_step)
-    hEOG_temporal_corr = calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, lp_filter, max_lag_samples, lag_step)
-    
+    vEOG_temporal_corr =
+        calculate_lagged_correlations(remaining_vEOG, primary_vEOG, components, lp_filter, max_lag_samples, lag_step)
+    hEOG_temporal_corr =
+        calculate_lagged_correlations(remaining_hEOG, primary_hEOG, components, lp_filter, max_lag_samples, lag_step)
+
     # Helper function to compute z-scores only for remaining components
     function zscore_for_remaining(corr_vector, remaining_indices)
         z = fill(NaN, length(corr_vector))
@@ -1288,38 +1320,68 @@ function identify_eog_components(
         end
         return z
     end
-    
+
     # Calculate z-scores for spatial and temporal correlations
     vEOG_spatial_corr_z = zscore_for_remaining(vEOG_spatial_corr, remaining_vEOG)
     vEOG_temporal_corr_z = zscore_for_remaining(vEOG_temporal_corr, remaining_vEOG)
     hEOG_spatial_corr_z = zscore_for_remaining(hEOG_spatial_corr, remaining_hEOG)
     hEOG_temporal_corr_z = zscore_for_remaining(hEOG_temporal_corr, remaining_hEOG)
-    
+
     # Identify secondary components: require BOTH correlation > min_correlation AND z-score > z_threshold
-    function identify_secondary_components(remaining_components, corr_vector, corr_z_vector, min_corr_threshold, z_threshold)
+    function identify_secondary_components(
+        remaining_components,
+        corr_vector,
+        corr_z_vector,
+        min_corr_threshold,
+        z_threshold,
+    )
         isempty(remaining_components) && return Int[]
         corr_mask = corr_vector[remaining_components] .> min_corr_threshold
         z_mask = abs.(corr_z_vector[remaining_components]) .> z_threshold
         combined_mask = corr_mask .& z_mask
         return remaining_components[combined_mask]
     end
-    
+
     # Identify secondary components for vEOG: spatial OR temporal (each requires both corr and z-score)
-    secondary_vEOG_spatial = identify_secondary_components(remaining_vEOG, vEOG_spatial_corr, vEOG_spatial_corr_z, min_correlation, z_threshold)
-    secondary_vEOG_temporal = identify_secondary_components(remaining_vEOG, vEOG_temporal_corr, vEOG_temporal_corr_z, min_correlation, z_threshold)
-    
+    secondary_vEOG_spatial = identify_secondary_components(
+        remaining_vEOG,
+        vEOG_spatial_corr,
+        vEOG_spatial_corr_z,
+        min_correlation,
+        z_threshold,
+    )
+    secondary_vEOG_temporal = identify_secondary_components(
+        remaining_vEOG,
+        vEOG_temporal_corr,
+        vEOG_temporal_corr_z,
+        min_correlation,
+        z_threshold,
+    )
+
     # Identify secondary components for hEOG: spatial OR temporal (each requires both corr and z-score)
-    secondary_hEOG_spatial = identify_secondary_components(remaining_hEOG, hEOG_spatial_corr, hEOG_spatial_corr_z, min_correlation, z_threshold)
-    secondary_hEOG_temporal = identify_secondary_components(remaining_hEOG, hEOG_temporal_corr, hEOG_temporal_corr_z, min_correlation, z_threshold)
-    
+    secondary_hEOG_spatial = identify_secondary_components(
+        remaining_hEOG,
+        hEOG_spatial_corr,
+        hEOG_spatial_corr_z,
+        min_correlation,
+        z_threshold,
+    )
+    secondary_hEOG_temporal = identify_secondary_components(
+        remaining_hEOG,
+        hEOG_temporal_corr,
+        hEOG_temporal_corr_z,
+        min_correlation,
+        z_threshold,
+    )
+
     # Combine spatial and temporal secondary components
     secondary_vEOG = union(secondary_vEOG_spatial, secondary_vEOG_temporal)
     secondary_hEOG = union(secondary_hEOG_spatial, secondary_hEOG_temporal)
-    
+
     # Combine primary and secondary components (secondary only added if two_step is true)
     identified_vEOG = two_step ? union(primary_vEOG, secondary_vEOG) : primary_vEOG
     identified_hEOG = two_step ? union(primary_hEOG, secondary_hEOG) : primary_hEOG
-    
+
     # DataFrame metrics
     metrics_df = DataFrame(
         :Component => 1:n_components,
@@ -1410,7 +1472,8 @@ function identify_ecg_components(
 
     # Early return if no components
     if n_components == 0
-        return Int[], DataFrame(
+        return Int[],
+        DataFrame(
             Component = Int[],
             num_peaks = Int[],
             num_valid_ibis = Int[],
@@ -1430,7 +1493,7 @@ function identify_ecg_components(
 
     for comp_idx = 1:n_components
         component_ts = components_subset[comp_idx, :]
-        
+
         # Z-score the time series for consistent peak detection across components
         ts_zscored = StatsBase.zscore(component_ts)
 
@@ -1439,15 +1502,14 @@ function identify_ecg_components(
         num_peaks = length(peak_indices)
 
         # Calculate IBI metrics
-        num_valid_ibis, mean_ibi, std_ibi, peak_ratio = _calculate_ibi_metrics(
-            peak_indices, dat.sample_rate, min_ibi_s, max_ibi_s
-        )
+        num_valid_ibis, mean_ibi, std_ibi, peak_ratio =
+            _calculate_ibi_metrics(peak_indices, dat.sample_rate, min_ibi_s, max_ibi_s)
 
         # Check if component meets ECG criteria
         has_sufficient_ibis = num_valid_ibis >= (min_peaks - 1)
         has_low_ibi_variability = std_ibi <= max_ibi_std_s
         has_good_peak_ratio = peak_ratio >= min_peak_ratio
-        
+
         is_ecg = has_sufficient_ibis && has_low_ibi_variability && has_good_peak_ratio
         is_ecg && push!(identified_ecg, comp_idx)
 
@@ -1500,21 +1562,21 @@ Calculate inter-beat interval (IBI) metrics from peak indices.
 - `peak_ratio::Float64`: Ratio of valid IBIs to total inter-peak intervals
 """
 function _calculate_ibi_metrics(peak_indices::Vector{Int}, sample_rate::Real, min_ibi_s::Real, max_ibi_s::Real)
-    
+
     num_peaks = length(peak_indices)
     num_peaks < 2 && return 0, NaN, NaN, 0.0
-    
+
     # Calculate IBIs
     ibis_s = diff(peak_indices) ./ sample_rate
-    
+
     # Filter valid IBIs
     valid_ibi_mask = (ibis_s .>= min_ibi_s) .& (ibis_s .<= max_ibi_s)
     valid_ibis = ibis_s[valid_ibi_mask]
     num_valid_ibis = length(valid_ibis)
-    
+
     # Calculate peak ratio
     peak_ratio = num_valid_ibis / (num_peaks - 1)
-    
+
     # Calculate statistics
     if num_valid_ibis > 1
         mean_ibi = mean(valid_ibis)
@@ -1526,7 +1588,7 @@ function _calculate_ibi_metrics(peak_indices::Vector{Int}, sample_rate::Real, mi
         mean_ibi = NaN
         std_ibi = NaN
     end
-    
+
     return num_valid_ibis, mean_ibi, std_ibi, peak_ratio
 end
 
@@ -1636,7 +1698,7 @@ function identify_line_noise_components(
 
     for i = 1:n_components
         signal = components[i, :]
-        
+
         # Prepare signal for FFT: truncate or zero-pad to nfft points
         if length(signal) > nfft
             signal_fft = signal[1:nfft]
@@ -1646,7 +1708,7 @@ function identify_line_noise_components(
         else
             signal_fft = signal
         end
-        
+
         # Calculate power spectral density
         psd[:, i] = abs2.(FFTW.rfft(signal_fft))
     end
@@ -1700,10 +1762,10 @@ function identify_line_noise_components(
     # Identify components with strong line noise characteristics
     # Step 1: High power ratio (z-score > threshold)
     high_power_ratio_mask = power_ratio_z .> z_threshold
-    
+
     # Step 2: Must have significant 2nd harmonic (> min_harmonic_power)
     has_harmonic_mask = metrics_df.harmonic_ratio .> min_harmonic_power
-    
+
     # Combine both criteria
     line_noise_comps = findall(high_power_ratio_mask .& has_harmonic_mask)
     sort!(line_noise_comps)
@@ -1859,4 +1921,3 @@ function Base.show(io::IO, artifacts::ArtifactComponents)
     println(io, "Channel Noise: $(artifacts.channel_noise)")
     println(io, "All: $all_comps")
 end
-

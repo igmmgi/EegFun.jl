@@ -67,9 +67,12 @@ function _find_batch_files(pattern::String, dir::String, participant_selection::
 end
 
 # create predicate like input participants()
-_find_batch_files(pattern::String, dir::String, participants::Int) = _find_batch_files(pattern, dir, x -> x .== participants)
-_find_batch_files(pattern::String, dir::String, participants::Vector{Int}) = _find_batch_files(pattern, dir, x -> [id in participants for id in x])
-_find_batch_files(pattern::String, dir::String, participants::Nothing) = _find_batch_files(pattern, dir, x -> fill(true, length(x)))
+_find_batch_files(pattern::String, dir::String, participants::Int) =
+    _find_batch_files(pattern, dir, x -> x .== participants)
+_find_batch_files(pattern::String, dir::String, participants::Vector{Int}) =
+    _find_batch_files(pattern, dir, x -> [id in participants for id in x])
+_find_batch_files(pattern::String, dir::String, participants::Nothing) =
+    _find_batch_files(pattern, dir, x -> fill(true, length(x)))
 
 
 """
@@ -86,7 +89,7 @@ function load_data(filepath::String)
     jldopen(filepath, "r") do file
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing
-        
+
         if length(keys_list) == 1 # Single variable - return it directly
             return file[keys_list[1]]
         else # Multiple variables - return a Dict
@@ -152,7 +155,7 @@ Load all data from files into a flat vector.
 """
 function load_all_data(files::Vector{String}, input_dir::String)
     all_data = EegData[]
-    for (i, file) in enumerate(sort(files, by=natural_sort_key))
+    for (i, file) in enumerate(sort(files, by = natural_sort_key))
         input_path = joinpath(input_dir, file)
         @info "Loading: $file ($i/$(length(files)))"
         file_data = load_data(input_path)
@@ -168,7 +171,7 @@ end
 
 function load_all_data(::Type{T}, files::Vector{String}, input_dir::String) where {T}
     all_data = T[]
-    for (i, file) in enumerate(sort(files, by=natural_sort_key))
+    for (i, file) in enumerate(sort(files, by = natural_sort_key))
         input_path = joinpath(input_dir, file)
         @info "Loading: $file ($i/$(length(files)))"
         file_data = load_data(input_path)
@@ -212,13 +215,13 @@ Group ERPs by their condition number.
 - `OrderedDict{Int, Vector{ErpData}}`: ERPs grouped by condition number (sorted)
 """
 function group_by_condition(erps::Vector{<:ErpData})
-    grouped = OrderedDict{Int, Vector{ErpData}}()
+    grouped = OrderedDict{Int,Vector{ErpData}}()
     for erp in erps
         cond_num = erp.condition
         push!(get!(grouped, cond_num, ErpData[]), erp)
     end
     # Sort by condition number
-    return OrderedDict(sort(collect(grouped), by=first))
+    return OrderedDict(sort(collect(grouped), by = first))
 end
 
 

@@ -141,8 +141,13 @@ using JLD2
             )
             data.triggers[100] = 1
 
-            continuous =
-                eegfun.ContinuousData("test_data", data, eegfun.Layout(DataFrame(), nothing, nothing), 500, eegfun.AnalysisInfo())
+            continuous = eegfun.ContinuousData(
+                "test_data",
+                data,
+                eegfun.Layout(DataFrame(), nothing, nothing),
+                500,
+                eegfun.AnalysisInfo(),
+            )
 
             resampled = eegfun.resample(continuous, 5)
 
@@ -228,8 +233,15 @@ using JLD2
                 push!(epochs, epoch)
             end
 
-            epoch_data =
-                eegfun.EpochData("test_data", 1, "condition_1", epochs, eegfun.Layout(DataFrame(), nothing, nothing), 512, eegfun.AnalysisInfo())
+            epoch_data = eegfun.EpochData(
+                "test_data",
+                1,
+                "condition_1",
+                epochs,
+                eegfun.Layout(DataFrame(), nothing, nothing),
+                512,
+                eegfun.AnalysisInfo(),
+            )
 
             original_n_samples = nrow(epoch_data.data[1])
 
@@ -255,8 +267,15 @@ using JLD2
                 push!(epochs, epoch)
             end
 
-            epoch_data =
-                eegfun.EpochData("test_data", 1, "condition_1", epochs, eegfun.Layout(DataFrame(), nothing, nothing), 256, eegfun.AnalysisInfo())
+            epoch_data = eegfun.EpochData(
+                "test_data",
+                1,
+                "condition_1",
+                epochs,
+                eegfun.Layout(DataFrame(), nothing, nothing),
+                256,
+                eegfun.AnalysisInfo(),
+            )
 
             resampled = eegfun.resample(epoch_data, 2)
 
@@ -318,7 +337,16 @@ using JLD2
             # Create ERP with condition info
             data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
 
-            erp = eegfun.ErpData("test_data", 1, "Target", data, eegfun.Layout(DataFrame(), nothing, nothing), 512, eegfun.AnalysisInfo(), 30)
+            erp = eegfun.ErpData(
+                "test_data",
+                1,
+                "Target",
+                data,
+                eegfun.Layout(DataFrame(), nothing, nothing),
+                512,
+                eegfun.AnalysisInfo(),
+                30,
+            )
 
             resampled = eegfun.resample(erp, 4)
 
@@ -465,7 +493,13 @@ using JLD2
                 output_dir = joinpath(tmpdir, "resampled")
 
                 # Process only participants 2 and 4
-                eegfun.resample("continuous", 2, input_dir = tmpdir, participant_selection = eegfun.participants([2, 4]), output_dir = output_dir)
+                eegfun.resample(
+                    "continuous",
+                    2,
+                    input_dir = tmpdir,
+                    participant_selection = eegfun.participants([2, 4]),
+                    output_dir = output_dir,
+                )
 
                 # Check only selected participants were processed
                 @test !isfile(joinpath(output_dir, "1_continuous.jld2"))
@@ -489,7 +523,13 @@ using JLD2
 
             analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 40.0)
 
-            continuous = eegfun.ContinuousData("test_data", data, eegfun.Layout(DataFrame(), nothing, nothing), 512, analysis_info)
+            continuous = eegfun.ContinuousData(
+                "test_data",
+                data,
+                eegfun.Layout(DataFrame(), nothing, nothing),
+                512,
+                analysis_info,
+            )
 
             resampled = eegfun.resample(continuous, 2)
 

@@ -93,11 +93,13 @@ function plot_joint_probability!(fig::Figure, ax::Axis, dat::DataFrame; kwargs..
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
     # Configure grid using the new axis styling function
-    _set_axis_grid!(ax; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 
     # Create the bar plot
     barplot!(

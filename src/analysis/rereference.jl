@@ -150,7 +150,12 @@ end
 Process a single file through rereferencing pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_rereference_file(filepath::String, output_path::String, reference_selection, condition_selection::Function)
+function _process_rereference_file(
+    filepath::String,
+    output_path::String,
+    reference_selection,
+    condition_selection::Function,
+)
     filename = basename(filepath)
 
     # Load data
@@ -164,18 +169,18 @@ function _process_rereference_file(filepath::String, output_path::String, refere
         return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
     end
 
-        # Select conditions
-        data = _condition_select(data, condition_selection)
+    # Select conditions
+    data = _condition_select(data, condition_selection)
 
-        # Handle empty data (valid case - just save empty vector)
-        if isempty(data)
-            jldsave(output_path; data = data)
-            ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
-            return BatchResult(true, filename, "Rereferenced to $ref_str (empty data)")
-        end
+    # Handle empty data (valid case - just save empty vector)
+    if isempty(data)
+        jldsave(output_path; data = data)
+        ref_str = reference_selection isa Symbol ? string(reference_selection) : join(reference_selection, ", ")
+        return BatchResult(true, filename, "Rereferenced to $ref_str (empty data)")
+    end
 
-        # Apply rereferencing (mutates data in-place)
-        rereference!.(data, reference_selection)
+    # Apply rereferencing (mutates data in-place)
+    rereference!.(data, reference_selection)
 
     # Save (always use "data" as variable name since load_data finds by type)
     jldsave(output_path; data = data)

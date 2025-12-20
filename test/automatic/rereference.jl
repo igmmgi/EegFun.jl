@@ -271,11 +271,11 @@ end
         @testset "Empty data files" begin
             # Use a separate directory to avoid interference from other tests
             empty_test_dir = mktempdir()
-            
+
             # Create file with empty data
             empty_file = joinpath(empty_test_dir, "empty_erps_cleaned.jld2")
             jldsave(empty_file; data = eegfun.ErpData[])
-            
+
             # Create the unrecognized file
             unrecognized_file = joinpath(empty_test_dir, "999_unrecognized_erps_cleaned.jld2")
             jldsave(unrecognized_file; other_data = "test")

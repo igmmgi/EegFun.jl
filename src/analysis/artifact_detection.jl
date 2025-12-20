@@ -252,17 +252,17 @@ function is_extreme_value!(
     # Process each selected epoch
     for epoch_idx in selected_epochs
         epoch_df = dat.data[epoch_idx]
-        
+
         # Get selected samples for this epoch
         selected_samples = get_selected_samples(epoch_df, sample_selection)
-        
+
         # Initialize artifact flag column for this epoch
         epoch_df[!, channel_out] = falses(nrow(epoch_df))
 
         # Create sample mask once (same for all channels)
         sample_mask = falses(nrow(epoch_df))
         sample_mask[selected_samples] .= true
-        
+
         if mode == :combined
             for ch in selected_channels
                 extreme_mask = _is_extreme_value(epoch_df[!, ch], threshold) .& sample_mask
@@ -389,7 +389,7 @@ function is_extreme_value(
 
         return combined_mask
 
-    elseif mode == :separate  
+    elseif mode == :separate
         # Separate mode - create temporary data object and use mutating version
         temp_dat = deepcopy(dat)
         is_extreme_value!(temp_dat, threshold; channel_selection, sample_selection, mode = :separate)
@@ -453,7 +453,7 @@ function n_extreme_value(
             combined_mask .|= extreme_mask
         end
         return sum(combined_mask)
-    elseif mode == :separate 
+    elseif mode == :separate
         selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
         counts = [sum(results[ch]) for ch in selected_channels]
         return DataFrame(channel = selected_channels, n_extreme = counts)
@@ -497,7 +497,7 @@ struct Rejection
     epoch::Int
 end
 
-Base.show(io::IO, r::Rejection) =  print(io, "Rejection(:$(r.label), $(r.epoch))")
+Base.show(io::IO, r::Rejection) = print(io, "Rejection(:$(r.label), $(r.epoch))")
 
 # Are two Rejections equal?
 is_equal_rejection(a::Rejection, b::Rejection) = a.label == b.label && a.epoch == b.epoch
@@ -581,12 +581,12 @@ mutable struct EpochRejectionInfo
     info::EpochInfo
     n_artifacts::Int
     abs_criterion::Real
-    abs_rejections::Union{Vector{Rejection}, Nothing}
+    abs_rejections::Union{Vector{Rejection},Nothing}
     z_criterion::Real
-    z_rejections::Union{ZScoreRejectionInfo, Nothing}
+    z_rejections::Union{ZScoreRejectionInfo,Nothing}
     rejected::Vector{Rejection}
-    repaired::Union{OrderedDict{Int, Vector{Symbol}}, Nothing}
-    skipped::Union{OrderedDict{Int, Vector{Symbol}}, Nothing}
+    repaired::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
+    skipped::Union{OrderedDict{Int,Vector{Symbol}},Nothing}
 end
 
 # Methods depending on EpochRejectionInfo must be defined after the struct
@@ -685,7 +685,7 @@ function detect_bad_epochs_automatic(
     name::String = "rejection_info",
 )::EpochRejectionInfo
 
-    @info "--------------------------------" 
+    @info "--------------------------------"
     @info "Condition: $(dat.condition) ($(dat.condition_name)) - Detecting bad epochs"
 
     # Validate inputs
@@ -756,22 +756,12 @@ function detect_bad_epochs_automatic(
     end
 
     # Create z-score rejection info if z_criterion > 0
-    z_rejections = z_criterion > 0 ? ZScoreRejectionInfo(
-        z_measures,
-        z_variance,
-        z_max,
-        z_min,
-        z_abs,
-        z_range,
-        z_kurtosis,
-    ) : nothing
+    z_rejections =
+        z_criterion > 0 ? ZScoreRejectionInfo(z_measures, z_variance, z_max, z_min, z_abs, z_range, z_kurtosis) :
+        nothing
 
     # Create rejection info
-    info = EpochInfo(
-        dat.condition,
-        dat.condition_name,
-        length(dat.data),
-    )
+    info = EpochInfo(dat.condition, dat.condition_name, length(dat.data))
 
     rejection_info = EpochRejectionInfo(
         name,
@@ -852,7 +842,8 @@ function _calculate_epoch_metrics(
         end
 
         if abs_criterion > 0
-            abs_threshold_violations = findall(epoch_data -> maximum(abs.(epoch_data)) > abs_criterion, channel_data_all)
+            abs_threshold_violations =
+                findall(epoch_data -> maximum(abs.(epoch_data)) > abs_criterion, channel_data_all)
             append!(metrics[:absolute_threshold][ch], abs_threshold_violations)
         end
 
@@ -898,7 +889,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
     println(io, "  Epochs total: $(info.info.n), Epochs rejected: $(length(unique_epochs(info.rejected)))")
     println(io, "  Artifacts total: $(info.n_artifacts)")
     println(io, "  Rejected epochs: $(print_vector(unique_epochs(info.rejected)))")
- 
+
     if info.abs_rejections !== nothing
         println(io, "  Rejection breakdown (absolute):")
         println(
@@ -930,12 +921,15 @@ function Base.show(io::IO, info::EpochRejectionInfo)
         if !isempty(nonempty_selected)
             println(io, "  Rejection breakdown (z-score):")
             for (vec, label) in nonempty_selected
-                println(io, "    $(label):  $(length(unique_epochs(vec))) unique epochs, $(length(unique_channels(vec))) unique channels")
+                println(
+                    io,
+                    "    $(label):  $(length(unique_epochs(vec))) unique epochs, $(length(unique_channels(vec))) unique channels",
+                )
             end
         end
     end
     println(io, "")
- 
+
 end
 
 Base.show(io::IO, infos::Vector{EpochRejectionInfo}) = Base.show.(Ref(io), infos)
@@ -970,7 +964,7 @@ function repair_artifacts!(
     method::Symbol = :neighbor_interpolation,
     kwargs...,
 )
-    @info "--------------------------------" 
+    @info "--------------------------------"
     @info "Condition: $(dat.condition) ($(dat.condition_name)) - Repairing artifacts using method: $method"
     if method == :neighbor_interpolation
         # Determine which channels can be repaired if not already done
@@ -1054,15 +1048,12 @@ Populates `artifacts.repaired` and `artifacts.skipped` with the analysis.
 This function only analyzes repairability - it does not perform any repairs.
 Use `repair_artifacts_neighbor!` to actually perform the repairs after this analysis.
 """
-function channel_repairable!(
-    artifacts::EpochRejectionInfo,
-    layout::Layout,
-)
+function channel_repairable!(artifacts::EpochRejectionInfo, layout::Layout)
     rejected = unique([r.epoch for r in artifacts.rejected])
-    
+
     # Initialize tracking dictionaries in artifacts struct (OrderedDict to maintain sorted order)
-    artifacts.repaired = OrderedDict{Int, Vector{Symbol}}()
-    artifacts.skipped = OrderedDict{Int, Vector{Symbol}}()
+    artifacts.repaired = OrderedDict{Int,Vector{Symbol}}()
+    artifacts.skipped = OrderedDict{Int,Vector{Symbol}}()
 
     # Process epochs in sorted order to maintain ordering in OrderedDict
     for epoch_idx in sort(rejected)
@@ -1070,7 +1061,7 @@ function channel_repairable!(
         isempty(bad_channels) && continue
 
         repairable_channels = check_channel_neighbors(bad_channels, layout)
-        
+
         if isempty(repairable_channels)
             if length(bad_channels) == 1
                 @info "Epoch $epoch_idx: Cannot repair channel $(bad_channels[1]) (fewer than 2 neighbors)"
@@ -1092,7 +1083,8 @@ function channel_repairable!(
     return artifacts
 end
 
-channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) = channel_repairable!.(artifacts, Ref(layout))
+channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) =
+    channel_repairable!.(artifacts, Ref(layout))
 
 
 """
@@ -1112,12 +1104,12 @@ Uses `dat.layout.neighbours` for neighbor information.
 # See also
 - `channel_repairable!`: Analyze which channels can be repaired before calling this function
 """
-function repair_artifacts_neighbor!( dat::EpochData, artifacts::EpochRejectionInfo)
+function repair_artifacts_neighbor!(dat::EpochData, artifacts::EpochRejectionInfo)
     # Check if repaired has been populated
     if isnothing(artifacts.repaired)
         throw(ArgumentError("repaired not populated. Call channel_repairable! first."))
     end
-    
+
     if isempty(artifacts.repaired)
         @info "No channels to repair (all bad channels were skipped)"
         return dat

@@ -107,15 +107,18 @@ function validate_baseline_interval(
 )::Union{IntervalIndex,IntervalTime}
     # Convert tuple to IntervalTime
     if baseline_interval isa Tuple
-        length(baseline_interval) == 2 || @minimal_error_throw "Baseline interval tuple must have 2 elements (start, stop), got: $baseline_interval"
+        length(baseline_interval) == 2 ||
+            @minimal_error_throw "Baseline interval tuple must have 2 elements (start, stop), got: $baseline_interval"
         baseline_interval = IntervalTime(start = Float64(baseline_interval[1]), stop = Float64(baseline_interval[2]))
     end
 
     # Validate structure
     if baseline_interval isa IntervalTime
-        baseline_interval.start > baseline_interval.stop && @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+        baseline_interval.start > baseline_interval.stop &&
+            @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
     elseif baseline_interval isa IntervalIndex
-        baseline_interval.start > baseline_interval.stop && @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+        baseline_interval.start > baseline_interval.stop &&
+            @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
     end
 
     return baseline_interval
@@ -142,7 +145,7 @@ function validate_baseline_interval(
 )::IntervalIndex
     # First normalize (convert tuple, validate structure)
     baseline_interval = validate_baseline_interval(baseline_interval)
-    
+
     # Convert IntervalTime to IntervalIndex
     if baseline_interval isa IntervalTime
         start_idx, stop_idx = find_idx_start_end(time, baseline_interval.start, baseline_interval.stop)
@@ -309,7 +312,7 @@ sort(files, by=natural_sort_key)  # Returns: ["file_1.jld2", "file_2.jld2", "fil
 sort(df, :file, by=natural_sort_key)
 ```
 """
-natural_sort_key(s::String)::String  = replace(s, r"\d+" => m -> lpad(String(m), 10, '0'))
+natural_sort_key(s::String)::String = replace(s, r"\d+" => m -> lpad(String(m), 10, '0'))
 
 
 
@@ -396,7 +399,13 @@ The data and layout DataFrames are copied with `copycols=true` to ensure
 independence, while immutable fields are shared.
 """
 function Base.copy(dat::ContinuousData)::ContinuousData
-    return ContinuousData(dat.file, copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
+    return ContinuousData(
+        dat.file,
+        copy(dat.data, copycols = true),
+        copy(dat.layout),
+        dat.sample_rate,
+        copy(dat.analysis_info),
+    )
 end
 
 """

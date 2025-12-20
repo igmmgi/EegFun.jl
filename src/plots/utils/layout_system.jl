@@ -9,13 +9,13 @@ const LAYOUT_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :topo_margin => (0.02, "Margin between plots in topo layout"),
     :topo_scale_offset => (0.1, "Offset factor for scale plot position"),
     :topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot as (x, y) tuple"),
-    
+
     # Grid layout parameters
     :grid_dims => (nothing, "Grid dimensions as (rows, cols) tuple. If nothing, automatically calculated"),
     :grid_rowgap => (10, "Gap between rows in grid layout (in pixels)"),
     :grid_colgap => (10, "Gap between columns in grid layout (in pixels)"),
-    :grid_skip_positions => (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
-    
+    :grid_skip_positions =>
+        (nothing, "Positions to skip in grid layout as vector of (row, col) tuples, e.g., [(2,1), (2,3)]"),
 )
 
 
@@ -43,7 +43,8 @@ end
 Create an Axis at the given position with settings from kwargs.
 """
 function _create_axis(fig, position; kwargs...)
-    return Axis(position;
+    return Axis(
+        position;
         xgridvisible = kwargs[:xgrid],
         ygridvisible = kwargs[:ygrid],
         xminorgridvisible = kwargs[:xminorgrid],
@@ -80,17 +81,17 @@ function _apply_grid_spacing!(fig::Figure, plot_layout::PlotLayout)
     rowgap_val = plot_layout.metadata[:grid_rowgap]
     colgap_val = plot_layout.metadata[:grid_colgap]
     rows, cols = plot_layout.dims
-    
+
     # Set row gaps for all rows (gaps are between rows, so set for rows 1 to rows-1)
     if rowgap_val !== nothing && rows > 1
-        for row in 1:(rows-1)
+        for row = 1:(rows-1)
             rowgap!(fig.layout, row, rowgap_val)
         end
     end
-    
+
     # Set column gaps for all columns (gaps are between columns, so set for cols 1 to cols-1)
     if colgap_val !== nothing && cols > 1
-        for col in 1:(cols-1)
+        for col = 1:(cols-1)
             colgap!(fig.layout, col, colgap_val)
         end
     end
@@ -133,7 +134,7 @@ If not specified, dimensions are calculated automatically.
 function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
     isempty(channels) && throw(ArgumentError("Cannot create grid layout with empty channel list"))
     metadata = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
-    
+
     # Get skip positions if provided
     skip_positions = metadata[:grid_skip_positions]
     skip_count = 0
@@ -149,7 +150,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         skip_count = length(skip_set)
         metadata[:grid_skip_positions] = skip_set
     end
-    
+
     # Calculate grid dimensions
     # If grid_dims is specified, validate it has enough space (accounting for skipped positions)
     # If not specified, calculate dimensions for n_channels + skip_count positions
@@ -158,7 +159,7 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
         # Validate and auto-correct grid dimensions if too small
         # Need enough positions for n_channels + skip_count (skip positions still need to be in grid)
         rows, cols = _validate_dims(metadata[:grid_dims], n_channels + skip_count)
-        
+
         # Validate skip positions are within grid bounds
         if skip_positions !== nothing
             for (row, col) in skip_positions
@@ -167,26 +168,34 @@ function _create_grid_layout(channels::Vector{Symbol}; kwargs...)
                 end
             end
         end
-        
+
         # Final check: ensure we have enough available positions after skipping
         available_positions = rows * cols - skip_count
         if available_positions < n_channels
-            throw(ArgumentError("Grid size ($rows×$cols) with $skip_count skipped positions has only $available_positions available positions, but need $n_channels"))
+            throw(
+                ArgumentError(
+                    "Grid size ($rows×$cols) with $skip_count skipped positions has only $available_positions available positions, but need $n_channels",
+                ),
+            )
         end
     else
         # Auto-calculate dimensions for n_channels + skip_count total positions
         rows, cols = best_rect(n_channels + skip_count)
-        
+
         # Validate skip positions are within auto-calculated grid bounds
         if skip_positions !== nothing
             for (row, col) in skip_positions
                 if row < 1 || row > rows || col < 1 || col > cols
-                    throw(ArgumentError("Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)"))
+                    throw(
+                        ArgumentError(
+                            "Skip position ($row, $col) is outside auto-calculated grid bounds ($rows×$cols)",
+                        ),
+                    )
                 end
             end
         end
     end
-    
+
     return PlotLayout(:grid, [rows, cols], [], channels, metadata)
 end
 
@@ -198,11 +207,7 @@ Create a topographic layout based on channel positions.
 # Keyword Arguments
 $(generate_kwargs_doc(LAYOUT_KWARGS))
 """
-function _create_topo_layout(
-    layout::Layout,
-    channels::Vector{Symbol};
-    kwargs...,
-)
+function _create_topo_layout(layout::Layout, channels::Vector{Symbol}; kwargs...)
     # Create metadata from kwargs
     topo_kwargs = _merge_plot_kwargs(LAYOUT_KWARGS, kwargs; validate = false)
 
@@ -224,7 +229,7 @@ function _create_topo_layout(
     positions = Tuple{Float64,Float64}[]
     new_plot_count = 0  # Count how many new plots we've placed
     last_new_plot_pos = nothing  # Track position of last new plot
-    
+
     for channel in channels
         idx = findfirst(==(channel), layout.data.label)
         if idx !== nothing
@@ -232,16 +237,16 @@ function _create_topo_layout(
         else
             @minimal_warning "Channel $channel not found in layout, finding non-overlapping position"
             new_plot_count += 1
-            
+
             # Calculate spacing based on layout range
             spacing = max(layout_xrange, layout_yrange) * 0.15  # Spacing between new plots
-            
+
             if new_plot_count == 1 # First new plot: to the right, near the top
                 new_pos = (layout_maxx + spacing, layout_maxy - spacing * 0.5)
             else # Subsequent new plots: directly below the previous new plot
                 new_pos = (last_new_plot_pos[1], last_new_plot_pos[2] - spacing)
             end
-            
+
             push!(positions, new_pos)
             last_new_plot_pos = new_pos  # Update for next new plot
         end
@@ -277,7 +282,11 @@ function create_layout(
     elseif layout_spec isa PlotLayout
         return layout_spec
     else
-        throw(ArgumentError("Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object."))
+        throw(
+            ArgumentError(
+                "Invalid layout specification: $layout_spec. Must be :single, :grid, :topo, or a PlotLayout object.",
+            ),
+        )
     end
 end
 
@@ -311,9 +320,9 @@ Otherwise returns dims as-is.
 function _validate_dims(dims, n_items::Int)
 
     dims === nothing && return best_rect(n_items)
-    
+
     length(dims) !== 2 && throw(ArgumentError("dims must be a tuple of two positive integers (rows, cols), got: $dims"))
-   
+
     # If grid is too small, use best_rect instead
     if dims[1] * dims[2] < n_items
         @minimal_warning "Grid size ($(dims[1])×$(dims[2])) is too small for $n_items items. Using optimal grid dimensions instead."
@@ -323,7 +332,7 @@ function _validate_dims(dims, n_items::Int)
     end
 
 end
-    
+
 
 """
     best_rect(n::Int)
@@ -350,13 +359,13 @@ function best_rect(n::Int)
 
     # Filter out 1×n arrangements (unless it's the only option)
     good_factors = Base.filter(f -> f[1] > 1, exact_factors)
-    
+
     if !isempty(good_factors)
         # Use the factor pair with the smallest difference (most square-like)
         best_exact = argmin(good_factors) do (r, c)
             abs(r - c)
         end
-        
+
         # Check if the best exact factor is reasonably square-like
         # If the aspect ratio is too extreme (> 3:1), prefer approximate square
         aspect_ratio = max(best_exact[1], best_exact[2]) / min(best_exact[1], best_exact[2])
@@ -369,7 +378,7 @@ function best_rect(n::Int)
     # This gives a more square-like arrangement even if it has extra spaces
     rows = ceil(Int, sqrt(n))
     cols = ceil(Int, n / rows)
-    
+
     return (rows, cols)
 end
 
@@ -384,7 +393,7 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
 
     axes = Axis[]
     channels = Symbol[]
-    
+
     if plot_layout.type == :single
         ax = _create_axis(fig, fig[1, 1]; kwargs...)
         _add_axis_and_channel!(axes, channels, ax, plot_layout.channels[1])
@@ -392,10 +401,10 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
     elseif plot_layout.type == :grid
         rows, cols = plot_layout.dims
         skip_positions = get(plot_layout.metadata, :grid_skip_positions, nothing)
-        
+
         channel_idx = 1
-        for row in 1:rows
-            for col in 1:cols
+        for row = 1:rows
+            for col = 1:cols
                 is_skipped = skip_positions !== nothing && (row, col) in skip_positions
                 has_channel = channel_idx <= length(plot_layout.channels)
                 if has_channel && !is_skipped
@@ -410,18 +419,19 @@ function _apply_layout!(fig::Figure, plot_layout::PlotLayout; kwargs...)
                 end
             end
         end
-        
+
         # apply grid spacing after axes are created (grid structure is now complete)
         _apply_grid_spacing!(fig, plot_layout)
-        
+
     elseif plot_layout.type == :topo
         plot_width = plot_layout.metadata[:topo_plot_width]
         plot_height = plot_layout.metadata[:topo_plot_height]
 
         # Compute bounds for normalization
         positions = plot_layout.positions
-        isempty(positions) && throw(ArgumentError("Cannot create topo layout with empty positions. Problem with layout creation!"))
-        
+        isempty(positions) &&
+            throw(ArgumentError("Cannot create topo layout with empty positions. Problem with layout creation!"))
+
         minx, maxx = extrema(pos[1] for pos in positions)
         miny, maxy = extrema(pos[2] for pos in positions)
         xrange = maxx - minx == 0 ? 1.0 : maxx - minx
@@ -499,15 +509,7 @@ function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLay
         for (idx, ax) in enumerate(axes)
             row = fld(idx-1, cols) + 1
             col = mod(idx-1, cols) + 1
-            _set_grid_axis_properties!(
-                ax,
-                plot_layout.channels[idx],
-                row,
-                col,
-                rows,
-                cols;
-                kwargs...,
-            )
+            _set_grid_axis_properties!(ax, plot_layout.channels[idx], row, col, rows, cols; kwargs...)
         end
     elseif plot_layout.type == :topo
         for (idx, ax) in enumerate(axes)

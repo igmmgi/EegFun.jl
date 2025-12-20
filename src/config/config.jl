@@ -42,7 +42,8 @@ function _param(::Type{T}, desc, default = nothing; allowed = nothing, min = not
     ConfigParameter{T}(description = desc, default = default, allowed = allowed, min = min, max = max)
 end
 
-string_param(desc, default = ""; allowed = nothing) = _param(Union{Vector{String},String}, desc, default, allowed = allowed)
+string_param(desc, default = ""; allowed = nothing) =
+    _param(Union{Vector{String},String}, desc, default, allowed = allowed)
 simple_string_param(desc, default = ""; allowed = nothing) = _param(String, desc, default, allowed = allowed)
 bool_param(desc, default = false) = _param(Bool, desc, default)
 number_param(desc, default, min = nothing, max = nothing) = _param(Real, desc, default, min = min, max = max)
@@ -104,10 +105,10 @@ const PARAMETERS = Dict{String,ConfigParameter}(
     "preprocess.ica.percentage_of_data" => number_param("Percentage of data to use for ICA (0-100).", 100.0, 0.0, 100.0),
 
     # Filtering settings - using helper function
-    _filter_param_spec("preprocess.filter.highpass",     true,  "hp",  0.1, 0.01,  20.0, 1, 1, 4)...,
-    _filter_param_spec("preprocess.filter.lowpass",      false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
-    _filter_param_spec("preprocess.filter.ica_highpass", true,  "hp",  1.0, 1.00,  20.0, 1, 1, 4)...,
-    _filter_param_spec("preprocess.filter.ica_lowpass",  false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("preprocess.filter.highpass", true, "hp", 0.1, 0.01, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
+    _filter_param_spec("preprocess.filter.ica_highpass", true, "hp", 1.0, 1.00, 20.0, 1, 1, 4)...,
+    _filter_param_spec("preprocess.filter.ica_lowpass", false, "lp", 30.0, 5.00, 500.0, 3, 1, 8)...,
 )
 # fmt: on
 

@@ -487,7 +487,13 @@ end
 Process a single file through filtering pipeline.
 Returns BatchResult with success/failure info.
 """
-function _process_filter_file(filepath::String, output_path::String, filter_type::String, cutoff_freq::Real, condition_selection::Function)
+function _process_filter_file(
+    filepath::String,
+    output_path::String,
+    filter_type::String,
+    cutoff_freq::Real,
+    condition_selection::Function,
+)
     filename = basename(filepath)
 
     # Load data
@@ -576,7 +582,8 @@ function filter(
         end
 
         # Setup directories
-        output_dir = something(output_dir, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
+        output_dir =
+            something(output_dir, _default_filter_output_dir(input_dir, file_pattern, filter_type, cutoff_freq))
         mkpath(output_dir)
 
         # Find files
@@ -589,7 +596,9 @@ function filter(
 
         # Create processing function with captured parameters
         @info "Filter settings: filter_type=\"$filter_type\", cutoff: $cutoff_freq Hz"
-        process_fn = (input_path, output_path) -> _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
+        process_fn =
+            (input_path, output_path) ->
+                _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
 
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Filtering")

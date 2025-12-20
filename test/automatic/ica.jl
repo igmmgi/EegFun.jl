@@ -172,15 +172,8 @@ using eegfun
         @test ecg_vec isa Vector{Int}
         @test ecg_df isa DataFrame
         @test all(
-            c in propertynames(ecg_df) for c in [
-                :Component,
-                :num_peaks,
-                :num_valid_ibis,
-                :mean_ibi_s,
-                :std_ibi_s,
-                :peak_ratio,
-                :heart_rate_bpm,
-            ]
+            c in propertynames(ecg_df) for
+            c in [:Component, :num_peaks, :num_valid_ibis, :mean_ibi_s, :std_ibi_s, :peak_ratio, :heart_rate_bpm]
         )
         # No samples selected -> empty results
         ecg_vec0, ecg_df0 = eegfun.identify_ecg_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))
@@ -197,14 +190,8 @@ using eegfun
         @test ln_vec isa Vector{Int}
         @test ln_df isa DataFrame
         @test all(
-            c in propertynames(ln_df) for c in [
-                :Component,
-                :line_power,
-                :surrounding_power,
-                :power_ratio,
-                :harmonic_ratio,
-                :power_ratio_zscore,
-            ]
+            c in propertynames(ln_df) for
+            c in [:Component, :line_power, :surrounding_power, :power_ratio, :harmonic_ratio, :power_ratio_zscore]
         )
         # No samples selected -> empty results
         ln_vec0, ln_df0 = eegfun.identify_line_noise_components(dat, ica_res; sample_selection = x -> falses(nrow(x)))

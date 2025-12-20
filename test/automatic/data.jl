@@ -326,20 +326,24 @@ using eegfun
         # Test get_selected_channels - comprehensive edge cases
         @testset "get_selected_channels edge cases" begin
             # Test channels([Symbol...]) - order preservation
-            selected_ordered = eegfun.get_selected_channels(continuous_data, eegfun.channels([:Cz, :Fz]); include_meta = false)
+            selected_ordered =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels([:Cz, :Fz]); include_meta = false)
             @test selected_ordered == [:Cz, :Fz]  # Order preserved
 
             # Test channels_not([Symbol...]) - exclusion and default order
-            selected_excluded = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([:Cz]); include_meta = false)
+            selected_excluded =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels_not([:Cz]); include_meta = false)
             @test :Cz ∉ selected_excluded
             @test :Fz ∈ selected_excluded
 
             # Test channels([Int...]) - order preservation
-            selected_by_num = eegfun.get_selected_channels(continuous_data, eegfun.channels([2, 1]); include_meta = false)
+            selected_by_num =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels([2, 1]); include_meta = false)
             @test selected_by_num == [:Cz, :Fz]  # Order preserved (channel 2, then 1)
 
             # Test channels_not([Int...]) - exclusion
-            selected_excluded_num = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([2]); include_meta = false)
+            selected_excluded_num =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels_not([2]); include_meta = false)
             @test :Cz ∉ selected_excluded_num
             @test :Fz ∈ selected_excluded_num
 
@@ -348,7 +352,8 @@ using eegfun
             @test selected_range == [:Fz, :Cz]  # Order preserved
 
             # Test channels_not(UnitRange) - exclusion
-            selected_excluded_range = eegfun.get_selected_channels(continuous_data, eegfun.channels_not(1:1); include_meta = false)
+            selected_excluded_range =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels_not(1:1); include_meta = false)
             @test :Fz ∉ selected_excluded_range
             @test :Cz ∈ selected_excluded_range
 
@@ -357,37 +362,60 @@ using eegfun
             @test selected_single == [:Fz]
 
             # Test channels(:Symbol) - single channel name
-            selected_single_sym = eegfun.get_selected_channels(continuous_data, eegfun.channels(:Fz); include_meta = false)
+            selected_single_sym =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels(:Fz); include_meta = false)
             @test selected_single_sym == [:Fz]
 
             # Test channels() - all channels
-            selected_all = eegfun.get_selected_channels(continuous_data, eegfun.channels(); include_meta = false, include_extra = false)
+            selected_all = eegfun.get_selected_channels(
+                continuous_data,
+                eegfun.channels();
+                include_meta = false,
+                include_extra = false,
+            )
             @test length(selected_all) == 2
             @test :Fz ∈ selected_all && :Cz ∈ selected_all
 
             # Test missing channel - should warn but continue
-            selected_missing = eegfun.get_selected_channels(continuous_data, eegfun.channels([:Fz, :NonExistent]); include_meta = false)
+            selected_missing = eegfun.get_selected_channels(
+                continuous_data,
+                eegfun.channels([:Fz, :NonExistent]);
+                include_meta = false,
+            )
             @test selected_missing == [:Fz]  # Only existing channel
 
             # Test duplicate channels - should warn but keep first occurrence
-            selected_dup = eegfun.get_selected_channels(continuous_data, eegfun.channels([:Fz, :Cz, :Fz]); include_meta = false)
+            selected_dup =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels([:Fz, :Cz, :Fz]); include_meta = false)
             @test selected_dup == [:Fz, :Cz]  # Duplicates removed, order preserved
 
             # Test invalid index - should warn but continue
-            selected_invalid = eegfun.get_selected_channels(continuous_data, eegfun.channels([1, 100]); include_meta = false)
+            selected_invalid =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels([1, 100]); include_meta = false)
             @test selected_invalid == [:Fz]  # Only valid index
 
             # Test channels_not with missing channel - should warn but continue
-            selected_excluded_missing = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([:NonExistent]); include_meta = false, include_extra = false)
+            selected_excluded_missing = eegfun.get_selected_channels(
+                continuous_data,
+                eegfun.channels_not([:NonExistent]);
+                include_meta = false,
+                include_extra = false,
+            )
             @test length(selected_excluded_missing) == 2  # All channels selected (exclusion didn't match)
 
             # Test channels_not with duplicates - should warn
-            selected_excluded_dup = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([:Fz, :Fz]); include_meta = false)
+            selected_excluded_dup =
+                eegfun.get_selected_channels(continuous_data, eegfun.channels_not([:Fz, :Fz]); include_meta = false)
             @test :Fz ∉ selected_excluded_dup
             @test :Cz ∈ selected_excluded_dup
 
             # Test mixed types in channels_not - tests the mixed Vector handler
-            selected_mixed = eegfun.get_selected_channels(continuous_data, eegfun.channels_not([1, 2:2]); include_meta = false, include_extra = false)
+            selected_mixed = eegfun.get_selected_channels(
+                continuous_data,
+                eegfun.channels_not([1, 2:2]);
+                include_meta = false,
+                include_extra = false,
+            )
             @test isempty(selected_mixed)  # Both channels excluded
 
         end

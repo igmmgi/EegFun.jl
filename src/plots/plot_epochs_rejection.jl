@@ -401,7 +401,7 @@ function _update_epoch_display!(
                 # Reset to automatic scaling by clearing the limits
                 ax.limits = (ax.limits[][1], nothing)
             end
-            
+
             # Apply X limits if provided
             if !isnothing(plot_kwargs[:xlim])
                 xlims!(ax, plot_kwargs[:xlim])

@@ -30,18 +30,30 @@ eegfun.channel_difference!(
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
 # ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
 
-@time ica_result_sobi = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
+@time ica_result_sobi =
+    eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
 
-ica_result_infomax = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
-ica_result_infomax_extended = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10, algorithm = :infomax_extended)
-ica_result_infomax = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10, n_components = 1)
+ica_result_infomax =
+    eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
+ica_result_infomax_extended = eegfun.run_ica(
+    dat;
+    sample_selection = eegfun.samples_not(:is_extreme_value_200),
+    percentage_of_data = 10,
+    algorithm = :infomax_extended,
+)
+ica_result_infomax = eegfun.run_ica(
+    dat;
+    sample_selection = eegfun.samples_not(:is_extreme_value_200),
+    percentage_of_data = 10,
+    n_components = 1,
+)
 
 eegfun.plot_ica_component_activation(dat, ica_result_sobi)
 eegfun.plot_component_spectrum(ica_result_infomax, dat, component_selection = eegfun.components(1:70))
 
 eegfun.plot_ica_component_activation(dat, ica_result_infomax_extended)
 
- # Calculate components for valid samples
+# Calculate components for valid samples
 selected_samples = eegfun.get_selected_samples(dat, eegfun.samples_not(:is_extreme_value_200))
 components, n_components = eegfun._prepare_ica_data_matrix(dat, ica_result, selected_samples)
 
@@ -52,15 +64,10 @@ lp_filter = eegfun.create_filter("lp", "iir", 5.0, dat.sample_rate; order = 3)
 comp1 = eegfun.filtfilt(lp_filter.filter_object, components[1, :])
 comp2 = eegfun.filtfilt(lp_filter.filter_object, components[17, :])
 
-component_artifacts, component_metrics = eegfun.identify_components(
-                    dat,
-                    ica_result,
-                    sample_selection = eegfun.samples_not(
-                        :is_extreme_value_200,
-                    ),
-                )
+component_artifacts, component_metrics =
+    eegfun.identify_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_200))
 
-eegfun.identify_ecg_components(dat, ica_result; sample_selection = eegfun.samples_not(:is_extreme_value_200))        
+eegfun.identify_ecg_components(dat, ica_result; sample_selection = eegfun.samples_not(:is_extreme_value_200))
 
 
 fig, ax, analysis_settings = eegfun.plot_databrowser(dat, ica_result_infomax)
@@ -212,7 +219,7 @@ eegfun.plot_topography(
     method = :spherical_spline,
     colorbar_plot = true,
     colorbar_position = (2, 1),
-    colorbar_vertical = false
+    colorbar_vertical = false,
 );
 
 eegfun.plot_topography(
@@ -288,13 +295,8 @@ eegfun.plot_ica_component_activation(dat, ica_result)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
 eegfun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
 
-component_artifacts, component_metrics = eegfun.identify_components(
-                    dat,
-                    ica_result,
-                    sample_selection = eegfun.samples_not(
-                        :is_extreme_value_100,
-                    ),
-                )
+component_artifacts, component_metrics =
+    eegfun.identify_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_100))
 
 
 

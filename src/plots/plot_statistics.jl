@@ -10,15 +10,15 @@ This module provides visualization functions for permutation test and analytic t
 Find continuous regions where mask is true, returning start and end times.
 """
 function find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
-    regions = Vector{Tuple{Float64, Float64}}()
-    
+    regions = Vector{Tuple{Float64,Float64}}()
+
     if isempty(mask) || !any(mask)
         return regions
     end
-    
+
     in_region = false
     start_idx = 0
-    
+
     for (i, is_sig) in enumerate(mask)
         if is_sig && !in_region
             # Start of a new region
@@ -30,12 +30,12 @@ function find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
             push!(regions, (time_points[start_idx], time_points[i-1]))
         end
     end
-    
+
     # Handle case where region extends to end
     if in_region
         push!(regions, (time_points[start_idx], time_points[end]))
     end
-    
+
     return regions
 end
 
@@ -94,28 +94,28 @@ function plot_analytic_ttest(
     show_significance::Bool = false,
     show_critical_t::Bool = false,
     shift_difference::Bool = false,
-    sig_bar_position::Union{Symbol, Float64} = :auto,
-    sig_bar_color = (:gray, 0.6)
+    sig_bar_position::Union{Symbol,Float64} = :auto,
+    sig_bar_color = (:gray, 0.6),
 )
     # If show_critical_t is requested, automatically enable t-value plotting
     # (since critical t-values only make sense when plotting t-values)
     plot_tvalues = plot_tvalues || show_critical_t
-    
+
     # Validate that at least something is being plotted
     if !plot_erp && !plot_difference && !plot_tvalues
         error("At least one of plot_erp, plot_difference, or plot_tvalues must be true")
     end
-    
+
     # Find channel index
     channel_idx = findfirst(==(channel), result.electrodes)
     if channel_idx === nothing
         error("Channel $channel not found in results. Available channels: $(result.electrodes)")
     end
-    
+
     # Get data for this channel
     time_points = result.time_points
     t_values = result.stat_matrix.t[channel_idx, :]
-    
+
     # Get p-values if available (only for AnalyticTTestResult)
     p_values = if isa(result, AnalyticTTestResult)
         result.stat_matrix.p[channel_idx, :]
@@ -123,7 +123,7 @@ function plot_analytic_ttest(
         # For ClusterPermutationResult, we don't have p_matrix, but we don't need it for plotting
         similar(t_values, Float64)  # Dummy array, won't be used
     end
-    
+
     # Get condition averages for this channel (both result types now have data)
     cond_A_erp = result.data[1]
     cond_B_erp = result.data[2]
@@ -132,13 +132,13 @@ function plot_analytic_ttest(
     cond_A_avg = cond_A_erp.data[!, channel_col]
     cond_B_avg = cond_B_erp.data[!, channel_col]
     erp_time_points = cond_A_erp.data[!, :time]
-    
+
     # Calculate difference: A - B
     # When A = B, difference = 0
     # When A > B, difference > 0 (positive)
     # When A < B, difference < 0 (negative)
     diff_wave = cond_A_avg .- cond_B_avg
-    
+
     # Pre-compute critical t-values if needed for significance bars or critical t lines
     critical_t_pos = nothing
     critical_t_neg = nothing
@@ -154,10 +154,10 @@ function plot_analytic_ttest(
             critical_t_neg = -critical_t_channel
         end
     end
-    
+
     # Create figure
     fig = Figure(size = (800, 600))
-    
+
     # Always use single axis (no dual axes)
     # Get title suffix based on result type
     title_suffix = if isa(result, AnalyticTTestResult)
@@ -165,7 +165,7 @@ function plot_analytic_ttest(
     else
         "Cluster permutation test ($(result.test_info.cluster_info.threshold_method))"
     end
-    
+
     # Determine y-axis label
     if plot_tvalues && (plot_erp || plot_difference)
         ylabel_str = "Amplitude (μV) / t-statistic"
@@ -174,27 +174,21 @@ function plot_analytic_ttest(
     else
         ylabel_str = "Amplitude (μV)"
     end
-    
-    ax = Axis(fig[1, 1],
-        xlabel = "Time (s)",
-        ylabel = ylabel_str,
-        title = "$channel - $title_suffix"
-    )
-    
+
+    ax = Axis(fig[1, 1], xlabel = "Time (s)", ylabel = ylabel_str, title = "$channel - $title_suffix")
+
     # Plot condition averages (ERP waveforms)
     if plot_erp
         cond_A_name = result.data[1].condition_name
         cond_B_name = result.data[2].condition_name
-        lines!(ax, erp_time_points, cond_A_avg, 
-               color = :blue, linewidth = 2, label = cond_A_name)
-        lines!(ax, erp_time_points, cond_B_avg, 
-               color = :red, linewidth = 2, label = cond_B_name)
+        lines!(ax, erp_time_points, cond_A_avg, color = :blue, linewidth = 2, label = cond_A_name)
+        lines!(ax, erp_time_points, cond_B_avg, color = :red, linewidth = 2, label = cond_B_name)
     end
-    
+
     # Initialize diff_offset for use in significance markers
     diff_offset = 0.0
     diff_wave_plot = diff_wave
-    
+
     # Plot difference wave (if requested)
     if plot_difference
         if shift_difference && plot_erp
@@ -204,48 +198,58 @@ function plot_analytic_ttest(
             min_cond = minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
             range_cond = max_cond - min_cond
             diff_offset = max_cond + range_cond * 0.3  # Offset by 30% of condition range
-            
+
             # The difference wave: when conditions overlap (A = B), diff = 0, so shifted wave = offset
             diff_wave_plot = diff_wave .+ diff_offset
             diff_label = "Difference (A-B, shifted)"
-            
+
             # Horizontal line at offset level = "zero difference" reference
             hlines!(ax, [diff_offset], color = (:gray, 0.7), linewidth = 1, linestyle = :dot)
-            
+
             # Add text annotation to clarify: this line represents zero difference
-            text!(ax, erp_time_points[end] * 0.98, diff_offset, 
-                  text = "0 μV (A=B)", 
-                  align = (:right, :center), 
-                  color = :gray, 
-                  fontsize = 9)
+            text!(
+                ax,
+                erp_time_points[end] * 0.98,
+                diff_offset,
+                text = "0 μV (A=B)",
+                align = (:right, :center),
+                color = :gray,
+                fontsize = 9,
+            )
         else
             # Plot difference wave at actual zero (not shifted)
             diff_wave_plot = diff_wave
             diff_offset = 0.0
             diff_label = "Difference (A-B)"
         end
-        
-        lines!(ax, erp_time_points, diff_wave_plot, 
-               color = :black, linewidth = 2, linestyle = :dash, label = diff_label)
-        
+
+        lines!(
+            ax,
+            erp_time_points,
+            diff_wave_plot,
+            color = :black,
+            linewidth = 2,
+            linestyle = :dash,
+            label = diff_label,
+        )
+
         # Add zero lines
         vlines!(ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
         hlines!(ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
     end
-    
+
     # Plot t-values (if requested)
     if plot_tvalues
         # Plot t-value line on same axis
-        lines!(ax, time_points, t_values,
-               color = :purple, linewidth = 2, linestyle = :solid, label = "t-statistic")
-        
+        lines!(ax, time_points, t_values, color = :purple, linewidth = 2, linestyle = :solid, label = "t-statistic")
+
         # Add zero line for t-values (only if not already added for difference wave)
         if !plot_difference
             hlines!(ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
             vlines!(ax, [0.0], color = :gray, linewidth = 1, linestyle = :dash)
         end
     end
-    
+
     # Show significance regions as grey bars at y=0 (or bottom spine)
     if show_significance
         # Use the result's significance masks, which already have the correction applied
@@ -254,14 +258,14 @@ function plot_analytic_ttest(
         sig_pos = result.masks.positive[channel_idx, :]
         sig_neg = result.masks.negative[channel_idx, :]
         sig_any = sig_pos .| sig_neg  # Any significance (positive or negative)
-        
+
         if any(sig_any)
             # Find continuous significant regions
             sig_regions = find_continuous_regions(sig_any, time_points)
-            
+
             # Always use the single axis for significance bars
             sig_ax = ax
-            
+
             # Calculate bar position and height based on data range and user preference
             if sig_bar_position isa Float64
                 # User specified custom position
@@ -272,8 +276,9 @@ function plot_analytic_ttest(
                     bar_height = t_range * 0.02  # 2% of range
                 elseif plot_difference || plot_erp
                     if plot_erp
-                        amp_range = maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) - 
-                                   minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
+                        amp_range =
+                            maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) -
+                            minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
                     else
                         amp_range = maximum(diff_wave_plot) - minimum(diff_wave_plot)
                     end
@@ -289,8 +294,9 @@ function plot_analytic_ttest(
                     bar_height = t_range * 0.02
                 elseif plot_difference || plot_erp
                     if plot_erp
-                        amp_range = maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) - 
-                                   minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
+                        amp_range =
+                            maximum([maximum(cond_A_avg), maximum(cond_B_avg)]) -
+                            minimum([minimum(cond_A_avg), minimum(cond_B_avg)])
                     else
                         amp_range = maximum(diff_wave_plot) - minimum(diff_wave_plot)
                     end
@@ -354,7 +360,7 @@ function plot_analytic_ttest(
                     bar_height = 0.05
                 end
             end
-            
+
             # Plot grey bars for each significant region
             for (t_start, t_end) in sig_regions
                 # Create rectangle vertices: bottom-left, bottom-right, top-right, top-left
@@ -365,26 +371,37 @@ function plot_analytic_ttest(
                     Point2f(t_start, bar_y + bar_height),
                 ]
                 # Use poly! to draw filled rectangle
-                poly!(sig_ax, rect_vertices, 
-                      color = sig_bar_color,
-                      strokewidth = 0)
+                poly!(sig_ax, rect_vertices, color = sig_bar_color, strokewidth = 0)
             end
         end
     end
-    
+
     # Show critical t-values if requested (only relevant for t-value plots)
     if show_critical_t && plot_tvalues && critical_t_pos !== nothing
         # Plot critical t boundaries on same axis (symmetric around zero)
         # These are the actual critical t-values, not scaled to amplitude
-        lines!(ax, time_points, critical_t_pos, 
-               color = :grey, linewidth = 2, linestyle = :dashdot, label = "Critical t+")
-        lines!(ax, time_points, critical_t_neg, 
-               color = :grey, linewidth = 2, linestyle = :dashdot, label = "Critical t-")
+        lines!(
+            ax,
+            time_points,
+            critical_t_pos,
+            color = :grey,
+            linewidth = 2,
+            linestyle = :dashdot,
+            label = "Critical t+",
+        )
+        lines!(
+            ax,
+            time_points,
+            critical_t_neg,
+            color = :grey,
+            linewidth = 2,
+            linestyle = :dashdot,
+            label = "Critical t-",
+        )
     end
-    
+
     # Add legend
     axislegend(ax, position = :rt)
-    
+
     return fig
 end
-

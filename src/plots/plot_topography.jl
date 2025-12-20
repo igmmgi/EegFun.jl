@@ -17,7 +17,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
     gridscale = pop!(plot_kwargs, :gridscale)
     colorbar_position = pop!(plot_kwargs, :colorbar_position)
     ylim = pop!(plot_kwargs, :ylim)
-    
+
     # Set title based on user preferences and data
     if plot_kwargs[:show_title]
         if plot_kwargs[:title] != ""
@@ -54,7 +54,7 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         extendlow = :auto,
         extendhigh = :auto,
         colormap = pop!(plot_kwargs, :colormap),
-        nan_color = :transparent
+        nan_color = :transparent,
     )
     co.colorrange = ylim
 
@@ -151,14 +151,14 @@ function plot_topography(
 
     n_datasets = length(dat)
     n_datasets == 0 && @minimal_error_throw "Cannot plot empty vector of datasets"
-    
+
     # Check if colorbars are enabled and get colorbar position
-    kwargs_dict = Dict{Symbol, Any}(kwargs)
+    kwargs_dict = Dict{Symbol,Any}(kwargs)
     colorbar_enabled = get(kwargs_dict, :colorbar_plot, true)
     user_colorbar_position = get(kwargs_dict, :colorbar_position, nothing)
     colorbar_plot_numbers = get(kwargs_dict, :colorbar_plot_numbers, [])
     dims = get(kwargs_dict, :dims, nothing)
-    
+
     # Calculate grid dimensions for plots
     if isnothing(dims)
         plot_rows, plot_cols = best_rect(n_datasets)
@@ -173,7 +173,7 @@ function plot_topography(
             throw(ArgumentError("Grid dimensions $dims provide $total_cells cells but need $n_datasets."))
         end
     end
-    
+
     # Determine layout based on colorbar position
     if colorbar_enabled && user_colorbar_position !== nothing
         # User provided custom colorbar position - use it
@@ -197,17 +197,17 @@ function plot_topography(
         total_rows = plot_rows
         total_cols = plot_cols
     end
-    
+
     # Create single figure with subplots
     set_window_title(_generate_window_title(dat))
     fig = Figure()
     axes = Axis[]
-    
+
     # Plot each dataset in its own subplot
     for (idx, dataset) in enumerate(dat)
         base_row = div(idx - 1, plot_cols) + 1
         base_col = mod1(idx, plot_cols)
-        
+
         if colorbar_enabled && user_colorbar_position !== nothing
             # User provided custom colorbar position
             cb_row_offset, cb_col_offset = user_colorbar_position
@@ -235,15 +235,15 @@ function plot_topography(
             plot_row = base_row
             plot_col = base_col
         end
-        
+
         ax = Axis(fig[plot_row, plot_col])
         push!(axes, ax)
-        
+
         # Set subplot title to condition name if available
         if hasproperty(dataset, :condition_name) && dataset.condition_name !== ""
             ax.title = dataset.condition_name
         end
-        
+
         # Prepare kwargs for this subplot
         subplot_kwargs = copy(kwargs_dict)
         # Determine if this dataset should have a colorbar
@@ -256,7 +256,7 @@ function plot_topography(
             # Disable colorbar for this specific dataset
             subplot_kwargs[:colorbar_plot] = false
         end
-        
+
         # Plot the topography in this subplot
         plot_topography!(
             fig,
@@ -267,12 +267,12 @@ function plot_topography(
             subplot_kwargs...,
         )
     end
-    
+
     # Set column sizes only if colorbars are enabled and to the right (default)
     if colorbar_enabled && (user_colorbar_position === nothing || user_colorbar_position[1] <= 1)
         # Make colorbar columns narrower than plot columns
         # This ensures colorbars don't take up too much space while keeping plots visible
-        for col in 1:total_cols
+        for col = 1:total_cols
             if col % 2 == 1
                 colsize!(fig.layout, col, Auto())
             else
@@ -280,15 +280,15 @@ function plot_topography(
             end
         end
     end
-    
+
     # Only enable interactivity if all datasets are ErpData (context menu requires ErpData)
     if interactive && all(d isa ErpData for d in dat)
         shared_selection_state = TopoSelectionState(axes)
         _setup_shared_topo_interactivity!(fig, axes, dat, shared_selection_state)
     end
-    
+
     display_plot && display_figure(fig)
-    
+
     set_window_title("Makie")
     return fig, axes
 end
@@ -628,7 +628,7 @@ end
 Set up keyboard event handlers for topographic plots.
 Handles both single axis and multiple axes.
 """
-function _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis, Vector{Axis}})
+function _setup_topo_keyboard_handlers!(fig::Figure, axes::Union{Axis,Vector{Axis}})
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press
             if event.key == Keyboard.i
@@ -679,9 +679,9 @@ mutable struct TopoSelectionState
             Observable(false),
             Observable((0.0, 0.0, 0.0, 0.0)),
             Observable(false),
-            [Makie.Poly[] for _ in 1:n_axes],  # Empty vectors for rectangles per axis
+            [Makie.Poly[] for _ = 1:n_axes],  # Empty vectors for rectangles per axis
             Observable{Tuple{Float64,Float64,Float64,Float64}}[],  # Empty vector for bounds
-            [nothing for _ in 1:n_axes],  # No temporary rectangles initially
+            [nothing for _ = 1:n_axes],  # No temporary rectangles initially
             Symbol[],  # Empty vector for selected channels
             axes,  # Store all axes
         )
@@ -693,7 +693,12 @@ end
 
 Set up shared interactivity for multiple topographic plots.
 """
-function _setup_shared_topo_interactivity!(fig::Figure, axes::Vector{Axis}, datasets::Vector, shared_selection_state::TopoSelectionState)
+function _setup_shared_topo_interactivity!(
+    fig::Figure,
+    axes::Vector{Axis},
+    datasets::Vector,
+    shared_selection_state::TopoSelectionState,
+)
     deregister_interaction!.(axes, :rectanglezoom)
     _setup_topo_keyboard_handlers!(fig, axes)
     _setup_shared_topo_selection!(fig, datasets, shared_selection_state)
@@ -755,7 +760,11 @@ Create rectangles on all axes with the given points.
 - If `is_temporary`, stores in `temp_rectangles`
 - Otherwise, creates permanent rectangles and stores in `rectangles`
 """
-function _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, rect_points::Vector{Point2f}, is_temporary::Bool)
+function _create_rectangles_on_all_axes!(
+    selection_state::TopoSelectionState,
+    rect_points::Vector{Point2f},
+    is_temporary::Bool,
+)
     for (idx, other_ax) in enumerate(selection_state.axes)
         rect = poly!(
             other_ax,
@@ -766,7 +775,7 @@ function _create_rectangles_on_all_axes!(selection_state::TopoSelectionState, re
             visible = true,
             overdraw = true,
         )
-        
+
         if is_temporary
             selection_state.temp_rectangles[idx] = rect
         else
@@ -811,13 +820,11 @@ function _setup_shared_topo_selection!(fig::Figure, datasets::Vector, shared_sel
     on(events(fig).mousebutton) do event
         # Check if mouse is over any of the axes in the shared state
         mouse_pos = events(fig).mouseposition[]
-        active_ax, active_dataset = _find_active_axis_with_dataset(
-            shared_selection_state.axes, mouse_pos, datasets
-        )
-        
+        active_ax, active_dataset = _find_active_axis_with_dataset(shared_selection_state.axes, mouse_pos, datasets)
+
         # Only process if mouse is over one of the shared axes
         active_ax === nothing && return
-        
+
         if event.button == Mouse.left
             if event.action == Mouse.press
                 if shift_pressed[]
@@ -871,7 +878,7 @@ function _start_topo_selection!(ax::Axis, selection_state::TopoSelectionState)
     selection_state.bounds[] = (mouse_x, mouse_y, mouse_x, mouse_y)
 
     # Create temporary rectangles for all axes (all points same initially)
-    initial_points = [Point2f(mouse_x, mouse_y) for _ in 1:4]
+    initial_points = [Point2f(mouse_x, mouse_y) for _ = 1:4]
     _create_rectangles_on_all_axes!(selection_state, initial_points, true)
 
     _update_topo_selection!(ax, selection_state)
@@ -932,7 +939,7 @@ function _finish_topo_selection!(ax::Axis, selection_state::TopoSelectionState, 
 
     unique_electrodes = unique(all_selected_electrodes)
     @info "$(length(selection_state.bounds_list[])) regions; Channels: $unique_electrodes"
-    
+
     # Store selected channels in the state
     selection_state.selected_channels = unique_electrodes
 
@@ -1005,7 +1012,8 @@ This approach uses the real layout data from the topographic plot.
 """
 function _find_electrodes_in_region(x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data)
     # Filter electrodes that are inside the selection rectangle
-    selected_rows = Base.filter(row -> x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max, eachrow(original_data.layout.data))
+    selected_rows =
+        Base.filter(row -> x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max, eachrow(original_data.layout.data))
     return [Symbol(row.label) for row in selected_rows]
 end
 
@@ -1015,15 +1023,15 @@ end
 Show a context menu for plotting selected channels from topography plot.
 Supports both single dataset and multiple datasets (conditions).
 """
-function _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, selected_channels::Vector{Symbol})
+function _show_topo_context_menu!(datasets::Union{ErpData,Vector{ErpData}}, selected_channels::Vector{Symbol})
 
     datasets_vec = datasets isa Vector ? datasets : [datasets]
     has_multiple_conditions = length(datasets_vec) > 1
     has_multiple_channels = length(selected_channels) > 1
-    
+
     plot_types = String[]
-    plot_configs = Tuple{Bool, Bool, String}[]
-    
+    plot_configs = Tuple{Bool,Bool,String}[]
+
     if has_multiple_conditions && has_multiple_channels
         # Multiple conditions and multiple channels: show all 4 options
         push!(plot_types, "Separate channels, separate conditions")
@@ -1040,44 +1048,32 @@ function _show_topo_context_menu!(datasets::Union{ErpData, Vector{ErpData}}, sel
         # Multiple conditions but single channel: only condition averaging options
         push!(plot_types, "Separate conditions")
         push!(plot_types, "Average conditions")
-        plot_configs = [
-            (false, false, "separate conditions"),
-            (true, false, "average conditions"),
-        ]
+        plot_configs = [(false, false, "separate conditions"), (true, false, "average conditions")]
     elseif has_multiple_channels
         # Single condition but multiple channels: only channel averaging options
         push!(plot_types, "Plot Individual Channels")
         push!(plot_types, "Plot Averaged Channels")
-        plot_configs = [
-            (false, false, "individual channels"),
-            (false, true, "averaged channels"),
-        ]
+        plot_configs = [(false, false, "individual channels"), (false, true, "averaged channels")]
     else
         # Single condition and single channel: just plot it
         push!(plot_types, "Plot Channel")
-        plot_configs = [
-            (false, false, "single channel"),
-        ]
+        plot_configs = [(false, false, "single channel"),]
     end
-    
+
     menu_fig = Figure(size = (400, 200))
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
-    
+
     for (idx, btn) in enumerate(menu_buttons)
         on(btn.clicks) do n
             avg_conditions, avg_channels, msg = plot_configs[idx]
-            
+
             # Prepare data: average conditions if needed
             data_to_plot = avg_conditions ? _average_conditions(datasets_vec) : datasets_vec
             @info "Plotting ERP: $msg: $selected_channels"
-            plot_erp(
-                data_to_plot;
-                channel_selection = channels(selected_channels),
-                average_channels = avg_channels,
-            )
+            plot_erp(data_to_plot; channel_selection = channels(selected_channels), average_channels = avg_channels)
         end
     end
-    
+
     new_screen = GLMakie.Screen()
     display(new_screen, menu_fig)
 end

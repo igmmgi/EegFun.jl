@@ -28,12 +28,8 @@ using CSV
         output_dir = joinpath(test_dir, "differences")
 
         # Test basic difference creation
-        result = eegfun.condition_difference(
-            "erps_cleaned",
-            [(1, 2), (3, 4)],
-            input_dir = test_dir,
-            output_dir = output_dir,
-        )
+        result =
+            eegfun.condition_difference("erps_cleaned", [(1, 2), (3, 4)], input_dir = test_dir, output_dir = output_dir)
 
         # Verify output files were created
         @test isdir(output_dir)
@@ -82,12 +78,8 @@ using CSV
     @testset "Vector condition pairs" begin
         output_dir = joinpath(test_dir, "differences_vector")
 
-        result = eegfun.condition_difference(
-            "erps_cleaned",
-            [[1, 2], [3, 4]],
-            input_dir = test_dir,
-            output_dir = output_dir,
-        )
+        result =
+            eegfun.condition_difference("erps_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
         @test isdir(output_dir)
         output_files = readdir(output_dir)
@@ -129,11 +121,7 @@ using CSV
 
     @testset "Error handling" begin
         @testset "Invalid input directory" begin
-            @test_throws Exception eegfun.condition_difference(
-                "erps_cleaned",
-                [(1, 2)],
-                input_dir = "/nonexistent/dir",
-            )
+            @test_throws Exception eegfun.condition_difference("erps_cleaned", [(1, 2)], input_dir = "/nonexistent/dir")
         end
 
         @testset "Non-ERP pattern" begin

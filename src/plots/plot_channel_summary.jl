@@ -3,7 +3,6 @@
 # =============================================================================
 const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :display_plot => (true, "Display plot."),
-    
     :sort_values => (false, "Sort the bars by the values in the `col` column in descending order."),
     :average_over => (nothing, "Column to average over (e.g., :epoch). If specified, will compute mean ± 95% CI."),
     :dims => (nothing, "Tuple (rows, cols) for grid layout. default = best_rect(n_columns)."),
@@ -25,7 +24,6 @@ const PLOT_CHANNEL_SUMMARY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :ygrid => (false, "Whether to show y-axis grid"),
     :xminorgrid => (false, "Whether to show x-axis minor grid"),
     :yminorgrid => (false, "Whether to show y-axis minor grid"),
-
 )
 
 
@@ -305,9 +303,11 @@ function _configure_axis!(
     ax.yticklabelsize = plot_kwargs[:tick_fontsize]
 
     # Configure grid using the new axis styling function
-    _set_axis_grid!(ax; 
-                     xgrid = plot_kwargs[:xgrid], 
-                     ygrid = plot_kwargs[:ygrid],
-                     xminorgrid = plot_kwargs[:xminorgrid], 
-                     yminorgrid = plot_kwargs[:yminorgrid])
+    _set_axis_grid!(
+        ax;
+        xgrid = plot_kwargs[:xgrid],
+        ygrid = plot_kwargs[:ygrid],
+        xminorgrid = plot_kwargs[:xminorgrid],
+        yminorgrid = plot_kwargs[:yminorgrid],
+    )
 end

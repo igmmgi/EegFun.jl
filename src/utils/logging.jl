@@ -78,7 +78,7 @@ function _open_log_file(handle_field::Union{Nothing,IO}, start_time_field::Union
     handle = open(filename, "w")
     start_time = now()
     _write_log_header(handle, start_time)
-    
+
     return handle, start_time
 end
 
@@ -118,7 +118,12 @@ end
 
 Create a TeeLogger that writes to both console and file.
 """
-function _create_tee_logger(console_level::Logging.LogLevel, file_handle::IO, file_level::Logging.LogLevel; include_kwargs::Bool = false)
+function _create_tee_logger(
+    console_level::Logging.LogLevel,
+    file_handle::IO,
+    file_level::Logging.LogLevel;
+    include_kwargs::Bool = false,
+)
     console_logger = ConsoleLogger(stdout, console_level)
     file_logger = _create_file_logger(file_handle, file_level; include_kwargs = include_kwargs)
     return TeeLogger(console_logger, file_logger)
@@ -250,7 +255,7 @@ function _get_last_history_line()::Union{String,Nothing}
     if isfile(history_file)
         try # Read last line (skip empty lines)
             lines = readlines(history_file)
-            for i in length(lines):-1:1
+            for i = length(lines):-1:1
                 line = strip(lines[i])
                 if !isempty(line) && !startswith(line, "#")
                     return line
@@ -278,5 +283,3 @@ macro log_call(func_name)
         last_line = _get_last_history_line()
     end
 end
-
-

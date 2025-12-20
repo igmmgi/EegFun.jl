@@ -237,8 +237,18 @@ using eegfun
 
         # Test constructor
         is_sub_gaussian = falses(2)  # All super-Gaussian for test (all false)
-        ica_info =
-            eegfun.InfoIca(unmixing, mixing, sphere, variance, scale, mean, ica_label, removed_activations, layout, is_sub_gaussian)
+        ica_info = eegfun.InfoIca(
+            unmixing,
+            mixing,
+            sphere,
+            variance,
+            scale,
+            mean,
+            ica_label,
+            removed_activations,
+            layout,
+            is_sub_gaussian,
+        )
 
         @test ica_info.unmixing == unmixing
         @test ica_info.mixing == mixing
@@ -279,8 +289,18 @@ using eegfun
         variance = [0.5, 0.3]
         ica_label = [:IC1, :IC2]
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
-        ica_info =
-            eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, [0.0, 0.0], ica_label, removed_activations, layout, falses(2))
+        ica_info = eegfun.InfoIca(
+            unmixing,
+            mixing,
+            sphere,
+            variance,
+            1.0,
+            [0.0, 0.0],
+            ica_label,
+            removed_activations,
+            layout,
+            falses(2),
+        )
         @test_nowarn show(stdout, ica_info)
         @test_nowarn show(stdout, MIME"text/plain"(), ica_info)
 
@@ -301,8 +321,18 @@ using eegfun
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
         removed_activations[1] = [1.0 2.0; 3.0 4.0]
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        ica_info =
-            eegfun.InfoIca(unmixing, mixing, sphere, variance, 1.0, [0.0, 0.0], ica_label, removed_activations, layout, falses(2))
+        ica_info = eegfun.InfoIca(
+            unmixing,
+            mixing,
+            sphere,
+            variance,
+            1.0,
+            [0.0, 0.0],
+            ica_label,
+            removed_activations,
+            layout,
+            falses(2),
+        )
 
         copied = copy(ica_info)
         @test copied.unmixing == ica_info.unmixing
