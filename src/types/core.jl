@@ -222,6 +222,66 @@ mutable struct EpochData <: MultiDataFrameEeg
 end
 
 """
+    TimeFreqData
+
+Stores time-frequency analysis results for a single condition/average.
+
+This type represents time-frequency power data where all time-frequency points
+are stored in a single DataFrame with columns for time, frequency, and each
+electrode channel. Suitable for averaged TF representations.
+
+# Fields
+- `file::String`: Source filename
+- `condition::Int64`: Condition number
+- `condition_name::String`: Name of the condition
+- `data::DataFrame`: DataFrame with columns: time, freq, [electrode channels...]
+- `layout::Layout`: Layout object containing electrode positioning information
+- `sample_rate::Int64`: Sample rate of the original data in Hz
+- `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`)
+- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+"""
+mutable struct TimeFreqData <: SingleDataFrameEeg
+    file::String
+    condition::Int64
+    condition_name::String
+    data::DataFrame
+    layout::Layout
+    sample_rate::Int64
+    method::Symbol
+    analysis_info::AnalysisInfo
+end
+
+"""
+    TimeFreqEpochData
+
+Stores time-frequency analysis results with individual trials preserved.
+
+This type represents time-frequency power data organized into individual trials,
+where each trial is stored as a separate DataFrame. Each DataFrame contains
+columns for time, frequency, and each electrode channel.
+
+# Fields
+- `file::String`: Source filename (constant across all trials)
+- `condition::Int64`: Condition number (constant across all trials)
+- `condition_name::String`: Name of the condition (constant across all trials)
+- `data::Vector{DataFrame}`: Vector of DataFrames, one per trial (columns: time, freq, [electrodes...])
+- `layout::Layout`: Layout object containing electrode positioning information
+- `sample_rate::Int64`: Sample rate of the original data in Hz
+- `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`)
+- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+"""
+mutable struct TimeFreqEpochData <: MultiDataFrameEeg
+    file::String
+    condition::Int64
+    condition_name::String
+    data::Vector{DataFrame}
+    layout::Layout
+    sample_rate::Int64
+    method::Symbol
+    analysis_info::AnalysisInfo
+end
+
+"""
     AbstractInterval
 
 Abstract type for interval specifications used in baseline correction and other time-based operations.
@@ -545,6 +605,34 @@ function Base.show(io::IO, dat::SingleDataFrameEeg)
     println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
     println(io, "Labels: ", print_vector(channel_labels(dat)))
     println(io, "Duration: ", duration(dat), " S")
+    println(io, "Sample Rate: ", sample_rate(dat))
+end
+
+
+function Base.show(io::IO, dat::TimeFreqData)
+    n_times = length(unique(dat.data.time))
+    n_freqs = length(unique(dat.data.freq))
+    freqs = unique(dat.data.freq)
+    println(io, "File: $(filename(dat))")
+    println(io, "Type: TimeFreqData ($(dat.method))")
+    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
+    println(io, "Size: $(n_times) times × $(n_freqs) freqs × $(length(channel_labels(dat))) channels")
+    println(io, "Freq range: $(minimum(freqs)) - $(maximum(freqs)) Hz")
+    println(io, "Labels: ", print_vector(channel_labels(dat)))
+    println(io, "Sample Rate: ", sample_rate(dat))
+end
+
+function Base.show(io::IO, dat::TimeFreqEpochData)
+    n_trials = length(dat.data)
+    n_times = n_trials > 0 ? length(unique(dat.data[1].time)) : 0
+    n_freqs = n_trials > 0 ? length(unique(dat.data[1].freq)) : 0
+    freqs = n_trials > 0 ? unique(dat.data[1].freq) : Float64[]
+    println(io, "File: $(filename(dat))")
+    println(io, "Type: TimeFreqEpochData ($(dat.method))")
+    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
+    println(io, "Size: $(n_trials) trials × $(n_times) times × $(n_freqs) freqs × $(length(channel_labels(dat))) channels")
+    !isempty(freqs) && println(io, "Freq range: $(minimum(freqs)) - $(maximum(freqs)) Hz")
+    println(io, "Labels: ", print_vector(channel_labels(dat)))
     println(io, "Sample Rate: ", sample_rate(dat))
 end
 

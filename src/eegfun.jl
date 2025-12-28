@@ -1,5 +1,6 @@
 __precompile__(true)
 
+
 module eegfun
 
 # Core dependencies
@@ -85,7 +86,7 @@ include("analysis/mirror.jl")
 include("analysis/realign.jl")
 include("analysis/rereference.jl")
 include("analysis/resample.jl")
-include("analysis/tf.jl")
+include("analysis/time_frequency.jl")
 include("analysis/triggers.jl")
 
 # analysis pipelines
@@ -117,6 +118,7 @@ include("plots/plot_ica.jl")
 include("plots/plot_joint_probability.jl")
 include("plots/plot_layout.jl")
 include("plots/plot_power_spectrum.jl")
+include("plots/plot_time_frequency.jl")
 include("plots/plot_topography.jl")
 include("plots/plot_triggers.jl")
 include("plots/plot_filter.jl")

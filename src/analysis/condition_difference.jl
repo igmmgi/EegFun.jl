@@ -250,3 +250,137 @@ end
 """
 Batch computation of condition difference waves for ERP data.
 """
+
+# ============================================================================
+# TF Difference for TimeFreqData
+# ============================================================================
+
+"""
+    tf_difference(tf1::TimeFreqData, tf2::TimeFreqData) -> TimeFreqData
+
+Compute the difference between two TimeFreqData objects (tf1 - tf2).
+
+# Arguments
+- `tf1::TimeFreqData`: First TF data (minuend)
+- `tf2::TimeFreqData`: Second TF data (subtrahend)
+
+# Returns
+- `TimeFreqData`: Difference wave (tf1 - tf2)
+
+# Example
+```julia
+diff_tf = tf_difference(tf_cond1, tf_cond2)
+```
+"""
+function tf_difference(tf1::TimeFreqData, tf2::TimeFreqData)
+    # Validate same structure
+    times1, times2 = unique(tf1.data.time), unique(tf2.data.time)
+    freqs1, freqs2 = unique(tf1.data.freq), unique(tf2.data.freq)
+    ch1, ch2 = channel_labels(tf1), channel_labels(tf2)
+    
+    times1 == times2 || error("TimeFreqData objects have different time vectors")
+    freqs1 == freqs2 || error("TimeFreqData objects have different frequency vectors")
+    ch1 == ch2 || error("TimeFreqData objects have different channels")
+    
+    # Create difference DataFrame
+    diff_data = copy(tf1.data)
+    for ch in ch1
+        diff_data[!, ch] = tf1.data[!, ch] .- tf2.data[!, ch]
+    end
+    
+    diff_name = "$(tf1.condition_name)_minus_$(tf2.condition_name)"
+    
+    return TimeFreqData(
+        tf1.file,
+        tf1.condition * 100 + tf2.condition,  # Combined condition number
+        diff_name,
+        diff_data,
+        tf1.layout,
+        tf1.sample_rate,
+        tf1.method,
+        tf1.analysis_info
+    )
+end
+
+"""
+    tf_difference(file_pattern::String, condition_pairs;
+                  input_dir=pwd(), output_dir=nothing,
+                  participant_selection=participants())
+
+Compute condition difference waves for TimeFreqData files.
+
+# Arguments
+- `file_pattern::String`: Pattern to match files
+- `condition_pairs`: Vector of (cond1, cond2) pairs to compute cond1 - cond2
+
+# Example
+```julia
+tf_difference("tf_epochs_wavelet", [(1, 2), (3, 4)])
+```
+"""
+function tf_difference(
+    file_pattern::String,
+    condition_pairs::Union{Vector{Tuple{Int,Int}},Vector{Vector{Int}}};
+    input_dir::String=pwd(),
+    output_dir::Union{String,Nothing}=nothing,
+    participant_selection::Function=participants()
+)
+    log_file = "tf_difference.log"
+    setup_global_logging(log_file)
+
+    try
+        @info "Batch TF difference started at $(now())"
+        @log_call "tf_difference"
+
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
+        end
+
+        output_dir = something(output_dir, joinpath(input_dir, "tf_difference_$(file_pattern)"))
+        mkpath(output_dir)
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern'"
+            return nothing
+        end
+
+        @info "Found $(length(files)) files, condition pairs: $condition_pairs"
+
+        process_fn = (input_path, output_path) -> begin
+            filename = basename(input_path)
+            data = load_data(input_path)
+            if isnothing(data) || !(data isa Vector{TimeFreqData})
+                return BatchResult(false, filename, "Invalid data type")
+            end
+            
+            diff_results = TimeFreqData[]
+            for (cond1, cond2) in condition_pairs
+                tf1 = findfirst(tf -> tf.condition == cond1, data)
+                tf2 = findfirst(tf -> tf.condition == cond2, data)
+                
+                if isnothing(tf1) || isnothing(tf2)
+                    @warn "Missing condition $cond1 or $cond2 in $filename"
+                    continue
+                end
+                
+                diff_tf = tf_difference(data[tf1], data[tf2])
+                push!(diff_results, diff_tf)
+            end
+            
+            if isempty(diff_results)
+                return BatchResult(false, filename, "No differences computed")
+            end
+            
+            jldsave(output_path; data=diff_results)
+            return BatchResult(true, filename, "Created $(length(diff_results)) difference(s)")
+        end
+
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
+                                       operation_name="TF difference")
+        _log_batch_summary(results, output_dir)
+
+    finally
+        _cleanup_logging(log_file, output_dir)
+    end
+end

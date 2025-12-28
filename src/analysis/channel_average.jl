@@ -428,3 +428,169 @@ function _append_layouts(base_layout::Layout, avg_layout::Layout)::Layout
     combined_df = vcat(base_copy.data, avg_copy.data)
     return Layout(combined_df, nothing, nothing)
 end
+
+# ============================================================================
+# TF Channel Average for TimeFreqData
+# ============================================================================
+
+"""
+    tf_channel_average!(tf_data::TimeFreqData; channel_selections=[channels()], 
+                        output_labels=nothing, reduce=false)
+
+Average channels in TimeFreqData in-place.
+
+# Arguments
+- `tf_data::TimeFreqData`: Time-frequency data to modify
+- `channel_selections`: Vector of channel predicates
+- `output_labels`: Labels for averaged channels (default: auto-generated)
+- `reduce`: If true, keep only averaged channels
+
+# Example
+```julia
+# Average all channels
+tf_channel_average!(tf_data)
+
+# Average specific channel groups
+tf_channel_average!(tf_data, 
+    channel_selections=[channels([:Fz, :Cz, :Pz])],
+    output_labels=[:midline])
+```
+"""
+function tf_channel_average!(tf_data::TimeFreqData; 
+                             channel_selections::AbstractVector=[channels()],
+                             output_labels=nothing,
+                             reduce::Bool=false)
+    ch_labels = channel_labels(tf_data)
+    
+    # Resolve channel groups
+    selected_groups = Vector{Vector{Symbol}}()
+    for sel in channel_selections
+        selected = filter(ch -> sel(ch), ch_labels)
+        isempty(selected) && error("Channel selection produced no channels")
+        push!(selected_groups, selected)
+    end
+    
+    # Determine labels
+    if isnothing(output_labels)
+        labels = [length(grp) == length(ch_labels) ? :avg : Symbol(join(string.(grp), "_")) 
+                  for grp in selected_groups]
+    else
+        length(output_labels) == length(selected_groups) || 
+            error("output_labels length must match channel_selections")
+        labels = Symbol.(output_labels)
+    end
+    
+    # Add averaged columns
+    for (grp, lbl) in zip(selected_groups, labels)
+        avg_vals = zeros(nrow(tf_data.data))
+        for ch in grp
+            avg_vals .+= tf_data.data[!, ch]
+        end
+        avg_vals ./= length(grp)
+        tf_data.data[!, lbl] = avg_vals
+    end
+    
+    # Reduce if requested
+    if reduce
+        keep_cols = [:time, :freq, labels...]
+        select!(tf_data.data, keep_cols)
+        # Update layout
+        tf_data.layout = _layout_from_groups(tf_data.layout, selected_groups, labels)
+    else
+        # Append to layout
+        avg_layout = _layout_from_groups(tf_data.layout, selected_groups, labels)
+        tf_data.layout = _append_layouts(tf_data.layout, avg_layout)
+    end
+    
+    return nothing
+end
+
+# Non-mutating version
+function tf_channel_average(tf_data::TimeFreqData; kwargs...)
+    tf_copy = deepcopy(tf_data)
+    tf_channel_average!(tf_copy; kwargs...)
+    return tf_copy
+end
+
+# Vector versions
+function tf_channel_average!(tf_data::Vector{TimeFreqData}; kwargs...)
+    tf_channel_average!.(tf_data; kwargs...)
+    return nothing
+end
+
+function tf_channel_average(tf_data::Vector{TimeFreqData}; kwargs...)
+    return [tf_channel_average(tf; kwargs...) for tf in tf_data]
+end
+
+"""
+    tf_channel_average(file_pattern::String, channel_selections; 
+                       output_labels=nothing, input_dir=pwd(), output_dir=nothing,
+                       participant_selection=participants(), condition_selection=conditions(),
+                       reduce=false)
+
+Batch average channels in TimeFreqData files.
+
+# Example
+```julia
+tf_channel_average("tf_epochs_wavelet", [channels([:Fz, :Cz, :Pz])], 
+                   output_labels=[:midline])
+```
+"""
+function tf_channel_average(
+    file_pattern::String,
+    channel_selections::Vector{<:Function};
+    output_labels::Union{Vector{Symbol},Nothing}=nothing,
+    input_dir::String=pwd(),
+    output_dir::Union{String,Nothing}=nothing,
+    participant_selection::Function=participants(),
+    condition_selection::Function=conditions(),
+    reduce::Bool=false
+)
+    log_file = "tf_channel_average.log"
+    setup_global_logging(log_file)
+
+    try
+        @info "Batch TF channel averaging started at $(now())"
+        @log_call "tf_channel_average"
+
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
+        end
+
+        # Generate output labels if not provided
+        if isnothing(output_labels)
+            output_labels = [Symbol("avg_$i") for i in 1:length(channel_selections)]
+        end
+
+        output_dir = something(output_dir, joinpath(input_dir, "tf_channel_average_$(file_pattern)"))
+        mkpath(output_dir)
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern'"
+            return nothing
+        end
+
+        @info "Found $(length(files)) files, $(length(channel_selections)) channel group(s)"
+
+        process_fn = (input_path, output_path) -> begin
+            filename = basename(input_path)
+            data = load_data(input_path)
+            if isnothing(data) || !(data isa Vector{TimeFreqData})
+                return BatchResult(false, filename, "Invalid data type")
+            end
+            data = _condition_select(data, condition_selection)
+            tf_channel_average!(data; channel_selections=channel_selections, 
+                               output_labels=output_labels, reduce=reduce)
+            jldsave(output_path; data=data)
+            return BatchResult(true, filename, "Averaged $(length(channel_selections)) group(s)")
+        end
+
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
+                                       operation_name="TF channel average")
+        _log_batch_summary(results, output_dir)
+
+    finally
+        _cleanup_logging(log_file, output_dir)
+    end
+end
