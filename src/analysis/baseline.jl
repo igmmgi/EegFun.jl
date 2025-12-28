@@ -411,3 +411,164 @@ function baseline(
         output_dir = output_dir,
     )
 end
+
+# ============================================================================
+# TF Baseline for TimeFreqData structs
+# ============================================================================
+
+"""
+    tf_baseline!(tf_data::TimeFreqData, baseline_window; method=:db)
+
+Apply baseline correction to TimeFreqData in-place.
+
+# Arguments
+- `tf_data::TimeFreqData`: Time-frequency data to baseline correct
+- `baseline_window::Tuple{Real,Real}`: Time window for baseline (start, stop) in seconds
+
+# Keyword Arguments
+- `method::Symbol=:db`: Baseline method
+  - `:db`: Decibel change (10 * log10(power/baseline))
+  - `:percent`: Percent change (100 * (power - baseline) / baseline)
+  - `:relchange`: Relative change (power / baseline)
+  - `:zscore`: Z-score ((power - mean) / std)
+
+# Example
+```julia
+tf_baseline!(tf_data, (-0.3, 0.0); method=:db)
+```
+"""
+function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
+    times = unique(tf_data.data.time)
+    freqs_unique = unique(tf_data.data.freq)
+    n_freqs = length(freqs_unique)
+    n_times = length(times)
+    
+    # Find baseline time indices
+    base_mask = baseline_window[1] .<= times .<= baseline_window[2]
+    if !any(base_mask)
+        error("Baseline window $(baseline_window) does not overlap with data times")
+    end
+    
+    # Get channel columns
+    ch_labels = channel_labels(tf_data)
+    
+    # Process each channel
+    for ch in ch_labels
+        # Reshape to freq × time matrix for baseline calculation
+        power_mat = zeros(n_freqs, n_times)
+        for ti in 1:n_times
+            for fi in 1:n_freqs
+                row_idx = (ti - 1) * n_freqs + fi
+                power_mat[fi, ti] = tf_data.data[row_idx, ch]
+            end
+        end
+        
+        # Compute baseline per frequency
+        baseline_power = mean(power_mat[:, base_mask], dims=2)
+        
+        # Apply baseline correction
+        if method == :db
+            power_mat .= 10 .* log10.(power_mat ./ baseline_power)
+        elseif method == :percent
+            power_mat .= 100 .* (power_mat .- baseline_power) ./ baseline_power
+        elseif method == :relchange
+            power_mat .= power_mat ./ baseline_power
+        elseif method == :zscore
+            baseline_std = std(power_mat[:, base_mask], dims=2)
+            power_mat .= (power_mat .- baseline_power) ./ baseline_std
+        else
+            error("Unknown baseline method: $method. Use :db, :percent, :relchange, or :zscore")
+        end
+        
+        # Write back to DataFrame
+        for ti in 1:n_times
+            for fi in 1:n_freqs
+                row_idx = (ti - 1) * n_freqs + fi
+                tf_data.data[row_idx, ch] = power_mat[fi, ti]
+            end
+        end
+    end
+    
+    return nothing
+end
+
+# Non-mutating version
+function tf_baseline(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
+    tf_copy = deepcopy(tf_data)
+    tf_baseline!(tf_copy, baseline_window; method=method)
+    return tf_copy
+end
+
+# Vector version
+function tf_baseline!(tf_data::Vector{TimeFreqData}, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
+    tf_baseline!.(tf_data, Ref(baseline_window); method=method)
+    return nothing
+end
+
+function tf_baseline(tf_data::Vector{TimeFreqData}, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
+    return [tf_baseline(tf, baseline_window; method=method) for tf in tf_data]
+end
+
+"""
+    tf_baseline(file_pattern::String, baseline_window;
+                method=:db, input_dir=pwd(), output_dir=nothing,
+                participant_selection=participants(), condition_selection=conditions())
+
+Apply baseline correction to TimeFreqData files.
+
+# Example
+```julia
+tf_baseline("tf_epochs_wavelet", (-0.3, 0.0); method=:db)
+```
+"""
+function tf_baseline(
+    file_pattern::String,
+    baseline_window::Tuple{Real,Real};
+    method::Symbol=:db,
+    input_dir::String=pwd(),
+    output_dir::Union{String,Nothing}=nothing,
+    participant_selection::Function=participants(),
+    condition_selection::Function=conditions()
+)
+    log_file = "tf_baseline.log"
+    setup_global_logging(log_file)
+
+    try
+        @info "Batch TF baseline started at $(now())"
+        @log_call "tf_baseline"
+
+        if (error_msg = _validate_input_dir(input_dir)) !== nothing
+            @minimal_error_throw(error_msg)
+        end
+
+        output_dir = something(output_dir, joinpath(input_dir, "tf_baseline_$(file_pattern)"))
+        mkpath(output_dir)
+
+        files = _find_batch_files(file_pattern, input_dir, participant_selection)
+        if isempty(files)
+            @minimal_warning "No JLD2 files found matching pattern '$file_pattern'"
+            return nothing
+        end
+
+        @info "Found $(length(files)) files, baseline: $baseline_window, method: $method"
+
+        process_fn = (input_path, output_path) -> begin
+            filename = basename(input_path)
+            data = load_data(input_path)
+            if isnothing(data) || !(data isa Vector{TimeFreqData})
+                return BatchResult(false, filename, "Invalid data type")
+            end
+            data = _condition_select(data, condition_selection)
+            tf_baseline!(data, baseline_window; method=method)
+            jldsave(output_path; data=data)
+            return BatchResult(true, filename, "Baseline corrected")
+        end
+
+        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
+                                       operation_name="TF baseline")
+        _log_batch_summary(results, output_dir)
+
+    finally
+        _cleanup_logging(log_file, output_dir)
+    end
+end
