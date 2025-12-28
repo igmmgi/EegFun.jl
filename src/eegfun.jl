@@ -6,6 +6,7 @@ module eegfun
 # Core dependencies
 using BiosemiDataFormat
 using BrainVisionDataFormat
+using CategoricalArrays
 using CSV
 using DataFrames
 using JLD2
@@ -38,6 +39,11 @@ using Statistics
 using StatsBase
 using TOML
 
+# Machine learning (for decoding/MVPA)
+using MLJ
+using MLJLinearModels
+using LIBSVM
+
 # Julia standard library
 # using Base.Threads
 
@@ -45,6 +51,7 @@ using TOML
 include("types/core.jl")
 include("types/pipeline.jl")
 include("types/statistics.jl")
+include("types/decoding.jl")
 
 # Utility functions
 include("utils/error.jl")
@@ -72,6 +79,7 @@ include("analysis/channel_summary.jl")
 include("analysis/channel_metrics.jl")
 include("analysis/condition_combine.jl")
 include("analysis/condition_difference.jl")
+include("analysis/decoding.jl")
 include("analysis/erp_measurements.jl")
 include("analysis/epochs.jl")
 include("analysis/filter.jl")
@@ -108,6 +116,7 @@ include("plots/plot_statistics.jl")
 include("plots/plot_channel_summary.jl")
 include("plots/plot_correlation_heatmap.jl")
 include("plots/plot_databrowser.jl")
+include("plots/plot_decoding.jl")
 include("plots/plot_epochs_rejection.jl")
 include("plots/plot_epochs.jl")
 include("plots/plot_erp.jl")
