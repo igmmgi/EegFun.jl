@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>"]
 
 [deps]
+AnovaFun = "786f6bac-1c88-4ef5-b24a-5b341b5d6c78"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 BiosemiDataFormat = "d1c37e40-cd17-11e8-241b-47481c954d91"
 BrainVisionDataFormat = "a1c37e40-cd17-11e8-241b-47481c954d92"
@@ -21,6 +22,7 @@ GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HypothesisTests = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LIBSVM = "b1bec4e5-fd48-53fe-b0cb-9723c09d164b"
+LanguageServer = "2b0e0bc5-e4fd-59b4-8912-456d1b03d8d7"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 LoggingExtras = "e6f89c97-d47a-5376-807f-9c37f3926c36"
@@ -45,6 +47,7 @@ BiosemiDataFormat = {rev = "master", url = "https://github.com/igmmgi/BiosemiDat
 BrainVisionDataFormat = {rev = "main", url = "https://github.com/igmmgi/BrainVisionDataFormat.jl.git"}
 
 [compat]
+AnovaFun = "0.1.0"
 BenchmarkTools = "1.6.3"
 BiosemiDataFormat = "0.1.0"
 BrainVisionDataFormat = "0.1.0"
@@ -61,6 +64,7 @@ GLMakie = "0.13.2"
 HypothesisTests = "0.11.6"
 JLD2 = "0.5.15"
 LIBSVM = "0.8.1"
+LanguageServer = "4.1.0"
 LoggingExtras = "1.0.0"
 MLJ = "0.22.0"
 MLJLinearModels = "0.10.1"

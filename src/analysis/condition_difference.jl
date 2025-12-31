@@ -360,7 +360,7 @@ function tf_difference(
                 tf2 = findfirst(tf -> tf.condition == cond2, data)
                 
                 if isnothing(tf1) || isnothing(tf2)
-                    @warn "Missing condition $cond1 or $cond2 in $filename"
+                    @minimal_warning "Missing condition $cond1 or $cond2 in $filename"
                     continue
                 end
                 

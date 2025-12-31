@@ -303,24 +303,11 @@ Returns BatchResult with success/failure info.
 function _process_resample_file(filepath::String, output_path::String, factor::Int)
     filename = basename(filepath)
 
-    # Load data
-    file_data = load(filepath)
-
-    # Try common variable names
-    var_names = ["data", "epochs", "erp", "continuous", "epoch_data", "erp_data", "continuous_data"]
-    loaded_data = nothing
-    data_var_name = nothing
-
-    for var_name in var_names
-        if haskey(file_data, var_name)
-            loaded_data = file_data[var_name]
-            data_var_name = var_name
-            break
-        end
-    end
+    # Load data using load_data (handles single variable files automatically)
+    loaded_data = load_data(filepath)
 
     if isnothing(loaded_data)
-        return BatchResult(false, filename, "No EEG data variable found (tried: $(var_names))")
+        return BatchResult(false, filename, "No data found in file")
     end
 
     if !(loaded_data isa Union{ContinuousData,EpochData,ErpData})

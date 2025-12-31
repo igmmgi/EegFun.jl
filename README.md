@@ -9,22 +9,48 @@ Alpha level 0.1 :-)
 
 ## ✅ Complete
 
-- ✓ Basic EEG data reading and processing (currently limited file formats!)
+### Data Loading & Preprocessing
+- ✓ Basic EEG data reading (Biosemi BDF, BrainVision)
 - ✓ Layout system for different electrode configurations
-- ✓ Interactive databrowser with analysis options (implemented in Makie)
-- ✓ Multiple plot types (ERP, topography, spectrum, etc., again with some interactivity)
-- ✓ Filtering (high-pass, low-pass)
+- ✓ Filtering (high-pass, low-pass, bandpass, bandstop)
+- ✓ Baseline correction
+- ✓ Rereferencing (average, single channel, custom)
+- ✓ Resampling
+- ✓ Channel repair (neighbor interpolation, spherical spline)
+- ✓ Artifact detection and rejection
 - ✓ ICA component calculation/removal
-- ✓ Epoching and basic ERP analysis
-- ✓ Initial batch processing options 
-- ✓ Initial documentation and examples
-- ✓ Initial test suite
 
-## 📋 TODO
+### Analysis
+- ✓ Epoching and ERP analysis
+- ✓ Time-frequency analysis (wavelet transforms)
+- ✓ Cluster-based permutation tests (spatial, temporal, spatiotemporal)
+- ✓ Analytic t-tests with multiple comparison correction
+- ✓ Decoding/MVPA (multivariate pattern analysis) with MLJ integration
+- ✓ RSA (Representational Similarity Analysis) with static and temporal models
+- ✓ GFP (Global Field Power)
+- ✓ Grand averaging
+- ✓ Jackknife averaging
+- ✓ ERP measurements (peak detection, latency, amplitude)
 
-- ☐ Batch functions need to deal with bad input options (e.g., conditions missing and so on)
-- ☐ Add more visualization options
+### Visualization
+- ✓ Interactive databrowser with analysis options (Makie)
+- ✓ Multiple plot types (ERP, topography, spectrum, time-frequency, etc.)
+- ✓ Interactive plots with zooming, panning, channel selection
+- ✓ Decoding accuracy plots
+- ✓ RSA visualization (RDMs, model correlations)
+
+### Utilities
+- ✓ Batch processing pipelines
+- ✓ Configuration system (TOML-based)
+- ✓ Logging system
+- ✓ Data export/import (JLD2)
+
+## 📋 TODO / Known Issues
+
+- ☐ Batch functions need to deal with bad input options (e.g., conditions missing)
+- ☐ Add tests for decoding/MVPA functionality
+- ☐ Add tests for RSA functionality
+- ☐ Add more file formats (EDF, SET, FIF)
 - ☐ Improve documentation and examples
-- ☐ Add more filetypes (separate packages?)
-- ☐ Add more statistical analysis functions
+- ☐ Consolidate codebase (see CONSOLIDATION_PLAN.md)
 
