@@ -286,6 +286,7 @@ function _create_tf_grand_average(tf_data::Vector{TimeFreqData}, cond_num::Int)
         first_tf.layout,
         first_tf.sample_rate,
         first_tf.method,
+        nothing,  # Baseline info not preserved for grand averages
         first_tf.analysis_info
     )
 end

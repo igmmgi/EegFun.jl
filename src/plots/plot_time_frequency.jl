@@ -38,8 +38,17 @@ function plot_time_frequency(tf_data::TimeFreqData, channel::Symbol;
                              title::Union{Nothing,String}=nothing,
                              colorbar::Bool=true)
     
-    # Apply baseline if requested
-    tf_plot = isnothing(baseline_window) ? tf_data : tf_baseline(tf_data, baseline_window; method=baseline_method)
+    # Apply baseline if requested, but only if data hasn't already been baselined
+    if !isnothing(baseline_window) && tf_data.baseline !== nothing
+        @warn "Data has already been baselined (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
+              "Ignoring baseline_window parameter. Use the data as-is or create a new TimeFreqData without baseline."
+        tf_plot = tf_data
+    elseif !isnothing(baseline_window)
+        # Apply baseline on-the-fly
+        tf_plot = tf_baseline(tf_data, baseline_window; method=baseline_method)
+    else
+        tf_plot = tf_data
+    end
     
     # Get unique times and freqs
     times = sort(unique(tf_plot.data.time))
@@ -70,7 +79,7 @@ function plot_time_frequency(tf_data::TimeFreqData, channel::Symbol;
     
     # Determine color range
     if isnothing(colorrange)
-        cmin, cmax = extrema(filter(!isnan, power_mat))
+        cmin, cmax = extrema(Base.filter(!isnan, power_mat))
         colorrange = (cmin, cmax)
     end
     
@@ -79,8 +88,26 @@ function plot_time_frequency(tf_data::TimeFreqData, channel::Symbol;
                   colormap=colormap, colorrange=colorrange)
     
     if colorbar
-        label = isnothing(baseline_window) ? "Power" : 
-                (baseline_method == :db ? "Power (dB)" : "Power")
+        # Determine colorbar label based on baseline information
+        if tf_plot.baseline !== nothing
+            method = tf_plot.baseline.method
+            if method == :db
+                label = "Power (dB)"
+            elseif method == :percent
+                label = "Power (% change)"
+            elseif method == :relchange
+                label = "Power (relative)"
+            else
+                label = "Power"
+            end
+        elseif !isnothing(baseline_window)
+            # Baseline was just applied via parameter
+            label = baseline_method == :db ? "Power (dB)" : 
+                   baseline_method == :percent ? "Power (% change)" :
+                   baseline_method == :relchange ? "Power (relative)" : "Power"
+        else
+            label = "Power"
+        end
         Colorbar(fig[1, 2], hm, label=label)
     end
     

@@ -79,7 +79,7 @@ end
 Non-mutating version of mirror!. Returns new EpochData with mirrored epochs.
 """
 function mirror(dat::EpochData, side::Symbol = :both)::EpochData
-    dat_copy = deepcopy(dat)
+    dat_copy = copy(dat)
     mirror!(dat_copy, side)
     return dat_copy
 end
@@ -123,7 +123,7 @@ end
 Non-mutating version of mirror! for ERP data.
 """
 function mirror(dat::ErpData, side::Symbol = :both)::ErpData
-    dat_copy = deepcopy(dat)
+    dat_copy = copy(dat)
     mirror!(dat_copy, side)
     return dat_copy
 end
@@ -225,7 +225,7 @@ end
 Non-mutating version of unmirror!.
 """
 function unmirror(dat::EpochData, side::Symbol = :both)::EpochData
-    dat_copy = deepcopy(dat)
+    dat_copy = copy(dat)
     unmirror!(dat_copy, side)
     return dat_copy
 end
@@ -255,7 +255,7 @@ end
 Non-mutating version of unmirror! for ERP data.
 """
 function unmirror(dat::ErpData, side::Symbol = :both)::ErpData
-    dat_copy = deepcopy(dat)
+    dat_copy = copy(dat)
     unmirror!(dat_copy, side)
     return dat_copy
 end

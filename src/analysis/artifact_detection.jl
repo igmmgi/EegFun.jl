@@ -391,7 +391,7 @@ function is_extreme_value(
 
     elseif mode == :separate
         # Separate mode - create temporary data object and use mutating version
-        temp_dat = deepcopy(dat)
+        temp_dat = copy(dat)
         is_extreme_value!(temp_dat, threshold; channel_selection, sample_selection, mode = :separate)
 
         # Extract the extreme value columns in the same order as the original channels

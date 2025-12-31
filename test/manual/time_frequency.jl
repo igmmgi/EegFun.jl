@@ -2,156 +2,196 @@ using eegfun
 using GLMakie
 using JLD2
 using DataFrames
+using BenchmarkTools
 
+#######################################################################
+@info eegfun.section("TEST 1: Synthetic Signal with Known Frequencies")
+#######################################################################
 
-# ============================================================================
-# Helper function for plotting TF results
-# ============================================================================
-
-function plot_tf_result(power, times, freqs; title="Time-Frequency Analysis", 
-                        colormap=:viridis, baseline_window=nothing)
-    fig = Figure(size=(800, 500))
-    
-    # Apply baseline if specified
-    if !isnothing(baseline_window)
-        power = eegfun.apply_tf_baseline_db(power, times, baseline_window)
-        colorbar_label = "Power (dB)"
-    else
-        colorbar_label = "Power"
-    end
-    
-    ax = Axis(fig[1, 1], 
-              xlabel="Time (s)", 
-              ylabel="Frequency (Hz)",
-              title=title)
-    
-    hm = heatmap!(ax, collect(times), collect(freqs), power', colormap=colormap)
-    Colorbar(fig[1, 2], hm, label=colorbar_label)
-    
-    display(fig)
-    return fig, ax
-end
-
-
-
-
-# ============================================================================
-# Test 1: Synthetic Signal with Known Frequencies
-# ============================================================================
-println("\n" * "="^60)
-println("TEST 1: Synthetic Signal with Known Frequencies")
-println("="^60)
- 
-# Generate synthetic signal: 10Hz from 0-0.5s, 25Hz from 0.5-1s
+# Generate synthetic signal: 2Hz from -0.1-0.5s, 15Hz from 0.5-1.1s, 25Hz from 1.5-2.0s
 sample_rate = 256.0
 times, signal = eegfun.generate_signal(
     300,                                    # n_trials
     [-1.0, 3.0],                            # time_window
     sample_rate,                            # sample_rate
     [2.0, 15, 25.0],                        # frequencies
-    [1.0, 2.0, 3.0],                       # amplitudes
+    [1.0, 2.0, 3.0],                        # amplitudes
     [[-0.1, 0.5], [0.5, 1.1], [1.5, 2.0]],  # time windows for each freq
     2.0                                     # noise amplitude
-)
+);
 
-# Time and frequency parameters
+# Convert signal to EpochData format
+epochs = eegfun.signal_to_epochs(times, signal, :Channel1, Int(sample_rate))
+
+# Time and frequency parameters for TF analysis
 toi = -1:0.01:3
 foi = 1:1:40
-  
+
 # 1. Wavelet method
-power, times_out, freqs_out = eegfun.tf_wavelet(signal, times, sample_rate, foi, toi; width=7)
-fig1, _ = plot_tf_result(power, times_out, freqs_out; title="tf_wavelet (7 cycles)")
+tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
+fig1, _ = eegfun.plot_time_frequency(tf_data1, :Channel1; title="tf_analysis (wavelet, 7 cycles)")
 
 # 2. Multitaper with Hanning
-power, times_out, freqs_out = eegfun.tf_multitaper(signal, times, sample_rate, foi, toi; taper=:hanning, t_ftimwin=0.3)
-fig2, _ = plot_tf_result(power, times_out, freqs_out; title="tf_multitaper (Hanning)")
+tf_data2 = eegfun.tf_analysis(epochs, foi, toi; method=:multitaper, taper=:hanning, t_ftimwin=0.3)
+fig2, _ = eegfun.plot_time_frequency(tf_data2, :Channel1; title="tf_analysis (multitaper, Hanning)")
 
 # 3. Multitaper with DPSS  
-power, times_out, freqs_out = eegfun.tf_multitaper(signal, times, sample_rate, foi, toi; taper=:dpss, t_ftimwin=0.3, tapsmofrq=4.0)
-fig3, _ = plot_tf_result(power, times_out, freqs_out; title="tf_multitaper (DPSS)")
+tf_data3 = eegfun.tf_analysis(epochs, foi, toi; method=:multitaper, taper=:dpss, t_ftimwin=0.3, tapsmofrq=4.0)
+fig3, _ = eegfun.plot_time_frequency(tf_data3, :Channel1; title="tf_analysis (multitaper, DPSS)")
 
 # 4. Superlet Unified method
-power, times_out, freqs_out = eegfun.tf_superlet(signal, times, sample_rate, foi, toi; order=5)
-fig4, _ = plot_tf_result(power, times_out, freqs_out; title="tf_superlet (5th order)")
+tf_data4 = eegfun.tf_analysis(epochs, foi, toi; method=:superlet, order=5)
+fig4, _ = eegfun.plot_time_frequency(tf_data4, :Channel1; title="tf_analysis (superlet, 5th order)")
 
-# 5. Power spectrum
+# 5. Power spectrum (using tf_spectrum on raw signal for comparison)
 power_spectrum, freqs_out = eegfun.tf_spectrum(signal, sample_rate, foi; taper=:dpss, tapsmofrq=2.0)
-fig4 = Figure(size=(600, 400))
-ax = Axis(fig4[1, 1], xlabel="Frequency (Hz)", ylabel="Power", title="tf_spectrum (peaks at 10Hz, 25Hz)")
+fig5 = Figure(size=(600, 400))
+ax = Axis(fig5[1, 1], xlabel="Frequency (Hz)", ylabel="Power", title="tf_spectrum (peaks at 2Hz, 15Hz, 25Hz)")
 lines!(ax, freqs_out, power_spectrum)
-display(fig4)
- 
-
-# power, t, f = eegfun.tf_analysis(:wavelet, signal, times, sample_rate, foi, toi; width=5)
-# fig1, _ = plot_tf_result(power, times_out, freqs_out; title="tf_wavelet (7 cycles)")
-# power, t, f = eegfun.tf_analysis(:multitaper, signal, times, sample_rate, foi, toi; taper=:dpss)
-# fig1, _ = plot_tf_result(power, times_out, freqs_out; title="tf_wavelet (7 cycles)")
-# power, f = eegfun.tf_analysis(:spectrum, signal, nothing, sample_rate, foi, nothing)
-# fig1, _ = plot_tf_result(power, times_out, freqs_out; title="tf_wavelet (7 cycles)")a
-# power, f = eegfun.tf_analysis(:spectrum, signal, nothing, sample_rate, foi, nothing)
-# fig1, _ = plot_tf_result(power, times_out, freqs_out; title="tf_wavelet (7 cycles)")
+display(fig5)
 
  
-
-    
-# ============================================================================
-# Test 2: Real EEG Data
-# ============================================================================
+#######################################################################
+@info eegfun.section("TEST 2: Real EEG Data")
+#######################################################################
 
 # Try to load epoched data from output_data
 data_dir = "/home/ian/Documents/Julia/output_data"
 epoch_files = filter(f -> endswith(f, "_epochs_cleaned.jld2"), readdir(data_dir))
 epoch_file = joinpath(data_dir, epoch_files[1])
-data = eegfun.load_data(epoch_file)
-
-   
-# Handle Vector{EpochData} - use first condition
-epochs = data isa Vector ? data[1] : data
-
-# Get data from a central electrode
-selected_channel = :Cz
-
-# Extract signal data from epochs (samples × trials)
-# epochs.data is Vector{DataFrame}, each DataFrame is one trial
-n_trials = length(epochs.data)
-n_samples = nrow(epochs.data[1])
-signal = zeros(n_samples, n_trials)
-for (i, trial_df) in enumerate(epochs.data)
-    signal[:, i] = trial_df[:, selected_channel]
-end
-
-# Get time vector from first trial's time column, sample rate from epochs
-times = collect(epochs.data[1].time)
-sample_rate = epochs.sample_rate
+epochs = eegfun.load_data(epoch_file)[1] # take single epoch
 
 # Time and frequency parameters
 toi = -0.5:0.01:2
 foi = 1:1:40
 
+# TODO: Julia code seems really slow!!!  # takes approx 7 seconds vs. 2 seconds in matlab (check this!!)
+tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:multitaper, width=7)
+
+
+
+# Get data from a central electrode
+selected_channel = [:Cz, :Fp1, :Fp2]
+
+# Time and frequency parameters
+toi = -0.5:0.01:2
+foi = 1:1:40
+
+# Use tf_analysis - it handles all the data extraction automatically!
 # 1. Wavelet
-power, t, f = eegfun.tf_wavelet(signal, times, sample_rate, foi, collect(toi); width=7)
-fig1, _ = plot_tf_result(power, t, f; title="Wavelet - $selected_channel") 
+@btime tf_data1 = eegfun.tf_analysis(epochs, foi, toi; 
+                                method=:multitaper, taper=:hanning, t_ftimwin=0.3,
+                                channel_selection=eegfun.channels(selected_channel))
+
+
+@time tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
+tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
+
+
+fig1, _ = eegfun.plot_time_frequency(tf_data1, selected_channel; title="Wavelet - $selected_channel") 
 
 # 2. Wavelet with variable cycles
-power, t, f = eegfun.tf_wavelet(signal, times, sample_rate, foi, collect(toi); width=[3, 10])
-fig2, _ = plot_tf_result(power, t, f; title="Wavelet Variable - $selected_channel")
+tf_data2 = eegfun.tf_analysis(epochs, foi, toi; 
+                                method=:wavelet, width=(3, 10),
+                                channel_selection=eegfun.channels(selected_channel))
+fig2, _ = eegfun.plot_time_frequency(tf_data2, selected_channel[1]; title="Wavelet Variable - $selected_channel")
 
 # 3. Superlet
-power, t, f = eegfun.tf_superlet(signal, times, sample_rate, foi, collect(toi); order=5)
-fig3, _ = plot_tf_result(power, t, f; title="Superlet - $selected_channel")
+tf_data3 = eegfun.tf_analysis(epochs, foi, toi; 
+                                method=:superlet, order=5,
+                                channel_selection=eegfun.channels(selected_channel))
+fig3, _ = eegfun.plot_time_frequency(tf_data3, selected_channel[1]; title="Superlet - $selected_channel")
 
 # 4. Multitaper Hanning
-power, t, f = eegfun.tf_multitaper(signal, times, sample_rate, foi, collect(toi); taper=:hanning, t_ftimwin=0.3)
-fig4, _ = plot_tf_result(power, t, f; title="MTM Hanning - $selected_channel")
+tf_data4 = eegfun.tf_analysis(epochs, foi, toi; 
+                                method=:multitaper, taper=:hanning, t_ftimwin=0.3,
+                                channel_selection=eegfun.channels(selected_channel))
+fig4, _ = eegfun.plot_time_frequency(tf_data4, selected_channel[1]; title="MTM Hanning - $selected_channel")
 
 # 5. Multitaper DPSS
-power, t, f = eegfun.tf_multitaper(signal, times, sample_rate, foi, collect(toi); taper=:dpss, t_ftimwin=0.3, tapsmofrq=4.0)
-fig5, _ = plot_tf_result(power, t, f; title="MTM DPSS - $selected_channel") 
+@btime tf_data5 = eegfun.tf_analysis(epochs, foi, toi; 
+                                method=:multitaper, taper=:dpss, t_ftimwin=0.3, tapsmofrq=4.0,
+                                channel_selection=eegfun.channels(selected_channel))
+fig5, _ = eegfun.plot_time_frequency(tf_data5, selected_channel[1]; title="MTM DPSS - $selected_channel") 
 
-# 6. Spectrum (non-time-resolved)
-power_spec, f_spec = eegfun.tf_spectrum(signal, sample_rate, foi; taper=:dpss, tapsmofrq=2.0)
-fig6 = Figure(size=(600, 400))
-ax = Axis(fig6[1, 1], xlabel="Frequency (Hz)", ylabel="Power", title="Power Spectrum - $selected_channel")
-lines!(ax, f_spec, power_spec)
-display(fig6)
+
+#######################################################################
+@info eegfun.section("TEST 3: Baseline Correction Examples")
+#######################################################################
+
+# Baseline correction removes the mean power during a baseline period
+# This is essential for visualizing event-related changes in power
+
+selected_channel = :Cz
+# Create a TF analysis for baseline examples
+@btime tf_baseline_example = eegfun.tf_analysis(epochs, foi, toi; 
+                                         method=:multitaper, width=7,
+                                         channel_selection=eegfun.channels(selected_channel))
+
+# Create a TF analysis for baseline examples
+tf_baseline_example = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
+
+
+# Example 1: Apply baseline correction using tf_baseline function
+# Baseline window: -0.3 to 0.0 seconds (pre-stimulus period)
+baseline_window = (-0.3, 0.0)
+# Method 1: Decibel (dB) - most common, shows power relative to baseline
+# Formula: 10 * log10(power / baseline_mean)
+tf_db = eegfun.tf_baseline(tf_baseline_example, baseline_window; method=:db)
+fig_b1_no_baseline, _ = eegfun.plot_time_frequency(tf_db, selected_channel; 
+                                       title="Baseline: dB ($(baseline_window[1]) to $(baseline_window[2])s)")
+
+fig_b1_with_baseline, _ = eegfun.plot_time_frequency(tf_db, selected_channel; 
+                                       title="Baseline: dB ($(baseline_window[1]) to $(baseline_window[2])s)")
+
+# Method 2: Percent change
+# Formula: 100 * (power - baseline_mean) / baseline_mean
+tf_percent = eegfun.tf_baseline(tf_baseline_example, baseline_window; method=:percent)
+fig_b2, _ = eegfun.plot_time_frequency(tf_percent, selected_channel; 
+                                       title="Baseline: Percent Change ($(baseline_window[1]) to $(baseline_window[2])s)")
+
+# Method 3: Relative change (ratio)
+# Formula: power / baseline_mean
+tf_rel = eegfun.tf_baseline(tf_baseline_example, baseline_window; method=:relchange)
+fig_b3, _ = eegfun.plot_time_frequency(tf_rel, selected_channel; 
+                                       title="Baseline: Relative Change ($(baseline_window[1]) to $(baseline_window[2])s)")
+
+# Check values look reasonable
+println("\n" * "="^60)
+println("Baseline Correction Value Check:")
+println("="^60)
+times_unique = sort(unique(tf_baseline_example.data.time))
+freqs_unique = sort(unique(tf_baseline_example.data.freq))
+# Get a sample time point (e.g., 0.1s after baseline ends)
+sample_time_idx = findfirst(t -> t >= 0.1, times_unique)
+sample_freq_idx = findfirst(f -> f >= 10, freqs_unique)  # Around 10Hz
+
+if !isnothing(sample_time_idx) && !isnothing(sample_freq_idx)
+    sample_time = times_unique[sample_time_idx]
+    sample_freq = freqs_unique[sample_freq_idx]
     
+    # Extract values at this time-frequency point
+    row_idx = findfirst(row -> row.time ≈ sample_time && row.freq ≈ sample_freq, eachrow(tf_baseline_example.data))
+    if !isnothing(row_idx)
+        original_val = tf_baseline_example.data[row_idx, selected_channel]
+        db_val = tf_db.data[row_idx, selected_channel]
+        percent_val = tf_percent.data[row_idx, selected_channel]
+        rel_val = tf_rel.data[row_idx, selected_channel]
+        
+        println("Sample point: $(round(sample_time, digits=2))s, $(round(sample_freq, digits=1))Hz")
+        println("Original power: $(round(original_val, digits=4))")
+        println("dB: $(round(db_val, digits=2)) dB")
+        println("Percent: $(round(percent_val, digits=2))%")
+        println("Relative: $(round(rel_val, digits=3))x")
+        println("\nExpected relationships:")
+        println("  dB ≈ 10 * log10(relative) = $(round(10 * log10(rel_val), digits=2))")
+        println("  Percent ≈ 100 * (relative - 1) = $(round(100 * (rel_val - 1), digits=2))")
+    end
+end
+
+# Example 2: Apply baseline directly in plotting (convenience method)
+# This applies baseline correction on-the-fly without modifying the original data
+fig_b5, _ = eegfun.plot_time_frequency(tf_baseline_example, selected_channel; 
+                                       baseline_window=baseline_window,
+                                       baseline_method=:percent,
+                                       title="Plot with baseline_window parameter (dB)")
