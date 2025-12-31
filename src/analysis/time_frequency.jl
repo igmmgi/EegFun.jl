@@ -46,6 +46,61 @@ function dpss_tapers(n::Int, nw::Real, k::Int)
 end
 
 # ============================================================================
+# Shared Helper Functions
+# ============================================================================
+
+function _prepare_morlet_wavelets(frequencies, width, sample_rate, n_samples; log_freqs=true)
+    freqs = collect(Float64, frequencies)
+    n_freqs = length(freqs)
+    
+    # 1. Frequency vector
+    freqs_out = log_freqs ? exp.(range(log(float(freqs[1])), log(float(freqs[end])), length = n_freqs)) : freqs
+    
+    # 2. Cycles (width)
+    if width isa Tuple{<:Number, <:Number}
+        # Variable cycles: interpolate
+        cycles = exp.(range(log(float(width[1])), log(float(width[2])), length = n_freqs))
+    elseif width isa Number
+        cycles = fill(float(width), n_freqs)
+    else
+        cycles = collect(Float64, width)
+    end
+    
+    # 3. Sigmas and Window lengths
+    sigmas = cycles ./ (2 * pi .* freqs_out)
+    half_wins = Int[]
+    for sig in sigmas
+        wl = ceil(Int, 6 * sig * sample_rate)
+        wl += iseven(wl)
+        push!(half_wins, wl ÷ 2)
+    end
+    
+    # 4. Convolution length
+    # Use nextfastfft for optimal performance (handles factors 2, 3, 5, 7)
+    # instead of restrictive nextpow(2)
+    n_convolution = n_samples + ceil(Int, 6 * maximum(sigmas) * sample_rate)
+    n_conv = DSP.nextfastfft(n_convolution)
+    
+    # 5. Pre-compute wavelet FFTs
+    wavelet_ffts = zeros(ComplexF64, n_conv, n_freqs)
+    tmp_w_padded = zeros(ComplexF64, n_conv)
+    
+    for fi in 1:n_freqs
+        freq = freqs_out[fi]
+        sigma = sigmas[fi]
+        hw = half_wins[fi]
+        wl = hw * 2 + 1 
+        
+        fill!(tmp_w_padded, 0.0)
+        w_time = range(-wl / 2, wl / 2, length = wl) ./ sample_rate
+        @. tmp_w_padded[1:wl] = sqrt(1 / (sigma * sqrt(pi))) * exp(2im * pi * freq * w_time) * exp(-w_time^2 / (2 * sigma^2))
+        wavelet_ffts[:, fi] = fft(tmp_w_padded)
+    end
+    
+    return freqs_out, half_wins, n_conv, wavelet_ffts
+end
+
+# ============================================================================
 # Option 1: Individual TF functions with keyword arguments
 # ============================================================================
 
@@ -86,16 +141,37 @@ power, t, f = tf_wavelet(signal, times, 256, 2:30, -0.5:0.05:1.5; width=(3, 10))
 function tf_wavelet(signal, times, sample_rate, frequencies, time_steps; 
                     width::Union{Int, Tuple{Int,Int}, Vector{Int}}=7, 
                     keeptrials::Bool=false, log_freqs::Bool=true)
-    freqs = collect(Float64, frequencies)
+    
+    # Ensure signal is 2D
+    signal = ndims(signal) == 1 ? reshape(signal, :, 1) : signal
+    n_samples, n_trials = size(signal)
+    
+    # Prepare parameters and wavelets
+    freqs_out, half_wins, n_conv, wavelet_ffts = _prepare_morlet_wavelets(frequencies, width, sample_rate, n_samples; log_freqs=log_freqs)
+    
+    # Setup output time indices
     toi = collect(Float64, time_steps)
+    tois_idx = [argmin(abs.(times .- t)) for t in toi]
     
-    # Convert width to vector format expected by tf_morlet
-    cycles = width isa Int ? [width] : collect(width)
+    # Create workspace
+    ws = TFMorletWorkspace(n_conv, n_trials)
     
-    power, times_out, freqs_out = tf_morlet(signal, times, sample_rate, freqs, cycles; 
-                                             tois=toi, log_freqs=log_freqs, keeptrials=keeptrials)
+    # Convert signal to 3D for kernel (1 channel)
+    data_3d = reshape(signal, n_samples, 1, n_trials)
     
-    return power, times_out, freqs_out
+    # Allocate output
+    n_freqs = length(freqs_out)
+    n_times = length(toi)
+    
+    if keeptrials
+        power = zeros(n_freqs, n_times, n_trials)
+        tf_morlet_optimized!(power, ws, data_3d, 1, n_samples, n_trials, tois_idx, half_wins, wavelet_ffts, true)
+    else
+        power = zeros(n_freqs, n_times)
+        tf_morlet_optimized!(power, ws, data_3d, 1, n_samples, n_trials, tois_idx, half_wins, wavelet_ffts, false)
+    end
+    
+    return power, toi, freqs_out
 end
 
 """
@@ -147,6 +223,8 @@ power, t, f = tf_superlet(signal, times, 256, 2:30, -0.5:0.05:1.5; order=collect
 Moca VV, Bârzan H, Nagy-Dăbâcan A, Mureșan RC (2021). Time-frequency super-resolution 
 with superlets. Nature Communications 12:337. https://doi.org/10.1038/s41467-020-20539-9
 """
+
+
 function tf_superlet(signal, times, sample_rate, frequencies, time_steps;
                      order::Union{Int, Vector{Int}}=5, width::Int=3,
                      combine::Symbol=:multiplicative, keeptrials::Bool=false)
@@ -157,7 +235,6 @@ function tf_superlet(signal, times, sample_rate, frequencies, time_steps;
     freqs = collect(Float64, frequencies)
     toi = collect(Float64, time_steps)
     n_freqs = length(freqs)
-    n_times = length(toi)
     
     orders = order isa Int ? fill(order, n_freqs) : order
     tois_idx = [findfirst(≈(t, atol = (1000 / sample_rate) / 1000), times) for t in toi]
@@ -165,57 +242,19 @@ function tf_superlet(signal, times, sample_rate, frequencies, time_steps;
     max_sigma = (width * maximum(orders)) / (2π * minimum(freqs))
     n_conv = nextpow(2, n_samples + ceil(Int, 6 * max_sigma * sample_rate))
     
-    # Pre-compute signal FFT
-    padded_signal = zeros(ComplexF64, n_conv, n_trials)
-    padded_signal[1:n_samples, :] .= signal
-    signal_fft = fft(padded_signal, 1)
+    ws = TFMorletWorkspace(n_conv, n_trials)
     
-    # Pre-allocate output
-    power = zeros(n_freqs, n_times, n_trials)
-    
-    # Reusable buffers
-    conv_fft = zeros(ComplexF64, n_conv, n_trials)
-    eegconv = zeros(ComplexF64, n_conv, n_trials)
-    wavelet_padded = zeros(ComplexF64, n_conv)
-    p_ifft = plan_ifft(conv_fft, 1)
-    
-    @inbounds for fi in 1:n_freqs
-        freq = freqs[fi]
-        ord = orders[fi]
-        cycles_list = combine == :multiplicative ? [width * i for i in 1:ord] : [width + i - 1 for i in 1:ord]
-        
-        prod_power = ones(n_times, n_trials)
-        
-        for cyc in cycles_list
-            sigma = cyc / (2π * freq)
-            win_len = ceil(Int, 6 * sigma * sample_rate)
-            win_len += iseven(win_len)
-            half_win = win_len ÷ 2
-            
-            fill!(wavelet_padded, 0.0)
-            w_time = range(-win_len / 2, win_len / 2, length = win_len) ./ sample_rate
-            @. wavelet_padded[1:win_len] = sqrt(1 / (sigma * sqrt(pi))) * exp(2im * pi * freq * w_time) * exp(-w_time^2 / (2 * sigma^2))
-            wavelet_fft = fft(wavelet_padded)
-            
-            @. conv_fft = signal_fft * wavelet_fft
-            mul!(eegconv, p_ifft, conv_fft)
-            
-            # Efficient extraction
-            valid_start = half_win + 1
-            @views prod_power .*= abs2.(eegconv[valid_start .+ tois_idx .- 1, :])
-        end
-        
-        @views power[fi, :, :] = prod_power .^ (1.0 / ord)
+    if keeptrials
+        power = zeros(n_freqs, length(toi), n_trials)
+        tf_superlet_optimized!(power, ws, signal, 1, n_samples, n_trials, tois_idx, freqs, orders, width, combine, true, sample_rate)
+        return power, toi, freqs
+    else
+        power = zeros(n_freqs, length(toi))
+        tf_superlet_optimized!(power, ws, signal, 1, n_samples, n_trials, tois_idx, freqs, orders, width, combine, false, sample_rate)
+        return power, toi, freqs
     end
-    
-    if !keeptrials && n_trials > 1
-        power = dropdims(mean(power, dims=3), dims=3)
-    elseif n_trials == 1
-        power = dropdims(power, dims=3)
-    end
-    
-    return power, toi, freqs
 end
+
 
 
 
@@ -262,16 +301,15 @@ function tf_multitaper(signal, times, sample_rate, frequencies, time_steps;
     
     if taper == :hanning
         power, times_out, freqs_out = tf_hanning(signal, times, sample_rate, freqs, toi; 
-                                                  window_length=t_ftimwin)
+                                                  window_length=t_ftimwin, keeptrials=keeptrials)
     elseif taper == :dpss
         power, times_out, freqs_out = tf_mtm(signal, times, sample_rate, freqs, toi;
-                                              t_ftimwin=t_ftimwin, tapsmofrq=tapsmofrq)
+                                              t_ftimwin=t_ftimwin, tapsmofrq=tapsmofrq, keeptrials=keeptrials)
+        if !keeptrials && ndims(power) == 3
+             power = dropdims(mean(power, dims=3), dims=3)
+        end
     else
         throw(ArgumentError("Unknown taper: $taper. Use :hanning or :dpss"))
-    end
-    
-    if !keeptrials && ndims(power) == 3
-        power = dropdims(mean(power, dims=3), dims=3)
     end
     
     return power, times_out, freqs_out
@@ -636,61 +674,97 @@ function tf_morlet_optimized!(output_power, ws::TFMorletWorkspace, data_3d, ci,
     end
 end
 
-# Compatibility wrapper for tf_morlet
-function tf_morlet(signal, times, sample_rate, freqs, cycles; 
-                   log_freqs = true, tois = nothing, keeptrials::Bool = false)
+
+
+
+
+
+function tf_superlet_optimized!(output_power, ws::TFMorletWorkspace, signal, ci, # signal can be 2D (samples x trials) or 3D slice if we adapt
+                                n_samples, n_trials, tois_idx, freqs, orders, width, combine, keeptrials, sample_rate)
+
+    n_freqs = length(freqs)
+    n_times = length(tois_idx)
+    n_conv = size(ws.padded_signal, 1)
     
-    signal = ndims(signal) == 1 ? reshape(signal, :, 1) : signal
-    ns, nt = size(signal)
-    
-    # Simple conversion to 3D for the optimized inner function
-    sig3d = reshape(signal, ns, 1, nt)
-    
-    nf = length(freqs)
-    f_out = log_freqs ? exp.(range(log(float(freqs[1])), log(float(freqs[end])), length = nf)) : collect(Float64, freqs)
-    
-    c_vals = cycles isa Int ? fill(float(cycles), nf) : 
-             exp.(range(log(float(cycles[1])), log(float(cycles[end])), length = nf))
-    sigmas = c_vals ./ (2 * pi .* f_out)
-    
-    hwins = Int[]
-    for sig in sigmas
-        wl = ceil(Int, 6 * sig * sample_rate)
-        wl += iseven(wl)
-        push!(hwins, wl ÷ 2)
+    # 1. Prepare signal
+    # If signal is 3D (samples x channels x trials), ci is index.
+    # If signal is 2D (samples x trials), ci is ignored or used as offset?
+    # Let's enforce signal to be the 2D matrix for simplicity in this helper
+    for trial in 1:n_trials
+        @inbounds for s in 1:n_samples
+            ws.padded_signal[s, trial] = ComplexF64(signal[s, trial], 0.0)
+        end
+        @inbounds for s in (n_samples+1):n_conv
+            ws.padded_signal[s, trial] = ComplexF64(0.0, 0.0)
+        end
     end
+    mul!(ws.signal_fft, ws.p_fft, ws.padded_signal)
+
+    wavelet_padded = zeros(ComplexF64, n_conv)
+    # Buffers for geometric mean accumulation
+    prod_power = zeros(Float64, n_times, n_trials)
     
-    # Use nextfastfft for optimal FFT/IFFT performance without massive power-of-2 jumps
-    nc = DSP.nextfastfft(ns + ceil(Int, 6 * maximum(sigmas) * sample_rate))
+    inv_n_trials = 1.0 / n_trials
     
-    tois_idx = isnothing(tois) ? collect(1:ns) : [argmin(abs.(times .- t)) for t in tois]
-    
-    # Pre-compute wavelets
-    wffts = zeros(ComplexF64, nc, nf)
-    tmp_w = zeros(ComplexF64, nc)
-    for fi in 1:nf
-        wl = hwins[fi] * 2 + 1
-        w_time = range(-wl / 2, wl / 2, length = wl) ./ sample_rate
-        fill!(tmp_w, 0.0)
-        @. tmp_w[1:wl] = sqrt(1 / (sigmas[fi] * sqrt(pi))) * exp(2im * pi * f_out[fi] * w_time) * exp(-w_time^2 / (2 * sigmas[fi]^2))
-        wffts[:, fi] = fft(tmp_w)
-    end
-    
-    ws = TFMorletWorkspace(nc, nt)
-    
-    if keeptrials
-        out = zeros(nf, length(tois_idx), nt)
-        tf_morlet_optimized!(out, ws, sig3d, 1, ns, nt, tois_idx, hwins, wffts, true)
-        return out, times[tois_idx], f_out
-    else
-        out = zeros(nf, length(tois_idx))
-        tf_morlet_optimized!(out, ws, sig3d, 1, ns, nt, tois_idx, hwins, wffts, false)
-        return out, times[tois_idx], f_out
+    @inbounds for fi in 1:n_freqs
+        freq = freqs[fi]
+        ord = orders[fi]
+        cycles_list = combine == :multiplicative ? [width * i for i in 1:ord] : [width + i - 1 for i in 1:ord]
+        
+        fill!(prod_power, 1.0)
+        
+        for cyc in cycles_list
+            sigma = cyc / (2π * freq)
+            win_len = ceil(Int, 6 * sigma * sample_rate)
+            win_len += iseven(win_len)
+            half_win = win_len ÷ 2
+            
+            fill!(wavelet_padded, 0.0)
+            w_time = range(-win_len / 2, win_len / 2, length = win_len) ./ sample_rate
+            @. wavelet_padded[1:win_len] = sqrt(1 / (sigma * sqrt(pi))) * exp(2im * pi * freq * w_time) * exp(-w_time^2 / (2 * sigma^2))
+            
+            # FFT of wavelet (allocating a bit here, but negligible vs IFFT)
+            wavelet_fft = fft(wavelet_padded)
+            
+            # Convolution
+            for trial in 1:n_trials
+                @simd for i in 1:n_conv
+                    ws.conv_fft[i, trial] = ws.signal_fft[i, trial] * wavelet_fft[i]
+                end
+            end
+            mul!(ws.eegconv, ws.p_ifft, ws.conv_fft)
+            
+            valid_start = half_win + 1
+            for trial in 1:n_trials
+                for ti in 1:n_times
+                    t_idx = tois_idx[ti]
+                    prod_power[ti, trial] *= abs2(ws.eegconv[valid_start + t_idx - 1, trial])
+                end
+            end
+        end
+        
+        # Power calculation (Geometric Mean)
+        inv_ord = 1.0 / ord
+        if keeptrials
+             for trial in 1:n_trials
+                @simd for ti in 1:n_times
+                    output_power[fi, ti, trial] = prod_power[ti, trial] ^ inv_ord
+                end
+            end
+        else
+            # Average directly
+            for trial in 1:n_trials
+                @simd for ti in 1:n_times
+                    output_power[fi, ti] += (prod_power[ti, trial] ^ inv_ord) * inv_n_trials
+                end
+            end
+        end
     end
 end
 
 
-function tf_hanning(signal, times, sample_rate, frequencies, time_steps; window_length = nothing, cycles = nothing)
+
+function tf_hanning(signal, times, sample_rate, frequencies, time_steps; window_length = nothing, cycles = nothing, keeptrials::Bool=false)
 
     if isnothing(window_length) && isnothing(cycles)
         throw(ArgumentError("Must specify either window_length or cycles"))
@@ -702,16 +776,107 @@ function tf_hanning(signal, times, sample_rate, frequencies, time_steps; window_
     tois_idx = [findfirst(≈(t, atol = (1000 / sample_rate) / 1000), times) for t in time_steps]
     n_frex = length(frequencies)
     n_timepoints = length(time_steps)
-    tf_trials = zeros(n_frex, n_timepoints, n_trials)
+    
+    # Optimization: If window_length is fixed (cycles=nothing), we can do 1 FFT per time point
+    # and extract all frequencies, similar to MTM. This avoids n_freqs * n_times FFTs.
+    if isnothing(cycles)
+        timewinidx = round(Int, window_length * sample_rate)
+        timewinidx += iseven(timewinidx)
+        half_win = timewinidx ÷ 2
+        
+        hann_win = 0.5 * (1 .- cos.(2π * (0:(timewinidx-1)) / (timewinidx - 1)))
+        
+        # Frequency indices for all frequencies
+        freq_indices = round.(Int, frequencies .* timewinidx ./ sample_rate) .+ 1
+        
+        # Pre-allocate buffers (Real input for rfft)
+        tmpdat = zeros(Float64, timewinidx, n_trials)
+        p_rfft = plan_rfft(tmpdat, 1) # Plan once
+        
+        # Output size of rfft is div(n, 2) + 1
+        n_rfft_out = div(timewinidx, 2) + 1
+        fdat = zeros(ComplexF64, n_rfft_out, n_trials)
+        
+        # Allocate output
+        if keeptrials
+            tf_trials = zeros(n_frex, n_timepoints, n_trials)
+        else
+            tf_avg = zeros(n_frex, n_timepoints)
+        end
+        inv_n_trials = 1.0 / n_trials
+        
+        @inbounds for (ti, center_idx) in enumerate(tois_idx)
+            start_idx = center_idx - half_win
+            end_idx = center_idx + half_win
 
+            # Extract signal and apply window in one pass (Loop Fusion)
+            if start_idx >= 1 && end_idx <= n_samples
+                for trial in 1:n_trials
+                    @simd for s in 1:timewinidx
+                        tmpdat[s, trial] = signal[start_idx + s - 1, trial] * hann_win[s]
+                    end
+                end
+            else
+                fill!(tmpdat, 0.0)
+                v_start = max(1, start_idx)
+                v_end = min(n_samples, end_idx)
+                offset = v_start - start_idx
+                len = v_end - v_start + 1
+                for trial in 1:n_trials
+                    @simd for s in 1:len
+                        tmpdat[offset + s, trial] = signal[v_start + s - 1, trial] * hann_win[offset + s]
+                    end
+                end
+            end
+
+            # Real-to-Complex FFT (2x faster than Complex FFT)
+            mul!(fdat, p_rfft, tmpdat)
+            
+            # Extract power
+            if keeptrials
+                 for trial in 1:n_trials
+                    for (fi, f_idx) in enumerate(freq_indices)
+                        tf_trials[fi, ti, trial] = abs2(fdat[f_idx, trial])
+                    end
+                end
+            else
+                # Average directly
+                for trial in 1:n_trials
+                    for (fi, f_idx) in enumerate(freq_indices)
+                        tf_avg[fi, ti] += abs2(fdat[f_idx, trial])
+                    end
+                end
+                # Normalize (can also be done at end, but here keeps numbers smaller?)
+                # Actually, better to normalize at very end? No, `tf_avg` is Float64.
+                # Accumulate then multiply.
+            end
+        end
+        
+        if !keeptrials
+            tf_avg .*= inv_n_trials
+            return tf_avg, times[tois_idx], frequencies
+        else
+            return tf_trials, times[tois_idx], frequencies
+        end
+    end
+
+    # Variable window length (cycles specified) - must loop over frequencies
+    # Also handle keeptrials here
+    if keeptrials
+        tf_trials = zeros(n_frex, n_timepoints, n_trials)
+    else
+        tf_avg = zeros(n_frex, n_timepoints)
+    end
+    
     @inbounds for (fi, freq) in enumerate(frequencies)
-        timewinidx = isnothing(cycles) ? round(Int, window_length * sample_rate) : round(Int, cycles / freq * sample_rate)
+        timewinidx = round(Int, cycles / freq * sample_rate)
         timewinidx += iseven(timewinidx)
         half_win = timewinidx ÷ 2
         
         hann_win = 0.5 * (1 .- cos.(2π * (0:(timewinidx-1)) / (timewinidx - 1)))
         frex_idx = round(Int, freq * timewinidx / sample_rate) + 1
         
+        # Pre-allocate buffers for this frequency
         tmpdat = zeros(ComplexF64, timewinidx, n_trials)
         fdat = zeros(ComplexF64, timewinidx, n_trials)
         p_fft = plan_fft(tmpdat, 1)
@@ -721,26 +886,59 @@ function tf_hanning(signal, times, sample_rate, frequencies, time_steps; window_
             end_idx = center_idx + half_win
 
             if start_idx >= 1 && end_idx <= n_samples
-                @views tmpdat .= signal[start_idx:end_idx, :]
+                # Fast path: no boundary issues
+                for trial in 1:n_trials
+                    @simd for s in 1:timewinidx
+                        tmpdat[s, trial] = signal[start_idx + s - 1, trial]
+                    end
+                end
             else
+                # Slow path: handle boundaries
                 fill!(tmpdat, 0.0)
                 v_start = max(1, start_idx)
                 v_end = min(n_samples, end_idx)
                 offset = v_start - start_idx
                 len = v_end - v_start + 1
-                @views tmpdat[offset+1:offset+len, :] .= signal[v_start:v_end, :]
+                for trial in 1:n_trials
+                    @simd for s in 1:len
+                        tmpdat[offset + s, trial] = signal[v_start + s - 1, trial]
+                    end
+                end
             end
 
-            @views tmpdat .*= hann_win
+            # Apply Hanning window
+            for trial in 1:n_trials
+                @simd for s in 1:timewinidx
+                    tmpdat[s, trial] *= hann_win[s]
+                end
+            end
+            
+            # FFT using in-place operation
             mul!(fdat, p_fft, tmpdat)
-            @views tf_trials[fi, ti, :] .= abs2.(fdat[frex_idx, :])
+            
+            # Extract power
+            if keeptrials
+                @simd for trial in 1:n_trials
+                    tf_trials[fi, ti, trial] = abs2(fdat[frex_idx, trial])
+                end
+            else
+                sum_p = 0.0
+                @simd for trial in 1:n_trials
+                    sum_p += abs2(fdat[frex_idx, trial])
+                end
+                tf_avg[fi, ti] = sum_p / n_trials
+            end
         end
     end
 
-    return tf_trials, times[tois_idx], frequencies
+    if !keeptrials
+        return tf_avg, times[tois_idx], frequencies
+    else
+        return tf_trials, times[tois_idx], frequencies
+    end
 end
 
-function tf_mtm(signal, times, sample_rate, frequencies, time_steps; t_ftimwin::Float64=0.5, tapsmofrq::Float64=4.0)
+function tf_mtm(signal, times, sample_rate, frequencies, time_steps; t_ftimwin::Float64=0.5, tapsmofrq::Float64=4.0, keeptrials::Bool=false)
     signal = ndims(signal) == 1 ? reshape(signal, :, 1) : signal
     n_samples, n_trials = size(signal)
     
@@ -763,12 +961,14 @@ function tf_mtm(signal, times, sample_rate, frequencies, time_steps; t_ftimwin::
     
     tf_trials = zeros(n_freqs, n_timepoints, n_trials)
     
-    # Pre-allocate buffer and FFT plan
+    # Pre-allocate all buffers outside the time loop to avoid repeated allocations
     tmpdat = zeros(ComplexF64, timewinidx, n_trials)
-    p_fft = plan_fft(tmpdat, 1)
-    
-    # Temporary buffer for tapered signals
     tapered_buf = zeros(ComplexF64, timewinidx, n_trials)
+    fdat = zeros(ComplexF64, timewinidx, n_trials)
+    taper_power = zeros(n_freqs, n_trials)
+    
+    # Create FFT plan for in-place operations
+    p_fft = plan_fft(tapered_buf, 1)
 
     @inbounds for (ti, center_idx) in enumerate(tois_idx)
         start_idx = center_idx - half_win
@@ -779,22 +979,42 @@ function tf_mtm(signal, times, sample_rate, frequencies, time_steps; t_ftimwin::
         end
         
         # Extract window for all trials
-        @views tmpdat .= signal[start_idx:end_idx, :]
-        
-        # Multi-taper power accumulation
-        taper_power = zeros(n_freqs, n_trials)
-        for t in 1:n_tapers
-            # Apply taper
-            @views tapered_buf .= tmpdat .* tapers[:, t]
-            
-            # FFT all trials at once
-            fdat = p_fft * tapered_buf
-            
-            # Accumulate power
-            @views taper_power .+= abs2.(fdat[freq_indices, :])
+        for trial in 1:n_trials
+            @simd for s in 1:timewinidx
+                tmpdat[s, trial] = signal[start_idx + s - 1, trial]
+            end
         end
         
-        tf_trials[:, ti, :] .= taper_power ./ n_tapers
+        # Reset taper_power for this time point
+        fill!(taper_power, 0.0)
+        
+        # Multi-taper power accumulation
+        for t in 1:n_tapers
+            # Apply taper - manual loop for better performance
+            for trial in 1:n_trials
+                @simd for s in 1:timewinidx
+                    tapered_buf[s, trial] = tmpdat[s, trial] * tapers[s, t]
+                end
+            end
+            
+            # FFT all trials at once using in-place operation
+            mul!(fdat, p_fft, tapered_buf)
+            
+            # Accumulate power at frequency indices
+            for trial in 1:n_trials
+                @simd for fi in 1:n_freqs
+                    taper_power[fi, trial] += abs2(fdat[freq_indices[fi], trial])
+                end
+            end
+        end
+        
+        # Store averaged power
+        inv_n_tapers = 1.0 / n_tapers
+        for trial in 1:n_trials
+            @simd for fi in 1:n_freqs
+                tf_trials[fi, ti, trial] = taper_power[fi, trial] * inv_n_tapers
+            end
+        end
     end
     
     return tf_trials, collect(Float64, time_steps), collect(Float64, frequencies)
@@ -897,36 +1117,12 @@ function tf_analysis(epochs::EpochData, frequencies, time_steps;
     tois_idx = [argmin(abs.(times .- t)) for t in time_steps]
 
     # Pre-compute wavelet parameters (only needed for wavelet method)
+    # Pre-compute wavelet parameters (only needed for wavelet method)
     if method == :wavelet
         width_val = get(kwargs, :width, 7)
-        cycles_range = width_val isa Int ? fill(float(width_val), n_freqs) : 
-                       exp.(range(log(float(width_val[1])), log(float(width_val[end])), length = n_freqs))
-        sigmas = cycles_range ./ (2 * pi .* freqs_out)
+        # Re-calc freqs_out to ensure consistency with helper (though logic is same)
+        _, half_wins, n_conv, wavelet_ffts = _prepare_morlet_wavelets(foi, width_val, sr, n_samples; log_freqs=log_freqs)
         
-        half_wins = Int[]
-        for sig in sigmas
-            wl = ceil(Int, 6 * sig * sr)
-            wl += iseven(wl)
-            push!(half_wins, wl ÷ 2)
-        end
-
-        n_convolution = n_samples + ceil(Int, 6 * maximum(sigmas) * sr)
-        n_conv_pow2 = nextpow(2, n_convolution)
-        
-        # Pre-compute wavelet filters
-        wavelet_ffts = zeros(ComplexF64, n_conv_pow2, n_freqs)
-        tmp_w_padded = zeros(ComplexF64, n_conv_pow2)
-        for fi in 1:n_freqs
-            freq = freqs_out[fi]
-            sigma = sigmas[fi]
-            hw = half_wins[fi]
-            wl = hw * 2 + 1 # iseven check above
-            fill!(tmp_w_padded, 0.0)
-            w_time = range(-wl / 2, wl / 2, length = wl) ./ sr
-            @. tmp_w_padded[1:wl] = sqrt(1 / (sigma * sqrt(pi))) * exp(2im * pi * freq * w_time) * exp(-w_time^2 / (2 * sigma^2))
-            wavelet_ffts[:, fi] = fft(tmp_w_padded)
-        end
-
         # Convert epochs.data to 3D array (only needed for wavelet)
         data_3d = zeros(Float64, n_samples, n_channels, n_trials)
         for (ti, trial_df) in enumerate(epochs.data)
@@ -935,6 +1131,18 @@ function tf_analysis(epochs::EpochData, frequencies, time_steps;
             end
         end
 
+        ws = TFMorletWorkspace(n_conv, n_trials)
+    elseif method == :superlet
+        # Superlet workspace setup
+        # Superlet needs convolution buffer similar to wavelet
+        # Max sigma calculation
+        order = get(kwargs, :order, 5)
+        width = get(kwargs, :width, 3)
+        orders = order isa Int ? fill(order, n_freqs) : order
+        max_sigma = (width * maximum(orders)) / (2π * minimum(freqs_out))
+        n_convolution = n_samples + ceil(Int, 6 * max_sigma * sr)
+        n_conv_pow2 = nextpow(2, n_convolution)
+        
         ws = TFMorletWorkspace(n_conv_pow2, n_trials)
     end
 
@@ -960,8 +1168,14 @@ function tf_analysis(epochs::EpochData, frequencies, time_steps;
             elseif method == :superlet
                 # Filter kwargs for superlet
                 superlet_kwargs = Base.filter(p -> p.first in (:order, :width, :combine), kwargs)
-                power, _, _ = tf_superlet(signal, times, sr, foi, toi; keeptrials=false, superlet_kwargs...)
-                full_power[:, :, ci] = power
+                # Parse defaults
+                sl_order = get(kwargs, :order, 5)
+                sl_width = get(kwargs, :width, 3)
+                sl_combine = get(kwargs, :combine, :multiplicative)
+                orders = sl_order isa Int ? fill(sl_order, n_freqs) : sl_order
+                
+                tf_superlet_optimized!(@view(full_power[:, :, ci]), ws, signal, ci,
+                                     n_samples, n_trials, tois_idx, freqs_out, orders, sl_width, sl_combine, false, sr)
             else
                 error("Unknown method: $method. Use :wavelet, :multitaper, or :superlet")
             end
@@ -1000,7 +1214,14 @@ function tf_analysis(epochs::EpochData, frequencies, time_steps;
             elseif method == :superlet
                 # Filter kwargs for superlet
                 superlet_kwargs = Base.filter(p -> p.first in (:order, :width, :combine), kwargs)
-                power, _, _ = tf_superlet(signal, times, sr, foi, toi; keeptrials=true, superlet_kwargs...)
+                # Parse defaults
+                sl_order = get(kwargs, :order, 5)
+                sl_width = get(kwargs, :width, 3)
+                sl_combine = get(kwargs, :combine, :multiplicative)
+                orders = sl_order isa Int ? fill(sl_order, n_freqs) : sl_order
+                
+                tf_superlet_optimized!(pwr, ws, signal, ci,
+                                     n_samples, n_trials, tois_idx, freqs_out, orders, sl_width, sl_combine, true, sr)
                 # Ensure 3D (freqs × times × trials)
                 if ndims(power) == 2
                     pwr = reshape(power, size(power)..., 1)
