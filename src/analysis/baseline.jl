@@ -430,7 +430,6 @@ Apply baseline correction to TimeFreqData in-place.
   - `:db`: Decibel change (10 * log10(power/baseline))
   - `:percent`: Percent change (100 * (power - baseline) / baseline)
   - `:relchange`: Relative change (power / baseline)
-  - `:zscore`: Z-score ((power - mean) / std)
 
 # Example
 ```julia
@@ -438,6 +437,12 @@ tf_baseline!(tf_data, (-0.3, 0.0); method=:db)
 ```
 """
 function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
+    # Check if baseline has already been applied
+    if tf_data.baseline !== nothing
+        error("Baseline correction has already been applied to this data (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
+              "Baseline corrections are non-linear and cannot be chained. Use the original data to apply a different baseline.")
+    end
+    
     times = unique(tf_data.data.time)
     freqs_unique = unique(tf_data.data.freq)
     n_freqs = length(freqs_unique)
@@ -468,16 +473,19 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         
         # Apply baseline correction
         if method == :db
-            power_mat .= 10 .* log10.(power_mat ./ baseline_power)
+            # Avoid log(0) by ensuring positive values
+            min_power = max.(baseline_power, 1e-10)
+            power_mat .= 10 .* log10.(max.(power_mat, 1e-10) ./ min_power)
         elseif method == :percent
-            power_mat .= 100 .* (power_mat .- baseline_power) ./ baseline_power
+            # Avoid division by zero - use minimum threshold
+            min_baseline = max.(baseline_power, 1e-10)
+            power_mat .= 100 .* (power_mat .- baseline_power) ./ min_baseline
         elseif method == :relchange
-            power_mat .= power_mat ./ baseline_power
-        elseif method == :zscore
-            baseline_std = std(power_mat[:, base_mask], dims=2)
-            power_mat .= (power_mat .- baseline_power) ./ baseline_std
+            # Avoid division by zero
+            min_baseline = max.(baseline_power, 1e-10)
+            power_mat .= power_mat ./ min_baseline
         else
-            error("Unknown baseline method: $method. Use :db, :percent, :relchange, or :zscore")
+            error("Unknown baseline method: $method. Use :db, :percent, or :relchange")
         end
         
         # Write back to DataFrame
@@ -489,12 +497,15 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         end
     end
     
+    # Store baseline information
+    tf_data.baseline = BaselineInfo(method=method, window=(Float64(baseline_window[1]), Float64(baseline_window[2])))
+    
     return nothing
 end
 
 # Non-mutating version
 function tf_baseline(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
-    tf_copy = deepcopy(tf_data)
+    tf_copy = copy(tf_data)  # Use custom copy method instead of deepcopy
     tf_baseline!(tf_copy, baseline_window; method=method)
     return tf_copy
 end

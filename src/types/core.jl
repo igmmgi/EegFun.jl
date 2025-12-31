@@ -222,6 +222,20 @@ mutable struct EpochData <: MultiDataFrameEeg
 end
 
 """
+    BaselineInfo
+
+Stores information about baseline correction applied to time-frequency data.
+
+# Fields
+- `method::Symbol`: Baseline method (`:db`, `:percent`, `:relchange`)
+- `window::Tuple{Float64,Float64}`: Baseline time window (start, stop) in seconds
+"""
+@kwdef struct BaselineInfo
+    method::Symbol
+    window::Tuple{Float64,Float64}
+end
+
+"""
     TimeFreqData
 
 Stores time-frequency analysis results for a single condition/average.
@@ -238,6 +252,7 @@ electrode channel. Suitable for averaged TF representations.
 - `layout::Layout`: Layout object containing electrode positioning information
 - `sample_rate::Int64`: Sample rate of the original data in Hz
 - `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`)
+- `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 """
 mutable struct TimeFreqData <: SingleDataFrameEeg
@@ -248,7 +263,28 @@ mutable struct TimeFreqData <: SingleDataFrameEeg
     layout::Layout
     sample_rate::Int64
     method::Symbol
+    baseline::Union{BaselineInfo,Nothing}
     analysis_info::AnalysisInfo
+end
+
+"""
+    Base.copy(tf_data::TimeFreqData) -> TimeFreqData
+
+Create a copy of TimeFreqData with copied DataFrame and layout.
+The data DataFrame is copied with `copycols=true` to ensure independence.
+"""
+function Base.copy(tf_data::TimeFreqData)::TimeFreqData
+    return TimeFreqData(
+        tf_data.file,
+        tf_data.condition,
+        tf_data.condition_name,
+        copy(tf_data.data, copycols=true),
+        copy(tf_data.layout),
+        tf_data.sample_rate,
+        tf_data.method,
+        tf_data.baseline,  # BaselineInfo is immutable, can share
+        tf_data.analysis_info,  # AnalysisInfo is small, can share or copy if needed
+    )
 end
 
 """
@@ -268,6 +304,7 @@ columns for time, frequency, and each electrode channel.
 - `layout::Layout`: Layout object containing electrode positioning information
 - `sample_rate::Int64`: Sample rate of the original data in Hz
 - `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`)
+- `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
 - `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
 """
 mutable struct TimeFreqEpochData <: MultiDataFrameEeg
@@ -278,6 +315,7 @@ mutable struct TimeFreqEpochData <: MultiDataFrameEeg
     layout::Layout
     sample_rate::Int64
     method::Symbol
+    baseline::Union{BaselineInfo,Nothing}
     analysis_info::AnalysisInfo
 end
 
@@ -542,6 +580,7 @@ filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.
 filename(dat::ContinuousData)::String = dat.file
 filename(dat::ErpData)::String = dat.file
 filename(dat::EpochData)::String = dat.file
+filename(dat::TimeFreqData)::String = dat.file
 filename(dat::SingleDataFrameEeg)::String = dat.data.file[1]  # Fallback for other SingleDataFrameEeg types
 filename(dat::MultiDataFrameEeg)::String = dat.data[1].file[1]  # Fallback for other MultiDataFrameEeg types
 
@@ -618,6 +657,9 @@ function Base.show(io::IO, dat::TimeFreqData)
     println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
     println(io, "Size: $(n_times) times × $(n_freqs) freqs × $(length(channel_labels(dat))) channels")
     println(io, "Freq range: $(minimum(freqs)) - $(maximum(freqs)) Hz")
+    if dat.baseline !== nothing
+        println(io, "Baseline: $(dat.baseline.method) ($(dat.baseline.window[1]) to $(dat.baseline.window[2]) s)")
+    end
     println(io, "Labels: ", print_vector(channel_labels(dat)))
     println(io, "Sample Rate: ", sample_rate(dat))
 end
@@ -632,6 +674,9 @@ function Base.show(io::IO, dat::TimeFreqEpochData)
     println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
     println(io, "Size: $(n_trials) trials × $(n_times) times × $(n_freqs) freqs × $(length(channel_labels(dat))) channels")
     !isempty(freqs) && println(io, "Freq range: $(minimum(freqs)) - $(maximum(freqs)) Hz")
+    if dat.baseline !== nothing
+        println(io, "Baseline: $(dat.baseline.method) ($(dat.baseline.window[1]) to $(dat.baseline.window[2]) s)")
+    end
     println(io, "Labels: ", print_vector(channel_labels(dat)))
     println(io, "Sample Rate: ", sample_rate(dat))
 end

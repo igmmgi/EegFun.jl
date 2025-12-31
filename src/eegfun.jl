@@ -45,6 +45,7 @@ using MLJLinearModels
 using LIBSVM
 
 # Julia standard library
+# TODO: consider using Threads.@threads for parallel processing?
 # using Base.Threads
 
 # Core types

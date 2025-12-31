@@ -507,7 +507,7 @@ end
 
 # Non-mutating version
 function tf_channel_average(tf_data::TimeFreqData; kwargs...)
-    tf_copy = deepcopy(tf_data)
+    tf_copy = copy(tf_data)
     tf_channel_average!(tf_copy; kwargs...)
     return tf_copy
 end

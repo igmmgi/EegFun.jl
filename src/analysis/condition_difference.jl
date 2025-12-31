@@ -298,6 +298,7 @@ function tf_difference(tf1::TimeFreqData, tf2::TimeFreqData)
         tf1.layout,
         tf1.sample_rate,
         tf1.method,
+        nothing,  # Baseline info not preserved for condition differences
         tf1.analysis_info
     )
 end
