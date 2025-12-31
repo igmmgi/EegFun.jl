@@ -261,22 +261,11 @@ Returns BatchResult with success/failure info.
 function _process_realign_file(filepath::String, output_path::String, realignment_column::Symbol)
     filename = basename(filepath)
 
-    # Load data
-    file_data = load(filepath)
-
-    # Try common variable names for epoched data
-    epoch_var_names = ["epochs", "epoch_data", "data"]
-    epochs_data = nothing
-
-    for var_name in epoch_var_names
-        if haskey(file_data, var_name)
-            epochs_data = file_data[var_name]
-            break
-        end
-    end
+    # Load data using load_data (handles single variable files automatically)
+    epochs_data = load_data(filepath)
 
     if isnothing(epochs_data)
-        return BatchResult(false, filename, "No epoched data variable found (tried: $(epoch_var_names))")
+        return BatchResult(false, filename, "No data found in file")
     end
 
     if !(epochs_data isa EpochData)

@@ -640,7 +640,11 @@ function summarize_electrode_repairs(file_pattern::String; input_dir::String = p
         file_path = joinpath(input_dir, file)
         try
             if isfile(file_path)
-                artifact_info = load(file_path, "data")
+                artifact_info = load_data(file_path)
+                # If load_data returned a Dict, extract "data" key
+                if isa(artifact_info, Dict) && haskey(artifact_info, "data")
+                    artifact_info = artifact_info["data"]
+                end
                 for repair_info in artifact_info.continuous_repairs
                     if !isempty(repair_info.repaired)
                         push!(continuous_repairs, repair_info)
@@ -794,7 +798,11 @@ function summarize_ica_components(file_pattern::String; input_dir::String = pwd(
         file_path = joinpath(input_dir, file)
         try
             if isfile(file_path)
-                artifact_info = load(file_path, "data")
+                artifact_info = load_data(file_path)
+                # If load_data returned a Dict, extract "data" key
+                if isa(artifact_info, Dict) && haskey(artifact_info, "data")
+                    artifact_info = artifact_info["data"]
+                end
                 if !isnothing(artifact_info.ica_components)
                     push!(ica_components, artifact_info.ica_components)
                     push!(filenames, file)  # _find_batch_files returns filenames, not full paths

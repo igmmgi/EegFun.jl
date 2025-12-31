@@ -410,7 +410,7 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
     stopband_atten = mean(stopband_db)
 
     # Calculate delays
-    group_delay = -diff(unwrap(phase)) ./ diff(w)
+    group_delay = -diff(DSP.unwrap(phase)) ./ diff(w)
     phase_delay = -phase ./ w
     phase_delay[1] = phase_delay[2] # Handle division by zero at DC
 

@@ -20,7 +20,6 @@ println("=" ^ 40)
 @testset "eegfun" begin
 
     include("automatic/apply.jl")
-    include("automatic/apply.jl")
     include("automatic/artifact_detection.jl")
     include("automatic/baseline.jl")
     # include("automatic/batch_utils.jl") # TODO: tests seem iffy here!
