@@ -443,8 +443,8 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
               "Baseline corrections are non-linear and cannot be chained. Use the original data to apply a different baseline.")
     end
     
-    times = unique(tf_data.data.time)
-    freqs_unique = unique(tf_data.data.freq)
+    times = unique(tf_data.data_power.time)
+    freqs_unique = unique(tf_data.data_power.freq)
     n_freqs = length(freqs_unique)
     n_times = length(times)
     
@@ -457,14 +457,14 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
     # Get channel columns
     ch_labels = channel_labels(tf_data)
     
-    # Process each channel
+    # Process each channel (baseline correction only applies to power, not phase)
     for ch in ch_labels
         # Reshape to freq × time matrix for baseline calculation
         power_mat = zeros(n_freqs, n_times)
         for ti in 1:n_times
             for fi in 1:n_freqs
                 row_idx = (ti - 1) * n_freqs + fi
-                power_mat[fi, ti] = tf_data.data[row_idx, ch]
+                power_mat[fi, ti] = tf_data.data_power[row_idx, ch]
             end
         end
         
@@ -492,7 +492,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         for ti in 1:n_times
             for fi in 1:n_freqs
                 row_idx = (ti - 1) * n_freqs + fi
-                tf_data.data[row_idx, ch] = power_mat[fi, ti]
+                tf_data.data_power[row_idx, ch] = power_mat[fi, ti]
             end
         end
     end

@@ -64,6 +64,7 @@ include("utils/files.jl")
 include("utils/logging.jl")
 include("utils/misc.jl")
 include("utils/print.jl")
+include("utils/signal_generation.jl")
 
 # Layout handling
 include("layouts/layout.jl")

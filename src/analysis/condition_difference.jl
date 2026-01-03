@@ -274,18 +274,27 @@ diff_tf = tf_difference(tf_cond1, tf_cond2)
 """
 function tf_difference(tf1::TimeFreqData, tf2::TimeFreqData)
     # Validate same structure
-    times1, times2 = unique(tf1.data.time), unique(tf2.data.time)
-    freqs1, freqs2 = unique(tf1.data.freq), unique(tf2.data.freq)
+    times1, times2 = unique(tf1.data_power.time), unique(tf2.data_power.time)
+    freqs1, freqs2 = unique(tf1.data_power.freq), unique(tf2.data_power.freq)
     ch1, ch2 = channel_labels(tf1), channel_labels(tf2)
     
     times1 == times2 || error("TimeFreqData objects have different time vectors")
     freqs1 == freqs2 || error("TimeFreqData objects have different frequency vectors")
     ch1 == ch2 || error("TimeFreqData objects have different channels")
     
-    # Create difference DataFrame
-    diff_data = copy(tf1.data)
+    # Create difference DataFrames
+    diff_data_power = copy(tf1.data_power)
+    diff_data_phase = copy(tf1.data_phase)
+    
     for ch in ch1
-        diff_data[!, ch] = tf1.data[!, ch] .- tf2.data[!, ch]
+        # Power difference: simple subtraction
+        diff_data_power[!, ch] = tf1.data_power[!, ch] .- tf2.data_power[!, ch]
+        
+        # Phase difference: compute in complex space (convert to complex, subtract, get phase)
+        z1 = sqrt.(tf1.data_power[!, ch]) .* exp.(im .* tf1.data_phase[!, ch])
+        z2 = sqrt.(tf2.data_power[!, ch]) .* exp.(im .* tf2.data_phase[!, ch])
+        diff_complex = z1 .- z2
+        diff_data_phase[!, ch] = angle.(diff_complex)
     end
     
     diff_name = "$(tf1.condition_name)_minus_$(tf2.condition_name)"
@@ -294,7 +303,8 @@ function tf_difference(tf1::TimeFreqData, tf2::TimeFreqData)
         tf1.file,
         tf1.condition * 100 + tf2.condition,  # Combined condition number
         diff_name,
-        diff_data,
+        diff_data_power,
+        diff_data_phase,
         tf1.layout,
         tf1.sample_rate,
         tf1.method,
