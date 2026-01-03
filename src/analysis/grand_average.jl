@@ -247,15 +247,15 @@ function _create_tf_grand_average(tf_data::Vector{TimeFreqData}, cond_num::Int)
     first_tf = tf_data[1]
     
     # Validate all have same structure (same freqs, times, channels)
-    first_times = unique(first_tf.data.time)
-    first_freqs = unique(first_tf.data.freq)
+    first_times = unique(first_tf.data_power.time)
+    first_freqs = unique(first_tf.data_power.freq)
     first_channels = channel_labels(first_tf)
     
     for tf in tf_data[2:end]
-        if unique(tf.data.time) != first_times
+        if unique(tf.data_power.time) != first_times
             @minimal_error_throw("TimeFreqData objects have inconsistent time vectors")
         end
-        if unique(tf.data.freq) != first_freqs
+        if unique(tf.data_power.freq) != first_freqs
             @minimal_error_throw("TimeFreqData objects have inconsistent frequency vectors")
         end
         if channel_labels(tf) != first_channels
@@ -263,17 +263,21 @@ function _create_tf_grand_average(tf_data::Vector{TimeFreqData}, cond_num::Int)
         end
     end
 
-    # Create a copy of the first TF's data as the base
-    grand_avg_data = copy(first_tf.data)
+    # Create copies of the first TF's data as the base
+    grand_avg_data_power = copy(first_tf.data_power)
+    grand_avg_data_phase = copy(first_tf.data_phase)
 
-    # Average each channel across participants
+    # Average each channel across participants (power and phase separately)
     for ch in first_channels
-        # Collect data from all participants for this channel
-        # Stack as columns: n_rows x n_participants
-        channel_matrix = hcat([tf.data[!, ch] for tf in tf_data]...)
-
-        # Average across participants
-        grand_avg_data[!, ch] = vec(mean(channel_matrix, dims=2))
+        # Collect power data from all participants for this channel
+        power_matrix = hcat([tf.data_power[!, ch] for tf in tf_data]...)
+        grand_avg_data_power[!, ch] = vec(mean(power_matrix, dims=2))
+        
+        # For phase, average in complex space (more meaningful than averaging angles)
+        # Convert phase to complex, average, then get phase back
+        phase_matrix = hcat([tf.data_phase[!, ch] for tf in tf_data]...)
+        complex_avg = vec(mean(exp.(im .* phase_matrix), dims=2))
+        grand_avg_data_phase[!, ch] = angle.(complex_avg)
     end
 
     grand_avg_cond_name = "grand_avg_$(first_tf.condition_name)"
@@ -282,7 +286,8 @@ function _create_tf_grand_average(tf_data::Vector{TimeFreqData}, cond_num::Int)
         "grand_avg",
         cond_num,
         grand_avg_cond_name,
-        grand_avg_data,
+        grand_avg_data_power,
+        grand_avg_data_phase,
         first_tf.layout,
         first_tf.sample_rate,
         first_tf.method,

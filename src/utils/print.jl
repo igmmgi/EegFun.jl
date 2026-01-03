@@ -134,3 +134,4 @@ function eegfun_version_info()
         "timestamp" => string(now()),
     )
 end
+
