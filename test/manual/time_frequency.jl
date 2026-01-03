@@ -4,8 +4,6 @@ using JLD2
 using DataFrames
 using BenchmarkTools
 
-
-
 #######################################################################
 @info eegfun.section("TEST 1: Synthetic Signal with Known Frequencies")
 #######################################################################
@@ -23,30 +21,34 @@ times, signal = eegfun.generate_signal(
 );
 
 # Convert signal to EpochData format
-epochs = eegfun.signal_to_epochs(times, signal, :Channel1, Int(sample_rate))
+epochs = eegfun._signal_to_epochs(times, signal, :Channel1, Int(sample_rate))
 
 # Time and frequency parameters for TF analysis
-toi = -1:0.01:3
-foi = 1:1:40
+time_of_interest = -1:0.01:3
+frequency_of_interest = 1:1:40
 
 # 1. Wavelet method
-tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
+tf_data1 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:wavelet, width=7)
 fig1, _ = eegfun.plot_time_frequency(tf_data1, :Channel1; title="tf_analysis (wavelet, 7 cycles)")
 
-# 2. Multitaper with Hanning
-tf_data2 = eegfun.tf_analysis(epochs, foi, toi; method=:multitaper, taper=:hanning, t_ftimwin=0.3)
-fig2, _ = eegfun.plot_time_frequency(tf_data2, :Channel1; title="tf_analysis (multitaper, Hanning)")
+# 2. Hanning with fixed window length
+tf_data2 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:hanning_fixed, time_window_length=0.3)
+fig2, _ = eegfun.plot_time_frequency(tf_data2, :Channel1; title="tf_analysis (hanning_fixed, 0.3s window)")
 
-# 3. Multitaper with DPSS  
-tf_data3 = eegfun.tf_analysis(epochs, foi, toi; method=:multitaper, taper=:dpss, t_ftimwin=0.3, tapsmofrq=4.0)
+# 3. Hanning with frequency-dependent window length
+tf_data2b = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:hanning_adaptive, cycles=5)
+fig2b, _ = eegfun.plot_time_frequency(tf_data2b, :Channel1; title="tf_analysis (hanning_adaptive, 5 cycles)")
+
+# 4. Multitaper with DPSS  
+tf_data3 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:multitaper, time_window_length=0.3, frequency_smoothing=4.0)
 fig3, _ = eegfun.plot_time_frequency(tf_data3, :Channel1; title="tf_analysis (multitaper, DPSS)")
 
-# 4. Superlet Unified method
-tf_data4 = eegfun.tf_analysis(epochs, foi, toi; method=:superlet, order=5)
+# 5. Superlet Unified method
+tf_data4 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:superlet, order=5)
 fig4, _ = eegfun.plot_time_frequency(tf_data4, :Channel1; title="tf_analysis (superlet, 5th order)")
 
-# 5. Power spectrum (using tf_spectrum on raw signal for comparison)
-power_spectrum, freqs_out = eegfun.tf_spectrum(signal, sample_rate, foi; taper=:dpss, tapsmofrq=2.0)
+# 6. Power spectrum (using tf_spectrum on raw signal for comparison)
+power_spectrum, freqs_out = eegfun.tf_spectrum(signal, sample_rate, frequency_of_interest; taper=:dpss, frequency_smoothing=2.0)
 fig5 = Figure(size=(600, 400))
 ax = Axis(fig5[1, 1], xlabel="Frequency (Hz)", ylabel="Power", title="tf_spectrum (peaks at 2Hz, 15Hz, 25Hz)")
 lines!(ax, freqs_out, power_spectrum)
@@ -64,11 +66,11 @@ epoch_file = joinpath(data_dir, epoch_files[1])
 epochs = eegfun.load_data(epoch_file)[1] # take single epoch
 
 # Time and frequency parameters
-toi = -0.5:0.01:2
-foi = 1:1:40
+time_of_interest = -0.5:0.01:2
+frequency_of_interest = 1:1:40
 
 # TODO: Julia code seems really slow!!!  # takes approx 7 seconds vs. 2 seconds in matlab (check this!!)
-tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:multitaper, width=7)
+# @btime tf_data1 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:wavelet, width=7)
 
 
 
@@ -76,43 +78,46 @@ tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:multitaper, width=7)
 selected_channel = [:Cz, :Fp1, :Fp2]
 
 # Time and frequency parameters
-toi = -0.5:0.01:2
-foi = 1:1:40
+time_of_interest = -0.5:0.01:2
+frequency_of_interest = 1:1:40
 
 # Use tf_analysis - it handles all the data extraction automatically!
 # 1. Wavelet
-@btime tf_data1 = eegfun.tf_analysis(epochs, foi, toi; 
-                                method=:multitaper, taper=:hanning, t_ftimwin=0.3,
-                                channel_selection=eegfun.channels(selected_channel))
 
 
-@time tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
-tf_data1 = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
+@time tf_data1 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:wavelet, width=7)
+tf_data1 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:wavelet, width=7)
 
 
 fig1, _ = eegfun.plot_time_frequency(tf_data1, selected_channel; title="Wavelet - $selected_channel") 
 
 # 2. Wavelet with variable cycles
-tf_data2 = eegfun.tf_analysis(epochs, foi, toi; 
+tf_data2 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; 
                                 method=:wavelet, width=(3, 10),
                                 channel_selection=eegfun.channels(selected_channel))
 fig2, _ = eegfun.plot_time_frequency(tf_data2, selected_channel[1]; title="Wavelet Variable - $selected_channel")
 
 # 3. Superlet
-tf_data3 = eegfun.tf_analysis(epochs, foi, toi; 
+tf_data3 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; 
                                 method=:superlet, order=5,
                                 channel_selection=eegfun.channels(selected_channel))
 fig3, _ = eegfun.plot_time_frequency(tf_data3, selected_channel[1]; title="Superlet - $selected_channel")
 
-# 4. Multitaper Hanning
-tf_data4 = eegfun.tf_analysis(epochs, foi, toi; 
-                                method=:multitaper, taper=:hanning, t_ftimwin=0.3,
+# 4. Hanning with fixed window length
+tf_data4 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; 
+                                method=:hanning_fixed, time_window_length=0.3,
                                 channel_selection=eegfun.channels(selected_channel))
-fig4, _ = eegfun.plot_time_frequency(tf_data4, selected_channel[1]; title="MTM Hanning - $selected_channel")
+fig4, _ = eegfun.plot_time_frequency(tf_data4, selected_channel[1]; title="Hanning Fixed (0.3s) - $selected_channel")
+
+# 4b. Hanning with frequency-dependent window length
+tf_data4b = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; 
+                                method=:hanning_adaptive, cycles=5,
+                                channel_selection=eegfun.channels(selected_channel))
+fig4b, _ = eegfun.plot_time_frequency(tf_data4b, selected_channel[1]; title="Hanning Adaptive (5 cycles) - $selected_channel")
 
 # 5. Multitaper DPSS
-@btime tf_data5 = eegfun.tf_analysis(epochs, foi, toi; 
-                                method=:multitaper, taper=:dpss, t_ftimwin=0.3, tapsmofrq=4.0,
+@btime tf_data5 = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; 
+                                method=:multitaper, time_window_length=0.3, frequency_smoothing=4.0,
                                 channel_selection=eegfun.channels(selected_channel))
 fig5, _ = eegfun.plot_time_frequency(tf_data5, selected_channel[1]; title="MTM DPSS - $selected_channel") 
 
@@ -126,12 +131,12 @@ fig5, _ = eegfun.plot_time_frequency(tf_data5, selected_channel[1]; title="MTM D
 
 selected_channel = :Cz
 # Create a TF analysis for baseline examples
-@btime tf_baseline_example = eegfun.tf_analysis(epochs, foi, toi; 
+@btime tf_baseline_example = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; 
                                          method=:multitaper, width=7,
                                          channel_selection=eegfun.channels(selected_channel))
 
 # Create a TF analysis for baseline examples
-tf_baseline_example = eegfun.tf_analysis(epochs, foi, toi; method=:wavelet, width=7)
+tf_baseline_example = eegfun.tf_analysis(epochs, frequency_of_interest, time_of_interest; method=:wavelet, width=7)
 
 
 # Example 1: Apply baseline correction using tf_baseline function
@@ -197,3 +202,64 @@ fig_b5, _ = eegfun.plot_time_frequency(tf_baseline_example, selected_channel;
                                        baseline_window=baseline_window,
                                        baseline_method=:percent,
                                        title="Plot with baseline_window parameter (dB)")
+
+
+#######################################################################
+@info eegfun.section("TEST 4: Performance Benchmarks")
+#######################################################################
+
+println("="^60)
+println("Time-Frequency Performance Benchmark")
+println("="^60)
+println()
+
+# Generate synthetic test data for benchmarking
+println("Generating synthetic test data...")
+sample_rate = 256.0
+times, signal = eegfun.generate_signal(
+    100,                                    # n_trials (typical for EEG)
+    [-0.5, 2.5],                           # time_window
+    sample_rate,                            # sample_rate
+    [10.0, 20.0],                          # frequencies
+    [1.0, 1.0],                            # amplitudes
+    [[0.0, 1.0], [1.0, 2.0]],             # time windows for each freq
+    0.5                                     # noise amplitude
+)
+
+# Convert to EpochData
+epochs_bench = eegfun._signal_to_epochs(times, signal, :TestChannel, Int(sample_rate))
+
+# Time and frequency parameters
+toi = -0.5:0.01:2.0
+foi = 1:1:40
+
+println("Benchmark configuration:")
+println("  Trials: $(length(epochs_bench.data))")
+println("  Samples per trial: $(nrow(epochs_bench.data[1]))")
+println("  Time points: $(length(toi))")
+println("  Frequencies: $(length(foi))")
+println()
+
+# Warmup
+println("Warming up...")
+eegfun.tf_analysis(epochs_bench, foi, toi; method=:multitaper, time_window_length=0.5, frequency_smoothing=4.0)
+
+println("\n" * "="^60)
+println("BENCHMARK: Multitaper (DPSS) Method")
+println("="^60)
+println()
+
+# Run benchmark
+println("Running benchmark (this may take a few seconds)...")
+@time tf_data_bench = eegfun.tf_analysis(epochs_bench, foi, toi; method=:multitaper, time_window_length=0.5, frequency_smoothing=4.0)
+
+println("\nDetailed benchmark:")
+@btime eegfun.tf_analysis($epochs_bench, $foi, $toi; method=:multitaper, time_window_length=0.5, frequency_smoothing=4.0)
+
+println("\n" * "="^60)
+println("Results:")
+println("="^60)
+println("Output size: $(size(tf_data_bench.data))")
+println("Channels: $(names(tf_data_bench.data)[3:end])")
+println()
+println("="^60)
