@@ -368,12 +368,18 @@ n_epochs(dat::ErpData)::Int = dat.n_epochs
 condition_number(dat::ContinuousData)::String = "Raw Data"
 condition_number(dat::ErpData)::Int = dat.condition
 condition_number(dat::EpochData)::Int = dat.condition
+condition_number(dat::TimeFreqData)::Int = dat.condition
+condition_number(dat::TimeFreqEpochData)::Int = dat.condition
 
 condition_name(dat::ContinuousData)::String = "Raw Data"
 condition_name(dat::ErpData)::String = dat.condition_name
 condition_name(dat::EpochData)::String = dat.condition_name
+condition_name(dat::TimeFreqData)::String = dat.condition_name
+condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
 
 file_name(dat::EpochData)::String = dat.file
+file_name(dat::TimeFreqData)::String = dat.file
+file_name(dat::TimeFreqEpochData)::String = dat.file
 
 
 """
@@ -1122,6 +1128,8 @@ epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 # Helper to extract condition name from ErpData or EpochData
 _get_condition_name(dat::ErpData)::String = dat.condition_name
 _get_condition_name(dat::EpochData)::String = dat.condition_name
+_get_condition_name(dat::TimeFreqData)::String = dat.condition_name
+_get_condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
 
 # Helper function predicates for easier participant filtering (for Vector{Int} of participant IDs)
 participants() = x -> fill(true, length(x))  # Default: select all participants given

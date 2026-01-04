@@ -72,18 +72,20 @@ function generate_signal(
 end
 
 """
-    _signal_to_epochs(times, signal, channel_name::Symbol, sample_rate::Int;
-                     file::String="synthetic", condition::Int=1, condition_name::String="test") -> EpochData
+    signal_to_data(times, signal, channel_name::Symbol, sample_rate::Real;
+                     file::String="synthetic", condition::Int=1, condition_name::String="test") -> Union{EpochData, ErpData}
 
-Internal function: Convert signal data from `generate_signal` to `EpochData` format.
+Internal function: Convert signal data from `generate_signal` to `EpochData` or `ErpData` format.
+
+Returns `ErpData` when there is only one epoch, otherwise returns `EpochData`.
 
 Used internally for testing. Not part of the public API.
 """
-function _signal_to_epochs(
+function signal_to_data(
     times,
     signal,
     channel_name::Symbol,
-    sample_rate::Int;
+    sample_rate::Real;
     file::String = "synthetic",
     condition::Int = 1,
     condition_name::String = "test",
@@ -99,14 +101,6 @@ function _signal_to_epochs(
     times_vec = collect(Float64, times)
     @assert length(times_vec) == n_samples "Time vector length ($(length(times_vec))) must match signal samples ($n_samples)"
 
-    # Create Vector{DataFrame} - one DataFrame per trial
-    trial_dfs = Vector{DataFrame}(undef, n_trials)
-
-    for trial_idx = 1:n_trials
-        # Create DataFrame for this trial with time and channel columns
-        trial_dfs[trial_idx] = DataFrame(:time => times_vec, channel_name => signal[:, trial_idx], :epoch => trial_idx)
-    end
-
     # Create minimal layout for the channel
     layout_df = DataFrame(:label => [channel_name])
     layout = Layout(layout_df, nothing, nothing)
@@ -114,6 +108,15 @@ function _signal_to_epochs(
     # Create AnalysisInfo
     analysis_info = AnalysisInfo()
 
-    # Create and return EpochData
-    return EpochData(file, condition, condition_name, trial_dfs, layout, sample_rate, analysis_info)
+    # If only one epoch, return ErpData
+    if n_trials == 1
+        erp_df = DataFrame(:time => times_vec, channel_name => signal[:, 1])
+        return ErpData(file, condition, condition_name, erp_df, layout, Int(sample_rate), analysis_info, 1)
+    else
+        trial_dfs = Vector{DataFrame}(undef, n_trials)
+        for trial_idx = 1:n_trials
+            trial_dfs[trial_idx] = DataFrame(:time => times_vec, channel_name => signal[:, trial_idx], :epoch => trial_idx)
+        end
+        return EpochData(file, condition, condition_name, trial_dfs, layout, Int(sample_rate), analysis_info)
+    end
 end
