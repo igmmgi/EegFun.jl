@@ -80,7 +80,7 @@ fig1, _ = eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
     baseline_method = :db,
-    #colorrange = (-3, 3),
+    colorrange = (-3, 3),
     ylogscale = true,
     colormap = :jet,
 )
