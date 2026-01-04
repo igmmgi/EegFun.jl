@@ -43,9 +43,17 @@ baseline_window = (-0.5, -0.2), baseline_method = :db)
 
 # Load real EEG data from Cohen's dataset
 data_cohen = eegfun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
-tf_data = eegfun.tf_morlet(data_cohen, :Channel1; min_freq = 2, max_freq = 80, num_frex = 10, cycles = 10)
-fig1, _ = eegfun.plot_time_frequency(tf_data, :Channel1; baseline_window = (-0.5, -0.2), 
+
+# 13.11
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 100), cycles = 7, time_steps = (-0.5, 1.0, 0.01))
+fig1, _ = eegfun.plot_time_frequency(tf_data; baseline_window = (-0.5, -0.2), 
 baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
+
+# 13.11
+@btime tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (2, 80, 1), cycles = 7, time_steps = (-0.5, 1.0, 0.01))
+fig1, _ = eegfun.plot_time_frequency(tf_data; baseline_window = (-0.5, -0.2), 
+baseline_method = :db, colorrange = (-3, 3), ylogscale = false, colormap = :jet)
+
 
 
 

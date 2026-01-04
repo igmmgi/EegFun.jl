@@ -237,6 +237,61 @@ find_idx_start_end(time::AbstractVector, limits::AbstractVector) =
     searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
 
 
+"""
+    find_times(time::AbstractVector, requested_times::AbstractVector) -> (indices::Vector{Int}, times::Vector{Float64})
+
+Find nearest time points in a sorted time vector for each requested time.
+
+For each requested time, finds the nearest matching time point in the sorted time vector
+and returns both the indices and the actual time values.
+
+# Arguments
+- `time::AbstractVector`: Sorted time vector (assumed to be in ascending order)
+- `requested_times::AbstractVector`: Vector of requested time points
+
+# Returns
+- `indices::Vector{Int}`: Indices of nearest matching time points
+- `times::Vector{Float64}`: Actual time values at those indices
+
+# Example
+```julia
+time_vec = [0.0, 0.01, 0.02, 0.03, 0.04]
+requested = [0.005, 0.015, 0.025]
+indices, times = find_times(time_vec, requested)
+# indices = [1, 2, 3]
+# times = [0.0, 0.01, 0.02]
+```
+"""
+function find_times(time::AbstractVector, requested_times::AbstractVector)::Tuple{Vector{Int}, Vector{Float64}}
+    time_min = minimum(time)
+    time_max = maximum(time)
+    
+    indices = Int[]
+    times_out = Float64[]
+    
+    for t_requested in requested_times
+        # Only include if within data range
+        if t_requested >= time_min && t_requested <= time_max
+            # Use searchsortedfirst (same as find_idx_range/find_idx_start_end)
+            idx = searchsortedfirst(time, t_requested)
+            # Find nearest (check previous index if closer)
+            if idx > 1 && abs(time[idx-1] - t_requested) < abs(time[min(idx, length(time))] - t_requested)
+                idx = idx - 1
+            end
+            idx = min(idx, length(time))  # Ensure within bounds
+            
+            # Avoid duplicates
+            if isempty(indices) || indices[end] != idx
+                push!(indices, idx)
+                push!(times_out, time[idx])
+            end
+        end
+    end
+    
+    return indices, times_out
+end
+
+
 
 """
     detrend(x::AbstractVector, y::AbstractVector) -> Vector{Float64}
