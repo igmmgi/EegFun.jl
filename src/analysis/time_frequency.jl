@@ -148,11 +148,6 @@ function tf_morlet(
     end
     num_frex = length(freqs)  # Update num_frex for use in rest of function
 
-    # Define wavelet time window (MATLAB: -1:1/EEG.srate:1)
-    wavelet_time = -1:(1/sr):1
-    n_wavelet = length(wavelet_time)
-    half_of_wavelet_size = (n_wavelet - 1) / 2
-
     # Define cycles/sigma
     # MATLAB: s = logspace(log10(3),log10(10),num_frex)./(2*pi*frex)
     if cycles isa Tuple
@@ -160,12 +155,6 @@ function tf_morlet(
     else
         cycles_vec = fill(Float64(cycles), num_frex)
     end
-    sigma = cycles_vec ./ (2 * pi .* freqs)
-
-    # Define convolution parameters (same for all channels)
-    n_data = n_samples_per_epoch * n_trials
-    n_convolution = n_wavelet + n_data - 1
-    n_conv_pow2 = nextpow(2, n_convolution)
 
     # Initialize output structures based on return_trials flag
     n_times = length(times_out)
@@ -190,60 +179,119 @@ function tf_morlet(
         phase_df.freq = copy(power_df.freq)
     end
 
-    # Process each selected channel
+    # Pre-compute convolution length and FFT plans for single trial (same for all channels)
+    max_sigma = maximum(cycles_vec ./ (2 * pi .* freqs))
+    max_hw = ceil(Int, 6 * max_sigma * sr) ÷ 2
+    max_wl = max_hw * 2 + 1
+    n_conv_trial = max_wl + n_samples_per_epoch - 1
+    n_conv_pow2_trial = nextpow(2, n_conv_trial)
+    
+    # Pre-allocate FFT plans for single trial (smaller, faster) - same for all channels
+    signal_padded_trial_template = zeros(ComplexF64, n_conv_pow2_trial)
+    wavelet_padded_template = zeros(ComplexF64, n_conv_pow2_trial)
+    conv_buffer_template = zeros(ComplexF64, n_conv_pow2_trial)
+    p_fft_trial = plan_fft(signal_padded_trial_template, flags=FFTW.ESTIMATE)
+    p_fft_wavelet_trial = plan_fft(wavelet_padded_template, flags=FFTW.ESTIMATE)
+    p_ifft_trial = plan_ifft(conv_buffer_template, flags=FFTW.ESTIMATE)
+
+    # Pre-allocate reusable buffers (same size for all channels, can be reused)
+    signal_padded_trial = zeros(ComplexF64, n_conv_pow2_trial)
+    eegfft_trial = zeros(ComplexF64, n_conv_pow2_trial)
+    wavelet_padded = zeros(ComplexF64, n_conv_pow2_trial)
+    wavelet_fft = zeros(ComplexF64, n_conv_pow2_trial)
+    conv_buffer = zeros(ComplexF64, n_conv_pow2_trial)
+    eegconv_trial = zeros(ComplexF64, n_conv_pow2_trial)
+
+    # Pre-compute constants (same for all channels and frequencies)
+    inv_sr = 1.0 / sr
+    two_pi = 2 * pi
+    sqrt_pi = sqrt(pi)
+
+    # Process each selected channel - process trials separately for better performance
     for channel in selected_channels
-        # Extract full signal data for convolution (use all time points)
-        signal = zeros(Float64, n_samples_original * n_trials)
-        for (trial_idx, epoch_df) in enumerate(dat_processed.data)
-            signal[(trial_idx-1)*n_samples_original+1:trial_idx*n_samples_original] = epoch_df[!, channel]
+
+        # Initialize output arrays - only for requested time points!
+        if return_trials
+            eegpower = zeros(Float64, num_frex, n_times, n_trials)
+            eegconv = zeros(ComplexF64, num_frex, n_times, n_trials)
+        else
+            eegpower = zeros(Float64, num_frex, n_times)
+            eegconv = zeros(ComplexF64, num_frex, n_times)
         end
+        inv_n_trials = 1.0 / n_trials
 
-        # Get FFT of data 
-        signal_padded = zeros(ComplexF64, n_conv_pow2)
-        signal_padded[1:n_data] = signal
-        eegfft = fft(signal_padded)
-
-        # Initialize output power and phase matrices (frequencies × time × trials) - use full time resolution
-        # Store complex values for proper phase averaging
-        eegpower_full = zeros(Float64, num_frex, n_samples_per_epoch, n_trials)
-        eegconv_full = zeros(ComplexF64, num_frex, n_samples_per_epoch, n_trials)  # Store complex for phase
-
-        # Loop through frequencies
+        # Pre-compute wavelets and their FFTs once (same for all trials)
+        wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
+        hw_per_freq = Vector{Int}(undef, num_frex)
+        valid_start_per_freq = Vector{Int}(undef, num_frex)  # Pre-compute valid_start offsets
         for fi = 1:num_frex
-            # Create wavelet (MATLAB: sqrt(1/(s(fi)*sqrt(pi))) * exp(2*1i*pi*frex(fi).*time) .* exp(-time.^2./(2*(s(fi)^2))))
-            A = sqrt(1 / (sigma[fi] * sqrt(pi)))
-            wavelet = A .* exp.(2im * pi * freqs[fi] .* wavelet_time) .* exp.(-wavelet_time .^ 2 ./ (2 * (sigma[fi]^2)))
+            sigma = cycles_vec[fi] / (two_pi * freqs[fi])
+            hw = ceil(Int, 6 * sigma * sr) ÷ 2
+            wl = hw * 2 + 1
+            hw_per_freq[fi] = hw
+            valid_start_per_freq[fi] = hw + 1  # Pre-compute to avoid repeated addition
+            
+            # Create wavelet directly in padded buffer
+            fill!(wavelet_padded, 0)
+            A = sqrt(1 / (sigma * sqrt_pi))
+            two_pi_freq = two_pi * freqs[fi]
+            inv_2sigma2 = 1.0 / (2 * sigma^2)
+            @inbounds @simd for i = 1:wl
+                t = (-wl / 2 + i - 1) * inv_sr
+                t2 = t * t
+                wavelet_padded[i] = A * exp(im * two_pi_freq * t) * exp(-t2 * inv_2sigma2)
+            end
 
-            # FFT of wavelet
-            wavelet_padded = zeros(ComplexF64, n_conv_pow2)
-            wavelet_padded[1:n_wavelet] = wavelet
-            wavelet_fft = fft(wavelet_padded)
-
-            # Convolution (MATLAB: ifft(wavelet.*eegfft))
-            eegconv = ifft(wavelet_fft .* eegfft)
-
-            # Extract valid part (MATLAB: eegconv(1:n_convolution) then eegconv(half_of_wavelet_size+1:end-half_of_wavelet_size))
-            eegconv = eegconv[1:n_convolution]
-            eegconv = eegconv[Int(half_of_wavelet_size)+1:end-Int(half_of_wavelet_size)]
-
-            # Reshape to (n_samples_per_epoch × n_trials)
-            eegconv_reshaped = reshape(eegconv, n_samples_per_epoch, n_trials)
-
-            # Store power and complex values for each trial
-            eegpower_full[fi, :, :] = abs2.(eegconv_reshaped)
-            eegconv_full[fi, :, :] = eegconv_reshaped
+            # FFT of wavelet - compute once, reuse for all trials
+            wavelet_fft_freq = zeros(ComplexF64, n_conv_pow2_trial)
+            mul!(wavelet_fft_freq, p_fft_wavelet_trial, wavelet_padded)
+            wavelet_ffts[fi] = wavelet_fft_freq
         end
 
-        # Extract only requested time points from full power and complex matrices
-        eegpower = eegpower_full[:, time_indices, :]  # (num_frex × n_times × n_trials)
-        eegconv = eegconv_full[:, time_indices, :]    # (num_frex × n_times × n_trials)
+        # Process each trial separately
+        for trial_idx = 1:n_trials
+            # Extract signal for this trial
+            signal_trial = dat_processed.data[trial_idx][!, channel]
+            
+            # FFT of trial signal - zero pad first, then copy signal
+            fill!(signal_padded_trial, 0)
+            signal_padded_trial[1:n_samples_per_epoch] .= signal_trial
+            mul!(eegfft_trial, p_fft_trial, signal_padded_trial)
+
+            # Loop through frequencies - reuse pre-computed wavelet FFTs
+            for fi = 1:num_frex
+                wavelet_fft = wavelet_ffts[fi]
+                valid_start = valid_start_per_freq[fi]
+
+                # Convolution (MATLAB: ifft(wavelet.*eegfft)) - use @simd for faster multiplication
+                @inbounds @simd for i = 1:n_conv_pow2_trial
+                    conv_buffer[i] = wavelet_fft[i] * eegfft_trial[i]
+                end
+                mul!(eegconv_trial, p_ifft_trial, conv_buffer)
+
+                # Directly extract only requested time points from convolution result
+                # Pre-compute conv_idx offsets for better performance
+                @inbounds for ti in eachindex(time_indices)
+                    conv_idx = valid_start + time_indices[ti] - 1
+                    val = eegconv_trial[conv_idx]
+                    if return_trials
+                        eegpower[fi, ti, trial_idx] = abs2(val)
+                        eegconv[fi, ti, trial_idx] = val
+                    else
+                        eegpower[fi, ti] += abs2(val) * inv_n_trials
+                        eegconv[fi, ti] += val * inv_n_trials
+                    end
+                end
+            end
+        end
 
         if return_trials
             # Store each trial separately
             for trial_idx = 1:n_trials
                 # Extract trial data: (num_frex × n_times)
-                power_trial = eegpower[:, :, trial_idx]
-                phase_trial = angle.(eegconv[:, :, trial_idx])  # Compute phase from complex values
+                @views power_trial = eegpower[:, :, trial_idx]
+                @views conv_trial = eegconv[:, :, trial_idx]
+                phase_trial = angle.(conv_trial)
 
                 # Reshape to long format: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
                 power_values = vec(power_trial)
@@ -253,13 +301,12 @@ function tf_morlet(
                 phase_dfs[trial_idx][!, channel] = phase_values
             end
         else
-            # Average across trials
-            eegpower_avg = mean(eegpower, dims = 3)  # (num_frex × n_times × 1)
-            eegphase_avg = angle.(mean(eegconv, dims = 3))  # Mean of complex values, then angle
+            # Already averaged during accumulation - just compute phase and reshape
+            eegphase = angle.(eegconv)
 
             # Reshape to long format
-            power_values = vec(eegpower_avg)
-            phase_values = vec(eegphase_avg)
+            power_values = vec(eegpower)
+            phase_values = vec(eegphase)
 
             power_df[!, channel] = power_values
             phase_df[!, channel] = phase_values
