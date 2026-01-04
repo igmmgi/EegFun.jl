@@ -145,22 +145,16 @@ function tf_morlet(
     n_times = length(times_out)
 
     # Initialize output structures - allocate appropriate type based on return_trials
+    # Pre-compute shared time and freq columns (same for power and phase)
+    time_col = repeat(times_out, inner = num_frex)
+    freq_col = repeat(freqs, outer = n_times)
+    
     if return_trials
-        power_df = [DataFrame() for _ = 1:n_trials]
-        phase_df = [DataFrame() for _ = 1:n_trials]
-        for trial_idx = 1:n_trials
-            power_df[trial_idx].time = repeat(times_out, inner = num_frex)
-            power_df[trial_idx].freq = repeat(freqs, outer = n_times)
-            phase_df[trial_idx].time = power_df[trial_idx].time  # Share same vectors (never modified)
-            phase_df[trial_idx].freq = power_df[trial_idx].freq
-        end
+        power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
+        phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
     else
-        power_df = DataFrame()
-        power_df.time = repeat(times_out, inner = num_frex)
-        power_df.freq = repeat(freqs, outer = n_times)
-        phase_df = DataFrame()
-        phase_df.time = power_df.time  # Share same vectors (never modified)
-        phase_df.freq = power_df.freq
+        power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
+        phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
     # Pre-compute convolution length and FFT plans for single trial (same for all channels)
@@ -553,22 +547,16 @@ function tf_stft(
     signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
 
     # Initialize output structures - allocate appropriate type based on return_trials
+    # Pre-compute shared time and freq columns (same for power and phase)
+    time_col = repeat(times_out, inner = num_frex)
+    freq_col = repeat(freqs, outer = n_times)
+    
     if return_trials
-        power_df = [DataFrame() for _ = 1:n_trials]
-        phase_df = [DataFrame() for _ = 1:n_trials]
-        for trial_idx = 1:n_trials
-            power_df[trial_idx].time = repeat(times_out, inner = num_frex)
-            power_df[trial_idx].freq = repeat(freqs, outer = n_times)
-            phase_df[trial_idx].time = power_df[trial_idx].time  # Share same vectors (never modified)
-            phase_df[trial_idx].freq = power_df[trial_idx].freq
-        end
+        power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
+        phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
     else
-        power_df = DataFrame()
-        power_df.time = repeat(times_out, inner = num_frex)
-        power_df.freq = repeat(freqs, outer = n_times)
-        phase_df = DataFrame()
-        phase_df.time = power_df.time  # Share same vectors (never modified)
-        phase_df.freq = power_df.freq
+        power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
+        phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
     # Pre-allocate reusable output buffers (reused across all channels)
@@ -1012,22 +1000,16 @@ function tf_multitaper(
     signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
 
     # Initialize output structures - allocate appropriate type based on return_trials
+    # Pre-compute shared time and freq columns (same for power and phase)
+    time_col = repeat(times_out, inner = num_frex)
+    freq_col = repeat(freqs, outer = n_times)
+    
     if return_trials
-        power_df = [DataFrame() for _ = 1:n_trials]
-        phase_df = [DataFrame() for _ = 1:n_trials]
-        for trial_idx = 1:n_trials
-            power_df[trial_idx].time = repeat(times_out, inner = num_frex)
-            power_df[trial_idx].freq = repeat(freqs, outer = n_times)
-            phase_df[trial_idx].time = power_df[trial_idx].time  # Share same vectors (never modified)
-            phase_df[trial_idx].freq = power_df[trial_idx].freq
-        end
+        power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
+        phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
     else
-        power_df = DataFrame()
-        power_df.time = repeat(times_out, inner = num_frex)
-        power_df.freq = repeat(freqs, outer = n_times)
-        phase_df = DataFrame()
-        phase_df.time = power_df.time  # Share same vectors (never modified)
-        phase_df.freq = power_df.freq
+        power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
+        phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
     # Pre-allocate reusable output buffers (reused across all channels)
