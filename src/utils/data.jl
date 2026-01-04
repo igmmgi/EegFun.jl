@@ -254,6 +254,7 @@ function extra_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame
     return isempty(extra_cols) ? DataFrame() : dat.data[epoch][:, extra_cols]
 end
 
+
 function extra_data(dat::MultiDataFrameEeg)::DataFrame
     extra_cols = get_cols_by_group(dat, :extra)
     return isempty(extra_cols) ? DataFrame() : to_data_frame(dat)[:, extra_cols]
@@ -321,6 +322,7 @@ n_samples(dat::MultiDataFrameEeg)::Int = nrow(dat.data[1])
 n_samples(dat::MultiDataFrameEeg, epoch::Int)::Int = nrow(dat.data[epoch])
 n_samples(dat::DataFrame)::Int = nrow(dat)
 
+
 """
     n_channels(dat::EegData) -> Int
 
@@ -366,14 +368,10 @@ n_epochs(dat::ErpData)::Int = dat.n_epochs
 condition_number(dat::ContinuousData)::String = "Raw Data"
 condition_number(dat::ErpData)::Int = dat.condition
 condition_number(dat::EpochData)::Int = dat.condition
-condition_number(dat::TimeFreqData)::Int = dat.condition
-condition_number(dat::TimeFreqEpochData)::Int = dat.condition
 
 condition_name(dat::ContinuousData)::String = "Raw Data"
 condition_name(dat::ErpData)::String = dat.condition_name
 condition_name(dat::EpochData)::String = dat.condition_name
-condition_name(dat::TimeFreqData)::String = dat.condition_name
-condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
 
 file_name(dat::EpochData)::String = dat.file
 
@@ -620,52 +618,6 @@ function to_data_frame(dat::Vector{EpochData})
     isempty(dat[1].data) && return DataFrame()
     return vcat([vcat(dat[idx].data[:]...) for idx in eachindex(dat)]...)
 end
-
-"""
-    to_data_frame(dat::TimeFreqEpochData) -> DataFrame
-
-Convert TimeFreqEpochData to a single DataFrame by concatenating all trials.
-
-# Arguments
-- `dat::TimeFreqEpochData`: The time-frequency epoch data to convert
-
-# Returns
-- `DataFrame`: Single DataFrame with all trials concatenated vertically
-"""
-function to_data_frame(dat::TimeFreqEpochData)
-    isempty(dat.data) && return DataFrame()
-    return vcat(dat.data...)
-end
-
-# === TIME-FREQUENCY SPECIFIC ACCESSORS ===
-
-"""
-    freqs(dat::TimeFreqData) -> Vector{Float64}
-    freqs(dat::TimeFreqEpochData) -> Vector{Float64}
-
-Get unique frequency values from time-frequency data.
-
-# Returns
-- `Vector{Float64}`: Sorted unique frequency values in Hz
-"""
-freqs(dat::TimeFreqData)::Vector{Float64} = sort(unique(dat.data.freq))
-freqs(dat::TimeFreqEpochData)::Vector{Float64} = isempty(dat.data) ? Float64[] : sort(unique(dat.data[1].freq))
-
-"""
-    n_freqs(dat::TimeFreqData) -> Int
-    n_freqs(dat::TimeFreqEpochData) -> Int
-
-Get the number of frequency bins in time-frequency data.
-"""
-n_freqs(dat::TimeFreqData)::Int = length(unique(dat.data.freq))
-n_freqs(dat::TimeFreqEpochData)::Int = isempty(dat.data) ? 0 : length(unique(dat.data[1].freq))
-
-"""
-    n_trials(dat::TimeFreqEpochData) -> Int
-
-Get the number of trials in time-frequency epoch data.
-"""
-n_trials(dat::TimeFreqEpochData)::Int = length(dat.data)
 
 # === MATHEMATICAL UTILITIES ===
 
