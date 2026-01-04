@@ -63,29 +63,34 @@ function tf_morlet(
 
     # Get selected channels using channel selection predicate
     selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
+    if isempty(selected_channels)
+        error("No channels selected. Available channels: $(channel_labels(dat))")
+    end
 
     # Validate frequency specification - exactly one must be provided
-    isnothing(lin_freqs) && isnothing(log_freqs) && error("Either `lin_freqs` or `log_freqs` must be specified")
-    !isnothing(lin_freqs) &&
-        !isnothing(log_freqs) &&
+    if isnothing(lin_freqs) && isnothing(log_freqs)
+        error("Either `lin_freqs` or `log_freqs` must be specified")
+    end
+    if !isnothing(lin_freqs) && !isnothing(log_freqs) 
         error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
+    end
 
     # Validate padding parameter
     if !isnothing(pad) && pad ∉ [:pre, :post, :both]
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
-    # Apply padding if requested (non-mutating)
-    dat_processed = isnothing(pad) ? dat : mirror(dat, pad)
-
-    # Get sample rate and time vector from processed data
-    sr = Float64(dat_processed.sample_rate)
-    times_processed = time(dat_processed)
-    n_samples_processed = n_samples(dat_processed)  # Number of samples per epoch (may be padded)
-
     # Get original data time range (for when time_steps is nothing - use all original points)
+    # Extract this BEFORE potentially mutating dat
     times_original = time(dat)
+
+    # Apply padding if requested (mutating dat directly since we extract time points later anyway)
+    if !isnothing(pad)
+        mirror!(dat, pad)
+    end
+
+    times_processed = time(dat)
+    n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
     # Handle time_steps parameter - determine which time points to extract from results
     # After padding, processed data has extended time range - validate against processed data
@@ -132,7 +137,7 @@ function tf_morlet(
     n_samples_original = n_samples_processed
 
     # Get number of trials/epochs
-    n_trials = n_epochs(dat_processed)
+    n_trials = n_epochs(dat)
     n_samples_per_epoch = n_samples_original  # Use full signal for convolution
 
     # Define frequencies based on user specification
@@ -149,7 +154,6 @@ function tf_morlet(
     num_frex = length(freqs)  # Update num_frex for use in rest of function
 
     # Define cycles/sigma
-    # MATLAB: s = logspace(log10(3),log10(10),num_frex)./(2*pi*frex)
     if cycles isa Tuple
         cycles_vec = exp.(range(log(cycles[1]), log(cycles[2]), length = num_frex))
     else
@@ -181,7 +185,7 @@ function tf_morlet(
 
     # Pre-compute convolution length and FFT plans for single trial (same for all channels)
     max_sigma = maximum(cycles_vec ./ (2 * pi .* freqs))
-    max_hw = ceil(Int, 6 * max_sigma * sr) ÷ 2
+    max_hw = ceil(Int, 6 * max_sigma * dat.sample_rate) ÷ 2
     max_wl = max_hw * 2 + 1
     n_conv_trial = max_wl + n_samples_per_epoch - 1
     n_conv_pow2_trial = nextpow(2, n_conv_trial)
@@ -203,7 +207,7 @@ function tf_morlet(
     eegconv_trial = zeros(ComplexF64, n_conv_pow2_trial)
 
     # Pre-compute constants (same for all channels and frequencies)
-    inv_sr = 1.0 / sr
+    inv_sr = 1.0 / dat.sample_rate 
     two_pi = 2 * pi
     sqrt_pi = sqrt(pi)
     inv_n_trials = 1.0 / n_trials
@@ -214,7 +218,7 @@ function tf_morlet(
     valid_start_per_freq = Vector{Int}(undef, num_frex)
     for fi = 1:num_frex
         sigma = cycles_vec[fi] / (two_pi * freqs[fi])
-        hw = ceil(Int, 6 * sigma * sr) ÷ 2
+        hw = ceil(Int, 6 * sigma * dat.sample_rate) ÷ 2
         wl = hw * 2 + 1
         hw_per_freq[fi] = hw
         valid_start_per_freq[fi] = hw + 1
@@ -250,12 +254,10 @@ function tf_morlet(
 
         # Process each trial separately
         for trial_idx = 1:n_trials
-            # Extract signal for this trial
-            # signal_trial = dat_processed.data[trial_idx][!, channel]
             
             # FFT of trial signal - zero pad first, then copy signal
             fill!(signal_padded_trial, 0)
-            signal_padded_trial[1:n_samples_per_epoch] .= dat_processed.data[trial_idx][!, channel]
+            signal_padded_trial[1:n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
             mul!(eegfft_trial, p_fft_trial, signal_padded_trial)
 
             # Loop through frequencies - reuse pre-computed wavelet FFTs
@@ -301,8 +303,6 @@ function tf_morlet(
         end
     end
 
-    # No need to unmirror DataFrames - we already extracted only the original time range
-
     # Create and return appropriate data type
     if return_trials
         return TimeFreqEpochData(
@@ -332,6 +332,8 @@ function tf_morlet(
         )
     end
 end
+
+
 
 """
     tf_stft(dat::EpochData; 
