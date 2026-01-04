@@ -89,45 +89,25 @@ function tf_morlet(
         mirror!(dat, pad)
     end
 
+    # Get sample rate and time vector from processed data
     times_processed = time(dat)
     n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
     # Handle time_steps parameter - determine which time points to extract from results
-    # After padding, processed data has extended time range - validate against processed data
-    time_min_processed = minimum(times_processed)
-    time_max_processed = maximum(times_processed)
-
     if isnothing(time_steps)
-        # Use all original time points (all in seconds)
-        # Find indices in processed data that correspond to original time points
         time_indices, times_out = find_times(times_processed, times_original)
     else
-        # Generate time points from tuple (start, stop, step) - all in SECONDS
         start_time, stop_time, step_time = time_steps
-        # Generate range of time values in seconds
-        time_steps_vec = collect(Float64, range(Float64(start_time), Float64(stop_time), step = Float64(step_time)))
-        # If the last value is significantly less than stop_time, add it
-        if !isempty(time_steps_vec) && (stop_time - time_steps_vec[end]) > step_time / 2
-            push!(time_steps_vec, Float64(stop_time))
-        end
-
-        # Validate that requested times (in seconds) are within the processed data range (which may be padded)
+        
+        # Check if requested range extends beyond processed data range and warn
+        time_min_processed = minimum(times_processed)
+        time_max_processed = maximum(times_processed)
         if start_time < time_min_processed || stop_time > time_max_processed
             @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
         end
-
-        # Filter time_steps_vec to only include points within processed data range
-        time_steps_vec_filtered = Base.filter(t -> time_min_processed <= t <= time_max_processed, time_steps_vec)
-
-        if isempty(time_steps_vec_filtered)
-            error(
-                "No valid time points found in requested range ($start_time to $stop_time seconds) within processed data range ($time_min_processed to $time_max_processed seconds)",
-            )
-        end
-
-        # Find nearest time points in processed data
-        time_indices, times_out = find_times(times_processed, time_steps_vec_filtered)
-
+        
+        time_steps_range = Float64(start_time):Float64(step_time):Float64(stop_time)
+        time_indices, times_out = find_times(times_processed, time_steps_range)
         if isempty(time_indices)
             error("No valid time points found in requested range ($start_time to $stop_time seconds)")
         end
@@ -332,8 +312,6 @@ function tf_morlet(
         )
     end
 end
-
-
 
 """
     tf_stft(dat::EpochData; 
