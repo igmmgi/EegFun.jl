@@ -430,6 +430,7 @@ Apply baseline correction to TimeFreqData in-place.
   - `:db`: Decibel change (10 * log10(power/baseline))
   - `:percent`: Percent change (100 * (power - baseline) / baseline)
   - `:relchange`: Relative change (power / baseline)
+  - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std)
 
 # Example
 ```julia
@@ -481,10 +482,10 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
             end
         end
         
-        # Compute baseline per frequency
+        # Compute baseline statistics per frequency
         # base_mask is a boolean vector for time points
         # power_mat is (n_freqs, n_times)
-        # We want mean across time points in baseline window for each frequency
+        # We want mean (and std for zscore) across time points in baseline window for each frequency
         baseline_power = vec(mean(power_mat[:, base_mask], dims=2))  # Ensure it's a vector
         
         # Apply baseline correction
@@ -502,8 +503,20 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
             # Avoid division by zero
             min_baseline = max.(baseline_power, 1e-10)
             power_mat .= power_mat ./ min_baseline
+        elseif method == :zscore
+            @info "Applying z-score baseline correction"
+            # Compute standard deviation for each frequency across baseline time points
+            # Cohen: std(baseline_power,[],2) - std along dimension 2 (time), uses sample std (N-1)
+            baseline_std = vec(std(power_mat[:, base_mask], dims=2, corrected=true))  # Use sample std (Bessel's correction, N-1)
+            # Avoid division by zero - use minimum threshold for std
+            # Note: In practice, std should rarely be zero, but this prevents numerical issues
+            min_std = max.(baseline_std, 1e-10)
+            # Z-score: (power - baseline_mean) / baseline_std
+            # Cohen: (tf_data - mean(baseline_power,2)) ./ std(baseline_power,[],2)
+            # baseline_power and min_std are vectors of length n_freqs, reshape to (n_freqs × 1) for broadcasting
+            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_std, n_freqs, 1)
         else
-            error("Unknown baseline method: $method. Use :db, :percent, or :relchange")
+            error("Unknown baseline method: $method. Use :db, :percent, :relchange, or :zscore")
         end
         
         # Write back to DataFrame (using same indexing)
