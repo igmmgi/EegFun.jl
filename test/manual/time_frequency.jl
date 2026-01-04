@@ -28,7 +28,7 @@ eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channe
 # Generate synthetic signal with noise
 sample_rate = 256.0
 times, signal = eegfun.generate_signal(
-    160 * 72,                                     # n_trials
+    2,                                      # n_trials
     [-1.0, 2.0],                            # time_window
     sample_rate,                            # sample_rate
     [2.0, 15, 25.0],                        # frequencies
@@ -39,20 +39,20 @@ times, signal = eegfun.generate_signal(
 epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
 eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
 
-spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=80.0)
+spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=10.0)
+# TODO: why is this plot now blank?
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 
 # time-frequency analysis
 # 13.11
 @btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (2, 80, 1))
-@btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (2, 80, 1), time_steps = (-0.5, 2.0, 0.01))
-fig1 = eegfun.plot_time_frequency( tf_data)
+fig1 = eegfun.plot_time_frequency(tf_data)
 
-@btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (2, 80, 2), window_length = 0.5) 
-fig1 = eegfun.plot_time_frequency( tf_data)
+@btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (2, 80, 4), window_length = 0.5) 
+fig1 = eegfun.plot_time_frequency(tf_data)
 
 @btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (2, 80, 2), window_length = 0.5) 
-fig1 = eegfun.plot_time_frequency( tf_data)
+fig1 = eegfun.plot_time_frequency(tf_data)
 
 
 # Load real data
