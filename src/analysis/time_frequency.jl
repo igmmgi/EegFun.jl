@@ -47,7 +47,7 @@ tf_data = tf_morlet(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:C
 
 # Linear-spaced frequencies with padding and individual trials
 tf_epochs = tf_morlet(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), 
-                      pad=:both, return_trials=true)
+    pad=:both, return_trials=true)
 ```
 """
 function tf_morlet(
@@ -399,10 +399,12 @@ function tf_stft(
     isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
 
     # Validate frequency specification - exactly one must be provided
-    isnothing(lin_freqs) && isnothing(log_freqs) && error("Either `lin_freqs` or `log_freqs` must be specified")
-    !isnothing(lin_freqs) &&
-        !isnothing(log_freqs) &&
+    if isnothing(lin_freqs) && isnothing(log_freqs) 
+        error("Either `lin_freqs` or `log_freqs` must be specified")
+    end
+    if !isnothing(lin_freqs) && !isnothing(log_freqs) 
         error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
+    end
 
     # Validate padding parameter
     if !isnothing(pad) && pad ∉ [:pre, :post, :both]
@@ -415,10 +417,12 @@ function tf_stft(
     end
 
     # Validate window specification - exactly one must be provided
-    isnothing(window_length) && isnothing(cycles) && error("Either `window_length` (fixed) or `cycles` (adaptive) must be specified")
-    !isnothing(window_length) &&
-        !isnothing(cycles) &&
+    if isnothing(window_length) && isnothing(cycles) 
+        error("Either `window_length` (fixed) or `cycles` (adaptive) must be specified")
+    end
+    if !isnothing(window_length) && !isnothing(cycles) 
         error("Only one of `window_length` or `cycles` can be specified, not both")
+    end
 
     # Determine mode
     use_fixed_window = !isnothing(window_length)
@@ -436,13 +440,15 @@ function tf_stft(
         end
     end
 
-    # Apply padding if requested (non-mutating)
-    dat_processed = isnothing(pad) ? dat : mirror(dat, pad)
+    # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
+    if !isnothing(pad)
+        mirror!(dat, pad)
+    end
 
     # Get sample rate and time vector from processed data
-    sr = Float64(dat_processed.sample_rate)
-    times_processed = time(dat_processed)
-    n_samples_processed = n_samples(dat_processed)  # Number of samples per epoch (may be padded)
+    sr = Float64(dat.sample_rate)
+    times_processed = time(dat)
+    n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
     # Get original data time range (for when time_steps is nothing - use all original points)
     times_original = time(dat)
@@ -457,32 +463,15 @@ function tf_stft(
         # Find indices in processed data that correspond to original time points
         time_indices, times_out = find_times(times_processed, times_original)
     else
-        # Generate time points from tuple (start, stop, step) - all in SECONDS
         start_time, stop_time, step_time = time_steps
-        # Generate range of time values in seconds
-        time_steps_vec = collect(Float64, range(Float64(start_time), Float64(stop_time), step = Float64(step_time)))
-        # If the last value is significantly less than stop_time, add it
-        if !isempty(time_steps_vec) && (stop_time - time_steps_vec[end]) > step_time / 2
-            push!(time_steps_vec, Float64(stop_time))
-        end
-
-        # Validate that requested times (in seconds) are within the processed data range (which may be padded)
+        
+        # Check if requested range extends beyond processed data range and warn
         if start_time < time_min_processed || stop_time > time_max_processed
             @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
         end
-
-        # Filter time_steps_vec to only include points within processed data range
-        time_steps_vec_filtered = Base.filter(t -> time_min_processed <= t <= time_max_processed, time_steps_vec)
-
-        if isempty(time_steps_vec_filtered)
-            error(
-                "No valid time points found in requested range ($start_time to $stop_time seconds) within processed data range ($time_min_processed to $time_max_processed seconds)",
-            )
-        end
-
-        # Find nearest time points in processed data
-        time_indices, times_out = find_times(times_processed, time_steps_vec_filtered)
-
+        
+        time_steps_range = Float64(start_time):Float64(step_time):Float64(stop_time)
+        time_indices, times_out = find_times(times_processed, time_steps_range)
         if isempty(time_indices)
             error("No valid time points found in requested range ($start_time to $stop_time seconds)")
         end
@@ -492,7 +481,7 @@ function tf_stft(
     n_samples_original = n_samples_processed
 
     # Get number of trials/epochs
-    n_trials = n_epochs(dat_processed)
+    n_trials = n_epochs(dat)
     n_samples_per_epoch = n_samples_original
 
     # Define frequencies based on user specification
@@ -597,18 +586,32 @@ function tf_stft(
         phase_df.freq = copy(power_df.freq)
     end
 
-    # Process each selected channel
-    for channel in selected_channels
-        # Initialize output power and complex matrices (frequencies × time × trials)
-        # Store complex values for proper phase averaging
+    # Pre-allocate reusable output buffers (reused across all channels)
+    if return_trials
         eegpower_full = zeros(Float64, num_frex, n_times, n_trials)
         eegconv_full = zeros(ComplexF64, num_frex, n_times, n_trials)
+    else
+        eegpower = zeros(Float64, num_frex, n_times)
+        eegconv = zeros(ComplexF64, num_frex, n_times)
+        inv_n_trials = 1.0 / n_trials
+    end
+
+    # Process each selected channel
+    for channel in selected_channels
+        # Clear/initialize output buffers for this channel
+        if return_trials
+            fill!(eegpower_full, 0.0)
+            fill!(eegconv_full, 0.0im)
+        else
+            fill!(eegpower, 0.0)
+            fill!(eegconv, 0.0im)
+        end
 
         # Process each trial
         for trial_idx = 1:n_trials
             # Extract signal for this trial into pre-allocated buffer (match tf_morlet pattern)
             # Get column once to avoid repeated DataFrame lookups
-            epoch_df = dat_processed.data[trial_idx]
+            epoch_df = dat.data[trial_idx]
             col = epoch_df[!, channel]
             # Copy with type conversion in one pass (more efficient than Float64.(col) which allocates)
             @inbounds @simd for i = 1:n_samples_per_epoch
@@ -673,8 +676,14 @@ function tf_stft(
                     # Normalize power by window length squared (matches old tf_hanning implementation)
                     if freq_idx <= length(signal_fft)
                         @inbounds complex_val = signal_fft[freq_idx]
-                        eegpower_full[fi, ti_idx, trial_idx] = abs2(complex_val) / (n_window_samples^2)
-                        eegconv_full[fi, ti_idx, trial_idx] = complex_val
+                        power_val = abs2(complex_val) / (n_window_samples^2)
+                        if return_trials
+                            eegpower_full[fi, ti_idx, trial_idx] = power_val
+                            eegconv_full[fi, ti_idx, trial_idx] = complex_val
+                        else
+                            eegpower[fi, ti_idx] += power_val * inv_n_trials
+                            eegconv[fi, ti_idx] += complex_val * inv_n_trials
+                        end
                     end
                 end
             end
@@ -695,13 +704,9 @@ function tf_stft(
                 phase_dfs[trial_idx][!, channel] = phase_values
             end
         else
-            # Average across trials
-            eegpower_avg = mean(eegpower_full, dims = 3)  # (num_frex × n_times × 1)
-            eegphase_avg = angle.(mean(eegconv_full, dims = 3))  # Mean of complex values, then angle
-
-            # Reshape to long format
-            power_values = vec(eegpower_avg)
-            phase_values = vec(eegphase_avg)
+            # Already averaged during accumulation - just reshape to long format
+            power_values = vec(eegpower)
+            phase_values = vec(angle.(eegconv))
 
             power_df[!, channel] = power_values
             phase_df[!, channel] = phase_values
@@ -863,13 +868,15 @@ function tf_multitaper(
         error("`frequency_smoothing` must be positive, got $frequency_smoothing")
     end
 
-    # Apply padding if requested (non-mutating)
-    dat_processed = isnothing(pad) ? dat : mirror(dat, pad)
+    # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
+    if !isnothing(pad)
+        mirror!(dat, pad)
+    end
 
     # Get sample rate and time vector from processed data
-    sr = Float64(dat_processed.sample_rate)
-    times_processed = time(dat_processed)
-    n_samples_processed = n_samples(dat_processed)  # Number of samples per epoch (may be padded)
+    sr = Float64(dat.sample_rate)
+    times_processed = time(dat)
+    n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
     # Get original data time range (for when time_steps is nothing - use all original points)
     times_original = time(dat)
@@ -884,32 +891,15 @@ function tf_multitaper(
         # Find indices in processed data that correspond to original time points
         time_indices, times_out = find_times(times_processed, times_original)
     else
-        # Generate time points from tuple (start, stop, step) - all in SECONDS
         start_time, stop_time, step_time = time_steps
-        # Generate range of time values in seconds
-        time_steps_vec = collect(Float64, range(Float64(start_time), Float64(stop_time), step = Float64(step_time)))
-        # If the last value is significantly less than stop_time, add it
-        if !isempty(time_steps_vec) && (stop_time - time_steps_vec[end]) > step_time / 2
-            push!(time_steps_vec, Float64(stop_time))
-        end
-
-        # Validate that requested times (in seconds) are within the processed data range (which may be padded)
+        
+        # Check if requested range extends beyond processed data range and warn
         if start_time < time_min_processed || stop_time > time_max_processed
             @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
         end
-
-        # Filter time_steps_vec to only include points within processed data range
-        time_steps_vec_filtered = Base.filter(t -> time_min_processed <= t <= time_max_processed, time_steps_vec)
-
-        if isempty(time_steps_vec_filtered)
-            error(
-                "No valid time points found in requested range ($start_time to $stop_time seconds) within processed data range ($time_min_processed to $time_max_processed seconds)",
-            )
-        end
-
-        # Find nearest time points in processed data
-        time_indices, times_out = find_times(times_processed, time_steps_vec_filtered)
-
+        
+        time_steps_range = Float64(start_time):Float64(step_time):Float64(stop_time)
+        time_indices, times_out = find_times(times_processed, time_steps_range)
         if isempty(time_indices)
             error("No valid time points found in requested range ($start_time to $stop_time seconds)")
         end
@@ -919,7 +909,7 @@ function tf_multitaper(
     n_samples_original = n_samples_processed
 
     # Get number of trials/epochs
-    n_trials = n_epochs(dat_processed)
+    n_trials = n_epochs(dat)
     n_samples_per_epoch = n_samples_original
 
     # Define frequencies based on user specification
@@ -1082,18 +1072,32 @@ function tf_multitaper(
         phase_df.freq = copy(power_df.freq)
     end
 
-    # Process each selected channel
-    for channel in selected_channels
-        # Initialize output power and complex matrices (frequencies × time × trials)
-        # Store complex values for proper phase averaging
+    # Pre-allocate reusable output buffers (reused across all channels)
+    if return_trials
         eegpower_full = zeros(Float64, num_frex, n_times, n_trials)
         eegconv_full = zeros(ComplexF64, num_frex, n_times, n_trials)
+    else
+        eegpower = zeros(Float64, num_frex, n_times)
+        eegconv = zeros(ComplexF64, num_frex, n_times)
+        inv_n_trials = 1.0 / n_trials
+    end
+
+    # Process each selected channel
+    for channel in selected_channels
+        # Clear/initialize output buffers for this channel
+        if return_trials
+            fill!(eegpower_full, 0.0)
+            fill!(eegconv_full, 0.0im)
+        else
+            fill!(eegpower, 0.0)
+            fill!(eegconv, 0.0im)
+        end
 
         # Process each trial
         for trial_idx = 1:n_trials
             # Extract signal for this trial into pre-allocated buffer (avoid allocation)
             # Get column once to avoid repeated DataFrame lookups
-            epoch_df = dat_processed.data[trial_idx]
+            epoch_df = dat.data[trial_idx]
             col = epoch_df[!, channel]
             # Copy with type conversion in one pass (more efficient than Float64.(col) which allocates)
             @inbounds @simd for i = 1:n_samples_per_epoch
@@ -1183,8 +1187,15 @@ function tf_multitaper(
                     end
                     
                     # Average across tapers (use pre-computed inverse)
-                    eegpower_full[fi, ti_idx, trial_idx] = power_sum * inv_n_tapers
-                    eegconv_full[fi, ti_idx, trial_idx] = complex_sum * inv_n_tapers
+                    power_avg = power_sum * inv_n_tapers
+                    complex_avg = complex_sum * inv_n_tapers
+                    if return_trials
+                        eegpower_full[fi, ti_idx, trial_idx] = power_avg
+                        eegconv_full[fi, ti_idx, trial_idx] = complex_avg
+                    else
+                        eegpower[fi, ti_idx] += power_avg * inv_n_trials
+                        eegconv[fi, ti_idx] += complex_avg * inv_n_trials
+                    end
                 end
             end
         end
@@ -1204,13 +1215,9 @@ function tf_multitaper(
                 phase_dfs[trial_idx][!, channel] = phase_values
             end
         else
-            # Average across trials
-            eegpower_avg = mean(eegpower_full, dims = 3)  # (num_frex × n_times × 1)
-            eegphase_avg = angle.(mean(eegconv_full, dims = 3))  # Mean of complex values, then angle
-
-            # Reshape to long format
-            power_values = vec(eegpower_avg)
-            phase_values = vec(eegphase_avg)
+            # Already averaged during accumulation - just reshape to long format
+            power_values = vec(eegpower)
+            phase_values = vec(angle.(eegconv))
 
             power_df[!, channel] = power_values
             phase_df[!, channel] = phase_values
