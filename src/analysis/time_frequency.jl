@@ -144,24 +144,23 @@ function tf_morlet(
     # Initialize output structures based on return_trials flag
     n_times = length(times_out)
 
+    # Initialize output structures - allocate appropriate type based on return_trials
     if return_trials
-        # Initialize per-trial DataFrames
-        power_dfs = [DataFrame() for _ = 1:n_trials]
-        phase_dfs = [DataFrame() for _ = 1:n_trials]
+        power_df = [DataFrame() for _ = 1:n_trials]
+        phase_df = [DataFrame() for _ = 1:n_trials]
         for trial_idx = 1:n_trials
-            power_dfs[trial_idx].time = repeat(times_out, inner = num_frex)
-            power_dfs[trial_idx].freq = repeat(freqs, outer = n_times)
-            phase_dfs[trial_idx].time = copy(power_dfs[trial_idx].time)
-            phase_dfs[trial_idx].freq = copy(power_dfs[trial_idx].freq)
+            power_df[trial_idx].time = repeat(times_out, inner = num_frex)
+            power_df[trial_idx].freq = repeat(freqs, outer = n_times)
+            phase_df[trial_idx].time = power_df[trial_idx].time  # Share same vectors (never modified)
+            phase_df[trial_idx].freq = power_df[trial_idx].freq
         end
     else
-        # Initialize single averaged DataFrame
         power_df = DataFrame()
-        power_df.time = repeat(times_out, inner = num_frex)  # Each time repeated for all freqs
-        power_df.freq = repeat(freqs, outer = n_times)       # All freqs repeated for each time
+        power_df.time = repeat(times_out, inner = num_frex)
+        power_df.freq = repeat(freqs, outer = n_times)
         phase_df = DataFrame()
-        phase_df.time = copy(power_df.time)
-        phase_df.freq = copy(power_df.freq)
+        phase_df.time = power_df.time  # Share same vectors (never modified)
+        phase_df.freq = power_df.freq
     end
 
     # Pre-compute convolution length and FFT plans for single trial (same for all channels)
@@ -273,8 +272,8 @@ function tf_morlet(
                 # Extract trial data and assign directly (vec flattens 2D to match long format)
                 @views power_trial = eegpower[:, :, trial_idx]
                 @views conv_trial = eegconv[:, :, trial_idx]
-                power_dfs[trial_idx][!, channel] = vec(power_trial)
-                phase_dfs[trial_idx][!, channel] = vec(angle.(conv_trial))
+                power_df[trial_idx][!, channel] = vec(power_trial)
+                phase_df[trial_idx][!, channel] = vec(angle.(conv_trial))
             end
         else
             eegpower ./= n_trials
@@ -285,33 +284,19 @@ function tf_morlet(
     end
 
     # Create and return appropriate data type
-    if return_trials
-        return TimeFreqEpochData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            power_dfs,
-            phase_dfs,
-            dat.layout,
-            dat.sample_rate,
-            :wavelet,
-            nothing,  # baseline
-            dat.analysis_info,
-        )
-    else
-        return TimeFreqData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            power_df,
-            phase_df,
-            dat.layout,
-            dat.sample_rate,
-            :wavelet,
-            nothing,  # baseline
-            dat.analysis_info,
-        )
-    end
+    return_type = return_trials ? TimeFreqEpochData : TimeFreqData
+    return return_type(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
+        power_df,
+        phase_df,
+        dat.layout,
+        dat.sample_rate,
+        :wavelet,
+        nothing,  # baseline
+        dat.analysis_info,
+    )
 end
 
 """
@@ -567,25 +552,23 @@ function tf_stft(
     signal_fft_buffer = zeros(ComplexF64, max_fft)
     signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
 
-    # Initialize output structures based on return_trials flag
+    # Initialize output structures - allocate appropriate type based on return_trials
     if return_trials
-        # Initialize per-trial DataFrames
-        power_dfs = [DataFrame() for _ = 1:n_trials]
-        phase_dfs = [DataFrame() for _ = 1:n_trials]
+        power_df = [DataFrame() for _ = 1:n_trials]
+        phase_df = [DataFrame() for _ = 1:n_trials]
         for trial_idx = 1:n_trials
-            power_dfs[trial_idx].time = repeat(times_out, inner = num_frex)
-            power_dfs[trial_idx].freq = repeat(freqs, outer = n_times)
-            phase_dfs[trial_idx].time = copy(power_dfs[trial_idx].time)
-            phase_dfs[trial_idx].freq = copy(power_dfs[trial_idx].freq)
+            power_df[trial_idx].time = repeat(times_out, inner = num_frex)
+            power_df[trial_idx].freq = repeat(freqs, outer = n_times)
+            phase_df[trial_idx].time = power_df[trial_idx].time  # Share same vectors (never modified)
+            phase_df[trial_idx].freq = power_df[trial_idx].freq
         end
     else
-        # Initialize single averaged DataFrame
         power_df = DataFrame()
-        power_df.time = repeat(times_out, inner = num_frex)  # Each time repeated for all freqs
-        power_df.freq = repeat(freqs, outer = n_times)       # All freqs repeated for each time
+        power_df.time = repeat(times_out, inner = num_frex)
+        power_df.freq = repeat(freqs, outer = n_times)
         phase_df = DataFrame()
-        phase_df.time = copy(power_df.time)
-        phase_df.freq = copy(power_df.freq)
+        phase_df.time = power_df.time  # Share same vectors (never modified)
+        phase_df.freq = power_df.freq
     end
 
     # Pre-allocate reusable output buffers (reused across all channels)
@@ -692,8 +675,8 @@ function tf_stft(
 
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
-                power_dfs[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
-                phase_dfs[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
+                power_df[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
+                phase_df[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
             end
         else 
             eegpower ./= n_trials
@@ -704,33 +687,19 @@ function tf_stft(
     end
 
     # Create and return appropriate data type
-    if return_trials
-        return TimeFreqEpochData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            power_dfs,
-            phase_dfs,
-            dat.layout,
-            dat.sample_rate,
-            method_symbol,
-            nothing,  # baseline
-            dat.analysis_info,
-        )
-    else
-        return TimeFreqData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            power_df,
-            phase_df,
-            dat.layout,
-            dat.sample_rate,
-            method_symbol,
-            nothing,  # baseline
-            dat.analysis_info,
-        )
-    end
+    return_type = return_trials ? TimeFreqEpochData : TimeFreqData
+    return return_type(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
+        power_df,
+        phase_df,
+        dat.layout,
+        dat.sample_rate,
+        method_symbol,
+        nothing,  # baseline
+        dat.analysis_info,
+    )
 end
 
 """
@@ -1042,25 +1011,23 @@ function tf_multitaper(
     signal_fft_buffer = zeros(ComplexF64, max_fft)
     signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
 
-    # Initialize output structures based on return_trials flag
+    # Initialize output structures - allocate appropriate type based on return_trials
     if return_trials
-        # Initialize per-trial DataFrames
-        power_dfs = [DataFrame() for _ = 1:n_trials]
-        phase_dfs = [DataFrame() for _ = 1:n_trials]
+        power_df = [DataFrame() for _ = 1:n_trials]
+        phase_df = [DataFrame() for _ = 1:n_trials]
         for trial_idx = 1:n_trials
-            power_dfs[trial_idx].time = repeat(times_out, inner = num_frex)
-            power_dfs[trial_idx].freq = repeat(freqs, outer = n_times)
-            phase_dfs[trial_idx].time = copy(power_dfs[trial_idx].time)
-            phase_dfs[trial_idx].freq = copy(power_dfs[trial_idx].freq)
+            power_df[trial_idx].time = repeat(times_out, inner = num_frex)
+            power_df[trial_idx].freq = repeat(freqs, outer = n_times)
+            phase_df[trial_idx].time = power_df[trial_idx].time  # Share same vectors (never modified)
+            phase_df[trial_idx].freq = power_df[trial_idx].freq
         end
     else
-        # Initialize single averaged DataFrame
         power_df = DataFrame()
-        power_df.time = repeat(times_out, inner = num_frex)  # Each time repeated for all freqs
-        power_df.freq = repeat(freqs, outer = n_times)       # All freqs repeated for each time
+        power_df.time = repeat(times_out, inner = num_frex)
+        power_df.freq = repeat(freqs, outer = n_times)
         phase_df = DataFrame()
-        phase_df.time = copy(power_df.time)
-        phase_df.freq = copy(power_df.freq)
+        phase_df.time = power_df.time  # Share same vectors (never modified)
+        phase_df.freq = power_df.freq
     end
 
     # Pre-allocate reusable output buffers (reused across all channels)
@@ -1193,8 +1160,8 @@ function tf_multitaper(
 
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
-                power_dfs[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
-                phase_dfs[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
+                power_df[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
+                phase_df[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
             end
         else 
             eegpower ./= n_trials
@@ -1205,33 +1172,19 @@ function tf_multitaper(
     end
 
     # Create and return appropriate data type
-    if return_trials
-        return TimeFreqEpochData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            power_dfs,
-            phase_dfs,
-            dat.layout,
-            dat.sample_rate,
-            :multitaper,
-            nothing,  # baseline
-            dat.analysis_info,
-        )
-    else
-        return TimeFreqData(
-            dat.file,
-            dat.condition,
-            dat.condition_name,
-            power_df,
-            phase_df,
-            dat.layout,
-            dat.sample_rate,
-            :multitaper,
-            nothing,  # baseline
-            dat.analysis_info,
-        )
-    end
+    return_type = return_trials ? TimeFreqEpochData : TimeFreqData
+    return return_type(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
+        power_df,
+        phase_df,
+        dat.layout,
+        dat.sample_rate,
+        :multitaper,
+        nothing,  # baseline
+        dat.analysis_info,
+    )
 end
 
 
