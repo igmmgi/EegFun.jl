@@ -26,10 +26,10 @@ spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=80.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 
 # Generate synthetic signal with noise
-sample_rate = 1000.0
+sample_rate = 256.0
 times, signal = eegfun.generate_signal(
-    5,                                     # n_trials
-    [-1.0, 3.0],                            # time_window
+    160 * 72,                                     # n_trials
+    [-1.0, 2.0],                            # time_window
     sample_rate,                            # sample_rate
     [2.0, 15, 25.0],                        # frequencies
     [2.0, 3.0, 2.0],                        # amplitudes
@@ -54,6 +54,14 @@ fig1 = eegfun.plot_time_frequency( tf_data)
 fig1 = eegfun.plot_time_frequency( tf_data)
 
 
+# Load real data
+data_dir = "/home/ian/Documents/Julia/output_data"
+epoch_files = filter(f -> endswith(f, "_epochs_cleaned.jld2"), readdir(data_dir))
+epoch_file = joinpath(data_dir, epoch_files[1])
+epochs_real = eegfun.load_data(epoch_file)[1] # take single epoch
+
+@btime tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 1)) 
+fig1 = eegfun.plot_time_frequency( tf_data, baseline_window = (-0.5, -0.2), baseline_method = :db)
 
 
 
@@ -71,7 +79,7 @@ tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 100), cycles = 7, tim
 fig1, _ = eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
-    baseline_method = :zscore,
+    baseline_method = :db,
     #colorrange = (-3, 3),
     ylogscale = true,
     colormap = :jet,
