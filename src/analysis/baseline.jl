@@ -456,30 +456,17 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
     baseline_start_idx = argmin(abs.(times .- baseline_window[1]))
     baseline_end_idx = argmin(abs.(times .- baseline_window[2]))
     
-    # Ensure start <= end
-    if baseline_start_idx > baseline_end_idx
-        baseline_start_idx, baseline_end_idx = baseline_end_idx, baseline_start_idx
-    end
-    
     # Create mask for baseline time points
     base_mask = falses(n_times)
     base_mask[baseline_start_idx:baseline_end_idx] .= true
-    
     if !any(base_mask)
         error("Baseline window $(baseline_window) does not overlap with data times")
     end
     
-    # Debug: Check baseline window matching
-    n_baseline_points = sum(base_mask)
-    @info "Baseline window: $(baseline_window), matched $n_baseline_points time points out of $n_times"
-    @info "Baseline time range: $(minimum(times[base_mask])) to $(maximum(times[base_mask]))"
-    @info "Frequency range: $(minimum(freqs_unique)) to $(maximum(freqs_unique)) Hz"
-    @info "Frequency order (first 5, last 5): $(freqs_unique[1:min(5, length(freqs_unique))]) ... $(freqs_unique[max(1, length(freqs_unique)-4):end])"
-    
     # Get channel columns
     ch_labels = channel_labels(tf_data)
     
-    # Process each channel (baseline correction only applies to power, not phase)
+    # Process each channel 
     for ch in ch_labels
         # Reshape to freq × time matrix for baseline calculation
         # DataFrame structure: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
@@ -487,22 +474,9 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         # So row_idx = (ti - 1) * n_freqs + fi
         power_mat = zeros(n_freqs, n_times)
         
-        # Debug: Check what frequencies are actually in the first few rows
-        @info "First 5 rows of DataFrame: time=$(tf_data.data_power.time[1:5]), freq=$(tf_data.data_power.freq[1:5])"
-        @info "Expected freqs_unique order: $(freqs_unique[1:min(5, length(freqs_unique))])"
-        
         for ti in 1:n_times
             for fi in 1:n_freqs
                 row_idx = (ti - 1) * n_freqs + fi
-                # Verify we're reading the right frequency
-                actual_freq = tf_data.data_power.freq[row_idx]
-                expected_freq = freqs_unique[fi]
-                if ti == 1 && fi <= 3  # Debug first time point, first 3 frequencies
-                    @info "  ti=$ti, fi=$fi, row_idx=$row_idx: actual_freq=$(round(actual_freq, digits=3)), expected=$(round(expected_freq, digits=3)), power=$(tf_data.data_power[row_idx, ch])"
-                end
-                if abs(actual_freq - expected_freq) > 1e-6
-                    @warn "Frequency mismatch at row_idx=$row_idx: expected $(expected_freq), got $(actual_freq)"
-                end
                 power_mat[fi, ti] = tf_data.data_power[row_idx, ch]
             end
         end
@@ -513,69 +487,11 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         # We want mean across time points in baseline window for each frequency
         baseline_power = vec(mean(power_mat[:, base_mask], dims=2))  # Ensure it's a vector
         
-        # Debug: Check what we're averaging
-        baseline_time_indices = findall(base_mask)
-        @info "Baseline time indices (first 5, last 5): $(baseline_time_indices[1:min(5, length(baseline_time_indices))]) ... $(baseline_time_indices[max(1, length(baseline_time_indices)-4):end])"
-        @info "Baseline time values (first 5, last 5): $(times[baseline_time_indices[1:min(5, length(baseline_time_indices))]]) ... $(times[baseline_time_indices[max(1, length(baseline_time_indices)-4):end]])"
-        
-        # Check power values across the full baseline window
-        baseline_power_freq1 = power_mat[1, base_mask]
-        @info "For freq 1 (1.0 Hz): power range in baseline = $(minimum(baseline_power_freq1)) to $(maximum(baseline_power_freq1))"
-        @info "For freq 1 (1.0 Hz): power values (first 5, last 5) = $(baseline_power_freq1[1:min(5, length(baseline_power_freq1))]) ... $(baseline_power_freq1[max(1, length(baseline_power_freq1)-4):end])"
-        @info "For freq 1 (1.0 Hz): mean = $(mean(baseline_power_freq1)), baseline_power[1] = $(baseline_power[1])"
-        
-        baseline_power_freq40 = power_mat[n_freqs, base_mask]
-        @info "For freq $n_freqs (40.0 Hz): power range in baseline = $(minimum(baseline_power_freq40)) to $(maximum(baseline_power_freq40))"
-        @info "For freq $n_freqs (40.0 Hz): mean = $(mean(baseline_power_freq40)), baseline_power[$n_freqs] = $(baseline_power[n_freqs])"
-        
-        # Debug: Check baseline power values
-        @info "Baseline power range: $(minimum(baseline_power)) to $(maximum(baseline_power))"
-        @info "Power matrix range: $(minimum(power_mat)) to $(maximum(power_mat))"
-        @info "Baseline power mean: $(mean(baseline_power))"
-        # Check a few specific frequencies - show the actual frequency values
-        if n_freqs >= 10
-            @info "Baseline power at $(round(freqs_unique[1], digits=2))Hz (first): $(round(baseline_power[1], digits=2))"
-            @info "Baseline power at $(round(freqs_unique[n_freqs÷2], digits=2))Hz (mid): $(round(baseline_power[n_freqs÷2], digits=2))"
-            @info "Baseline power at $(round(freqs_unique[n_freqs], digits=2))Hz (last): $(round(baseline_power[n_freqs], digits=2))"
-            # Also check what power values we're reading from the DataFrame
-            @info "Sample: power_mat[1,1] (first freq, first time) = $(power_mat[1,1])"
-            @info "Sample: power_mat[1,base_mask[1]] (first freq, first baseline time) = $(power_mat[1, findfirst(base_mask)])"
-            @info "Sample: power_mat[n_freqs,1] (last freq, first time) = $(power_mat[n_freqs,1])"
-        end
-        
         # Apply baseline correction
         if method == :db
-            # Cohen's formula: 10*log10(power / baseline_mean_per_frequency)
-            # This means baseline period should average to ~0 dB (but individual points will vary)
-            # Avoid log(0) by ensuring positive values
-            # Simply use baseline_power directly, but ensure it's at least 1e-10 to avoid division by zero
-            # This preserves the actual baseline power for normalization without inflating the denominator
+            @info "Applying db baseline correction"
             min_power = max.(baseline_power, 1e-10)
-            # Ensure broadcasting works correctly: power_mat is (n_freqs, n_times), min_power is (n_freqs,)
-            # Cohen: 10*log10(power / baseline_mean_per_frequency)
             power_mat .= 10 .* log10.(max.(power_mat, 1e-10) ./ reshape(min_power, n_freqs, 1))
-            
-            # Debug: Check baseline period dB values (should average ~0 dB)
-            # Note: Individual points will vary, but the mean should be ~0
-            baseline_dB_freq1 = power_mat[1, base_mask]
-            @info "For freq 1 ($(round(freqs_unique[1], digits=1)) Hz): dB values in baseline range = $(round(minimum(baseline_dB_freq1), digits=2)) to $(round(maximum(baseline_dB_freq1), digits=2))"
-            @info "For freq 1 ($(round(freqs_unique[1], digits=1)) Hz): mean dB in baseline = $(round(mean(baseline_dB_freq1), digits=2)) (should be ~0)"
-            @info "For freq 1 ($(round(freqs_unique[1], digits=1)) Hz): baseline power values (first, middle, last) = $(round(baseline_power_freq1[1], digits=2)), $(round(baseline_power_freq1[length(baseline_power_freq1)÷2], digits=2)), $(round(baseline_power_freq1[end], digits=2))"
-            @info "For freq 1 ($(round(freqs_unique[1], digits=1)) Hz): baseline mean = $(round(baseline_power[1], digits=2))"
-            @info "For freq 1 ($(round(freqs_unique[1], digits=1)) Hz): dB of first baseline point = 10*log10($(round(baseline_power_freq1[1], digits=2)) / $(round(baseline_power[1], digits=2))) = $(round(10*log10(baseline_power_freq1[1] / baseline_power[1]), digits=2))"
-            
-            # Verify: manually compute mean dB to check calculation
-            manual_mean_dB = mean(10 .* log10.(baseline_power_freq1 ./ baseline_power[1]))
-            @info "For freq 1 ($(round(freqs_unique[1], digits=1)) Hz): Manual mean dB calculation = $(round(manual_mean_dB, digits=2))"
-            
-            baseline_dB_freq40 = power_mat[n_freqs, base_mask]
-            @info "For freq $n_freqs (40.0 Hz): dB values in baseline range = $(round(minimum(baseline_dB_freq40), digits=2)) to $(round(maximum(baseline_dB_freq40), digits=2))"
-            @info "For freq $n_freqs (40.0 Hz): mean dB in baseline = $(round(mean(baseline_dB_freq40), digits=2)) (should be ~0)"
-            
-            # Debug: Check dB values
-            @info "dB range after baseline: $(minimum(power_mat)) to $(maximum(power_mat))"
-            @info "dB mean: $(mean(power_mat))"
-            @info "dB values > 10: $(sum(power_mat .> 10)), dB values < -10: $(sum(power_mat .< -10))"
         elseif method == :percent
             @info "Applying percent baseline correction"
             # Avoid division by zero - use minimum threshold
