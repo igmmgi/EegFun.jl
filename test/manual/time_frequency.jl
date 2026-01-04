@@ -36,14 +36,12 @@ times, signal = eegfun.generate_signal(
 epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
 eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
 
-tf_data = eegfun.tf_morlet(epochs_synthetic, :Channel1)
-fig1, _ = eegfun.plot_time_frequency(
-    tf_data,
-    :Channel1;
-    title = "tf_analysis (wavelet, 7 cycles)",
-    baseline_window = (-0.5, -0.2),
-    baseline_method = :db,
-)
+tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (2, 80, 1))
+fig1, _ = eegfun.plot_time_frequency( tf_data)
+
+tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (2, 80, 1), cycles = 7)
+fig1, _ = eegfun.plot_time_frequency( tf_data, :Channel1;)
+
 
 
 # Load real EEG data from Cohen's dataset
