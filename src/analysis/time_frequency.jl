@@ -4,7 +4,9 @@
               log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
               cycles::Union{Real,Tuple{Real,Real}}=(3, 10),
               time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
-              channel_selection::Function=channels())
+              channel_selection::Function=channels(),
+              pad::Union{Nothing,Symbol}=nothing,
+              return_trials::Bool=false)
 
 Time-frequency analysis using Morlet wavelets (Cohen Chapter 13).
 
@@ -26,17 +28,26 @@ Time-frequency analysis using Morlet wavelets (Cohen Chapter 13).
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
+- `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
+  - `nothing`: No padding (default)
+  - `:pre`: Mirror data before each epoch
+  - `:post`: Mirror data after each epoch
+  - `:both`: Mirror data on both sides (recommended)
+- `return_trials::Bool=false`: If `true`, returns `TimeFreqEpochData` with individual trials preserved.
+  - If `false` (default), returns `TimeFreqData` with trials averaged.
 
 # Returns
-- `TimeFreqData`: Time-frequency data object containing power (and phase, currently empty) for selected channels
+- `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
+- `TimeFreqEpochData` (if `return_trials=true`): Time-frequency data with individual trials preserved
 
 # Example
 ```julia
-# Log-spaced frequencies (30 frequencies from 2 to 80 Hz), single channel
+# Log-spaced frequencies (30 frequencies from 2 to 80 Hz), single channel, averaged
 tf_data = tf_morlet(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz))
 
-# Linear-spaced frequencies (2 Hz steps from 2 to 80 Hz), specific time resolution, multiple channels
-tf_data = tf_morlet(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), channel_selection=channels([:Cz, :Pz]))
+# Linear-spaced frequencies with padding and individual trials
+tf_epochs = tf_morlet(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), 
+                      pad=:both, return_trials=true)
 ```
 """
 function tf_morlet(
@@ -46,6 +57,8 @@ function tf_morlet(
     lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
     log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
     cycles::Union{Real,Tuple{Real,Real}} = (3, 10),
+    pad::Union{Nothing,Symbol} = nothing,
+    return_trials::Bool = false,
 )
 
     # Get selected channels using channel selection predicate
@@ -54,21 +67,35 @@ function tf_morlet(
 
     # Validate frequency specification - exactly one must be provided
     isnothing(lin_freqs) && isnothing(log_freqs) && error("Either `lin_freqs` or `log_freqs` must be specified")
-    !isnothing(lin_freqs) && !isnothing(log_freqs) && error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
+    !isnothing(lin_freqs) &&
+        !isnothing(log_freqs) &&
+        error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
 
-    # Get sample rate
-    sr = Float64(dat.sample_rate)
+    # Validate padding parameter
+    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
+        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
+    end
 
-    # Get time vector from first epoch (all epochs should have same time points)
-    times_original = dat.data[1][!, :time]
-    n_samples_original = length(times_original)
+    # Apply padding if requested (non-mutating)
+    dat_processed = isnothing(pad) ? dat : mirror(dat, pad)
+
+    # Get sample rate and time vector from processed data
+    sr = Float64(dat_processed.sample_rate)
+    times_processed = time(dat_processed)
+    n_samples_processed = n_samples(dat_processed)  # Number of samples per epoch (may be padded)
+
+    # Get original data time range (for when time_steps is nothing - use all original points)
+    times_original = time(dat)
 
     # Handle time_steps parameter - determine which time points to extract from results
-    # time_steps is in SECONDS: (start, stop, step) where all values are in seconds
+    # After padding, processed data has extended time range - validate against processed data
+    time_min_processed = minimum(times_processed)
+    time_max_processed = maximum(times_processed)
+
     if isnothing(time_steps)
         # Use all original time points (all in seconds)
-        time_indices = 1:n_samples_original
-        times_out = times_original  # times_original is in seconds
+        # Find indices in processed data that correspond to original time points
+        time_indices, times_out = find_times(times_processed, times_original)
     else
         # Generate time points from tuple (start, stop, step) - all in SECONDS
         start_time, stop_time, step_time = time_steps
@@ -78,25 +105,35 @@ function tf_morlet(
         if !isempty(time_steps_vec) && (stop_time - time_steps_vec[end]) > step_time / 2
             push!(time_steps_vec, Float64(stop_time))
         end
-        
-        # Validate that requested times (in seconds) are within the original data range (in seconds)
-        time_min = minimum(times_original)  # seconds
-        time_max = maximum(times_original)  # seconds
-        if start_time < time_min || stop_time > time_max
-            @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond data range ($time_min to $time_max seconds). Clipping to available range."
+
+        # Validate that requested times (in seconds) are within the processed data range (which may be padded)
+        if start_time < time_min_processed || stop_time > time_max_processed
+            @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
         end
-        
-        # Find nearest time points using find_times utility function
-        time_indices, times_out = find_times(times_original, time_steps_vec)
-        
+
+        # Filter time_steps_vec to only include points within processed data range
+        time_steps_vec_filtered = Base.filter(t -> time_min_processed <= t <= time_max_processed, time_steps_vec)
+
+        if isempty(time_steps_vec_filtered)
+            error(
+                "No valid time points found in requested range ($start_time to $stop_time seconds) within processed data range ($time_min_processed to $time_max_processed seconds)",
+            )
+        end
+
+        # Find nearest time points in processed data
+        time_indices, times_out = find_times(times_processed, time_steps_vec_filtered)
+
         if isempty(time_indices)
             error("No valid time points found in requested range ($start_time to $stop_time seconds)")
         end
     end
 
+    # Use processed data dimensions for convolution
+    n_samples_original = n_samples_processed
+
     # Get number of trials/epochs
-    n_trials = length(dat.data)
-    n_samples = n_samples_original  # Use full signal for convolution
+    n_trials = n_epochs(dat_processed)
+    n_samples_per_epoch = n_samples_original  # Use full signal for convolution
 
     # Define frequencies based on user specification
     if !isnothing(log_freqs)
@@ -126,36 +163,50 @@ function tf_morlet(
     sigma = cycles_vec ./ (2 * pi .* freqs)
 
     # Define convolution parameters (same for all channels)
-    n_data = n_samples * n_trials
+    n_data = n_samples_per_epoch * n_trials
     n_convolution = n_wavelet + n_data - 1
     n_conv_pow2 = nextpow(2, n_convolution)
 
-    # Initialize output DataFrames (will accumulate data from all channels)
+    # Initialize output structures based on return_trials flag
     n_times = length(times_out)
-    power_df = DataFrame()
-    power_df.time = repeat(times_out, inner = num_frex)  # Each time repeated for all freqs
-    power_df.freq = repeat(freqs, outer = n_times)        # All freqs repeated for each time
-    
-    phase_df = DataFrame()
-    phase_df.time = copy(power_df.time)
-    phase_df.freq = copy(power_df.freq)
+
+    if return_trials
+        # Initialize per-trial DataFrames
+        power_dfs = [DataFrame() for _ = 1:n_trials]
+        phase_dfs = [DataFrame() for _ = 1:n_trials]
+        for trial_idx = 1:n_trials
+            power_dfs[trial_idx].time = repeat(times_out, inner = num_frex)
+            power_dfs[trial_idx].freq = repeat(freqs, outer = n_times)
+            phase_dfs[trial_idx].time = copy(power_dfs[trial_idx].time)
+            phase_dfs[trial_idx].freq = copy(power_dfs[trial_idx].freq)
+        end
+    else
+        # Initialize single averaged DataFrame
+        power_df = DataFrame()
+        power_df.time = repeat(times_out, inner = num_frex)  # Each time repeated for all freqs
+        power_df.freq = repeat(freqs, outer = n_times)       # All freqs repeated for each time
+        phase_df = DataFrame()
+        phase_df.time = copy(power_df.time)
+        phase_df.freq = copy(power_df.freq)
+    end
 
     # Process each selected channel
     for channel in selected_channels
         # Extract full signal data for convolution (use all time points)
-        # MATLAB: reshape(EEG.data(chan,:,:), 1, EEG.pnts*EEG.trials)
         signal = zeros(Float64, n_samples_original * n_trials)
-        for (trial_idx, epoch_df) in enumerate(dat.data)
+        for (trial_idx, epoch_df) in enumerate(dat_processed.data)
             signal[(trial_idx-1)*n_samples_original+1:trial_idx*n_samples_original] = epoch_df[!, channel]
         end
 
-        # Get FFT of data (MATLAB: fft(reshape(...), n_conv_pow2))
+        # Get FFT of data 
         signal_padded = zeros(ComplexF64, n_conv_pow2)
         signal_padded[1:n_data] = signal
         eegfft = fft(signal_padded)
 
-        # Initialize output power matrix (frequencies × time) - use full time resolution
-        eegpower_full = zeros(Float64, num_frex, n_samples)
+        # Initialize output power and phase matrices (frequencies × time × trials) - use full time resolution
+        # Store complex values for proper phase averaging
+        eegpower_full = zeros(Float64, num_frex, n_samples_per_epoch, n_trials)
+        eegconv_full = zeros(ComplexF64, num_frex, n_samples_per_epoch, n_trials)  # Store complex for phase
 
         # Loop through frequencies
         for fi = 1:num_frex
@@ -175,36 +226,76 @@ function tf_morlet(
             eegconv = eegconv[1:n_convolution]
             eegconv = eegconv[Int(half_of_wavelet_size)+1:end-Int(half_of_wavelet_size)]
 
-            # Reshape to (n_samples × n_trials) and average power over trials
-            # MATLAB: mean(abs(reshape(eegconv,EEG.pnts,EEG.trials)).^2,2)
-            eegconv_reshaped = reshape(eegconv, n_samples, n_trials)
-            eegpower_full[fi, :] = vec(mean(abs2.(eegconv_reshaped), dims = 2))
+            # Reshape to (n_samples_per_epoch × n_trials)
+            eegconv_reshaped = reshape(eegconv, n_samples_per_epoch, n_trials)
+
+            # Store power and complex values for each trial
+            eegpower_full[fi, :, :] = abs2.(eegconv_reshaped)
+            eegconv_full[fi, :, :] = eegconv_reshaped
         end
 
-        # Extract only requested time points from full power matrix
-        eegpower = eegpower_full[:, time_indices]
+        # Extract only requested time points from full power and complex matrices
+        eegpower = eegpower_full[:, time_indices, :]  # (num_frex × n_times × n_trials)
+        eegconv = eegconv_full[:, time_indices, :]    # (num_frex × n_times × n_trials)
 
-        # Reshape power matrix to match expected order: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
-        # eegpower is (num_frex × n_times), we need column-major order
-        # vec(eegpower) gives: [freq1_time1, freq2_time1, ..., freqN_time1, freq1_time2, ...]
-        power_values = vec(eegpower)
-        power_df[!, channel] = power_values
+        if return_trials
+            # Store each trial separately
+            for trial_idx = 1:n_trials
+                # Extract trial data: (num_frex × n_times)
+                power_trial = eegpower[:, :, trial_idx]
+                phase_trial = angle.(eegconv[:, :, trial_idx])  # Compute phase from complex values
 
-        # Add phase column (NaN for now)
-        phase_df[!, channel] = fill(NaN, nrow(power_df))
+                # Reshape to long format: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
+                power_values = vec(power_trial)
+                phase_values = vec(phase_trial)
+
+                power_dfs[trial_idx][!, channel] = power_values
+                phase_dfs[trial_idx][!, channel] = phase_values
+            end
+        else
+            # Average across trials
+            eegpower_avg = mean(eegpower, dims = 3)  # (num_frex × n_times × 1)
+            eegphase_avg = angle.(mean(eegconv, dims = 3))  # Mean of complex values, then angle
+
+            # Reshape to long format
+            power_values = vec(eegpower_avg)
+            phase_values = vec(eegphase_avg)
+
+            power_df[!, channel] = power_values
+            phase_df[!, channel] = phase_values
+        end
     end
 
-    # Create TimeFreqData object
-    return TimeFreqData(
-        dat.file,
-        dat.condition,
-        dat.condition_name,
-        power_df,
-        phase_df,
-        dat.layout,
-        dat.sample_rate,
-        :wavelet,
-        nothing,  # baseline
-        dat.analysis_info,
-    )
+    # No need to unmirror DataFrames - we already extracted only the original time range
+
+    # Create and return appropriate data type
+    if return_trials
+        return TimeFreqEpochData(
+            dat.file,
+            dat.condition,
+            dat.condition_name,
+            power_dfs,
+            phase_dfs,
+            dat.layout,
+            dat.sample_rate,
+            :wavelet,
+            nothing,  # baseline
+            dat.analysis_info,
+        )
+    else
+        return TimeFreqData(
+            dat.file,
+            dat.condition,
+            dat.condition_name,
+            power_df,
+            phase_df,
+            dat.layout,
+            dat.sample_rate,
+            :wavelet,
+            nothing,  # baseline
+            dat.analysis_info,
+        )
+    end
 end
+
+
