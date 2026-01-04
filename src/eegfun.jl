@@ -128,6 +128,7 @@ include("plots/plot_power_spectrum.jl")
 include("plots/plot_topography.jl")
 include("plots/plot_triggers.jl")
 include("plots/plot_time_frequency.jl")
+include("plots/plot_spectrum.jl")
 include("plots/plot_filter.jl")
 
 # Plot utilities

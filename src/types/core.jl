@@ -344,6 +344,54 @@ function Base.getproperty(tf_data::TimeFreqEpochData, name::Symbol)
     end
 end
 
+"""
+    SpectrumData
+
+Stores power spectrum analysis results (frequency domain, no time dimension).
+
+This type represents power spectral density data computed using Welch's method or
+other spectral estimation techniques. The data is stored in a DataFrame with
+frequency values and power for each electrode channel.
+
+# Fields
+- `file::String`: Source filename
+- `condition::Int64`: Condition number
+- `condition_name::String`: Name of the condition
+- `data::DataFrame`: DataFrame with columns: freq, [electrode channels...] containing power spectral density (μV²/Hz)
+- `layout::Layout`: Layout object containing electrode positioning information
+- `sample_rate::Int64`: Sample rate of the original data in Hz
+- `method::Symbol`: Analysis method (`:welch`, `:multitaper`, etc.)
+- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
+"""
+mutable struct SpectrumData <: SingleDataFrameEeg
+    file::String
+    condition::Int64
+    condition_name::String
+    data::DataFrame
+    layout::Layout
+    sample_rate::Int64
+    method::Symbol
+    analysis_info::AnalysisInfo
+end
+
+"""
+    Base.copy(spectrum_data::SpectrumData) -> SpectrumData
+
+Create a copy of SpectrumData with copied DataFrame and layout.
+"""
+function Base.copy(spectrum_data::SpectrumData)::SpectrumData
+    return SpectrumData(
+        spectrum_data.file,
+        spectrum_data.condition,
+        spectrum_data.condition_name,
+        copy(spectrum_data.data, copycols = true),
+        copy(spectrum_data.layout),
+        spectrum_data.sample_rate,
+        spectrum_data.method,
+        spectrum_data.analysis_info,
+    )
+end
+
 
 
 """
@@ -609,6 +657,7 @@ filename(dat::ErpData)::String = dat.file
 filename(dat::EpochData)::String = dat.file
 filename(dat::TimeFreqData)::String = dat.file
 filename(dat::TimeFreqEpochData)::String = dat.file
+filename(dat::SpectrumData)::String = dat.file
 filename(dat::SingleDataFrameEeg)::String = dat.data.file[1]  # Fallback for other SingleDataFrameEeg types
 filename(dat::MultiDataFrameEeg)::String = dat.data[1].file[1]  # Fallback for other MultiDataFrameEeg types
 

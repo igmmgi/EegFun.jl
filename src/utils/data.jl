@@ -370,16 +370,19 @@ condition_number(dat::ErpData)::Int = dat.condition
 condition_number(dat::EpochData)::Int = dat.condition
 condition_number(dat::TimeFreqData)::Int = dat.condition
 condition_number(dat::TimeFreqEpochData)::Int = dat.condition
+condition_number(dat::SpectrumData)::Int = dat.condition
 
 condition_name(dat::ContinuousData)::String = "Raw Data"
 condition_name(dat::ErpData)::String = dat.condition_name
 condition_name(dat::EpochData)::String = dat.condition_name
 condition_name(dat::TimeFreqData)::String = dat.condition_name
 condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
+condition_name(dat::SpectrumData)::String = dat.condition_name
 
 file_name(dat::EpochData)::String = dat.file
 file_name(dat::TimeFreqData)::String = dat.file
 file_name(dat::TimeFreqEpochData)::String = dat.file
+file_name(dat::SpectrumData)::String = dat.file
 
 
 """
