@@ -125,11 +125,12 @@ function tf_morlet(
         # Logarithmic spacing: (start, stop, number)
         min_freq, max_freq, num_frex = log_freqs
         freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-        freqs = collect(Float64, freqs)
+        # Broadcasting already allocates an array, no collect() needed
     else
         # Linear spacing: (start, stop, step)
         min_freq, max_freq, step = lin_freqs
-        freqs = collect(Float64, range(Float64(min_freq), Float64(max_freq), step = Float64(step)))
+        freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
+        # Range works fine for indexing, repeat(), and broadcasting - no collect() needed
     end
     num_frex = length(freqs)  # Update num_frex for use in rest of function
 
@@ -190,7 +191,6 @@ function tf_morlet(
     inv_sr = 1.0 / dat.sample_rate 
     two_pi = 2 * pi
     sqrt_pi = sqrt(pi)
-    inv_n_trials = 1.0 / n_trials
 
     # Pre-compute wavelets and their FFTs once (same for all channels and trials)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
@@ -260,8 +260,8 @@ function tf_morlet(
                         eegpower[fi, ti, trial_idx] = abs2(val)
                         eegconv[fi, ti, trial_idx] = val
                     else
-                        eegpower[fi, ti] += abs2(val) * inv_n_trials
-                        eegconv[fi, ti] += val * inv_n_trials
+                        eegpower[fi, ti] += abs2(val)
+                        eegconv[fi, ti] += val
                     end
                 end
             end
@@ -277,7 +277,8 @@ function tf_morlet(
                 phase_dfs[trial_idx][!, channel] = vec(angle.(conv_trial))
             end
         else
-            # Already averaged during accumulation - just compute phase and assign directly
+            eegpower ./= n_trials
+            eegconv ./= n_trials
             power_df[!, channel] = vec(eegpower)
             phase_df[!, channel] = vec(angle.(eegconv))
         end
@@ -489,11 +490,12 @@ function tf_stft(
         # Logarithmic spacing: (start, stop, number)
         min_freq, max_freq, num_frex = log_freqs
         freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-        freqs = collect(Float64, freqs)
+        # Broadcasting already allocates an array, no collect() needed
     else
         # Linear spacing: (start, stop, step)
         min_freq, max_freq, step = lin_freqs
-        freqs = collect(Float64, range(Float64(min_freq), Float64(max_freq), step = Float64(step)))
+        freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
+        # Range works fine for indexing, repeat(), and broadcasting - no collect() needed
     end
     num_frex = length(freqs)
 
@@ -593,7 +595,6 @@ function tf_stft(
     else
         eegpower = zeros(Float64, num_frex, n_times)
         eegconv = zeros(ComplexF64, num_frex, n_times)
-        inv_n_trials = 1.0 / n_trials
     end
 
     # Process each selected channel
@@ -611,12 +612,14 @@ function tf_stft(
         for trial_idx = 1:n_trials
             # Extract signal for this trial into pre-allocated buffer (match tf_morlet pattern)
             # Get column once to avoid repeated DataFrame lookups
-            epoch_df = dat.data[trial_idx]
-            col = epoch_df[!, channel]
+            # epoch_df = dat.data[trial_idx]
+            # col = epoch_df[!, channel]
+            signal_buffer .= dat.data[trial_idx][!, channel]
             # Copy with type conversion in one pass (more efficient than Float64.(col) which allocates)
-            @inbounds @simd for i = 1:n_samples_per_epoch
-                signal_buffer[i] = Float64(col[i])
-            end
+            # @inbounds @simd for i = 1:n_samples_per_epoch
+            #     signal_buffer[i] = Float64(col[i])
+            # end
+            # signal_buffer .= col
 
             # Process each frequency (for adaptive windows, window size varies per frequency)
             for fi = 1:num_frex
@@ -658,15 +661,13 @@ function tf_stft(
                     end
 
                     # Apply Hanning window (in-place)
-                    @inbounds @simd for i = 1:n_window_samples
-                        windowed_signal[i] *= hanning_window[i]
-                    end
+                    windowed_signal .*= hanning_window
 
                     # Pad to FFT length (zero out, then copy windowed signal)
+                    # Note: We zero the entire buffer because we only copy n_window_samples
+                    # into a buffer of size n_fft (the tail must be zero for FFT)
                     fill!(signal_padded, 0.0)
-                    @inbounds @simd for i = 1:n_window_samples
-                        signal_padded[i] = windowed_signal[i]
-                    end
+                    signal_padded[1:n_window_samples] .= windowed_signal
 
                     # Compute FFT using pre-computed plan (reuse buffer)
                     mul!(signal_fft, p_fft, signal_padded)
@@ -681,35 +682,24 @@ function tf_stft(
                             eegpower_full[fi, ti_idx, trial_idx] = power_val
                             eegconv_full[fi, ti_idx, trial_idx] = complex_val
                         else
-                            eegpower[fi, ti_idx] += power_val * inv_n_trials
-                            eegconv[fi, ti_idx] += complex_val * inv_n_trials
+                            eegpower[fi, ti_idx] += power_val
+                            eegconv[fi, ti_idx] += complex_val
                         end
                     end
                 end
             end
         end
 
-        if return_trials
-            # Store each trial separately
+        if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
-                # Extract trial data: (num_frex × n_times)
-                power_trial = eegpower_full[:, :, trial_idx]
-                phase_trial = angle.(eegconv_full[:, :, trial_idx])  # Compute phase from complex values
-
-                # Reshape to long format: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
-                power_values = vec(power_trial)
-                phase_values = vec(phase_trial)
-
-                power_dfs[trial_idx][!, channel] = power_values
-                phase_dfs[trial_idx][!, channel] = phase_values
+                power_dfs[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
+                phase_dfs[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
             end
-        else
-            # Already averaged during accumulation - just reshape to long format
-            power_values = vec(eegpower)
-            phase_values = vec(angle.(eegconv))
-
-            power_df[!, channel] = power_values
-            phase_df[!, channel] = phase_values
+        else 
+            eegpower ./= n_trials
+            eegconv ./= n_trials
+            power_df[!, channel] = vec(eegpower)
+            phase_df[!, channel] = vec(angle.(eegconv))
         end
     end
 
@@ -917,11 +907,12 @@ function tf_multitaper(
         # Logarithmic spacing: (start, stop, number)
         min_freq, max_freq, num_frex = log_freqs
         freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-        freqs = collect(Float64, freqs)
+        # Broadcasting already allocates an array, no collect() needed
     else
         # Linear spacing: (start, stop, step)
         min_freq, max_freq, step = lin_freqs
-        freqs = collect(Float64, range(Float64(min_freq), Float64(max_freq), step = Float64(step)))
+        freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
+        # Range works fine for indexing, repeat(), and broadcasting - no collect() needed
     end
     num_frex = length(freqs)
 
@@ -1079,7 +1070,6 @@ function tf_multitaper(
     else
         eegpower = zeros(Float64, num_frex, n_times)
         eegconv = zeros(ComplexF64, num_frex, n_times)
-        inv_n_trials = 1.0 / n_trials
     end
 
     # Process each selected channel
@@ -1097,12 +1087,13 @@ function tf_multitaper(
         for trial_idx = 1:n_trials
             # Extract signal for this trial into pre-allocated buffer (avoid allocation)
             # Get column once to avoid repeated DataFrame lookups
-            epoch_df = dat.data[trial_idx]
-            col = epoch_df[!, channel]
+            # epoch_df = dat.data[trial_idx]
+            # col = epoch_df[!, channel]
+            signal_buffer .= dat.data[trial_idx][!, channel]
             # Copy with type conversion in one pass (more efficient than Float64.(col) which allocates)
-            @inbounds @simd for i = 1:n_samples_per_epoch
-                signal_buffer[i] = Float64(col[i])
-            end
+            # @inbounds @simd for i = 1:n_samples_per_epoch
+            #     signal_buffer[i] = Float64(col[i])
+            # end
 
             # Process each frequency (for adaptive windows, window size varies per frequency)
             for fi = 1:num_frex
@@ -1193,34 +1184,23 @@ function tf_multitaper(
                         eegpower_full[fi, ti_idx, trial_idx] = power_avg
                         eegconv_full[fi, ti_idx, trial_idx] = complex_avg
                     else
-                        eegpower[fi, ti_idx] += power_avg * inv_n_trials
-                        eegconv[fi, ti_idx] += complex_avg * inv_n_trials
+                        eegpower[fi, ti_idx] += power_avg
+                        eegconv[fi, ti_idx] += complex_avg
                     end
                 end
             end
         end
 
-        if return_trials
-            # Store each trial separately
+        if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
-                # Extract trial data: (num_frex × n_times)
-                power_trial = eegpower_full[:, :, trial_idx]
-                phase_trial = angle.(eegconv_full[:, :, trial_idx])  # Compute phase from complex values
-
-                # Reshape to long format: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
-                power_values = vec(power_trial)
-                phase_values = vec(phase_trial)
-
-                power_dfs[trial_idx][!, channel] = power_values
-                phase_dfs[trial_idx][!, channel] = phase_values
+                power_dfs[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
+                phase_dfs[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
             end
-        else
-            # Already averaged during accumulation - just reshape to long format
-            power_values = vec(eegpower)
-            phase_values = vec(angle.(eegconv))
-
-            power_df[!, channel] = power_values
-            phase_df[!, channel] = phase_values
+        else 
+            eegpower ./= n_trials
+            eegconv ./= n_trials
+            power_df[!, channel] = vec(eegpower)
+            phase_df[!, channel] = vec(angle.(eegconv))
         end
     end
 
@@ -1253,6 +1233,10 @@ function tf_multitaper(
         )
     end
 end
+
+
+
+
 
 """
     freq_spectrum(dat::EegData;
