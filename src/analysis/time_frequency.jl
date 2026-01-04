@@ -206,6 +206,7 @@ function tf_morlet(
     inv_sr = 1.0 / sr
     two_pi = 2 * pi
     sqrt_pi = sqrt(pi)
+    inv_n_trials = 1.0 / n_trials
 
     # Pre-compute wavelets and their FFTs once (same for all channels and trials)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
@@ -235,17 +236,17 @@ function tf_morlet(
         wavelet_ffts[fi] = wavelet_fft_freq
     end
 
+    # Pre-allocate reusable output buffers (reused across all channels)
+    if return_trials
+        eegpower = zeros(Float64, num_frex, n_times, n_trials)
+        eegconv = zeros(ComplexF64, num_frex, n_times, n_trials)
+    else
+        eegpower = zeros(Float64, num_frex, n_times)
+        eegconv = zeros(ComplexF64, num_frex, n_times)
+    end
+
     # Process each selected channel - process trials separately for better performance
     for channel in selected_channels
-        # Initialize output arrays - only for requested time points!
-        if return_trials
-            eegpower = zeros(Float64, num_frex, n_times, n_trials)
-            eegconv = zeros(ComplexF64, num_frex, n_times, n_trials)
-        else
-            eegpower = zeros(Float64, num_frex, n_times)
-            eegconv = zeros(ComplexF64, num_frex, n_times)
-        end
-        inv_n_trials = 1.0 / n_trials
 
         # Process each trial separately
         for trial_idx = 1:n_trials
