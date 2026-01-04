@@ -37,8 +37,13 @@ epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
 eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
 
 tf_data = eegfun.tf_morlet(epochs_synthetic, :Channel1)
-fig1, _ = eegfun.plot_time_frequency(tf_data, :Channel1; title = "tf_analysis (wavelet, 7 cycles)", 
-baseline_window = (-0.5, -0.2), baseline_method = :db)
+fig1, _ = eegfun.plot_time_frequency(
+    tf_data,
+    :Channel1;
+    title = "tf_analysis (wavelet, 7 cycles)",
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+)
 
 
 # Load real EEG data from Cohen's dataset
@@ -46,14 +51,64 @@ data_cohen = eegfun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
 
 # 13.11
 tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 100), cycles = 7, time_steps = (-0.5, 1.0, 0.01))
-fig1, _ = eegfun.plot_time_frequency(tf_data; baseline_window = (-0.5, -0.2), 
-baseline_method = :db, colorrange = (-3, 3), ylogscale = true, colormap = :jet)
+fig1, _ = eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
 
 # 13.11
-@btime tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (2, 80, 1), cycles = 7, time_steps = (-0.5, 1.0, 0.01))
-fig1, _ = eegfun.plot_time_frequency(tf_data; baseline_window = (-0.5, -0.2), 
-baseline_method = :db, colorrange = (-3, 3), ylogscale = false, colormap = :jet)
+@btime tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (2, 80, 1), cycles = 7, time_steps = (-2.5, 3.0, 0.01))
 
+fig1, _ = eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = false,
+    colormap = :jet,
+)
+
+
+fig1, _ = eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = false,
+    colormap = :jet,
+)
+
+
+# Load real data
+data_dir = "/home/ian/Documents/Julia/output_data"
+epoch_files = filter(f -> endswith(f, "_epochs_cleaned.jld2"), readdir(data_dir))
+epoch_file = joinpath(data_dir, epoch_files[1])
+epochs_real = eegfun.load_data(epoch_file)[1] # take single epoch
+
+@time tf_data = eegfun.tf_morlet(epochs_real, log_freqs = (2, 80, 100), cycles = 7, time_steps = (-0.5, 1.0, 0.01))
+fig1, _ = eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
+
+@time tf_data =
+    eegfun.tf_morlet_optim(epochs_real, log_freqs = (2, 80, 100), cycles = 7, time_steps = (-0.5, 1.0, 0.01))
+fig1, _ = eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
 
 
 
@@ -76,23 +131,23 @@ frequency_of_interest_cohen = 2:1:80   # 0.5 Hz steps (matches Cohen Figure 13.1
 # - colorrange=(-3, 3): dB range matching Cohen's figure
 @info "Running wavelet analysis (this may take a while due to fine time/freq resolution)..."
 tf_data1_cohen = eegfun.tf_analysis(
-    data_cohen, 
-    frequency_of_interest_cohen, 
-    time_of_interest_cohen; 
-    method = :wavelet, 
+    data_cohen,
+    frequency_of_interest_cohen,
+    time_of_interest_cohen;
+    method = :wavelet,
     width = 3,  # Frequency-dependent cycles: 3 at low freq, 10 at high freq
-    log_freqs = false  # Use linear frequency spacing (1:2:80) instead of logarithmic
+    log_freqs = false,  # Use linear frequency spacing (1:2:80) instead of logarithmic
 )
 
 fig1_cohen, _ = eegfun.plot_time_frequency(
-    tf_data1_cohen, 
+    tf_data1_cohen,
     :Channel1;
     title = "Figure 13.14 - Time-Frequency Analysis (Cohen)",
     #baseline_window = (-0.5, -0.2),
     #baseline_method = :db,
     ylogscale = false,  # Logarithmic frequency scale (matches Cohen)
     #colorrange = (-3, 3),  # dB range matching Cohen's figure
-    colormap = :jet
+    colormap = :jet,
 )
 
 
@@ -122,7 +177,7 @@ time_of_interest = -1:0.01:3
 frequency_of_interest = 1:1:40
 
 # 1. Wavelet method
-tf_data = tf_analysis(epochs_synthetic, frequency_of_interest, time_of_interest; method=:wavelet, width=7)
+tf_data = tf_analysis(epochs_synthetic, frequency_of_interest, time_of_interest; method = :wavelet, width = 7)
 fig1, _ = eegfun.plot_time_frequency(tf_data, :Channel1; title = "tf_analysis (wavelet, 7 cycles)")
 
 
@@ -148,23 +203,23 @@ frequency_of_interest_cohen = 2:1:80   # 0.5 Hz steps (matches Cohen Figure 13.1
 # - colorrange=(-3, 3): dB range matching Cohen's figure
 @info "Running wavelet analysis (this may take a while due to fine time/freq resolution)..."
 tf_data1_cohen = eegfun.tf_analysis(
-    data_cohen, 
-    frequency_of_interest_cohen, 
-    time_of_interest_cohen; 
-    method = :wavelet, 
+    data_cohen,
+    frequency_of_interest_cohen,
+    time_of_interest_cohen;
+    method = :wavelet,
     width = 3,  # Frequency-dependent cycles: 3 at low freq, 10 at high freq
-    log_freqs = false  # Use linear frequency spacing (1:2:80) instead of logarithmic
+    log_freqs = false,  # Use linear frequency spacing (1:2:80) instead of logarithmic
 )
 
 fig1_cohen, _ = eegfun.plot_time_frequency(
-    tf_data1_cohen, 
+    tf_data1_cohen,
     :Channel1;
     title = "Figure 13.14 - Time-Frequency Analysis (Cohen)",
     #baseline_window = (-0.5, -0.2),
     #baseline_method = :db,
     ylogscale = false,  # Logarithmic frequency scale (matches Cohen)
     #colorrange = (-3, 3),  # dB range matching Cohen's figure
-    colormap = :jet
+    colormap = :jet,
 )
 
 
@@ -175,8 +230,15 @@ epoch_files = filter(f -> endswith(f, "_epochs_cleaned.jld2"), readdir(data_dir)
 epoch_file = joinpath(data_dir, epoch_files[1])
 epochs_real = eegfun.load_data(epoch_file)[1] # take single epoch
 
-tf_data = eegfun.tf_analysis(epochs_real, frequency_of_interest, time_of_interest; method=:wavelet, width=7)
-fig1, _ = eegfun.plot_time_frequency(tf_data, :Cz; title = "tf_analysis (wavelet, 7 cycles)", ylogscale=false, baseline_window=(-0.5, -0.2), baseline_method=:db)
+tf_data = eegfun.tf_analysis(epochs_real, frequency_of_interest, time_of_interest; method = :wavelet, width = 7)
+fig1, _ = eegfun.plot_time_frequency(
+    tf_data,
+    :Cz;
+    title = "tf_analysis (wavelet, 7 cycles)",
+    ylogscale = false,
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+)
 
 # 2. Hanning with fixed window length
 tf_data2 = eegfun.tf_analysis(
