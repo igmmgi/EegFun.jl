@@ -94,6 +94,7 @@ include("analysis/realign.jl")
 include("analysis/rereference.jl")
 include("analysis/resample.jl")
 include("analysis/triggers.jl")
+include("analysis/time_frequency.jl")
 
 # analysis pipelines
 include("pipelines/utils/utils.jl")
@@ -126,6 +127,7 @@ include("plots/plot_layout.jl")
 include("plots/plot_power_spectrum.jl")
 include("plots/plot_topography.jl")
 include("plots/plot_triggers.jl")
+include("plots/plot_time_frequency.jl")
 include("plots/plot_filter.jl")
 
 # Plot utilities
