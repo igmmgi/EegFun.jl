@@ -45,10 +45,14 @@ eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channe
 
 # time-frequency analysis
 # 13.11
-@btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (2, 80, 1))
+@btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 80, 1))
+@btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (1, 80, 1), window_length = 0.5) 
+@btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (1, 80, 1), window_length = 0.5) 
+
 fig1 = eegfun.plot_time_frequency(tf_data)
 
 @btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (2, 80, 4), window_length = 0.5) 
+@btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (2, 80, 2), window_length = 0.5) 
 fig1 = eegfun.plot_time_frequency(tf_data)
 
 @btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (2, 80, 2), window_length = 0.5) 
