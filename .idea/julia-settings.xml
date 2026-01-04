@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="JuliaSettingsState">
-    <option name="juliaSdkPath" value="$USER_HOME$/.julia/juliaup/julia-1.12.3+0.x64.linux.gnu/bin/julia" />
-    <option name="juliaVersion" value="1.12.3" />
-    <option name="enableJuliaFormatter" value="true" />
-    <option name="formatOnSave" value="true" />
-  </component>
-</project>

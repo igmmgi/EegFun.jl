@@ -235,104 +235,7 @@ Stores information about baseline correction applied to time-frequency data.
     window::Tuple{Float64,Float64}
 end
 
-"""
-    TimeFreqData
 
-Stores time-frequency analysis results for a single condition/average.
-
-This type represents time-frequency power and phase data where all time-frequency points
-are stored in DataFrames with columns for time, frequency, and each electrode channel.
-Suitable for averaged TF representations.
-
-# Fields
-- `file::String`: Source filename
-- `condition::Int64`: Condition number
-- `condition_name::String`: Name of the condition
-- `data_power::DataFrame`: DataFrame with columns: time, freq, [electrode channels...] containing power values
-- `data_phase::DataFrame`: DataFrame with columns: time, freq, [electrode channels...] containing phase values (radians)
-- `data::DataFrame`: Alias for `data_power` (for backward compatibility)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the original data in Hz
-- `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`, `:hanning_fixed`, `:hanning_adaptive`)
-- `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
-"""
-mutable struct TimeFreqData <: SingleDataFrameEeg
-    file::String
-    condition::Int64
-    condition_name::String
-    data_power::DataFrame
-    data_phase::DataFrame
-    layout::Layout
-    sample_rate::Int64
-    method::Symbol
-    baseline::Union{BaselineInfo,Nothing}
-    analysis_info::AnalysisInfo
-end
-
-# Backward compatibility: make .data an alias for .data_power
-Base.getproperty(tf_data::TimeFreqData, sym::Symbol) = 
-    sym === :data ? getfield(tf_data, :data_power) : getfield(tf_data, sym)
-
-"""
-    Base.copy(tf_data::TimeFreqData) -> TimeFreqData
-
-Create a copy of TimeFreqData with copied DataFrames and layout.
-The data DataFrames are copied with `copycols=true` to ensure independence.
-"""
-function Base.copy(tf_data::TimeFreqData)::TimeFreqData
-    return TimeFreqData(
-        tf_data.file,
-        tf_data.condition,
-        tf_data.condition_name,
-        copy(tf_data.data_power, copycols=true),
-        copy(tf_data.data_phase, copycols=true),
-        copy(tf_data.layout),
-        tf_data.sample_rate,
-        tf_data.method,
-        tf_data.baseline,  # BaselineInfo is immutable, can share
-        tf_data.analysis_info,  # AnalysisInfo is small, can share or copy if needed
-    )
-end
-
-"""
-    TimeFreqEpochData
-
-Stores time-frequency analysis results with individual trials preserved.
-
-This type represents time-frequency power and phase data organized into individual trials,
-where each trial is stored as a separate DataFrame. Each DataFrame contains
-columns for time, frequency, and each electrode channel.
-
-# Fields
-- `file::String`: Source filename (constant across all trials)
-- `condition::Int64`: Condition number (constant across all trials)
-- `condition_name::String`: Name of the condition (constant across all trials)
-- `data_power::Vector{DataFrame}`: Vector of DataFrames, one per trial (columns: time, freq, [electrodes...]) containing power values
-- `data_phase::Vector{DataFrame}`: Vector of DataFrames, one per trial (columns: time, freq, [electrodes...]) containing phase values (radians)
-- `data::Vector{DataFrame}`: Alias for `data_power` (for backward compatibility)
-- `layout::Layout`: Layout object containing electrode positioning information
-- `sample_rate::Int64`: Sample rate of the original data in Hz
-- `method::Symbol`: Analysis method (`:wavelet`, `:superlet`, `:multitaper`, `:spectrum`, `:hanning_fixed`, `:hanning_adaptive`)
-- `baseline::Union{BaselineInfo,Nothing}`: Baseline correction information (if applied)
-- `analysis_info::AnalysisInfo`: Analysis information and preprocessing metadata
-"""
-mutable struct TimeFreqEpochData <: MultiDataFrameEeg
-    file::String
-    condition::Int64
-    condition_name::String
-    data_power::Vector{DataFrame}
-    data_phase::Vector{DataFrame}
-    layout::Layout
-    sample_rate::Int64
-    method::Symbol
-    baseline::Union{BaselineInfo,Nothing}
-    analysis_info::AnalysisInfo
-end
-
-# Backward compatibility: make .data an alias for .data_power
-Base.getproperty(tf_data::TimeFreqEpochData, sym::Symbol) = 
-    sym === :data ? getfield(tf_data, :data_power) : getfield(tf_data, sym)
 
 """
     AbstractInterval
@@ -595,7 +498,6 @@ filename(dat::BiosemiDataFormat.BiosemiData)::String = basename_without_ext(dat.
 filename(dat::ContinuousData)::String = dat.file
 filename(dat::ErpData)::String = dat.file
 filename(dat::EpochData)::String = dat.file
-filename(dat::TimeFreqData)::String = dat.file
 filename(dat::SingleDataFrameEeg)::String = dat.data.file[1]  # Fallback for other SingleDataFrameEeg types
 filename(dat::MultiDataFrameEeg)::String = dat.data[1].file[1]  # Fallback for other MultiDataFrameEeg types
 
@@ -662,39 +564,6 @@ function Base.show(io::IO, dat::SingleDataFrameEeg)
     println(io, "Sample Rate: ", sample_rate(dat))
 end
 
-
-function Base.show(io::IO, dat::TimeFreqData)
-    n_times = length(unique(dat.data_power.time))
-    n_freqs = length(unique(dat.data_power.freq))
-    freqs = unique(dat.data_power.freq)
-    println(io, "File: $(filename(dat))")
-    println(io, "Type: TimeFreqData ($(dat.method))")
-    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
-    println(io, "Size: $(n_times) times × $(n_freqs) freqs × $(length(channel_labels(dat))) channels")
-    println(io, "Freq range: $(minimum(freqs)) - $(maximum(freqs)) Hz")
-    if dat.baseline !== nothing
-        println(io, "Baseline: $(dat.baseline.method) ($(dat.baseline.window[1]) to $(dat.baseline.window[2]) s)")
-    end
-    println(io, "Labels: ", print_vector(channel_labels(dat)))
-    println(io, "Sample Rate: ", sample_rate(dat))
-end
-
-function Base.show(io::IO, dat::TimeFreqEpochData)
-    n_trials = length(dat.data_power)
-    n_times = n_trials > 0 ? length(unique(dat.data_power[1].time)) : 0
-    n_freqs = n_trials > 0 ? length(unique(dat.data_power[1].freq)) : 0
-    freqs = n_trials > 0 ? unique(dat.data_power[1].freq) : Float64[]
-    println(io, "File: $(filename(dat))")
-    println(io, "Type: TimeFreqEpochData ($(dat.method))")
-    println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
-    println(io, "Size: $(n_trials) trials × $(n_times) times × $(n_freqs) freqs × $(length(channel_labels(dat))) channels")
-    !isempty(freqs) && println(io, "Freq range: $(minimum(freqs)) - $(maximum(freqs)) Hz")
-    if dat.baseline !== nothing
-        println(io, "Baseline: $(dat.baseline.method) ($(dat.baseline.window[1]) to $(dat.baseline.window[2]) s)")
-    end
-    println(io, "Labels: ", print_vector(channel_labels(dat)))
-    println(io, "Sample Rate: ", sample_rate(dat))
-end
 
 
 function Base.show(io::IO, dat::AnalysisInfo)
