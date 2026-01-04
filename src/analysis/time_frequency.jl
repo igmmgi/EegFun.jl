@@ -207,9 +207,36 @@ function tf_morlet(
     two_pi = 2 * pi
     sqrt_pi = sqrt(pi)
 
+    # Pre-compute wavelets and their FFTs once (same for all channels and trials)
+    wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
+    hw_per_freq = Vector{Int}(undef, num_frex)
+    valid_start_per_freq = Vector{Int}(undef, num_frex)
+    for fi = 1:num_frex
+        sigma = cycles_vec[fi] / (two_pi * freqs[fi])
+        hw = ceil(Int, 6 * sigma * sr) ÷ 2
+        wl = hw * 2 + 1
+        hw_per_freq[fi] = hw
+        valid_start_per_freq[fi] = hw + 1
+        
+        # Create wavelet directly in padded buffer
+        fill!(wavelet_padded, 0)
+        A = sqrt(1 / (sigma * sqrt_pi))
+        two_pi_freq = two_pi * freqs[fi]
+        inv_2sigma2 = 1.0 / (2 * sigma^2)
+        @inbounds @simd for i = 1:wl
+            t = (-wl / 2 + i - 1) * inv_sr
+            t2 = t * t
+            wavelet_padded[i] = A * exp(im * two_pi_freq * t) * exp(-t2 * inv_2sigma2)
+        end
+
+        # FFT of wavelet - compute once, reuse for all channels and trials
+        wavelet_fft_freq = zeros(ComplexF64, n_conv_pow2_trial)
+        mul!(wavelet_fft_freq, p_fft_wavelet_trial, wavelet_padded)
+        wavelet_ffts[fi] = wavelet_fft_freq
+    end
+
     # Process each selected channel - process trials separately for better performance
     for channel in selected_channels
-
         # Initialize output arrays - only for requested time points!
         if return_trials
             eegpower = zeros(Float64, num_frex, n_times, n_trials)
@@ -220,42 +247,14 @@ function tf_morlet(
         end
         inv_n_trials = 1.0 / n_trials
 
-        # Pre-compute wavelets and their FFTs once (same for all trials)
-        wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
-        hw_per_freq = Vector{Int}(undef, num_frex)
-        valid_start_per_freq = Vector{Int}(undef, num_frex)  # Pre-compute valid_start offsets
-        for fi = 1:num_frex
-            sigma = cycles_vec[fi] / (two_pi * freqs[fi])
-            hw = ceil(Int, 6 * sigma * sr) ÷ 2
-            wl = hw * 2 + 1
-            hw_per_freq[fi] = hw
-            valid_start_per_freq[fi] = hw + 1  # Pre-compute to avoid repeated addition
-            
-            # Create wavelet directly in padded buffer
-            fill!(wavelet_padded, 0)
-            A = sqrt(1 / (sigma * sqrt_pi))
-            two_pi_freq = two_pi * freqs[fi]
-            inv_2sigma2 = 1.0 / (2 * sigma^2)
-            @inbounds @simd for i = 1:wl
-                t = (-wl / 2 + i - 1) * inv_sr
-                t2 = t * t
-                wavelet_padded[i] = A * exp(im * two_pi_freq * t) * exp(-t2 * inv_2sigma2)
-            end
-
-            # FFT of wavelet - compute once, reuse for all trials
-            wavelet_fft_freq = zeros(ComplexF64, n_conv_pow2_trial)
-            mul!(wavelet_fft_freq, p_fft_wavelet_trial, wavelet_padded)
-            wavelet_ffts[fi] = wavelet_fft_freq
-        end
-
         # Process each trial separately
         for trial_idx = 1:n_trials
             # Extract signal for this trial
-            signal_trial = dat_processed.data[trial_idx][!, channel]
+            # signal_trial = dat_processed.data[trial_idx][!, channel]
             
             # FFT of trial signal - zero pad first, then copy signal
             fill!(signal_padded_trial, 0)
-            signal_padded_trial[1:n_samples_per_epoch] .= signal_trial
+            signal_padded_trial[1:n_samples_per_epoch] .= dat_processed.data[trial_idx][!, channel]
             mul!(eegfft_trial, p_fft_trial, signal_padded_trial)
 
             # Loop through frequencies - reuse pre-computed wavelet FFTs
@@ -288,28 +287,16 @@ function tf_morlet(
         if return_trials
             # Store each trial separately
             for trial_idx = 1:n_trials
-                # Extract trial data: (num_frex × n_times)
+                # Extract trial data and assign directly (vec flattens 2D to match long format)
                 @views power_trial = eegpower[:, :, trial_idx]
                 @views conv_trial = eegconv[:, :, trial_idx]
-                phase_trial = angle.(conv_trial)
-
-                # Reshape to long format: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
-                power_values = vec(power_trial)
-                phase_values = vec(phase_trial)
-
-                power_dfs[trial_idx][!, channel] = power_values
-                phase_dfs[trial_idx][!, channel] = phase_values
+                power_dfs[trial_idx][!, channel] = vec(power_trial)
+                phase_dfs[trial_idx][!, channel] = vec(angle.(conv_trial))
             end
         else
-            # Already averaged during accumulation - just compute phase and reshape
-            eegphase = angle.(eegconv)
-
-            # Reshape to long format
-            power_values = vec(eegpower)
-            phase_values = vec(eegphase)
-
-            power_df[!, channel] = power_values
-            phase_df[!, channel] = phase_values
+            # Already averaged during accumulation - just compute phase and assign directly
+            power_df[!, channel] = vec(eegpower)
+            phase_df[!, channel] = vec(angle.(eegconv))
         end
     end
 
