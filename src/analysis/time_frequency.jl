@@ -1056,11 +1056,15 @@ function tf_multitaper(
     
     # Pre-compute FFT plans and frequency bins for each unique FFT size (reuse for same sizes)
     unique_fft_sizes = unique(n_fft_per_freq)
-    fft_plans = Dict{Int, FFTW.cFFTWPlan{ComplexF64, -1, false, 1}}()
+    fft_plans = Dict{Int, FFTW.cFFTWPlan{ComplexF64, -1, false, 1}}()  # 1D plan for single trial
+    fft_plans_batch = Dict{Int, Any}()  # 2D plan for batch (n_fft × n_trials) - use Any for 2D plan type
     fft_freqs_cache = Dict{Int, Vector{Float64}}()  # Cache FFT frequency vectors per FFT size
     for n_fft in unique_fft_sizes
-        template = zeros(ComplexF64, n_fft)
-        fft_plans[n_fft] = plan_fft(template, flags = FFTW.MEASURE)
+        template_1d = zeros(ComplexF64, n_fft)
+        fft_plans[n_fft] = plan_fft(template_1d, flags = FFTW.MEASURE)
+        # Plan for 2D matrix batch (n_fft × n_trials), FFT along dimension 1
+        template_2d = zeros(ComplexF64, n_fft, n_trials)
+        fft_plans_batch[n_fft] = plan_fft(template_2d, 1, flags = FFTW.MEASURE)
         # Pre-compute FFT frequency bins once per unique FFT size
         fft_freqs_cache[n_fft] = collect(range(0.0, dat.sample_rate, length = n_fft + 1)[1:(n_fft÷2+1)])
     end
@@ -1146,17 +1150,17 @@ function tf_multitaper(
     # Pre-allocate reusable buffers per unique FFT size (reuse across frequencies with same sizes)
     unique_fft_sizes = unique(n_fft_per_freq)
     unique_window_sizes = unique(n_window_samples_per_freq)
-    windowed_signal_buffers = Dict{Int, Vector{Float64}}()
-    tapered_signal_buffers = Dict{Int, Vector{Float64}}()
-    signal_padded_buffers = Dict{Int, Vector{ComplexF64}}()
-    signal_fft_buffers = Dict{Int, Vector{ComplexF64}}()
+    windowed_signal_buffers = Dict{Int, Matrix{Float64}}()  # Batch buffers: (n_window × n_trials)
+    tapered_signal_buffers = Dict{Int, Matrix{Float64}}()   # Batch buffers: (n_window × n_trials)
+    signal_padded_buffers = Dict{Int, Matrix{ComplexF64}}()  # Batch buffers: (n_fft × n_trials)
+    signal_fft_buffers = Dict{Int, Matrix{ComplexF64}}()      # Batch buffers: (n_fft × n_trials)
     for n_window in unique_window_sizes
-        windowed_signal_buffers[n_window] = zeros(Float64, n_window)
-        tapered_signal_buffers[n_window] = zeros(Float64, n_window)
+        windowed_signal_buffers[n_window] = zeros(Float64, n_window, n_trials)
+        tapered_signal_buffers[n_window] = zeros(Float64, n_window, n_trials)
     end
     for n_fft in unique_fft_sizes
-        signal_padded_buffers[n_fft] = zeros(ComplexF64, n_fft)
-        signal_fft_buffers[n_fft] = zeros(ComplexF64, n_fft)
+        signal_padded_buffers[n_fft] = zeros(ComplexF64, n_fft, n_trials)
+        signal_fft_buffers[n_fft] = zeros(ComplexF64, n_fft, n_trials)
     end
 
     # Initialize output structures - allocate appropriate type based on return_trials
@@ -1202,106 +1206,125 @@ function tf_multitaper(
             fill!(eegconv, 0.0im)
         end
 
-        # Process each trial
-        for trial_idx = 1:n_trials
-            # Use pre-extracted trial signal (no DataFrame lookup)
-            signal_buffer = @view trial_signals_matrix[:, trial_idx]
-            # Copy with type conversion in one pass (more efficient than Float64.(col) which allocates)
-            # @inbounds @simd for i = 1:n_samples_per_epoch
-            #     signal_buffer[i] = Float64(col[i])
-            # end
+        # Process each frequency (for adaptive windows, window size varies per frequency)
+        # Batch process all trials together for each frequency-time-taper combination
+        for fi = 1:num_frex
+            n_window_samples = n_window_samples_per_freq[fi]
+            n_fft = n_fft_per_freq[fi]
+            tapers = tapers_per_freq[fi]  # (n_window_samples × n_tapers)
+            n_tapers = n_tapers_per_freq[fi]
+            freq_idx = freq_indices[fi]
+            p_fft_batch = fft_plans_batch[n_fft]  # Use batch plan for matrix operations
 
-            # Process each frequency (for adaptive windows, window size varies per frequency)
-            for fi = 1:num_frex
-                n_window_samples = n_window_samples_per_freq[fi]
-                n_fft = n_fft_per_freq[fi]
-                tapers = tapers_per_freq[fi]  # (n_window_samples × n_tapers)
-                n_tapers = n_tapers_per_freq[fi]
-                freq_idx = freq_indices[fi]
-                p_fft = fft_plans[n_fft]
+            # Reuse pre-allocated batch buffers for this frequency
+            windowed_signal_batch = windowed_signal_buffers[n_window_samples]  # (n_window × n_trials)
+            tapered_signal_batch = tapered_signal_buffers[n_window_samples]    # (n_window × n_trials)
+            signal_padded_batch = signal_padded_buffers[n_fft]                  # (n_fft × n_trials)
+            signal_fft_batch = signal_fft_buffers[n_fft]                        # (n_fft × n_trials)
+            
+            # Pre-compute whether padding is needed (same for all time points and tapers at this frequency)
+            needs_padding = n_window_samples < n_fft
+            padding_start = n_window_samples + 1
+            inv_n_window_samples_sq = inv_n_window_samples_sq_per_freq[fi]
+            inv_n_tapers = inv_n_tapers_per_freq[fi]
 
-                # Reuse pre-allocated buffers for this frequency (no views needed, direct reuse)
-                windowed_signal = windowed_signal_buffers[n_window_samples]
-                tapered_signal = tapered_signal_buffers[n_window_samples]
-                signal_padded = signal_padded_buffers[n_fft]
-                signal_fft = signal_fft_buffers[n_fft]
+            # Process each requested time point
+            for (ti_idx, window_center) in enumerate(window_center_indices)
+                # Calculate window start and end indices
+                window_start = window_center - n_window_samples ÷ 2
+                window_end = window_start + n_window_samples - 1
+
+                # Extract windowed signal for ALL trials at once
+                if window_start < 1 || window_end > n_samples_per_epoch
+                    # Edge case: pad with zeros or use available data
+                    fill!(windowed_signal_batch, 0.0)
+                    actual_start = max(1, window_start)
+                    actual_end = min(n_samples_per_epoch, window_end)
+                    copy_start = max(1, 1 - window_start + 1)
+                    copy_end = copy_start + (actual_end - actual_start)
+                    if copy_end <= n_window_samples && copy_start >= 1
+                        @inbounds @simd for trial = 1:n_trials
+                            for i = copy_start:copy_end
+                                windowed_signal_batch[i, trial] = trial_signals_matrix[actual_start + i - copy_start, trial]
+                            end
+                        end
+                    end
+                else
+                    # Normal case: copy windowed signal for all trials (use @inbounds for speed)
+                    @inbounds @simd for trial = 1:n_trials
+                        for i = 1:n_window_samples
+                            windowed_signal_batch[i, trial] = trial_signals_matrix[window_start + i - 1, trial]
+                        end
+                    end
+                end
+
+                # Reset power accumulation buffers for this time point
+                if return_trials
+                    fill!(eegpower_full[fi, ti_idx, :], 0.0)
+                    fill!(eegconv_full[fi, ti_idx, :], 0.0im)
+                else
+                    power_sum_trials = zeros(Float64, n_trials)
+                    complex_sum_trials = zeros(ComplexF64, n_trials)
+                end
                 
-                # Pre-compute whether padding is needed (same for all time points and tapers at this frequency)
-                needs_padding = n_window_samples < n_fft
-                padding_start = n_window_samples + 1
-
-                # Process each requested time point
-                for (ti_idx, window_center) in enumerate(window_center_indices)
-                    # Calculate window start and end indices
-                    window_start = window_center - n_window_samples ÷ 2
-                    window_end = window_start + n_window_samples - 1
-
-                    # Extract windowed signal into pre-allocated buffer
-                    if window_start < 1 || window_end > n_samples_per_epoch
-                        # Edge case: pad with zeros or use available data
-                        fill!(windowed_signal, 0.0)
-                        actual_start = max(1, window_start)
-                        actual_end = min(n_samples_per_epoch, window_end)
-                        copy_start = max(1, 1 - window_start + 1)
-                        copy_end = copy_start + (actual_end - actual_start)
-                        if copy_end <= n_window_samples && copy_start >= 1
-                            @inbounds @simd for i = copy_start:copy_end
-                                windowed_signal[i] = signal_buffer[actual_start + i - copy_start]
-                            end
-                        end
-                    else
-                        # Normal case: copy windowed signal (use @inbounds for speed)
-                        @inbounds @simd for i = 1:n_window_samples
-                            windowed_signal[i] = signal_buffer[window_start + i - 1]
-                        end
-                    end
-
-                    # Apply each taper and compute FFT, then average across tapers
-                    # Use pre-computed normalization factors (computed once per frequency)
-                    inv_n_window_samples_sq = inv_n_window_samples_sq_per_freq[fi]
-                    inv_n_tapers = inv_n_tapers_per_freq[fi]
-                    power_sum = 0.0
-                    complex_sum = 0.0im
-                    
-                    for taper_idx = 1:n_tapers
-                        # Apply taper (in-place multiplication into pre-allocated buffer)
-                        taper_col = @view tapers[:, taper_idx]  # Views are cheap, create on the fly
-                        @inbounds @simd for i = 1:n_window_samples
-                            tapered_signal[i] = windowed_signal[i] * taper_col[i]
-                        end
-                        
-                        # Pad to FFT length (zero out padding part, then copy tapered signal)
-                        # Only zero the padding part if needed (pre-computed check)
-                        if needs_padding
-                            @inbounds @simd for i = padding_start:n_fft
-                                signal_padded[i] = 0.0
-                            end
-                        end
-                        @inbounds @simd for i = 1:n_window_samples
-                            signal_padded[i] = tapered_signal[i]
-                        end
-                        
-                        # Compute FFT using pre-computed plan (reuse buffer)
-                        mul!(signal_fft, p_fft, signal_padded)
-                        
-                        # Extract value at requested frequency
-                        if freq_idx <= length(signal_fft)
-                            @inbounds complex_val = signal_fft[freq_idx]
-                            # Normalize by window length squared (consistent with STFT)
-                            power_sum += abs2(complex_val) * inv_n_window_samples_sq
-                            complex_sum += complex_val
+                # Apply each taper and compute FFT for all trials, then average across tapers
+                for taper_idx = 1:n_tapers
+                    # Apply taper to ALL trials at once
+                    taper_col = @view tapers[:, taper_idx]
+                    @inbounds @simd for trial = 1:n_trials
+                        for i = 1:n_window_samples
+                            tapered_signal_batch[i, trial] = windowed_signal_batch[i, trial] * taper_col[i]
                         end
                     end
                     
-                    # Average across tapers (use pre-computed inverse)
-                    power_avg = power_sum * inv_n_tapers
-                    complex_avg = complex_sum * inv_n_tapers
-                    if return_trials
-                        eegpower_full[fi, ti_idx, trial_idx] = power_avg
-                        eegconv_full[fi, ti_idx, trial_idx] = complex_avg
-                    else
-                        eegpower[fi, ti_idx] += power_avg
-                        eegconv[fi, ti_idx] += complex_avg
+                    # Pad to FFT length for all trials
+                    if needs_padding
+                        @inbounds @simd for trial = 1:n_trials
+                            for i = padding_start:n_fft
+                                signal_padded_batch[i, trial] = 0.0
+                            end
+                        end
+                    end
+                    @inbounds @simd for trial = 1:n_trials
+                        for i = 1:n_window_samples
+                            signal_padded_batch[i, trial] = tapered_signal_batch[i, trial]
+                        end
+                    end
+                    
+                    # Batch FFT: process all trials at once (ONE FFT instead of n_trials FFTs!)
+                    mul!(signal_fft_batch, p_fft_batch, signal_padded_batch)
+                    
+                    # Extract value at requested frequency for all trials
+                    if freq_idx <= size(signal_fft_batch, 1)
+                        if return_trials
+                            @inbounds for trial = 1:n_trials
+                                complex_val = signal_fft_batch[freq_idx, trial]
+                                eegpower_full[fi, ti_idx, trial] += abs2(complex_val) * inv_n_window_samples_sq
+                                eegconv_full[fi, ti_idx, trial] += complex_val
+                            end
+                        else
+                            @inbounds for trial = 1:n_trials
+                                complex_val = signal_fft_batch[freq_idx, trial]
+                                power_sum_trials[trial] += abs2(complex_val) * inv_n_window_samples_sq
+                                complex_sum_trials[trial] += complex_val
+                            end
+                        end
+                    end
+                end
+                
+                # Average across tapers and accumulate across trials
+                if return_trials
+                    @inbounds for trial = 1:n_trials
+                        eegpower_full[fi, ti_idx, trial] *= inv_n_tapers
+                        eegconv_full[fi, ti_idx, trial] *= inv_n_tapers
+                    end
+                else
+                    inv_n_trials = 1.0 / n_trials
+                    @inbounds for trial = 1:n_trials
+                        power_avg = power_sum_trials[trial] * inv_n_tapers
+                        complex_avg = complex_sum_trials[trial] * inv_n_tapers
+                        eegpower[fi, ti_idx] += power_avg * inv_n_trials
+                        eegconv[fi, ti_idx] += complex_avg * inv_n_trials
                     end
                 end
             end
@@ -1509,4 +1532,5 @@ function freq_spectrum(
         dat.analysis_info,
     )
 end
+
 
