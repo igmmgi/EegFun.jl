@@ -28,7 +28,7 @@ eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channe
 # Generate synthetic signal with noise
 sample_rate = 256.0
 times, signal = eegfun.generate_signal(
-    10,                                      # n_trials
+    72*160,                                      # n_trials
     [-1.0, 2.0],                            # time_window
     sample_rate,                            # sample_rate
     [2.0, 15, 25.0],                        # frequencies
@@ -41,6 +41,11 @@ eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Chann
 
 spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=100.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
+
+
+tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (1, 80, 1), window_length = 0.5) 
+@btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (1, 40, 1), window_length = 0.5) 
+
 
 # time-frequency analysis
 # 13.11
