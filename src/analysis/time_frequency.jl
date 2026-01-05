@@ -291,18 +291,16 @@ end
     tf_stft_fixed(dat::EpochData; 
             lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
-            window_length::Union{Nothing,Real}=nothing,
+            window_length::Real,
             overlap::Real=0.5,
             time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             channel_selection::Function=channels(),
             pad::Union{Nothing,Symbol}=nothing,
             return_trials::Bool=false)
 
-Short-Time Fourier Transform (STFT) time-frequency analysis using a sliding Hanning window (Cohen Chapter 15, equivalent to FieldTrip's 'hanning' method).
+Short-Time Fourier Transform (STFT) time-frequency analysis using a fixed-length sliding Hanning window (Cohen Chapter 15, equivalent to FieldTrip's 'hanning_fixed' method).
 
-Supports both fixed and adaptive window lengths:
-- **Fixed window** (FieldTrip's 'hanning_fixed'): Use `window_length` to specify a fixed window size in seconds
-- **Adaptive window** (FieldTrip's 'hanning_adaptive'): Use `cycles` to specify frequency-dependent window sizes
+Uses a fixed window length for all frequencies, which provides consistent time resolution across the frequency range.
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data
@@ -313,17 +311,9 @@ Supports both fixed and adaptive window lengths:
 - `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
   - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
 - **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
-- `window_length::Union{Nothing,Real}=nothing`: Fixed window length in seconds (for fixed window mode).
-  - If `nothing`, uses adaptive window mode (requires `cycles`).
+- `window_length::Real`: Fixed window length in seconds (same for all frequencies).
   - Example: `window_length=0.3` uses a fixed 0.3 second window for all frequencies
-- `cycles::Union{Nothing,Real,Tuple{Real,Real}}=nothing`: Number of cycles for adaptive window mode.
-  - Can be a single number (fixed cycles for all frequencies) or a tuple (min, max) for log-spaced cycles.
-  - Window length = cycles / frequency (in seconds)
-  - Example: `cycles=5` uses 5 cycles for all frequencies
-  - Example: `cycles=(3, 10)` uses log-spaced cycles from 3 to 10 across frequencies
-  - **Exactly one of `window_length` or `cycles` must be specified.**
 - `overlap::Real=0.5`: Overlap fraction between windows (0 to 1). Default is 0.5 (50% overlap).
-  - Note: For adaptive windows, overlap is calculated per frequency based on that frequency's window length.
 - `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
   - If `nothing`, uses all time points from the data
   - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
@@ -331,7 +321,7 @@ Supports both fixed and adaptive window lengths:
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
-  - `nothing`: No padding (default)
+  - `nothing`: No padding (default). Time points where windows extend beyond data boundaries are excluded with a warning.
   - `:pre`: Mirror data before each epoch
   - `:post`: Mirror data after each epoch
   - `:both`: Mirror data on both sides (recommended)
@@ -345,14 +335,11 @@ Supports both fixed and adaptive window lengths:
 # Example
 ```julia
 # Fixed window: Log-spaced frequencies with 0.3s fixed window
-tf_data = tf_stft(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz), window_length=0.3)
+tf_data = tf_stft_fixed(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz), window_length=0.3)
 
-# Adaptive window: Linear-spaced frequencies with 5 cycles per frequency
-tf_data = tf_stft(epochs; lin_freqs=(2, 80, 2), cycles=5)
-
-# Adaptive window with variable cycles and padding
-tf_epochs = tf_stft(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), 
-                    cycles=(3, 10), overlap=0.5, pad=:both, return_trials=true)
+# With padding and individual trials
+tf_epochs = tf_stft_fixed(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), 
+                          window_length=0.3, overlap=0.5, pad=:both, return_trials=true)
 ```
 """
 function tf_stft_fixed(
@@ -578,19 +565,16 @@ end
     tf_stft_adaptive(dat::EpochData; 
             lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
-            window_length::Union{Nothing,Real}=nothing,
-            cycles::Union{Nothing,Real,Tuple{Real,Real}}=nothing,
+            cycles::Real,
             overlap::Real=0.5,
             time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             channel_selection::Function=channels(),
             pad::Union{Nothing,Symbol}=nothing,
             return_trials::Bool=false)
 
-Short-Time Fourier Transform (STFT) time-frequency analysis using a sliding Hanning window (Cohen Chapter 15, equivalent to FieldTrip's 'hanning' method).
+Short-Time Fourier Transform (STFT) time-frequency analysis using an adaptive-length sliding Hanning window (Cohen Chapter 15, equivalent to FieldTrip's 'hanning_adaptive' method).
 
-Supports both fixed and adaptive window lengths:
-- **Fixed window** (FieldTrip's 'hanning_fixed'): Use `window_length` to specify a fixed window size in seconds
-- **Adaptive window** (FieldTrip's 'hanning_adaptive'): Use `cycles` to specify frequency-dependent window sizes
+Uses frequency-dependent window lengths (window_length = cycles / frequency), which provides better frequency resolution at lower frequencies and better time resolution at higher frequencies. This matches the trade-off used in Morlet wavelet analysis.
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data
@@ -601,17 +585,11 @@ Supports both fixed and adaptive window lengths:
 - `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
   - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
 - **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
-- `window_length::Union{Nothing,Real}=nothing`: Fixed window length in seconds (for fixed window mode).
-  - If `nothing`, uses adaptive window mode (requires `cycles`).
-  - Example: `window_length=0.3` uses a fixed 0.3 second window for all frequencies
-- `cycles::Union{Nothing,Real,Tuple{Real,Real}}=nothing`: Number of cycles for adaptive window mode.
-  - Can be a single number (fixed cycles for all frequencies) or a tuple (min, max) for log-spaced cycles.
-  - Window length = cycles / frequency (in seconds)
-  - Example: `cycles=5` uses 5 cycles for all frequencies
-  - Example: `cycles=(3, 10)` uses log-spaced cycles from 3 to 10 across frequencies
-  - **Exactly one of `window_length` or `cycles` must be specified.**
+- `cycles::Real`: Number of cycles per frequency. Window length = cycles / frequency (in seconds).
+  - Example: `cycles=5` uses 5 cycles for all frequencies (FieldTrip: `cfg.t_ftimwin = 5./cfg.foi`)
+  - Lower frequencies will have longer windows, higher frequencies will have shorter windows
 - `overlap::Real=0.5`: Overlap fraction between windows (0 to 1). Default is 0.5 (50% overlap).
-  - Note: For adaptive windows, overlap is calculated per frequency based on that frequency's window length.
+  - Overlap is calculated per frequency based on that frequency's window length.
 - `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
   - If `nothing`, uses all time points from the data
   - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
@@ -632,15 +610,12 @@ Supports both fixed and adaptive window lengths:
 
 # Example
 ```julia
-# Fixed window: Log-spaced frequencies with 0.3s fixed window
-tf_data = tf_stft(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz), window_length=0.3)
-
 # Adaptive window: Linear-spaced frequencies with 5 cycles per frequency
-tf_data = tf_stft(epochs; lin_freqs=(2, 80, 2), cycles=5)
+tf_data = tf_stft_adaptive(epochs; lin_freqs=(2, 80, 2), cycles=5)
 
-# Adaptive window with variable cycles and padding
-tf_epochs = tf_stft(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), 
-                    cycles=(3, 10), overlap=0.5, pad=:both, return_trials=true)
+# With padding and individual trials
+tf_epochs = tf_stft_adaptive(epochs; log_freqs=(2, 80, 30), time_steps=(-0.5, 2.0, 0.01), 
+                              cycles=5, overlap=0.5, pad=:both, return_trials=true)
 ```
 """
 function tf_stft_adaptive(
@@ -916,8 +891,7 @@ end
     tf_multitaper(dat::EpochData; 
                   lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
                   log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
-                  window_length::Union{Nothing,Real}=nothing,
-                  cycles::Union{Nothing,Real,Tuple{Real,Real}}=nothing,
+                  cycles::Real,
                   frequency_smoothing::Union{Nothing,Real}=nothing,
                   time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
                   channel_selection::Function=channels(),
@@ -926,7 +900,7 @@ end
 
 Multitaper time-frequency analysis using DPSS (Discrete Prolate Spheroidal Sequences) tapers (Cohen Chapter 16, equivalent to FieldTrip's 'mtmconvol' method).
 
-Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectral estimates. Uses adaptive window lengths (cycles per frequency).
+Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectral estimates compared to single-taper methods. Uses adaptive window lengths (cycles per frequency) to match the time-frequency trade-off of Morlet wavelets and adaptive STFT.
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data
@@ -937,14 +911,15 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
   - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
 - **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
-- `cycles::Real`: Number of cycles for adaptive window mode.
-  - Window length = cycles / frequency (in seconds)
+- `cycles::Real`: Number of cycles per frequency. Window length = cycles / frequency (in seconds).
   - Example: `cycles=5` uses 5 cycles for all frequencies (FieldTrip: `cfg.t_ftimwin = 5./cfg.foi`)
+  - Lower frequencies will have longer windows, higher frequencies will have shorter windows
 - `frequency_smoothing::Union{Nothing,Real}=nothing`: Frequency smoothing parameter (FieldTrip's `tapsmofrq`).
   - If `nothing`, uses `frequency_smoothing = 0.4 * frequency` (FieldTrip default: `cfg.tapsmofrq = 0.4 * cfg.foi`)
   - If a number, uses that value multiplied by frequency: `tapsmofrq = frequency_smoothing * frequency`
   - Example: `frequency_smoothing=0.4` matches FieldTrip's default
   - Controls time-bandwidth product: `NW = tapsmofrq * window_length / 2`
+  - Number of tapers used: `K = 2*NW - 1` (rounded down)
 - `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
   - If `nothing`, uses all time points from the data
   - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
@@ -1186,8 +1161,13 @@ function tf_multitaper(
     end
 
     # Pre-allocate reusable output buffers (reused across all channels)
+    if return_trials
+        eegpower = zeros(Float64, num_frex, n_times, n_trials)
+        eegconv = zeros(ComplexF64, num_frex, n_times, n_trials)
+    else
         eegpower = zeros(Float64, num_frex, n_times)
         eegconv = zeros(ComplexF64, num_frex, n_times)
+    end
 
     # Process each selected channel
     for channel in selected_channels
@@ -1202,8 +1182,13 @@ function tf_multitaper(
         end
         
         # Clear/initialize output buffers for this channel
+        if return_trials
             fill!(eegpower, 0.0)
             fill!(eegconv, 0.0im)
+        else
+            fill!(eegpower, 0.0)
+            fill!(eegconv, 0.0im)
+        end
 
         # Process each frequency (for adaptive windows, window size varies per frequency)
         # Batch process all trials together for each frequency-time-taper combination
@@ -1259,8 +1244,8 @@ function tf_multitaper(
 
                 # Reset power accumulation buffers for this time point
                 if return_trials
-                    fill!(eegpower_full[fi, ti_idx, :], 0.0)
-                    fill!(eegconv_full[fi, ti_idx, :], 0.0im)
+                    fill!(view(eegpower, fi, ti_idx, :), 0.0)
+                    fill!(view(eegconv, fi, ti_idx, :), 0.0im)
                 else
                     power_sum_trials = zeros(Float64, n_trials)
                     complex_sum_trials = zeros(ComplexF64, n_trials)
@@ -1291,8 +1276,8 @@ function tf_multitaper(
                     if return_trials
                         @inbounds for trial = 1:n_trials
                             complex_val = signal_fft_batch[freq_idx, trial]
-                            eegpower_full[fi, ti_idx, trial] += abs2(complex_val) * inv_n_window_samples_sq
-                            eegconv_full[fi, ti_idx, trial] += complex_val
+                            eegpower[fi, ti_idx, trial] += abs2(complex_val) * inv_n_window_samples_sq
+                            eegconv[fi, ti_idx, trial] += complex_val
                         end
                     else
                         @inbounds for trial = 1:n_trials
@@ -1306,8 +1291,8 @@ function tf_multitaper(
                 # Average across tapers and accumulate across trials
                 if return_trials
                     @inbounds for trial = 1:n_trials
-                        eegpower_full[fi, ti_idx, trial] *= inv_n_tapers
-                        eegconv_full[fi, ti_idx, trial] *= inv_n_tapers
+                        eegpower[fi, ti_idx, trial] *= inv_n_tapers
+                        eegconv[fi, ti_idx, trial] *= inv_n_tapers
                     end
                 else
                     inv_n_trials = 1.0 / n_trials
@@ -1352,22 +1337,11 @@ end
 
 
 
-# Internal helper function to compute power spectrum for a single signal
-function _compute_welch_power(
-    signal::AbstractVector{<:Real},
-    window_size::Int,
-    noverlap::Int,
-    sample_rate::Real,
-    window_function::Function,
-)::Tuple{Vector{Float64}, Vector{Float64}}
-    pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = sample_rate, window = window_function)
-    return DSP.freq(pgram), DSP.power(pgram    )
-end
 
 """
     freq_spectrum(dat::EegData;
                   channel_selection::Function=channels(),
-                  window_size::Int=1024,
+                  window_size::Int=256,
                   overlap::Real=0.5,
                   window_function::Function=DSP.hanning,
                   max_freq::Union{Nothing,Real}=nothing)
@@ -1427,15 +1401,17 @@ function freq_spectrum(
     # Get frequency vector from first channel's first signal
     first_channel = selected_channels[1]
     first_signal = channel_data(dat, first_channel)
-    freqs, _ = _compute_welch_power(first_signal, window_size, noverlap, dat.sample_rate, window_function)
+    pgram = DSP.welch_pgram(first_signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+    freqs = DSP.freq(pgram)
 
     # Initialize output DataFrame with frequency column
     spectrum_df = DataFrame(freq = freqs)
 
-    # Process each channel using broadcasting
+    # Process each channel
     for channel in selected_channels
         signal = channel_data(dat, channel)
-        spectrum_df[!, channel] = _compute_welch_power(signal, window_size, noverlap, dat.sample_rate, window_function)[2]
+        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+        spectrum_df[!, channel] = DSP.power(pgram)
     end
 
     # Filter by max_freq if specified
@@ -1457,56 +1433,4 @@ function freq_spectrum(
         dat.analysis_info,
     )
 end
-
-# Split tf_stft into fixed and adaptive versions
-function tf_stft_fixed(
-    dat::EpochData;
-    channel_selection::Function = channels(),
-    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
-    window_length::Real,
-    overlap::Real = 0.5,
-    pad::Union{Nothing,Symbol} = nothing,
-    return_trials::Bool = false,
-)
-    return tf_stft(
-        dat;
-        channel_selection = channel_selection,
-        time_steps = time_steps,
-        lin_freqs = lin_freqs,
-        log_freqs = log_freqs,
-        window_length = window_length,
-        cycles = nothing,
-        overlap = overlap,
-        pad = pad,
-        return_trials = return_trials,
-    )
-end
-
-function tf_stft_adaptive(
-    dat::EpochData;
-    channel_selection::Function = channels(),
-    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
-    cycles::Union{Real,Tuple{Real,Real}},
-    overlap::Real = 0.5,
-    pad::Union{Nothing,Symbol} = nothing,
-    return_trials::Bool = false,
-)
-    return tf_stft(
-        dat;
-        channel_selection = channel_selection,
-        time_steps = time_steps,
-        lin_freqs = lin_freqs,
-        log_freqs = log_freqs,
-        window_length = nothing,
-        cycles = cycles,
-        overlap = overlap,
-        pad = pad,
-        return_trials = return_trials,
-    )
-end
-
 
