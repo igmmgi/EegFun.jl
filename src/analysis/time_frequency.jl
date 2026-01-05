@@ -926,7 +926,7 @@ end
 
 Multitaper time-frequency analysis using DPSS (Discrete Prolate Spheroidal Sequences) tapers (Cohen Chapter 16, equivalent to FieldTrip's 'mtmconvol' method).
 
-Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectral estimates. Supports both fixed and adaptive window lengths.
+Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectral estimates. Uses adaptive window lengths (cycles per frequency).
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data
@@ -937,14 +937,9 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
   - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
 - **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
-- `window_length::Union{Nothing,Real}=nothing`: Fixed window length in seconds (for fixed window mode).
-  - If `nothing`, uses adaptive window mode (requires `cycles`).
-  - Example: `window_length=0.5` uses a fixed 0.5 second window for all frequencies
-- `cycles::Union{Nothing,Real,Tuple{Real,Real}}=nothing`: Number of cycles for adaptive window mode.
+- `cycles::Real`: Number of cycles for adaptive window mode.
   - Window length = cycles / frequency (in seconds)
   - Example: `cycles=5` uses 5 cycles for all frequencies (FieldTrip: `cfg.t_ftimwin = 5./cfg.foi`)
-  - Example: `cycles=(3, 10)` uses log-spaced cycles from 3 to 10 across frequencies
-  - **Exactly one of `window_length` or `cycles` must be specified.**
 - `frequency_smoothing::Union{Nothing,Real}=nothing`: Frequency smoothing parameter (FieldTrip's `tapsmofrq`).
   - If `nothing`, uses `frequency_smoothing = 0.4 * frequency` (FieldTrip default: `cfg.tapsmofrq = 0.4 * cfg.foi`)
   - If a number, uses that value multiplied by frequency: `tapsmofrq = frequency_smoothing * frequency`
@@ -973,9 +968,7 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 # Adaptive window with default frequency smoothing (0.4 * frequency)
 tf_data = tf_multitaper(epochs; log_freqs=(2, 80, 30), cycles=5)
 
-# Fixed window with custom frequency smoothing
-tf_data = tf_multitaper(epochs; lin_freqs=(1, 30, 2), window_length=0.5, frequency_smoothing=0.4)
-
+# Custom frequency smoothing
 # FieldTrip equivalent: cfg.t_ftimwin = 5./cfg.foi, cfg.tapsmofrq = 0.4 * cfg.foi
 tf_data = tf_multitaper(epochs; lin_freqs=(1, 30, 2), cycles=5, frequency_smoothing=0.4)
 ```
@@ -986,8 +979,7 @@ function tf_multitaper(
     time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
     lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
     log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
-    window_length::Union{Nothing,Real} = nothing,
-    cycles::Union{Nothing,Real,Tuple{Real,Real}} = nothing,
+    cycles::Real,
     frequency_smoothing::Union{Nothing,Real} = nothing,
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
@@ -1007,26 +999,9 @@ function tf_multitaper(
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
-    # Validate window specification - exactly one must be provided
-    isnothing(window_length) && isnothing(cycles) && error("Either `window_length` (fixed) or `cycles` (adaptive) must be specified")
-    !isnothing(window_length) &&
-        !isnothing(cycles) &&
-        error("Only one of `window_length` or `cycles` can be specified, not both")
-
-    # Determine mode
-    use_fixed_window = !isnothing(window_length)
-    if use_fixed_window
-        if window_length <= 0
-            error("`window_length` must be positive, got $window_length")
-        end
-    else
-        if cycles isa Tuple
-            if cycles[1] <= 0 || cycles[2] <= 0 || cycles[1] >= cycles[2]
-                error("`cycles` tuple must be (min, max) with 0 < min < max, got $cycles")
-            end
-        elseif cycles <= 0
-            error("`cycles` must be positive, got $cycles")
-        end
+    # Validate cycles parameter (adaptive window only)
+    if cycles <= 0
+        error("`cycles` must be positive, got $cycles")
     end
 
     # Default frequency smoothing (FieldTrip: cfg.tapsmofrq = 0.4 * cfg.foi)
@@ -1090,20 +1065,9 @@ function tf_multitaper(
     end
     num_frex = length(freqs)
 
-    # Determine window lengths (fixed or adaptive)
-    # FieldTrip: cfg.t_ftimwin = 5./cfg.foi means window_length = cycles / frequency (in seconds)
-    if use_fixed_window
-        # Fixed window mode: same window length for all frequencies
-        window_lengths_sec = fill(Float64(window_length), num_frex)
-    else
-        # Adaptive window mode: window length = cycles / frequency (FieldTrip: cfg.t_ftimwin = cycles./cfg.foi)
-        if cycles isa Tuple
-            cycles_vec = exp.(range(log(cycles[1]), log(cycles[2]), length = num_frex))
-        else
-            cycles_vec = fill(Float64(cycles), num_frex)
-        end
-        window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds
-    end
+    # Adaptive window mode: window length = cycles / frequency (FieldTrip: cfg.t_ftimwin = cycles./cfg.foi)
+    cycles_vec = fill(Float64(cycles), num_frex)
+    window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds
 
     # Convert window lengths from seconds to samples (per frequency)
     n_window_samples_per_freq = [Int(round(wl * dat.sample_rate)) for wl in window_lengths_sec]
@@ -1112,21 +1076,17 @@ function tf_multitaper(
         error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
     end
 
-    # Determine window center positions (in samples) for each requested time point
+    # Compute window center positions for each requested time point
     n_times = length(times_out)
-    window_center_indices = zeros(Int, n_times)
+    window_center_indices = Vector{Int}(undef, n_times)
     for (ti_idx, t_requested) in enumerate(times_out)
-        # Find the sample index in processed data that corresponds to this time
         sample_idx = searchsortedfirst(times_processed, t_requested)
-        if sample_idx > 1 && abs(times_processed[sample_idx-1] - t_requested) < abs(times_processed[min(sample_idx, length(times_processed))] - t_requested)
-            sample_idx = sample_idx - 1
-        end
-        sample_idx = min(sample_idx, length(times_processed))
         window_center_indices[ti_idx] = sample_idx
     end
 
     # Pre-compute DPSS tapers and FFT parameters for each frequency
-    n_fft_per_freq = [nextpow(2, n_win) for n_win in n_window_samples_per_freq]
+    # Use actual window size for FFT (FFTW is efficient for many sizes, not just powers of 2)
+    n_fft_per_freq = n_window_samples_per_freq
     tapers_per_freq = Vector{Matrix{Float64}}(undef, num_frex)  # Each element is (n_window_samples × n_tapers)
     n_tapers_per_freq = zeros(Int, num_frex)
     # Pre-compute normalization factors per frequency (avoid repeated computation)
@@ -1136,19 +1096,13 @@ function tf_multitaper(
     # For each frequency, find the FFT bin that corresponds to it
     freq_indices = zeros(Int, num_frex)
     
-    # Pre-compute FFT plans and frequency bins for each unique FFT size (reuse for same sizes)
+    # Pre-compute FFT plans for each unique FFT size (reuse for same sizes)
     unique_fft_sizes = unique(n_fft_per_freq)
-    fft_plans = Dict{Int, FFTW.cFFTWPlan{ComplexF64, -1, false, 1}}()  # 1D plan for single trial
     fft_plans_batch = Dict{Int, Any}()  # 2D plan for batch (n_fft × n_trials) - use Any for 2D plan type
-    fft_freqs_cache = Dict{Int, Vector{Float64}}()  # Cache FFT frequency vectors per FFT size
     for n_fft in unique_fft_sizes
-        template_1d = zeros(ComplexF64, n_fft)
-        fft_plans[n_fft] = plan_fft(template_1d, flags = FFTW.MEASURE)
         # Plan for 2D matrix batch (n_fft × n_trials), FFT along dimension 1
         template_2d = zeros(ComplexF64, n_fft, n_trials)
         fft_plans_batch[n_fft] = plan_fft(template_2d, 1, flags = FFTW.MEASURE)
-        # Pre-compute FFT frequency bins once per unique FFT size
-        fft_freqs_cache[n_fft] = collect(range(0.0, dat.sample_rate, length = n_fft + 1)[1:(n_fft÷2+1)])
     end
     
     for (fi, freq) in enumerate(freqs)
@@ -1159,7 +1113,6 @@ function tf_multitaper(
         tapsmofrq = frequency_smoothing * freq  # Frequency smoothing in Hz
         
         # Time-bandwidth product: NW = tapsmofrq * window_length / 2
-        # (matches old code: nw = frequency_smoothing * timewinidx / sample_rate / 2)
         NW = tapsmofrq * window_length_sec / 2
         
         # Ensure NW is valid (must be > 0 and < n_window_samples/2)
@@ -1167,31 +1120,17 @@ function tf_multitaper(
             error("Invalid time-bandwidth product NW=$NW for frequency $freq Hz. NW must be > 0 and < $(n_window_samples/2). Window length: $window_length_sec s, tapsmofrq: $tapsmofrq Hz")
         end
         
-        # Number of tapers: K = 2*NW - 1 (but ensure at least 1, and cap at reasonable value)
-        # (matches old code: n_tapers = max(1, floor(Int, 2 * nw - 1)))
+        # Number of tapers: K = 2*NW - 1 (Shannon number)
         K = max(1, Int(floor(2 * NW - 1)))
-        K = min(K, n_window_samples ÷ 2)  # Cap at half window length to avoid issues
+        K = min(K, n_window_samples ÷ 2)  # Cap at half window length
         
-        # If K=1 and NW is very small, dpss may have issues - try to get at least 2 tapers
-        # by slightly increasing NW if possible
-        if K == 1 && NW < 1.0
-            # Try to get K=2 by adjusting NW slightly
-            NW_adjusted = 1.5  # This will give K = floor(2*1.5 - 1) = 2
-            K = 2
-        else
-            NW_adjusted = NW
-        end
-        
-        # Generate DPSS tapers (dpss returns (tapers, eigenvalues) where tapers is a matrix)
-        # Match old code: tapers = DSP.dpss(timewinidx, nw, n_tapers)
-        # Note: When K=1, dpss may return a vector instead of a matrix
-        dpss_result = DSP.dpss(n_window_samples, NW_adjusted, K)
+        # Generate DPSS tapers
+        dpss_result = DSP.dpss(n_window_samples, NW, K)
         
         # Handle different return types from dpss
         if dpss_result isa Tuple
             tapers = dpss_result[1]
         else
-            # If not a tuple, use directly (unlikely)
             tapers = dpss_result
         end
         
@@ -1199,34 +1138,22 @@ function tf_multitaper(
         if tapers isa AbstractMatrix
             tapers_per_freq[fi] = Matrix{Float64}(tapers)
         elseif tapers isa AbstractVector
-            # If it's a vector (happens when K=1), reshape to matrix (n_window_samples × 1)
+            # If it's a vector (happens when K=1), reshape to matrix
             tapers_per_freq[fi] = reshape(Vector{Float64}(tapers), length(tapers), 1)
-        elseif tapers isa Number
-            # If it's a scalar, something went wrong - but try to create a matrix from it
-            # This shouldn't happen, but if NW is very small, dpss might misbehave
-            error("DSP.dpss returned a scalar ($tapers) instead of a matrix/vector. NW=$NW, K=$K, n_window_samples=$n_window_samples, freq=$freq Hz. Try increasing frequency_smoothing or window_length.")
         else
-            error("DSP.dpss returned unexpected type: $(typeof(tapers)), value: $tapers. NW=$NW, K=$K, n_window_samples=$n_window_samples, freq=$freq Hz")
+            error("DSP.dpss returned unexpected type: $(typeof(tapers)) for freq=$freq Hz, NW=$NW, K=$K")
         end
         n_tapers_per_freq[fi] = K
         
         # Pre-compute normalization factors for this frequency
         inv_n_window_samples_sq_per_freq[fi] = 1.0 / (n_window_samples^2)
-        inv_n_tapers_per_freq[fi] = 1.0 / K
+        inv_n_tapers_per_freq[fi] = 1.0 / n_tapers_per_freq[fi]
         
-        # Find FFT bin for this frequency (use cached frequency vector)
+        # Compute FFT bin index directly (faster than searching)
         n_fft = n_fft_per_freq[fi]
-        freqs_fft = fft_freqs_cache[n_fft]  # Use cached frequency vector
-        freq_idx = 1
-        min_diff = abs(freqs_fft[1] - freq)
-        @inbounds for i = 2:length(freqs_fft)
-            diff = abs(freqs_fft[i] - freq)
-            if diff < min_diff
-                min_diff = diff
-                freq_idx = i
-            end
-        end
-        freq_indices[fi] = freq_idx
+        freq_to_bin_factor = n_fft / dat.sample_rate
+        max_bin = n_fft ÷ 2 + 1  # rFFT output size
+        freq_indices[fi] = clamp(round(Int, freq * freq_to_bin_factor) + 1, 1, max_bin)
     end
 
     # Pre-allocate reusable buffers per unique FFT size (reuse across frequencies with same sizes)
@@ -1259,13 +1186,8 @@ function tf_multitaper(
     end
 
     # Pre-allocate reusable output buffers (reused across all channels)
-    if return_trials
-        eegpower_full = zeros(Float64, num_frex, n_times, n_trials)
-        eegconv_full = zeros(ComplexF64, num_frex, n_times, n_trials)
-    else
         eegpower = zeros(Float64, num_frex, n_times)
         eegconv = zeros(ComplexF64, num_frex, n_times)
-    end
 
     # Process each selected channel
     for channel in selected_channels
@@ -1280,13 +1202,8 @@ function tf_multitaper(
         end
         
         # Clear/initialize output buffers for this channel
-        if return_trials
-            fill!(eegpower_full, 0.0)
-            fill!(eegconv_full, 0.0im)
-        else
             fill!(eegpower, 0.0)
             fill!(eegconv, 0.0im)
-        end
 
         # Process each frequency (for adaptive windows, window size varies per frequency)
         # Batch process all trials together for each frequency-time-taper combination
@@ -1304,38 +1221,38 @@ function tf_multitaper(
             signal_padded_batch = signal_padded_buffers[n_fft]                  # (n_fft × n_trials)
             signal_fft_batch = signal_fft_buffers[n_fft]                        # (n_fft × n_trials)
             
-            # Pre-compute whether padding is needed (same for all time points and tapers at this frequency)
-            needs_padding = n_window_samples < n_fft
-            padding_start = n_window_samples + 1
             inv_n_window_samples_sq = inv_n_window_samples_sq_per_freq[fi]
             inv_n_tapers = inv_n_tapers_per_freq[fi]
 
             # Process each requested time point
-            for (ti_idx, window_center) in enumerate(window_center_indices)
-                # Calculate window start and end indices
-                window_start = window_center - n_window_samples ÷ 2
+            half_window = n_window_samples ÷ 2
+            for ti_idx = 1:n_times
+                window_center = window_center_indices[ti_idx]
+                window_start = window_center - half_window
                 window_end = window_start + n_window_samples - 1
 
                 # Extract windowed signal for ALL trials at once
-                if window_start < 1 || window_end > n_samples_per_epoch
-                    # Edge case: pad with zeros or use available data
-                    fill!(windowed_signal_batch, 0.0)
-                    actual_start = max(1, window_start)
-                    actual_end = min(n_samples_per_epoch, window_end)
-                    copy_start = max(1, 1 - window_start + 1)
-                    copy_end = copy_start + (actual_end - actual_start)
-                    if copy_end <= n_window_samples && copy_start >= 1
-                        @inbounds @simd for trial = 1:n_trials
-                            for i = copy_start:copy_end
-                                windowed_signal_batch[i, trial] = trial_signals_matrix[actual_start + i - copy_start, trial]
-                            end
-                        end
-                    end
-                else
-                    # Normal case: copy windowed signal for all trials (use @inbounds for speed)
+                # Check if window is valid (should be after filtering, but check for safety)
+                if window_start >= 1 && window_end <= n_samples_per_epoch
                     @inbounds @simd for trial = 1:n_trials
                         for i = 1:n_window_samples
                             windowed_signal_batch[i, trial] = trial_signals_matrix[window_start + i - 1, trial]
+                        end
+                    end
+                else
+                    # Edge case: pad with zeros (shouldn't happen after filtering, but handle gracefully)
+                    fill!(windowed_signal_batch, 0.0)
+                    actual_start = max(1, window_start)
+                    actual_end = min(n_samples_per_epoch, window_end)
+                    if actual_start <= actual_end
+                        copy_start = max(1, 1 - window_start + 1)
+                        copy_end = copy_start + (actual_end - actual_start)
+                        if copy_end <= n_window_samples && copy_start >= 1
+                            @inbounds @simd for trial = 1:n_trials
+                                for i = copy_start:copy_end
+                                    windowed_signal_batch[i, trial] = trial_signals_matrix[actual_start + i - copy_start, trial]
+                                end
+                            end
                         end
                     end
                 end
@@ -1359,14 +1276,8 @@ function tf_multitaper(
                         end
                     end
                     
-                    # Pad to FFT length for all trials
-                    if needs_padding
-                        @inbounds @simd for trial = 1:n_trials
-                            for i = padding_start:n_fft
-                                signal_padded_batch[i, trial] = 0.0
-                            end
-                        end
-                    end
+                    # Pad to FFT length for all trials (zero-pad if needed)
+                    fill!(signal_padded_batch, 0.0)
                     @inbounds @simd for trial = 1:n_trials
                         for i = 1:n_window_samples
                             signal_padded_batch[i, trial] = tapered_signal_batch[i, trial]
@@ -1377,19 +1288,17 @@ function tf_multitaper(
                     mul!(signal_fft_batch, p_fft_batch, signal_padded_batch)
                     
                     # Extract value at requested frequency for all trials
-                    if freq_idx <= size(signal_fft_batch, 1)
-                        if return_trials
-                            @inbounds for trial = 1:n_trials
-                                complex_val = signal_fft_batch[freq_idx, trial]
-                                eegpower_full[fi, ti_idx, trial] += abs2(complex_val) * inv_n_window_samples_sq
-                                eegconv_full[fi, ti_idx, trial] += complex_val
-                            end
-                        else
-                            @inbounds for trial = 1:n_trials
-                                complex_val = signal_fft_batch[freq_idx, trial]
-                                power_sum_trials[trial] += abs2(complex_val) * inv_n_window_samples_sq
-                                complex_sum_trials[trial] += complex_val
-                            end
+                    if return_trials
+                        @inbounds for trial = 1:n_trials
+                            complex_val = signal_fft_batch[freq_idx, trial]
+                            eegpower_full[fi, ti_idx, trial] += abs2(complex_val) * inv_n_window_samples_sq
+                            eegconv_full[fi, ti_idx, trial] += complex_val
+                        end
+                    else
+                        @inbounds for trial = 1:n_trials
+                            complex_val = signal_fft_batch[freq_idx, trial]
+                            power_sum_trials[trial] += abs2(complex_val) * inv_n_window_samples_sq
+                            complex_sum_trials[trial] += complex_val
                         end
                     end
                 end
@@ -1414,8 +1323,8 @@ function tf_multitaper(
 
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
-                power_df[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
-                phase_df[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
+                power_df[trial_idx][!, channel] = vec(eegpower[:, :, trial_idx])
+                phase_df[trial_idx][!, channel] = vec(angle.(eegconv[:, :, trial_idx]))
             end
         else 
             eegpower ./= n_trials
@@ -1441,56 +1350,7 @@ function tf_multitaper(
     )
 end
 
-# Split tf_stft into fixed and adaptive versions
-function tf_stft_fixed(
-    dat::EpochData;
-    channel_selection::Function = channels(),
-    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
-    window_length::Real,
-    overlap::Real = 0.5,
-    pad::Union{Nothing,Symbol} = nothing,
-    return_trials::Bool = false,
-)
-    return tf_stft(
-        dat;
-        channel_selection = channel_selection,
-        time_steps = time_steps,
-        lin_freqs = lin_freqs,
-        log_freqs = log_freqs,
-        window_length = window_length,
-        cycles = nothing,
-        overlap = overlap,
-        pad = pad,
-        return_trials = return_trials,
-    )
-end
 
-function tf_stft_adaptive(
-    dat::EpochData;
-    channel_selection::Function = channels(),
-    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
-    cycles::Union{Real,Tuple{Real,Real}},
-    overlap::Real = 0.5,
-    pad::Union{Nothing,Symbol} = nothing,
-    return_trials::Bool = false,
-)
-    return tf_stft(
-        dat;
-        channel_selection = channel_selection,
-        time_steps = time_steps,
-        lin_freqs = lin_freqs,
-        log_freqs = log_freqs,
-        window_length = nothing,
-        cycles = cycles,
-        overlap = overlap,
-        pad = pad,
-        return_trials = return_trials,
-    )
-end
 
 # Internal helper function to compute power spectrum for a single signal
 function _compute_welch_power(
