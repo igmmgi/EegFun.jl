@@ -509,14 +509,20 @@ function tf_stft(
     
     # Pre-compute FFT plans and frequency bins for each unique FFT size (reuse for same sizes)
     # Use real-to-complex FFT (rfft) which is ~2x faster than complex FFT for real input data
+    # Create plans for both 1D (vector) and 2D (matrix batch) operations
     unique_fft_sizes = unique(n_fft_per_freq)
-    fft_plans = Dict{Int, FFTW.rFFTWPlan{Float64, -1, false, 1}}()  # Real FFT plan
+    fft_plans = Dict{Int, FFTW.rFFTWPlan{Float64, -1, false, 1}}()  # Real FFT plan for vectors
+    fft_plans_batch = Dict{Int, Any}()  # Real FFT plan for matrices (batch) - use Any for 2D plan type
     fft_freqs_cache = Dict{Int, Vector{Float64}}()  # Cache FFT frequency vectors per FFT size
     for n_fft in unique_fft_sizes
-        template = zeros(Float64, n_fft)  # Real input (not complex)
-        # PATIENT flag: even more thorough than MEASURE, finds the absolute fastest algorithm
-        # Real FFT is ~2x faster than complex FFT for real input data
-        fft_plans[n_fft] = plan_rfft(template, flags = FFTW.PATIENT)
+        # Plan for 1D vector (for adaptive window if needed)
+        template_1d = zeros(Float64, n_fft)
+        fft_plans[n_fft] = plan_rfft(template_1d, flags = FFTW.PATIENT)
+        
+        # Plan for 2D matrix batch (n_fft × n_trials), FFT along dimension 1
+        template_2d = zeros(Float64, n_fft, n_trials)
+        fft_plans_batch[n_fft] = plan_rfft(template_2d, 1, flags = FFTW.PATIENT)
+        
         # Pre-compute FFT frequency bins once per unique FFT size
         # rfft output size is n_fft÷2+1 (frequencies from 0 to Nyquist)
         fft_freqs_cache[n_fft] = collect(range(0.0, dat.sample_rate, length = n_fft + 1)[1:(n_fft÷2+1)])
@@ -599,10 +605,10 @@ function tf_stft(
 
     # Process each selected channel
     for channel in selected_channels
-        # Pre-extract all trial data for this channel (avoid repeated DataFrame lookups)
-        trial_signals = Vector{Vector{Float64}}(undef, n_trials)
+        # Pre-extract all trial data for this channel into a matrix (n_samples × n_trials) for batch processing
+        trial_signals_matrix = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
         for trial_idx = 1:n_trials
-            trial_signals[trial_idx] = Vector{Float64}(dat.data[trial_idx][!, channel])
+            trial_signals_matrix[:, trial_idx] = Vector{Float64}(dat.data[trial_idx][!, channel])
         end
 
         # Clear/initialize output buffers for this channel
@@ -614,78 +620,179 @@ function tf_stft(
             fill!(eegconv, 0.0im)
         end
 
-        # Process each frequency (for adaptive windows, window size varies per frequency)
-        for fi = 1:num_frex
-            n_window_samples = n_window_samples_per_freq[fi]
-            n_fft = n_fft_per_freq[fi]
-            hanning_window = hanning_windows[fi]
-            freq_idx = freq_indices[fi]
-            inv_n_window_sq_val = inv_n_window_sq_per_freq[fi]
-            fft_plan = fft_plans[n_fft]
-            window_starts = window_starts_per_freq[fi]
-            window_ends = window_ends_per_freq[fi]
-            needs_edge = needs_edge_per_freq[fi]
+        if use_fixed_window
+            # OPTIMIZATION 1 & 2: Fixed window - do 1 FFT per time point, batch all trials together
+            # Extract all frequencies from each FFT (avoids n_freqs × n_times FFTs)
+            n_window_samples = n_window_samples_per_freq[1]  # Same for all frequencies
+            n_fft = n_fft_per_freq[1]  # Same for all frequencies
+            hanning_window = hanning_windows[1]  # Same for all frequencies
+            half_window = n_window_samples ÷ 2
+            fft_plan_batch = fft_plans_batch[n_fft]  # Use batch plan for matrix operations
+            inv_n_window_sq_val = inv_n_window_sq_per_freq[1]
             
-            # Get buffers for this FFT size (pre-allocated, exact size match)
-            signal_padded = signal_padded_buffers[n_fft]
-            signal_fft = signal_fft_buffers[n_fft]
-
-            # Process each trial
-            for trial_idx = 1:n_trials
-                signal_buffer = trial_signals[trial_idx]  # Use pre-extracted signal
-
+            # Pre-compute frequency indices for all frequencies (fixed window, same FFT size)
+            freq_indices_all = Vector{Int}(undef, num_frex)
+            for fi = 1:num_frex
+                freq_idx = freq_indices[fi]
+                freq_indices_all[fi] = freq_idx
+            end
+            
+            # Batch buffers: (n_fft × n_trials) for input, (n_fft÷2+1 × n_trials) for output
+            signal_padded_batch = zeros(Float64, n_fft, n_trials)
+            signal_fft_batch = zeros(ComplexF64, n_fft÷2+1, n_trials)
+            
+            # Process each time point
+            @inbounds for ti_idx = 1:n_times
+                window_center = window_center_indices[ti_idx]
+                window_start = window_center - half_window
+                window_end = window_start + n_window_samples - 1
+                
+                # Extract windowed signal, apply Hanning window, and pad for all trials in batch
+                if window_start >= 1 && window_end <= n_samples_per_epoch
+                    # Fast path: no edge handling needed
+                    # Zero out tail first (if needed)
+                    if n_fft > n_window_samples
+                        @inbounds @simd for trial = 1:n_trials
+                            for i = (n_window_samples+1):n_fft
+                                signal_padded_batch[i, trial] = 0.0
+                            end
+                        end
+                    end
+                    # Copy and apply Hanning window for all trials
+                    @inbounds @simd for trial = 1:n_trials
+                        for i = 1:n_window_samples
+                            signal_padded_batch[i, trial] = trial_signals_matrix[window_start + i - 1, trial] * hanning_window[i]
+                        end
+                    end
+                else
+                    # Edge case: pad with zeros or use available data
+                    fill!(signal_padded_batch, 0.0)
+                    actual_start = max(1, window_start)
+                    actual_end = min(n_samples_per_epoch, window_end)
+                    copy_start = max(1, 1 - window_start + 1)
+                    copy_end = copy_start + (actual_end - actual_start)
+                    if copy_end <= n_window_samples && copy_start >= 1
+                        @inbounds @simd for trial = 1:n_trials
+                            for i = copy_start:copy_end
+                                signal_padded_batch[i, trial] = trial_signals_matrix[actual_start + i - copy_start, trial] * hanning_window[i]
+                            end
+                        end
+                    end
+                end
+                
+                # Batch FFT: process all trials at once (~2x faster than complex FFT)
+                mul!(signal_fft_batch, fft_plan_batch, signal_padded_batch)
+                
+                # Extract power and complex values for all frequencies from this single FFT
+                @inbounds for fi = 1:num_frex
+                    freq_idx = freq_indices_all[fi]
+                    if freq_idx <= size(signal_fft_batch, 1)
+                        if return_trials
+                            for trial = 1:n_trials
+                                complex_val = signal_fft_batch[freq_idx, trial]
+                                eegpower_full[fi, ti_idx, trial] = abs2(complex_val) * inv_n_window_sq_val
+                                eegconv_full[fi, ti_idx, trial] = complex_val
+                            end
+                        else
+                            # Accumulate across trials
+                            sum_power = 0.0
+                            sum_conv = 0.0im
+                            for trial = 1:n_trials
+                                complex_val = signal_fft_batch[freq_idx, trial]
+                                sum_power += abs2(complex_val)
+                                sum_conv += complex_val
+                            end
+                            eegpower[fi, ti_idx] += sum_power * inv_n_window_sq_val
+                            eegconv[fi, ti_idx] += sum_conv
+                        end
+                    end
+                end
+            end
+        else
+            # Adaptive window: must loop over frequencies (window size varies per frequency)
+            # But still batch all trials together in FFT
+            for fi = 1:num_frex
+                n_window_samples = n_window_samples_per_freq[fi]
+                n_fft = n_fft_per_freq[fi]
+                hanning_window = hanning_windows[fi]
+                freq_idx = freq_indices[fi]
+                inv_n_window_sq_val = inv_n_window_sq_per_freq[fi]
+                fft_plan_batch = fft_plans_batch[n_fft]  # Use batch plan for matrix operations
+                half_window = n_window_samples ÷ 2
+                
+                # Batch buffers: (n_fft × n_trials) for input, (n_fft÷2+1 × n_trials) for output
+                signal_padded_batch = zeros(Float64, n_fft, n_trials)
+                signal_fft_batch = zeros(ComplexF64, n_fft÷2+1, n_trials)
+                
+                # Zero buffer once per frequency (not per time point)
+                fill!(signal_padded_batch, 0.0)
+                
                 # Process each requested time point
                 @inbounds for ti_idx = 1:n_times
-                    window_start = window_starts[ti_idx]
-                    window_end = window_ends[ti_idx]
-
-                    # Extract windowed signal, apply Hanning window, and pad to FFT length in one pass
-                    if needs_edge[ti_idx]
+                    window_center = window_center_indices[ti_idx]
+                    window_start = window_center - half_window
+                    window_end = window_start + n_window_samples - 1
+                    
+                    # Extract windowed signal, apply Hanning window, and pad for all trials in batch
+                    if window_start >= 1 && window_end <= n_samples_per_epoch
+                        # Fast path: no edge handling needed
+                        # Zero out tail first (if needed)
+                        if n_fft > n_window_samples
+                            @inbounds @simd for trial = 1:n_trials
+                                for i = (n_window_samples+1):n_fft
+                                    signal_padded_batch[i, trial] = 0.0
+                                end
+                            end
+                        end
+                        # Copy and apply Hanning window for all trials
+                        @inbounds @simd for trial = 1:n_trials
+                            for i = 1:n_window_samples
+                                signal_padded_batch[i, trial] = trial_signals_matrix[window_start + i - 1, trial] * hanning_window[i]
+                            end
+                        end
+                    else
                         # Edge case: pad with zeros or use available data
-                        # Zero out the entire padded buffer first
-                        @inbounds @simd for i = 1:n_fft
-                            signal_padded[i] = 0.0
+                        # Zero out window segment first
+                        @inbounds @simd for trial = 1:n_trials
+                            for i = 1:n_window_samples
+                                signal_padded_batch[i, trial] = 0.0
+                            end
                         end
                         actual_start = max(1, window_start)
                         actual_end = min(n_samples_per_epoch, window_end)
                         copy_start = max(1, 1 - window_start + 1)
                         copy_end = copy_start + (actual_end - actual_start)
                         if copy_end <= n_window_samples && copy_start >= 1
-                            # Copy and apply Hanning window directly into padded buffer
-                            @inbounds @simd for i = copy_start:copy_end
-                                signal_padded[i] = signal_buffer[actual_start + i - copy_start] * hanning_window[i]
+                            @inbounds @simd for trial = 1:n_trials
+                                for i = copy_start:copy_end
+                                    signal_padded_batch[i, trial] = trial_signals_matrix[actual_start + i - copy_start, trial] * hanning_window[i]
+                                end
                             end
-                        end
-                    else
-                        # Normal case: copy windowed signal, apply Hanning window, and pad in one pass
-                        # Zero out tail first (if needed)
-                        if n_fft > n_window_samples
-                            @inbounds @simd for i = (n_window_samples+1):n_fft
-                                signal_padded[i] = 0.0
-                            end
-                        end
-                        # Copy and apply Hanning window directly into padded buffer
-                        @inbounds @simd for i = 1:n_window_samples
-                            signal_padded[i] = signal_buffer[window_start + i - 1] * hanning_window[i]
                         end
                     end
-
-                    # Compute real-to-complex FFT using pre-computed plan (~2x faster than complex FFT)
-                    # rfft takes real input and produces complex output of size n_fft÷2+1
-                    mul!(signal_fft, fft_plan, signal_padded)
-
+                    
+                    # Batch FFT: process all trials at once
+                    mul!(signal_fft_batch, fft_plan_batch, signal_padded_batch)
+                    
                     # Extract power and complex values at requested frequency
-                    # FFT output is (n_fft÷2+1) frequencies from 0 to Nyquist
-                    # Normalize power by window length squared (matches old tf_hanning implementation)
-                    if freq_idx <= length(signal_fft)
-                        @inbounds complex_val = signal_fft[freq_idx]
-                        power_val = abs2(complex_val) * inv_n_window_sq_val
+                    if freq_idx <= size(signal_fft_batch, 1)
                         if return_trials
-                            eegpower_full[fi, ti_idx, trial_idx] = power_val
-                            eegconv_full[fi, ti_idx, trial_idx] = complex_val
+                            for trial = 1:n_trials
+                                complex_val = signal_fft_batch[freq_idx, trial]
+                                eegpower_full[fi, ti_idx, trial] = abs2(complex_val) * inv_n_window_sq_val
+                                eegconv_full[fi, ti_idx, trial] = complex_val
+                            end
                         else
-                            eegpower[fi, ti_idx] += power_val
-                            eegconv[fi, ti_idx] += complex_val
+                            # Accumulate across trials
+                            sum_power = 0.0
+                            sum_conv = 0.0im
+                            for trial = 1:n_trials
+                                complex_val = signal_fft_batch[freq_idx, trial]
+                                sum_power += abs2(complex_val)
+                                sum_conv += complex_val
+                            end
+                            eegpower[fi, ti_idx] += sum_power * inv_n_window_sq_val
+                            eegconv[fi, ti_idx] += sum_conv
                         end
                     end
                 end
