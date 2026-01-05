@@ -1360,8 +1360,17 @@ function tf_multitaper(
     )
 end
 
-
-
+# Internal helper function to compute power spectrum for a single signal
+function _compute_welch_power(
+    signal::AbstractVector{<:Real},
+    window_size::Int,
+    noverlap::Int,
+    sample_rate::Real,
+    window_function::Function,
+)::Tuple{Vector{Float64}, Vector{Float64}}
+    pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = sample_rate, window = window_function)
+    return DSP.freq(pgram), DSP.power(pgram)
+end
 
 
 """
@@ -1408,7 +1417,7 @@ spectrum = freq_spectrum(epochs; channel_selection=channels(:Cz), window_size=20
 ```
 """
 function freq_spectrum(
-    dat::EpochData;
+    dat::EegData;
     channel_selection::Function = channels(),
     window_size::Int = 256,
     overlap::Real = 0.5,
@@ -1422,34 +1431,20 @@ function freq_spectrum(
     # Validate overlap
     overlap < 0 || overlap >= 1 && error("`overlap` must be in range [0, 1), got $overlap")
 
-    n_trials = n_epochs(dat)
     noverlap = Int(round(window_size * overlap))
 
-    # Use first epoch of first channel to get frequency vector
+    # Get frequency vector from first channel's first signal
     first_channel = selected_channels[1]
-    first_epoch_df = dat.data[1]
-    first_signal = Float64.(first_epoch_df[!, first_channel])
-    pgram_first = DSP.welch_pgram(first_signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+    first_signal = channel_data(dat, first_channel)
+    freqs, _ = _compute_welch_power(first_signal, window_size, noverlap, dat.sample_rate, window_function)
 
     # Initialize output DataFrame with frequency column
-    freqs = DSP.freq(pgram_first)
     spectrum_df = DataFrame(freq = freqs)
 
-    # Process each channel
+    # Process each channel using broadcasting
     for channel in selected_channels
-        # Accumulate power across epochs (avoid storing all spectra)
-        power_sum = zeros(Float64, length(freqs))
-
-        for trial_idx = 1:n_trials
-            signal = dat.data[trial_idx][!, channel]
-
-            # Compute power spectrum using Welch's method
-            pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
-            power_sum .+= DSP.power(pgram)
-        end
-
-        # Average power across epochs
-        spectrum_df[!, channel] = power_sum ./ n_trials
+        signal = channel_data(dat, channel)
+        spectrum_df[!, channel] = _compute_welch_power(signal, window_size, noverlap, dat.sample_rate, window_function)[2]
     end
 
     # Filter by max_freq if specified
@@ -1458,70 +1453,8 @@ function freq_spectrum(
         spectrum_df = spectrum_df[mask, :]
     end
 
-    # Return SpectrumData type
-    return SpectrumData(
-        dat.file,
-        dat.condition,
-        dat.condition_name,
-        spectrum_df,
-        dat.layout,
-        dat.sample_rate,
-        :welch,
-        dat.analysis_info,
-    )
-end
-
-function freq_spectrum(
-    dat::SingleDataFrameEeg;
-    channel_selection::Function = channels(),
-    window_size::Int = 256,
-    overlap::Real = 0.5,
-    window_function::Function = DSP.hanning,
-    max_freq::Union{Nothing,Real} = nothing,
-)
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
-
-    # Validate overlap
-    if overlap < 0 || overlap >= 1
-        error("`overlap` must be in range [0, 1), got $overlap")
-    end
-
-    noverlap = Int(round(window_size * overlap))
-
-    # Compute frequencies once (same for all channels since they use same parameters)
-    # Use first channel to get frequency vector
-    first_channel = selected_channels[1]
-    first_signal = Float64.(dat.data[!, first_channel])
-    pgram_first = DSP.welch_pgram(first_signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
-    freqs = collect(Float64, DSP.freq(pgram_first))
-
-    # Initialize output DataFrame with frequency column
-    spectrum_df = DataFrame(freq = freqs)
-
-    # Process each channel
-    for channel in selected_channels
-        signal = dat.data[!, channel]
-
-        # Compute power spectrum using Welch's method
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
-        power = DSP.power(pgram)
-
-        spectrum_df[!, channel] = power
-    end
-
-    # Filter by max_freq if specified
-    if !isnothing(max_freq)
-        mask = spectrum_df.freq .<= max_freq
-        spectrum_df = spectrum_df[mask, :]
-    end
-
-    # Return SpectrumData type
-    # Handle condition/condition_name: ErpData has them, ContinuousData doesn't
-    condition_num = hasproperty(dat, :condition) ? dat.condition : 1
-    condition_name = hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous"
-    
+    # Return SpectrumData type (dispatch handles condition info)
+    condition_num, condition_name = condition_info(dat)
     return SpectrumData(
         dat.file,
         condition_num,
