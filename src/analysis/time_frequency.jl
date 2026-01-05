@@ -999,16 +999,12 @@ function tf_multitaper(
     n_samples_per_epoch = n_samples_original
 
     # Define frequencies based on user specification
-    if !isnothing(log_freqs)
-        # Logarithmic spacing: (start, stop, number)
+    if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
         min_freq, max_freq, num_frex = log_freqs
         freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-        # Broadcasting already allocates an array, no collect() needed
-    else
-        # Linear spacing: (start, stop, step)
+    else # Linear spacing: (start, stop, step)
         min_freq, max_freq, step = lin_freqs
         freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
-        # Range works fine for indexing, repeat(), and broadcasting - no collect() needed
     end
     num_frex = length(freqs)
 
@@ -1051,17 +1047,22 @@ function tf_multitaper(
     n_fft_per_freq = [nextpow(2, n_win) for n_win in n_window_samples_per_freq]
     tapers_per_freq = Vector{Matrix{Float64}}(undef, num_frex)  # Each element is (n_window_samples × n_tapers)
     n_tapers_per_freq = zeros(Int, num_frex)
+    # Pre-compute normalization factors per frequency (avoid repeated computation)
+    inv_n_window_samples_sq_per_freq = Vector{Float64}(undef, num_frex)
+    inv_n_tapers_per_freq = Vector{Float64}(undef, num_frex)
     
     # For each frequency, find the FFT bin that corresponds to it
     freq_indices = zeros(Int, num_frex)
     
-    # Pre-compute FFT plans for each unique FFT size (reuse plans for same sizes)
-    # Use FFTW.MEASURE for better performance (takes longer to create but FFTs are faster)
+    # Pre-compute FFT plans and frequency bins for each unique FFT size (reuse for same sizes)
     unique_fft_sizes = unique(n_fft_per_freq)
     fft_plans = Dict{Int, FFTW.cFFTWPlan{ComplexF64, -1, false, 1}}()
+    fft_freqs_cache = Dict{Int, Vector{Float64}}()  # Cache FFT frequency vectors per FFT size
     for n_fft in unique_fft_sizes
         template = zeros(ComplexF64, n_fft)
         fft_plans[n_fft] = plan_fft(template, flags = FFTW.MEASURE)
+        # Pre-compute FFT frequency bins once per unique FFT size
+        fft_freqs_cache[n_fft] = collect(range(0.0, dat.sample_rate, length = n_fft + 1)[1:(n_fft÷2+1)])
     end
     
     for (fi, freq) in enumerate(freqs)
@@ -1123,21 +1124,40 @@ function tf_multitaper(
         end
         n_tapers_per_freq[fi] = K
         
-        # Find FFT bin for this frequency
+        # Pre-compute normalization factors for this frequency
+        inv_n_window_samples_sq_per_freq[fi] = 1.0 / (n_window_samples^2)
+        inv_n_tapers_per_freq[fi] = 1.0 / K
+        
+        # Find FFT bin for this frequency (use cached frequency vector)
         n_fft = n_fft_per_freq[fi]
-        freqs_fft = range(0.0, dat.sample_rate, length = n_fft + 1)[1:(n_fft÷2+1)]  # FFT frequencies (0 to Nyquist)
-        freq_idx = argmin(abs.(freqs_fft .- freq))
+        freqs_fft = fft_freqs_cache[n_fft]  # Use cached frequency vector
+        freq_idx = 1
+        min_diff = abs(freqs_fft[1] - freq)
+        @inbounds for i = 2:length(freqs_fft)
+            diff = abs(freqs_fft[i] - freq)
+            if diff < min_diff
+                min_diff = diff
+                freq_idx = i
+            end
+        end
         freq_indices[fi] = freq_idx
     end
 
-    # Pre-allocate reusable buffers (use maximum sizes needed, computed after tapers)
-    max_window_samples = maximum(n_window_samples_per_freq)
-    max_fft = maximum(n_fft_per_freq)
-    windowed_signal_buffer = zeros(Float64, max_window_samples)
-    tapered_signal_buffer = zeros(Float64, max_window_samples)
-    signal_padded_buffer = zeros(ComplexF64, max_fft)
-    signal_fft_buffer = zeros(ComplexF64, max_fft)
-    signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
+    # Pre-allocate reusable buffers per unique FFT size (reuse across frequencies with same sizes)
+    unique_fft_sizes = unique(n_fft_per_freq)
+    unique_window_sizes = unique(n_window_samples_per_freq)
+    windowed_signal_buffers = Dict{Int, Vector{Float64}}()
+    tapered_signal_buffers = Dict{Int, Vector{Float64}}()
+    signal_padded_buffers = Dict{Int, Vector{ComplexF64}}()
+    signal_fft_buffers = Dict{Int, Vector{ComplexF64}}()
+    for n_window in unique_window_sizes
+        windowed_signal_buffers[n_window] = zeros(Float64, n_window)
+        tapered_signal_buffers[n_window] = zeros(Float64, n_window)
+    end
+    for n_fft in unique_fft_sizes
+        signal_padded_buffers[n_fft] = zeros(ComplexF64, n_fft)
+        signal_fft_buffers[n_fft] = zeros(ComplexF64, n_fft)
+    end
 
     # Initialize output structures - allocate appropriate type based on return_trials
     # Pre-compute shared time and freq columns (same for power and phase)
@@ -1163,6 +1183,16 @@ function tf_multitaper(
 
     # Process each selected channel
     for channel in selected_channels
+        # Pre-extract all trial data for this channel into a matrix (n_samples × n_trials) for better cache locality
+        trial_signals_matrix = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
+        for trial_idx = 1:n_trials
+            col = dat.data[trial_idx][!, channel]
+            # Copy directly without intermediate Vector allocation
+            @inbounds @simd for i = 1:n_samples_per_epoch
+                trial_signals_matrix[i, trial_idx] = Float64(col[i])
+            end
+        end
+        
         # Clear/initialize output buffers for this channel
         if return_trials
             fill!(eegpower_full, 0.0)
@@ -1174,11 +1204,8 @@ function tf_multitaper(
 
         # Process each trial
         for trial_idx = 1:n_trials
-            # Extract signal for this trial into pre-allocated buffer (avoid allocation)
-            # Get column once to avoid repeated DataFrame lookups
-            # epoch_df = dat.data[trial_idx]
-            # col = epoch_df[!, channel]
-            signal_buffer .= dat.data[trial_idx][!, channel]
+            # Use pre-extracted trial signal (no DataFrame lookup)
+            signal_buffer = @view trial_signals_matrix[:, trial_idx]
             # Copy with type conversion in one pass (more efficient than Float64.(col) which allocates)
             # @inbounds @simd for i = 1:n_samples_per_epoch
             #     signal_buffer[i] = Float64(col[i])
@@ -1193,11 +1220,11 @@ function tf_multitaper(
                 freq_idx = freq_indices[fi]
                 p_fft = fft_plans[n_fft]
 
-                # Get views into pre-allocated buffers for this frequency
-                windowed_signal = @view windowed_signal_buffer[1:n_window_samples]
-                tapered_signal = @view tapered_signal_buffer[1:n_window_samples]
-                signal_padded = @view signal_padded_buffer[1:n_fft]
-                signal_fft = @view signal_fft_buffer[1:n_fft]
+                # Reuse pre-allocated buffers for this frequency (no views needed, direct reuse)
+                windowed_signal = windowed_signal_buffers[n_window_samples]
+                tapered_signal = tapered_signal_buffers[n_window_samples]
+                signal_padded = signal_padded_buffers[n_fft]
+                signal_fft = signal_fft_buffers[n_fft]
                 
                 # Pre-compute whether padding is needed (same for all time points and tapers at this frequency)
                 needs_padding = n_window_samples < n_fft
@@ -1230,9 +1257,9 @@ function tf_multitaper(
                     end
 
                     # Apply each taper and compute FFT, then average across tapers
-                    # Pre-compute normalization factor to avoid repeated division
-                    inv_n_window_samples_sq = 1.0 / (n_window_samples^2)
-                    inv_n_tapers = 1.0 / n_tapers
+                    # Use pre-computed normalization factors (computed once per frequency)
+                    inv_n_window_samples_sq = inv_n_window_samples_sq_per_freq[fi]
+                    inv_n_tapers = inv_n_tapers_per_freq[fi]
                     power_sum = 0.0
                     complex_sum = 0.0im
                     
