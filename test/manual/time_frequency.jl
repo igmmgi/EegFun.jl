@@ -11,17 +11,16 @@ using BenchmarkTools
 # Generate synthetic signal
 sample_rate = 1000.0
 times, signal = eegfun.generate_signal(
-    1,                                      # n_trials
+    100,                                      # n_trials
     [-1.0, 3.0],                            # time_window
     sample_rate,                            # sample_rate
-    [2.0, 15, 25.0],                        # frequencies
-    [2.0, 2.0, 2.0],                        # amplitudes
+    [5.0, 25, 35.0],                        # frequencies
+    [5.0, 5.0, 4.0],                        # amplitudes
     [[0.1, 0.5], [0.6, 1.0], [1.1, 1.5]],   # time windows for each freq 
     0.0,                                    # noise amplitude
 );
 epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
-eegfun.plot_erp(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
-
+# eegfun.plot_erp(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
 spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=80.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 

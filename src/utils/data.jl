@@ -213,6 +213,10 @@ function channel_data(dat::MultiDataFrameEeg)::DataFrame
     return isempty(channel_cols) ? DataFrame() : to_data_frame(dat)[:, channel_cols]
 end
 
+# Extract channel signals as vectors (returns vector of signals for processing)
+channel_data(dat::EpochData, channel::Symbol) = reduce(vcat, (trial[!, channel] for trial in dat.data))
+channel_data(dat::SingleDataFrameEeg, channel::Symbol)::Vector{Float64} = dat.data[!, channel]
+
 """
 
     extra_data(eeg_data::EegData) -> DataFrame
@@ -1129,10 +1133,20 @@ epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_nu
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
 # Helper to extract condition name from ErpData or EpochData
-_get_condition_name(dat::ErpData)::String = dat.condition_name
-_get_condition_name(dat::EpochData)::String = dat.condition_name
-_get_condition_name(dat::TimeFreqData)::String = dat.condition_name
-_get_condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
+condition_name(dat::ErpData)::String = dat.condition_name
+condition_name(dat::EpochData)::String = dat.condition_name
+condition_name(dat::TimeFreqData)::String = dat.condition_name
+condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
+
+# Helper to extract condition number and name (returns tuple)
+condition_info(dat::EpochData) = (dat.condition, dat.condition_name)
+condition_info(dat::ErpData) = (dat.condition, dat.condition_name)
+condition_info(dat::TimeFreqData) = (dat.condition, dat.condition_name)
+condition_info(dat::TimeFreqEpochData) = (dat.condition, dat.condition_name)
+condition_info(dat::SingleDataFrameEeg) = (
+    hasproperty(dat, :condition) ? dat.condition : 1,
+    hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous"
+)
 
 # Helper function predicates for easier participant filtering (for Vector{Int} of participant IDs)
 participants() = x -> fill(true, length(x))  # Default: select all participants given
