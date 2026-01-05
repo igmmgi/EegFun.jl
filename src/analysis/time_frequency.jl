@@ -83,7 +83,7 @@ function tf_morlet(
     # Get original data time range 
     times_original = time(dat)
 
-    # Apply padding if requested (mutating dat directly since we extract time points later anyway)
+    # Apply padding if requested 
     if !isnothing(pad)
         mirror!(dat, pad)
     end
@@ -546,18 +546,6 @@ function tf_stft(
         freq_indices[fi] = freq_idx
     end
 
-    # Pre-allocate reusable buffers for each unique FFT size (match FFT plan sizes)
-    max_window_samples = maximum(n_window_samples_per_freq)
-    # Create buffers for each unique FFT size (allows direct mul! without views)
-    # Use real buffers for input (rfft takes real input)
-    signal_padded_buffers = Dict{Int, Vector{Float64}}()  # Real input buffer
-    signal_fft_buffers = Dict{Int, Vector{ComplexF64}}()  # Complex output buffer
-    for n_fft in unique_fft_sizes
-        signal_padded_buffers[n_fft] = zeros(Float64, n_fft)  # Real input
-        # rfft output size is n_fft÷2+1 (frequencies from 0 to Nyquist)
-        signal_fft_buffers[n_fft] = zeros(ComplexF64, n_fft÷2+1)  # Complex output
-    end
-    signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
 
     # Initialize output structures - allocate appropriate type based on return_trials
     # Pre-compute shared time and freq columns (same for power and phase)
