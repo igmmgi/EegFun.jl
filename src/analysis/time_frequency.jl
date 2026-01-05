@@ -425,10 +425,12 @@ function tf_stft(
     times_processed = time(dat)
 
     # Handle time_steps parameter - determine which time points to extract from results
+    # After padding, processed data has extended time range - validate against processed data
     if isnothing(time_steps)
         time_indices, times_out = find_times(times_processed, times_original)
     else
         start_time, stop_time, step_time = time_steps
+        # Check if requested range extends beyond processed data range and warn
         time_min_processed = minimum(times_processed)
         time_max_processed = maximum(times_processed)
         if start_time < time_min_processed || stop_time > time_max_processed
@@ -501,12 +503,24 @@ function tf_stft(
     
     # Pre-compute FFT plans and frequency bins for each unique FFT size (reuse for same sizes)
     unique_fft_sizes = unique(n_fft_per_freq)
+    fft_plans = Dict{Int, FFTW.rFFTWPlan{Float64, -1, false, 1}}()  # Real FFT plan for vectors
     fft_plans_batch = Dict{Int, Any}()  # Real FFT plan for matrices (batch) - use Any for 2D plan type
     fft_freqs_cache = Dict{Int, Vector{Float64}}()  # Cache FFT frequency vectors per FFT size
+    # Pre-allocate reusable buffers for each unique FFT size (reuse across frequencies)
+    signal_padded_buffers_batch = Dict{Int, Matrix{Float64}}()  # Input buffers keyed by FFT size
+    signal_fft_buffers_batch = Dict{Int, Matrix{ComplexF64}}()  # Output buffers keyed by FFT size
     for n_fft in unique_fft_sizes
+        # Plan for 1D vector (for adaptive window if needed)
+        template_1d = zeros(Float64, n_fft)
+        fft_plans[n_fft] = plan_rfft(template_1d, flags = FFTW.MEASURE)
+        
         # Plan for 2D matrix batch (n_fft × n_trials), FFT along dimension 1
         template_2d = zeros(Float64, n_fft, n_trials)
-        fft_plans_batch[n_fft] = plan_rfft(template_2d, 1, flags = FFTW.PATIENT)
+        fft_plans_batch[n_fft] = plan_rfft(template_2d, 1, flags = FFTW.MEASURE)
+        
+        # Pre-allocate reusable buffers for this FFT size
+        signal_padded_buffers_batch[n_fft] = zeros(Float64, n_fft, n_trials)
+        signal_fft_buffers_batch[n_fft] = zeros(ComplexF64, n_fft÷2+1, n_trials)
         
         # Pre-compute FFT frequency bins once per unique FFT size
         # rfft output size is n_fft÷2+1 (frequencies from 0 to Nyquist)
@@ -531,6 +545,18 @@ function tf_stft(
         freq_indices[fi] = freq_idx
     end
 
+    # Pre-allocate reusable buffers for each unique FFT size (match FFT plan sizes)
+    max_window_samples = maximum(n_window_samples_per_freq)
+    # Create buffers for each unique FFT size (allows direct mul! without views)
+    # Use real buffers for input (rfft takes real input)
+    signal_padded_buffers = Dict{Int, Vector{Float64}}()  # Real input buffer
+    signal_fft_buffers = Dict{Int, Vector{ComplexF64}}()  # Complex output buffer
+    for n_fft in unique_fft_sizes
+        signal_padded_buffers[n_fft] = zeros(Float64, n_fft)  # Real input
+        # rfft output size is n_fft÷2+1 (frequencies from 0 to Nyquist)
+        signal_fft_buffers[n_fft] = zeros(ComplexF64, n_fft÷2+1)  # Complex output
+    end
+    signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
 
     # Initialize output structures - allocate appropriate type based on return_trials
     # Pre-compute shared time and freq columns (same for power and phase)
@@ -545,6 +571,27 @@ function tf_stft(
         phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
+    # Pre-compute window start/end indices for each frequency and time point (avoid repeated calculations)
+    window_starts_per_freq = Vector{Vector{Int}}(undef, num_frex)
+    window_ends_per_freq = Vector{Vector{Int}}(undef, num_frex)
+    needs_edge_per_freq = Vector{BitVector}(undef, num_frex)
+    for fi = 1:num_frex
+        n_window_samples = n_window_samples_per_freq[fi]
+        half_window = n_window_samples ÷ 2
+        window_starts = Vector{Int}(undef, n_times)
+        window_ends = Vector{Int}(undef, n_times)
+        needs_edge = BitVector(undef, n_times)
+        @inbounds for (ti_idx, window_center) in enumerate(window_center_indices)
+            window_start = window_center - half_window
+            window_end = window_start + n_window_samples - 1
+            window_starts[ti_idx] = window_start
+            window_ends[ti_idx] = window_end
+            needs_edge[ti_idx] = (window_start < 1 || window_end > n_samples_per_epoch)
+        end
+        window_starts_per_freq[fi] = window_starts
+        window_ends_per_freq[fi] = window_ends
+        needs_edge_per_freq[fi] = needs_edge
+    end
 
     # Pre-allocate reusable output buffers (reused across all channels)
     if return_trials
@@ -573,9 +620,8 @@ function tf_stft(
         end
 
         if use_fixed_window
-            # OPTIMIZATION: Fixed window size means we can do 1 FFT per time point and extract
-            # all requested frequencies from that single FFT output (instead of n_freqs FFTs per time point).
-            # Also batch all trials together in one FFT call (n_trials processed in parallel).
+            # OPTIMIZATION 1 & 2: Fixed window - do 1 FFT per time point, batch all trials together
+            # Extract all frequencies from each FFT (avoids n_freqs × n_times FFTs)
             n_window_samples = n_window_samples_per_freq[1]  # Same for all frequencies
             n_fft = n_fft_per_freq[1]  # Same for all frequencies
             hanning_window = hanning_windows[1]  # Same for all frequencies
@@ -590,9 +636,9 @@ function tf_stft(
                 freq_indices_all[fi] = freq_idx
             end
             
-            # Batch buffers: (n_fft × n_trials) for input, (n_fft÷2+1 × n_trials) for output
-            signal_padded_batch = zeros(Float64, n_fft, n_trials)
-            signal_fft_batch = zeros(ComplexF64, n_fft÷2+1, n_trials)
+            # Reuse pre-allocated buffers for this FFT size (no allocation!)
+            signal_padded_batch = signal_padded_buffers_batch[n_fft]
+            signal_fft_batch = signal_fft_buffers_batch[n_fft]
             
             # Process each time point
             @inbounds for ti_idx = 1:n_times
@@ -673,12 +719,9 @@ function tf_stft(
                 fft_plan_batch = fft_plans_batch[n_fft]  # Use batch plan for matrix operations
                 half_window = n_window_samples ÷ 2
                 
-                # Batch buffers: (n_fft × n_trials) for input, (n_fft÷2+1 × n_trials) for output
-                signal_padded_batch = zeros(Float64, n_fft, n_trials)
-                signal_fft_batch = zeros(ComplexF64, n_fft÷2+1, n_trials)
-                
-                # Zero buffer once per frequency (not per time point)
-                fill!(signal_padded_batch, 0.0)
+                # Reuse pre-allocated buffers for this FFT size (no allocation!)
+                signal_padded_batch = signal_padded_buffers_batch[n_fft]
+                signal_fft_batch = signal_fft_buffers_batch[n_fft]
                 
                 # Process each requested time point
                 @inbounds for ti_idx = 1:n_times
