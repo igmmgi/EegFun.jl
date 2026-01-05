@@ -41,8 +41,8 @@ eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Chann
 
 
 @btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1))
-@btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (1, 40, 1), window_length = 0.5)
-@btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (1, 40, 1), cycles = 5)
+@btime tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 1), window_length = 0.5)
+@btime tf_data = eegfun.tf_stft_adaptive(epochs_synthetic, lin_freqs = (1, 40, 1), cycles = 5)
 @btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (1, 40, 1), window_length = 0.5)
 
 
