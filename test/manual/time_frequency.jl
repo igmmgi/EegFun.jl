@@ -41,7 +41,7 @@ eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Chann
 
 
 
-@btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1))
+tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1))
 
 
 spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=100.0)
@@ -75,8 +75,9 @@ epoch_files = filter(f -> endswith(f, "_epochs_cleaned.jld2"), readdir(data_dir)
 epoch_file = joinpath(data_dir, epoch_files[1])
 epochs_real = eegfun.load_data(epoch_file)[1] # take single epoch
 
-@btime tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 1)) 
-@btime tf_data = eegfun.tf_stft(epochs_real, lin_freqs = (1, 40, 1), window_length = 0.5) 
+@btime tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 1), time_steps = (-0.5, 2.0, 0.01)) 
+@btime tf_data = eegfun.tf_stft(epochs_real, lin_freqs = (1, 40, 1), time_steps = (-0.5, 2.0, 0.01), cycles = 5) 
+
 
 @btime tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 1), time_steps = (-0.5, 2.0, 0.1)) 
 tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 5), time_steps = (-0.5, 2.0, 0.01)) 
