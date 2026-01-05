@@ -98,6 +98,7 @@ function tf_morlet(
         time_indices, times_out = find_times(times_processed, times_original)
     else
         start_time, stop_time, step_time = time_steps
+        
         # Check if requested range extends beyond processed data range and warn
         time_min_processed = minimum(times_processed)
         time_max_processed = maximum(times_processed)
@@ -291,6 +292,7 @@ function tf_morlet(
         dat.analysis_info,
     )
 end
+
 
 """
     tf_stft(dat::EpochData; 
@@ -508,8 +510,6 @@ function tf_stft(
     inv_n_window_sq_per_freq = [1.0 / (n_win * n_win) for n_win in n_window_samples_per_freq]
     
     # Pre-compute FFT plans and frequency bins for each unique FFT size (reuse for same sizes)
-    # Use real-to-complex FFT (rfft) which is ~2x faster than complex FFT for real input data
-    # Create plans for both 1D (vector) and 2D (matrix batch) operations
     unique_fft_sizes = unique(n_fft_per_freq)
     fft_plans = Dict{Int, FFTW.rFFTWPlan{Float64, -1, false, 1}}()  # Real FFT plan for vectors
     fft_plans_batch = Dict{Int, Any}()  # Real FFT plan for matrices (batch) - use Any for 2D plan type
