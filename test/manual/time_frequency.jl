@@ -44,6 +44,7 @@ tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 0.5), windo
 @btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1))
 @btime tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 1), window_length = 0.5)
 @btime tf_data = eegfun.tf_stft_adaptive(epochs_synthetic, lin_freqs = (1, 40, 1), cycles = 5)
+
 @btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (1, 40, 1), window_length = 0.5)
 
 
@@ -77,8 +78,8 @@ data_dir = "/home/ian/Documents/Julia/output_data"
 epoch_files = filter(f -> endswith(f, "_epochs_cleaned.jld2"), readdir(data_dir))
 epoch_file = joinpath(data_dir, epoch_files[1])
 epochs_real = eegfun.load_data(epoch_file)[1] # take single epoch
-# @btime tf_data = eegfun.tf_stft_fixed(epochs_real, lin_freqs = (1, 80, 1), window_length = 0.5)
-@btime tf_data = eegfun.tf_stft_adaptive(epochs_real, lin_freqs = (1, 80, 1), cycles = 5)
+@btime tf_data = eegfun.tf_stft_fixed(epochs_real, lin_freqs = (1, 80, 1), window_length = 0.5)
+@btime tf_data = eegfun.tf_stft_adaptive(epochs_real, lin_freqs = (1, 40, 1), cycles = 5)
 
 
 
@@ -108,9 +109,9 @@ fig1 = eegfun.plot_time_frequency( tf_data, baseline_window = (-0.5, -0.2), base
 
 # Load real EEG data from Cohen's dataset
 data_cohen = eegfun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
-#tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (1, 40, 0.5), cycles = 3)
+# tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (1, 40, 0.5), cycles = 5)
 # tf_data = eegfun.tf_stft_fixed(data_cohen, lin_freqs = (1, 40, 0.5), window_length = 0.5)
-tf_data = eegfun.tf_stft_adaptive(data_cohen, lin_freqs = (1, 40, 1), cycles = 3)
+tf_data = eegfun.tf_stft_adaptive(data_cohen, lin_freqs = (1, 40, 1), cycles = 5)
 fig1, _ = eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
