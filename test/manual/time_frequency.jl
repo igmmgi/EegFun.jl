@@ -111,7 +111,8 @@ fig1 = eegfun.plot_time_frequency( tf_data, baseline_window = (-0.5, -0.2), base
 data_cohen = eegfun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
 # tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (1, 40, 0.5), cycles = 5)
 # tf_data = eegfun.tf_stft_fixed(data_cohen, lin_freqs = (1, 40, 0.5), window_length = 0.5)
-tf_data = eegfun.tf_stft_adaptive(data_cohen, lin_freqs = (1, 40, 1), cycles = 5)
+# tf_data = eegfun.tf_stft_adaptive(data_cohen, lin_freqs = (1, 40, 1), cycles = 5)
+tf_data = eegfun.tf_multitaper(data_cohen, lin_freqs = (1, 40, 0.5), cycles = 5, time_steps = (-0.5, 2.0, 0.02))
 fig1, _ = eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
