@@ -28,7 +28,7 @@ eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channe
 # Generate synthetic signal with noise
 sample_rate = 256.0
 times, signal = eegfun.generate_signal(
-    72*160,                                      # n_trials
+    160,                                      # n_trials
     [-1.0, 2.0],                            # time_window
     sample_rate,                            # sample_rate
     [2.0, 15, 25.0],                        # frequencies
@@ -38,6 +38,11 @@ times, signal = eegfun.generate_signal(
 );
 epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
 eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
+
+
+
+@btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1))
+
 
 spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=100.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
@@ -51,6 +56,7 @@ tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (1, 80, 1), window_length
 # 13.11
 @btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 80, 1))
 @btime tf_data = eegfun.tf_stft(epochs_synthetic, lin_freqs = (1, 80, 1), window_length = 0.5) 
+
 @btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (1, 80, 1), window_length = 0.5) 
 
 fig1 = eegfun.plot_time_frequency(tf_data)
@@ -70,6 +76,8 @@ epoch_file = joinpath(data_dir, epoch_files[1])
 epochs_real = eegfun.load_data(epoch_file)[1] # take single epoch
 
 @btime tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 1)) 
+@btime tf_data = eegfun.tf_stft(epochs_real, lin_freqs = (1, 40, 1), window_length = 0.5) 
+
 @btime tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 1), time_steps = (-0.5, 2.0, 0.1)) 
 tf_data = eegfun.tf_morlet(epochs_real, lin_freqs = (1, 40, 5), time_steps = (-0.5, 2.0, 0.01)) 
 fig1 = eegfun.plot_time_frequency( tf_data, baseline_window = (-0.5, -0.2), baseline_method = :db)
