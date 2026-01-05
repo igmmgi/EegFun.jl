@@ -80,8 +80,7 @@ function tf_morlet(
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
-    # Get original data time range (for when time_steps is nothing - use all original points)
-    # Extract this BEFORE potentially mutating dat
+    # Get original data time range 
     times_original = time(dat)
 
     # Apply padding if requested (mutating dat directly since we extract time points later anyway)
@@ -121,16 +120,12 @@ function tf_morlet(
     n_samples_per_epoch = n_samples_original  # Use full signal for convolution
 
     # Define frequencies based on user specification
-    if !isnothing(log_freqs)
-        # Logarithmic spacing: (start, stop, number)
+    if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
         min_freq, max_freq, num_frex = log_freqs
         freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-        # Broadcasting already allocates an array, no collect() needed
-    else
-        # Linear spacing: (start, stop, step)
+    else # Linear spacing: (start, stop, step)
         min_freq, max_freq, step = lin_freqs
         freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
-        # Range works fine for indexing, repeat(), and broadcasting - no collect() needed
     end
     num_frex = length(freqs)  # Update num_frex for use in rest of function
 
@@ -155,24 +150,25 @@ function tf_morlet(
         phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
-    # Pre-compute convolution length and FFT plans for single trial (same for all channels)
+    # Pre-compute convolution length for batch processing (all trials concatenated)
     max_sigma = maximum(cycles_vec ./ (2 * pi .* freqs))
     max_hw = ceil(Int, 6 * max_sigma * dat.sample_rate) ÷ 2
     max_wl = max_hw * 2 + 1
-    n_conv_trial = max_wl + n_samples_per_epoch - 1
-    n_conv_pow2_trial = nextpow(2, n_conv_trial)
+    n_total = n_samples_per_epoch * n_trials  # Total samples across all trials
+    n_conv_batch = max_wl + n_total - 1
+    n_conv_pow2_batch = nextpow(2, n_conv_batch)
     
-    # Pre-allocate reusable buffers (same size for all channels, can be reused)
-    signal_padded_trial = zeros(ComplexF64, n_conv_pow2_trial)
-    eegfft_trial = zeros(ComplexF64, n_conv_pow2_trial)
-    wavelet_padded = zeros(ComplexF64, n_conv_pow2_trial)
-    conv_buffer = zeros(ComplexF64, n_conv_pow2_trial)
-    eegconv_trial = zeros(ComplexF64, n_conv_pow2_trial)
+    # Pre-allocate reusable buffers for batch processing (same size for all channels)
+    signal_padded_batch = zeros(ComplexF64, n_conv_pow2_batch)
+    eegfft_batch = zeros(ComplexF64, n_conv_pow2_batch)
+    wavelet_padded = zeros(ComplexF64, n_conv_pow2_batch)
+    conv_buffer = zeros(ComplexF64, n_conv_pow2_batch)
+    eegconv_batch = zeros(ComplexF64, n_conv_pow2_batch)
     
     # Create FFT plans using the actual buffers (plans keep references, so buffers must persist)
-    p_fft_trial = plan_fft(signal_padded_trial, flags=FFTW.ESTIMATE)
-    p_fft_wavelet_trial = plan_fft(wavelet_padded, flags=FFTW.ESTIMATE)
-    p_ifft_trial = plan_ifft(conv_buffer, flags=FFTW.ESTIMATE)
+    p_fft_batch = plan_fft(signal_padded_batch, flags=FFTW.MEASURE)
+    p_fft_wavelet_batch = plan_fft(wavelet_padded, flags=FFTW.MEASURE)
+    p_ifft_batch = plan_ifft(conv_buffer, flags=FFTW.MEASURE)
 
     # Pre-compute constants (same for all channels and frequencies)
     inv_sr = 1.0 / dat.sample_rate 
@@ -202,8 +198,8 @@ function tf_morlet(
         end
 
         # FFT of wavelet - compute once, reuse for all channels and trials
-        wavelet_fft_freq = zeros(ComplexF64, n_conv_pow2_trial)
-        mul!(wavelet_fft_freq, p_fft_wavelet_trial, wavelet_padded)
+        wavelet_fft_freq = zeros(ComplexF64, n_conv_pow2_batch)
+        mul!(wavelet_fft_freq, p_fft_wavelet_batch, wavelet_padded)
         wavelet_ffts[fi] = wavelet_fft_freq
     end
 
@@ -216,45 +212,49 @@ function tf_morlet(
         eegconv = zeros(ComplexF64, num_frex, n_times)
     end
 
-    # Process each selected channel - process trials separately for better performance
+    # Process each selected channel - batch process all trials together
     for channel in selected_channels
 
-        # Process each trial separately
+        # Concatenate all trials for this channel into one long signal
+        fill!(signal_padded_batch, 0)
+        offset = 0
         for trial_idx = 1:n_trials
-            
-            # FFT of trial signal - zero pad first, then copy signal
-            fill!(signal_padded_trial, 0)
-            signal_padded_trial[1:n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
-            mul!(eegfft_trial, p_fft_trial, signal_padded_trial)
+            signal_padded_batch[offset+1:offset+n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
+            offset += n_samples_per_epoch
+        end
+        
+        # Single FFT for all trials (much faster than n_trials separate FFTs)
+        mul!(eegfft_batch, p_fft_batch, signal_padded_batch)
 
-            # Loop through frequencies - reuse pre-computed wavelet FFTs
-            for fi = 1:num_frex
-                wavelet_fft = wavelet_ffts[fi]
-                valid_start = valid_start_per_freq[fi]
+        # Loop through frequencies - reuse pre-computed wavelet FFTs
+        for fi = 1:num_frex
+            wavelet_fft = wavelet_ffts[fi]
+            valid_start = valid_start_per_freq[fi]
 
-                # Convolution (MATLAB: ifft(wavelet.*eegfft)) - use @simd for faster multiplication
-                @inbounds @simd for i = 1:n_conv_pow2_trial
-                    conv_buffer[i] = wavelet_fft[i] * eegfft_trial[i]
-                end
-                mul!(eegconv_trial, p_ifft_trial, conv_buffer)
+            # Convolution (MATLAB: ifft(wavelet.*eegfft)) - use @simd for faster multiplication
+            @inbounds @simd for i = 1:n_conv_pow2_batch
+                conv_buffer[i] = wavelet_fft[i] * eegfft_batch[i]
+            end
+            mul!(eegconv_batch, p_ifft_batch, conv_buffer)
 
-                # Directly extract only requested time points from convolution result
-                # Pre-compute conv_idx offsets for better performance
+            # Extract results per trial using trial offsets
+            for trial_idx = 1:n_trials
+                t_offset = (trial_idx - 1) * n_samples_per_epoch
                 @inbounds for ti in eachindex(time_indices)
-                    conv_idx = valid_start + time_indices[ti] - 1
-                    val = eegconv_trial[conv_idx]
+                    conv_idx = valid_start + t_offset + time_indices[ti] - 1
+                    val = eegconv_batch[conv_idx]
                     if return_trials
                         eegpower[fi, ti, trial_idx] = abs2(val)
                         eegconv[fi, ti, trial_idx] = val
                     else
-                        eegpower[fi, ti] += abs2(val)
-                        eegconv[fi, ti] += val
+                        eegpower[fi, ti] += abs2(val) 
+                        eegconv[fi, ti] += val 
                     end
                 end
             end
         end
 
-        if return_trials
+        if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
                 @views power_trial = eegpower[:, :, trial_idx]
                 @views conv_trial = eegconv[:, :, trial_idx]
@@ -425,12 +425,10 @@ function tf_stft(
     times_processed = time(dat)
 
     # Handle time_steps parameter - determine which time points to extract from results
-    # After padding, processed data has extended time range - validate against processed data
     if isnothing(time_steps)
         time_indices, times_out = find_times(times_processed, times_original)
     else
         start_time, stop_time, step_time = time_steps
-        # Check if requested range extends beyond processed data range and warn
         time_min_processed = minimum(times_processed)
         time_max_processed = maximum(times_processed)
         if start_time < time_min_processed || stop_time > time_max_processed
@@ -503,14 +501,9 @@ function tf_stft(
     
     # Pre-compute FFT plans and frequency bins for each unique FFT size (reuse for same sizes)
     unique_fft_sizes = unique(n_fft_per_freq)
-    fft_plans = Dict{Int, FFTW.rFFTWPlan{Float64, -1, false, 1}}()  # Real FFT plan for vectors
     fft_plans_batch = Dict{Int, Any}()  # Real FFT plan for matrices (batch) - use Any for 2D plan type
     fft_freqs_cache = Dict{Int, Vector{Float64}}()  # Cache FFT frequency vectors per FFT size
     for n_fft in unique_fft_sizes
-        # Plan for 1D vector (for adaptive window if needed)
-        template_1d = zeros(Float64, n_fft)
-        fft_plans[n_fft] = plan_rfft(template_1d, flags = FFTW.PATIENT)
-        
         # Plan for 2D matrix batch (n_fft × n_trials), FFT along dimension 1
         template_2d = zeros(Float64, n_fft, n_trials)
         fft_plans_batch[n_fft] = plan_rfft(template_2d, 1, flags = FFTW.PATIENT)
@@ -538,18 +531,6 @@ function tf_stft(
         freq_indices[fi] = freq_idx
     end
 
-    # Pre-allocate reusable buffers for each unique FFT size (match FFT plan sizes)
-    max_window_samples = maximum(n_window_samples_per_freq)
-    # Create buffers for each unique FFT size (allows direct mul! without views)
-    # Use real buffers for input (rfft takes real input)
-    signal_padded_buffers = Dict{Int, Vector{Float64}}()  # Real input buffer
-    signal_fft_buffers = Dict{Int, Vector{ComplexF64}}()  # Complex output buffer
-    for n_fft in unique_fft_sizes
-        signal_padded_buffers[n_fft] = zeros(Float64, n_fft)  # Real input
-        # rfft output size is n_fft÷2+1 (frequencies from 0 to Nyquist)
-        signal_fft_buffers[n_fft] = zeros(ComplexF64, n_fft÷2+1)  # Complex output
-    end
-    signal_buffer = zeros(Float64, n_samples_per_epoch)  # Reusable buffer for trial signals
 
     # Initialize output structures - allocate appropriate type based on return_trials
     # Pre-compute shared time and freq columns (same for power and phase)
@@ -564,27 +545,6 @@ function tf_stft(
         phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
     end
 
-    # Pre-compute window start/end indices for each frequency and time point (avoid repeated calculations)
-    window_starts_per_freq = Vector{Vector{Int}}(undef, num_frex)
-    window_ends_per_freq = Vector{Vector{Int}}(undef, num_frex)
-    needs_edge_per_freq = Vector{BitVector}(undef, num_frex)
-    for fi = 1:num_frex
-        n_window_samples = n_window_samples_per_freq[fi]
-        half_window = n_window_samples ÷ 2
-        window_starts = Vector{Int}(undef, n_times)
-        window_ends = Vector{Int}(undef, n_times)
-        needs_edge = BitVector(undef, n_times)
-        @inbounds for (ti_idx, window_center) in enumerate(window_center_indices)
-            window_start = window_center - half_window
-            window_end = window_start + n_window_samples - 1
-            window_starts[ti_idx] = window_start
-            window_ends[ti_idx] = window_end
-            needs_edge[ti_idx] = (window_start < 1 || window_end > n_samples_per_epoch)
-        end
-        window_starts_per_freq[fi] = window_starts
-        window_ends_per_freq[fi] = window_ends
-        needs_edge_per_freq[fi] = needs_edge
-    end
 
     # Pre-allocate reusable output buffers (reused across all channels)
     if return_trials
@@ -613,8 +573,9 @@ function tf_stft(
         end
 
         if use_fixed_window
-            # OPTIMIZATION 1 & 2: Fixed window - do 1 FFT per time point, batch all trials together
-            # Extract all frequencies from each FFT (avoids n_freqs × n_times FFTs)
+            # OPTIMIZATION: Fixed window size means we can do 1 FFT per time point and extract
+            # all requested frequencies from that single FFT output (instead of n_freqs FFTs per time point).
+            # Also batch all trials together in one FFT call (n_trials processed in parallel).
             n_window_samples = n_window_samples_per_freq[1]  # Same for all frequencies
             n_fft = n_fft_per_freq[1]  # Same for all frequencies
             hanning_window = hanning_windows[1]  # Same for all frequencies
