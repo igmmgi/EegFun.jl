@@ -144,11 +144,9 @@ function tf_morlet(
     # Initialize output structures based on return_trials flag
     n_times = length(times_out)
 
-    # Initialize output structures - allocate appropriate type based on return_trials
-    # Pre-compute shared time and freq columns (same for power and phase)
+    # Initialize output structures 
     time_col = repeat(times_out, inner = num_frex)
     freq_col = repeat(freqs, outer = n_times)
-    
     if return_trials
         power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
         phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
@@ -164,21 +162,17 @@ function tf_morlet(
     n_conv_trial = max_wl + n_samples_per_epoch - 1
     n_conv_pow2_trial = nextpow(2, n_conv_trial)
     
-    # Pre-allocate FFT plans for single trial (smaller, faster) - same for all channels
-    signal_padded_trial_template = zeros(ComplexF64, n_conv_pow2_trial)
-    wavelet_padded_template = zeros(ComplexF64, n_conv_pow2_trial)
-    conv_buffer_template = zeros(ComplexF64, n_conv_pow2_trial)
-    p_fft_trial = plan_fft(signal_padded_trial_template, flags=FFTW.ESTIMATE)
-    p_fft_wavelet_trial = plan_fft(wavelet_padded_template, flags=FFTW.ESTIMATE)
-    p_ifft_trial = plan_ifft(conv_buffer_template, flags=FFTW.ESTIMATE)
-
     # Pre-allocate reusable buffers (same size for all channels, can be reused)
     signal_padded_trial = zeros(ComplexF64, n_conv_pow2_trial)
     eegfft_trial = zeros(ComplexF64, n_conv_pow2_trial)
     wavelet_padded = zeros(ComplexF64, n_conv_pow2_trial)
-    wavelet_fft = zeros(ComplexF64, n_conv_pow2_trial)
     conv_buffer = zeros(ComplexF64, n_conv_pow2_trial)
     eegconv_trial = zeros(ComplexF64, n_conv_pow2_trial)
+    
+    # Create FFT plans using the actual buffers (plans keep references, so buffers must persist)
+    p_fft_trial = plan_fft(signal_padded_trial, flags=FFTW.ESTIMATE)
+    p_fft_wavelet_trial = plan_fft(wavelet_padded, flags=FFTW.ESTIMATE)
+    p_ifft_trial = plan_ifft(conv_buffer, flags=FFTW.ESTIMATE)
 
     # Pre-compute constants (same for all channels and frequencies)
     inv_sr = 1.0 / dat.sample_rate 
@@ -261,9 +255,7 @@ function tf_morlet(
         end
 
         if return_trials
-            # Store each trial separately
             for trial_idx = 1:n_trials
-                # Extract trial data and assign directly (vec flattens 2D to match long format)
                 @views power_trial = eegpower[:, :, trial_idx]
                 @views conv_trial = eegconv[:, :, trial_idx]
                 power_df[trial_idx][!, channel] = vec(power_trial)
