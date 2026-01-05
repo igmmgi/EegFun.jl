@@ -426,7 +426,6 @@ function tf_stft(
     end
 
     # Get sample rate and time vector from processed data
-    sr = Float64(dat.sample_rate)
     times_processed = time(dat)
     n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
@@ -465,25 +464,21 @@ function tf_stft(
     n_samples_per_epoch = n_samples_original
 
     # Define frequencies based on user specification
-    if !isnothing(log_freqs)
-        # Logarithmic spacing: (start, stop, number)
+    if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
         min_freq, max_freq, num_frex = log_freqs
         freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-        # Broadcasting already allocates an array, no collect() needed
-    else
-        # Linear spacing: (start, stop, step)
+    else # Linear spacing: (start, stop, step)
         min_freq, max_freq, step = lin_freqs
         freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
-        # Range works fine for indexing, repeat(), and broadcasting - no collect() needed
     end
     num_frex = length(freqs)
 
     # Determine window lengths (fixed or adaptive)
     # FieldTrip: cfg.t_ftimwin = 7./cfg.foi means window_length = cycles / frequency (in seconds)
     if use_fixed_window
-        # Fixed window mode: same window length for all frequencies (FieldTrip: fixed t_ftimwin)
         window_lengths_sec = fill(Float64(window_length), num_frex)
-        method_symbol = :hanning_fixed
+        # lets just match FieldTrip naming from https://www.fieldtriptoolbox.org/tutorial/sensor/timefrequencyanalysis/ 
+        method_symbol = :hanning_fixed 
     else
         # Adaptive window mode: window length = cycles / frequency (FieldTrip: cfg.t_ftimwin = cycles./cfg.foi)
         if cycles isa Tuple
@@ -492,11 +487,12 @@ function tf_stft(
             cycles_vec = fill(Float64(cycles), num_frex)
         end
         window_lengths_sec = cycles_vec ./ freqs  # Window length in seconds (matches FieldTrip: t_ftimwin = cycles./foi)
+        # lets just match FieldTrip naming from https://www.fieldtriptoolbox.org/tutorial/sensor/timefrequencyanalysis/ 
         method_symbol = :hanning_adaptive
     end
 
     # Convert window lengths from seconds to samples (per frequency)
-    n_window_samples_per_freq = [Int(round(wl * sr)) for wl in window_lengths_sec]
+    n_window_samples_per_freq = [Int(round(wl * dat.sample_rate)) for wl in window_lengths_sec]
     if any(n -> n < 2, n_window_samples_per_freq)
         min_samples = minimum(n_window_samples_per_freq)
         error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
@@ -524,7 +520,7 @@ function tf_stft(
     freq_indices = zeros(Int, num_frex)
     for (fi, freq) in enumerate(freqs)
         n_fft = n_fft_per_freq[fi]
-        freqs_fft = range(0.0, sr, length = n_fft + 1)[1:(n_fft÷2+1)]  # FFT frequencies (0 to Nyquist)
+        freqs_fft = range(0.0, dat.sample_rate, length = n_fft + 1)[1:(n_fft÷2+1)]  # FFT frequencies (0 to Nyquist)
         # Find nearest FFT frequency bin
         freq_idx = argmin(abs.(freqs_fft .- freq))
         freq_indices[fi] = freq_idx
@@ -821,7 +817,6 @@ function tf_multitaper(
     end
 
     # Get sample rate and time vector from processed data
-    sr = Float64(dat.sample_rate)
     times_processed = time(dat)
     n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
@@ -889,7 +884,7 @@ function tf_multitaper(
     end
 
     # Convert window lengths from seconds to samples (per frequency)
-    n_window_samples_per_freq = [Int(round(wl * sr)) for wl in window_lengths_sec]
+    n_window_samples_per_freq = [Int(round(wl * dat.sample_rate)) for wl in window_lengths_sec]
     if any(n -> n < 2, n_window_samples_per_freq)
         min_samples = minimum(n_window_samples_per_freq)
         error("Window length is too short. Minimum window size is 2 samples, got $min_samples samples.")
@@ -985,7 +980,7 @@ function tf_multitaper(
         
         # Find FFT bin for this frequency
         n_fft = n_fft_per_freq[fi]
-        freqs_fft = range(0.0, sr, length = n_fft + 1)[1:(n_fft÷2+1)]  # FFT frequencies (0 to Nyquist)
+        freqs_fft = range(0.0, dat.sample_rate, length = n_fft + 1)[1:(n_fft÷2+1)]  # FFT frequencies (0 to Nyquist)
         freq_idx = argmin(abs.(freqs_fft .- freq))
         freq_indices[fi] = freq_idx
     end
@@ -1185,6 +1180,7 @@ Compute power spectrum using Welch's method for EEG data.
 
 This function computes the frequency-domain power spectrum (no time dimension) using
 Welch's method with overlapping windows. For EpochData, power is averaged across epochs.
+For ErpData and ContinuousData (SingleDataFrameEeg), power is computed directly from the single DataFrame.
 
 # Arguments
 - `dat::EegData`: EEG data (EpochData, ErpData, or ContinuousData)
@@ -1213,21 +1209,12 @@ spectrum = freq_spectrum(epochs)
 
 # Single channel with custom parameters
 spectrum = freq_spectrum(epochs; channel_selection=channels(:Cz), window_size=2048, max_freq=100.0)
-
-# Plot
-using GLMakie
-fig = Figure()
-ax = Axis(fig[1, 1], xlabel="Frequency (Hz)", ylabel="Power (μV²/Hz)")
-for ch in names(spectrum)[2:end]  # Skip 'freq' column
-    lines!(ax, spectrum.freq, spectrum[!, ch], label=string(ch))
-end
-axislegend(ax)
 ```
 """
 function freq_spectrum(
     dat::EpochData;
     channel_selection::Function = channels(),
-    window_size::Int = 1024,
+    window_size::Int = 256,
     overlap::Real = 0.5,
     window_function::Function = DSP.hanning,
     max_freq::Union{Nothing,Real} = nothing,
@@ -1237,43 +1224,36 @@ function freq_spectrum(
     isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
 
     # Validate overlap
-    if overlap < 0 || overlap >= 1
-        error("`overlap` must be in range [0, 1), got $overlap")
-    end
+    overlap < 0 || overlap >= 1 && error("`overlap` must be in range [0, 1), got $overlap")
 
-    sr = Float64(dat.sample_rate)
     n_trials = n_epochs(dat)
     noverlap = Int(round(window_size * overlap))
 
-    # Initialize output DataFrame
-    spectrum_df = DataFrame()
-    freqs_initialized = false
+    # Use first epoch of first channel to get frequency vector
+    first_channel = selected_channels[1]
+    first_epoch_df = dat.data[1]
+    first_signal = Float64.(first_epoch_df[!, first_channel])
+    pgram_first = DSP.welch_pgram(first_signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+
+    # Initialize output DataFrame with frequency column
+    freqs = DSP.freq(pgram_first)
+    spectrum_df = DataFrame(freq = freqs)
 
     # Process each channel
     for channel in selected_channels
-        # Collect power spectra from all epochs
-        power_spectra = Vector{Vector{Float64}}()
+        # Accumulate power across epochs (avoid storing all spectra)
+        power_sum = zeros(Float64, length(freqs))
 
         for trial_idx = 1:n_trials
-            epoch_df = dat.data[trial_idx]
-            signal = Float64.(epoch_df[!, channel])
+            signal = dat.data[trial_idx][!, channel]
 
             # Compute power spectrum using Welch's method
-            pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = sr, window = window_function)
-            freqs, power = DSP.freq(pgram), DSP.power(pgram)
-
-            # Initialize frequency column on first iteration
-            if !freqs_initialized
-                spectrum_df.freq = collect(Float64, freqs)
-                freqs_initialized = true
-            end
-
-            push!(power_spectra, collect(Float64, power))
+            pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+            power_sum .+= DSP.power(pgram)
         end
 
         # Average power across epochs
-        power_avg = mean(hcat(power_spectra...), dims = 2)[:, 1]
-        spectrum_df[!, channel] = power_avg
+        spectrum_df[!, channel] = power_sum ./ n_trials
     end
 
     # Filter by max_freq if specified
@@ -1296,9 +1276,9 @@ function freq_spectrum(
 end
 
 function freq_spectrum(
-    dat::ErpData;
+    dat::SingleDataFrameEeg;
     channel_selection::Function = channels(),
-    window_size::Int = 1024,
+    window_size::Int = 256,
     overlap::Real = 0.5,
     window_function::Function = DSP.hanning,
     max_freq::Union{Nothing,Real} = nothing,
@@ -1312,28 +1292,27 @@ function freq_spectrum(
         error("`overlap` must be in range [0, 1), got $overlap")
     end
 
-    sr = Float64(dat.sample_rate)
     noverlap = Int(round(window_size * overlap))
 
-    # Initialize output DataFrame
-    spectrum_df = DataFrame()
-    freqs_initialized = false
+    # Compute frequencies once (same for all channels since they use same parameters)
+    # Use first channel to get frequency vector
+    first_channel = selected_channels[1]
+    first_signal = Float64.(dat.data[!, first_channel])
+    pgram_first = DSP.welch_pgram(first_signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+    freqs = collect(Float64, DSP.freq(pgram_first))
+
+    # Initialize output DataFrame with frequency column
+    spectrum_df = DataFrame(freq = freqs)
 
     # Process each channel
     for channel in selected_channels
-        signal = Float64.(dat.data[!, channel])
+        signal = dat.data[!, channel]
 
         # Compute power spectrum using Welch's method
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = sr, window = window_function)
-        freqs, power = DSP.freq(pgram), DSP.power(pgram)
+        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = dat.sample_rate, window = window_function)
+        power = DSP.power(pgram)
 
-        # Initialize frequency column on first iteration
-        if !freqs_initialized
-            spectrum_df.freq = collect(Float64, freqs)
-            freqs_initialized = true
-        end
-
-        spectrum_df[!, channel] = collect(Float64, power)
+        spectrum_df[!, channel] = power
     end
 
     # Filter by max_freq if specified
@@ -1343,71 +1322,14 @@ function freq_spectrum(
     end
 
     # Return SpectrumData type
+    # Handle condition/condition_name: ErpData has them, ContinuousData doesn't
+    condition_num = hasproperty(dat, :condition) ? dat.condition : 1
+    condition_name = hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous"
+    
     return SpectrumData(
         dat.file,
-        dat.condition,
-        dat.condition_name,
-        spectrum_df,
-        dat.layout,
-        dat.sample_rate,
-        :welch,
-        dat.analysis_info,
-    )
-end
-
-function freq_spectrum(
-    dat::ContinuousData;
-    channel_selection::Function = channels(),
-    window_size::Int = 1024,
-    overlap::Real = 0.5,
-    window_function::Function = DSP.hanning,
-    max_freq::Union{Nothing,Real} = nothing,
-)
-    # Get selected channels
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
-
-    # Validate overlap
-    if overlap < 0 || overlap >= 1
-        error("`overlap` must be in range [0, 1), got $overlap")
-    end
-
-    sr = Float64(dat.sample_rate)
-    noverlap = Int(round(window_size * overlap))
-
-    # Initialize output DataFrame
-    spectrum_df = DataFrame()
-    freqs_initialized = false
-
-    # Process each channel
-    for channel in selected_channels
-        signal = Float64.(dat.data[!, channel])
-
-        # Compute power spectrum using Welch's method
-        pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = sr, window = window_function)
-        freqs, power = DSP.freq(pgram), DSP.power(pgram)
-
-        # Initialize frequency column on first iteration
-        if !freqs_initialized
-            spectrum_df.freq = collect(Float64, freqs)
-            freqs_initialized = true
-        end
-
-        spectrum_df[!, channel] = collect(Float64, power)
-    end
-
-    # Filter by max_freq if specified
-    if !isnothing(max_freq)
-        mask = spectrum_df.freq .<= max_freq
-        spectrum_df = spectrum_df[mask, :]
-    end
-
-    # Return SpectrumData type
-    # ContinuousData doesn't have condition/condition_name fields, use defaults
-    return SpectrumData(
-        dat.file,
-        1,  # Default condition number
-        "Continuous",  # Default condition name
+        condition_num,
+        condition_name,
         spectrum_df,
         dat.layout,
         dat.sample_rate,
