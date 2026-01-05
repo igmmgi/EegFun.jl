@@ -288,7 +288,347 @@ end
 
 
 """
-    tf_stft(dat::EpochData; 
+    tf_stft_fixed(dat::EpochData; 
+            lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
+            log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
+            window_length::Union{Nothing,Real}=nothing,
+            overlap::Real=0.5,
+            time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
+            channel_selection::Function=channels(),
+            pad::Union{Nothing,Symbol}=nothing,
+            return_trials::Bool=false)
+
+Short-Time Fourier Transform (STFT) time-frequency analysis using a sliding Hanning window (Cohen Chapter 15, equivalent to FieldTrip's 'hanning' method).
+
+Supports both fixed and adaptive window lengths:
+- **Fixed window** (FieldTrip's 'hanning_fixed'): Use `window_length` to specify a fixed window size in seconds
+- **Adaptive window** (FieldTrip's 'hanning_adaptive'): Use `cycles` to specify frequency-dependent window sizes
+
+# Arguments
+- `dat::EpochData`: Epoched EEG data
+
+# Keyword Arguments
+- `lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Linear frequency spacing as (start, stop, step).
+  - Example: `lin_freqs=(2, 80, 2)` creates frequencies [2, 4, 6, ..., 80] Hz
+- `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
+  - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
+- **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
+- `window_length::Union{Nothing,Real}=nothing`: Fixed window length in seconds (for fixed window mode).
+  - If `nothing`, uses adaptive window mode (requires `cycles`).
+  - Example: `window_length=0.3` uses a fixed 0.3 second window for all frequencies
+- `cycles::Union{Nothing,Real,Tuple{Real,Real}}=nothing`: Number of cycles for adaptive window mode.
+  - Can be a single number (fixed cycles for all frequencies) or a tuple (min, max) for log-spaced cycles.
+  - Window length = cycles / frequency (in seconds)
+  - Example: `cycles=5` uses 5 cycles for all frequencies
+  - Example: `cycles=(3, 10)` uses log-spaced cycles from 3 to 10 across frequencies
+  - **Exactly one of `window_length` or `cycles` must be specified.**
+- `overlap::Real=0.5`: Overlap fraction between windows (0 to 1). Default is 0.5 (50% overlap).
+  - Note: For adaptive windows, overlap is calculated per frequency based on that frequency's window length.
+- `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
+  - If `nothing`, uses all time points from the data
+  - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
+- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
+- `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
+  - `nothing`: No padding (default)
+  - `:pre`: Mirror data before each epoch
+  - `:post`: Mirror data after each epoch
+  - `:both`: Mirror data on both sides (recommended)
+- `return_trials::Bool=false`: If `true`, returns `TimeFreqEpochData` with individual trials preserved.
+  - If `false` (default), returns `TimeFreqData` with trials averaged.
+
+# Returns
+- `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
+- `TimeFreqEpochData` (if `return_trials=true`): Time-frequency data with individual trials preserved
+
+# Example
+```julia
+# Fixed window: Log-spaced frequencies with 0.3s fixed window
+tf_data = tf_stft(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz), window_length=0.3)
+
+# Adaptive window: Linear-spaced frequencies with 5 cycles per frequency
+tf_data = tf_stft(epochs; lin_freqs=(2, 80, 2), cycles=5)
+
+# Adaptive window with variable cycles and padding
+tf_epochs = tf_stft(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), 
+                    cycles=(3, 10), overlap=0.5, pad=:both, return_trials=true)
+```
+"""
+function tf_stft_fixed(
+    dat::EpochData;
+    channel_selection::Function = channels(),
+    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
+    window_length::Real,
+    overlap::Real = 0.5,
+    pad::Union{Nothing,Symbol} = nothing,
+    return_trials::Bool = false,
+)
+    # Get selected channels using channel selection predicate
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
+    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
+
+    # Validate frequency specification - exactly one must be provided
+    if isnothing(lin_freqs) && isnothing(log_freqs) 
+        error("Either `lin_freqs` or `log_freqs` must be specified")
+    end
+    if !isnothing(lin_freqs) && !isnothing(log_freqs) 
+        error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
+    end
+
+    # Validate padding parameter
+    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
+        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
+    end
+
+    # Validate overlap
+    if overlap < 0 || overlap >= 1
+        error("`overlap` must be in range [0, 1), got $overlap")
+    end
+
+    # Validate window_length
+    if window_length <= 0
+        error("`window_length` must be positive, got $window_length")
+    end
+
+    # Get original data time range (for when time_steps is nothing - use all original points)
+    times_original = time(dat)
+
+    # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
+    if !isnothing(pad)
+        mirror!(dat, pad)
+    end
+
+    # Get sample rate and time vector from processed data
+    times_processed = time(dat)
+
+    # Handle time_steps parameter - determine which time points to extract from results
+    # After padding, processed data has extended time range - validate against processed data
+    if isnothing(time_steps)
+        time_indices, times_out = find_times(times_processed, times_original)
+    else
+        start_time, stop_time, step_time = time_steps
+        # Check if requested range extends beyond processed data range and warn
+        time_min_processed = minimum(times_processed)
+        time_max_processed = maximum(times_processed)
+        if start_time < time_min_processed || stop_time > time_max_processed
+            @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
+        end
+        time_steps_range = start_time:step_time:stop_time
+        time_indices, times_out = find_times(times_processed, time_steps_range)
+        if isempty(time_indices)
+            error("No valid time points found in requested range ($start_time to $stop_time seconds)")
+        end
+    end
+
+    # Get number of trials/epochs
+    n_trials = n_epochs(dat)
+    n_samples_per_epoch = n_samples(dat)
+
+    # Define frequencies based on user specification
+    if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
+        min_freq, max_freq, num_frex = log_freqs
+        freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
+    else # Linear spacing: (start, stop, step)
+        min_freq, max_freq, step = lin_freqs
+        freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
+    end
+    num_frex = length(freqs)
+
+    # Fixed window: same window length for all frequencies
+    n_window_samples = Int(round(window_length * dat.sample_rate))
+    if n_window_samples < 2
+        error("Window length is too short. Minimum window size is 2 samples, got $n_window_samples samples.")
+    end
+
+    # Determine window center positions (in samples) for each requested time point
+    # For each requested time, find the window that centers on it
+    n_times = length(times_out)
+    window_center_indices = zeros(Int, n_times)
+    for (ti_idx, t_requested) in enumerate(times_out)
+        # Find the sample index in processed data that corresponds to this time
+        sample_idx = searchsortedfirst(times_processed, t_requested)
+        if sample_idx > 1 && abs(times_processed[sample_idx-1] - t_requested) < abs(times_processed[min(sample_idx, length(times_processed))] - t_requested)
+            sample_idx = sample_idx - 1
+        end
+        sample_idx = min(sample_idx, length(times_processed))
+        window_center_indices[ti_idx] = sample_idx
+    end
+
+    # Pre-compute window start/end positions (same for all channels)
+    half_window = n_window_samples ÷ 2
+    window_starts = Vector{Int}(undef, n_times)
+    window_ends = Vector{Int}(undef, n_times)
+    needs_edge = BitVector(undef, n_times)
+    @inbounds for ti_idx = 1:n_times
+        window_center = window_center_indices[ti_idx]
+        window_start = window_center - half_window
+        window_end = window_start + n_window_samples - 1
+        window_starts[ti_idx] = window_start
+        window_ends[ti_idx] = window_end
+        needs_edge[ti_idx] = (window_start < 1 || window_end > n_samples_per_epoch)
+    end
+
+    # Fixed window: all frequencies use the same window size and FFT size
+    n_fft = nextpow(2, n_window_samples)
+    hanning_window = DSP.hanning(n_window_samples)
+    inv_n_window_sq = 1.0 / (n_window_samples * n_window_samples)
+    
+    # Pre-compute FFT plan for batch processing (2D matrix: n_fft × n_trials)
+    template_2d = zeros(Float64, n_fft, n_trials)
+    fft_plan_batch = plan_rfft(template_2d, 1, flags = FFTW.MEASURE)
+    
+    # Pre-allocate reusable buffers 
+    signal_padded_batch = zeros(Float64, n_fft, n_trials)
+    signal_fft_batch = zeros(ComplexF64, n_fft÷2+1, n_trials)
+
+    # Initialize output structures - allocate appropriate type based on return_trials
+    # Pre-compute shared time and freq columns (same for power and phase)
+    time_col = repeat(times_out, inner = num_frex)
+    freq_col = repeat(freqs, outer = n_times)
+    if return_trials
+        power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
+        phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
+    else
+        power_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
+        phase_df = DataFrame(time = time_col, freq = freq_col, copycols = false)
+    end
+
+    # Pre-allocate reusable output buffers (reused across all channels)
+    if return_trials
+        eegpower_full = zeros(Float64, num_frex, n_times, n_trials)
+        eegconv_full = zeros(ComplexF64, num_frex, n_times, n_trials)
+    else
+        eegpower = zeros(Float64, num_frex, n_times)
+        eegconv = zeros(ComplexF64, num_frex, n_times)
+    end
+
+    # Process each selected channel
+    for channel in selected_channels
+        # Pre-extract all trial data for this channel into a matrix (n_samples × n_trials) for batch processing
+        trial_signals_matrix = Matrix{Float64}(undef, n_samples_per_epoch, n_trials)
+        for trial_idx = 1:n_trials
+            trial_signals_matrix[:, trial_idx] = Vector{Float64}(dat.data[trial_idx][!, channel])
+        end
+
+        # Clear/initialize output buffers for this channel
+        if return_trials
+            fill!(eegpower_full, 0.0)
+            fill!(eegconv_full, 0.0im)
+        else
+            fill!(eegpower, 0.0)
+            fill!(eegconv, 0.0im)
+        end
+
+        # Fixed window - do 1 FFT per time point, batch all trials together
+        # Extract all frequencies from each FFT (avoids n_freqs × n_times FFTs)
+        
+        # Pre-compute constants for bin index calculation
+        max_bin = n_fft ÷ 2 + 1
+        freq_to_bin_factor = n_fft / dat.sample_rate
+        
+        # Process each time point
+        @inbounds for ti_idx = 1:n_times
+            window_start = window_starts[ti_idx]
+            window_end = window_ends[ti_idx]
+            
+            # Extract windowed signal, apply Hanning window, and pad for all trials in batch
+            if !needs_edge[ti_idx]
+                # Fast path: no edge handling needed
+                # Zero out tail first (if needed)
+                if n_fft > n_window_samples
+                    @inbounds @simd for trial = 1:n_trials
+                        for i = (n_window_samples+1):n_fft
+                            signal_padded_batch[i, trial] = 0.0
+                        end
+                    end
+                end
+                # Copy and apply Hanning window for all trials
+                @inbounds @simd for trial = 1:n_trials
+                    for i = 1:n_window_samples
+                        signal_padded_batch[i, trial] = trial_signals_matrix[window_start + i - 1, trial] * hanning_window[i]
+                    end
+                end
+            else
+                # Edge case: pad with zeros or use available data
+                fill!(signal_padded_batch, 0.0)
+                actual_start = max(1, window_start)
+                actual_end = min(n_samples_per_epoch, window_end)
+                copy_start = max(1, 1 - window_start + 1)
+                copy_end = copy_start + (actual_end - actual_start)
+                if copy_end <= n_window_samples && copy_start >= 1
+                    @inbounds @simd for trial = 1:n_trials
+                        for i = copy_start:copy_end
+                            signal_padded_batch[i, trial] = trial_signals_matrix[actual_start + i - copy_start, trial] * hanning_window[i]
+                        end
+                    end
+                end
+            end
+            
+            # Batch FFT: process all trials at once (~2x faster than complex FFT)
+            mul!(signal_fft_batch, fft_plan_batch, signal_padded_batch)
+            
+            # Extract power and complex values for all frequencies from this single FFT
+            @inbounds for (fi, freq) in enumerate(freqs)
+                # Compute FFT bin index directly: round(freq * n_fft / sample_rate) + 1
+                freq_idx = clamp(round(Int, freq * freq_to_bin_factor) + 1, 1, max_bin)
+                if return_trials
+                    for trial = 1:n_trials
+                        complex_val = signal_fft_batch[freq_idx, trial]
+                        eegpower_full[fi, ti_idx, trial] = abs2(complex_val) * inv_n_window_sq
+                        eegconv_full[fi, ti_idx, trial] = complex_val
+                    end
+                else
+                    # Accumulate across trials
+                    sum_power = 0.0
+                    sum_conv = 0.0im
+                    for trial = 1:n_trials
+                        complex_val = signal_fft_batch[freq_idx, trial]
+                        sum_power += abs2(complex_val)
+                        sum_conv += complex_val
+                    end
+                    eegpower[fi, ti_idx] += sum_power * inv_n_window_sq
+                    eegconv[fi, ti_idx] += sum_conv
+                end
+            end
+        end
+        
+
+        if return_trials # Store each trial separately
+            for trial_idx = 1:n_trials
+                power_df[trial_idx][!, channel] = vec(eegpower_full[:, :, trial_idx])
+                phase_df[trial_idx][!, channel] = vec(angle.(eegconv_full[:, :, trial_idx]))
+            end
+        else 
+            eegpower ./= n_trials
+            eegconv ./= n_trials
+            power_df[!, channel] = vec(eegpower)
+            phase_df[!, channel] = vec(angle.(eegconv))
+        end
+    end
+
+    # Create and return appropriate data type
+    return_type = return_trials ? TimeFreqEpochData : TimeFreqData
+    return return_type(
+        dat.file,
+        dat.condition,
+        dat.condition_name,
+        power_df,
+        phase_df,
+        dat.layout,
+        dat.sample_rate,
+        :taper_fixed,
+        nothing,  # baseline
+        dat.analysis_info,
+    )
+end
+
+
+
+"""
+    tf_stft_adaptive(dat::EpochData; 
             lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
             window_length::Union{Nothing,Real}=nothing,
@@ -356,7 +696,7 @@ tf_epochs = tf_stft(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01),
                     cycles=(3, 10), overlap=0.5, pad=:both, return_trials=true)
 ```
 """
-function tf_stft(
+function tf_stft_adaptive(
     dat::EpochData;
     channel_selection::Function = channels(),
     time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
@@ -812,6 +1152,7 @@ function tf_stft(
         dat.analysis_info,
     )
 end
+
 
 
 
@@ -1348,6 +1689,57 @@ function tf_multitaper(
     )
 end
 
+# Split tf_stft into fixed and adaptive versions
+function tf_stft_fixed(
+    dat::EpochData;
+    channel_selection::Function = channels(),
+    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
+    window_length::Real,
+    overlap::Real = 0.5,
+    pad::Union{Nothing,Symbol} = nothing,
+    return_trials::Bool = false,
+)
+    return tf_stft(
+        dat;
+        channel_selection = channel_selection,
+        time_steps = time_steps,
+        lin_freqs = lin_freqs,
+        log_freqs = log_freqs,
+        window_length = window_length,
+        cycles = nothing,
+        overlap = overlap,
+        pad = pad,
+        return_trials = return_trials,
+    )
+end
+
+function tf_stft_adaptive(
+    dat::EpochData;
+    channel_selection::Function = channels(),
+    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
+    cycles::Union{Real,Tuple{Real,Real}},
+    overlap::Real = 0.5,
+    pad::Union{Nothing,Symbol} = nothing,
+    return_trials::Bool = false,
+)
+    return tf_stft(
+        dat;
+        channel_selection = channel_selection,
+        time_steps = time_steps,
+        lin_freqs = lin_freqs,
+        log_freqs = log_freqs,
+        window_length = nothing,
+        cycles = cycles,
+        overlap = overlap,
+        pad = pad,
+        return_trials = return_trials,
+    )
+end
+
 # Internal helper function to compute power spectrum for a single signal
 function _compute_welch_power(
     signal::AbstractVector{<:Real},
@@ -1357,9 +1749,8 @@ function _compute_welch_power(
     window_function::Function,
 )::Tuple{Vector{Float64}, Vector{Float64}}
     pgram = DSP.welch_pgram(signal, window_size, noverlap; fs = sample_rate, window = window_function)
-    return DSP.freq(pgram), DSP.power(pgram)
+    return DSP.freq(pgram), DSP.power(pgram    )
 end
-
 
 """
     freq_spectrum(dat::EegData;
@@ -1452,6 +1843,57 @@ function freq_spectrum(
         dat.sample_rate,
         :welch,
         dat.analysis_info,
+    )
+end
+
+# Split tf_stft into fixed and adaptive versions
+function tf_stft_fixed(
+    dat::EpochData;
+    channel_selection::Function = channels(),
+    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
+    window_length::Real,
+    overlap::Real = 0.5,
+    pad::Union{Nothing,Symbol} = nothing,
+    return_trials::Bool = false,
+)
+    return tf_stft(
+        dat;
+        channel_selection = channel_selection,
+        time_steps = time_steps,
+        lin_freqs = lin_freqs,
+        log_freqs = log_freqs,
+        window_length = window_length,
+        cycles = nothing,
+        overlap = overlap,
+        pad = pad,
+        return_trials = return_trials,
+    )
+end
+
+function tf_stft_adaptive(
+    dat::EpochData;
+    channel_selection::Function = channels(),
+    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
+    cycles::Union{Real,Tuple{Real,Real}},
+    overlap::Real = 0.5,
+    pad::Union{Nothing,Symbol} = nothing,
+    return_trials::Bool = false,
+)
+    return tf_stft(
+        dat;
+        channel_selection = channel_selection,
+        time_steps = time_steps,
+        lin_freqs = lin_freqs,
+        log_freqs = log_freqs,
+        window_length = nothing,
+        cycles = cycles,
+        overlap = overlap,
+        pad = pad,
+        return_trials = return_trials,
     )
 end
 
