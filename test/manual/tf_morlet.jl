@@ -107,7 +107,7 @@ data = eegfun.load_csv("/home/ian/Documents/MATLAB/BioPsyLab/Data/TestData/data1
 
 # tf_data = eegfun.tf_morlet(data, channel_selection = eegfun.channels([:Cz]), lin_freqs = (1, 40, 1), cycles = 7, filter_edges = false, time_steps = (-1, 2, 0.01)) 
 tf_data = eegfun.tf_morlet(data, channel_selection = eegfun.channels([:Cz]), lin_freqs = (1, 40, 1), cycles = 7, filter_edges = true)
-@btime tf_data = eegfun.tf_morlet(data, lin_freqs = (1, 40, 1), cycles = 7, filter_edges = true)
+@btime tf_data = eegfun.tf_morlet(data, lin_freqs = (1, 40, 1), cycles = 7, filter_edges = true, time_steps = (-1, 2, 0.01))
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.1),
