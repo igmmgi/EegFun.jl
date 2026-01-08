@@ -37,8 +37,6 @@ Time-frequency analysis using Morlet wavelets (Cohen Chapter 13).
 - `return_trials::Bool=false`: If `true`, returns `TimeFreqEpochData` with individual trials preserved.
   - If `false` (default), returns `TimeFreqData` with trials averaged.
 - `filter_edges::Bool=true`: If `true` (default), filters out edge regions where the wavelet extends beyond the data
-  (FieldTrip's "cone of influence" - marks edges as NaN). If `false`, uses all convolution results including edges
-  (Cohen's approach - simpler but less accurate at edges).
 
 # Returns
 - `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
@@ -227,6 +225,9 @@ function tf_morlet(
     end
 
     norm_factor = sqrt(2.0 / dat.sample_rate)
+    
+    # Pre-compute taper lengths for edge filtering (if needed) - avoid recomputing
+    taper_lengths_samples_exact = filter_edges ? [Float64(wl_per_freq[fi]) for fi = 1:num_frex] : nothing
 
     # Process each selected channel - batch process all trials together
     for channel in selected_channels
@@ -251,18 +252,14 @@ function tf_morlet(
             end
             mul!(eegconv_batch, p_ifft_batch, conv_buffer)
             
-            @inbounds @simd for i in eachindex(eegconv_batch)
-                eegconv_batch[i] *= norm_factor
-            end
-
-            # Extract results per trial using trial offsets
-            # Always add all values - we'll set invalid edge regions to NaN later if filter_edges=true
+            # Apply norm_factor and extract in one pass to reduce memory access
+            valid_start = valid_start_per_freq[fi]
             for trial_idx = 1:n_trials
                 t_offset = (trial_idx - 1) * n_samples_per_epoch
                 @inbounds for ti in eachindex(time_indices)
                     sample_idx = time_indices[ti]
-                    conv_idx = valid_start_per_freq[fi] + t_offset + sample_idx - 1
-                    val = eegconv_batch[conv_idx]
+                    conv_idx = valid_start + t_offset + sample_idx - 1
+                    val = eegconv_batch[conv_idx] * norm_factor
                     
                     if return_trials
                         eegpower[fi, ti, trial_idx] = abs2(val)
@@ -277,20 +274,18 @@ function tf_morlet(
 
         if return_trials # Store each trial separately
             if filter_edges
-                taper_lengths_samples_exact = [Float64(wl_per_freq[fi]) for fi = 1:num_frex]
                 _filter_edges!(eegpower, eegconv, num_frex, time_indices, taper_lengths_samples_exact, n_samples_original_unpadded)
             end
+            # Pre-allocate phase vectors to avoid repeated allocations
             for trial_idx = 1:n_trials
-                @views power_trial = eegpower[:, :, trial_idx]
-                @views conv_trial = eegconv[:, :, trial_idx]
-                power_df[trial_idx][!, channel] = vec(power_trial)
-                phase_df[trial_idx][!, channel] = vec(angle.(conv_trial))
+                power_df[trial_idx][!, channel] = vec(@view eegpower[:, :, trial_idx])
+                # Compute angle directly without intermediate view
+                phase_df[trial_idx][!, channel] = vec(angle.(@view eegconv[:, :, trial_idx]))
             end
         else
             eegpower ./= n_trials
             eegconv ./= n_trials
             if filter_edges
-                taper_lengths_samples_exact = [Float64(wl_per_freq[fi]) for fi = 1:num_frex]
                 _filter_edges!(eegpower, eegconv, num_frex, time_indices, taper_lengths_samples_exact, n_samples_original_unpadded)
             end
             power_df[!, channel] = vec(eegpower)
