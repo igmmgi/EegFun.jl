@@ -62,7 +62,7 @@ include("utils/logging.jl")
 include("utils/misc.jl")
 include("utils/print.jl")
 include("utils/signal_generation.jl")
-include("utils/extern/load_csv.jl") 
+include("utils/extern/load_csv.jl")
 
 # Layout handling
 include("layouts/layout.jl")
@@ -95,7 +95,12 @@ include("analysis/realign.jl")
 include("analysis/rereference.jl")
 include("analysis/resample.jl")
 include("analysis/triggers.jl")
-include("analysis/time_frequency.jl")
+
+# time-frequency analysis
+include("analysis/time_frequency/tf_morlet.jl")
+include("analysis/time_frequency/tf_stft.jl")
+include("analysis/time_frequency/tf_multitaper.jl")
+include("analysis/time_frequency/utils/utils.jl")
 
 # analysis pipelines
 include("pipelines/utils/utils.jl")
