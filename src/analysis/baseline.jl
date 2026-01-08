@@ -426,11 +426,15 @@ Apply baseline correction to TimeFreqData in-place.
 - `baseline_window::Tuple{Real,Real}`: Time window for baseline (start, stop) in seconds
 
 # Keyword Arguments
-- `method::Symbol=:db`: Baseline method
-  - `:db`: Decibel change (10 * log10(power/baseline))
-  - `:percent`: Percent change (100 * (power - baseline) / baseline)
-  - `:relchange`: Relative change (power / baseline)
-  - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std)
+- `method::Symbol=:db`: Baseline method (matches FieldTrip baselinetype options)
+  - `:absolute`: Absolute change (power - baseline_mean) - simple subtraction, no normalization
+  - `:relative`: Relative power (power / baseline_mean) - ratio, same as FieldTrip 'relative'
+  - `:relchange`: Relative change ((power - baseline_mean) / baseline_mean) - fractional change, same as FieldTrip 'relchange'
+  - `:normchange`: Normalized change ((power - baseline) / (power + baseline)) - symmetric normalization, same as FieldTrip 'normchange'
+  - `:db`: Decibel change (10 * log10(power/baseline_mean)) - same as FieldTrip 'db'
+  - `:vssum`: Variance-stabilized sum ((power - baseline) / (power + baseline)) - same as FieldTrip 'vssum' (equivalent to normchange)
+  - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std) - same as FieldTrip 'zscore'
+  - `:percent`: Percent change (100 * (power - baseline) / baseline) - convenience alias for relchange × 100
 
 # Example
 ```julia
@@ -488,35 +492,51 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         # We want mean (and std for zscore) across time points in baseline window for each frequency
         baseline_power = vec(mean(power_mat[:, base_mask], dims=2))  # Ensure it's a vector
         
-        # Apply baseline correction
-        if method == :db
-            @info "Applying db baseline correction"
-            min_power = max.(baseline_power, 1e-10)
-            power_mat .= 10 .* log10.(max.(power_mat, 1e-10) ./ reshape(min_power, n_freqs, 1))
-        elseif method == :percent
-            @info "Applying percent baseline correction"
-            # Avoid division by zero - use minimum threshold
-            min_baseline = max.(baseline_power, 1e-10)
-            power_mat .= 100 .* (power_mat .- baseline_power) ./ min_baseline
+        # Apply baseline correction (matching FieldTrip baselinetype options)
+        if method == :absolute
+            # FieldTrip 'absolute': data - meanVals (simple subtraction)
+            @info "Applying absolute baseline correction (FieldTrip baselinetype='absolute')"
+            power_mat .= power_mat .- reshape(baseline_power, n_freqs, 1)
+        elseif method == :relative
+            # FieldTrip 'relative': power / baseline_mean
+            @info "Applying relative baseline correction (FieldTrip baselinetype='relative')"
+            min_baseline = max.(baseline_power, 1e-30)
+            power_mat .= power_mat ./ reshape(min_baseline, n_freqs, 1)
         elseif method == :relchange
-            @info "Applying relchange baseline correction"
-            # Avoid division by zero
-            min_baseline = max.(baseline_power, 1e-10)
-            power_mat .= power_mat ./ min_baseline
+            # FieldTrip 'relchange': (power - baseline_mean) / baseline_mean
+            @info "Applying relchange baseline correction (FieldTrip baselinetype='relchange')"
+            min_baseline = max.(baseline_power, 1e-30)
+            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
+        elseif method == :normchange
+            # FieldTrip 'normchange': (power - baseline) / (power + baseline)
+            @info "Applying normchange baseline correction (FieldTrip baselinetype='normchange')"
+            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
+        elseif method == :db
+            # FieldTrip 'db': 10 * log10(power / baseline_mean)
+            @info "Applying db baseline correction (FieldTrip baselinetype='db')"
+            min_power = max.(baseline_power, 1e-30)
+            power_mat .= 10 .* log10.(max.(power_mat, 1e-30) ./ reshape(min_power, n_freqs, 1))
+        elseif method == :vssum
+            # FieldTrip 'vssum': (power - baseline) / (power + baseline) - same as normchange
+            @info "Applying vssum baseline correction (FieldTrip baselinetype='vssum')"
+            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
         elseif method == :zscore
-            @info "Applying z-score baseline correction"
+            # FieldTrip 'zscore': (power - baseline_mean) / baseline_std
+            # FieldTrip uses population std (divide by N, not N-1): nanstd(data(:,:,baselineTimes),1, 3)
+            @info "Applying z-score baseline correction (FieldTrip baselinetype='zscore')"
             # Compute standard deviation for each frequency across baseline time points
-            # Cohen: std(baseline_power,[],2) - std along dimension 2 (time), uses sample std (N-1)
-            baseline_std = vec(std(power_mat[:, base_mask], dims=2, corrected=true))  # Use sample std (Bessel's correction, N-1)
+            # Use corrected=false for population std (matches FieldTrip's std(..., 1, ...))
+            baseline_std = vec(std(power_mat[:, base_mask], dims=2, corrected=false))
             # Avoid division by zero - use minimum threshold for std
-            # Note: In practice, std should rarely be zero, but this prevents numerical issues
-            min_std = max.(baseline_std, 1e-10)
-            # Z-score: (power - baseline_mean) / baseline_std
-            # Cohen: (tf_data - mean(baseline_power,2)) ./ std(baseline_power,[],2)
-            # baseline_power and min_std are vectors of length n_freqs, reshape to (n_freqs × 1) for broadcasting
+            min_std = max.(baseline_std, 1e-30)
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_std, n_freqs, 1)
+        elseif method == :percent
+            # Convenience alias: percent change = relchange × 100
+            @info "Applying percent baseline correction (convenience alias for relchange × 100)"
+            min_baseline = max.(baseline_power, 1e-30)
+            power_mat .= 100 .* (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
         else
-            error("Unknown baseline method: $method. Use :db, :percent, :relchange, or :zscore")
+            error("Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum, :zscore, or :percent")
         end
         
         # Write back to DataFrame (using same indexing)

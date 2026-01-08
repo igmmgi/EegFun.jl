@@ -15,31 +15,116 @@ times, signal = eegfun.generate_signal(
     [-1.0, 3.0],                            # time_window
     sample_rate,                            # sample_rate
     [5.0, 25, 35.0],                        # frequencies
-    [5.0, 5.0, 4.0],                        # amplitudes
+    [5.0, 5.0, 5.0],                        # amplitudes
     [[0.1, 0.5], [0.6, 1.0], [1.1, 1.5]],   # time windows for each freq 
     0.0,                                    # noise amplitude
 );
 epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
-# eegfun.plot_erp(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
+eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
+
 spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=80.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 
-# Generate synthetic signal with noise
-sample_rate = 256.0
-times, signal = eegfun.generate_signal(
-    10,                                      # n_trials
-    [-1.0, 2.0],                            # time_window
-    sample_rate,                            # sample_rate
-    [2.0, 15, 25.0],                        # frequencies
-    [2.0, 3.0, 2.0],                        # amplitudes
-    [[0.1, 0.5], [0.6, 1.0], [1.1, 1.5]],   # time windows for each freq 
-    0.5,                                    # noise amplitude
-);
-epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
-eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
+# tf_morlet
+tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 0.5), cycles = 3)
+eegfun.plot_time_frequency(tf_data, log_freqs = false)
+
+tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 0.5), cycles = 10)
+eegfun.plot_time_frequency(tf_data, log_freqs = false)
+
+tf_data = eegfun.tf_morlet(epochs_synthetic, log_freqs = (1, 40, 30), cycles = 3)
+eegfun.plot_time_frequency(tf_data, ylogscale = true)
+
+tf_data = eegfun.tf_morlet(epochs_synthetic, log_freqs = (1, 40, 30), cycles = 10)
+eegfun.plot_time_frequency(tf_data, ylogscale = true)
+
+#######################################################################
+@info eegfun.section("TEST 2: Cohen Data Chapter 13")
+#######################################################################
+
+data_cohen = eegfun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
+
+# Figure 13.11 A)
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = (3, 10), time_steps = (-0.5, 1.0, 0.005), filter_edges = false)
+eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
+
+# Figure 13.11 A)
+tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (2, 80, 1), cycles = (3, 10), time_steps = (-0.5, 1.0, 0.005))
+eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = false,
+    colormap = :jet,
+)
+
+# Figure 13.14 A)
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 3, time_steps = (-0.5, 1.0, 0.005))
+eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
+
+# Figure 13.14 B)
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 10, time_steps = (-0.5, 1.0, 0.005))
+eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
+
+# Figure 13.14 C)
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = (3, 10), time_steps = (-0.5, 1.0, 0.005))
+eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.2),
+    baseline_method = :db,
+    colorrange = (-3, 3),
+    ylogscale = true,
+    colormap = :jet,
+)
+
+#######################################################################
+@info eegfun.section("TEST 3: Exported data from MATLAB FieldTrip")
+#######################################################################
+
+data = eegfun.load_csv("/home/ian/Documents/MATLAB/BioPsyLab/Data/TestData/data1/", file = "epoch_data.csv")
+
+tf_data = eegfun.tf_morlet(data, channel_selection = eegfun.channels([:Cz]), lin_freqs = (1, 40, 2), cycles = 3, filter_edges = true) 
+@btime tf_data = eegfun.tf_morlet(data, lin_freqs = (1, 40, 2), cycles = 3, filter_edges = true, time_steps = (-1, 2.0, 0.01)) 
+
+eegfun.plot_time_frequency(
+    tf_data;
+    baseline_window = (-0.5, -0.1),
+    baseline_method = :db,
+    # colorrange = (-25, 20),
+    ylogscale = false,
+    #colormap = :jet,
+)
 
 
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 0.5), window_length = 0.5)
+
+
+
+
+
+
+
 
 @btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1))
 @btime tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 1), window_length = 0.5)
