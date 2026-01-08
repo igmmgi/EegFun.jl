@@ -6,6 +6,7 @@
 % - epochs_metadata.csv: Metadata (fsample, labels, trialinfo, sampleinfo)
 
 function matlab_to_csv(epochs, output_dir)
+
     % Create output directory if it doesn't exist
     if ~exist(output_dir, 'dir')
         mkdir(output_dir);

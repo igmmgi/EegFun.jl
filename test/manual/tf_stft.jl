@@ -124,8 +124,3 @@ eegfun.plot_time_frequency(
     ylogscale = false,
     #colormap = :jet,
 )
-
-
-
-
-
