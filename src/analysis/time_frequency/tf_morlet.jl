@@ -1,74 +1,89 @@
 """
     tf_morlet(dat::EpochData; 
-              lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
+              lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=(1, 40, 1),
               log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
               cycles::Union{Real,Tuple{Real,Real}}=(3, 10),
-              time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
               channel_selection::Function=channels(),
+              sample_selection::Function=samples(),
               pad::Union{Nothing,Symbol}=nothing,
               return_trials::Bool=false,
               filter_edges::Bool=true)
 
-Time-frequency analysis using Morlet wavelets 
+Time-frequency analysis using Morlet wavelets.
+
+Performs continuous wavelet transform using complex Morlet wavelets. The function supports both 
+linear and logarithmic frequency spacing, with optional padding to reduce edge artifacts.
 
 # Arguments
-- `dat::EpochData`: Epoched EEG data
+- `dat::EpochData`: Epoched EEG data to analyze
 
 # Keyword Arguments
-- `lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Linear frequency spacing as (start, stop, step).
+- `lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=(1, 40, 1)`: Linear frequency spacing as `(start, stop, step)`.
+  - Creates frequencies from `start` to `stop` Hz with step size `step`
   - Example: `lin_freqs=(2, 80, 2)` creates frequencies [2, 4, 6, ..., 80] Hz
-- `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
+  - Default: `(1, 40, 1)` Hz
+- `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as `(start, stop, number)`.
+  - Creates `number` logarithmically-spaced frequencies from `start` to `stop` Hz
   - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
-- **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
-- `cycles::Union{Real,Tuple{Real,Real}}=(3, 10)`: Number of cycles. Can be:
-  - Single number: fixed cycles for all frequencies
-  - Tuple (min, max): log-spaced cycles from min to max
-- `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
-  - If `nothing`, uses all time points from the data
-  - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
+  - **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
+- `cycles::Union{Real,Tuple{Real,Real}}=(3, 10)`: Number of cycles in the wavelet. Controls time-frequency trade-off:
+  - Single number: fixed cycles for all frequencies (e.g., `cycles=5`)
+  - Tuple `(min, max)`: log-spaced cycles from `min` to `max` across frequencies
+  - More cycles = better frequency resolution, worse time resolution
+  - Default: `(3, 10)` cycles
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
+  - Default: all channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
+  - Default: all samples
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
   - `nothing`: No padding (default)
   - `:pre`: Mirror data before each epoch
   - `:post`: Mirror data after each epoch
-  - `:both`: Mirror data on both sides (recommended)
-- `return_trials::Bool=false`: If `true`, returns `TimeFreqEpochData` with individual trials preserved.
-  - If `false` (default), returns `TimeFreqData` with trials averaged.
-- `filter_edges::Bool=true`: If `true` (default), filters out edge regions where the wavelet extends beyond the data
+  - `:both`: Mirror data on both sides (recommended for best edge artifact reduction)
+  - Padding extends the data for convolution, then results are automatically unpadded
+- `return_trials::Bool=false`: Whether to preserve individual trials:
+  - `false` (default): Returns `TimeFreqData` with trials averaged
+  - `true`: Returns `TimeFreqEpochData` with individual trials preserved
+- `filter_edges::Bool=true`: Whether to filter edge regions where the wavelet extends beyond the data:
+  - `true` (default): Sets edge regions to `NaN` where the wavelet window extends beyond data boundaries
+  - `false`: Keeps all computed values (may include edge artifacts)
+  - Edge filtering accounts for padding if applied
 
 # Returns
 - `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
 - `TimeFreqEpochData` (if `return_trials=true`): Time-frequency data with individual trials preserved
 
-# Example
+# Examples
 ```julia
-# Log-spaced frequencies (30 frequencies from 2 to 80 Hz), single channel, averaged
+# Default: linear frequencies 1-40 Hz, step 1, averaged across trials
+tf_data = tf_morlet(epochs)
+
+# Log-spaced frequencies (30 frequencies from 2 to 80 Hz), single channel
 tf_data = tf_morlet(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz))
 
-# Linear-spaced frequencies with padding and individual trials
-tf_epochs = tf_morlet(epochs; lin_freqs=(2, 80, 2), time_steps=(-0.5, 2.0, 0.01), 
+# Linear frequencies with padding and individual trials preserved
+tf_epochs = tf_morlet(epochs; lin_freqs=(2, 80, 2), sample_selection=samples((-0.5, 2.0)), 
     pad=:both, return_trials=true)
+
+# Custom cycles and time window
+tf_data = tf_morlet(epochs; lin_freqs=(5, 50, 1), cycles=7, sample_selection=samples((0, 1.5)))
 ```
 """
 function tf_morlet(
     dat::EpochData;
     channel_selection::Function = channels(),
-    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    sample_selection::Function = samples(),
+    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = (1, 40, 1),
     log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
     cycles::Union{Real,Tuple{Real,Real}} = (3, 10),
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
     filter_edges::Bool = true,
 )
-
-    # Get selected channels using channel selection predicate
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    if isempty(selected_channels)
-        error("No channels selected. Available channels: $(channel_labels(dat))")
-    end
 
     # Validate frequency specification - exactly one must be provided
     if isnothing(lin_freqs) && isnothing(log_freqs)
@@ -83,41 +98,24 @@ function tf_morlet(
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
-    # Get original data time range 
-    times_original = time(dat)
+    # Subset data with channel and sample selection
+    dat = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+    isempty(dat.data) && error("No data remaining after subsetting")
+
+    # Get original data time range (before padding) - these are the time points we want in output
     n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
 
-    # apply padding if requested 
+    # Apply padding if requested 
     if !isnothing(pad)
-        dat = mirror(dat, pad)
+        mirror!(dat, pad)
     end
-
-    # Get sample rate and time vector from processed data
-    times_processed = time(dat)
-
-    # Handle time_steps parameter - determine which time points to extract from results
-    if isnothing(time_steps)
-        time_indices, times_out = find_times(times_processed, times_original)
-    else
-        start_time, stop_time, step_time = time_steps
-        
-        # Check if requested range extends beyond processed data range and warn
-        time_min_processed = minimum(times_processed)
-        time_max_processed = maximum(times_processed)
-        if start_time < time_min_processed || stop_time > time_max_processed
-            @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
-        end
-        
-        time_steps_range = start_time:step_time:stop_time
-        time_indices, times_out = find_times(times_processed, time_steps_range)
-        if isempty(time_indices)
-            error("No valid time points found in requested range ($start_time to $stop_time seconds)")
-        end
-    end
-
+    
     # Get number of trials/epochs
     n_trials = n_epochs(dat)
-    n_samples_per_epoch = n_samples(dat) # Use full signal for convolution
+    n_samples_per_epoch = n_samples(dat) # Use full signal for convolution (may be padded)
+    
+    # Get all time points from processed (possibly padded) data
+    times_all = time(dat)
 
     # Define frequencies based on user specification
     if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
@@ -136,12 +134,23 @@ function tf_morlet(
         cycles_vec = fill(Float64(cycles), num_frex)
     end
 
-    # Initialize output structures based on return_trials flag
-    n_times = length(times_out)
+    # Calculate which time indices to keep (original unpadded samples)
+    if !isnothing(pad)
+        if pad == :pre || pad == :both
+            n_pre_pad = n_samples_original_unpadded - 1
+        else  # :post
+            n_pre_pad = 0
+        end
+        time_indices_out = (n_pre_pad + 1):(n_pre_pad + n_samples_original_unpadded)
+    else
+        time_indices_out = 1:n_samples_original_unpadded
+    end
+    n_times_out = length(time_indices_out)
 
-    # Initialize output structures 
+    # Initialize output structures with only original time points as we unpad!
+    times_out = times_all[time_indices_out]
     time_col = repeat(times_out, inner = num_frex)
-    freq_col = repeat(freqs, outer = n_times)
+    freq_col = repeat(freqs, outer = n_times_out)
     if return_trials
         power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
         phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
@@ -154,8 +163,7 @@ function tf_morlet(
     max_sigma = maximum(cycles_vec ./ (2 * pi .* freqs))
     max_hw = ceil(Int, 6 * max_sigma * dat.sample_rate) ÷ 2
     max_wl = max_hw * 2 + 1
-    n_conv = max_wl + n_samples_per_epoch - 1
-    n_conv_pow2 = nextpow(2, n_conv)
+    n_conv_pow2 = nextpow(2, max_wl + n_samples_per_epoch - 1)
     
     # Pre-allocate reusable buffers for single trial processing
     signal_padded = zeros(ComplexF64, n_conv_pow2)
@@ -165,9 +173,9 @@ function tf_morlet(
     eegconv_buffer = zeros(ComplexF64, n_conv_pow2)
     
     # Create FFT plans using the actual buffers 
-    p_fft = plan_fft(signal_padded, flags=FFTW.MEASURE)
+    p_fft_signal = plan_fft(signal_padded, flags=FFTW.MEASURE)
     p_fft_wavelet = plan_fft(wavelet_padded, flags=FFTW.MEASURE)
-    p_ifft = plan_ifft(eegconv_buffer, flags=FFTW.MEASURE)
+    p_ifft_conv = plan_ifft(eegconv_buffer, flags=FFTW.MEASURE)
 
     # Pre-compute some constants 
     inv_sr = 1.0 / dat.sample_rate 
@@ -187,8 +195,8 @@ function tf_morlet(
         wl_per_freq[fi] = wl
         valid_start = hw + 1
         
-        # Pre-compute convolution indices for this frequency
-        conv_indices_per_freq[fi] = [valid_start + sample_idx - 1 for sample_idx in time_indices]
+        # Pre-compute convolution indices for all samples in padded data
+        conv_indices_per_freq[fi] = [valid_start + sample_idx - 1 for sample_idx = 1:n_samples_per_epoch]
         
         # Create wavelet directly in padded buffer
         fill!(wavelet_padded, 0)
@@ -208,18 +216,22 @@ function tf_morlet(
     end
 
     # Pre-allocate reusable output buffers (reused across all channels)
-    # Always initialize to zeros for accumulation (we'll set invalid regions to NaN later if filtering edges)
+    # Only allocate for original unpadded samples
     if return_trials
-        eegpower = zeros(Float64, num_frex, n_times, n_trials)
-        eegconv = zeros(ComplexF64, num_frex, n_times, n_trials)
+        eegpower = zeros(Float64, num_frex, n_times_out, n_trials)
+        eegconv = zeros(ComplexF64, num_frex, n_times_out, n_trials)
     else
-        eegpower = zeros(Float64, num_frex, n_times)
-        eegconv = zeros(ComplexF64, num_frex, n_times)
+        eegpower = zeros(Float64, num_frex, n_times_out)
+        eegconv = zeros(ComplexF64, num_frex, n_times_out)
     end
 
+    # TODO: initial testing shows this is just as fast as concatenating 
+    # all trials and/or channels into a single matrix and then processing that
+    # but it still seems too slow!!!
 
     # Process each selected channel and each trial separately
-    for channel in selected_channels
+    for channel in channel_labels(dat)
+
         # Reset output arrays for this channel
         fill!(eegpower, 0)
         fill!(eegconv, 0)
@@ -231,28 +243,30 @@ function tf_morlet(
             signal_padded[1:n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
             
             # FFT for this trial
-            mul!(eegfft, p_fft, signal_padded)
+            mul!(eegfft, p_fft_signal, signal_padded)
 
             # Loop through frequencies - reuse pre-computed wavelet FFTs
             for fi = 1:num_frex
 
+                # TODO: here is the problem!!! But need to test again concat option(s)
                 @inbounds @simd for i = 1:n_conv_pow2
                     conv_buffer[i] = wavelet_ffts[fi][i] * eegfft[i]
                 end
-                mul!(eegconv_buffer, p_ifft, conv_buffer)
+                mul!(eegconv_buffer, p_ifft_conv, conv_buffer)
                 
-                # Apply norm_factor and extract in one pass - use pre-computed indices
+                # Extract only original unpadded samples from convolution
                 conv_indices = conv_indices_per_freq[fi]
-                @inbounds for ti in eachindex(time_indices)
-                    val = eegconv_buffer[conv_indices[ti]] 
+                @inbounds for (ti_out, ti_padded) in enumerate(time_indices_out)
+                    val = eegconv_buffer[conv_indices[ti_padded]] 
                     
                     if return_trials
-                        eegpower[fi, ti, trial_idx] = abs2(val)
-                        eegconv[fi, ti, trial_idx] = val
+                        eegpower[fi, ti_out, trial_idx] = abs2(val)
+                        eegconv[fi, ti_out, trial_idx] = val
                     else
-                        eegpower[fi, ti] += abs2(val) 
-                        eegconv[fi, ti] += val 
+                        eegpower[fi, ti_out] += abs2(val) 
+                        eegconv[fi, ti_out] += val 
                     end
+
                 end
             end
         end
@@ -263,7 +277,8 @@ function tf_morlet(
         end
         
         if filter_edges
-            _filter_edges!(eegpower, eegconv, num_frex, time_indices, wl_per_freq, n_samples_original_unpadded)
+            # Use padded indices for edge filtering - padding extends valid region
+            _filter_edges!(eegpower, eegconv, num_frex, time_indices_out, wl_per_freq, n_samples_per_epoch)
         end
         
         if return_trials # Store each trial separately
@@ -292,4 +307,3 @@ function tf_morlet(
         dat.analysis_info,
     )
 end
-

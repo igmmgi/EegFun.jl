@@ -27,9 +27,13 @@ spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq = 80.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 
 # tf_morlet
-@btime tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 0.5), cycles = 5)
-
+tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1), cycles = 3, pad = :both)
 eegfun.plot_time_frequency(tf_data, ylogscale = false)
+
+# tf_morlet
+tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 1), cycles = 3)
+eegfun.plot_time_frequency(tf_data, ylogscale = false)
+
 
 tf_data = eegfun.tf_morlet(epochs_synthetic, lin_freqs = (1, 40, 0.5), cycles = 10)
 eegfun.plot_time_frequency(tf_data, ylogscale = false)
