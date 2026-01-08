@@ -490,7 +490,17 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         # base_mask is a boolean vector for time points
         # power_mat is (n_freqs, n_times)
         # We want mean (and std for zscore) across time points in baseline window for each frequency
-        baseline_power = vec(mean(power_mat[:, base_mask], dims=2))  # Ensure it's a vector
+        # Skip NaN values (from edge filtering) when computing baseline statistics (matches FieldTrip's nanmean)
+        baseline_power = zeros(n_freqs)
+        for fi = 1:n_freqs
+            baseline_values = power_mat[fi, base_mask]
+            baseline_values_no_nan = baseline_values[.!isnan.(baseline_values)]
+            if isempty(baseline_values_no_nan)
+                baseline_power[fi] = NaN  # All baseline values are NaN
+            else
+                baseline_power[fi] = mean(baseline_values_no_nan)
+            end
+        end
         
         # Apply baseline correction (matching FieldTrip baselinetype options)
         if method == :absolute
@@ -525,8 +535,18 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
             # FieldTrip uses population std (divide by N, not N-1): nanstd(data(:,:,baselineTimes),1, 3)
             @info "Applying z-score baseline correction (FieldTrip baselinetype='zscore')"
             # Compute standard deviation for each frequency across baseline time points
-            # Use corrected=false for population std (matches FieldTrip's std(..., 1, ...))
-            baseline_std = vec(std(power_mat[:, base_mask], dims=2, corrected=false))
+            # Skip NaN values (from edge filtering) when computing std (matches FieldTrip's nanstd)
+            baseline_std = zeros(n_freqs)
+            for fi = 1:n_freqs
+                baseline_values = power_mat[fi, base_mask]
+                baseline_values_no_nan = baseline_values[.!isnan.(baseline_values)]
+                if isempty(baseline_values_no_nan) || length(baseline_values_no_nan) < 2
+                    baseline_std[fi] = NaN  # All baseline values are NaN or insufficient data
+                else
+                    # Use population std (divide by N, not N-1) to match FieldTrip's std(..., 1, ...)
+                    baseline_std[fi] = std(baseline_values_no_nan, corrected=false)
+                end
+            end
             # Avoid division by zero - use minimum threshold for std
             min_std = max.(baseline_std, 1e-30)
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_std, n_freqs, 1)

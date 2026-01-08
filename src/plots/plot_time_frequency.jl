@@ -115,8 +115,10 @@ function plot_time_frequency(tf_data::TimeFreqData, channel::Symbol;
     # x = times (n_times), y = freqs_vec (n_freqs)
     # So data should be (n_freqs, n_times)
     # After transpose, power_mat is (n_times, n_freqs), which is what Makie expects
+    # Set NaN color to transparent so edge-filtered regions are not displayed
     hm = heatmap!(ax, times, freqs_vec, power_mat, 
-                  colormap=colormap, colorrange=colorrange)
+                  colormap=colormap, colorrange=colorrange,
+                  nan_color=:transparent)
     
     if colorbar
         # Determine colorbar label based on baseline information
