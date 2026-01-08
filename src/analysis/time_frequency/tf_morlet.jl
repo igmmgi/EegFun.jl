@@ -9,7 +9,7 @@
               return_trials::Bool=false,
               filter_edges::Bool=true)
 
-Time-frequency analysis using Morlet wavelets (Cohen Chapter 13).
+Time-frequency analysis using Morlet wavelets 
 
 # Arguments
 - `dat::EpochData`: Epoched EEG data
@@ -87,14 +87,13 @@ function tf_morlet(
     times_original = time(dat)
     n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
 
-    # Apply padding if requested 
+    # apply padding if requested 
     if !isnothing(pad)
         dat = mirror(dat, pad)
     end
 
     # Get sample rate and time vector from processed data
     times_processed = time(dat)
-    n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
 
     # Handle time_steps parameter - determine which time points to extract from results
     if isnothing(time_steps)
@@ -116,20 +115,17 @@ function tf_morlet(
         end
     end
 
-    # Use processed data dimensions for convolution
-    n_samples_original = n_samples_processed
-
     # Get number of trials/epochs
     n_trials = n_epochs(dat)
-    n_samples_per_epoch = n_samples_original  # Use full signal for convolution
+    n_samples_per_epoch = n_samples(dat) # Use full signal for convolution
 
     # Define frequencies based on user specification
     if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
         min_freq, max_freq, num_frex = log_freqs
-        freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
+        freqs = exp.(range(log(min_freq), log(max_freq), length = num_frex))
     else # Linear spacing: (start, stop, step)
         min_freq, max_freq, step = lin_freqs
-        freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
+        freqs = range(min_freq, max_freq, step = step)
     end
     num_frex = length(freqs)  # Update num_frex for use in rest of function
 
@@ -168,33 +164,28 @@ function tf_morlet(
     conv_buffer = zeros(ComplexF64, n_conv_pow2)
     eegconv_buffer = zeros(ComplexF64, n_conv_pow2)
     
-    # Create FFT plans using the actual buffers (plans keep references, so buffers must persist)
+    # Create FFT plans using the actual buffers 
     p_fft = plan_fft(signal_padded, flags=FFTW.MEASURE)
     p_fft_wavelet = plan_fft(wavelet_padded, flags=FFTW.MEASURE)
     p_ifft = plan_ifft(eegconv_buffer, flags=FFTW.MEASURE)
 
-    # Pre-compute constants (same for all channels and frequencies)
+    # Pre-compute some constants 
     inv_sr = 1.0 / dat.sample_rate 
     two_pi = 2 * pi
     sqrt_pi = sqrt(pi)
 
     # Pre-compute wavelets and their FFTs once (same for all channels and trials)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
-    hw_per_freq = Vector{Int}(undef, num_frex)
-    wl_per_freq = Vector{Int}(undef, num_frex)  # Store actual wavelet length for edge filtering
-    valid_start_per_freq = Vector{Int}(undef, num_frex)
-    # Pre-compute convolution indices for each frequency to avoid computation in inner loop
+    wl_per_freq = Vector{Int}(undef, num_frex)  
     conv_indices_per_freq = Vector{Vector{Int}}(undef, num_frex)
 
     for fi = 1:num_frex
-
-        sigma = cycles_vec[fi] / (two_pi * freqs[fi])
+        freq_val = freqs[fi]
+        sigma = cycles_vec[fi] / (two_pi * freq_val)
         hw = ceil(Int, 6 * sigma * dat.sample_rate) ÷ 2
         wl = hw * 2 + 1
-        hw_per_freq[fi] = hw
         wl_per_freq[fi] = wl
         valid_start = hw + 1
-        valid_start_per_freq[fi] = valid_start
         
         # Pre-compute convolution indices for this frequency
         conv_indices_per_freq[fi] = [valid_start + sample_idx - 1 for sample_idx in time_indices]
@@ -202,7 +193,7 @@ function tf_morlet(
         # Create wavelet directly in padded buffer
         fill!(wavelet_padded, 0)
         A = sqrt(1 / (sigma * sqrt_pi))
-        two_pi_freq = two_pi * freqs[fi]
+        two_pi_freq = two_pi * freq_val
         inv_2sigma2 = 1.0 / (2 * sigma^2)
         @inbounds @simd for i = 1:wl
             t = (-wl / 2 + i - 1) * inv_sr
@@ -226,19 +217,15 @@ function tf_morlet(
         eegconv = zeros(ComplexF64, num_frex, n_times)
     end
 
-    norm_factor = sqrt(2.0 / dat.sample_rate)
-    
-    # Pre-compute taper lengths for edge filtering (if needed) - avoid recomputing
-    taper_lengths_samples_exact = filter_edges ? [Float64(wl_per_freq[fi]) for fi = 1:num_frex] : nothing
 
     # Process each selected channel and each trial separately
     for channel in selected_channels
         # Reset output arrays for this channel
         fill!(eegpower, 0)
         fill!(eegconv, 0)
-        
+         
         for trial_idx = 1:n_trials
-            
+             
             # Copy single trial data to padded buffer
             fill!(signal_padded, 0)
             signal_padded[1:n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
@@ -249,7 +236,6 @@ function tf_morlet(
             # Loop through frequencies - reuse pre-computed wavelet FFTs
             for fi = 1:num_frex
 
-                # Convolution (MATLAB: ifft(wavelet.*eegfft)) - use @simd for faster multiplication
                 @inbounds @simd for i = 1:n_conv_pow2
                     conv_buffer[i] = wavelet_ffts[fi][i] * eegfft[i]
                 end
@@ -258,7 +244,7 @@ function tf_morlet(
                 # Apply norm_factor and extract in one pass - use pre-computed indices
                 conv_indices = conv_indices_per_freq[fi]
                 @inbounds for ti in eachindex(time_indices)
-                    val = eegconv_buffer[conv_indices[ti]] * norm_factor
+                    val = eegconv_buffer[conv_indices[ti]] 
                     
                     if return_trials
                         eegpower[fi, ti, trial_idx] = abs2(val)
@@ -271,22 +257,21 @@ function tf_morlet(
             end
         end
 
+        if !return_trials
+            eegpower ./= n_trials
+            eegconv ./= n_trials
+        end
+        
+        if filter_edges
+            _filter_edges!(eegpower, eegconv, num_frex, time_indices, wl_per_freq, n_samples_original_unpadded)
+        end
+        
         if return_trials # Store each trial separately
-            if filter_edges
-                _filter_edges!(eegpower, eegconv, num_frex, time_indices, taper_lengths_samples_exact, n_samples_original_unpadded)
-            end
-            # Pre-allocate phase vectors to avoid repeated allocations
             for trial_idx = 1:n_trials
                 power_df[trial_idx][!, channel] = vec(@view eegpower[:, :, trial_idx])
-                # Compute angle directly without intermediate view
                 phase_df[trial_idx][!, channel] = vec(angle.(@view eegconv[:, :, trial_idx]))
             end
         else
-            eegpower ./= n_trials
-            eegconv ./= n_trials
-            if filter_edges
-                _filter_edges!(eegpower, eegconv, num_frex, time_indices, taper_lengths_samples_exact, n_samples_original_unpadded)
-            end
             power_df[!, channel] = vec(eegpower)
             phase_df[!, channel] = vec(angle.(eegconv))
         end
@@ -307,3 +292,4 @@ function tf_morlet(
         dat.analysis_info,
     )
 end
+
