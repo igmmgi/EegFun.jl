@@ -1132,12 +1132,6 @@ epochs(predicate::Function) = predicate  # Allow custom function predicates
 epochs_not(epoch_numbers::Union{Vector{Int},UnitRange}) = x -> .!([i in epoch_numbers for i in x])
 epochs_not(epoch_number::Int) = x -> .!(x .== epoch_number)
 
-# Helper to extract condition name from ErpData or EpochData
-condition_name(dat::ErpData)::String = dat.condition_name
-condition_name(dat::EpochData)::String = dat.condition_name
-condition_name(dat::TimeFreqData)::String = dat.condition_name
-condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
-
 # Helper to extract condition number and name (returns tuple)
 condition_info(dat::EpochData) = (dat.condition, dat.condition_name)
 condition_info(dat::ErpData) = (dat.condition, dat.condition_name)
