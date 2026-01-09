@@ -68,7 +68,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.11 A)
-tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (2, 80, 1), cycles = (3, 10), time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (2, 80, 1), cycles = (3, 10))
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -79,7 +79,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 A)
-tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 3, time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 3) 
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -90,7 +90,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 B)
-tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 10, time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 10)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -101,7 +101,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 C)
-tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = (3, 10), time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = (3, 10))
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),

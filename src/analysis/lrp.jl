@@ -59,9 +59,6 @@ erps = load("participant_05_erps.jld2", "erps")
 lrp_result = lrp(erps[1], erps[2], channel_selection = channels([:C3]))
 jldsave("participant_05_lrp.jld2"; data = lrp_result)
 ```
-
-# References
-See the original FieldTrip implementation: `ft_lateralizedpotential.m`
 """
 function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function = channels())::ErpData
 
