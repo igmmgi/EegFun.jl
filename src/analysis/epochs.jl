@@ -648,6 +648,7 @@ Average epochs to create an ERP. This function:
 - `ErpData`: The averaged ERP data with epoch counts
 """
 function average_epochs(dat::EpochData)
+
     # Input validation
     isempty(dat.data) && @minimal_error_throw("Cannot average empty EpochData")
 
@@ -674,24 +675,38 @@ function average_epochs(dat::EpochData)
     # Ensure we have some channels to average
     isempty(eeg_channels) && @minimal_error_throw("No EEG channels found to average")
 
-    # Concatenate all epochs with error handling
+    # Average epochs directly by row index (all epochs have same length and time values)
     try
-        all_epochs = reduce(vcat, dat.data)
-
-        # Verify we have time column
-        if !hasproperty(all_epochs, :time)
-            @minimal_error_throw("Missing required column 'time' for epoch averaging")
+        first_epoch = first(dat.data)
+        n_timepoints = nrow(first_epoch)
+        
+        # Verify all epochs have the same length
+        for (i, epoch) in enumerate(dat.data)
+            if nrow(epoch) != n_timepoints
+                @minimal_error_throw("Epoch $i has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length.")
+            end
         end
 
-        # Group by time only (condition/condition_name are constant in struct)
-        # Count epochs by grouping by time
-        erp = combine(
-            groupby(all_epochs, [:time]),
-            eeg_channels .=> mean .=> eeg_channels,  # Average the EEG channels
-        )
+        # Create result DataFrame with metadata columns from first epoch
+        erp = DataFrame()
+        
+        # Copy metadata columns (time, sample, epoch, etc.) from first epoch
+        metadata_cols = meta_labels(dat)
+        for col in metadata_cols
+            if hasproperty(first_epoch, col)
+                erp[!, col] = first_epoch[!, col]
+            end
+        end
+        
+        # Average EEG channels across epochs by row index
+        for ch in eeg_channels
+            # Stack all epochs for this channel: n_epochs × n_timepoints
+            channel_matrix = hcat([epoch[!, ch] for epoch in dat.data]...)
+            # Average across epochs (mean of each row = each timepoint)
+            erp[!, ch] = vec(mean(channel_matrix, dims=2))
+        end
 
-        # Count epochs - each unique time point should have same number of epochs
-        # We can check by seeing how many epochs we concatenated
+        # Count epochs
         n_epochs = length(dat.data)
 
         return ErpData(
