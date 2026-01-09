@@ -1,7 +1,6 @@
 """
     tf_morlet(dat::EpochData; 
-              lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=(1, 40, 1),
-              log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
+              frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
               cycles::Union{Real,Tuple{Real,Real}}=(3, 10),
               channel_selection::Function=channels(),
               sample_selection::Function=samples(),
@@ -18,19 +17,16 @@ linear and logarithmic frequency spacing, with optional padding to reduce edge a
 - `dat::EpochData`: Epoched EEG data to analyze
 
 # Keyword Arguments
-- `lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=(1, 40, 1)`: Linear frequency spacing as `(start, stop, step)`.
-  - Creates frequencies from `start` to `stop` Hz with step size `step`
-  - Example: `lin_freqs=(2, 80, 2)` creates frequencies [2, 4, 6, ..., 80] Hz
-  - Default: `(1, 40, 1)` Hz
-- `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as `(start, stop, number)`.
-  - Creates `number` logarithmically-spaced frequencies from `start` to `stop` Hz
-  - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
-  - **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
+- `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
+  - Can be any range or vector of frequencies in Hz
+  - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
+  - For logarithmic spacing: `frequencies=exp.(range(log(1), log(40), length=30))`
+  - Default: `range(1, 40, length=40)` (40 linearly-spaced frequencies from 1 to 40 Hz)
 - `cycles::Union{Real,Tuple{Real,Real}}=(3, 10)`: Number of cycles in the wavelet. Controls time-frequency trade-off:
   - Single number: fixed cycles for all frequencies (e.g., `cycles=5`)
   - Tuple `(min, max)`: log-spaced cycles from `min` to `max` across frequencies
   - More cycles = better frequency resolution, worse time resolution
-  - Default: `(3, 10)` cycles
+  - Default: `7` cycles
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
@@ -59,39 +55,29 @@ linear and logarithmic frequency spacing, with optional padding to reduce edge a
 
 # Examples
 ```julia
-# Default: linear frequencies 1-40 Hz, step 1, averaged across trials
+# Default: linear frequencies 1-40 Hz, 40 points, averaged across trials
 tf_data = tf_morlet(epochs)
 
-# Log-spaced frequencies (30 frequencies from 2 to 80 Hz), single channel
-tf_data = tf_morlet(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz))
+# Log-spaced frequencies (30 frequencies from 1 to 40 Hz)
+tf_data = tf_morlet(epochs; frequencies=logrange(1, 40, length=30))
+
+# Log-spaced frequencies, single channel
+tf_data = tf_morlet(epochs; channel_selection=channels(:Cz), frequencies=logrange(2, 80, length=30))
 
 # Linear frequencies with padding and individual trials preserved
-tf_epochs = tf_morlet(epochs; lin_freqs=(2, 80, 2), sample_selection=samples((-0.5, 2.0)), 
-    pad=:both, return_trials=true)
-
-# Custom cycles and time window
-tf_data = tf_morlet(epochs; lin_freqs=(5, 50, 1), cycles=7, sample_selection=samples((0, 1.5)))
+tf_epochs = tf_morlet(epochs; sample_selection=samples((-0.5, 2.0)), frequencies=2:2:80, pad=:both, return_trials=true)
 ```
 """
 function tf_morlet(
     dat::EpochData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = (1, 40, 1),
-    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
-    cycles::Union{Real,Tuple{Real,Real}} = (3, 10),
+    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
+    cycles::Union{Real,Tuple{Real,Real}} = 7,
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
     filter_edges::Bool = true,
 )
-
-    # Validate frequency specification - exactly one must be provided
-    if isnothing(lin_freqs) && isnothing(log_freqs)
-        error("Either `lin_freqs` or `log_freqs` must be specified")
-    end
-    if !isnothing(lin_freqs) && !isnothing(log_freqs) 
-        error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
-    end
 
     # Validate padding parameter
     if !isnothing(pad) && pad ∉ [:pre, :post, :both]
@@ -117,21 +103,22 @@ function tf_morlet(
     # Get all time points from processed (possibly padded) data
     times_all = time(dat)
 
-    # Define frequencies based on user specification
-    if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
-        min_freq, max_freq, num_frex = log_freqs
-        freqs = exp.(range(log(min_freq), log(max_freq), length = num_frex))
-    else # Linear spacing: (start, stop, step)
-        min_freq, max_freq, step = lin_freqs
-        freqs = range(min_freq, max_freq, step = step)
+    # Use frequency input directly (ranges and vectors both work)
+    num_frex = length(frequencies)
+    
+    # Validate frequencies
+    if num_frex == 0
+        error("`frequencies` must contain at least one frequency")
     end
-    num_frex = length(freqs)  # Update num_frex for use in rest of function
+    if any(f -> f <= 0, freqs)
+        error("All frequencies in `frequencies` must be positive")
+    end
 
     # Define cycles/sigma
     if cycles isa Tuple
-        cycles_vec = exp.(range(log(cycles[1]), log(cycles[2]), length = num_frex))
+        cycles_vec = logrange(cycles[1], cycles[2], length = num_frex)
     else
-        cycles_vec = fill(Float64(cycles), num_frex)
+        cycles_vec = fill(cycles, num_frex)
     end
 
     # Calculate which time indices to keep (original unpadded samples)
