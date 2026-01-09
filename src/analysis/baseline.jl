@@ -426,14 +426,14 @@ Apply baseline correction to TimeFreqData in-place.
 - `baseline_window::Tuple{Real,Real}`: Time window for baseline (start, stop) in seconds
 
 # Keyword Arguments
-- `method::Symbol=:db`: Baseline method (matches FieldTrip baselinetype options)
+- `method::Symbol=:db`: Baseline method 
   - `:absolute`: Absolute change (power - baseline_mean) - simple subtraction, no normalization
-  - `:relative`: Relative power (power / baseline_mean) - ratio, same as FieldTrip 'relative'
-  - `:relchange`: Relative change ((power - baseline_mean) / baseline_mean) - fractional change, same as FieldTrip 'relchange'
-  - `:normchange`: Normalized change ((power - baseline) / (power + baseline)) - symmetric normalization, same as FieldTrip 'normchange'
-  - `:db`: Decibel change (10 * log10(power/baseline_mean)) - same as FieldTrip 'db'
-  - `:vssum`: Variance-stabilized sum ((power - baseline) / (power + baseline)) - same as FieldTrip 'vssum' (equivalent to normchange)
-  - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std) - same as FieldTrip 'zscore'
+  - `:relative`: Relative power (power / baseline_mean) - ratio, 
+  - `:relchange`: Relative change ((power - baseline_mean) / baseline_mean) - fractional change 
+  - `:normchange`: Normalized change ((power - baseline) / (power + baseline)) - symmetric normalization
+  - `:db`: Decibel change (10 * log10(power/baseline_mean)) 
+  - `:vssum`: Variance-stabilized sum ((power - baseline) / (power + baseline)) 
+  - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std) 
   - `:percent`: Percent change (100 * (power - baseline) / baseline) - convenience alias for relchange × 100
 
 # Example
@@ -490,7 +490,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
         # base_mask is a boolean vector for time points
         # power_mat is (n_freqs, n_times)
         # We want mean (and std for zscore) across time points in baseline window for each frequency
-        # Skip NaN values (from edge filtering) when computing baseline statistics (matches FieldTrip's nanmean)
+        # Skip NaN values (from edge filtering) when computing baseline statistics 
         baseline_power = zeros(n_freqs)
         for fi = 1:n_freqs
             baseline_values = power_mat[fi, base_mask]
@@ -502,40 +502,40 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
             end
         end
         
-        # Apply baseline correction (matching FieldTrip baselinetype options)
+        # Apply baseline correction 
         if method == :absolute
-            # FieldTrip 'absolute': data - meanVals (simple subtraction)
-            @info "Applying absolute baseline correction (FieldTrip baselinetype='absolute')"
+            # 'absolute': data - meanVals (simple subtraction)
+            @info "Applying absolute baseline correction"
             power_mat .= power_mat .- reshape(baseline_power, n_freqs, 1)
         elseif method == :relative
-            # FieldTrip 'relative': power / baseline_mean
-            @info "Applying relative baseline correction (FieldTrip baselinetype='relative')"
+            # 'relative': power / baseline_mean
+            @info "Applying relative baseline correction"
             min_baseline = max.(baseline_power, 1e-30)
             power_mat .= power_mat ./ reshape(min_baseline, n_freqs, 1)
         elseif method == :relchange
-            # FieldTrip 'relchange': (power - baseline_mean) / baseline_mean
-            @info "Applying relchange baseline correction (FieldTrip baselinetype='relchange')"
+            # 'relchange': (power - baseline_mean) / baseline_mean
+            @info "Applying relchange baseline correction"
             min_baseline = max.(baseline_power, 1e-30)
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
         elseif method == :normchange
-            # FieldTrip 'normchange': (power - baseline) / (power + baseline)
-            @info "Applying normchange baseline correction (FieldTrip baselinetype='normchange')"
+            # 'normchange': (power - baseline) / (power + baseline)
+            @info "Applying normchange baseline correction"
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
         elseif method == :db
-            # FieldTrip 'db': 10 * log10(power / baseline_mean)
-            @info "Applying db baseline correction (FieldTrip baselinetype='db')"
+            # 'db': 10 * log10(power / baseline_mean)
+            @info "Applying db baseline correction"
             min_power = max.(baseline_power, 1e-30)
             power_mat .= 10 .* log10.(max.(power_mat, 1e-30) ./ reshape(min_power, n_freqs, 1))
         elseif method == :vssum
-            # FieldTrip 'vssum': (power - baseline) / (power + baseline) - same as normchange
-            @info "Applying vssum baseline correction (FieldTrip baselinetype='vssum')"
+            # 'vssum': (power - baseline) / (power + baseline) - same as normchange
+            @info "Applying vssum baseline correction"
             power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
         elseif method == :zscore
-            # FieldTrip 'zscore': (power - baseline_mean) / baseline_std
-            # FieldTrip uses population std (divide by N, not N-1): nanstd(data(:,:,baselineTimes),1, 3)
-            @info "Applying z-score baseline correction (FieldTrip baselinetype='zscore')"
+            # 'zscore': (power - baseline_mean) / baseline_std
+            # uses population std (divide by N, not N-1): nanstd(data(:,:,baselineTimes),1, 3)
+            @info "Applying z-score baseline correction"
             # Compute standard deviation for each frequency across baseline time points
-            # Skip NaN values (from edge filtering) when computing std (matches FieldTrip's nanstd)
+            # Skip NaN values (from edge filtering) when computing std 
             baseline_std = zeros(n_freqs)
             for fi = 1:n_freqs
                 baseline_values = power_mat[fi, base_mask]
@@ -543,7 +543,7 @@ function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; 
                 if isempty(baseline_values_no_nan) || length(baseline_values_no_nan) < 2
                     baseline_std[fi] = NaN  # All baseline values are NaN or insufficient data
                 else
-                    # Use population std (divide by N, not N-1) to match FieldTrip's std(..., 1, ...)
+                    # Use population std (divide by N, not N-1) 
                     baseline_std[fi] = std(baseline_values_no_nan, corrected=false)
                 end
             end
