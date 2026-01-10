@@ -1,31 +1,41 @@
 """
-    preprocess(config::String; log_level::Symbol = :info)
+    preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
 
 Preprocess EEG data according to the specified configuration file.
 
 # Arguments
 - `config::String`: Path to the configuration file in TOML format
+- `base_dir::Union{String,Nothing}`: Base directory for resolving relative paths in TOML file.
+  If `nothing` (default), uses the directory of the config file. This allows relative paths
+  in your TOML to work relative to where your analysis script is located.
 - `log_level::Symbol`: Log level for preprocessing (:debug, :info, :warn, :error)
+
+# Notes
+- Relative paths in the TOML config file are resolved relative to `base_dir`
+- If `base_dir` is not provided, it defaults to the directory containing the config file
+- Absolute paths in the TOML are used as-is
+- This allows you to use relative paths in your TOML files that work regardless of where
+  you run the script from, as long as the config file is in the same directory as your analysis script
 """
-function preprocess(config::String; log_level::Symbol = :info)
+function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing, log_level::Symbol = :info)
+
+    # Use config file's directory as base_dir if not provided
+    # This makes relative paths in TOML work relative to the analysis script location
+    base_dir === nothing && (base_dir = abspath(dirname(abspath(config))))
+    @info "Using base directory for relative paths: $base_dir"
 
     # Generate timestamp for unique log filename
     timestamp = Dates.format(now(), "yyyy-mm-dd_HH-MM-SS")
     log_filename = "preprocess_log_$(timestamp).txt"
 
     # set up the global log for overall processing
-    global_log = setup_global_logging(log_filename, log_level = log_level)
+    setup_global_logging(log_filename, log_level = log_level)
 
     # initialize variable for outer scope
     output_directory = ""
     all_epoch_counts = DataFrame[]  # Vector to store all epoch counts
 
     try
-
-        # Setup for all analyses files:
-        # This involves loading the end-user config file, merging it with the default config, 
-        # and creating the PreprocessConfig struct.
-        # The epoch conditions files are also loaded and parsed (see XXX for example configuration files)
 
         @info section("Setup")
         @info "Configuration Files:"
@@ -38,45 +48,40 @@ function preprocess(config::String; log_level::Symbol = :info)
         default_config === nothing && @minimal_error "Failed to load default configuration"
         cfg = _merge_configs(default_config, cfg)
 
-        # Set output directory early so log file can be moved even if errors occur later
-        output_directory = cfg["files"]["output"]["directory"]
-        !isdir(output_directory) && mkdir(output_directory)
+        # Resolve relative/absolute paths
+        resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
+        
+        # Resolve input directory
+        input_directory = resolve_path(cfg["files"]["input"]["directory"])
+        !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
+        
+        # Resolve output directory
+        output_directory = resolve_path(cfg["files"]["output"]["directory"])
+        !isdir(output_directory) && mkpath(output_directory)
+        
+        # Resolve epoch condition file path
+        epoch_condition_file = resolve_path(cfg["files"]["input"]["epoch_condition_file"])
 
         # Create the PreprocessConfig object for easier access
         preprocess_cfg = PreprocessConfig(cfg["preprocess"])
-
-        # check if input directory exists
-        input_directory = cfg["files"]["input"]["directory"]
-        !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
 
         # check if all requested raw data files exist
         raw_data_files = get_files(input_directory, cfg["files"]["input"]["raw_data_files"])
         raw_data_files_exist = check_files_exist(raw_data_files)
         !raw_data_files_exist && @minimal_error "Missing raw data files requested within TOML file!"
-        @info "Found $(length(raw_data_files)) files: $(join(raw_data_files, ", "))"
+        @info "Found $(length(raw_data_files)) files: $(print_vector(basename.(raw_data_files)))"
 
         # Read the epoch conditions defined within the toml file (See XXX for examples)
-        !isfile(cfg["files"]["input"]["epoch_condition_file"]) &&
-            @minimal_error "File missing: $(cfg["files"]["input"]["epoch_condition_file"])"
-        epoch_cfgs = condition_parse_epoch(TOML.parsefile(cfg["files"]["input"]["epoch_condition_file"]))
-        @info "Loading/parsing epoch file: $(cfg["files"]["input"]["epoch_condition_file"])"
-
-        # Find and load layout file
-        layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
-        layout_file === nothing && @minimal_error "Layout file not found: $(cfg["files"]["input"]["layout_file"])"
-        layout = read_layout(layout_file)
+        !isfile(epoch_condition_file) &&
+            @minimal_error "File missing: $epoch_condition_file"
+        epoch_cfgs = condition_parse_epoch(TOML.parsefile(epoch_condition_file))
+        @info "Loading/parsing epoch file: $epoch_condition_file"
 
         # Output directory was already set early, just log it
         @info "Output directory: $output_directory"
 
         # print config to output directory
         print_config(cfg, joinpath(output_directory, "config.toml"))
-
-        # Layout coordinates and calculation of channel neighbours (2D/3D)
-        polar_to_cartesian_xy!(layout)
-        polar_to_cartesian_xyz!(layout)
-        get_layout_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
-        print_layout_neighbours(layout, joinpath(output_directory, "neighbours.toml"))
 
         # Actual start of preprocessing pipeline!
         # This is the main loop that processes each raw data file.
@@ -85,9 +90,9 @@ function preprocess(config::String; log_level::Symbol = :info)
         processed_files = 0
         failed_files = String[]
 
+
         for (file_idx, data_file) in enumerate(raw_data_files)
             @info "Processing file $file_idx/$(length(raw_data_files)): $(basename(data_file))"
-
             try
 
                 # Individual file processing
@@ -103,28 +108,13 @@ function preprocess(config::String; log_level::Symbol = :info)
                 ################### LOAD RAW DATA FILE ###################
                 # TODO: update for different file types!
                 @info section("Raw Data")
-                dat = create_eeg_dataframe(read_bdf(data_file), layout)
-
-                # Save the original data in Julia format
-                if cfg["files"]["output"]["save_continuous_data_original"]
-                    @info "Saving continuous data (original)"
-                    jldsave(make_output_filename(output_directory, data_file, "_continuous_original"); data = dat)
-                end
+                dat = load_data(data_file)
 
                 # Mark epoch windows
                 # This is useful for x (time/sample) subsetting within the preprocessing pipeline
                 @info section("Marking epoch windows")
                 @info "Epoch windows: $([preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])"
                 mark_epoch_windows!(dat, epoch_cfgs, [preprocess_cfg.epoch_start, preprocess_cfg.epoch_end])
-
-                ################### REREFERENCE DATA ###################
-                @info section("Rereference")
-                rereference!(dat, preprocess_cfg.reference_channel)
-
-                ################### APPLY INITIAL FILTERS ###################
-                @info section("Initial Filters")
-                @info "Continuous data filters: $(_applied_filters(preprocess_cfg.filter, filter_sections = [:highpass, :lowpass]))"
-                filter_data!(dat, preprocess_cfg.filter)
 
                 #################### CALCULATE EOG CHANNELS ###################
                 @info section("EOG")
@@ -137,15 +127,15 @@ function preprocess(config::String; log_level::Symbol = :info)
 
                 # Calculate correlations between all channels and EOG channels
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix")
-                hEOG_vEOG_cm = eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog)
-                eegfun.add_zscore_columns!(hEOG_vEOG_cm)
+                hEOG_vEOG_cm = correlation_matrix_eog(dat, preprocess_cfg.eog)
+                add_zscore_columns!(hEOG_vEOG_cm)
                 log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
 
                 # Calculate correlations between all channels and EOG channels (epoch window)
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch window)")
                 hEOG_vEOG_cm_epoch =
-                    eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
-                eegfun.add_zscore_columns!(hEOG_vEOG_cm_epoch)
+                    correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
+                add_zscore_columns!(hEOG_vEOG_cm_epoch)
                 log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)")
 
                 #################### INITIAL EPOCH and ERP EXTRACTION ###################
@@ -233,7 +223,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 if !isempty(bad_channels_non_eog_related)
                     continuous_repair_info =
                         create_continuous_repair_info(:neighbor_interpolation; name = "continuous_repair")
-                    channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, layout)
+                    channel_repairable!(continuous_repair_info, bad_channels_non_eog_related, dat.layout)
                 end
 
                 #################### Independent Component Analysis (ICA) ###################
@@ -326,15 +316,15 @@ function preprocess(config::String; log_level::Symbol = :info)
                     ),
                 )
 
-                # Save the original data in Julia format
-                if cfg["files"]["output"]["save_continuous_data_cleaned"]
-                    @info "Saving continuous data"
-                    jldsave(make_output_filename(output_directory, data_file, "_continuous_cleaned"); data = dat)
-                end
-
                 #################### EPOCH EXTRACTION ###################
                 @info section("Extracting cleaned epoched data")
                 epochs = extract_epochs(dat, epoch_cfgs, preprocess_cfg.epoch_start, preprocess_cfg.epoch_end)
+
+                # Check if any epochs have empty data
+                empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]
+                if !isempty(empty_epochs)
+                    @eegfun.minimal_error_throw "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch window parameters and trigger locations."
+                end
 
                 #################### BASELINE WHOLE EPOCHS ##############
                 @info section("Baseline whole epochs")
@@ -492,7 +482,7 @@ function preprocess(config::String; log_level::Symbol = :info)
                 title = "Average percentage per condition (averaged across conditions):",
                 alignment = [:l, :r],
             )
-            @info "Mean percentage (averaged across all conditions and files): $(round(mean(merged_file_summary.percentage), digits = 1)) %"
+            @info "Mean percentage (averaged across all conditions and files): $(round(Statistics.mean(merged_file_summary.percentage), digits = 1)) %"
             jldsave(joinpath(output_directory, "epoch_summary.jld2"); data = merged_epoch_summary)
             jldsave(joinpath(output_directory, "file_summary.jld2"); data = merged_file_summary)
         end
