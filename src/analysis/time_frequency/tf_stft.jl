@@ -1,7 +1,6 @@
 """
     tf_stft(dat::EpochData; 
-            lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
-            log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
+            frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
             window_length::Union{Nothing,Real}=nothing,
             cycles::Union{Nothing,Real}=nothing,
             channel_selection::Function=channels(),
@@ -19,11 +18,11 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `dat::EpochData`: Epoched EEG data
 
 # Keyword Arguments
-- `lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Linear frequency spacing as (start, stop, step).
-  - Example: `lin_freqs=(2, 80, 2)` creates frequencies [2, 4, 6, ..., 80] Hz
-- `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
-  - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
-- **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
+- `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
+  - Can be any range or vector of frequencies in Hz
+  - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
+  - For logarithmic spacing: `frequencies=logrange(1, 40, length=30)`
+  - Default: `range(1, 40, length=40)` (40 linearly-spaced frequencies from 1 to 40 Hz)
 - `window_length::Union{Nothing,Real}=nothing`: Fixed window length in seconds (same for all frequencies).
   - Example: `window_length=0.3` uses a fixed 0.3 second window for all frequencies
   - **Exactly one of `window_length` or `cycles` must be specified.**
@@ -54,22 +53,24 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
 - `TimeFreqEpochData` (if `return_trials=true`): Time-frequency data with individual trials preserved
 
-# Example
+# Examples
 ```julia
-# Fixed window: Log-spaced frequencies with 0.3s fixed window
-tf_data = tf_stft(epochs; log_freqs=(2, 80, 30), channel_selection=channels(:Cz), window_length=0.3)
+# Default: linear frequencies 1-40 Hz, 40 points, fixed window
+tf_data = tf_stft(epochs; window_length=0.3)
+
+# Log-spaced frequencies with fixed window
+tf_data = tf_stft(epochs; frequencies=logrange(2, 80, length=30), window_length=0.3)
 
 # Adaptive window: 7 cycles per frequency (FieldTrip equivalent)
-tf_data = tf_stft(epochs; lin_freqs=(2, 30, 1), channel_selection=channels(:Cz), cycles=7, time_steps=(-0.5, 1.5, 0.05))
+tf_data = tf_stft(epochs; frequencies=2:1:30, cycles=7, time_steps=(-0.5, 1.5, 0.05))
 ```
 """
 function tf_stft(
     dat::EpochData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
+    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
     time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
     window_length::Union{Nothing,Real} = nothing,
     cycles::Union{Nothing,Real} = nothing,
     pad::Union{Nothing,Symbol} = nothing,
@@ -89,12 +90,15 @@ function tf_stft(
     # Get selected channels (after subsetting)
     selected_channels = channel_labels(dat)
 
-    # Validate frequency specification - exactly one must be provided
-    if isnothing(lin_freqs) && isnothing(log_freqs) 
-        error("Either `lin_freqs` or `log_freqs` must be specified")
+    # Use frequency input directly (ranges and vectors both work)
+    num_frex = length(frequencies)
+    
+    # Validate frequencies
+    if num_frex == 0
+        error("`frequencies` must contain at least one frequency")
     end
-    if !isnothing(lin_freqs) && !isnothing(log_freqs) 
-        error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
+    if any(f -> f <= 0, frequencies)
+        error("All frequencies in `frequencies` must be positive")
     end
 
     # Validate window_length and cycles - exactly one must be provided
@@ -146,15 +150,8 @@ function tf_stft(
     n_trials = n_epochs(dat)
     n_samples_per_epoch = n_samples(dat)
 
-    # Define frequencies based on user specification
-    if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
-        min_freq, max_freq, num_frex = log_freqs
-        freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-    else # Linear spacing: (start, stop, step)
-        min_freq, max_freq, step = lin_freqs
-        freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
-    end
-    num_frex = length(freqs)
+    # Use frequencies directly (convert to vector if needed for indexing)
+    freqs = collect(frequencies)
 
     # Determine window mode: fixed or adaptive
     if !isnothing(window_length)
