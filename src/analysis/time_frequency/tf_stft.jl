@@ -4,7 +4,6 @@
             log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
             window_length::Union{Nothing,Real}=nothing,
             cycles::Union{Nothing,Real}=nothing,
-            overlap::Real=0.5,
             time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             channel_selection::Function=channels(),
             pad::Union{Nothing,Symbol}=nothing,
@@ -30,7 +29,6 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `cycles::Union{Nothing,Real}=nothing`: Number of cycles per frequency (adaptive window).
   - Example: `cycles=7` uses 7 cycles per frequency (window length = 7/frequency)
   - **Exactly one of `window_length` or `cycles` must be specified.**
-- `overlap::Real=0.5`: Overlap fraction between windows (0 to 1). Default is 0.5 (50% overlap).
 - `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
   - If `nothing`, uses all time points from the data
   - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
@@ -68,7 +66,6 @@ function tf_stft(
     log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
     window_length::Union{Nothing,Real} = nothing,
     cycles::Union{Nothing,Real} = nothing,
-    overlap::Real = 0.5,
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
     filter_edges::Bool = true,
@@ -89,11 +86,6 @@ function tf_stft(
     # Validate padding parameter
     if !isnothing(pad) && pad ∉ [:pre, :post, :both]
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
-    end
-
-    # Validate overlap
-    if overlap < 0 || overlap >= 1
-        error("`overlap` must be in range [0, 1), got $overlap")
     end
 
     # Validate window_length and cycles - exactly one must be provided
