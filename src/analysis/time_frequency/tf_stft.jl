@@ -1,11 +1,11 @@
 """
     tf_stft(dat::EpochData; 
+            channel_selection::Function=channels(),
+            sample_selection::Function=samples(),
             frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
             window_length::Union{Nothing,Real}=nothing,
             cycles::Union{Nothing,Real}=nothing,
-            channel_selection::Function=channels(),
-            sample_selection::Function=samples(),
-            time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
+            time_steps::Real=0.05,
             pad::Union{Nothing,Symbol}=nothing,
             return_trials::Bool=false,
             filter_edges::Bool=true)
@@ -18,6 +18,13 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `dat::EpochData`: Epoched EEG data
 
 # Keyword Arguments
+- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
+  - Default: all samples
 - `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
   - Can be any range or vector of frequencies in Hz
   - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
@@ -29,16 +36,10 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `cycles::Union{Nothing,Real}=nothing`: Number of cycles per frequency (adaptive window).
   - Example: `cycles=7` uses 7 cycles per frequency (window length = 7/frequency)
   - **Exactly one of `window_length` or `cycles` must be specified.**
-- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
-  - Example: `channel_selection=channels(:Cz)` for single channel
-  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
-  - Example: `sample_selection=samples()` for all time points (default)
-  - Default: all samples
-- `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
-  - If `nothing`, uses all time points from the data
-  - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
+- `time_steps::Real=0.05`: Step size for extracting time points in seconds.
+  - Creates time points from the selected time range with the specified step size
+  - Default: `0.05` (50 ms)
+  - Example: `time_steps=0.01` creates time points every 0.01 seconds within the selected time window
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
   - `nothing`: No padding (default). Time points where windows extend beyond data boundaries are excluded with a warning.
   - `:pre`: Mirror data before each epoch
@@ -62,7 +63,7 @@ tf_data = tf_stft(epochs; window_length=0.3)
 tf_data = tf_stft(epochs; frequencies=logrange(2, 80, length=30), window_length=0.3)
 
 # Adaptive window: 7 cycles per frequency (FieldTrip equivalent)
-tf_data = tf_stft(epochs; frequencies=2:1:30, cycles=7, time_steps=(-0.5, 1.5, 0.05))
+tf_data = tf_stft(epochs; frequencies=2:1:30, cycles=7, sample_selection=samples((-0.5, 1.5)), time_steps=0.05)
 ```
 """
 function tf_stft(
@@ -70,7 +71,7 @@ function tf_stft(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
-    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    time_steps::Real = 0.05,
     window_length::Union{Nothing,Real} = nothing,
     cycles::Union{Nothing,Real} = nothing,
     pad::Union{Nothing,Symbol} = nothing,
@@ -129,21 +130,13 @@ function tf_stft(
 
     # Handle time_steps parameter - determine which time points to extract from results
     # After padding, processed data has extended time range - validate against processed data
-    if isnothing(time_steps)
-        time_indices, times_out = find_times(times_processed, times_original)
-    else
-        start_time, stop_time, step_time = time_steps
-        # Check if requested range extends beyond processed data range and warn
-        time_min_processed = minimum(times_processed)
-        time_max_processed = maximum(times_processed)
-        if start_time < time_min_processed || stop_time > time_max_processed
-            @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
-        end
-        time_steps_range = start_time:step_time:stop_time
-        time_indices, times_out = find_times(times_processed, time_steps_range)
-        if isempty(time_indices)
-            error("No valid time points found in requested range ($start_time to $stop_time seconds)")
-        end
+    # Create time points with specified step size within the selected time range
+    time_min = minimum(times_original)
+    time_max = maximum(times_original)
+    time_steps_range = time_min:time_steps:time_max
+    time_indices, times_out = find_times(times_processed, time_steps_range)
+    if isempty(time_indices)
+        error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
     end
 
     # Get number of trials/epochs
