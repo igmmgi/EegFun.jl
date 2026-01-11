@@ -1,11 +1,11 @@
 """
     tf_multitaper(dat::EpochData; 
-                  lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
-                  log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
+                  frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
                   cycles::Real,
                   frequency_smoothing::Union{Nothing,Real}=nothing,
-                  time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
                   channel_selection::Function=channels(),
+                  sample_selection::Function=samples(),
+                  time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
                   pad::Union{Nothing,Symbol}=nothing,
                   return_trials::Bool=false)
 
@@ -17,11 +17,11 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `dat::EpochData`: Epoched EEG data
 
 # Keyword Arguments
-- `lin_freqs::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Linear frequency spacing as (start, stop, step).
-  - Example: `lin_freqs=(2, 80, 2)` creates frequencies [2, 4, 6, ..., 80] Hz
-- `log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing`: Logarithmic frequency spacing as (start, stop, number).
-  - Example: `log_freqs=(2, 80, 30)` creates 30 log-spaced frequencies from 2 to 80 Hz
-- **Exactly one of `lin_freqs` or `log_freqs` must be specified.**
+- `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
+  - Can be any range or vector of frequencies in Hz
+  - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
+  - For logarithmic spacing: `frequencies=logrange(1, 40, length=30)`
+  - Default: `range(1, 40, length=40)` (40 linearly-spaced frequencies from 1 to 40 Hz)
 - `cycles::Real`: Number of cycles per frequency. Window length = cycles / frequency (in seconds).
   - Example: `cycles=5` uses 5 cycles for all frequencies (FieldTrip: `cfg.t_ftimwin = 5./cfg.foi`)
   - Lower frequencies will have longer windows, higher frequencies will have shorter windows
@@ -31,12 +31,15 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
   - Example: `frequency_smoothing=0.4` matches FieldTrip's default
   - Controls time-bandwidth product: `NW = tapsmofrq * window_length / 2`
   - Number of tapers used: `K = 2*NW - 1` (rounded down)
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
+  - Default: all samples
 - `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
   - If `nothing`, uses all time points from the data
   - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
-- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
-  - Example: `channel_selection=channels(:Cz)` for single channel
-  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
   - `nothing`: No padding (default)
   - `:pre`: Mirror data before each epoch
@@ -51,41 +54,52 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
 - `TimeFreqEpochData` (if `return_trials=true`): Time-frequency data with individual trials preserved
 
-# Example
+# Examples
 ```julia
-# Adaptive window with default frequency smoothing (0.4 * frequency)
-tf_data = tf_multitaper(epochs; log_freqs=(2, 80, 30), cycles=5)
+# Default: linear frequencies 1-40 Hz, 40 points
+tf_data = tf_multitaper(epochs; cycles=5)
+
+# Log-spaced frequencies with default frequency smoothing (0.4 * frequency)
+tf_data = tf_multitaper(epochs; frequencies=logrange(2, 80, length=30), cycles=5)
 
 # Custom frequency smoothing
 # FieldTrip equivalent: cfg.t_ftimwin = 5./cfg.foi, cfg.tapsmofrq = 0.4 * cfg.foi
-tf_data = tf_multitaper(epochs; lin_freqs=(1, 30, 2), cycles=5, frequency_smoothing=0.4)
+tf_data = tf_multitaper(epochs; frequencies=1:2:30, cycles=5, frequency_smoothing=0.4)
 ```
 """
 function tf_multitaper(
     dat::EpochData;
     channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
     time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
-    log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
     cycles::Real,
     frequency_smoothing::Union{Nothing,Real} = nothing,
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
     filter_edges::Bool = true,
 )
-    # Get selected channels using channel selection predicate
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
-
-    # Validate frequency specification - exactly one must be provided
-    isnothing(lin_freqs) && isnothing(log_freqs) && error("Either `lin_freqs` or `log_freqs` must be specified")
-    !isnothing(lin_freqs) &&
-        !isnothing(log_freqs) &&
-        error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
-
     # Validate padding parameter
     if !isnothing(pad) && pad ∉ [:pre, :post, :both]
         error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
+    end
+
+    # Subset data with channel and sample selection
+    dat = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+    isempty(dat.data) && error("No data remaining after subsetting")
+
+    # Get selected channels (after subsetting)
+    selected_channels = channel_labels(dat)
+
+    # Use frequency input directly (ranges and vectors both work)
+    num_frex = length(frequencies)
+    
+    # Validate frequencies
+    if num_frex == 0
+        error("`frequencies` must contain at least one frequency")
+    end
+    if any(f -> f <= 0, frequencies)
+        error("All frequencies in `frequencies` must be positive")
     end
 
     # Validate cycles parameter (adaptive window only)
@@ -101,6 +115,10 @@ function tf_multitaper(
         error("`frequency_smoothing` must be positive, got $frequency_smoothing")
     end
 
+    # Get original data time range (before padding) - these are the time points we want in output
+    n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
+    times_original = time(dat)
+
     # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
     if !isnothing(pad)
         mirror!(dat, pad)
@@ -109,9 +127,6 @@ function tf_multitaper(
     # Get sample rate and time vector from processed data
     times_processed = time(dat)
     n_samples_processed = n_samples(dat)  # Number of samples per epoch (may be padded)
-
-    # Get original data time range (for when time_steps is nothing - use all original points)
-    times_original = time(dat)
 
     # Handle time_steps parameter - determine which time points to extract from results
     # After padding, processed data has extended time range - validate against processed data
@@ -144,15 +159,8 @@ function tf_multitaper(
     n_trials = n_epochs(dat)
     n_samples_per_epoch = n_samples_original
 
-    # Define frequencies based on user specification
-    if !isnothing(log_freqs) # Logarithmic spacing: (start, stop, number)
-        min_freq, max_freq, num_frex = log_freqs
-        freqs = exp.(range(log(Float64(min_freq)), log(Float64(max_freq)), length = num_frex))
-    else # Linear spacing: (start, stop, step)
-        min_freq, max_freq, step = lin_freqs
-        freqs = range(Float64(min_freq), Float64(max_freq), step = Float64(step))
-    end
-    num_frex = length(freqs)
+    # Use frequencies directly (convert to vector if needed for indexing)
+    freqs = collect(frequencies)
 
     # Adaptive window mode: window length = cycles / frequency (FieldTrip: cfg.t_ftimwin = cycles./cfg.foi)
     cycles_vec = fill(Float64(cycles), num_frex)
