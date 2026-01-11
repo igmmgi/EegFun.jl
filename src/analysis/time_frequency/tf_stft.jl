@@ -4,8 +4,9 @@
             log_freqs::Union{Nothing,Tuple{Real,Real,Int}}=nothing,
             window_length::Union{Nothing,Real}=nothing,
             cycles::Union{Nothing,Real}=nothing,
-            time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             channel_selection::Function=channels(),
+            sample_selection::Function=samples(),
+            time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
             pad::Union{Nothing,Symbol}=nothing,
             return_trials::Bool=false,
             filter_edges::Bool=true)
@@ -29,12 +30,16 @@ Supports both fixed-length windows (consistent time resolution) and adaptive win
 - `cycles::Union{Nothing,Real}=nothing`: Number of cycles per frequency (adaptive window).
   - Example: `cycles=7` uses 7 cycles per frequency (window length = 7/frequency)
   - **Exactly one of `window_length` or `cycles` must be specified.**
-- `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
-  - If `nothing`, uses all time points from the data
-  - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
+  - Default: all samples
+- `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
+  - If `nothing`, uses all time points from the data
+  - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
   - `nothing`: No padding (default). Time points where windows extend beyond data boundaries are excluded with a warning.
   - `:pre`: Mirror data before each epoch
@@ -61,6 +66,7 @@ tf_data = tf_stft(epochs; lin_freqs=(2, 30, 1), channel_selection=channels(:Cz),
 function tf_stft(
     dat::EpochData;
     channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
     time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
     lin_freqs::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
     log_freqs::Union{Nothing,Tuple{Real,Real,Int}} = nothing,
@@ -71,9 +77,17 @@ function tf_stft(
     filter_edges::Bool = true,
 )
 
-    # Get selected channels using channel selection predicate
-    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = false)
-    isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(dat))")
+    # Validate padding parameter
+    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
+        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
+    end
+
+    # Subset data with channel and sample selection
+    dat = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+    isempty(dat.data) && error("No data remaining after subsetting")
+
+    # Get selected channels (after subsetting)
+    selected_channels = channel_labels(dat)
 
     # Validate frequency specification - exactly one must be provided
     if isnothing(lin_freqs) && isnothing(log_freqs) 
@@ -81,11 +95,6 @@ function tf_stft(
     end
     if !isnothing(lin_freqs) && !isnothing(log_freqs) 
         error("Only one of `lin_freqs` or `log_freqs` can be specified, not both")
-    end
-
-    # Validate padding parameter
-    if !isnothing(pad) && pad ∉ [:pre, :post, :both]
-        error("`pad` must be `nothing`, `:pre`, `:post`, or `:both`, got :$pad")
     end
 
     # Validate window_length and cycles - exactly one must be provided
@@ -102,7 +111,8 @@ function tf_stft(
         error("`cycles` must be positive, got $cycles")
     end
 
-    # Get original data time range (for when time_steps is nothing - use all original points)
+    # Get original data time range (before padding) - these are the time points we want in output
+    n_samples_original_unpadded = n_samples(dat)  # Store original unpadded length for edge filtering
     times_original = time(dat)
 
     # Apply padding if requested (mutating dat directly for consistency with tf_morlet)
@@ -264,13 +274,8 @@ function tf_stft(
         end
 
         # Clear/initialize output buffers for this channel
-        if return_trials
-            fill!(eegpower, 0.0)
-            fill!(eegconv, 0.0im)
-        else
-            fill!(eegpower, 0.0)
-            fill!(eegconv, 0.0im)
-        end
+        fill!(eegpower, 0.0)
+        fill!(eegconv, 0.0im)
 
         # FieldTrip frequency-domain convolution approach (works for both fixed and adaptive windows)
         # FFT entire data once, then multiply by wavelet FFTs and IFFT
