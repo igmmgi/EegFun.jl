@@ -1,9 +1,9 @@
 """
     tf_morlet(dat::EpochData; 
-              frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
-              cycles::Union{Real,Tuple{Real,Real}}=(3, 10),
               channel_selection::Function=channels(),
               sample_selection::Function=samples(),
+              frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
+              cycles::Union{Real,Tuple{Real,Real}}=7,
               pad::Union{Nothing,Symbol}=nothing,
               return_trials::Bool=false,
               filter_edges::Bool=true)
@@ -17,16 +17,6 @@ linear and logarithmic frequency spacing, with optional padding to reduce edge a
 - `dat::EpochData`: Epoched EEG data to analyze
 
 # Keyword Arguments
-- `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
-  - Can be any range or vector of frequencies in Hz
-  - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
-  - For logarithmic spacing: `frequencies=exp.(range(log(1), log(40), length=30))`
-  - Default: `range(1, 40, length=40)` (40 linearly-spaced frequencies from 1 to 40 Hz)
-- `cycles::Union{Real,Tuple{Real,Real}}=(3, 10)`: Number of cycles in the wavelet. Controls time-frequency trade-off:
-  - Single number: fixed cycles for all frequencies (e.g., `cycles=5`)
-  - Tuple `(min, max)`: log-spaced cycles from `min` to `max` across frequencies
-  - More cycles = better frequency resolution, worse time resolution
-  - Default: `7` cycles
 - `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
   - Example: `channel_selection=channels(:Cz)` for single channel
   - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
@@ -35,6 +25,16 @@ linear and logarithmic frequency spacing, with optional padding to reduce edge a
   - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
   - Example: `sample_selection=samples()` for all time points (default)
   - Default: all samples
+- `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
+  - Can be any range or vector of frequencies in Hz
+  - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
+  - For logarithmic spacing: `frequencies=logrange(1, 40, length=30)`
+  - Default: `range(1, 40, length=40)` (40 linearly-spaced frequencies from 1 to 40 Hz)
+- `cycles::Union{Real,Tuple{Real,Real}}=7`: Number of cycles in the wavelet. Controls time-frequency trade-off:
+  - Single number: fixed cycles for all frequencies (e.g., `cycles=5`)
+  - Tuple `(min, max)`: log-spaced cycles from `min` to `max` across frequencies
+  - More cycles = better frequency resolution, worse time resolution
+  - Default: `7` cycles
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
   - `nothing`: No padding (default)
   - `:pre`: Mirror data before each epoch

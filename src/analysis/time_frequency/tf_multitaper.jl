@@ -1,13 +1,14 @@
 """
     tf_multitaper(dat::EpochData; 
+                  channel_selection::Function=channels(),
+                  sample_selection::Function=samples(),
                   frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
                   cycles::Real,
                   frequency_smoothing::Union{Nothing,Real}=nothing,
-                  channel_selection::Function=channels(),
-                  sample_selection::Function=samples(),
-                  time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing,
+                  time_steps::Real=0.05,
                   pad::Union{Nothing,Symbol}=nothing,
-                  return_trials::Bool=false)
+                  return_trials::Bool=false,
+                  filter_edges::Bool=true)
 
 Multitaper time-frequency analysis using DPSS (Discrete Prolate Spheroidal Sequences) tapers (Cohen Chapter 16, equivalent to FieldTrip's 'mtmconvol' method).
 
@@ -17,6 +18,13 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
 - `dat::EpochData`: Epoched EEG data
 
 # Keyword Arguments
+- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
+  - Default: all samples
 - `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
   - Can be any range or vector of frequencies in Hz
   - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
@@ -31,15 +39,10 @@ Uses multiple orthogonal tapers (Slepian sequences) to reduce variance in spectr
   - Example: `frequency_smoothing=0.4` matches FieldTrip's default
   - Controls time-bandwidth product: `NW = tapsmofrq * window_length / 2`
   - Number of tapers used: `K = 2*NW - 1` (rounded down)
-  - Example: `channel_selection=channels(:Cz)` for single channel
-  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
-  - Example: `sample_selection=samples()` for all time points (default)
-  - Default: all samples
-- `time_steps::Union{Nothing,Tuple{Real,Real,Real}}=nothing`: Time points of interest as (start, stop, step) in seconds.
-  - If `nothing`, uses all time points from the data
-  - Example: `time_steps=(-0.5, 2.0, 0.01)` creates time points from -0.5 to 2.0 with 0.01s steps
+- `time_steps::Real=0.05`: Step size for extracting time points in seconds.
+  - Creates time points from the selected time range with the specified step size
+  - Default: `0.05` (50 ms)
+  - Example: `time_steps=0.01` creates time points every 0.01 seconds within the selected time window
 - `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
   - `nothing`: No padding (default)
   - `:pre`: Mirror data before each epoch
@@ -72,7 +75,7 @@ function tf_multitaper(
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
-    time_steps::Union{Nothing,Tuple{Real,Real,Real}} = nothing,
+    time_steps::Real = 0.05,
     cycles::Real,
     frequency_smoothing::Union{Nothing,Real} = nothing,
     pad::Union{Nothing,Symbol} = nothing,
@@ -130,26 +133,13 @@ function tf_multitaper(
 
     # Handle time_steps parameter - determine which time points to extract from results
     # After padding, processed data has extended time range - validate against processed data
-    time_min_processed = minimum(times_processed)
-    time_max_processed = maximum(times_processed)
-
-    if isnothing(time_steps)
-        # Use all original time points (all in seconds)
-        # Find indices in processed data that correspond to original time points
-        time_indices, times_out = find_times(times_processed, times_original)
-    else
-        start_time, stop_time, step_time = time_steps
-        
-        # Check if requested range extends beyond processed data range and warn
-        if start_time < time_min_processed || stop_time > time_max_processed
-            @minimal_warning "Requested time range ($start_time to $stop_time seconds) extends beyond processed data range ($time_min_processed to $time_max_processed seconds). Clipping to available range."
-        end
-        
-        time_steps_range = Float64(start_time):Float64(step_time):Float64(stop_time)
-        time_indices, times_out = find_times(times_processed, time_steps_range)
-        if isempty(time_indices)
-            error("No valid time points found in requested range ($start_time to $stop_time seconds)")
-        end
+    # Create time points with specified step size within the selected time range
+    time_min = minimum(times_original)
+    time_max = maximum(times_original)
+    time_steps_range = time_min:time_steps:time_max
+    time_indices, times_out = find_times(times_processed, time_steps_range)
+    if isempty(time_indices)
+        error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
     end
 
     # Use processed data dimensions
