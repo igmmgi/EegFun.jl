@@ -26,16 +26,16 @@ spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=80.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 
 # tf_stft_fixed
-@btime tf_data = eegfun.tf_multitaper(epochs_synthetic, lin_freqs = (1, 40, 0.5), cycles = 5)
+tf_data = eegfun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)
 eegfun.plot_time_frequency(tf_data, ylogscale = false)
 
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 0.5), window_length = 0.5)
-eegfun.plot_time_frequency(tf_data, log_freqs = false)
+tf_data = eegfun.tf_multitaper(epochs_synthetic, frequencies = 1:1:40, cycles = 5)
+eegfun.plot_time_frequency(tf_data, ylogscale = false)
 
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, log_freqs = (1, 40, 30), window_length = 0.5)
+tf_data = eegfun.tf_multitaper(epochs_synthetic, frequencies = logrange(1, 40, length=30), cycles = 5)
 eegfun.plot_time_frequency(tf_data, ylogscale = true)
 
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, log_freqs = (1, 40, 30), window_length = 0.5)
+tf_data = eegfun.tf_multitaper(epochs_synthetic, frequencies = logrange(1, 40, length=30), cycles = 5)
 eegfun.plot_time_frequency(tf_data, ylogscale = true)
 
 #######################################################################
@@ -45,7 +45,7 @@ eegfun.plot_time_frequency(tf_data, ylogscale = true)
 data_cohen = eegfun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
 
 # Figure 13.11 A)
-tf_data = eegfun.tf_multitaper(data_cohen, log_freqs = (2, 80, 30), cycles = 5, time_steps = (-0.5, 1.0, 0.05), filter_edges = false)
+tf_data = eegfun.tf_multitaper(data_cohen, frequencies = logrange(2, 80, length=30), cycles = 5, time_steps = 0.05, filter_edges = true)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -67,10 +67,10 @@ epochs = eegfun.load_csv("/home/ian/Documents/MATLAB/BioPsyLab/Data/TestData/dat
 tf_data = eegfun.tf_multitaper(
     epochs;
     channel_selection = eegfun.channels(:Cz),
-    lin_freqs = (1, 30, 2),           # cfg.foi = 1:2:30
+    frequencies = 1:2:30,           # cfg.foi = 1:2:30
     cycles = 7,                       # cfg.t_ftimwin = 3./cfg.foi
     frequency_smoothing = 0.3,        # cfg.tapsmofrq = 0.1 * cfg.foi
-    time_steps = (-0.5, 1.5, 0.05)    # cfg.toi = -0.5:0.05:1.5
+    time_steps = 0.05    # cfg.toi = -0.5:0.05:1.5
 )
 eegfun.plot_time_frequency(
     tf_data;
