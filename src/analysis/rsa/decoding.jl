@@ -1,20 +1,4 @@
 """
-Multivariate Pattern Analysis (MVPA) and Decoding functions.
-
-This module provides functions for performing multivariate pattern classification
-on EEG/ERP data, including time-point-by-time-point decoding analysis.
-"""
-
-using LinearAlgebra
-using Statistics
-using StatsBase
-using Random
-
-# ==============================================================================
-#   DATA PREPARATION
-# ==============================================================================
-
-"""
     _prepare_decoding_data(epochs::Vector{EpochData}, channels::Vector{Symbol}, time_range::Tuple{Float64, Float64})
 
 Prepare epoch data for decoding analysis.
@@ -125,19 +109,34 @@ end
 # ==============================================================================
 #   MLJ CLASSIFIER WRAPPER
 # ==============================================================================
-
 """
-    _get_default_mlj_model()
+    _get_mlj_model(model_spec)
 
-Get default MLJ model (LinearBinaryClassifier/LDA) for decoding.
+Get MLJ model from specification.
 
-Returns a LinearBinaryClassifier from MLJLinearModels if available,
-otherwise throws an error asking user to load MLJ and specify a model.
+# Arguments
+- `model_spec`: Can be:
+  - `nothing` or `:logistic` - returns LogisticClassifier (default)
+  - `:svm` - returns SVC from LIBSVM automatically
+  - `:lda` - returns BayesianLDA from MultivariateStats automatically
+  - An MLJ model instance - returns as-is
+
+# Returns
+- MLJ model instance
 """
-function _get_default_mlj_model()
-    # MLJLinearModels is loaded at module level, so use it directly
-    # Note: MLJLinearModels doesn't have LinearBinaryClassifier, use LogisticClassifier instead
-    return MLJLinearModels.LogisticClassifier()
+function _get_mlj_model(model_spec)
+    if isnothing(model_spec) || model_spec == :logistic
+        return MLJLinearModels.LogisticClassifier()
+    elseif model_spec == :svm
+        # MLJLIBSVMInterface is already loaded at module level
+        return MLJLIBSVMInterface.SVC(kernel = LIBSVM.Kernel.Linear)
+    elseif model_spec == :lda
+        # MLJMultivariateStatsInterface is already loaded at module level
+        return MLJMultivariateStatsInterface.BayesianLDA()
+    else
+        # Assume it's already a model instance
+        return model_spec
+    end
 end
 
 """
@@ -145,7 +144,7 @@ end
 
 Wrapper function to use MLJ models for classification.
 
-This function requires MLJ.jl to be loaded. Users should run `using MLJ` before calling decode() with an MLJ model.
+This function uses MLJ models. MLJ is loaded internally by eegfun, so users don't need to load it themselves.
 
 # Arguments
 - `model`: MLJ model instance
@@ -181,28 +180,41 @@ function _mlj_classifier(
         mach = MLJ_mod.machine(model, X_train_df, y_train_cat)
         MLJ_mod.fit!(mach, verbosity = 0)
 
-        # Predict
+        # Get predictions - use predict (standard MLJ function)
+        # This returns either deterministic predictions or probabilistic (UnivariateFinite)
         y_pred_cat = MLJ_mod.predict(mach, X_test_df)
+
+        # Validate we got predictions
+        if isempty(y_pred_cat)
+            @minimal_error_throw("MLJ model returned empty predictions")
+        end
 
         # Convert predictions back to integers
         # Handle different prediction types (probabilistic vs deterministic)
-        y_pred = if isa(y_pred_cat[1], MLJ.UnivariateFinite)
+        first_pred = y_pred_cat[1]
+        y_pred = if isa(first_pred, MLJ.UnivariateFinite)
             # For probabilistic predictions, get the mode (most likely class)
-            # mode() returns CategoricalValue, use levelcode to get integer
-            [CategoricalArrays.levelcode(MLJ.mode(pred)) for pred in y_pred_cat]
+            # Use mode() from StatsBase (already loaded) to get the mode
+            [CategoricalArrays.levelcode(mode(pred)) for pred in y_pred_cat]
+        elseif isa(first_pred, CategoricalArrays.CategoricalValue)
+            # For categorical predictions, extract level code
+            [CategoricalArrays.levelcode(pred) for pred in y_pred_cat]
         else
-            # For deterministic predictions, convert directly (handle CategoricalValue)
-            [isa(pred, CategoricalArrays.CategoricalValue) ? CategoricalArrays.levelcode(pred) : Int(pred) for pred in y_pred_cat]
+            # For deterministic predictions (integers or other types)
+            [Int(pred) for pred in y_pred_cat]
         end
 
-        # Map back to original label indices (in case MLJ renumbered them)
-        unique_train = unique(y_train)
-        unique_pred = unique(y_pred)
+        # Map back to original label indices
+        # MLJ may use categorical levels that don't match our original integer labels
+        # We need to map from categorical level codes back to original label indices
+        unique_train = sort(unique(y_train))
+        unique_pred = sort(unique(y_pred))
         
-        # If MLJ used different labels, map them back
-        if length(unique_pred) == length(unique_train) && 
-           !all(p -> p in unique_train, unique_pred)
-            # Create mapping
+        # Create mapping from predicted values to original training labels
+        # This handles cases where MLJ renumbered labels or used different encoding
+        if length(unique_pred) == length(unique_train)
+            # Create a mapping: map predicted indices to training label indices
+            # Assuming MLJ preserves the order of unique labels
             label_map = Dict(zip(unique_pred, unique_train))
             y_pred = [label_map[p] for p in y_pred]
         end
@@ -282,19 +294,18 @@ using cross-validation to estimate classification accuracy at each time point.
 
 This matches erplab's workflow where decoding is performed "within each subject independently".
 
-Requires MLJ.jl to be loaded. All classification is performed using MLJ-compatible models.
+Uses MLJ-compatible models. The default model (LogisticClassifier) is automatically used if no model is specified.
 
 # Arguments
 - `epochs::Vector{EpochData}`: Vector of EpochData from a SINGLE participant, one per condition/class.
   Example: `[epoch_cond1_participant1, epoch_cond2_participant1]` for participant 1
 - `channels::Vector{Symbol}`: Channel names to include in analysis
 - `time_range::Union{Tuple{Float64, Float64}, Nothing}`: Time window for analysis (default: all available)
-- `model`: MLJ model instance. If `nothing` (default), attempts to load and use LinearBinaryClassifier from MLJLinearModels.
-  Examples:
-  - `@load SVMClassifier pkg=LIBSVM` then pass the model (matches erplab's SVM)
-  - `@load LinearBinaryClassifier pkg=MLJLinearModels` for LDA
-  - `@load LogisticClassifier pkg=MLJLinearModels` for logistic regression
-  - Any other MLJ-compatible classifier model
+- `model`: Model specification. Can be:
+  - `nothing` or `:logistic` (default) - uses LogisticClassifier automatically
+  - `:svm` - uses SVC from LIBSVM automatically
+  - `:lda` - uses BayesianLDA from MultivariateStats automatically
+  - An MLJ model instance - uses the provided model directly
 - `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
 - `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
 - `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
@@ -305,29 +316,33 @@ Requires MLJ.jl to be loaded. All classification is performed using MLJ-compatib
 
 # Examples
 ```julia
-using MLJ
-using LIBSVM
-
-# Typical workflow: Decode for each participant separately
-# Participant 1
+# Simple usage - default model (LogisticClassifier) is used automatically
 epochs_p1 = [load_data("p1_cond1_epochs.jld2"), load_data("p1_cond2_epochs.jld2")]
 decoded_p1 = decode(epochs_p1, [:Fz, :Cz, :Pz], time_range=(-0.2, 0.8))
 
-# Participant 2
-epochs_p2 = [load_data("p2_cond1_epochs.jld2"), load_data("p2_cond2_epochs.jld2")]
+# Multiple participants - decode each separately
 decoded_p2 = decode(epochs_p2, [:Fz, :Cz, :Pz], time_range=(-0.2, 0.8))
+decoded_p3 = decode(epochs_p3, [:Fz, :Cz, :Pz], time_range=(-0.2, 0.8))
 
-# ... repeat for all participants ...
+# Grand average across participants
+all_decoded = [decoded_p1, decoded_p2, decoded_p3]
+grand_avg = grand_average(all_decoded)
+plot_decoding(grand_avg)
 
-# Average across participants (grand average)
-all_decoded = [decoded_p1, decoded_p2, decoded_p3, ...]
-grand_avg_decoded = grand_average(all_decoded)
-plot_decoding(grand_avg_decoded)
+# Using SVM - just specify :svm, handled internally!
+decoded_svm = decode(epochs_p1, [:Fz, :Cz, :Pz], model=:svm)
 
-# Using SVM (matches erplab exactly)
-SVMClassifier = @load SVMClassifier pkg=LIBSVM
-svm_model = SVMClassifier(kernel=LIBSVM.Kernel.Linear)  # Linear kernel = erplab default
-decoded = decode(epochs_p1, channels, model=svm_model)
+# Using LDA - just specify :lda, handled internally!
+decoded_lda = decode(epochs_p1, [:Fz, :Cz, :Pz], model=:lda)
+
+# Or use default logistic regression (no specification needed!)
+decoded_logistic = decode(epochs_p1, [:Fz, :Cz, :Pz])  # or model=:logistic
+
+# Or pass any MLJ-compatible model instance directly
+using MLJ
+CustomModel = @load SomeOtherModel pkg=SomePackage
+custom_model = CustomModel(...)
+decoded_custom = decode(epochs_p1, [:Fz, :Cz, :Pz], model=custom_model)
 ```
 """
 function decode(
@@ -380,6 +395,16 @@ function decode(
             end
         end
         n_trials_per_condition = fill(minimum(n_trials_per_condition), n_classes)
+    end
+
+    # Validate that we have enough trials for cross-validation
+    min_trials_after_equalize = minimum(n_trials_per_condition)
+    if min_trials_after_equalize < n_folds
+        @minimal_error_throw(
+            "Not enough trials for $n_folds-fold cross-validation. " *
+            "Minimum trials per condition: $min_trials_after_equalize. " *
+            "Either reduce n_folds or increase number of trials."
+        )
     end
 
     # Preallocate results
@@ -435,18 +460,25 @@ function decode(
                 trial_start = 1
                 for (cond_idx, n_trials) in enumerate(n_trials_per_condition)
                     n_per_fold = n_trials_per_fold[cond_idx]
-                    fold_start = trial_start + (fold - 1) * n_per_fold
-                    fold_end = trial_start + fold * n_per_fold - 1
+                    
+                    # Skip if no trials for this fold (shouldn't happen after validation, but be safe)
+                    if n_per_fold > 0
+                        fold_start = trial_start + (fold - 1) * n_per_fold
+                        fold_end = trial_start + fold * n_per_fold - 1
 
-                    # Test set for this condition
-                    append!(test_indices, fold_start:fold_end)
+                        # Test set for this condition
+                        append!(test_indices, fold_start:fold_end)
 
-                    # Training set: all other trials from this condition
-                    train_cond_indices = vcat(
-                        trial_start:(fold_start - 1),
-                        (fold_end + 1):(trial_start + n_trials - 1),
-                    )
-                    append!(train_indices, train_cond_indices)
+                        # Training set: all other trials from this condition
+                        train_cond_indices = Int[]
+                        if fold_start > trial_start
+                            append!(train_cond_indices, trial_start:(fold_start - 1))
+                        end
+                        if fold_end < (trial_start + n_trials - 1)
+                            append!(train_cond_indices, (fold_end + 1):(trial_start + n_trials - 1))
+                        end
+                        append!(train_indices, train_cond_indices)
+                    end
 
                     trial_start += n_trials
                 end
@@ -457,12 +489,12 @@ function decode(
                 X_test = X_all[test_indices, :]
                 y_test = labels[test_indices]
 
-                # Train classifier using MLJ
-                # If no model provided, try to load default LDA model
-                model_to_use = if isnothing(model)
-                    _get_default_mlj_model()
-                else
-                    model
+                # Get model (handles :logistic, :svm, or model instances)
+                model_to_use = _get_mlj_model(model)
+                
+                # Validate model is not nothing
+                if isnothing(model_to_use)
+                    throw(ErrorException("Model is nothing. _get_mlj_model($model) returned nothing."))
                 end
                 
                 y_pred = _mlj_classifier(model_to_use, X_train, y_train, X_test, rng)
@@ -526,7 +558,13 @@ function decode(
     chance_level = 1.0 / n_classes
 
     # Determine method name for storage
-    model_to_use = isnothing(model) ? _get_default_mlj_model() : model
+    model_to_use = _get_mlj_model(model)
+    
+    # Validate model is not nothing
+    if isnothing(model_to_use)
+        throw(ErrorException("Model is nothing. _get_mlj_model($model) returned nothing."))
+    end
+    
     method_name = try
         model_name = string(typeof(model_to_use).name.name)
         Symbol(lowercase(model_name))

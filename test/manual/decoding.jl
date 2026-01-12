@@ -103,9 +103,9 @@ end
 all_participant_epochs = []
 for p in 1:n_participants
     # Participant p, Condition 1
-    cond1 = create_participant_condition_epochs(p, 1, "Face", n_epochs_per_condition, 2.0)
+    cond1 = create_participant_condition_epochs(p, 1, "Face", n_epochs_per_condition, 0.05)
     # Participant p, Condition 2
-    cond2 = create_participant_condition_epochs(p, 2, "Object", n_epochs_per_condition, 2.0)
+    cond2 = create_participant_condition_epochs(p, 2, "Object", n_epochs_per_condition, 0.05)
     push!(all_participant_epochs, [cond1, cond2])
 end
 
@@ -113,64 +113,176 @@ println("  ✓ Created epoch data for $n_participants participants")
 println("  ✓ Each participant has $(n_epochs_per_condition) epochs per condition")
 println("  ✓ Conditions: Face vs Object")
 
-# ============================================================================
-# TEST 1: Binary Classification with Default LDA
-# ============================================================================
+# ==========================================
+# TEST 1: Binary Classification with Default 
+# ==========================================
 
-println("\n[2/6] Test 1: Binary classification with default LDA model...")
+# model_method = :logistic
+# model_method = :svm
+model_method = :lda
 
-# MLJ is already loaded at eegfun module level
-# Load LogisticClassifier (linear classifier, similar to LDA) for default
-LogisticClassifier = @load LogisticClassifier pkg=MLJLinearModels
-lda_model = LogisticClassifier()
-
-# Decode for Participant 1
+# Decode for Participant 1 - default model is used automatically!
 epochs_p1 = all_participant_epochs[1]
 decoded_p1 = eegfun.decode(
     epochs_p1,
     channels;
-    model = lda_model,  # Use explicit model
+    model = model_method,
     time_range = (-0.2, 0.8),
     n_iterations = 10,  # Reduced for testing
     n_folds = 3,
     equalize_trials = true,
 )
 
-println("  ✓ Participant 1 decoding complete")
-println("    Max accuracy: $(round(maximum(decoded_p1.average_score), digits=3))")
-println("    Chance level: $(round(decoded_p1.chance_level, digits=3))")
-
-# Decode for Participant 2
+# Decode for Participant 2 - default model used automatically
 epochs_p2 = all_participant_epochs[2]
 decoded_p2 = eegfun.decode(
     epochs_p2,
     channels;
-    model = lda_model,
+    model = model_method,
     time_range = (-0.2, 0.8),
     n_iterations = 10,
     n_folds = 3,
     equalize_trials = true,
 )
 
-println("  ✓ Participant 2 decoding complete")
-
-# Decode for Participant 3
+# Decode for Participant 3 - default model used automatically
 epochs_p3 = all_participant_epochs[3]
 decoded_p3 = eegfun.decode(
     epochs_p3,
     channels;
-    model = lda_model,
+    model = model_method,
     time_range = (-0.2, 0.8),
     n_iterations = 10,
     n_folds = 3,
     equalize_trials = true,
 )
 
-println("  ✓ Participant 3 decoding complete")
-
 # Grand average
-println("\n[3/6] Creating grand average across participants...")
 all_decoded = [decoded_p1, decoded_p2, decoded_p3]
+grand_avg = eegfun.grand_average(all_decoded)
+
+# Plot grand average
+fig1 = eegfun.plot_decoding(grand_avg, title = "Grand Average: Face vs Object ($(model_method))")
+
+
+
+# Get some basic data with initial preprocessing steps (high-pass filter, epoch)
+data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Flank_C_11.bdf")
+layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+eegfun.polar_to_cartesian_xy!(layout_file)
+dat = eegfun.read_bdf(data_file);
+dat = eegfun.create_eeg_dataframe(dat, layout_file);
+eegfun.rereference!(dat, :avg)
+eegfun.filter_data!(dat, "hp", 1)
+eegfun.is_extreme_value!(dat, 500);
+eegfun.mark_epoch_windows!(dat, [1, 2, 3, 4], [-0.5, 3.0]) # simple epoch marking with trigger 1 and 3
+
+# EPOCHS
+epoch_cfg = [
+    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [3]]),
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2], [4]]),
+]
+epochs = eegfun.extract_epochs(dat, epoch_cfg, -0.5, 3)
+# Decode for Participant 1 - default model is used automatically!
+epochs_p1 = epochs[1:2]
+
+decoded_p1 = eegfun.decode(
+    epochs_p1,
+    channels;
+    model = model_method,
+    time_range = (-0.5, 3.0),
+    n_iterations = 100,  # Reduced for testing
+    n_folds = 3,
+    equalize_trials = true,
+)
+fig1 = eegfun.plot_decoding(decoded_p1, title = "Participant 1: Face vs Object ($(model_method))")
+
+
+
+using eegfun
+using Glob  # For finding files (or use readdir with filter)
+
+# Configuration
+data_dir = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded")
+layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv")
+eegfun.polar_to_cartesian_xy!(layout_file)
+
+# Epoch configuration
+epoch_cfg = [
+    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [3]]),
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2], [4]]),
+]
+
+# Decoding parameters
+model_method = :logistic  # or :svm, :lda
+time_range = (-0.5, 3.0)
+n_iterations = 100
+n_folds = 3
+
+# Find all .bdf files in directory
+bdf_files = glob("*.bdf", data_dir)
+# Alternative if you don't have Glob: bdf_files = filter(f -> endswith(f, ".bdf"), readdir(data_dir, join=true))
+
+println("Found $(length(bdf_files)) files to process")
+
+# Store decoded results for each participant
+all_decoded = eegfun.DecodedData[]
+
+# Process each file
+for (file_idx, data_file) in enumerate(bdf_files)
+    participant_id = basename(data_file)
+    println("\n[$(file_idx)/$(length(bdf_files))] Processing: $participant_id")
+    
+    try
+        # Preprocessing (same for all files)
+        dat = eegfun.read_bdf(data_file)
+        dat = eegfun.create_eeg_dataframe(dat, layout_file)
+        eegfun.rereference!(dat, :avg)
+        eegfun.filter_data!(dat, "hp", 1)
+        eegfun.is_extreme_value!(dat, 500)
+        eegfun.mark_epoch_windows!(dat, [1, 2, 3, 4], [-0.5, 3.0])
+        
+        # Extract epochs
+        epochs = eegfun.extract_epochs(dat, epoch_cfg, -0.5, 3)
+        
+        # Check we have both conditions
+        if length(epochs) < 2
+            println("  ⚠ Skipping: Only $(length(epochs)) condition(s) found")
+            continue
+        end
+        
+        # Decode
+        epochs_for_decoding = epochs[1:2]  # Use first two conditions
+        decoded = eegfun.decode(
+            epochs_for_decoding,
+            channels;
+            model = model_method,
+            time_range = time_range,
+            n_iterations = n_iterations,
+            n_folds = n_folds,
+            equalize_trials = true,
+        )
+        
+        push!(all_decoded, decoded)
+        println("  ✓ Decoding complete: Max accuracy = $(round(maximum(decoded.average_score), digits=3))")
+        
+    catch e
+        println("  ✗ Error processing $participant_id: $e")
+        # Continue with next file
+        continue
+    end
+end
+
+# Create grand average
+if isempty(all_decoded)
+    error("No participants successfully decoded!")
+end
+
+# Convert to proper type (in case it's Vector{Any})
+all_decoded = convert(Vector{eegfun.DecodedData}, all_decoded)
+
+println("\n" * "="^70)
+println("Creating grand average across $(length(all_decoded)) participants...")
 grand_avg = eegfun.grand_average(all_decoded)
 
 println("  ✓ Grand average created")
@@ -178,119 +290,8 @@ println("    Max accuracy: $(round(maximum(grand_avg.average_score), digits=3))"
 println("    Time range: $(round(grand_avg.times[1], digits=2)) to $(round(grand_avg.times[end], digits=2)) s")
 
 # Plot grand average
-println("\n[4/6] Plotting grand average decoding results...")
-fig1 = eegfun.plot_decoding(grand_avg, title = "Grand Average: Face vs Object (LDA)")
+fig = eegfun.plot_decoding(
+    grand_avg, 
+    title = "Grand Average: $(epoch_cfg[1].name) vs $(epoch_cfg[2].name) ($(model_method))"
+)
 println("  ✓ Plot created")
-
-
-# ============================================================================
-# TEST 2: Binary Classification with SVM (ERPLAB-like)
-# ============================================================================
-
-println("\n[5/6] Test 2: Binary classification with SVM (ERPLAB-like)...")
-
-try
-    using MLJ
-    using LIBSVM
-
-    # Load SVM classifier
-    SVMClassifier = @load SVMClassifier pkg=LIBSVM
-
-    # Create SVM model with linear kernel (erplab default)
-    svm_model = SVMClassifier(kernel = LIBSVM.Kernel.Linear)
-
-    # Decode for Participant 1 with SVM
-    epochs_p1 = all_participant_epochs[1]
-    decoded_p1_svm = eegfun.decode(
-        epochs_p1,
-        channels;
-        model = svm_model,
-        time_range = (-0.2, 0.8),
-        n_iterations = 10,  # Reduced for testing
-        n_folds = 3,
-        equalize_trials = true,
-    )
-
-    println("  ✓ SVM decoding complete")
-    println("    Max accuracy: $(round(maximum(decoded_p1_svm.average_score), digits=3))")
-    println("    Method: $(decoded_p1_svm.method)")
-
-    # Plot SVM results
-    fig2 = eegfun.plot_decoding(decoded_p1_svm, title = "Participant 1: Face vs Object (SVM)")
-
-catch e
-    if occursin("LIBSVM", string(e))
-        println("  ⚠ LIBSVM.jl not available, skipping SVM test")
-        println("    Install with: using Pkg; Pkg.add(\"LIBSVM\")")
-    else
-        println("  ✗ Error: $e")
-        rethrow(e)
-    end
-end
-
-# ============================================================================
-# TEST 3: Multi-class Classification (3 conditions)
-# ============================================================================
-
-println("\n[6/6] Test 3: Multi-class classification (3 conditions)...")
-
-try
-    using MLJ
-
-    # Create 3 conditions for one participant
-    cond1 = create_participant_condition_epochs(1, 1, "Face", n_epochs_per_condition, 2.0)
-    cond2 = create_participant_condition_epochs(1, 2, "Object", n_epochs_per_condition, 2.0)
-    cond3 = create_participant_condition_epochs(1, 3, "Scene", n_epochs_per_condition, 1.8)
-
-    epochs_3way = [cond1, cond2, cond3]
-
-    # Load model for 3-way classification
-    LogisticClassifier = @load LogisticClassifier pkg=MLJLinearModels
-    lda_model_3way = LogisticClassifier()
-    
-    # Decode with 3 conditions
-    decoded_3way = eegfun.decode(
-        epochs_3way,
-        channels;
-        model = lda_model_3way,
-        time_range = (-0.2, 0.8),
-        n_iterations = 10,
-        n_folds = 3,
-        equalize_trials = true,
-    )
-
-    println("  ✓ 3-way classification complete")
-    println("    Max accuracy: $(round(maximum(decoded_3way.average_score), digits=3))")
-    println("    Chance level: $(round(decoded_3way.chance_level, digits=3)) (1/3)")
-    println("    Conditions: $(join(decoded_3way.condition_names, ", "))")
-
-    # Plot confusion matrix at peak time
-    max_idx = argmax(decoded_3way.average_score)
-    peak_time = decoded_3way.times[max_idx]
-    println("\n    Plotting confusion matrix at peak time ($(round(peak_time, digits=3)) s)...")
-    fig3 = eegfun.plot_confusion_matrix(decoded_3way, time_point = peak_time)
-
-catch e
-    println("  ✗ Error: $e")
-    rethrow(e)
-end
-
-# ============================================================================
-# SUMMARY
-# ============================================================================
-
-println("\n" * "="^70)
-println("DECODING TESTS COMPLETE")
-println("="^70)
-println("\nTests performed:")
-println("  ✓ Binary classification with LDA (default)")
-println("  ✓ Grand averaging across participants")
-println("  ✓ Binary classification with SVM (ERPLAB-like)")
-println("  ✓ Multi-class classification (3 conditions)")
-println("\nAll plots should be displayed above.")
-println("Check that:")
-println("  - Decoding accuracy is above chance level")
-println("  - Accuracy varies over time (time-point-by-time-point)")
-println("  - Grand average shows group-level pattern")
-println("  - Confusion matrices show class-specific performance")
-
