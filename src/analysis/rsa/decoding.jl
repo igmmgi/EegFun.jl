@@ -1,63 +1,32 @@
 """
-    _prepare_decoding_data(epochs::Vector{EpochData}, channels::Vector{Symbol}, time_range::Tuple{Float64, Float64})
+    _prepare_decoding_data(epochs::Vector{EpochData})
 
 Prepare epoch data for decoding analysis.
 
-Extracts data from multiple EpochData conditions, selecting specified channels
-and time range. Returns arrays ready for classification.
+Extracts data from multiple EpochData conditions (already subsetted).
+Returns arrays ready for classification.
 
 # Arguments
-- `epochs::Vector{EpochData}`: Vector of EpochData, one per condition
-- `channels::Vector{Symbol}`: Channel names to include
-- `time_range::Tuple{Float64, Float64}`: (start_time, end_time) in seconds
+- `epochs::Vector{EpochData}`: Vector of EpochData, one per condition (already subsetted)
 
 # Returns
 - `data::Vector{Array{Float64, 3}}`: One array per condition [channels × time × trials]
 - `times::Vector{Float64}`: Time points in seconds
+- `selected_channels::Vector{Symbol}`: Selected channel names
 - `n_trials_per_condition::Vector{Int}`: Number of trials per condition
 """
-function _prepare_decoding_data(
-    epochs::Vector{EpochData},
-    channels::Vector{Symbol},
-    time_range::Tuple{Float64, Float64},
-)
+function _prepare_decoding_data(epochs::Vector{EpochData})
+
     if isempty(epochs)
         @minimal_error_throw("Cannot prepare decoding data from empty epochs vector")
     end
 
     # Validate all epochs have same structure
     first_epoch = epochs[1]
-    sample_rate = first_epoch.sample_rate
-    layout = first_epoch.layout
 
-    # Validate channels exist in layout
-    all_channels = layout.data.label  # Get channel labels from layout
-    missing_channels = setdiff(channels, all_channels)
-    if !isempty(missing_channels)
-        @minimal_error_throw("Channels not found in layout: $(join(string.(missing_channels), ", "))")
-    end
-
-    # Get time column name (could be :time or similar)
-    time_col = :time  # Assuming standard time column name
-    if !hasproperty(first_epoch.data[1], time_col)
-        # Try to find time column
-        possible_time_cols = filter(n -> occursin("time", lowercase(string(n))), names(first_epoch.data[1]))
-        if isempty(possible_time_cols)
-            @minimal_error_throw("No time column found in epoch data")
-        end
-        time_col = possible_time_cols[1]
-    end
-
-    # Get time points from first epoch
-    times_all = first_epoch.data[1][!, time_col]
-    start_idx = findfirst(t -> t >= time_range[1], times_all)
-    end_idx = findlast(t -> t <= time_range[2], times_all)
-
-    if isnothing(start_idx) || isnothing(end_idx) || start_idx > end_idx
-        @minimal_error_throw("Invalid time range $(time_range) for data with times $(times_all[1]) to $(times_all[end])")
-    end
-
-    times = times_all[start_idx:end_idx]
+    # Get channels and times from already-subsetted data
+    selected_channels = channel_labels(first_epoch)
+    times = first_epoch.data[1][!, :time]
 
     # Prepare data arrays for each condition
     data_arrays = Vector{Array{Float64, 3}}()
@@ -68,31 +37,21 @@ function _prepare_decoding_data(
         push!(n_trials_per_condition, n_trials)
 
         # Preallocate: [channels × time × trials]
-        condition_data = zeros(Float64, length(channels), length(times), n_trials)
+        condition_data = zeros(Float64, length(selected_channels), length(times), n_trials)
 
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            # Extract data for this trial
-            trial_times = trial_df[!, time_col]
-            trial_start_idx = findfirst(t -> t >= time_range[1], trial_times)
-            trial_end_idx = findlast(t -> t <= time_range[2], trial_times)
-
-            if isnothing(trial_start_idx) || isnothing(trial_end_idx)
-                @minimal_warning "Trial $trial_idx has no data in time range $(time_range), skipping"
-                continue
-            end
-
-            # Extract channel data
-            for (ch_idx, ch_name) in enumerate(channels)
+            # Extract channel data (data is already subsetted)
+            for (ch_idx, ch_name) in enumerate(selected_channels)
                 if hasproperty(trial_df, ch_name)
-                    ch_data = trial_df[trial_start_idx:trial_end_idx, ch_name]
-                    # Handle case where trial time range might be slightly different
+                    ch_data = trial_df[!, ch_name]
+                    # All trials should have same length after subsetting, but handle edge cases
                     if length(ch_data) == length(times)
                         condition_data[ch_idx, :, trial_idx] = ch_data
                     elseif length(ch_data) > length(times)
-                        # Interpolate or truncate
+                        # Truncate to match expected length
                         condition_data[ch_idx, :, trial_idx] = ch_data[1:length(times)]
                     else
-                        # Pad with last value or NaN
+                        # Pad with last value
                         condition_data[ch_idx, 1:length(ch_data), trial_idx] = ch_data
                         condition_data[ch_idx, (length(ch_data)+1):end, trial_idx] .= ch_data[end]
                     end
@@ -103,44 +62,15 @@ function _prepare_decoding_data(
         push!(data_arrays, condition_data)
     end
 
-    return data_arrays, times, n_trials_per_condition
+    return data_arrays, times, selected_channels, n_trials_per_condition
 end
 
 # ==============================================================================
 #   MLJ CLASSIFIER WRAPPER
 # ==============================================================================
-"""
-    _get_mlj_model(model_spec)
-
-Get MLJ model from specification.
-
-# Arguments
-- `model_spec`: Can be:
-  - `nothing` or `:logistic` - returns LogisticClassifier (default)
-  - `:svm` - returns SVC from LIBSVM automatically
-  - `:lda` - returns BayesianLDA from MultivariateStats automatically
-  - An MLJ model instance - returns as-is
-
-# Returns
-- MLJ model instance
-"""
-function _get_mlj_model(model_spec)
-    if isnothing(model_spec) || model_spec == :logistic
-        return MLJLinearModels.LogisticClassifier()
-    elseif model_spec == :svm
-        # MLJLIBSVMInterface is already loaded at module level
-        return MLJLIBSVMInterface.SVC(kernel = LIBSVM.Kernel.Linear)
-    elseif model_spec == :lda
-        # MLJMultivariateStatsInterface is already loaded at module level
-        return MLJMultivariateStatsInterface.BayesianLDA()
-    else
-        # Assume it's already a model instance
-        return model_spec
-    end
-end
 
 """
-    _mlj_classifier(model, X_train::Matrix{Float64}, y_train::Vector{Int}, X_test::Matrix{Float64}, rng::AbstractRNG)
+    _mlj_classifier(model, X_train::Matrix{Float64}, y_train::Vector{Int}, X_test::Matrix{Float64})
 
 Wrapper function to use MLJ models for classification.
 
@@ -151,7 +81,6 @@ This function uses MLJ models. MLJ is loaded internally by eegfun, so users don'
 - `X_train::Matrix{Float64}`: Training data [n_samples × n_features]
 - `y_train::Vector{Int}`: Training labels
 - `X_test::Matrix{Float64}`: Test data [n_samples × n_features]
-- `rng::AbstractRNG`: Random number generator
 
 # Returns
 - `predictions::Vector{Int}`: Predicted class labels
@@ -161,7 +90,6 @@ function _mlj_classifier(
     X_train::Matrix{Float64},
     y_train::Vector{Int},
     X_test::Matrix{Float64},
-    rng::AbstractRNG,
 )
     # MLJ is loaded at module level, so we can use it directly
     try
@@ -299,13 +227,19 @@ Uses MLJ-compatible models. The default model (LogisticClassifier) is automatica
 # Arguments
 - `epochs::Vector{EpochData}`: Vector of EpochData from a SINGLE participant, one per condition/class.
   Example: `[epoch_cond1_participant1, epoch_cond2_participant1]` for participant 1
-- `channels::Vector{Symbol}`: Channel names to include in analysis
-- `time_range::Union{Tuple{Float64, Float64}, Nothing}`: Time window for analysis (default: all available)
+
+# Keyword Arguments
+- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
+  - Example: `channel_selection=channels([:Fz, :Cz, :Pz])` for specific channels
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Default: all channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
 - `model`: Model specification. Can be:
-  - `nothing` or `:logistic` (default) - uses LogisticClassifier automatically
+  - `:logistic` (default) - uses LogisticClassifier automatically
   - `:svm` - uses SVC from LIBSVM automatically
   - `:lda` - uses BayesianLDA from MultivariateStats automatically
-  - An MLJ model instance - uses the provided model directly
 - `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
 - `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
 - `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
@@ -316,13 +250,25 @@ Uses MLJ-compatible models. The default model (LogisticClassifier) is automatica
 
 # Examples
 ```julia
-# Simple usage - default model (LogisticClassifier) is used automatically
+# Simple usage - default model (LogisticClassifier) and all channels/time points
 epochs_p1 = [load_data("p1_cond1_epochs.jld2"), load_data("p1_cond2_epochs.jld2")]
-decoded_p1 = decode(epochs_p1, [:Fz, :Cz, :Pz], time_range=(-0.2, 0.8))
+decoded_p1 = decode(epochs_p1)
+
+# Select specific channels and time window
+decoded_p1 = decode(epochs_p1, 
+    channel_selection=channels([:Fz, :Cz, :Pz]),
+    sample_selection=samples((-0.2, 0.8))
+)
 
 # Multiple participants - decode each separately
-decoded_p2 = decode(epochs_p2, [:Fz, :Cz, :Pz], time_range=(-0.2, 0.8))
-decoded_p3 = decode(epochs_p3, [:Fz, :Cz, :Pz], time_range=(-0.2, 0.8))
+decoded_p2 = decode(epochs_p2, 
+    channel_selection=channels([:Fz, :Cz, :Pz]),
+    sample_selection=samples((-0.2, 0.8))
+)
+decoded_p3 = decode(epochs_p3,
+    channel_selection=channels([:Fz, :Cz, :Pz]),
+    sample_selection=samples((-0.2, 0.8))
+)
 
 # Grand average across participants
 all_decoded = [decoded_p1, decoded_p2, decoded_p3]
@@ -330,57 +276,53 @@ grand_avg = grand_average(all_decoded)
 plot_decoding(grand_avg)
 
 # Using SVM - just specify :svm, handled internally!
-decoded_svm = decode(epochs_p1, [:Fz, :Cz, :Pz], model=:svm)
+decoded_svm = decode(epochs_p1, 
+    channel_selection=channels([:Fz, :Cz, :Pz]),
+    model=:svm
+)
 
 # Using LDA - just specify :lda, handled internally!
-decoded_lda = decode(epochs_p1, [:Fz, :Cz, :Pz], model=:lda)
+decoded_lda = decode(epochs_p1,
+    channel_selection=channels([:Fz, :Cz, :Pz]),
+    model=:lda
+)
 
-# Or use default logistic regression (no specification needed!)
-decoded_logistic = decode(epochs_p1, [:Fz, :Cz, :Pz])  # or model=:logistic
-
-# Or pass any MLJ-compatible model instance directly
-using MLJ
-CustomModel = @load SomeOtherModel pkg=SomePackage
-custom_model = CustomModel(...)
-decoded_custom = decode(epochs_p1, [:Fz, :Cz, :Pz], model=custom_model)
+# Single channel decoding
+decoded_single = decode(epochs_p1, channel_selection=channels(:Cz))
 ```
 """
 function decode(
-    epochs::Vector{EpochData},
-    channels::Vector{Symbol};
-    time_range::Union{Tuple{Float64, Float64}, Nothing} = nothing,
-    model = nothing,
+    epochs::Vector{EpochData};
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    model = :logistic,
     n_iterations::Int = 100,
     n_folds::Int = 3,
     equalize_trials::Bool = true,
     rng::AbstractRNG = Random.GLOBAL_RNG,
 )
-    if isempty(epochs)
-        @minimal_error_throw("Cannot decode with empty epochs vector")
+
+    # input validations
+    isempty(epochs) && @minimal_error_throw("Cannot decode with empty epochs vector")
+    length(epochs) < 2 && @minimal_error_throw("Need at least 2 conditions for decoding, got $(length(epochs))")
+    n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
+
+    if model ∉ (:logistic, :svm, :lda)
+        @minimal_error_throw("Invalid model: $model. Must be :logistic, :svm, or :lda")
     end
 
-    if length(epochs) < 2
-        @minimal_error_throw("Need at least 2 conditions for decoding, got $(length(epochs))")
-    end
+    # Subset epochs by channel and sample selection
+    epochs_subset = subset(
+        epochs;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = false,
+    )
+    isempty(channel_labels(epochs_subset[1])) && @minimal_error_throw("Channel selection produced no channels")
+    isempty(epochs_subset[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
 
-    if n_folds < 2
-        @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
-    end
-
-    # Get time range if not specified
-    if isnothing(time_range)
-        first_epoch = epochs[1]
-        time_col = :time
-        if hasproperty(first_epoch.data[1], time_col)
-            times_all = first_epoch.data[1][!, time_col]
-            time_range = (times_all[1], times_all[end])
-        else
-            @minimal_error_throw("Cannot determine time range automatically, please specify time_range")
-        end
-    end
-
-    # Prepare data
-    data_arrays, times, n_trials_per_condition = _prepare_decoding_data(epochs, channels, time_range)
+    # Prepare data from subsetted epochs
+    data_arrays, times, selected_channels, n_trials_per_condition = _prepare_decoding_data(epochs_subset)
     n_classes = length(epochs)
     n_timepoints = length(times)
 
@@ -416,15 +358,24 @@ function decode(
     all_predictions = Array{Float64}(undef, n_iterations, n_folds, n_timepoints, max_test_size)
     all_targets = similar(all_predictions)
 
-    # Get metadata from first epoch
-    first_epoch = epochs[1]
-    condition_names = [ep.condition_name for ep in epochs]
+    # Get metadata from first epoch (use subsetted epochs)
+    first_epoch = epochs_subset[1]
+    condition_names = [ep.condition_name for ep in epochs_subset]
+
+    # Get model once (same for all iterations/timepoints/folds)
+    if model == :logistic
+        model_to_use = MLJLinearModels.LogisticClassifier()
+    elseif model == :svm
+        model_to_use = MLJLIBSVMInterface.SVC(kernel = LIBSVM.Kernel.Linear)
+    elseif model == :lda
+        model_to_use = MLJMultivariateStatsInterface.BayesianLDA()
+    end
 
     # Main decoding loop
     for iter in 1:n_iterations
         # Shuffle trials within each condition
         shuffled_data = []
-        for (cond_idx, data_array) in enumerate(data_arrays)
+        for data_array in data_arrays
             n_trials = size(data_array, 3)
             trial_order = shuffle(rng, 1:n_trials)
             push!(shuffled_data, data_array[:, :, trial_order])
@@ -489,15 +440,8 @@ function decode(
                 X_test = X_all[test_indices, :]
                 y_test = labels[test_indices]
 
-                # Get model (handles :logistic, :svm, or model instances)
-                model_to_use = _get_mlj_model(model)
-                
-                # Validate model is not nothing
-                if isnothing(model_to_use)
-                    throw(ErrorException("Model is nothing. _get_mlj_model($model) returned nothing."))
-                end
-                
-                y_pred = _mlj_classifier(model_to_use, X_train, y_train, X_test, rng)
+                # Classify using the model (already obtained before the loop)
+                y_pred = _mlj_classifier(model_to_use, X_train, y_train, X_test)
 
                 # Compute accuracy
                 accuracy = _compute_accuracy(y_test, y_pred)
@@ -554,35 +498,17 @@ function decode(
         end
     end
 
-    # Create DecodedData object
-    chance_level = 1.0 / n_classes
-
-    # Determine method name for storage
-    model_to_use = _get_mlj_model(model)
-    
-    # Validate model is not nothing
-    if isnothing(model_to_use)
-        throw(ErrorException("Model is nothing. _get_mlj_model($model) returned nothing."))
-    end
-    
-    method_name = try
-        model_name = string(typeof(model_to_use).name.name)
-        Symbol(lowercase(model_name))
-    catch
-        :mlj_model
-    end
-
-    decoded = DecodedData(
+    return DecodedData(
         first_epoch.file,
         condition_names,
         times,
         average_score,
-        channels,
+        selected_channels,
         first_epoch.layout,
         first_epoch.sample_rate,
-        method_name;
+        model;  # model is already a Symbol (:logistic, :svm, or :lda)
         stderror = stderror,
-        chance_level = chance_level,
+        chance_level = 1.0 / n_classes,
         n_iterations = n_iterations,
         n_folds = n_folds,
         class_coding = :one_vs_one,  # MLJ handles multi-class internally (one-vs-one for binary)
@@ -591,7 +517,6 @@ function decode(
         analysis_info = first_epoch.analysis_info,
     )
 
-    return decoded
 end
 
 # ==============================================================================
