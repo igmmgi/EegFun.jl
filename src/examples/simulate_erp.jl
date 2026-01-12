@@ -249,7 +249,6 @@ function simulate_erp()
                 samp_freq = samp_freq,
                 sig_length = sig_length,
                 base_length = base_length,
-                plot_fig = plot_fig,
             )
             # Update both signals and erp, then trigger plot update manually
             signals[] = new_signals
