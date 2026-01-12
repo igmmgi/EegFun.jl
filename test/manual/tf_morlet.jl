@@ -23,7 +23,7 @@ times, signal = eegfun.generate_signal(
 epochs_synthetic = eegfun.signal_to_data(times, signal, :Channel1, sample_rate)
 eegfun.plot_epochs(epochs_synthetic, channel_selection = eegfun.channels([:Channel1]))
 
-spectrum = eegfun.freq_spectrum(epochs_synthetic, max_frequencies = 80.0)
+spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq= 80.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 
 # tf_morlet
@@ -78,7 +78,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 A)
-tf_data = eegfun.tf_morlet(data_cohen, frequencies = exp.(range(log(2), log(80), length=30)), cycles = 3) 
+tf_data = eegfun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length=30), cycles = 3) 
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -89,7 +89,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 B)
-tf_data = eegfun.tf_morlet(data_cohen, frequencies = exp.(range(log(2), log(80), length=30)), cycles = 10)
+tf_data = eegfun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length=30), cycles = 10)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -100,7 +100,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 C)
-tf_data = eegfun.tf_morlet(data_cohen, frequencies = exp.(range(log(2), log(80), length=30)), cycles = (3, 10))
+tf_data = eegfun.tf_morlet(data_cohen, frequencies = logrange(2, 80, length=30), cycles = (3, 10))
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -124,8 +124,8 @@ tf_data = eegfun.tf_morlet(
     cycles = 7,
     filter_edges = true,
 )
-@btime tf_data =
-    eegfun.tf_morlet(data, frequencies = 1:1:40, cycles = 7, filter_edges = true, time_steps = (-1, 2, 0.01))
+
+tf_data = eegfun.tf_morlet(data, frequencies = 1:1:40, cycles = 7, filter_edges = false)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.1),
