@@ -40,9 +40,11 @@ using StatsBase
 using TOML
 
 # Machine learning (for decoding/MVPA)
-using MLJ
+using MLJ # 
 using MLJLinearModels
 using LIBSVM
+using MLJLIBSVMInterface
+using MLJMultivariateStatsInterface
 
 # Julia standard library
 # TODO: consider using Threads.@threads for parallel processing?
@@ -52,6 +54,8 @@ using LIBSVM
 include("types/core.jl")
 include("types/pipeline.jl")
 include("types/statistics.jl")
+include("types/decoding.jl")
+include("types/rsa.jl")
 
 # Utility functions
 include("utils/error.jl")
@@ -102,6 +106,10 @@ include("analysis/time_frequency/tf_stft.jl")
 include("analysis/time_frequency/tf_multitaper.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
+# RSA and decoding analysis
+include("analysis/rsa/decoding.jl")
+include("analysis/rsa/rsa.jl")
+
 # analysis pipelines
 include("pipelines/utils/utils.jl")
 include("pipelines/utils/template.jl")
@@ -137,6 +145,8 @@ include("plots/plot_triggers.jl")
 include("plots/plot_time_frequency.jl")
 include("plots/plot_spectrum.jl")
 include("plots/plot_filter.jl")
+include("analysis/rsa/plot_decoding.jl")
+include("analysis/rsa/plot_rsa.jl")
 
 # Plot utilities
 include("plots/utils/help_system.jl")

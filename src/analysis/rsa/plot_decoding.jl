@@ -97,7 +97,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
     show_title = _get_val(:show_title)
 
     # Create figure
-    fig = Figure(title = figure_title, resolution = (800, 600))
+    fig = Figure(title = figure_title, size = (800, 600))
     ax = Axis(
         fig[1, 1],
         xlabel = _get_val(:xlabel),
@@ -242,7 +242,7 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     end
 
     # Create figure
-    fig = Figure(title = figure_title, resolution = (800, 600))
+    fig = Figure(title = figure_title, size = (800, 600))
     ax = Axis(
         fig[1, 1],
         xlabel = _get_val(:xlabel),
@@ -374,7 +374,7 @@ function plot_confusion_matrix(decoded::DecodedData; time_point::Union{Float64, 
     end
 
     # Create figure
-    fig = Figure(resolution = (600, 600))
+    fig = Figure(size = (600, 600))
     ax = Axis(fig[1, 1], title = title_text, xlabel = "Predicted", ylabel = "True")
 
     # Create heatmap
