@@ -26,16 +26,16 @@ spectrum = eegfun.freq_spectrum(epochs_synthetic, max_freq=80.0)
 eegfun.plot_freq_spectrum(spectrum, channel_selection = eegfun.channels([:Channel1]))
 
 # tf_stft_fixed
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 0.5), window_length = 0.5)
+tf_data = eegfun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
 eegfun.plot_time_frequency(tf_data, ylogscale = false)
 
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, lin_freqs = (1, 40, 0.5), window_length = 0.5)
-eegfun.plot_time_frequency(tf_data, log_freqs = false)
+tf_data = eegfun.tf_stft(epochs_synthetic, frequencies = 1:1:40, window_length = 0.5)
+eegfun.plot_time_frequency(tf_data, ylogscale = false)
 
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, log_freqs = (1, 40, 30), window_length = 0.5)
+tf_data = eegfun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length=30), window_length = 0.5)
 eegfun.plot_time_frequency(tf_data, ylogscale = true)
 
-tf_data = eegfun.tf_stft_fixed(epochs_synthetic, log_freqs = (1, 40, 30), window_length = 0.5)
+tf_data = eegfun.tf_stft(epochs_synthetic, frequencies = logrange(1, 40, length=30), window_length = 0.5)
 eegfun.plot_time_frequency(tf_data, ylogscale = true)
 
 #######################################################################
@@ -45,7 +45,7 @@ eegfun.plot_time_frequency(tf_data, ylogscale = true)
 data_cohen = eegfun.load_data("/home/ian/Desktop/tf_test_epochs.jld2")
 
 # Figure 13.11 A)
-tf_data = eegfun.tf_stft_fixed(data_cohen, log_freqs = (2, 80, 30), window_length = 0.5, time_steps = (-0.5, 1.0, 0.005), filter_edges = false)
+tf_data = eegfun.tf_stft(data_cohen, frequencies = logrange(2, 80, length=100), window_length = 0.5, time_steps = 0.001, filter_edges = true)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -56,7 +56,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.11 A)
-tf_data = eegfun.tf_morlet(data_cohen, lin_freqs = (2, 80, 1), cycles = (3, 10), time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_stft(data_cohen, frequencies = 2:1:80, cycles = 7, time_steps = 0.005, filter_edges = false)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -67,7 +67,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 A)
-tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 3, time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_stft(data_cohen, frequencies = logrange(2, 80, length=30), time_steps = 0.005, filter_edges = true)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -78,7 +78,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 B)
-tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = 10, time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_stft(data_cohen, frequencies = logrange(2, 80, length=30), time_steps = 0.005, filter_edges = true)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -89,7 +89,7 @@ eegfun.plot_time_frequency(
 )
 
 # Figure 13.14 C)
-tf_data = eegfun.tf_morlet(data_cohen, log_freqs = (2, 80, 30), cycles = (3, 10), time_steps = (-0.5, 1.0, 0.005))
+tf_data = eegfun.tf_stft(data_cohen, frequencies = logrange(2, 80, length=30), cycles = 5, time_steps = 0.005, filter_edges = true)
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.2),
@@ -105,7 +105,7 @@ eegfun.plot_time_frequency(
 
 data = eegfun.load_csv("/home/ian/Documents/MATLAB/BioPsyLab/Data/TestData/data1/", file = "epoch_data.csv")
 
-tf_data = eegfun.tf_stft(data, channel_selection = eegfun.channels([:Cz]), lin_freqs = (1, 40, 1), window_length = 0.5, time_steps = (-0.5, 1.5, 0.01)) 
+tf_data = eegfun.tf_stft(data, channel_selection = eegfun.channels([:Cz]), frequencies = 1:1:40, window_length = 0.5, time_steps = 0.01) 
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.1),
@@ -115,7 +115,7 @@ eegfun.plot_time_frequency(
     #colormap = :jet,
 )
 
-tf_data = eegfun.tf_stft(data, channel_selection = eegfun.channels([:Cz]), lin_freqs = (2, 30, 1), cycles = 7, time_steps = (-0.5, 1.5, 0.05)) 
+tf_data = eegfun.tf_stft(data, channel_selection = eegfun.channels([:Cz]), frequencies = 2:1:30, cycles = 7, time_steps = 0.05) 
 eegfun.plot_time_frequency(
     tf_data;
     baseline_window = (-0.5, -0.1),
