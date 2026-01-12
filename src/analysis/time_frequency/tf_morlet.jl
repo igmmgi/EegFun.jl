@@ -110,7 +110,7 @@ function tf_morlet(
     if num_frex == 0
         error("`frequencies` must contain at least one frequency")
     end
-    if any(f -> f <= 0, freqs)
+    if any(f -> f <= 0, frequencies)
         error("All frequencies in `frequencies` must be positive")
     end
 
@@ -137,7 +137,7 @@ function tf_morlet(
     # Initialize output structures with only original time points as we unpad!
     times_out = times_all[time_indices_out]
     time_col = repeat(times_out, inner = num_frex)
-    freq_col = repeat(freqs, outer = n_times_out)
+    freq_col = repeat(frequencies, outer = n_times_out)
     if return_trials
         power_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
         phase_df = [DataFrame(time = time_col, freq = freq_col, copycols = false) for _ = 1:n_trials]
@@ -147,7 +147,7 @@ function tf_morlet(
     end
 
     # Pre-compute convolution length for single trial processing
-    max_sigma = maximum(cycles_vec ./ (2 * pi .* freqs))
+    max_sigma = maximum(cycles_vec ./ (2 * pi .* frequencies))
     max_hw = ceil(Int, 6 * max_sigma * dat.sample_rate) ÷ 2
     max_wl = max_hw * 2 + 1
     n_conv_pow2 = nextpow(2, max_wl + n_samples_per_epoch - 1)
@@ -175,7 +175,7 @@ function tf_morlet(
     conv_indices_per_freq = Vector{Vector{Int}}(undef, num_frex)
 
     for fi = 1:num_frex
-        freq_val = freqs[fi]
+        freq_val = frequencies[fi]
         sigma = cycles_vec[fi] / (two_pi * freq_val)
         hw = ceil(Int, 6 * sigma * dat.sample_rate) ÷ 2
         wl = hw * 2 + 1
