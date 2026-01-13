@@ -90,7 +90,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
     times = decoded.times
     accuracy = decoded.average_score
     stderror = decoded.stderror
-    chance_level = decoded.chance_level
+    chance_level = decoded.parameters.chance_level
     show_chance = _get_val(:show_chance)
     show_error = _get_val(:show_error) && !isnothing(stderror)
     title_text = _get_val(:title)
@@ -111,7 +111,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
         ax.title = title_text
     elseif show_title && isempty(title_text)
         # Default title from decoded data
-        method_str = string(decoded.method) |> uppercase
+        method_str = string(decoded.parameters.method) |> uppercase
         ax.title = "$(method_str) Decoding: $(join(decoded.condition_names, " vs "))"
     end
 

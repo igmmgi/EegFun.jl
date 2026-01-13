@@ -14,6 +14,7 @@ Tests both binary and multi-class classification with different models.
 using eegfun
 using DataFrames
 using Random
+using BenchmarkTools
 
 # Set seed for reproducibility
 Random.seed!(42)
@@ -103,9 +104,9 @@ end
 all_participant_epochs = []
 for p in 1:n_participants
     # Participant p, Condition 1
-    cond1 = create_participant_condition_epochs(p, 1, "Face", n_epochs_per_condition, 0.05)
+    cond1 = create_participant_condition_epochs(p, 1, "Face", n_epochs_per_condition, 0.1)
     # Participant p, Condition 2
-    cond2 = create_participant_condition_epochs(p, 2, "Object", n_epochs_per_condition, 0.05)
+    cond2 = create_participant_condition_epochs(p, 2, "Object", n_epochs_per_condition, 0.1)
     push!(all_participant_epochs, [cond1, cond2])
 end
 
@@ -124,10 +125,8 @@ model_method = :lda
 # Decode for Participant 1 - default model is used automatically!
 epochs_p1 = all_participant_epochs[1]
 decoded_p1 = eegfun.decode(
-    epochs_p1,
-    channels;
+    epochs_p1;
     model = model_method,
-    time_range = (-0.2, 0.8),
     n_iterations = 10,  # Reduced for testing
     n_folds = 3,
     equalize_trials = true,
@@ -137,9 +136,7 @@ decoded_p1 = eegfun.decode(
 epochs_p2 = all_participant_epochs[2]
 decoded_p2 = eegfun.decode(
     epochs_p2,
-    channels;
     model = model_method,
-    time_range = (-0.2, 0.8),
     n_iterations = 10,
     n_folds = 3,
     equalize_trials = true,
@@ -149,9 +146,7 @@ decoded_p2 = eegfun.decode(
 epochs_p3 = all_participant_epochs[3]
 decoded_p3 = eegfun.decode(
     epochs_p3,
-    channels;
     model = model_method,
-    time_range = (-0.2, 0.8),
     n_iterations = 10,
     n_folds = 3,
     equalize_trials = true,
@@ -163,8 +158,6 @@ grand_avg = eegfun.grand_average(all_decoded)
 
 # Plot grand average
 fig1 = eegfun.plot_decoding(grand_avg, title = "Grand Average: Face vs Object ($(model_method))")
-
-
 
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Flank_C_11.bdf")
