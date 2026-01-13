@@ -107,9 +107,10 @@ include("analysis/time_frequency/tf_multitaper.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
 # RSA and decoding analysis
-include("analysis/rsa/decoding.jl")
-include("analysis/rsa/decoding_statistics.jl")
+include("analysis/decoding/decoding.jl")
+include("analysis/decoding/decoding_statistics.jl")
 include("analysis/rsa/rsa.jl")
+include("analysis/rsa/rsa_models.jl")
 
 # analysis pipelines
 include("pipelines/utils/utils.jl")
@@ -146,7 +147,7 @@ include("plots/plot_triggers.jl")
 include("plots/plot_time_frequency.jl")
 include("plots/plot_spectrum.jl")
 include("plots/plot_filter.jl")
-include("analysis/rsa/plot_decoding.jl")
+include("analysis/decoding/plot_decoding.jl")
 include("analysis/rsa/plot_rsa.jl")
 
 # Plot utilities

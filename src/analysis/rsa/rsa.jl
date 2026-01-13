@@ -10,59 +10,24 @@ Matrices (RDMs) from EEG data and comparing them to model RDMs.
 # ==============================================================================
 
 """
-    _prepare_rsa_data(epochs::Vector{EpochData}, channels::Vector{Symbol}, time_range::Tuple{Float64, Float64})
+    _prepare_rsa_data(epochs::Vector{EpochData})
 
 Prepare epoch data for RSA analysis.
 
-Extracts data for specified channels and time range from epoch data.
-Returns data arrays, time points, and number of trials per condition.
+Extracts data from multiple EpochData conditions (already subsetted).
+Returns arrays ready for RSA computation.
+
+# Arguments
+- `epochs::Vector{EpochData}`: Vector of EpochData, one per condition (already subsetted)
 
 # Returns
 - `data_arrays::Vector{Array{Float64, 3}}`: Vector of [channels × time × trials] arrays, one per condition
 - `times::Vector{Float64}`: Time points in seconds
 - `n_trials_per_condition::Vector{Int}`: Number of trials per condition
 """
-function _prepare_rsa_data(
-    epochs::Vector{EpochData},
-    channels::Vector{Symbol},
-    time_range::Tuple{Float64, Float64},
-)
-    if isempty(epochs)
-        @minimal_error_throw("Cannot perform RSA with empty epochs vector")
-    end
-
-    # Get metadata from first epoch
-    first_epoch = epochs[1]
-    sample_rate = first_epoch.sample_rate
-    layout = first_epoch.layout
-
-    # Validate channels exist in layout
-    all_channels = layout.data.label
-    missing_channels = setdiff(channels, all_channels)
-    if !isempty(missing_channels)
-        @minimal_error_throw("Channels not found in layout: $(join(string.(missing_channels), ", "))")
-    end
-
-    # Get time column name
-    time_col = :time
-    if !hasproperty(first_epoch.data[1], time_col)
-        possible_time_cols = filter(n -> occursin("time", lowercase(string(n))), names(first_epoch.data[1]))
-        if isempty(possible_time_cols)
-            @minimal_error_throw("No time column found in epoch data")
-        end
-        time_col = possible_time_cols[1]
-    end
-
-    # Get time points from first epoch
-    times_all = first_epoch.data[1][!, time_col]
-    start_idx = findfirst(t -> t >= time_range[1], times_all)
-    end_idx = findlast(t -> t <= time_range[2], times_all)
-
-    if isnothing(start_idx) || isnothing(end_idx) || start_idx > end_idx
-        @minimal_error_throw("Invalid time range $(time_range) for data with times $(times_all[1]) to $(times_all[end])")
-    end
-
-    times = times_all[start_idx:end_idx]
+function _prepare_rsa_data(epochs::Vector{EpochData})
+    channels = channel_labels(epochs)
+    times = time(epochs)
 
     # Prepare data arrays for each condition
     data_arrays = Vector{Array{Float64, 3}}()
@@ -76,30 +41,10 @@ function _prepare_rsa_data(
         condition_data = zeros(Float64, length(channels), length(times), n_trials)
 
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            # Extract data for this trial
-            trial_times = trial_df[!, time_col]
-            trial_start_idx = findfirst(t -> t >= time_range[1], trial_times)
-            trial_end_idx = findlast(t -> t <= time_range[2], trial_times)
-
-            if isnothing(trial_start_idx) || isnothing(trial_end_idx)
-                @minimal_warning "Trial $trial_idx has no data in time range $(time_range), skipping"
-                continue
-            end
-
-            # Extract channel data
+            # Extract channel data (data is already subsetted)
             for (ch_idx, ch_name) in enumerate(channels)
-                if hasproperty(trial_df, ch_name)
-                    ch_data = trial_df[trial_start_idx:trial_end_idx, ch_name]
-                    # Handle case where trial time range might be slightly different
-                    if length(ch_data) == length(times)
-                        condition_data[ch_idx, :, trial_idx] = ch_data
-                    elseif length(ch_data) > length(times)
-                        condition_data[ch_idx, :, trial_idx] = ch_data[1:length(times)]
-                    else
-                        condition_data[ch_idx, 1:length(ch_data), trial_idx] = ch_data
-                        condition_data[ch_idx, (length(ch_data)+1):end, trial_idx] .= ch_data[end]
-                    end
-                end
+                ch_data = trial_df[!, ch_name]
+                condition_data[ch_idx, :, trial_idx] = ch_data
             end
         end
 
@@ -187,9 +132,9 @@ end
 
 """
     rsa(
-        epochs::Vector{EpochData},
-        channels::Vector{Symbol};
-        time_range::Union{Tuple{Float64, Float64}, Nothing} = nothing,
+        epochs::Vector{EpochData};
+        channel_selection::Function = channels(),
+        sample_selection::Function = samples(),
         dissimilarity_measure::Symbol = :correlation,
         average_trials::Bool = true,
     )
@@ -201,8 +146,13 @@ showing how dissimilar neural patterns are between different conditions.
 
 # Arguments
 - `epochs::Vector{EpochData}`: Vector of EpochData, one per condition, from a SINGLE participant
-- `channels::Vector{Symbol}`: Channel names to include in analysis
-- `time_range::Union{Tuple{Float64, Float64}, Nothing}`: Time window for analysis (default: all available)
+- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
+  - Example: `channel_selection=channels([:Fz, :Cz, :Pz])` for specific channels
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Example: `channel_selection=channels()` for all channels (default)
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
 - `dissimilarity_measure::Symbol`: Measure to use (:correlation, :spearman, :euclidean, :mahalanobis)
 - `average_trials::Bool`: Whether to average across trials before computing RDM (default: true)
 
@@ -213,23 +163,26 @@ showing how dissimilar neural patterns are between different conditions.
 ```julia
 # Basic RSA with correlation-based dissimilarity
 epochs = [epoch_condition1, epoch_condition2, epoch_condition3]
-channels = [:Fz, :Cz, :Pz]
-rsa_result = rsa(epochs, channels, time_range=(-0.2, 0.8))
+rsa_result = rsa(epochs, channel_selection=channels([:Fz, :Cz, :Pz]), sample_selection=samples((-0.2, 0.8)))
 
 # Using Euclidean distance
-rsa_result = rsa(epochs, channels, dissimilarity_measure=:euclidean)
+rsa_result = rsa(epochs, dissimilarity_measure=:euclidean)
 
 # Without averaging trials (computes RDM for each trial, then averages RDMs)
-rsa_result = rsa(epochs, channels, average_trials=false)
+rsa_result = rsa(epochs, average_trials=false)
+
+# Use all channels and all time points (default)
+rsa_result = rsa(epochs)
 ```
 """
 function rsa(
-    epochs::Vector{EpochData},
-    channels::Vector{Symbol};
-    time_range::Union{Tuple{Float64, Float64}, Nothing} = nothing,
+    epochs::Vector{EpochData};
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
     dissimilarity_measure::Symbol = :correlation,
     average_trials::Bool = true,
 )
+    # Input validations
     if isempty(epochs)
         @minimal_error_throw("Cannot perform RSA with empty epochs vector")
     end
@@ -238,26 +191,25 @@ function rsa(
         @minimal_error_throw("Need at least 2 conditions for RSA, got $(length(epochs))")
     end
 
-    # Get time range if not specified
-    if isnothing(time_range)
-        first_epoch = epochs[1]
-        time_col = :time
-        if hasproperty(first_epoch.data[1], time_col)
-            times_all = first_epoch.data[1][!, time_col]
-            time_range = (times_all[1], times_all[end])
-        else
-            @minimal_error_throw("Cannot determine time range automatically. Please specify time_range.")
-        end
-    end
+    # Subset epochs by channel and sample selection
+    epochs = subset(
+        epochs;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = false,
+    )
+    isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
+    isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
 
-    # Prepare data
-    data_arrays, times, n_trials_per_condition = _prepare_rsa_data(epochs, channels, time_range)
+    # Prepare data from subsetted epochs
+    data_arrays, times, n_trials_per_condition = _prepare_rsa_data(epochs)
     n_conditions = length(epochs)
     n_timepoints = length(times)
 
     # Get metadata from first epoch
     first_epoch = epochs[1]
     condition_names = [e.condition_name for e in epochs]
+    selected_channels = channel_labels(epochs)
 
     # Preallocate RDM array: [time × condition × condition]
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
@@ -272,7 +224,7 @@ function rsa(
                 timepoint_data = cond_data[:, t, :]  # [channels × trials]
                 # Average across trials: [channels]
                 avg_pattern = vec(mean(timepoint_data, dims=2))
-                push!(condition_patterns, reshape(avg_pattern, length(channels), 1))
+                push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
             end
             rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure)
         else
@@ -286,7 +238,7 @@ function rsa(
                     if trial_idx <= size(cond_data, 3)
                         # Extract [channels] at time t, trial trial_idx
                         pattern = vec(cond_data[:, t, trial_idx])
-                        push!(condition_patterns, reshape(pattern, length(channels), 1))
+                        push!(condition_patterns, reshape(pattern, length(selected_channels), 1))
                     end
                 end
                 if length(condition_patterns) == n_conditions
@@ -303,7 +255,7 @@ function rsa(
                 for cond_data in data_arrays
                     timepoint_data = cond_data[:, t, :]  # [channels × trials]
                     avg_pattern = vec(mean(timepoint_data, dims=2))
-                    push!(condition_patterns, reshape(avg_pattern, length(channels), 1))
+                    push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
                 end
                 rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure)
             end
@@ -317,7 +269,7 @@ function rsa(
         times,
         rdms,
         dissimilarity_measure,
-        channels,
+        selected_channels,
         first_epoch.layout,
         first_epoch.sample_rate,
         analysis_info = first_epoch.analysis_info,
