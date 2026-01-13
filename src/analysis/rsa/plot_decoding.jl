@@ -189,27 +189,25 @@ function plot_decoding(decoded::DecodedData; kwargs...)
         display(fig)
     end
 
-    return fig
+    return fig, ax
 end
 
 """
     plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
 
-Plot multiple decoding results on the same axes.
+Plot multiple decoding results in separate subplots (one per subject).
 
-Useful for comparing decoding across different conditions, participants,
-or analysis parameters.
+Creates a grid of subplots using `best_rect` to determine optimal layout,
+with each subject's decoding results in its own subplot.
 
 # Arguments
-- `decoded_list::Vector{DecodedData}`: Vector of DecodedData objects
-- `kwargs`: Additional keyword arguments
-- `colors::Union{Vector, Symbol}`: Colors for each curve (default: automatic)
-- `labels::Vector{String}`: Labels for each curve (default: from condition_names)
+- `decoded_list::Vector{DecodedData}`: Vector of DecodedData objects, one per subject
+- `kwargs`: Additional keyword arguments (see PLOT_DECODING_KWARGS)
 
 # Examples
 ```julia
-# Compare two decoding analyses
-plot_decoding([decoded1, decoded2], colors=[:red, :blue], labels=["Condition A", "Condition B"])
+# Plot all subjects in separate subplots
+plot_decoding(all_decoded, title = "Individual Subjects")
 ```
 """
 function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
@@ -224,42 +222,25 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     display_plot = _get_val(:display_plot)
     figure_title = _get_val(:figure_title)
-    colors = get(kwargs, :colors, nothing)
-    labels = get(kwargs, :labels, nothing)
-
-    # Auto-generate colors if not provided
-    if isnothing(colors)
-        colors = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray]
-        # Cycle if needed
-        colors = [colors[mod1(i, length(colors))] for i in 1:length(decoded_list)]
-    elseif colors isa Symbol
-        colors = fill(colors, length(decoded_list))
-    end
-
-    # Auto-generate labels if not provided
-    if isnothing(labels)
-        labels = [join(d.condition_names, " vs ") for d in decoded_list]
-    end
-
-    # Create figure
-    fig = Figure(title = figure_title, size = (800, 600))
-    ax = Axis(
-        fig[1, 1],
-        xlabel = _get_val(:xlabel),
-        ylabel = _get_val(:ylabel),
-        xgridvisible = _get_val(:xgrid),
-        ygridvisible = _get_val(:ygrid),
-    )
-
-    # Determine common time range and y limits
+    title_text = _get_val(:title)
+    show_title = _get_val(:show_title)
+    
+    # Determine optimal subplot layout using best_rect
+    n_subjects = length(decoded_list)
+    rows, cols = best_rect(n_subjects)
+    
+    # Create figure with appropriate size for subplots
+    fig = Figure(title = figure_title, size = (400 * cols, 300 * rows))
+    
+    # Determine common time range and y limits across all subjects
     all_times = [d.times for d in decoded_list]
     time_min = minimum([t[1] for t in all_times])
     time_max = maximum([t[end] for t in all_times])
-
+    
     all_accuracies = [d.average_score for d in decoded_list]
     y_min = minimum([minimum(acc) for acc in all_accuracies])
     y_max = maximum([maximum(acc) for acc in all_accuracies])
-
+    
     # Account for error bars
     for d in decoded_list
         if !isnothing(d.stderror)
@@ -267,70 +248,246 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
             y_max = max(y_max, maximum(d.average_score .+ d.stderror))
         end
     end
-
+    
     y_range = y_max - y_min
-    ylims!(ax, (y_min - 0.05 * y_range, y_max + 0.05 * y_range))
-    xlims!(ax, (time_min, time_max))
-
-    # Get chance level (use first decoded's chance level, or average if different)
-    chance_level = decoded_list[1].chance_level
-
-    # Add origin lines
-    if _get_val(:add_xy_origin)
-        vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
-        hlines!(ax, chance_level, color = _get_val(:chance_color), linewidth = _get_val(:chance_linewidth), linestyle = _get_val(:chance_linestyle))
-    end
-
-    # Plot chance level
-    if _get_val(:show_chance)
-        hlines!(
-            ax,
-            chance_level,
-            color = _get_val(:chance_color),
-            linewidth = _get_val(:chance_linewidth),
-            linestyle = _get_val(:chance_linestyle),
-            label = "Chance ($(round(chance_level, digits = 3)))",
-        )
-    end
-
-    # Plot each decoding result
+    y_lims = (y_min - 0.05 * y_range, y_max + 0.05 * y_range)
+    
+    # Get chance level (use first decoded's chance level)
+    chance_level = decoded_list[1].parameters.chance_level
+    
+    # Create subplot for each subject
     for (idx, decoded) in enumerate(decoded_list)
+        # Calculate row and column for this subplot
+        row = fld(idx - 1, cols) + 1
+        col = mod(idx - 1, cols) + 1
+        
+        # Create axis for this subject
+        ax = Axis(
+            fig[row, col],
+            xlabel = (row == rows) ? _get_val(:xlabel) : "",  # Only show xlabel on bottom row
+            ylabel = (col == 1) ? _get_val(:ylabel) : "",    # Only show ylabel on left column
+            xgridvisible = _get_val(:xgrid),
+            ygridvisible = _get_val(:ygrid),
+        )
+        
+        # Set title for this subplot
+        if show_title
+            if !isempty(title_text)
+                ax.title = title_text
+            else
+                # Use subject identifier from file name or index
+                subject_id = isnothing(decoded.file) ? "Subject $idx" : basename(decoded.file)
+                method_str = string(decoded.parameters.method) |> uppercase
+                ax.title = "$subject_id ($method_str)"
+            end
+        end
+        
+        # Set axis limits
+        xlims!(ax, (time_min, time_max))
+        ylims!(ax, y_lims)
+        
+        # Add origin lines
+        if _get_val(:add_xy_origin)
+            vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
+            hlines!(ax, chance_level, color = _get_val(:chance_color), linewidth = _get_val(:chance_linewidth), linestyle = _get_val(:chance_linestyle))
+        end
+        
+        # Plot chance level
+        if _get_val(:show_chance)
+            hlines!(
+                ax,
+                chance_level,
+                color = _get_val(:chance_color),
+                linewidth = _get_val(:chance_linewidth),
+                linestyle = _get_val(:chance_linestyle),
+            )
+        end
+        
+        # Get data for this subject
         times = decoded.times
         accuracy = decoded.average_score
         stderror = decoded.stderror
-
-        # Error shading
+        
+        # Plot error shading
         if _get_val(:show_error) && !isnothing(stderror)
             band!(
                 ax,
                 times,
                 accuracy .- stderror,
                 accuracy .+ stderror,
-                color = (colors[idx], _get_val(:error_alpha)),
+                color = (_get_val(:error_color), _get_val(:error_alpha)),
             )
         end
-
-        # Main curve
+        
+        # Plot main accuracy curve
         lines!(
             ax,
             times,
             accuracy,
-            color = colors[idx],
+            color = _get_val(:color),
             linewidth = _get_val(:linewidth),
             linestyle = _get_val(:linestyle),
-            label = labels[idx],
         )
     end
-
-    # Add legend
-    axislegend(ax, position = :rt)
-
+    
     # Display if requested
     if display_plot
         display(fig)
     end
-
+    
     return fig
+end
+
+"""
+    plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
+
+Plot decoding accuracy over time with significance markers from statistical test results.
+
+# Arguments
+- `decoded::DecodedData`: DecodedData object containing decoding results
+- `stats::DecodingStatisticsResult`: DecodingStatisticsResult from `test_against_chance` or `test_against_chance_cluster`
+- `kwargs`: Additional keyword arguments (see PLOT_DECODING_KWARGS)
+  - `show_significance::Bool`: Show significance markers (default: true)
+  - `sig_color::ColorType`: Color for significance markers (default: :yellow)
+  - `sig_alpha::Float64`: Transparency for significance markers (default: 0.3)
+  - `sig_bar_position::Union{Float64, Symbol}`: Y-position for significance bars - `:bottom` (default), `:top`, or a Float64 value
+
+# Examples
+```julia
+# Test and plot with significance
+stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferroni)
+plot_decoding(grand_avg, stats, show_significance=true)
+```
+"""
+function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
+    # Merge defaults with user kwargs
+    plot_kwargs = merge(PLOT_DECODING_KWARGS, Dict(kwargs))
+    
+    # Extract parameters
+    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
+    show_significance = get(kwargs, :show_significance, true)
+    sig_color = get(kwargs, :sig_color, :yellow)
+    sig_alpha = get(kwargs, :sig_alpha, 0.3)
+    sig_bar_position = get(kwargs, :sig_bar_position, :bottom)
+    
+    # Validate that times match
+    if decoded.times != stats.times
+        @minimal_error_throw("DecodedData and DecodingStatisticsResult must have matching time vectors")
+    end
+    
+    # Create base plot (without displaying yet)
+    display_plot_orig = _get_val(:display_plot)
+    fig, ax = plot_decoding(decoded; kwargs..., display_plot=false, show_significance=false)
+    
+    # Compute y-limits from data for significance bar positioning
+    accuracy = decoded.average_score
+    stderror = decoded.stderror
+    y_min = minimum(accuracy)
+    y_max = maximum(accuracy)
+    if !isnothing(stderror)
+        y_min = min(y_min, minimum(accuracy .- stderror))
+        y_max = max(y_max, maximum(accuracy .+ stderror))
+    end
+    y_range = y_max - y_min
+    y_min -= 0.05 * y_range
+    y_max += 0.05 * y_range
+    y_range = y_max - y_min
+    
+    # Add significance markers if requested
+    if show_significance && any(stats.significant_mask)
+        # Find continuous significant regions
+        sig_regions = _find_continuous_regions(stats.significant_mask, stats.times)
+        
+        # Determine bar position
+        if sig_bar_position == :bottom
+            bar_y = y_min + 0.02 * y_range
+        elseif sig_bar_position == :top
+            bar_y = y_max - 0.02 * y_range
+        elseif isa(sig_bar_position, Number)
+            bar_y = Float64(sig_bar_position)
+        else
+            bar_y = y_min + 0.02 * y_range
+        end
+        
+        bar_height = y_range * 0.02  # 2% of y-range
+        
+        # Plot significance bars for each continuous region
+        for region in sig_regions
+            t_start, t_end = region
+            # Use poly! to create a horizontal bar (rectangle)
+            poly!(
+                ax,
+                Rect(t_start, bar_y, t_end - t_start, bar_height),
+                color = (sig_color, sig_alpha),
+                strokewidth = 0,
+            )
+        end
+        
+        # If clusters are available, add cluster labels
+        if !isnothing(stats.clusters) && !isempty(stats.clusters)
+            for cluster in stats.clusters
+                if cluster.is_significant
+                    # Add text label at cluster center
+                    t_center = (cluster.time_range[1] + cluster.time_range[2]) / 2
+                    text!(
+                        ax,
+                        t_center,
+                        bar_y + bar_height * 1.5,
+                        text = "p=$(round(cluster.p_value, digits=3))",
+                        align = (:center, :bottom),
+                        fontsize = 10,
+                        color = sig_color,
+                    )
+                end
+            end
+        end
+    end
+    
+    # Display if originally requested
+    if display_plot_orig
+        display(fig)
+    end
+    
+    return fig
+end
+
+"""
+    _find_continuous_regions(mask::BitVector, times::Vector{Float64})
+
+Find continuous regions of true values in a boolean mask.
+
+# Returns
+- `regions::Vector{Tuple{Float64, Float64}}`: List of (start, end) time ranges
+"""
+function _find_continuous_regions(mask::BitVector, times::Vector{Float64})
+    regions = Tuple{Float64, Float64}[]
+    
+    if !any(mask)
+        return regions
+    end
+    
+    in_region = false
+    region_start = 0
+    
+    for (idx, is_sig) in enumerate(mask)
+        if is_sig && !in_region
+            # Start new region
+            in_region = true
+            region_start = idx
+        elseif !is_sig && in_region
+            # End current region
+            in_region = false
+            region_end = idx - 1
+            push!(regions, (times[region_start], times[region_end]))
+        end
+    end
+    
+    # Handle region that extends to end
+    if in_region
+        push!(regions, (times[region_start], times[end]))
+    end
+    
+    return regions
 end
 
 """
