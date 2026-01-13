@@ -134,8 +134,8 @@ function tf_stft(
     time_min = minimum(times_original)
     time_max = maximum(times_original)
     time_steps_range = time_min:time_steps:time_max
-    time_indices, times_out = find_times(times_processed, time_steps_range)
-    if isempty(time_indices)
+        time_indices, times_out = find_times(times_processed, time_steps_range)
+        if isempty(time_indices)
         error("No valid time points found with step size $time_steps in range ($time_min to $time_max seconds)")
     end
 
@@ -264,8 +264,8 @@ function tf_stft(
         end
 
         # Clear/initialize output buffers for this channel
-        fill!(eegpower, 0.0)
-        fill!(eegconv, 0.0im)
+            fill!(eegpower, 0.0)
+            fill!(eegconv, 0.0im)
 
         # FieldTrip frequency-domain convolution approach (works for both fixed and adaptive windows)
         # FFT entire data once, then multiply by wavelet FFTs and IFFT

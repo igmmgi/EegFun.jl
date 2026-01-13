@@ -104,9 +104,9 @@ end
 all_participant_epochs = []
 for p in 1:n_participants
     # Participant p, Condition 1
-    cond1 = create_participant_condition_epochs(p, 1, "Face", n_epochs_per_condition, 0.25)
+    cond1 = create_participant_condition_epochs(p, 1, "Face", n_epochs_per_condition, 0.1)
     # Participant p, Condition 2
-    cond2 = create_participant_condition_epochs(p, 2, "Object", n_epochs_per_condition, 0.25)
+    cond2 = create_participant_condition_epochs(p, 2, "Object", n_epochs_per_condition, 0.1)
     push!(all_participant_epochs, [cond1, cond2])
 end
 
@@ -119,15 +119,15 @@ println("  ✓ Conditions: Face vs Object")
 # ==========================================
 
 # model_method = :logistic
-# model_method = :svm
-model_method = :lda
-
+model_method = :svm
+# model_method = :lda
 # Decode for Participant 1 - default model is used automatically!
 epochs_p1 = all_participant_epochs[1]
-decoded_p1 = eegfun.decode(
+
+@btime decoded_p1 = eegfun.decode(
     epochs_p1;
     model = model_method,
-    n_iterations = 10,  # Reduced for testing
+    n_iterations = 100,  # Reduced for testing
     n_folds = 3,
     equalize_trials = true,
 )
@@ -137,28 +137,98 @@ epochs_p2 = all_participant_epochs[2]
 decoded_p2 = eegfun.decode(
     epochs_p2,
     model = model_method,
-    n_iterations = 10,
+    n_iterations = 100,
     n_folds = 3,
     equalize_trials = true,
 )
-
 # Decode for Participant 3 - default model used automatically
 epochs_p3 = all_participant_epochs[3]
 decoded_p3 = eegfun.decode(
     epochs_p3,
     model = model_method,
-    n_iterations = 10,
+    n_iterations = 100,
     n_folds = 3,
     equalize_trials = true,
 )
-
 # Grand average
 all_decoded = [decoded_p1, decoded_p2, decoded_p3]
-grand_avg = eegfun.grand_average(all_decoded)
-
+grand_avg_mlj = eegfun.grand_average(all_decoded)
 # Plot grand average
-fig1 = eegfun.plot_decoding(grand_avg, title = "Grand Average: Face vs Object ($(model_method))")
-fig1 = eegfun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
+fig1 = eegfun.plot_decoding(grand_avg_mlj, title = "Grand Average: Face vs Object ($(model_method))")
+# fig1 = eegfun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
+
+
+
+
+
+decoded_p1 = eegfun.decode_pegasos(
+    epochs_p1;
+    n_iterations = 100,  # Reduced for testing
+    n_folds = 3,
+    equalize_trials = true,
+)
+# Decode for Participant 2 - default model used automatically
+decoded_p2 = eegfun.decode_pegasos(
+    epochs_p2,
+    n_iterations = 100,
+    n_folds = 3,
+    equalize_trials = true,
+)
+# Decode for Participant 3 - default model used automatically
+decoded_p3 = eegfun.decode_pegasos(
+    epochs_p3,
+    n_iterations = 100,
+    n_folds = 3,
+    equalize_trials = true,
+)
+# Grand average
+all_decoded = [decoded_p1, decoded_p2, decoded_p3]
+grand_avg_pegasos = eegfun.grand_average(all_decoded)
+# Plot grand average
+fig2 = eegfun.plot_decoding(grand_avg_pegasos, title = "Grand Average: Face vs Object (Pegasos)")
+# fig1 = eegfun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
+
+
+
+
+@btime decoded_p1 = eegfun.decode_libsvm(
+    epochs_p1;
+    n_iterations = 10,  # Reduced for testing
+    n_folds = 3,
+    equalize_trials = true,
+)
+# Decode for Participant 2 - default model used automatically
+decoded_p2 = eegfun.decode_libsvm(
+    epochs_p2,
+    n_iterations = 100,
+    n_folds = 3,
+    equalize_trials = true,
+)
+# Decode for Participant 3 - default model used automatically
+decoded_p3 = eegfun.decode_libsvm(
+    epochs_p3,
+    n_iterations = 100,
+    n_folds = 3,
+    equalize_trials = true,
+)
+# Grand average
+all_decoded = [decoded_p1, decoded_p2, decoded_p3]
+grand_avg_pegasos = eegfun.grand_average(all_decoded)
+# Plot grand average
+fig2 = eegfun.plot_decoding(grand_avg_pegasos, title = "Grand Average: Face vs Object (Pegasos)")
+# fig1 = eegfun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Quick statistical test on synthetic data
 println("\n[Quick Test] Statistical testing on synthetic data...")

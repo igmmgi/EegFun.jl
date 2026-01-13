@@ -107,6 +107,8 @@ include("analysis/time_frequency/tf_multitaper.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
 # RSA and decoding analysis
+include("analysis/decoding/svm_pegasos.jl")
+include("analysis/decoding/svm_libsvm.jl")
 include("analysis/decoding/decoding.jl")
 include("analysis/decoding/decoding_statistics.jl")
 include("analysis/rsa/rsa.jl")

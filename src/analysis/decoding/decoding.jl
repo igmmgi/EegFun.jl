@@ -527,6 +527,402 @@ function decode(
 end
 
 # ==============================================================================
+#   DECODE WITH PEGASOS SVM
+# ==============================================================================
+
+"""
+    decode_pegasos(
+        epochs::Vector{EpochData};
+        channel_selection::Function = channels(),
+        sample_selection::Function = samples(),
+        n_iterations::Int = 100,
+        n_folds::Int = 3,
+        equalize_trials::Bool = true,
+        C::Float64 = 1.0,
+        max_iter::Int = 20,
+        tolerance::Float64 = 1e-6,
+        rng::AbstractRNG = Random.GLOBAL_RNG,
+    )
+
+Perform multivariate pattern classification (decoding) analysis using Pegasos linear SVM.
+
+This function performs time-point-by-time-point decoding analysis on epoch data from one participant,
+using cross-validation to estimate classification accuracy at each time point.
+
+Uses a pure Julia implementation of linear SVM (Pegasos algorithm) - no MLJ or LIBSVM dependencies.
+
+# Arguments
+- `epochs::Vector{EpochData}`: Vector of EpochData from a SINGLE participant, one per condition/class.
+  Example: `[epoch_cond1_participant1, epoch_cond2_participant1]` for participant 1
+
+# Keyword Arguments
+- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
+  - Example: `channel_selection=channels([:Fz, :Cz, :Pz])` for specific channels
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Default: all channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
+- `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
+- `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
+- `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
+- `C::Float64`: SVM regularization parameter (default: 1.0). Larger values = less regularization.
+- `max_iter::Int`: Maximum iterations for Pegasos training (default: 500). 
+  For high-dimensional EEG data, more iterations may be needed. Too few iterations cause underfitting (low accuracy, low SE).
+- `tolerance::Float64`: Convergence tolerance for Pegasos (default: 1e-6)
+- `rng::AbstractRNG`: Random number generator for reproducibility
+
+# Returns
+- `DecodedData`: Object containing decoding results for this participant
+
+# Examples
+```julia
+# Decode with Pegasos SVM
+decoded = decode_pegasos(epochs; channel_selection=channels(:Cz), C=1.0)
+
+# Compare with MLJ version
+decoded_mlj = decode(epochs; model=:svm)
+```
+"""
+function decode_pegasos(
+    epochs::Vector{EpochData};
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    n_iterations::Int = 100,
+    n_folds::Int = 3,
+    equalize_trials::Bool = true,
+    C::Float64 = 1.0,
+        max_iter::Int = 500,
+    tolerance::Float64 = 1e-6,
+    rng::AbstractRNG = Random.GLOBAL_RNG,
+)
+
+    # Input validations
+    isempty(epochs) && @minimal_error_throw("Cannot decode with empty epochs vector")
+    length(epochs) < 2 && @minimal_error_throw("Need at least 2 conditions for decoding, got $(length(epochs))")
+    n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
+    length(epochs) > 2 && @minimal_error_throw("Pegasos currently supports binary classification only (2 classes), got $(length(epochs))")
+
+    # Subset epochs by channel and sample selection
+    epochs = subset(
+        epochs;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = false,
+    )
+    isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
+    isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
+
+    # Prepare data from subsetted epochs
+    data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
+    n_classes = length(epochs)
+    times = time(epochs)
+    selected_channels = channel_labels(epochs)
+    n_timepoints = length(times)
+
+    # Equalize trials if requested
+    if equalize_trials
+        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, n_classes, rng)
+    end
+
+    # Validate that we have enough trials for cross-validation
+    min_trials_after_equalize = minimum(n_trials_per_condition)
+    if min_trials_after_equalize < n_folds
+        @minimal_error_throw(
+            "Not enough trials for $n_folds-fold cross-validation. " *
+            "Minimum trials per condition: $min_trials_after_equalize. " *
+            "Either reduce n_folds or increase number of trials."
+        )
+    end
+
+    # Preallocate results
+    all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
+    
+    # Determine max test set size for preallocation
+    n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
+    max_test_size = sum(n_trials_per_fold)
+    all_predictions = Array{Float64}(undef, n_iterations, n_folds, n_timepoints, max_test_size)
+    all_targets = similar(all_predictions)
+    condition_names = [ep.condition_name for ep in epochs]
+
+    # Pre-compute all CV splits once (n_folds different splits, reused for all iterations/timepoints)
+    # cv_splits[i] contains (train_indices, test_indices) for fold i
+    cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
+    
+    # Pre-allocate reusable arrays
+    total_trials = sum(n_trials_per_condition)
+    n_channels = size(data_arrays[1], 1)
+    X_all = Matrix{Float64}(undef, total_trials, n_channels)
+    labels = Vector{Int}(undef, total_trials)
+
+    # Main decoding loop
+    for iter in 1:n_iterations
+        shuffled_data = _shuffle_trials(data_arrays, rng)
+
+        # For each time point
+        for t in 1:n_timepoints
+            # Fill pre-allocated arrays
+            _extract_timepoint_data!(X_all, labels, shuffled_data, t, n_classes)
+
+            # Cross-validation: use pre-computed splits for each fold
+            for fold in 1:n_folds
+                train_indices, test_indices = cv_splits[fold]
+
+                # Extract training and test sets (use views to avoid copying)
+                X_train = @view X_all[train_indices, :]
+                y_train = labels[train_indices]
+                X_test = @view X_all[test_indices, :]
+                y_test = labels[test_indices]
+
+                # Classify using Pegasos
+                y_pred = pegasos_classifier(X_train, y_train, X_test; C=C, max_iter=max_iter, tolerance=tolerance, rng=rng)
+
+                # Compute accuracy
+                accuracy = sum(y_test .== y_pred) / length(y_test)
+                all_accuracies[iter, fold, t] = accuracy
+
+                # Store predictions and targets
+                n_test = length(y_test)
+                if n_test <= size(all_predictions, 4)
+                    all_predictions[iter, fold, t, 1:n_test] = y_pred
+                    all_targets[iter, fold, t, 1:n_test] = y_test
+                    if n_test < size(all_predictions, 4)
+                        all_predictions[iter, fold, t, (n_test+1):end] .= 0
+                        all_targets[iter, fold, t, (n_test+1):end] .= 0
+                    end
+                end
+            end
+        end
+    end
+
+    # Average across iterations and folds
+    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))  # Average over iterations and folds
+    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))  # SE across iterations
+
+    # Compute confusion matrices
+    confusion_matrices = _compute_confusion_matrices(
+        all_targets, all_predictions, n_trials_per_fold, n_timepoints, n_classes, n_iterations, n_folds
+    )
+
+    parameters = DecodingParameters(
+        :pegasos,  # method
+        1.0 / n_classes,  # chance_level
+        n_iterations,
+        n_folds,
+        :binary,  # class_coding: Pegasos currently only supports binary
+        n_classes,
+    )
+    
+    return DecodedData(
+        epochs[1].file,
+        condition_names,
+        times,
+        average_score,
+        selected_channels,
+        parameters;
+        stderror = stderror,
+        confusion_matrix = confusion_matrices,
+        raw_predictions = all_predictions,
+    )
+
+end
+
+# ==============================================================================
+#   DECODE WITH DIRECT LIBSVM (NO MLJ)
+# ==============================================================================
+
+"""
+    decode_libsvm(
+        epochs::Vector{EpochData};
+        channel_selection::Function = channels(),
+        sample_selection::Function = samples(),
+        n_iterations::Int = 100,
+        n_folds::Int = 3,
+        equalize_trials::Bool = true,
+        C::Float64 = 1.0,
+        rng::AbstractRNG = Random.GLOBAL_RNG,
+    )
+
+Perform multivariate pattern classification (decoding) analysis using direct LIBSVM (no MLJ).
+
+This function performs time-point-by-time-point decoding analysis on epoch data from one participant,
+using cross-validation to estimate classification accuracy at each time point.
+
+Uses LIBSVM.jl directly (no MLJ wrapper) - reduces dependencies while maintaining performance.
+
+# Arguments
+- `epochs::Vector{EpochData}`: Vector of EpochData from a SINGLE participant, one per condition/class.
+  Example: `[epoch_cond1_participant1, epoch_cond2_participant1]` for participant 1
+
+# Keyword Arguments
+- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
+  - Example: `channel_selection=channels([:Fz, :Cz, :Pz])` for specific channels
+  - Example: `channel_selection=channels(:Cz)` for single channel
+  - Default: all channels
+- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
+  - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
+  - Example: `sample_selection=samples()` for all time points (default)
+- `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
+- `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
+- `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
+- `C::Float64`: SVM regularization parameter (default: 1.0). Larger values = less regularization.
+- `rng::AbstractRNG`: Random number generator for reproducibility
+
+# Returns
+- `DecodedData`: Object containing decoding results for this participant
+
+# Examples
+```julia
+# Decode with direct LIBSVM (no MLJ)
+decoded = decode_libsvm(epochs; channel_selection=channels(:Cz), C=1.0)
+
+# Compare with MLJ version
+decoded_mlj = decode(epochs; model=:svm)
+```
+"""
+function decode_libsvm(
+    epochs::Vector{EpochData};
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    n_iterations::Int = 100,
+    n_folds::Int = 3,
+    equalize_trials::Bool = true,
+    C::Float64 = 1.0,
+    rng::AbstractRNG = Random.GLOBAL_RNG,
+)
+
+    # Input validations
+    isempty(epochs) && @minimal_error_throw("Cannot decode with empty epochs vector")
+    length(epochs) < 2 && @minimal_error_throw("Need at least 2 conditions for decoding, got $(length(epochs))")
+    n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
+
+    # Subset epochs by channel and sample selection
+    epochs = subset(
+        epochs;
+        channel_selection = channel_selection,
+        sample_selection = sample_selection,
+        include_extra = false,
+    )
+    isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
+    isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
+
+    # Prepare data from subsetted epochs
+    data_arrays, n_trials_per_condition = _prepare_decoding_data(epochs)
+    n_classes = length(epochs)
+    times = time(epochs)
+    selected_channels = channel_labels(epochs)
+    n_timepoints = length(times)
+
+    # Equalize trials if requested
+    if equalize_trials
+        data_arrays, n_trials_per_condition = _equalize_trials(data_arrays, n_trials_per_condition, n_classes, rng)
+    end
+
+    # Validate that we have enough trials for cross-validation
+    min_trials_after_equalize = minimum(n_trials_per_condition)
+    if min_trials_after_equalize < n_folds
+        @minimal_error_throw(
+            "Not enough trials for $n_folds-fold cross-validation. " *
+            "Minimum trials per condition: $min_trials_after_equalize. " *
+            "Either reduce n_folds or increase number of trials."
+        )
+    end
+
+    # Preallocate results
+    all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
+    
+    # Determine max test set size for preallocation
+    n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
+    max_test_size = sum(n_trials_per_fold)
+    all_predictions = Array{Float64}(undef, n_iterations, n_folds, n_timepoints, max_test_size)
+    all_targets = similar(all_predictions)
+    condition_names = [ep.condition_name for ep in epochs]
+
+    # Pre-compute all CV splits once (n_folds different splits, reused for all iterations/timepoints)
+    # cv_splits[i] contains (train_indices, test_indices) for fold i
+    cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
+    
+    # Pre-allocate reusable arrays
+    total_trials = sum(n_trials_per_condition)
+    n_channels = size(data_arrays[1], 1)
+    X_all = Matrix{Float64}(undef, total_trials, n_channels)
+    labels = Vector{Int}(undef, total_trials)
+
+    # Main decoding loop
+    for iter in 1:n_iterations
+        shuffled_data = _shuffle_trials(data_arrays, rng)
+
+        # For each time point
+        for t in 1:n_timepoints
+            # Fill pre-allocated arrays
+            _extract_timepoint_data!(X_all, labels, shuffled_data, t, n_classes)
+
+            # Cross-validation: use pre-computed splits for each fold
+            for fold in 1:n_folds
+                train_indices, test_indices = cv_splits[fold]
+
+                # Extract training and test sets (use views to avoid copying)
+                X_train_view = @view X_all[train_indices, :]
+                y_train = labels[train_indices]
+                X_test_view = @view X_all[test_indices, :]
+                y_test = labels[test_indices]
+
+                # Classify using direct LIBSVM (convert views to matrices)
+                X_train = collect(X_train_view)
+                X_test = collect(X_test_view)
+                y_pred = libsvm_classifier(X_train, y_train, X_test; C=C)
+
+                # Compute accuracy
+                accuracy = sum(y_test .== y_pred) / length(y_test)
+                all_accuracies[iter, fold, t] = accuracy
+
+                # Store predictions and targets
+                n_test = length(y_test)
+                if n_test <= size(all_predictions, 4)
+                    all_predictions[iter, fold, t, 1:n_test] = y_pred
+                    all_targets[iter, fold, t, 1:n_test] = y_test
+                    if n_test < size(all_predictions, 4)
+                        all_predictions[iter, fold, t, (n_test+1):end] .= 0
+                        all_targets[iter, fold, t, (n_test+1):end] .= 0
+                    end
+                end
+            end
+        end
+    end
+
+    # Average across iterations and folds
+    average_score = vec(mean(mean(all_accuracies, dims = 2), dims = 1))  # Average over iterations and folds
+    stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))  # SE across iterations
+
+    # Compute confusion matrices
+    confusion_matrices = _compute_confusion_matrices(
+        all_targets, all_predictions, n_trials_per_fold, n_timepoints, n_classes, n_iterations, n_folds
+    )
+
+    parameters = DecodingParameters(
+        :libsvm,  # method
+        1.0 / n_classes,  # chance_level
+        n_iterations,
+        n_folds,
+        n_classes == 2 ? :binary : :one_vs_one,  # class_coding: Binary for 2 classes, one-vs-one for 3+ classes
+        n_classes,
+    )
+    
+    return DecodedData(
+        epochs[1].file,
+        condition_names,
+        times,
+        average_score,
+        selected_channels,
+        parameters;
+        stderror = stderror,
+        confusion_matrix = confusion_matrices,
+        raw_predictions = all_predictions,
+    )
+
+end
+
+# ==============================================================================
 #   GRAND AVERAGE FOR DECODING RESULTS
 # ==============================================================================
 
