@@ -292,14 +292,27 @@ end
         rng::AbstractRNG = Random.GLOBAL_RNG,
     )
 
-Compare RSA results to model RDMs (static or temporal).
+Compare neural RDMs to model RDMs (static or temporal).
 
 Computes correlations between neural RDMs and model RDMs at each time point,
 with optional permutation-based significance testing.
 
-Supports both:
-- **Static models**: `Matrix{Float64}` [condition × condition] - same RDM at all time points
-- **Temporal models**: `Array{Float64, 3}` [time × condition × condition] - RDM at each time point
+# Input Format
+
+**Model RDMs must be in one of these formats:**
+
+1. **Static RDM**: `Matrix{Float64}` [n_conditions × n_conditions]
+   - Single RDM used at all time points
+   - Example: Reaction time RDM, similarity ratings RDM
+
+2. **Temporal RDM**: `Array{Float64, 3}` [n_timepoints × n_conditions × n_conditions]
+   - RDM at each time point
+   - Must have same number of timepoints as `rsa_data.times`
+   - Example: Eye tracking RDM, EDA RDM
+
+**Note**: Convert your raw data to RDMs first using helper functions:
+- Static: `create_rdm_from_reaction_times()`, `create_rdm_from_vectors()`, etc.
+- Temporal: `create_temporal_rdm()` (handles temporal alignment automatically)
 
 # Arguments
 - `rsa_data::RsaData`: RSA results from neural data (temporal)
@@ -316,22 +329,58 @@ Supports both:
 - `RsaData`: Updated RsaData with model correlations and p-values
 
 # Examples
+
+## Static Model (Reaction Times)
+
 ```julia
-# Compare to static models (single timepoint)
-static_rdm = [0.0 0.5 0.8; 0.5 0.0 0.3; 0.8 0.3 0.0]
-rsa_with_model = compare_models(rsa_result, [static_rdm], model_names=["Static Model"])
+# Step 1: Convert your data to RDM
+rts = [0.3, 0.5, 0.4]  # Your reaction time data
+rt_rdm = create_rdm_from_reaction_times(rts)
 
-# Compare to temporal models (multiple timepoints)
-temporal_rdm = zeros(100, 3, 3)  # [time × condition × condition]
-# ... fill temporal_rdm with RDMs at each time point ...
-rsa_with_temporal = compare_models(rsa_result, [temporal_rdm], model_names=["Temporal Model"])
+# Step 2: Compare
+neural_rsa = rsa(epochs)
+rsa_with_model = compare_models(neural_rsa, [rt_rdm], model_names=["RTs"])
+```
 
-# Compare to mixed models (both static and temporal)
-rsa_with_mixed = compare_models(
-    rsa_result, 
-    [static_rdm, temporal_rdm], 
-    model_names=["Static", "Temporal"]
+## Temporal Model (Eye Tracking)
+
+```julia
+# Step 1: Convert your data to temporal RDM (with automatic alignment)
+eye_data = Array{Float64, 3}  # [conditions × features × time] - your format
+eye_times = Vector{Float64}     # Your time vector
+eye_rdms = create_temporal_rdm(eye_data, eye_times; align_to=neural_rsa)
+
+# Step 2: Compare
+neural_rsa = rsa(epochs)
+rsa_with_model = compare_models(neural_rsa, [eye_rdms], model_names=["Eye Tracking"])
+```
+
+## Multiple Models (Mixed Static and Temporal)
+
+```julia
+# Convert all your model data to RDMs
+rt_rdm = create_rdm_from_reaction_times(rts)
+eye_rdms = create_temporal_rdm(eye_data, eye_times; align_to=neural_rsa)
+eda_rdms = create_temporal_rdm(eda_data, eda_times; align_to=neural_rsa)
+
+# Compare all at once
+rsa_with_models = compare_models(
+    neural_rsa,
+    [rt_rdm, eye_rdms, eda_rdms],
+    model_names=["RTs", "Eye Tracking", "EDA"]
 )
+```
+
+## Pre-computed RDMs
+
+If you already have RDMs computed (from other analyses):
+
+```julia
+# Your pre-computed RDM
+my_rdm = Matrix{Float64}  # [conditions × conditions]
+
+# Use directly - no conversion needed
+rsa_with_model = compare_models(neural_rsa, [my_rdm], model_names=["My Model"])
 ```
 """
 function compare_models(
