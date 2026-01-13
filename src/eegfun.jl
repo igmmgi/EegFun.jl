@@ -108,6 +108,7 @@ include("analysis/time_frequency/utils/utils.jl")
 
 # RSA and decoding analysis
 include("analysis/rsa/decoding.jl")
+include("analysis/rsa/decoding_statistics.jl")
 include("analysis/rsa/rsa.jl")
 
 # analysis pipelines
