@@ -4,10 +4,6 @@ Plotting functions for Representational Similarity Analysis (RSA) results.
 This module provides functions for visualizing RDMs, model correlations,
 and other RSA analysis results.
 """
-
-using Makie
-using CairoMakie
-
 # ==============================================================================
 #   DEFAULT KEYWORD ARGUMENTS
 # ==============================================================================

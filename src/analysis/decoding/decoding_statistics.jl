@@ -1,17 +1,4 @@
 """
-Statistical testing for decoding results.
-
-This module provides functions for testing decoding accuracy against chance level
-and performing cluster-based permutation tests for temporal clusters.
-"""
-
-using AnovaFun
-using Distributions
-using ProgressMeter
-using Random
-using Statistics
-
-"""
     TemporalCluster
 
 Stores information about a temporal cluster in decoding results.

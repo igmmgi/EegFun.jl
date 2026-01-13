@@ -4,10 +4,6 @@ Plotting functions for MVPA/decoding results.
 This module provides functions for visualizing decoding accuracy over time,
 confusion matrices, and other decoding analysis results.
 """
-
-using Makie
-using CairoMakie
-
 # ==============================================================================
 #   DEFAULT KEYWORD ARGUMENTS
 # ==============================================================================
