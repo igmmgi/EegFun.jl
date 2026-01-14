@@ -17,27 +17,30 @@ function _prepare_decoding_data(epochs::Vector{EpochData})
 
     channels = channel_labels(epochs)
     times = time(epochs)
+    n_channels = length(channels)
+    n_times = length(times)
 
     # Prepare data arrays for each condition
-    data_arrays = Vector{Array{Float64, 3}}()
-    n_trials_per_condition = Int[]
+    data_arrays = Vector{Array{Float64,3}}(undef, length(epochs))
+    n_trials_per_condition = Vector{Int}(undef, length(epochs))
 
-    for epoch_data in epochs
+    for (cond_idx, epoch_data) in enumerate(epochs)
         n_trials = length(epoch_data.data)
-        push!(n_trials_per_condition, n_trials)
+        n_trials_per_condition[cond_idx] = n_trials
 
         # [channels × time × trials]
-        condition_data = zeros(Float64, length(channels), length(times), n_trials)
+        condition_data = Array{Float64}(undef, n_channels, n_times, n_trials)
 
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            # Extract channel data (data is already subsetted)
-            for (ch_idx, ch_name) in enumerate(channels)
-                ch_data = trial_df[!, ch_name]
-                condition_data[ch_idx, :, trial_idx] = ch_data
+            # Extract channel data efficiently
+            # Use Matrix conversion for bulk operation, but assign directly to avoid transpose
+            trial_matrix = Matrix(trial_df[!, channels])  # [time × channels]
+            @inbounds for ch_idx = 1:n_channels
+                condition_data[ch_idx, :, trial_idx] = @view trial_matrix[:, ch_idx]
             end
         end
 
-        push!(data_arrays, condition_data)
+        data_arrays[cond_idx] = condition_data
     end
 
     return data_arrays, n_trials_per_condition
@@ -65,7 +68,7 @@ This ensures balanced classification by preventing bias toward conditions with m
 - `n_trials_per_condition::Vector{Int}`: Updated trial counts (all equal to minimum)
 """
 function _equalize_trials(
-    data_arrays::Vector{Array{Float64, 3}},
+    data_arrays::Vector{Array{Float64,3}},
     n_trials_per_condition::Vector{Int},
     n_classes::Int,
     rng::AbstractRNG,
@@ -73,9 +76,10 @@ function _equalize_trials(
     min_trials = minimum(n_trials_per_condition)
     for (cond_idx, data_array) in enumerate(data_arrays)
         if size(data_array, 3) > min_trials
-            # Randomly select min_trials
+            # Randomly select min_trials indices (sorted for cache efficiency)
             selected_trials = sort(shuffle(rng, 1:size(data_array, 3))[1:min_trials])
-            data_arrays[cond_idx] = data_arrays[cond_idx][:, :, selected_trials]
+            # Create new array with selected trials
+            data_arrays[cond_idx] = data_array[:, :, selected_trials]
         end
     end
     n_trials_per_condition = fill(min_trials, n_classes)
@@ -96,22 +100,21 @@ Shuffle trials within each condition.
 - `rng::AbstractRNG`: Random number generator for reproducibility
 
 # Returns
-- `shuffled_data::Vector{Array{Float64, 3}}`: Shuffled data arrays (creates new arrays with shuffled trial order)
+- `shuffled_indices::Vector{Vector{Int}}`: Shuffled trial indices per condition (avoids copying data)
 """
-function _shuffle_trials(data_arrays::Vector{Array{Float64, 3}}, rng::AbstractRNG)
-    shuffled_data = Vector{Array{Float64, 3}}(undef, length(data_arrays))
+function _shuffle_trials(data_arrays::Vector{Array{Float64,3}}, rng::AbstractRNG)
+    shuffled_indices = Vector{Vector{Int}}(undef, length(data_arrays))
     for (cond_idx, data_array) in enumerate(data_arrays)
         n_trials = size(data_array, 3)
-        trial_order = shuffle(rng, 1:n_trials)
-        # Use selectdim for more efficient indexing
-        shuffled_data[cond_idx] = data_array[:, :, trial_order]
+        shuffled_indices[cond_idx] = shuffle(rng, 1:n_trials)
     end
-    return shuffled_data
+    return shuffled_indices
 end
 
 """
     _extract_timepoint_data!(X_all::Matrix{Float64}, labels::Vector{Int}, 
-                              shuffled_data::Vector{Array{Float64, 3}}, t::Int)
+                              data_arrays::Vector{Array{Float64, 3}}, 
+                              shuffled_indices::Vector{Vector{Int}}, t::Int)
 
 Extract data at a specific time point into pre-allocated arrays.
 Fills X_all [all_trials × channels] and labels [all_trials] in-place.
@@ -119,7 +122,8 @@ Fills X_all [all_trials × channels] and labels [all_trials] in-place.
 # Arguments
 - `X_all::Matrix{Float64}`: Pre-allocated matrix to fill [all_trials × channels]
 - `labels::Vector{Int}`: Pre-allocated vector to fill with condition labels [all_trials]
-- `shuffled_data::Vector{Array{Float64, 3}}`: Data arrays for each condition [channels × time × trials]
+- `data_arrays::Vector{Array{Float64, 3}}`: Data arrays for each condition [channels × time × trials]
+- `shuffled_indices::Vector{Vector{Int}}`: Shuffled trial indices per condition
 - `t::Int`: Time point index to extract
 
 # Returns
@@ -128,15 +132,18 @@ Fills X_all [all_trials × channels] and labels [all_trials] in-place.
 function _extract_timepoint_data!(
     X_all::Matrix{Float64},
     labels::Vector{Int},
-    shuffled_data::Vector{Array{Float64, 3}},
+    data_arrays::Vector{Array{Float64,3}},
+    shuffled_indices::Vector{Vector{Int}},
     t::Int,
 )
     row = 1
-    for (cond_idx, cond_data) in enumerate(shuffled_data)
-        n_trials = size(cond_data, 3)
-        # Extract and copy directly to X_all
-        for trial_idx in 1:n_trials
-            X_all[row, :] = cond_data[:, t, trial_idx]
+    @inbounds for (cond_idx, cond_data) in enumerate(data_arrays)
+        trial_indices = shuffled_indices[cond_idx]
+        n_trials = length(trial_indices)
+        # Extract and copy directly to X_all using shuffled indices
+        # Use copyto! for more efficient copying
+        for trial_idx in trial_indices
+            copyto!(@view(X_all[row, :]), @view(cond_data[:, t, trial_idx]))
             labels[row] = cond_idx
             row += 1
         end
@@ -156,42 +163,42 @@ Pre-compute all train/test indices for all cross-validation folds.
 - `splits::Vector{Tuple{Vector{Int}, Vector{Int}}}`: Vector of (train_indices, test_indices) tuples, one per fold
 """
 function _precompute_cv_splits(n_trials_per_condition::Vector{Int}, n_folds::Int)
-    splits = Vector{Tuple{Vector{Int}, Vector{Int}}}(undef, n_folds)
+    splits = Vector{Tuple{Vector{Int},Vector{Int}}}(undef, n_folds)
     n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
     total_trials = sum(n_trials_per_condition)
-    
-    for fold in 1:n_folds
+
+    for fold = 1:n_folds
         test_indices = Vector{Int}()
         train_indices = Vector{Int}()
         sizehint!(test_indices, sum(n_trials_per_fold))
         sizehint!(train_indices, total_trials - sum(n_trials_per_fold))
-        
+
         trial_start = 1
         for (cond_idx, n_trials) in enumerate(n_trials_per_condition)
             n_per_fold = n_trials_per_fold[cond_idx]
-            
+
             if n_per_fold > 0
                 fold_start = trial_start + (fold - 1) * n_per_fold
                 fold_end = trial_start + fold * n_per_fold - 1
-                
+
                 # Test set for this condition
                 append!(test_indices, fold_start:fold_end)
-                
+
                 # Training set: all other trials from this condition
                 if fold_start > trial_start
-                    append!(train_indices, trial_start:(fold_start - 1))
+                    append!(train_indices, trial_start:(fold_start-1))
                 end
                 if fold_end < (trial_start + n_trials - 1)
-                    append!(train_indices, (fold_end + 1):(trial_start + n_trials - 1))
+                    append!(train_indices, (fold_end+1):(trial_start+n_trials-1))
                 end
             end
-            
+
             trial_start += n_trials
         end
-        
+
         splits[fold] = (train_indices, test_indices)
     end
-    
+
     return splits
 end
 
@@ -215,8 +222,8 @@ Compute confusion matrices averaged across iterations and folds for each time po
 - `confusion_matrices::Array{Float64, 3}`: Confusion matrices [timepoints × n_classes × n_classes], normalized to proportions
 """
 function _compute_confusion_matrices(
-    all_targets::Array{Float64, 4},
-    all_predictions::Array{Float64, 4},
+    all_targets::Array{Float64,4},
+    all_predictions::Array{Float64,4},
     n_trials_per_fold::Vector{Int},
     n_timepoints::Int,
     n_classes::Int,
@@ -226,20 +233,20 @@ function _compute_confusion_matrices(
     confusion_matrices = zeros(Float64, n_timepoints, n_classes, n_classes)
     n_test = sum(n_trials_per_fold)
     total_valid = n_iterations * n_folds * n_test
-    
-    for t in 1:n_timepoints
+
+    for t = 1:n_timepoints
         # Preallocate arrays for all valid predictions
         all_true_t = Vector{Int}(undef, total_valid)
         all_pred_t = Vector{Int}(undef, total_valid)
         valid_count = 0
-        
-        for iter in 1:n_iterations
-            for fold in 1:n_folds
+
+        for iter = 1:n_iterations
+            for fold = 1:n_folds
                 if n_test <= size(all_targets, 4)
                     true_t = @view all_targets[iter, fold, t, 1:n_test]
                     pred_t = @view all_predictions[iter, fold, t, 1:n_test]
                     # Filter out zeros (sentinel values) and copy valid ones
-                    for i in 1:n_test
+                    for i = 1:n_test
                         if true_t[i] != 0 && pred_t[i] != 0
                             valid_count += 1
                             all_true_t[valid_count] = Int(true_t[i])
@@ -249,23 +256,23 @@ function _compute_confusion_matrices(
                 end
             end
         end
-        
+
         if valid_count > 0
             # Resize to actual valid count
             resize!(all_true_t, valid_count)
             resize!(all_pred_t, valid_count)
-            
+
             confusion_matrices[t, :, :] = _create_confusion_matrix(all_true_t, all_pred_t, n_classes)
             # Normalize to proportions
             row_sums = sum(confusion_matrices[t, :, :], dims = 2)
-            for c in 1:n_classes
+            for c = 1:n_classes
                 if row_sums[c] > 0
                     confusion_matrices[t, c, :] ./= row_sums[c]
                 end
             end
         end
     end
-    
+
     return confusion_matrices
 end
 
@@ -331,44 +338,67 @@ function libsvm_classifier(
     X_test::AbstractMatrix{Float64};
     cost::Float64 = 1.0,
 )::Vector{Int}
-    
+
     n_train = size(X_train, 1)
     n_test = size(X_test, 1)
-    
+
     n_train == 0 && return Int[]
     n_test == 0 && return Int[]
-    
+
     # Get unique classes
-    classes = sort(unique(y_train))
+    classes = unique(y_train)
+    sort!(classes)
     n_classes = length(classes)
-    
+
     if n_classes < 2
         error("Need at least 2 classes, got $(n_classes)")
     end
-    
+
+    # Fast path for binary classification with standard labels [1, 2]
+    # This is the common case and we can skip all mapping overhead
+    if classes == [1, 2]
+        # LIBSVM expects features in columns (each column is a feature, each row is a sample)
+        # X_train is [samples × features], so we need to transpose
+        # Use transpose view instead of materializing to save allocations
+        X_train_t = transpose(X_train)
+        X_test_t = transpose(X_test)
+
+        # Train model - LIBSVM accepts dense matrices directly
+        model = LIBSVM.svmtrain(X_train_t, y_train; svmtype = LIBSVM.SVC, kernel = LIBSVM.Kernel.Linear, cost = cost)
+
+        # Predict and return directly (no remapping needed)
+        y_pred, _ = LIBSVM.svmpredict(model, X_test_t)
+        return y_pred
+    end
+
+    # General path for multi-class or non-standard labels
     # Create class mapping (LIBSVM expects labels starting from 1)
-    class_to_label = Dict(c => i for (i, c) in enumerate(classes))
-    y_train_mapped = [class_to_label[y] for y in y_train]
-    
-    # Convert to SparseMatrixCSC (LIBSVM format)
-    # LIBSVM expects features in columns, samples in rows (transpose)
-    X_train_sparse = SparseArrays.sparse(X_train')
-    X_test_sparse = SparseArrays.sparse(X_test')
-    
-    # Train model using svmtrain (LIBSVM.jl API)
-    # Note: svmtype should be a Type (LIBSVM.SVC), and use 'cost' not 'C'
-    model = LIBSVM.svmtrain(X_train_sparse, y_train_mapped; 
-        svmtype = LIBSVM.SVC,
-        kernel = LIBSVM.Kernel.Linear,
-        cost = cost,
-    )
-    
+    max_class = maximum(classes)
+    class_to_label = zeros(Int, max_class)
+    @inbounds for (i, c) in enumerate(classes)
+        class_to_label[c] = i
+    end
+    y_train_mapped = Vector{Int}(undef, length(y_train))
+    @inbounds for i in eachindex(y_train)
+        y_train_mapped[i] = class_to_label[y_train[i]]
+    end
+
+    # Transpose for LIBSVM (features in columns)
+    X_train_t = transpose(X_train)
+    X_test_t = transpose(X_test)
+
+    # Train model
+    model = LIBSVM.svmtrain(X_train_t, y_train_mapped; svmtype = LIBSVM.SVC, kernel = LIBSVM.Kernel.Linear, cost = cost)
+
     # Predict
-    y_pred_mapped, _ = LIBSVM.svmpredict(model, X_test_sparse)
-    
+    y_pred_mapped, _ = LIBSVM.svmpredict(model, X_test_t)
+
     # Map predictions back to original class labels
-    y_pred = [classes[pred] for pred in y_pred_mapped]
-    
+    y_pred = Vector{Int}(undef, length(y_pred_mapped))
+    @inbounds for i in eachindex(y_pred_mapped)
+        y_pred[i] = classes[y_pred_mapped[i]]
+    end
+
     return y_pred
 end
 
@@ -472,7 +502,7 @@ function decode_libsvm(
 
     # Preallocate results
     all_accuracies = zeros(Float64, n_iterations, n_folds, n_timepoints)
-    
+
     # Determine max test set size for preallocation
     n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
     max_test_size = sum(n_trials_per_fold)
@@ -483,7 +513,7 @@ function decode_libsvm(
     # Pre-compute all CV splits once (n_folds different splits, reused for all iterations/timepoints)
     # cv_splits[i] contains (train_indices, test_indices) for fold i
     cv_splits = _precompute_cv_splits(n_trials_per_condition, n_folds)
-    
+
     # Pre-allocate reusable arrays
     total_trials = sum(n_trials_per_condition)
     n_channels = size(data_arrays[1], 1)
@@ -491,16 +521,16 @@ function decode_libsvm(
     labels = Vector{Int}(undef, total_trials)
 
     # Main decoding loop
-    for iter in 1:n_iterations
-        shuffled_data = _shuffle_trials(data_arrays, rng)
+    for iter = 1:n_iterations
+        shuffled_indices = _shuffle_trials(data_arrays, rng)
 
         # For each time point
-        for t in 1:n_timepoints
+        for t = 1:n_timepoints
             # Fill pre-allocated arrays
-            _extract_timepoint_data!(X_all, labels, shuffled_data, t)
+            _extract_timepoint_data!(X_all, labels, data_arrays, shuffled_indices, t)
 
             # Cross-validation: use pre-computed splits for each fold
-            for fold in 1:n_folds
+            for fold = 1:n_folds
                 train_indices, test_indices = cv_splits[fold]
 
                 # Extract training and test sets (use views to avoid copying)
@@ -509,13 +539,15 @@ function decode_libsvm(
                 X_test_view = @view X_all[test_indices, :]
                 y_test = labels[test_indices]
 
-                # Classify using direct LIBSVM (convert views to matrices)
-                X_train = collect(X_train_view)
-                X_test = collect(X_test_view)
-                y_pred = libsvm_classifier(X_train, y_train, X_test; cost=cost)
+                # Classify using direct LIBSVM (pass views directly - LIBSVM accepts AbstractMatrix)
+                y_pred = libsvm_classifier(X_train_view, y_train, X_test_view; cost = cost)
 
-                # Compute accuracy
-                accuracy = sum(y_test .== y_pred) / length(y_test)
+                # Compute accuracy (more efficient than broadcasting)
+                n_correct = 0
+                @inbounds for i in eachindex(y_test)
+                    n_correct += (y_test[i] == y_pred[i])
+                end
+                accuracy = n_correct / length(y_test)
                 all_accuracies[iter, fold, t] = accuracy
 
                 # Store predictions and targets
@@ -538,7 +570,13 @@ function decode_libsvm(
 
     # Compute confusion matrices
     confusion_matrices = _compute_confusion_matrices(
-        all_targets, all_predictions, n_trials_per_fold, n_timepoints, n_classes, n_iterations, n_folds
+        all_targets,
+        all_predictions,
+        n_trials_per_fold,
+        n_timepoints,
+        n_classes,
+        n_iterations,
+        n_folds,
     )
 
     parameters = DecodingParameters(
@@ -548,7 +586,7 @@ function decode_libsvm(
         n_classes == 2 ? :binary : :one_vs_one,  # class_coding: Binary for 2 classes, one-vs-one for 3+ classes
         n_classes,
     )
-    
+
     return DecodedData(
         epochs[1].file,
         condition_names,
@@ -603,12 +641,18 @@ function grand_average(dat::Vector{DecodedData})
 
     for decoded in dat[2:end]
         decoded.times != first_times && @minimal_error_throw("DecodedData objects have inconsistent time vectors")
-        decoded.condition_names != first_condition_names && @minimal_error_throw("DecodedData objects have inconsistent condition names")
+        decoded.condition_names != first_condition_names &&
+            @minimal_error_throw("DecodedData objects have inconsistent condition names")
         decoded.channels != first_channels && @minimal_error_throw("DecodedData objects have inconsistent channels")
-        decoded.parameters.n_classes != first_params.n_classes && @minimal_error_throw("DecodedData objects have inconsistent number of classes: $(first_params.n_classes) vs $(decoded.parameters.n_classes)")
-        decoded.parameters.n_iterations != first_params.n_iterations && @minimal_warning "DecodedData objects have different n_iterations: $(first_params.n_iterations) vs $(decoded.parameters.n_iterations)"
-        decoded.parameters.n_folds != first_params.n_folds && @minimal_warning "DecodedData objects have different n_folds: $(first_params.n_folds) vs $(decoded.parameters.n_folds)"
-        decoded.parameters.chance_level != first_params.chance_level && @minimal_warning "DecodedData objects have different chance_level: $(first_params.chance_level) vs $(decoded.parameters.chance_level)"
+        decoded.parameters.n_classes != first_params.n_classes && @minimal_error_throw(
+            "DecodedData objects have inconsistent number of classes: $(first_params.n_classes) vs $(decoded.parameters.n_classes)"
+        )
+        decoded.parameters.n_iterations != first_params.n_iterations &&
+            @minimal_warning "DecodedData objects have different n_iterations: $(first_params.n_iterations) vs $(decoded.parameters.n_iterations)"
+        decoded.parameters.n_folds != first_params.n_folds &&
+            @minimal_warning "DecodedData objects have different n_folds: $(first_params.n_folds) vs $(decoded.parameters.n_folds)"
+        decoded.parameters.chance_level != first_params.chance_level &&
+            @minimal_warning "DecodedData objects have different chance_level: $(first_params.chance_level) vs $(decoded.parameters.chance_level)"
     end
 
     # Average accuracy across participants
