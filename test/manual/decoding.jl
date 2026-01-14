@@ -109,12 +109,13 @@ epochs_p2 = all_participant_epochs[2]
 epochs_p3 = all_participant_epochs[3]
 
 
-decoded_p1 = eegfun.decode_libsvm(
+@btime decoded_p1 = eegfun.decode_libsvm(
     epochs_p1;
     n_iterations = 10,  # Reduced for testing
     n_folds = 3,
     equalize_trials = true,
 )
+
 # Decode for Participant 2 - default model used automatically
 decoded_p2 = eegfun.decode_libsvm(
     epochs_p2,
