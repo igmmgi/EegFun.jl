@@ -12,8 +12,37 @@ eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
 
-@btime eegfun.plot_topography(dat, method = :spherical_spline, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168)
-@btime eegfun.plot_topography(dat, method = :multiquadratic, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168, ylim = (-30, 30))
+@btime eegfun.plot_topography(
+    dat,
+    method = :spherical_spline,
+    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
+    gridscale = 500,
+)
+@btime eegfun.plot_topography(
+    dat,
+    method = :multiquadratic,
+    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
+    ylim = (-30, 30),
+    gridscale = 100,
+)
+@btime eegfun.plot_topography(
+    dat,
+    method = :nearest,
+    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
+    gridscale = 300,
+)
+@btime eegfun.plot_topography(
+    dat,
+    method = :linear,
+    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
+    gridscale = 300,
+)
+@btime eegfun.plot_topography(
+    dat,
+    method = :cubic,
+    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
+    gridscale = 300,
+)
 
 
 eegfun.plot_databrowser(dat)
@@ -85,7 +114,7 @@ eegfun.plot_topography(
     erps,
     sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6,
     ylim = (-2, 2),
-    colorbar_datasets = [4],
+    colorbar_plot_numbers = [4],
     dims = (1, 4),
 )
 

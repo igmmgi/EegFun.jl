@@ -35,6 +35,18 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
     elseif method == :spherical_spline
         data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
+    elseif method == :nearest
+        data = _data_interpolation_topo_nearest(channel_data, layout, gridscale)
+    elseif method == :linear
+        data = _data_interpolation_topo_scattered(channel_data, layout, gridscale, ScatteredInterpolation.Linear())
+    elseif method == :cubic
+        data = _data_interpolation_topo_scattered(channel_data, layout, gridscale, ScatteredInterpolation.Cubic())
+    else
+        throw(
+            ArgumentError(
+                "Unknown interpolation method: $method. Supported: :multiquadratic, :spherical_spline, :nearest, :linear, :cubic",
+            ),
+        )
     end
 
     # Calculate ylim if not provided (must be after data is computed)
@@ -427,6 +439,99 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
 
 end
 
+"""
+    _data_interpolation_topo_scattered(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int, method_type)
+
+Internal helper for 2D scattered interpolation using ScatteredInterpolation.jl.
+"""
+function _data_interpolation_topo_scattered(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int, method_type)
+    if any(isnan, dat) || any(isinf, dat)
+        throw(ArgumentError("Input data contains NaN or Inf values"))
+    end
+
+    points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
+    x_range = range(-1.0, 1.0, length = grid_scale)
+    y_range = range(-1.0, 1.0, length = grid_scale)
+
+    grid_points = zeros(2, grid_scale^2)
+    idx = 1
+    @inbounds for y in y_range, x in x_range
+        grid_points[1, idx] = x
+        grid_points[2, idx] = y
+        idx += 1
+    end
+
+    itp = ScatteredInterpolation.interpolate(method_type, points, dat)
+    result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
+    _circle_mask!(result, grid_scale)
+    return result
+end
+
+
+"""
+    _data_interpolation_topo_nearest(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int)
+
+Interpolate EEG data using nearest neighbor (Voronoi) interpolation for topographic plotting.
+Assigns each grid point the value of its closest electrode.
+
+# Arguments
+- `dat::Vector{<:AbstractFloat}`: EEG values at electrode positions
+- `layout::Layout`: Layout structure containing electrode positions
+- `grid_scale::Int`: Size of the output grid
+"""
+function _data_interpolation_topo_nearest(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int)
+
+    if any(isnan, dat) || any(isinf, dat)
+        throw(ArgumentError("Input data contains NaN or Inf values"))
+    end
+
+    # Get electrode 2D coordinates
+    _ensure_coordinates_2d!(layout)
+    n_channels = length(dat)
+
+    # Extract coordinates efficiently
+    x2_col = layout.data.x2::Vector{Float64}
+    y2_col = layout.data.y2::Vector{Float64}
+
+    # Prepare grid ranges
+    x_range = range(-1.0, 1.0, length = grid_scale)
+    y_range = range(-1.0, 1.0, length = grid_scale)
+
+    # Step 1: Find valid indices inside the head
+    valid_indices = Tuple{Int,Int}[]
+    sizehint!(valid_indices, grid_scale^2)
+    for (iy, y) in enumerate(y_range), (ix, x) in enumerate(x_range)
+        if x^2 + y^2 <= 1.0
+            push!(valid_indices, (ix, iy))
+        end
+    end
+
+    n_valid = length(valid_indices)
+    result = fill(NaN, grid_scale, grid_scale)
+
+    # Step 2: For each valid grid point, find the nearest electrode
+    @inbounds for i = 1:n_valid
+        ix, iy = valid_indices[i]
+        x, y = x_range[ix], y_range[iy]
+
+        min_dist_sq = Inf
+        nearest_idx = 1
+
+        # This loop is tight and should be very fast (~72 iterations)
+        for j = 1:n_channels
+            dist_sq = (x - x2_col[j])^2 + (y - y2_col[j])^2
+            if dist_sq < min_dist_sq
+                min_dist_sq = dist_sq
+                nearest_idx = j
+            end
+        end
+        result[ix, iy] = dat[nearest_idx]
+    end
+
+    _circle_mask!(result, grid_scale)
+    return result
+end
+
 
 """
     _data_interpolation_topo_spherical_spline(dat::Vector{Float64}, layout::DataFrame, grid_scale::Int; m::Int=4, lambda::Float64=1e-5)
@@ -446,13 +551,20 @@ Implementation follows MNE-Python exactly.
 """
 function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int;)
 
-    # Extract 3D coordinates as they are (no normalization needed)
+    # Ensure 3D coordinates exist
+    _ensure_coordinates_3d!(layout)
+
+    # Extract 3D coordinates efficiently from DataFrame
     n_channels = length(dat)
+    x3_col = layout.data.x3::Vector{Float64}
+    y3_col = layout.data.y3::Vector{Float64}
+    z3_col = layout.data.z3::Vector{Float64}
+
     coords = Matrix{Float64}(undef, n_channels, 3)
     @inbounds for i = 1:n_channels
-        coords[i, 1] = layout.data.x3[i]
-        coords[i, 2] = layout.data.y3[i]
-        coords[i, 3] = layout.data.z3[i]
+        coords[i, 1] = x3_col[i]
+        coords[i, 2] = y3_col[i]
+        coords[i, 3] = z3_col[i]
     end
 
     # Find the actual radius of the electrode positions
@@ -462,12 +574,7 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
     end
     electrode_radius /= n_channels
 
-    # Create a 2D grid for plotting using normalized coordinates
-    x_range = range(-1.0, 1.0, length = grid_scale)
-    y_range = range(-1.0, 1.0, length = grid_scale)
-
-    # For spherical spline calculation, we need unit sphere coordinates
-    # Normalize each point to unit sphere (MNE-Python approach)
+    # Pre-normalize electrode coordinates to unit sphere
     coords_unit = Matrix{Float64}(undef, n_channels, 3)
     @inbounds for i = 1:n_channels
         norm_factor = sqrt(coords[i, 1]^2 + coords[i, 2]^2 + coords[i, 3]^2)
@@ -476,119 +583,94 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
             coords_unit[i, 2] = coords[i, 2] / norm_factor
             coords_unit[i, 3] = coords[i, 3] / norm_factor
         else
-            coords_unit[i, 1] = coords[i, 1]
-            coords_unit[i, 2] = coords[i, 2]
-            coords_unit[i, 3] = coords[i, 3]
+            coords_unit[i, 1], coords_unit[i, 2], coords_unit[i, 3] = coords[i, 1], coords[i, 2], coords[i, 3]
         end
     end
 
-    # Compute cosine angles between all electrode pairs (exactly like MNE)
-    cosang = coords_unit * coords_unit'  # This is the dot product matrix
-
-    # Compute G matrix using MNE's exact g-function (m=4, 15 terms for speed)
+    # Step 1: Solve for weights
+    cosang = coords_unit * coords_unit'
     G = _calc_g_matrix(cosang)
 
-    # Add regularization to diagonal (exactly like MNE)
-    @inbounds for i = 1:n_channels
-        G[i, i] += 1e-5
-    end
-
-    # Add constraint rows/columns (exactly like MNE)
-    # Pre-allocate and fill in one pass
-    G_extended = Matrix{Float64}(undef, n_channels+1, n_channels+1)
+    G_extended = Matrix{Float64}(undef, n_channels + 1, n_channels + 1)
     @inbounds for i = 1:n_channels
         for j = 1:n_channels
             G_extended[i, j] = G[i, j]
         end
+        G_extended[i, i] += 1e-5 # λ regularization
         G_extended[i, n_channels+1] = 1.0
         G_extended[n_channels+1, i] = 1.0
     end
     G_extended[n_channels+1, n_channels+1] = 0.0
 
-    # Solve the system to get weights (exactly like MNE)
-    data_vector = Vector{Float64}(undef, n_channels+1)
+    data_vector = Vector{Float64}(undef, n_channels + 1)
     @inbounds for i = 1:n_channels
         data_vector[i] = dat[i]
     end
     data_vector[n_channels+1] = 0.0
+
     weights = G_extended \ data_vector
 
-    # Pre-compute all grid points for vectorized operations
-    # Use the same order as the original nested loops: for x in x_range, y in y_range
-    grid_x = vec(repeat(x_range', length(y_range), 1))
-    grid_y = repeat(y_range, length(x_range))
+    # Step 2: Prepare grid points for interpolation
+    x_range = range(-1.0, 1.0, length = grid_scale)
+    y_range = range(-1.0, 1.0, length = grid_scale)
 
-    # Calculate distances from center for all grid points at once
-    r_2d = sqrt.(grid_x .^ 2 .+ grid_y .^ 2)
-
-    # Initialize result array
-    interpolated_values = fill(NaN, length(grid_x))
-
-    # Find valid grid points (within head and plotting area)
-    # Since coordinates are normalized to [-1, 1], the head radius is 1.0
-    valid_mask = r_2d .<= 1.0
-    valid_indices = findall(valid_mask)
-
-    if !isempty(valid_indices)
-        # Extract valid grid points
-        valid_x = grid_x[valid_indices]
-        valid_y = grid_y[valid_indices]
-        valid_r = r_2d[valid_indices]
-
-        # Pre-compute stereographic projection for all valid points at once
-        # Since coordinates are normalized, use 1.0 as the head radius
-        r_norm = valid_r ./ 1.0
-
-        # Vectorized stereographic projection
-        # Fix coordinate conversion to prevent 90-degree offset
-        z3 = electrode_radius .* (1.0 .- r_norm .^ 2) ./ (1.0 .+ r_norm .^ 2)
-        # Swap x and y to fix the 90-degree rotation
-        x3 = valid_y .* (1.0 .+ z3 ./ electrode_radius)
-        y3 = valid_x .* (1.0 .+ z3 ./ electrode_radius)
-
-        # Stack into 3D coordinates - ensure proper coordinate order
-        grid_points_3d = hcat(x3, y3, z3)
-
-        # Normalize to unit sphere for all points at once
-        n_valid = length(valid_indices)
-        grid_points_unit = Matrix{Float64}(undef, n_valid, 3)
-        @inbounds for i = 1:n_valid
-            norm_val = sqrt(grid_points_3d[i, 1]^2 + grid_points_3d[i, 2]^2 + grid_points_3d[i, 3]^2)
-            if norm_val > 0
-                grid_points_unit[i, 1] = grid_points_3d[i, 1] / norm_val
-                grid_points_unit[i, 2] = grid_points_3d[i, 2] / norm_val
-                grid_points_unit[i, 3] = grid_points_3d[i, 3] / norm_val
-            else
-                grid_points_unit[i, 1] = grid_points_3d[i, 1]
-                grid_points_unit[i, 2] = grid_points_3d[i, 2]
-                grid_points_unit[i, 3] = grid_points_3d[i, 3]
-            end
+    # Find valid indices first to minimize work
+    valid_indices = Tuple{Int,Int}[]
+    sizehint!(valid_indices, grid_scale^2)
+    for (iy, y) in enumerate(y_range), (ix, x) in enumerate(x_range)
+        if x^2 + y^2 <= 1.0
+            push!(valid_indices, (ix, iy))
         end
-
-        # Compute cosine angles to all electrodes for all grid points at once
-        # Ensure proper matrix multiplication order (same as original)
-        cosang_grid = grid_points_unit * coords_unit'
-
-        # Clamp cosine angles
-        cosang_grid = clamp.(cosang_grid, -1.0, 1.0)
-
-        # Compute g-function values for all grid points and electrodes at once
-        g_values = _calc_g_function.(cosang_grid)
-
-        # Add the constant term (1.0) for each grid point
-        g_values_extended = hcat(g_values, ones(size(g_values, 1)))
-
-        # Compute interpolation for all valid points at once using matrix multiplication
-        interpolated_valid = g_values_extended * weights
-
-        # Store results back
-        interpolated_values[valid_indices] = interpolated_valid
     end
 
-    # Reshape to grid and apply circular mask
-    result = reshape(interpolated_values, grid_scale, grid_scale)
-    _circle_mask!(result, grid_scale)
+    n_valid = length(valid_indices)
+    grid_points_unit = Matrix{Float64}(undef, n_valid, 3)
 
+    @inbounds for i = 1:n_valid
+        ix, iy = valid_indices[i]
+        x, y = x_range[ix], y_range[iy]
+        r2 = x^2 + y^2
+        r = sqrt(r2)
+
+        # Stereographic projection
+        z3 = electrode_radius * (1.0 - r^2) / (1.0 + r^2)
+        px = x * (1.0 + z3 / electrode_radius)
+        py = y * (1.0 + z3 / electrode_radius)
+        pz = z3
+
+        # Normalize to unit sphere
+        p_norm = sqrt(px^2 + py^2 + pz^2)
+        if p_norm > 0
+            grid_points_unit[i, 1] = px / p_norm
+            grid_points_unit[i, 2] = py / p_norm
+            grid_points_unit[i, 3] = pz / p_norm
+        else
+            grid_points_unit[i, 1], grid_points_unit[i, 2], grid_points_unit[i, 3] = px, py, pz
+        end
+    end
+
+    # Step 3: Compute G matrix between valid grid points and channels using BLAS
+    cosang_grid = grid_points_unit * coords_unit'
+
+    # Step 4: Apply g-function in-place with pre-calculated factors
+    factors = _get_g_factors(15)
+    @inbounds for i in eachindex(cosang_grid)
+        cosang_grid[i] = _legendre_val(clamp(cosang_grid[i], -1.0, 1.0), factors)
+    end
+
+    # Step 5: Compute final interpolation values using BLAS
+    w_channels = @view weights[1:n_channels]
+    interpolated_valid = cosang_grid * w_channels
+    interpolated_valid .+= weights[n_channels+1]
+
+    # Step 6: Map back to 2D grid
+    result = fill(NaN, grid_scale, grid_scale)
+    @inbounds for i = 1:n_valid
+        ix, iy = valid_indices[i]
+        result[ix, iy] = interpolated_valid[i]
+    end
+
+    _circle_mask!(result, grid_scale)
     return result
 end
 
@@ -611,41 +693,44 @@ function _legendre_polynomial(n::Int, x::Float64)
 end
 
 # Optimized Legendre polynomial series evaluation using recurrence
-# This computes all Legendre polynomials in one pass, avoiding redundant computation
-function _legendre_val(x::Float64, factors::Vector{Float64})
+# Pre-calculate recurrence coefficients to avoid divisions in the inner loop
+const _LEGENDRE_COEFF_A = Float64[(2n - 1) / n for n = 0:17]
+const _LEGENDRE_COEFF_B = Float64[(n - 1) / n for n = 0:17]
+
+@inline function _legendre_val(x::Float64, factors::Vector{Float64})
     """Evaluate Legendre polynomial series efficiently using recurrence relation.
-    
+
     factors[1] = 0.0 (for n=0, skipped)
     factors[2] = factor for n=1
     factors[3] = factor for n=2
     etc.
     """
-    max_order = length(factors) - 1  # factors[1] is 0.0, so skip it
+    max_order = length(factors) - 1
     if max_order < 1
         return 0.0
     end
-    
+
     # Initialize recurrence: P_0 = 1, P_1 = x
     p_prev = 1.0  # P_0
     p_curr = x     # P_1
-    
+
     # Start with n=1 term: factors[2] * P_1(x) = factors[2] * x
-    result = factors[2] * p_curr
-    
+    @inbounds result = factors[2] * p_curr
+
     # Compute remaining polynomials using recurrence (n=2 to max_order)
-    # Recurrence: P_n(x) = ((2n-1)*x*P_{n-1}(x) - (n-1)*P_{n-2}(x)) / n
+    # Recurrence: P_n(x) = ((2n-1)/n * x * P_{n-1}(x) - (n-1)/n * P_{n-2}(x))
     @inbounds for n = 2:max_order
-        p_next = ((2n - 1) * x * p_curr - (n - 1) * p_prev) / n
-        result += factors[n + 1] * p_next
+        p_next = _LEGENDRE_COEFF_A[n+1] * x * p_curr - _LEGENDRE_COEFF_B[n+1] * p_prev
+        result += factors[n+1] * p_next
         p_prev = p_curr
         p_curr = p_next
     end
-    
+
     return result
 end
 
 # Pre-computed factors for m=4, cached to avoid recomputation
-const _G_FACTORS_CACHE = Dict{Int, Vector{Float64}}()
+const _G_FACTORS_CACHE = Dict{Int,Vector{Float64}}()
 
 function _get_g_factors(n_legendre_terms::Int = 15)
     """Get pre-computed factors for g-function calculation (cached)."""
@@ -653,7 +738,7 @@ function _get_g_factors(n_legendre_terms::Int = 15)
         factors = [(2 * n + 1) / (n^4 * (n + 1)^4 * 4 * π) for n = 1:n_legendre_terms]
         _G_FACTORS_CACHE[n_legendre_terms] = [0.0; factors]  # Prepend 0.0 for n=0
     end
-    return _G_FACTORS_CACHE[n_legendre_terms]
+    return _G_FACTORS_CACHE[n_legendre_terms]::Vector{Float64}
 end
 
 # MNE-Python's exact g-function calculation for EEG topography (m=4)
@@ -678,7 +763,11 @@ function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int = 15)
     factors = _get_g_factors(n_legendre_terms)
 
     # Use Legendre polynomial evaluation for the entire matrix
-    return _legendre_val.(cosang, Ref(factors))
+    G = similar(cosang)
+    @inbounds for i in eachindex(cosang)
+        G[i] = _legendre_val(cosang[i], factors)
+    end
+    return G
 end
 
 # =============================================================================
@@ -1120,7 +1209,7 @@ function _show_topo_context_menu!(datasets::Union{ErpData,Vector{ErpData}}, sele
     else
         # Single condition and single channel: just plot it
         push!(plot_types, "Plot Channel")
-        plot_configs = [(false, false, "single channel"),]
+        plot_configs = [(false, false, "single channel")]
     end
 
     menu_fig = Figure(size = (400, 200))

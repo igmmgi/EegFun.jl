@@ -12,7 +12,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :interactive => (true, "Whether to enable interactive features"),
 
     # Topography parameters
-    :method => (:multiquadratic, "Interpolation method: :multiquadratic or :spherical_spline"),
+    :method => (:multiquadratic, "Interpolation method: :multiquadratic, :spherical_spline, or :nearest"),
     :colormap => (:jet, "Colormap for the topography"),
     :gridscale => (200, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
@@ -1105,9 +1105,9 @@ function _add_boolean_indicators!(state, channel_sym)
                 # Create vertical lines at each true position
                 # Only create lines within the current view range
                 current_range = state.xrange[]
-                visible_times = true_times[true_times .>= state.dat.data.time[first(
+                visible_times = true_times[true_times.>=state.dat.data.time[first(
                     current_range,
-                )].&&true_times .<= state.dat.data.time[last(current_range)]]
+                )].&&true_times.<=state.dat.data.time[last(current_range)]]
 
                 if !isempty(visible_times)
                     lines = vlines!(ax_channel, visible_times, color = :red, linewidth = 1)
@@ -1311,8 +1311,28 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
         return _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
     elseif method == :multiquadratic
         return _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], ica.layout, gridscale)
+    elseif method == :nearest
+        return _data_interpolation_topo_nearest(ica.mixing[:, comp_idx], ica.layout, gridscale)
+    elseif method == :linear
+        return _data_interpolation_topo_scattered(
+            ica.mixing[:, comp_idx],
+            ica.layout,
+            gridscale,
+            ScatteredInterpolation.Linear(),
+        )
+    elseif method == :cubic
+        return _data_interpolation_topo_scattered(
+            ica.mixing[:, comp_idx],
+            ica.layout,
+            gridscale,
+            ScatteredInterpolation.Cubic(),
+        )
     else
-        throw(ArgumentError("Unknown interpolation method: $method"))
+        throw(
+            ArgumentError(
+                "Unknown interpolation method: $method. Supported: :multiquadratic, :spherical_spline, :nearest, :linear, :cubic",
+            ),
+        )
     end
 end
 
@@ -1638,7 +1658,7 @@ function plot_ecg_component_features_(
     fig = Figure()
 
     # Calculate heart rates
-    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
+    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0 / ibi for ibi in metrics_df.mean_ibi_s]
     metrics_df[!, :heart_rate_bpm] = heart_rates
 
     # Left panel: Heart Rate vs Peak Ratio
@@ -1797,7 +1817,7 @@ function plot_line_noise_components(
 
         # Add component numbers as labels
         for (i, comp) in enumerate(line_noise_comps)
-            row = metrics_df[metrics_df.Component .== comp, :]
+            row = metrics_df[metrics_df.Component.==comp, :]
             text!(
                 ax1,
                 comp,
@@ -1873,7 +1893,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     fig = Figure(size = (1000, 600))
 
     # Calculate heart rates
-    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0/ibi for ibi in metrics_df.mean_ibi_s]
+    heart_rates = [isnan(ibi) || ibi <= 0 ? NaN : 60.0 / ibi for ibi in metrics_df.mean_ibi_s]
     metrics_df[!, :heart_rate_bpm] = heart_rates
 
     # Left panel: Heart Rate vs Peak Ratio
