@@ -36,7 +36,7 @@ const PLOT_LAYOUT_ROI_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 # Layout plotting functions
 ########################################################
 """
-    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool=false, kwargs...)
+    plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool=false, correlation_matrix::Union{DataFrame, Nothing}=nothing, kwargs...)
 
 Plot a 2D EEG electrode layout with customizable head shape, electrode points, and labels.
 
@@ -44,7 +44,8 @@ Plot a 2D EEG electrode layout with customizable head shape, electrode points, a
 - `fig`: The figure to plot on
 - `ax`: The axis to plot on
 - `layout`: Layout containing electrode positions with columns x2, y2, and label
-- `neighbours`: Boolean to show interactive neighbour connections (default: false)
+- `neighbours`: Boolean to show interactive neighbour connections (default: false). Ignored if `correlation_matrix` is provided.
+- `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbours` is ignored.
 
 $(generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
 $(generate_kwargs_doc(PLOT_LAYOUT_POINT_KWARGS))
@@ -59,8 +60,19 @@ $(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     fig = Figure()
     ax = Axis(fig[1, 1])
     plot_layout_2d!(fig, ax, layout)
+    
+    # With correlation matrix
+    cm = correlation_matrix(dat)
+    plot_layout_2d!(fig, ax, layout, correlation_matrix=cm)
 """
-function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool = false, kwargs...)
+function plot_layout_2d!(
+    fig::Figure,
+    ax::Axis,
+    layout::Layout;
+    neighbours::Bool = false,
+    correlation_matrix::Union{DataFrame,Nothing} = nothing,
+    kwargs...,
+)
 
     _ensure_coordinates_2d!(layout)
 
@@ -81,7 +93,7 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
     arc!(
         ax,
         Point2f(radius, 0),
-        radius * (1/7),
+        radius * (1 / 7),
         -π / 2,
         π / 2;
         color = head_kwargs[:head_color],
@@ -90,7 +102,7 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
     arc!(
         ax,
         Point2f(-radius, 0),
-        - radius * (1/7),
+        -radius * (1 / 7),
         π / 2,
         -π / 2;
         color = head_kwargs[:head_color],
@@ -103,39 +115,56 @@ function plot_layout_2d!(fig::Figure, ax::Axis, layout::Layout; neighbours::Bool
         linewidth = head_kwargs[:head_linewidth],
     )
 
-    # Regular points
-    if plot_points
-        scatter!(
-            ax,
-            layout.data[!, :x2],
-            layout.data[!, :y2];
-            marker = point_kwargs[:point_marker],
-            markersize = point_kwargs[:point_markersize],
-            color = point_kwargs[:point_color],
-        )
-    end
+    positions = Point2f.(layout.data.x2, layout.data.y2)
 
-    if plot_labels
-        x_coords = layout.data[!, :x2] .+ xoffset
-        y_coords = layout.data[!, :y2] .+ yoffset
-        labels = String.(layout.data[!, :label])
-        for i in eachindex(labels)
-            text!(
+    if !isnothing(correlation_matrix)
+        # Show correlations interactively - this will create its own scatter plot
+        _add_interactive_correlation_points!(
+            fig,
+            ax,
+            layout.data,
+            positions,
+            correlation_matrix,
+            point_kwargs,
+            label_kwargs,
+            xoffset,
+            yoffset,
+            plot_labels,
+        )
+    else
+        # Regular points (only if not using correlation mode)
+        if plot_points
+            scatter!(
                 ax,
-                position = (x_coords[i], y_coords[i]),
-                labels[i];
-                fontsize = label_kwargs[:label_fontsize],
-                color = label_kwargs[:label_color],
+                layout.data[!, :x2],
+                layout.data[!, :y2];
+                marker = point_kwargs[:point_marker],
+                markersize = point_kwargs[:point_markersize],
+                color = point_kwargs[:point_color],
             )
         end
-    end
 
-    if neighbours
-        if isnothing(layout.neighbours)
-            @minimal_warning "Layout has no neighbours data. Set neighbours=false or calculate neighbours first."
-        else
-            positions = Point2f.(layout.data.x2, layout.data.y2)
-            _add_interactive_points!(fig, ax, layout.data, layout.neighbours, positions)
+        if plot_labels
+            x_coords = layout.data[!, :x2] .+ xoffset
+            y_coords = layout.data[!, :y2] .+ yoffset
+            labels = String.(layout.data[!, :label])
+            for i in eachindex(labels)
+                text!(
+                    ax,
+                    position = (x_coords[i], y_coords[i]),
+                    labels[i];
+                    fontsize = label_kwargs[:label_fontsize],
+                    color = label_kwargs[:label_color],
+                )
+            end
+        end
+
+        if neighbours
+            if isnothing(layout.neighbours)
+                @minimal_warning "Layout has no neighbours data. Set neighbours=false or calculate neighbours first."
+            else
+                _add_interactive_points!(fig, ax, layout.data, layout.neighbours, positions)
+            end
         end
     end
 
@@ -147,13 +176,14 @@ end
 
 
 """
-    plot_layout_2d(layout::Layout; neighbours::Bool=false, display_plot::Bool=true, kwargs...)
+    plot_layout_2d(layout::Layout; neighbours::Bool=false, correlation_matrix::Union{DataFrame, Nothing}=nothing, display_plot::Bool=true, kwargs...)
 
 Create a new figure and plot a 2D EEG electrode layout.
 
 # Arguments
 - `layout`: Layout containing electrode positions
-- `neighbours`: Boolean to show interactive neighbour connections (default: false)
+- `neighbours`: Boolean to show interactive neighbour connections (default: false). Ignored if `correlation_matrix` is provided.
+- `correlation_matrix`: Optional DataFrame from `correlation_matrix()` to show correlation values on hover (default: nothing). When provided, `neighbours` is ignored.
 - `display_plot`: Boolean to display the plot (default: true)
 
 $(generate_kwargs_doc(PLOT_LAYOUT_HEAD_KWARGS))
@@ -169,12 +199,21 @@ $(generate_kwargs_doc(PLOT_LAYOUT_LABEL_KWARGS))
     plot_layout_2d(layout)
     # With neighbour interactivity
     plot_layout_2d(layout, neighbours=true)
+    # With correlation matrix
+    cm = correlation_matrix(dat)
+    plot_layout_2d(layout, correlation_matrix=cm)
 """
-function plot_layout_2d(layout::Layout; neighbours::Bool = false, display_plot::Bool = true, kwargs...)
+function plot_layout_2d(
+    layout::Layout;
+    neighbours::Bool = false,
+    correlation_matrix::Union{DataFrame,Nothing} = nothing,
+    display_plot::Bool = true,
+    kwargs...,
+)
     fig = Figure()
     ax = Axis(fig[1, 1])
 
-    plot_layout_2d!(fig, ax, layout; neighbours = neighbours, kwargs...)
+    plot_layout_2d!(fig, ax, layout; neighbours = neighbours, correlation_matrix = correlation_matrix, kwargs...)
 
     if display_plot
         display_figure(fig)
@@ -200,8 +239,8 @@ Create a convex hull around a set of 2D points with a specified border size usin
 function _create_convex_hull_graham(xpos::Vector{<:Real}, ypos::Vector{<:Real}, border_size::Real)
     # Generate points around each electrode with the border
     circle_points = 0:(2π/361):2π
-    xs = (border_size .* sin.(circle_points) .+ transpose(xpos))[:]
-    ys = (border_size .* cos.(circle_points) .+ transpose(ypos))[:]
+    xs = (border_size.*sin.(circle_points).+transpose(xpos))[:]
+    ys = (border_size.*cos.(circle_points).+transpose(ypos))[:]
 
     # Convert to array of points
     points = [[xs[i], ys[i]] for i in eachindex(xs)]
@@ -525,4 +564,161 @@ function _add_interactive_points!(
             linesegments[] = new_lines[1:line_count]
         end
     end
+end
+
+"""
+    _add_interactive_correlation_points!(fig::Figure, ax::Axis, layout::DataFrame,
+                                        positions::Vector{Point2f}, correlation_matrix::DataFrame,
+                                        point_kwargs, label_kwargs, xoffset, yoffset, plot_labels)
+
+Add interactive electrode points that show correlation values when hovering over a channel.
+
+When a channel is hovered, all electrodes are colored based on their correlation with the selected channel,
+and correlation values are displayed as text labels.
+
+# Arguments
+- `fig`: The figure to add interactivity to
+- `ax`: The axis to add interactivity to
+- `layout`: DataFrame containing electrode information
+- `positions`: Vector containing point positions (Point2f)
+- `correlation_matrix`: DataFrame from `correlation_matrix()` with :row column and channel columns
+- `point_kwargs`: Dictionary of point styling kwargs
+- `label_kwargs`: Dictionary of label styling kwargs
+- `xoffset`: X offset for labels
+- `yoffset`: Y offset for labels
+- `plot_labels`: Whether to plot labels
+
+# Returns
+- `nothing` (modifies the provided figure and axis in-place)
+"""
+function _add_interactive_correlation_points!(
+    fig::Figure,
+    ax::Axis,
+    layout::DataFrame,
+    positions::Vector{Point2f},
+    correlation_matrix::DataFrame,
+    point_kwargs,
+    label_kwargs,
+    xoffset,
+    yoffset,
+    plot_labels,
+)
+
+    base_size = point_kwargs[:point_markersize]
+    hover_size = base_size * 1.5
+
+    # Observable for point sizes and correlation values
+    sizes = Observable(fill(base_size, length(layout.label)))
+    base_corr_values = fill(0.0, length(layout.label))  # Start with 0 (middle of colormap)
+    corr_values = Observable(base_corr_values)
+
+    # Store text label objects to manage visibility
+    current_text_labels = Ref{Vector{Any}}([])  # Correlation value labels
+    channel_labels = Ref{Vector{Any}}([])  # Regular channel name labels
+
+    # Plot regular labels if requested and store references
+    if plot_labels
+        x_coords = layout[!, :x2] .+ xoffset
+        y_coords = layout[!, :y2] .+ yoffset
+        labels = String.(layout[!, :label])
+        for i in eachindex(labels)
+            label_obj = text!(
+                ax,
+                position = (x_coords[i], y_coords[i]),
+                labels[i];
+                fontsize = label_kwargs[:label_fontsize],
+                color = label_kwargs[:label_color],
+            )
+            push!(channel_labels[], label_obj)
+        end
+    end
+
+    # Add interactive scatter points with observable correlation values for coloring
+    default_color = point_kwargs[:point_color]
+    p = scatter!(
+        ax,
+        positions;
+        color = default_color,
+        markersize = sizes,
+        marker = point_kwargs[:point_marker],
+        inspectable = true,
+        markerspace = :pixel,
+    )
+
+    # Correlation scatter (hidden initially)
+    corr_scatter = scatter!(
+        ax,
+        positions;
+        color = corr_values,
+        markersize = sizes,
+        marker = point_kwargs[:point_marker],
+        inspectable = true,  
+        markerspace = :pixel,
+        colormap = :RdYlGn,  
+        colorrange = (-1.0, 1.0),
+        visible = false,
+    )
+
+    # Add hover interaction
+    new_sizes = fill(base_size, length(layout.label))
+    new_corr_values = fill(0.0, length(layout.label))
+    on(events(fig).mouseposition) do mp
+        plt, i = pick(fig)
+        if (plt == p || plt == corr_scatter) && i !== nothing
+
+            # Reset all sizes 
+            fill!(new_sizes, base_size)
+            new_sizes[i] = hover_size
+            sizes[] = new_sizes
+
+            # Hide regular channel labels and old correlation text labels
+            for label_obj in channel_labels[]
+                label_obj.visible = false
+            end
+            for text_obj in current_text_labels[]
+                text_obj.visible = false
+            end
+            empty!(current_text_labels[])
+
+            # Color all points based on correlation with selected channel
+            row_idx = findfirst(==(layout.label[i]), correlation_matrix[!, :row])
+            for (j, label) in enumerate(layout.label)
+                corr_val = correlation_matrix[row_idx, label]
+                new_corr_values[j] = corr_val
+
+                # Add text label with correlation value at electrode position
+                pos = positions[j]
+                text_obj = text!(
+                    ax,
+                    position = (pos[1], pos[2]),
+                    string(round(corr_val, digits = 2));
+                    fontsize = 16,
+                    color = :black,
+                )
+                push!(current_text_labels[], text_obj)
+            end
+
+            # Update correlation scatter colors and show it, hide default scatter
+            corr_values[] = new_corr_values
+            p.visible = false
+            corr_scatter.visible = true
+        else
+            # Mouse not over any point, reset to defaults by showing channels labels and hiding correlation values
+            fill!(new_sizes, base_size)
+            sizes[] = new_sizes
+
+            for label_obj in channel_labels[]
+                label_obj.visible = true
+            end
+            for text_obj in current_text_labels[]
+                text_obj.visible = false
+            end
+            empty!(current_text_labels[])
+
+            p.visible = true
+            corr_scatter.visible = false
+        end
+    end
+
+    return nothing
 end

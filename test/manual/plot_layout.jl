@@ -5,7 +5,7 @@ eegfun.polar_to_cartesian_xy!(layout);
 
 eegfun.plot_layout_2d(layout; head_color = :blue)
 eegfun.plot_layout_2d(layout; head_linewidth = 5)
-eegfun.plot_layout_2d(layout; head_radius = 0.8)
+eegfun.plot_layout_2d(layout; head_radius = 1.8)
 
 eegfun.plot_layout_2d(layout; point_plot = false)
 eegfun.plot_layout_2d(layout; point_marker = :x)
