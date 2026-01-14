@@ -35,16 +35,10 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
         data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
     elseif method == :spherical_spline
         data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
-    elseif method == :nearest
-        data = _data_interpolation_topo_nearest(channel_data, layout, gridscale)
-    elseif method == :linear
-        data = _data_interpolation_topo_scattered(channel_data, layout, gridscale, ScatteredInterpolation.Linear())
-    elseif method == :cubic
-        data = _data_interpolation_topo_scattered(channel_data, layout, gridscale, ScatteredInterpolation.Cubic())
     else
         throw(
             ArgumentError(
-                "Unknown interpolation method: $method. Supported: :multiquadratic, :spherical_spline, :nearest, :linear, :cubic",
+                "Unknown interpolation method: $method. Supported: :multiquadratic, :spherical_spline",
             ),
         )
     end
@@ -439,98 +433,6 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
 
 end
 
-"""
-    _data_interpolation_topo_scattered(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int, method_type)
-
-Internal helper for 2D scattered interpolation using ScatteredInterpolation.jl.
-"""
-function _data_interpolation_topo_scattered(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int, method_type)
-    if any(isnan, dat) || any(isinf, dat)
-        throw(ArgumentError("Input data contains NaN or Inf values"))
-    end
-
-    points = permutedims(Matrix(layout.data[!, [:x2, :y2]]))
-    x_range = range(-1.0, 1.0, length = grid_scale)
-    y_range = range(-1.0, 1.0, length = grid_scale)
-
-    grid_points = zeros(2, grid_scale^2)
-    idx = 1
-    @inbounds for y in y_range, x in x_range
-        grid_points[1, idx] = x
-        grid_points[2, idx] = y
-        idx += 1
-    end
-
-    itp = ScatteredInterpolation.interpolate(method_type, points, dat)
-    result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
-    _circle_mask!(result, grid_scale)
-    return result
-end
-
-
-"""
-    _data_interpolation_topo_nearest(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int)
-
-Interpolate EEG data using nearest neighbor (Voronoi) interpolation for topographic plotting.
-Assigns each grid point the value of its closest electrode.
-
-# Arguments
-- `dat::Vector{<:AbstractFloat}`: EEG values at electrode positions
-- `layout::Layout`: Layout structure containing electrode positions
-- `grid_scale::Int`: Size of the output grid
-"""
-function _data_interpolation_topo_nearest(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int)
-
-    if any(isnan, dat) || any(isinf, dat)
-        throw(ArgumentError("Input data contains NaN or Inf values"))
-    end
-
-    # Get electrode 2D coordinates
-    _ensure_coordinates_2d!(layout)
-    n_channels = length(dat)
-
-    # Extract coordinates efficiently
-    x2_col = layout.data.x2::Vector{Float64}
-    y2_col = layout.data.y2::Vector{Float64}
-
-    # Prepare grid ranges
-    x_range = range(-1.0, 1.0, length = grid_scale)
-    y_range = range(-1.0, 1.0, length = grid_scale)
-
-    # Step 1: Find valid indices inside the head
-    valid_indices = Tuple{Int,Int}[]
-    sizehint!(valid_indices, grid_scale^2)
-    for (iy, y) in enumerate(y_range), (ix, x) in enumerate(x_range)
-        if x^2 + y^2 <= 1.0
-            push!(valid_indices, (ix, iy))
-        end
-    end
-
-    n_valid = length(valid_indices)
-    result = fill(NaN, grid_scale, grid_scale)
-
-    # Step 2: For each valid grid point, find the nearest electrode
-    @inbounds for i = 1:n_valid
-        ix, iy = valid_indices[i]
-        x, y = x_range[ix], y_range[iy]
-
-        min_dist_sq = Inf
-        nearest_idx = 1
-
-        # This loop is tight and should be very fast (~72 iterations)
-        for j = 1:n_channels
-            dist_sq = (x - x2_col[j])^2 + (y - y2_col[j])^2
-            if dist_sq < min_dist_sq
-                min_dist_sq = dist_sq
-                nearest_idx = j
-            end
-        end
-        result[ix, iy] = dat[nearest_idx]
-    end
-
-    _circle_mask!(result, grid_scale)
-    return result
-end
 
 
 """
@@ -1228,4 +1130,474 @@ function _show_topo_context_menu!(datasets::Union{ErpData,Vector{ErpData}}, sele
 
     new_screen = GLMakie.Screen()
     display(new_screen, menu_fig)
+end
+
+##########################################
+# 3D topographic plot
+##########################################
+
+"""
+    _generate_parametric_head_mesh(radius::Float64=1.0, n_points::Int=50)
+
+Generate a parametric 3D head mesh (ellipsoid with simple nose and ears).
+
+# Arguments
+- `radius::Float64`: Base radius of the head (default: 1.0)
+- `n_points::Int`: Number of points along each angular dimension (default: 50)
+
+# Returns
+- `vertices::Matrix{Float64}`: [n_points × 3] matrix of vertex coordinates
+- `faces::Matrix{Int}`: [n_faces × 3] matrix of triangle face indices
+- `vertex_normals::Matrix{Float64}`: [n_points × 3] matrix of vertex normals
+"""
+function _generate_parametric_head_mesh(radius::Float64 = 1.0, n_points::Int = 50)
+    # Generate spherical coordinates
+    # For EEG: z is up (top of head), x is forward (nose), y is left-right (ears)
+    # theta: azimuth angle in x-y plane (0 = +x/nose, π/2 = +y/right ear, π = -x/back, 3π/2 = -y/left ear)
+    # phi: elevation from z-axis (0 = top of head, π/2 = equator, π = bottom)
+    theta = range(0, 2π, length = n_points)
+    phi = range(0, π, length = n_points)
+
+    n_vertices = n_points * n_points
+    vertices = Matrix{Float64}(undef, n_vertices, 3)
+    vertex_normals = Matrix{Float64}(undef, n_vertices, 3)
+
+    # Generate vertices with clearly head-like shape
+    # Store as grid: phi (rows) × theta (cols) - phi varies first (outer loop), then theta
+    idx = 1
+    for (i, p) in enumerate(phi), (j, t) in enumerate(theta)
+        # Base ellipsoid - head is wider than it is tall
+        # Standard spherical coordinates: x = r*sin(phi)*cos(theta), y = r*sin(phi)*sin(theta), z = r*cos(phi)
+        x_base = radius * sin(p) * cos(t)
+        y_base = radius * sin(p) * sin(t)
+        z_base = radius * cos(p)
+        
+        # Make head shape: slightly wider horizontally, taller vertically
+        x_base *= 0.92  # Narrower front-to-back
+        y_base *= 0.92  # Narrower left-to-right  
+        z_base *= 1.2   # Taller (top to bottom)
+
+        # Add nose protrusion (front = +x direction, theta ≈ 0)
+        nose_factor = 0.0
+        # Front is where theta ≈ 0 (cos(theta) ≈ 1, sin(theta) ≈ 0)
+        if abs(t) < 0.5 || abs(t - 2π) < 0.5  # Front region
+            # Nose should be in upper-middle face
+            if p > 0.4 && p < 1.0
+                nose_strength = exp(-(min(abs(t), abs(t - 2π)) / 0.3)^2)  # Gaussian falloff
+                vertical_strength = sin((p - 0.4) / 0.6 * π)
+                nose_factor = 0.35 * radius * nose_strength * vertical_strength
+            end
+        end
+        # Nose extends forward in +x direction
+        x = x_base + nose_factor
+        y = y_base
+        z = z_base
+
+        # Add ear protrusions (sides = ±y direction, theta ≈ π/2 and 3π/2)
+        ear_factor = 0.0
+        # Right ear: theta ≈ π/2 (y positive)
+        if abs(t - π/2) < 0.6
+            if p > 0.5 && p < 1.3
+                ear_strength = exp(-((t - π/2) / 0.4)^2)
+                vertical_strength = sin((p - 0.5) / 0.8 * π)
+                ear_factor = 0.4 * radius * ear_strength * vertical_strength
+            end
+            y = y + ear_factor  # Extend in +y (right)
+        # Left ear: theta ≈ 3π/2 (y negative)
+        elseif abs(t - 3π/2) < 0.6
+            if p > 0.5 && p < 1.3
+                ear_strength = exp(-((t - 3π/2) / 0.4)^2)
+                vertical_strength = sin((p - 0.5) / 0.8 * π)
+                ear_factor = 0.4 * radius * ear_strength * vertical_strength
+            end
+            y = y - ear_factor  # Extend in -y (left)
+        end
+
+        vertices[idx, 1] = x
+        vertices[idx, 2] = y
+        vertices[idx, 3] = z
+
+        # Compute normal (pointing outward)
+        norm = sqrt(x^2 + y^2 + z^2)
+        if norm > 0
+            vertex_normals[idx, 1] = x / norm
+            vertex_normals[idx, 2] = y / norm
+            vertex_normals[idx, 3] = z / norm
+        else
+            vertex_normals[idx, :] = [0.0, 0.0, 1.0]
+        end
+
+        idx += 1
+    end
+
+    # Generate triangular faces
+    faces = Vector{Int}[]
+    for i = 1:(n_points - 1)
+        for j = 1:(n_points - 1)
+            # Two triangles per quad
+            v1 = (i - 1) * n_points + j
+            v2 = (i - 1) * n_points + j + 1
+            v3 = i * n_points + j
+            v4 = i * n_points + j + 1
+
+            push!(faces, [v1, v2, v3])
+            push!(faces, [v2, v4, v3])
+        end
+    end
+
+    # Convert faces to matrix
+    n_faces = length(faces)
+    faces_matrix = Matrix{Int}(undef, n_faces, 3)
+    for (i, face) in enumerate(faces)
+        faces_matrix[i, :] = face
+    end
+
+    return vertices, faces_matrix, vertex_normals
+end
+
+"""
+    _interpolate_data_on_3d_head(
+        channel_data::Vector{Float64},
+        layout::Layout,
+        vertices::Matrix{Float64},
+    )
+
+Interpolate EEG channel data onto 3D head mesh vertices using spherical spline.
+
+# Arguments
+- `channel_data::Vector{Float64}`: EEG values at electrode positions
+- `layout::Layout`: Layout containing electrode 3D coordinates
+- `vertices::Matrix{Float64}`: [n_vertices × 3] head mesh vertex coordinates
+
+# Returns
+- `interpolated_values::Vector{Float64}`: Interpolated values at each vertex
+"""
+function _interpolate_data_on_3d_head(
+    channel_data::Vector{Float64},
+    layout::Layout,
+    vertices::Matrix{Float64},
+)
+    # Ensure 3D coordinates exist
+    _ensure_coordinates_3d!(layout)
+
+    # Extract 3D coordinates efficiently from DataFrame
+    n_channels = length(channel_data)
+    x3_col = layout.data.x3::Vector{Float64}
+    y3_col = layout.data.y3::Vector{Float64}
+    z3_col = layout.data.z3::Vector{Float64}
+
+    coords = Matrix{Float64}(undef, n_channels, 3)
+    @inbounds for i = 1:n_channels
+        coords[i, 1] = x3_col[i]
+        coords[i, 2] = y3_col[i]
+        coords[i, 3] = z3_col[i]
+    end
+
+    # Find the actual radius of the electrode positions
+    electrode_radius = 0.0
+    @inbounds for i = 1:n_channels
+        electrode_radius += sqrt(coords[i, 1]^2 + coords[i, 2]^2 + coords[i, 3]^2)
+    end
+    electrode_radius /= n_channels
+
+    # Pre-normalize electrode coordinates to unit sphere
+    coords_unit = Matrix{Float64}(undef, n_channels, 3)
+    @inbounds for i = 1:n_channels
+        norm_factor = sqrt(coords[i, 1]^2 + coords[i, 2]^2 + coords[i, 3]^2)
+        if norm_factor > 0
+            coords_unit[i, 1] = coords[i, 1] / norm_factor
+            coords_unit[i, 2] = coords[i, 2] / norm_factor
+            coords_unit[i, 3] = coords[i, 3] / norm_factor
+        else
+            coords_unit[i, 1], coords_unit[i, 2], coords_unit[i, 3] = coords[i, 1], coords[i, 2], coords[i, 3]
+        end
+    end
+
+    # Step 1: Solve for weights (same as spherical spline)
+    cosang = coords_unit * coords_unit'
+    G = _calc_g_matrix(cosang)
+
+    G_extended = Matrix{Float64}(undef, n_channels + 1, n_channels + 1)
+    @inbounds for i = 1:n_channels
+        for j = 1:n_channels
+            G_extended[i, j] = G[i, j]
+        end
+        G_extended[i, i] += 1e-5 # λ regularization
+        G_extended[i, n_channels+1] = 1.0
+        G_extended[n_channels+1, i] = 1.0
+    end
+    G_extended[n_channels+1, n_channels+1] = 0.0
+
+    data_vector = Vector{Float64}(undef, n_channels + 1)
+    @inbounds for i = 1:n_channels
+        data_vector[i] = channel_data[i]
+    end
+    data_vector[n_channels+1] = 0.0
+
+    weights = G_extended \ data_vector
+
+    # Step 2: Normalize vertex coordinates to unit sphere for interpolation
+    n_vertices = size(vertices, 1)
+    vertices_unit = Matrix{Float64}(undef, n_vertices, 3)
+    @inbounds for i = 1:n_vertices
+        norm_factor = sqrt(vertices[i, 1]^2 + vertices[i, 2]^2 + vertices[i, 3]^2)
+        if norm_factor > 0
+            vertices_unit[i, 1] = vertices[i, 1] / norm_factor
+            vertices_unit[i, 2] = vertices[i, 2] / norm_factor
+            vertices_unit[i, 3] = vertices[i, 3] / norm_factor
+        else
+            vertices_unit[i, :] = vertices[i, :]
+        end
+    end
+
+    # Step 3: Compute G matrix between vertices and channels
+    cosang_vertices = vertices_unit * coords_unit'
+
+    # Step 4: Apply g-function
+    factors = _get_g_factors(15)
+    @inbounds for i in eachindex(cosang_vertices)
+        cosang_vertices[i] = _legendre_val(clamp(cosang_vertices[i], -1.0, 1.0), factors)
+    end
+
+    # Step 5: Compute interpolated values
+    w_channels = @view weights[1:n_channels]
+    interpolated_values = cosang_vertices * w_channels
+    interpolated_values .+= weights[n_channels+1]
+
+    return interpolated_values
+end
+
+"""
+    plot_topography_3d(
+        dat::SingleDataFrameEeg;
+        channel_selection::Function = channels(),
+        sample_selection::Function = samples(),
+        display_plot::Bool = true,
+        kwargs...,
+    )
+
+Create a 3D topographic plot on a parametric head model.
+
+# Arguments
+- `dat::SingleDataFrameEeg`: EEG data (ContinuousData or ErpData)
+- `channel_selection::Function`: Channel selection predicate (default: all channels)
+- `sample_selection::Function`: Sample selection predicate (default: all samples)
+- `display_plot::Bool`: Whether to display the plot (default: true)
+- `head_radius::Float64`: Radius of the head model (default: 1.0)
+- `head_resolution::Int`: Resolution of head mesh (default: 50)
+- `colormap`: Colormap for data visualization (default: :RdBu)
+- `colorrange`: Color range for data (default: automatic)
+- `show_electrodes::Bool`: Whether to show electrode positions (default: true)
+- `kwargs...`: Additional keyword arguments
+
+# Returns
+- `fig::Figure`: The figure object
+- `ax::Axis3`: The 3D axis object
+
+# Example
+```julia
+# Plot 3D topography
+fig, ax = plot_topography_3d(erp_data; sample_selection=samples((0.1, 0.2)))
+```
+"""
+function _generate_sphere_mesh_from_electrodes(layout::Layout, resolution::Int = 50)
+    _ensure_coordinates_3d!(layout)
+    
+    # Get electrode coordinates (same as plot_layout_3d uses)
+    x3_electrodes = layout.data.x3::Vector{Float64}
+    y3_electrodes = layout.data.y3::Vector{Float64}
+    z3_electrodes = layout.data.z3::Vector{Float64}
+    
+    # Convert electrode positions to spherical coordinates to understand their distribution
+    n_channels = length(x3_electrodes)
+    inc_electrodes = Vector{Float64}(undef, n_channels)
+    azi_electrodes = Vector{Float64}(undef, n_channels)
+    radius_electrodes = Vector{Float64}(undef, n_channels)
+    
+    @inbounds for i = 1:n_channels
+        x, y, z = x3_electrodes[i], y3_electrodes[i], z3_electrodes[i]
+        r = sqrt(x^2 + y^2 + z^2)
+        radius_electrodes[i] = r
+        if r > 0
+            inc_electrodes[i] = acos(clamp(z / r, -1.0, 1.0))
+            azi_electrodes[i] = atan(y, x)
+            if azi_electrodes[i] < 0
+                azi_electrodes[i] += 2π
+            end
+        else
+            inc_electrodes[i] = 0.0
+            azi_electrodes[i] = 0.0
+        end
+    end
+    
+    # Generate dense grid in spherical coordinates
+    inc_range = range(0, π, length = resolution)
+    azi_range = range(0, 2π, length = resolution)
+    
+    n_vertices = resolution * resolution
+    vertices = Matrix{Float64}(undef, n_vertices, 3)
+    
+    idx = 1
+    for (i, inc) in enumerate(inc_range), (j, azi) in enumerate(azi_range)
+        # For each grid point, find the radius by interpolating from nearby electrodes
+        # Use inverse distance weighting to get radius at this (inc, azi)
+        total_weight = 0.0
+        weighted_radius = 0.0
+        
+        @inbounds for k = 1:n_channels
+            # Angular distance between grid point and electrode
+            inc_diff = inc - inc_electrodes[k]
+            azi_diff = azi - azi_electrodes[k]
+            # Handle azimuth wrap-around
+            if azi_diff > π
+                azi_diff -= 2π
+            elseif azi_diff < -π
+                azi_diff += 2π
+            end
+            
+            # Angular distance (simplified - uses great circle distance approximation)
+            angular_dist = sqrt(inc_diff^2 + (azi_diff * sin(inc))^2)
+            
+            # Inverse distance weighting (with small epsilon to avoid division by zero)
+            if angular_dist < 0.01
+                # Very close to an electrode, use its radius directly
+                weighted_radius = radius_electrodes[k]
+                total_weight = 1.0
+                break
+            else
+                weight = 1.0 / (angular_dist^2 + 0.01)  # Small epsilon for stability
+                weighted_radius += weight * radius_electrodes[k]
+                total_weight += weight
+            end
+        end
+        
+        radius = total_weight > 0 ? weighted_radius / total_weight : 1.0
+        
+        # Convert back to Cartesian using the interpolated radius
+        vertices[idx, 1] = radius * sin(inc) * cos(azi)
+        vertices[idx, 2] = radius * sin(inc) * sin(azi)
+        vertices[idx, 3] = radius * cos(inc)
+        idx += 1
+    end
+    
+    # Generate triangular faces
+    faces = Vector{Int}[]
+    for i = 1:(resolution - 1)
+        for j = 1:(resolution - 1)
+            v1 = (i - 1) * resolution + j
+            v2 = (i - 1) * resolution + j + 1
+            v3 = i * resolution + j
+            v4 = i * resolution + j + 1
+            
+            push!(faces, [v1, v2, v3])
+            push!(faces, [v2, v4, v3])
+        end
+    end
+    
+    # Convert faces to matrix
+    n_faces = length(faces)
+    faces_matrix = Matrix{Int}(undef, n_faces, 3)
+    for (i, face) in enumerate(faces)
+        faces_matrix[i, :] = face
+    end
+    
+    return vertices, faces_matrix
+end
+
+function plot_topography_3d(
+    dat::SingleDataFrameEeg;
+    channel_selection::Function = channels(),
+    sample_selection::Function = samples(),
+    display_plot::Bool = true,
+    sphere_resolution::Int = 50,
+    colormap = :RdBu,
+    colorrange = nothing,
+    show_electrodes::Bool = true,
+    kwargs...,
+)
+    # Subset data
+    dat_subset = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection)
+
+    # Ensure 3D coordinates exist
+    _ensure_coordinates_3d!(dat_subset.layout)
+
+    # Compute average channel data
+    channel_data = mean.(eachcol(dat_subset.data[!, dat_subset.layout.data.label]))
+
+    # Generate sphere mesh that matches electrode positions
+    vertices, faces = _generate_sphere_mesh_from_electrodes(dat_subset.layout, sphere_resolution)
+
+    # Interpolate data onto sphere mesh using existing function
+    interpolated_values = _interpolate_data_on_3d_head(channel_data, dat_subset.layout, vertices)
+
+    # Determine color range
+    if isnothing(colorrange)
+        data_min, data_max = extrema(interpolated_values[.!isnan.(interpolated_values)])
+        max_abs = max(abs(data_min), abs(data_max))
+        colorrange = (-max_abs, max_abs)
+    end
+
+    # Create figure and axis
+    set_window_title(_generate_window_title(dat))
+    fig = Figure()
+    ax = Axis3(fig[1, 1]; aspect = :data)
+
+    # Reshape vertices and values to grid for surface plotting
+    n_points = sphere_resolution
+    x_grid = reshape(vertices[:, 1], n_points, n_points)
+    y_grid = reshape(vertices[:, 2], n_points, n_points)
+    z_grid = reshape(vertices[:, 3], n_points, n_points)
+    values_grid = reshape(interpolated_values, n_points, n_points)
+
+    # Plot surface with interpolated colors
+    # Use alpha to make surface semi-transparent so electrodes are visible
+    surface_plot = surface!(
+        ax,
+        x_grid,
+        y_grid,
+        z_grid;
+        color = values_grid,
+        colormap = colormap,
+        colorrange = colorrange,
+        shading = true,
+        alpha = 0.2,  # Make surface semi-transparent (0 = fully transparent, 1 = opaque)
+    )
+
+    # Optionally show electrode positions - plot AFTER surface so they're on top
+    # Offset electrodes slightly outward from surface to ensure they're always visible
+    if show_electrodes
+        # Scale electrode positions outward by 2% to ensure they're above the surface
+        scale_factor = 1.02
+        x_electrodes = dat_subset.layout.data[!, :x3] .* scale_factor
+        y_electrodes = dat_subset.layout.data[!, :y3] .* scale_factor
+        z_electrodes = dat_subset.layout.data[!, :z3] .* scale_factor
+        
+        scatter!(
+            ax,
+            x_electrodes,
+            y_electrodes,
+            z_electrodes;
+            color = :black,
+            markersize = 12,
+            marker = :circle,
+            strokewidth = 2,
+            strokecolor = :white,
+            overdraw = true,  # Disable depth testing so electrodes always appear on top
+        )
+    end
+
+    # Add colorbar
+    Colorbar(fig[1, 2], colormap = colormap, limits = colorrange, label = "Amplitude")
+
+    # Set title
+    time_min, time_max = extrema(dat_subset.data.time)
+    ax.title = @sprintf("%.3f to %.3f s", time_min, time_max)
+
+    hidedecorations!(ax)
+    hidespines!(ax)
+
+    display_plot && display_figure(fig)
+    set_window_title("Makie")
+
+    return fig, ax
 end

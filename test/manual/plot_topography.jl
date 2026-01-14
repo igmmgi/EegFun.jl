@@ -16,34 +16,15 @@ eegfun.filter_data!(dat, "hp", 1)
     dat,
     method = :spherical_spline,
     sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    gridscale = 500,
+    gridscale = 150,
 )
-@btime eegfun.plot_topography(
+eegfun.plot_topography(
     dat,
     method = :multiquadratic,
     sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
     ylim = (-30, 30),
     gridscale = 100,
 )
-@btime eegfun.plot_topography(
-    dat,
-    method = :nearest,
-    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    gridscale = 300,
-)
-@btime eegfun.plot_topography(
-    dat,
-    method = :linear,
-    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    gridscale = 300,
-)
-@btime eegfun.plot_topography(
-    dat,
-    method = :cubic,
-    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    gridscale = 300,
-)
-
 
 eegfun.plot_databrowser(dat)
 
