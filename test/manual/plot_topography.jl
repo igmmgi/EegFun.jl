@@ -11,6 +11,14 @@ dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
+
+@btime eegfun.plot_topography(dat, method = :spherical_spline, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168)
+@btime eegfun.plot_topography(dat, method = :multiquadratic, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168, ylim = (-30, 30))
+
+
+eegfun.plot_databrowser(dat)
+
+
 #################################
 # Single DataFrameEeg
 #################################
