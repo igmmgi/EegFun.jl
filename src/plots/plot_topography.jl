@@ -448,32 +448,44 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
 
     # Extract 3D coordinates as they are (no normalization needed)
     n_channels = length(dat)
-    coords = zeros(Float64, n_channels, 3)
-    for i = 1:n_channels
-        coords[i, :] = [layout.data.x3[i], layout.data.y3[i], layout.data.z3[i]]
+    coords = Matrix{Float64}(undef, n_channels, 3)
+    @inbounds for i = 1:n_channels
+        coords[i, 1] = layout.data.x3[i]
+        coords[i, 2] = layout.data.y3[i]
+        coords[i, 3] = layout.data.z3[i]
     end
 
     # Find the actual radius of the electrode positions
-    electrode_radius = mean([sqrt(sum(coords[i, :] .^ 2)) for i = 1:n_channels])
+    electrode_radius = 0.0
+    @inbounds for i = 1:n_channels
+        electrode_radius += sqrt(coords[i, 1]^2 + coords[i, 2]^2 + coords[i, 3]^2)
+    end
+    electrode_radius /= n_channels
 
     # Create a 2D grid for plotting using normalized coordinates
     x_range = range(-1.0, 1.0, length = grid_scale)
     y_range = range(-1.0, 1.0, length = grid_scale)
 
     # For spherical spline calculation, we need unit sphere coordinates
-    # So we normalize for the G matrix calculation only
-    coords_unit = copy(coords)
-    for i = 1:n_channels
-        norm_factor = sqrt(sum(coords_unit[i, :] .^ 2))
+    # Normalize each point to unit sphere (MNE-Python approach)
+    coords_unit = Matrix{Float64}(undef, n_channels, 3)
+    @inbounds for i = 1:n_channels
+        norm_factor = sqrt(coords[i, 1]^2 + coords[i, 2]^2 + coords[i, 3]^2)
         if norm_factor > 0
-            coords_unit[i, :] ./= norm_factor
+            coords_unit[i, 1] = coords[i, 1] / norm_factor
+            coords_unit[i, 2] = coords[i, 2] / norm_factor
+            coords_unit[i, 3] = coords[i, 3] / norm_factor
+        else
+            coords_unit[i, 1] = coords[i, 1]
+            coords_unit[i, 2] = coords[i, 2]
+            coords_unit[i, 3] = coords[i, 3]
         end
     end
 
     # Compute cosine angles between all electrode pairs (exactly like MNE)
     cosang = coords_unit * coords_unit'  # This is the dot product matrix
 
-    # Compute G matrix using MNE's exact g-function
+    # Compute G matrix using MNE's exact g-function (m=4, 15 terms for speed)
     G = _calc_g_matrix(cosang)
 
     # Add regularization to diagonal (exactly like MNE)
@@ -529,8 +541,20 @@ function _data_interpolation_topo_spherical_spline(dat::Vector{<:AbstractFloat},
         grid_points_3d = hcat(x3, y3, z3)
 
         # Normalize to unit sphere for all points at once
-        norms = sqrt.(sum(grid_points_3d .^ 2, dims = 2))
-        grid_points_unit = grid_points_3d ./ norms
+        n_valid = length(valid_indices)
+        grid_points_unit = Matrix{Float64}(undef, n_valid, 3)
+        @inbounds for i = 1:n_valid
+            norm_val = sqrt(grid_points_3d[i, 1]^2 + grid_points_3d[i, 2]^2 + grid_points_3d[i, 3]^2)
+            if norm_val > 0
+                grid_points_unit[i, 1] = grid_points_3d[i, 1] / norm_val
+                grid_points_unit[i, 2] = grid_points_3d[i, 2] / norm_val
+                grid_points_unit[i, 3] = grid_points_3d[i, 3] / norm_val
+            else
+                grid_points_unit[i, 1] = grid_points_3d[i, 1]
+                grid_points_unit[i, 2] = grid_points_3d[i, 2]
+                grid_points_unit[i, 3] = grid_points_3d[i, 3]
+            end
+        end
 
         # Compute cosine angles to all electrodes for all grid points at once
         # Ensure proper matrix multiplication order
@@ -577,18 +601,55 @@ function _legendre_polynomial(n::Int, x::Float64)
 
 end
 
-# Legendre polynomial evaluation for scalar input
+# Optimized Legendre polynomial series evaluation
+# Computes all Legendre polynomials up to max_order in one pass using recurrence
+function _legendre_val_optimized(x::Float64, factors::Vector{Float64})
+    """Evaluate Legendre polynomial series efficiently using recurrence relation.
+    
+    factors[1] = 0.0 (for n=0, which we skip)
+    factors[2] = factor for n=1
+    factors[3] = factor for n=2
+    etc.
+    """
+    max_order = length(factors) - 1  # factors[1] is 0.0, so skip it
+    if max_order < 1
+        return 0.0
+    end
+    
+    # Initialize recurrence: P_0 = 1, P_1 = x
+    p_prev = 1.0  # P_0
+    p_curr = x    # P_1
+    
+    # Start with n=1 term (factors[2])
+    result = factors[2] * p_curr
+    
+    # Compute remaining polynomials using recurrence (n=2 to max_order)
+    @inbounds for n = 2:max_order
+        p_next = ((2n - 1) * x * p_curr - (n - 1) * p_prev) / n
+        result += factors[n + 1] * p_next
+        p_prev = p_curr
+        p_curr = p_next
+    end
+    
+    return result
+end
+
+# Legendre polynomial evaluation for scalar input (legacy, kept for compatibility)
 function _legendre_val(x::Float64, factors::Vector{Float64})
     """Evaluate Legendre polynomial series for scalar input."""
-    result = 0.0
-    for (i, factor) in enumerate(factors)
-        if i == 1  # Skip the first factor (0.0)
-            continue
-        end
-        n = i - 1  # Legendre polynomial order
-        result += factor * _legendre_polynomial(n, x)
+    return _legendre_val_optimized(x, factors)
+end
+
+# Pre-computed factors for m=4, cached to avoid recomputation
+const _G_FACTORS_CACHE = Dict{Int, Vector{Float64}}()
+
+function _get_g_factors(n_legendre_terms::Int = 15)
+    """Get pre-computed factors for g-function calculation (cached)."""
+    if !haskey(_G_FACTORS_CACHE, n_legendre_terms)
+        factors = [(2 * n + 1) / (n^4 * (n + 1)^4 * 4 * π) for n = 1:n_legendre_terms]
+        _G_FACTORS_CACHE[n_legendre_terms] = [0.0; factors]  # Prepend 0.0 for n=0
     end
-    return result
+    return _G_FACTORS_CACHE[n_legendre_terms]
 end
 
 # MNE-Python's exact g-function calculation for EEG topography (m=4)
@@ -599,11 +660,9 @@ function _calc_g_function(cosang::Float64, n_legendre_terms::Int = 15)
     """
     cosang ≈ 1.0 && return 0.0
 
-    # Use m=4 (standard for EEG) and fewer terms for speed
-    factors = [(2 * n + 1) / (n^4 * (n + 1)^4 * 4 * π) for n = 1:n_legendre_terms]
-
-    # Use Legendre polynomial evaluation
-    return _legendre_val(cosang, [0.0; factors])
+    # Use cached factors and optimized Legendre evaluation
+    factors = _get_g_factors(n_legendre_terms)
+    return _legendre_val_optimized(cosang, factors)
 end
 
 # MNE-Python's exact G matrix calculation for EEG topography (m=4)
@@ -612,10 +671,10 @@ function _calc_g_matrix(cosang::Matrix{Float64}, n_legendre_terms::Int = 15)
 
     This is the exact implementation from MNE-Python, optimized for EEG topography (m=4).
     """
-    factors = [(2 * n + 1) / (n^4 * (n + 1)^4 * 4 * π) for n = 1:n_legendre_terms]
-
-    # Use Legendre polynomial evaluation for the entire matrix
-    return _legendre_val.(cosang, Ref([0.0; factors]))
+    factors = _get_g_factors(n_legendre_terms)
+    
+    # Use optimized Legendre evaluation for the entire matrix
+    return _legendre_val_optimized.(cosang, Ref(factors))
 end
 
 # =============================================================================
