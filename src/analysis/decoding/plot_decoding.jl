@@ -107,8 +107,7 @@ function plot_decoding(decoded::DecodedData; kwargs...)
         ax.title = title_text
     elseif show_title && isempty(title_text)
         # Default title from decoded data
-        method_str = string(decoded.parameters.method) |> uppercase
-        ax.title = "$(method_str) Decoding: $(join(decoded.condition_names, " vs "))"
+        ax.title = "Decoding: $(join(decoded.condition_names, " vs "))"
     end
 
     # Set axis limits
@@ -273,8 +272,7 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
             else
                 # Use subject identifier from file name or index
                 subject_id = isnothing(decoded.file) ? "Subject $idx" : basename(decoded.file)
-                method_str = string(decoded.parameters.method) |> uppercase
-                ax.title = "$subject_id ($method_str)"
+                ax.title = subject_id
             end
         end
         
