@@ -111,209 +111,201 @@ epochs_p2 = all_participant_epochs[2]
 epochs_p3 = all_participant_epochs[3]
 
 
-@btime decoded_p1 = eegfun.decode_libsvm(
+decoded_p1 = eegfun.decode_libsvm(
     epochs_p1;
     n_iterations = 10,  # Reduced for testing
     n_folds = 3,
     equalize_trials = true,
 )
+# Decode for Participant 2 - default model used automatically
+decoded_p2 = eegfun.decode_libsvm(epochs_p2, n_iterations = 10, n_folds = 3, equalize_trials = true)
+# Decode for Participant 3 - default model used automatically
+decoded_p3 = eegfun.decode_libsvm(epochs_p3, n_iterations = 10, n_folds = 3, equalize_trials = true)
+# Grand average
+all_decoded = [decoded_p1, decoded_p2, decoded_p3]
+grand_avg_decoded = eegfun.grand_average(all_decoded)
 
-# # Decode for Participant 2 - default model used automatically
-# decoded_p2 = eegfun.decode_libsvm(
-#     epochs_p2,
-#     n_iterations = 10,
-#     n_folds = 3,
-#     equalize_trials = true,
-# )
-# # Decode for Participant 3 - default model used automatically
-# decoded_p3 = eegfun.decode_libsvm(
-#     epochs_p3,
-#     n_iterations = 10,
-#     n_folds = 3,
-#     equalize_trials = true,
-# )
-# # Grand average
-# all_decoded = [decoded_p1, decoded_p2, decoded_p3]
-# grand_avg_decoded = eegfun.grand_average(all_decoded)
-# 
-# # fig = eegfun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
-# fig = eegfun.plot_decoding(grand_avg_decoded, title = "Test Decoding")
-# 
-# 
-# # ============================================================================
-# # STATISTICAL TESTING
-# # ============================================================================
-# # Quick statistical test on synthetic data
-# println("\n[Quick Test] Statistical testing on synthetic data...")
-# stats_synthetic = eegfun.test_against_chance(
-#     all_decoded,
-#     alpha = 0.05,
-#     tail = :right,
-#     # correction_method = :bonferroni,  # No correction for quick test
-#     correction_method = :none,  # No correction for quick test
-# )
-# println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
-# 
-# # Plot with significance
-# fig_stats_synthetic = eegfun.plot_decoding(
-#     grand_avg_decoded,
-#     stats_synthetic,
-#     title = "Synthetic Data with Significance",
-#     show_significance = true,
-# )
-# 
-# 
-# println("\n[Quick Test] Statistical testing on synthetic data...")
-# stats_synthetic = eegfun.test_against_chance_cluster(
-#     all_decoded,
-#     alpha = 0.2,
-#     tail = :right,
-# )
-# println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
-# 
-# # Plot with significance
-# fig_stats_synthetic = eegfun.plot_decoding(
-#     grand_avg_decoded,
-#     stats_synthetic,
-#     title = "Synthetic Data with Significance",
-#     show_significance = true,
-# )
-# 
-# 
-# 
-# using eegfun
-# using Glob  # For finding files (or use readdir with filter)
-# 
-# # Configuration
-# data_dir = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded")
-# layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv")
-# eegfun.polar_to_cartesian_xy!(layout_file)
-# 
-# # Epoch configuration
-# epoch_cfg = [
-#     eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [3]]),
-#     eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2], [4]]),
-# ]
-# 
-# # Find all .bdf files in directory
-# bdf_files = glob("*.bdf", data_dir)
-# println("Found $(length(bdf_files)) files to process")
-# 
-# # Process each file
-# all_decoded = eegfun.DecodedData[]
-# for (file_idx, data_file) in enumerate(bdf_files)
-#     participant_id = basename(data_file)
-#     println("\n[$(file_idx)/$(length(bdf_files))] Processing: $participant_id")
-#     
-#     try
-#         # Preprocessing (same for all files)
-#         dat = eegfun.read_bdf(data_file)
-#         dat = eegfun.create_eeg_dataframe(dat, layout_file)
-#         eegfun.rereference!(dat, :avg)
-#         eegfun.filter_data!(dat, "hp", 1)
-#         
-#         # Extract epochs
-#         epochs = eegfun.extract_epochs(dat, epoch_cfg, -0.2, 2.5)
-#         
-#         # Decode
-#         decoded = eegfun.decode_libsvm(
-#             epochs,
-#             n_iterations = 10,
-#             n_folds = 3,
-#             equalize_trials = true,
-#         )
-#         
-#         push!(all_decoded, decoded)
-#         println("  ✓ Decoding complete: Max accuracy = $(round(maximum(decoded.average_score), digits=3))")
-#         
-#     catch e
-#         println("  ✗ Error processing $participant_id: $e")
-#         continue
-#     end
-# end
-# 
-# grand_avg_decoded = eegfun.grand_average(all_decoded)
-# println("  ✓ Grand average created")
-# println("    Max accuracy: $(round(maximum(grand_avg_decoded.average_score), digits=3))")
-# println("    Time range: $(round(grand_avg_decoded.times[1], digits=2)) to $(round(grand_avg_decoded.times[end], digits=2)) s")
-# 
-# # Plot grand average
-# fig = eegfun.plot_decoding(
-#     grand_avg_decoded, 
-#     title = "Grand Average: Test Decoding"
-# )
-# println("  ✓ Plot created")
-# 
-# 
-# # ============================================================================
-# # STATISTICAL TESTING
-# # ============================================================================
-# 
-# println("\n" * "="^70)
-# println("Statistical Testing")
-# println("="^70)
-# 
-# # Test 1: One-sample t-test against chance (with Bonferroni correction)
-# println("\n[1/2] One-sample t-test against chance (Bonferroni correction)...")
-# stats_bonferroni = eegfun.test_against_chance(
-#     all_decoded,
-#     alpha = 0.05,
-#     tail = :right,  # Test if accuracy > chance
-#     correction_method = :bonferroni,
-# )
-# println("  ✓ T-test complete")
-# println("    Significant time points: $(sum(stats_bonferroni.significant_mask)) / $(length(stats_bonferroni.significant_mask))")
-# println("    Min p-value: $(round(minimum(stats_bonferroni.p_values), digits=4))")
-# println("    Max t-value: $(round(maximum(stats_bonferroni.t_statistics), digits=3))")
-# 
-# # Plot with significance markers (Bonferroni)
-# fig_stats_bonf = eegfun.plot_decoding(
-#     grand_avg,
-#     stats_bonferroni,
-#     title = "Grand Average with Significance (Bonferroni)",
-#     show_significance = true,
-#     sig_color = :yellow,
-#     sig_alpha = 0.3,
-# )
-# println("  ✓ Plot with significance markers created")
-# 
-# # Test 2: Cluster-based permutation test
-# println("\n[2/2] Cluster-based permutation test...")
-# stats_cluster = eegfun.test_against_chance_cluster(
-#     all_decoded,
-#     alpha = 0.05,
-#     tail = :right,
-#     n_permutations = 1000,  # Use more for publication (e.g., 10000)
-#     cluster_statistic = :sum,  # or :max
-#     random_seed = 42,  # For reproducibility
-#     show_progress = true,
-# )
-# println("  ✓ Cluster permutation test complete")
-# if !isnothing(stats_cluster.clusters) && !isempty(stats_cluster.clusters)
-#     n_sig_clusters = sum(c.is_significant for c in stats_cluster.clusters)
-#     println("    Significant clusters: $n_sig_clusters / $(length(stats_cluster.clusters))")
-#     for (i, cluster) in enumerate(stats_cluster.clusters)
-#         if cluster.is_significant
-#             println("      Cluster $i: $(round(cluster.time_range[1], digits=3))-$(round(cluster.time_range[2], digits=3)) s, p=$(round(cluster.p_value, digits=4))")
-#         end
-#     end
-# else
-#     println("    No clusters found")
-# end
-# println("    Significant time points: $(sum(stats_cluster.significant_mask)) / $(length(stats_cluster.significant_mask))")
-# 
-# # Plot with cluster-based significance markers
-# fig_stats_cluster = eegfun.plot_decoding(
-#     grand_avg,
-#     stats_cluster,
-#     title = "Grand Average with Cluster-Based Significance",
-#     show_significance = true,
-#     sig_color = :green,
-#     sig_alpha = 0.3,
-# )
-# println("  ✓ Plot with cluster significance markers created")
-# 
-# println("\n" * "="^70)
-# println("All tests complete!")
-# println("="^70)
+# fig = eegfun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
+fig = eegfun.plot_decoding(grand_avg_decoded, title = "Test Decoding")
+
+
+# ============================================================================
+# STATISTICAL TESTING
+# ============================================================================
+# Quick statistical test on synthetic data
+println("\n[Quick Test] Statistical testing on synthetic data...")
+stats_synthetic = eegfun.test_against_chance(
+    all_decoded,
+    alpha = 0.05,
+    tail = :right,
+    # correction_method = :bonferroni,  # No correction for quick test
+    correction_method = :none,  # No correction for quick test
+)
+println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
+
+# Plot with significance
+fig_stats_synthetic = eegfun.plot_decoding(
+    grand_avg_decoded,
+    stats_synthetic,
+    title = "Synthetic Data with Significance",
+    show_significance = true,
+)
+
+
+println("\n[Quick Test] Statistical testing on synthetic data...")
+stats_synthetic = eegfun.test_against_chance_cluster(all_decoded, alpha = 0.2, tail = :right)
+println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
+
+# Plot with significance
+fig_stats_synthetic = eegfun.plot_decoding(
+    grand_avg_decoded,
+    stats_synthetic,
+    title = "Synthetic Data with Significance",
+    show_significance = true,
+)
+
+
+
+using eegfun
+using Glob  # For finding files (or use readdir with filter)
+
+# Configuration
+data_dir = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded")
+layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv")
+eegfun.polar_to_cartesian_xy!(layout_file)
+
+# Epoch configuration
+epoch_cfg = [
+    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [3]]),
+    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2], [4]]),
+]
+
+# Find all .bdf files in directory
+bdf_files = glob("*.bdf", data_dir)
+println("Found $(length(bdf_files)) files to process")
+
+# Process each file
+all_decoded = eegfun.DecodedData[]
+for (file_idx, data_file) in enumerate(bdf_files)
+    participant_id = basename(data_file)
+    println("\n[$(file_idx)/$(length(bdf_files))] Processing: $participant_id")
+
+    try
+        # Preprocessing (same for all files)
+        dat = eegfun.read_bdf(data_file)
+        dat = eegfun.create_eeg_dataframe(dat, layout_file)
+        eegfun.rereference!(dat, :avg)
+        eegfun.filter_data!(dat, "hp", 1)
+
+        # Extract epochs
+        epochs = eegfun.extract_epochs(dat, epoch_cfg, -0.2, 2.5)
+
+        # Decode
+        decoded = eegfun.decode_libsvm(
+            epochs,
+            channel_selection = eegfun.channels([:PO7, :PO8]),
+            n_iterations = 10,
+            n_folds = 3,
+            equalize_trials = true,
+        )
+
+        push!(all_decoded, decoded)
+        println("  ✓ Decoding complete: Max accuracy = $(round(maximum(decoded.average_score), digits=3))")
+
+    catch e
+        println("  ✗ Error processing $participant_id: $e")
+        continue
+    end
+end
+
+grand_avg_decoded = eegfun.grand_average(all_decoded)
+println("  ✓ Grand average created")
+println("    Max accuracy: $(round(maximum(grand_avg_decoded.average_score), digits=3))")
+println(
+    "    Time range: $(round(grand_avg_decoded.times[1], digits=2)) to $(round(grand_avg_decoded.times[end], digits=2)) s",
+)
+
+# Plot grand average
+fig = eegfun.plot_decoding(grand_avg_decoded, title = "Grand Average: Test Decoding")
+println("  ✓ Plot created")
+
+
+# ============================================================================
+# STATISTICAL TESTING
+# ============================================================================
+
+println("\n" * "="^70)
+println("Statistical Testing")
+println("="^70)
+
+# Test 1: One-sample t-test against chance (with Bonferroni correction)
+println("\n[1/2] One-sample t-test against chance (Bonferroni correction)...")
+stats_bonferroni = eegfun.test_against_chance(
+    all_decoded,
+    alpha = 0.05,
+    tail = :right,  # Test if accuracy > chance
+    correction_method = :none,
+    # correction_method = :bonferroni,
+)
+println("  ✓ T-test complete")
+println(
+    "    Significant time points: $(sum(stats_bonferroni.significant_mask)) / $(length(stats_bonferroni.significant_mask))",
+)
+println("    Min p-value: $(round(minimum(stats_bonferroni.p_values), digits=4))")
+println("    Max t-value: $(round(maximum(stats_bonferroni.t_statistics), digits=3))")
+
+# Plot with significance markers (Bonferroni)
+fig_stats_bonf = eegfun.plot_decoding(
+    grand_avg_decoded,
+    stats_bonferroni,
+    title = "Grand Average with Significance (Bonferroni)",
+    show_significance = true,
+    sig_color = :yellow,
+    sig_alpha = 0.3,
+)
+println("  ✓ Plot with significance markers created")
+
+# Test 2: Cluster-based permutation test
+println("\n[2/2] Cluster-based permutation test...")
+stats_cluster = eegfun.test_against_chance_cluster(
+    all_decoded,
+    alpha = 0.05,
+    tail = :right,
+    n_permutations = 1000,  # Use more for publication (e.g., 10000)
+    cluster_statistic = :sum,  # or :max
+    random_seed = 42,  # For reproducibility
+    show_progress = true,
+)
+println("  ✓ Cluster permutation test complete")
+if !isnothing(stats_cluster.clusters) && !isempty(stats_cluster.clusters)
+    n_sig_clusters = sum(c.is_significant for c in stats_cluster.clusters)
+    println("    Significant clusters: $n_sig_clusters / $(length(stats_cluster.clusters))")
+    for (i, cluster) in enumerate(stats_cluster.clusters)
+        if cluster.is_significant
+            println(
+                "      Cluster $i: $(round(cluster.time_range[1], digits=3))-$(round(cluster.time_range[2], digits=3)) s, p=$(round(cluster.p_value, digits=4))",
+            )
+        end
+    end
+else
+    println("    No clusters found")
+end
+println(
+    "    Significant time points: $(sum(stats_cluster.significant_mask)) / $(length(stats_cluster.significant_mask))",
+)
+
+# Plot with cluster-based significance markers
+fig_stats_cluster = eegfun.plot_decoding(
+    grand_avg_decoded,
+    stats_cluster,
+    title = "Grand Average with Cluster-Based Significance",
+    show_significance = true,
+    sig_color = :green,
+    sig_alpha = 0.3,
+)
+println("  ✓ Plot with cluster significance markers created")
+
+println("\n" * "="^70)
+println("All tests complete!")
+println("="^70)
 
