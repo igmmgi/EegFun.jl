@@ -72,7 +72,7 @@ function tf_morlet(
     dat::EpochData;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
-    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length=40),
+    frequencies::Union{AbstractRange,AbstractVector{<:Real}} = range(1, 40, length = 40),
     cycles::Union{Real,Tuple{Real,Real}} = 7,
     pad::Union{Nothing,Symbol} = nothing,
     return_trials::Bool = false,
@@ -95,17 +95,17 @@ function tf_morlet(
     if !isnothing(pad)
         mirror!(dat, pad)
     end
-    
+
     # Get number of trials/epochs
     n_trials = n_epochs(dat)
     n_samples_per_epoch = n_samples(dat) # Use full signal for convolution (may be padded)
-    
+
     # Get all time points from processed (possibly padded) data
     times_all = time(dat)
 
     # Use frequency input directly (ranges and vectors both work)
     num_frex = length(frequencies)
-    
+
     # Validate frequencies
     if num_frex == 0
         error("`frequencies` must contain at least one frequency")
@@ -128,7 +128,7 @@ function tf_morlet(
         else  # :post
             n_pre_pad = 0
         end
-        time_indices_out = (n_pre_pad + 1):(n_pre_pad + n_samples_original_unpadded)
+        time_indices_out = (n_pre_pad+1):(n_pre_pad+n_samples_original_unpadded)
     else
         time_indices_out = 1:n_samples_original_unpadded
     end
@@ -151,27 +151,27 @@ function tf_morlet(
     max_hw = ceil(Int, 6 * max_sigma * dat.sample_rate) ÷ 2
     max_wl = max_hw * 2 + 1
     n_conv_pow2 = nextpow(2, max_wl + n_samples_per_epoch - 1)
-    
+
     # Pre-allocate reusable buffers for single trial processing
     signal_padded = zeros(ComplexF64, n_conv_pow2)
     eegfft = zeros(ComplexF64, n_conv_pow2)
     wavelet_padded = zeros(ComplexF64, n_conv_pow2)
     conv_buffer = zeros(ComplexF64, n_conv_pow2)
     eegconv_buffer = zeros(ComplexF64, n_conv_pow2)
-    
+
     # Create FFT plans using the actual buffers 
-    p_fft_signal = plan_fft(signal_padded, flags=FFTW.MEASURE)
-    p_fft_wavelet = plan_fft(wavelet_padded, flags=FFTW.MEASURE)
-    p_ifft_conv = plan_ifft(eegconv_buffer, flags=FFTW.MEASURE)
+    p_fft_signal = plan_fft(signal_padded, flags = FFTW.MEASURE)
+    p_fft_wavelet = plan_fft(wavelet_padded, flags = FFTW.MEASURE)
+    p_ifft_conv = plan_ifft(eegconv_buffer, flags = FFTW.MEASURE)
 
     # Pre-compute some constants 
-    inv_sr = 1.0 / dat.sample_rate 
+    inv_sr = 1.0 / dat.sample_rate
     two_pi = 2 * pi
     sqrt_pi = sqrt(pi)
 
     # Pre-compute wavelets and their FFTs once (same for all channels and trials)
     wavelet_ffts = Vector{Vector{ComplexF64}}(undef, num_frex)
-    wl_per_freq = Vector{Int}(undef, num_frex)  
+    wl_per_freq = Vector{Int}(undef, num_frex)
     conv_indices_per_freq = Vector{Vector{Int}}(undef, num_frex)
 
     for fi = 1:num_frex
@@ -181,10 +181,10 @@ function tf_morlet(
         wl = hw * 2 + 1
         wl_per_freq[fi] = wl
         valid_start = hw + 1
-        
+
         # Pre-compute convolution indices for all samples in padded data
         conv_indices_per_freq[fi] = [valid_start + sample_idx - 1 for sample_idx = 1:n_samples_per_epoch]
-        
+
         # Create wavelet directly in padded buffer
         fill!(wavelet_padded, 0)
         A = sqrt(1 / (sigma * sqrt_pi))
@@ -216,44 +216,72 @@ function tf_morlet(
     # all trials and/or channels into a single matrix and then processing that
     # but it still seems too slow!!!
 
-    # Process each selected channel and each trial separately
+    # Process each selected channel
     for channel in channel_labels(dat)
 
         # Reset output arrays for this channel
         fill!(eegpower, 0)
         fill!(eegconv, 0)
-         
+
+        # ==============================================================
+        # BATCH PROCESSING: Collect all trials into matrix
+        # ==============================================================
+        # Allocate matrix for all trials [n_samples × n_trials]
+        signal_matrix = zeros(Float64, n_samples_per_epoch, n_trials)
+        @inbounds for trial_idx = 1:n_trials
+            signal_matrix[:, trial_idx] .= dat.data[trial_idx][!, channel]
+        end
+
+        # ==============================================================
+        # FFT all trials at once (1 call instead of n_trials calls)
+        # ==============================================================
+        # Pad signal matrix for FFT
+        signal_matrix_padded = zeros(ComplexF64, n_conv_pow2, n_trials)
+        signal_matrix_padded[1:n_samples_per_epoch, :] .= signal_matrix
+
+        # FFT along first dimension for all trials
+        signal_fft_all = zeros(ComplexF64, n_conv_pow2, n_trials)
         for trial_idx = 1:n_trials
-             
-            # Copy single trial data to padded buffer
-            fill!(signal_padded, 0)
-            signal_padded[1:n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
-            
-            # FFT for this trial
-            mul!(eegfft, p_fft_signal, signal_padded)
+            mul!(@view(signal_fft_all[:, trial_idx]), p_fft_signal, @view(signal_matrix_padded[:, trial_idx]))
+        end
 
-            # Loop through frequencies - reuse pre-computed wavelet FFTs
-            for fi = 1:num_frex
+        # ==============================================================
+        # Process each frequency with all trials together
+        # ==============================================================
+        for fi = 1:num_frex
+            wavelet_fft = wavelet_ffts[fi]
+            conv_indices = conv_indices_per_freq[fi]
 
-                # TODO: here is the problem!!! But need to test again concat option(s)
+            # ==============================================================
+            # Multiply wavelet FFT with all trial FFTs and IFFT
+            # (40 IFFTs instead of 16,000)
+            # ==============================================================
+            conv_result_all = zeros(ComplexF64, n_conv_pow2, n_trials)
+
+            for trial_idx = 1:n_trials
+                # Element-wise multiply
                 @inbounds @simd for i = 1:n_conv_pow2
-                    conv_buffer[i] = wavelet_ffts[fi][i] * eegfft[i]
+                    conv_buffer[i] = wavelet_fft[i] * signal_fft_all[i, trial_idx]
                 end
-                mul!(eegconv_buffer, p_ifft_conv, conv_buffer)
-                
-                # Extract only original unpadded samples from convolution
-                conv_indices = conv_indices_per_freq[fi]
-                @inbounds for (ti_out, ti_padded) in enumerate(time_indices_out)
-                    val = eegconv_buffer[conv_indices[ti_padded]] 
-                    
+
+                # IFFT for this trial
+                mul!(@view(conv_result_all[:, trial_idx]), p_ifft_conv, conv_buffer)
+            end
+
+            # ==============================================================
+            # Extract results for all trials
+            # ==============================================================
+            @inbounds for trial_idx = 1:n_trials
+                for (ti_out, ti_padded) in enumerate(time_indices_out)
+                    val = conv_result_all[conv_indices[ti_padded], trial_idx]
+
                     if return_trials
                         eegpower[fi, ti_out, trial_idx] = abs2(val)
                         eegconv[fi, ti_out, trial_idx] = val
                     else
-                        eegpower[fi, ti_out] += abs2(val) 
-                        eegconv[fi, ti_out] += val 
+                        eegpower[fi, ti_out] += abs2(val)
+                        eegconv[fi, ti_out] += val
                     end
-
                 end
             end
         end
@@ -262,12 +290,12 @@ function tf_morlet(
             eegpower ./= n_trials
             eegconv ./= n_trials
         end
-        
+
         if filter_edges
             # Use padded indices for edge filtering - padding extends valid region
             _filter_edges!(eegpower, eegconv, num_frex, time_indices_out, wl_per_freq, n_samples_per_epoch)
         end
-        
+
         if return_trials # Store each trial separately
             for trial_idx = 1:n_trials
                 power_df[trial_idx][!, channel] = vec(@view eegpower[:, :, trial_idx])
