@@ -1474,6 +1474,7 @@ function _generate_sphere_mesh_from_electrodes(layout::Layout, resolution::Int =
         radius = total_weight > 0 ? weighted_radius / total_weight : 1.0
         
         # Convert back to Cartesian using the interpolated radius
+        # Use the same coordinate system as the electrodes (no rotation needed)
         vertices[idx, 1] = radius * sin(inc) * cos(azi)
         vertices[idx, 2] = radius * sin(inc) * sin(azi)
         vertices[idx, 3] = radius * cos(inc)
@@ -1543,10 +1544,28 @@ function plot_topography_3d(
     ax = Axis3(fig[1, 1]; aspect = :data)
 
     # Reshape vertices and values to grid for surface plotting
+    # The vertices are generated in order: for each inc (i), for each azi (j)
+    # This means: vertices[1:resolution] = all azi at inc=0 (top), 
+    #            vertices[resolution+1:2*resolution] = all azi at inc=π/resolution, etc.
+    # When reshaping, this creates a matrix where:
+    # - Rows correspond to inclination (inc) - from top (inc=0) to bottom (inc=π)
+    # - Columns correspond to azimuth (azi) - from 0 to 2π
     n_points = sphere_resolution
-    x_grid = reshape(vertices[:, 1], n_points, n_points)
-    y_grid = reshape(vertices[:, 2], n_points, n_points)
-    z_grid = reshape(vertices[:, 3], n_points, n_points)
+    
+    # Rotate vertices to match 2D topography orientation
+    # In 2D, frontal electrodes are at the top. Rotate 45 degrees around y-axis:
+    # x' = x*cos(45°) + z*sin(45°), y' = y, z' = -x*sin(45°) + z*cos(45°)
+    # cos(45°) = sin(45°) = 1/√2
+    cos_45 = 1.0 / sqrt(2.0)
+    sin_45 = 1.0 / sqrt(2.0)
+    vertices_rotated = similar(vertices)
+    vertices_rotated[:, 1] = vertices[:, 1] * cos_45 + vertices[:, 3] * sin_45  # x' = x*cos + z*sin
+    vertices_rotated[:, 2] = vertices[:, 2]                                     # y' = y
+    vertices_rotated[:, 3] = -vertices[:, 1] * sin_45 + vertices[:, 3] * cos_45 # z' = -x*sin + z*cos
+    
+    x_grid = reshape(vertices_rotated[:, 1], n_points, n_points)
+    y_grid = reshape(vertices_rotated[:, 2], n_points, n_points)
+    z_grid = reshape(vertices_rotated[:, 3], n_points, n_points)
     values_grid = reshape(interpolated_values, n_points, n_points)
 
     # Plot surface with interpolated colors
@@ -1560,14 +1579,14 @@ function plot_topography_3d(
         colormap = colormap,
         colorrange = colorrange,
         shading = true,
-        alpha = 0.2,  # Make surface semi-transparent (0 = fully transparent, 1 = opaque)
+        alpha = 1.0,  # Make surface semi-transparent (0 = fully transparent, 1 = opaque)
     )
 
     # Optionally show electrode positions - plot AFTER surface so they're on top
     # Offset electrodes slightly outward from surface to ensure they're always visible
     if show_electrodes
         # Scale electrode positions outward by 2% to ensure they're above the surface
-        scale_factor = 1.02
+        scale_factor = 1.1
         x_electrodes = dat_subset.layout.data[!, :x3] .* scale_factor
         y_electrodes = dat_subset.layout.data[!, :y3] .* scale_factor
         z_electrodes = dat_subset.layout.data[!, :z3] .* scale_factor
@@ -1578,11 +1597,11 @@ function plot_topography_3d(
             y_electrodes,
             z_electrodes;
             color = :black,
-            markersize = 12,
+            markersize = 10,
             marker = :circle,
-            strokewidth = 2,
-            strokecolor = :white,
-            overdraw = true,  # Disable depth testing so electrodes always appear on top
+            strokewidth = 1,
+            strokecolor = :black,
+            overdraw = false,  # Disable depth testing so electrodes always appear on top
         )
     end
 

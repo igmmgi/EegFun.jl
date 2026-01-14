@@ -12,12 +12,23 @@ eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
 
-@btime eegfun.plot_topography(
+eegfun.plot_topography_3d(
     dat,
     method = :spherical_spline,
     sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
     gridscale = 150,
 )
+
+
+
+
+eegfun.plot_topography(
+    dat,
+    method = :spherical_spline,
+    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
+    gridscale = 150,
+)
+
 eegfun.plot_topography(
     dat,
     method = :multiquadratic,
