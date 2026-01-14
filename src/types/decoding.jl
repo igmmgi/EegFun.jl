@@ -12,7 +12,6 @@ confusion matrices.
 Stores parameters used for decoding analysis.
 
 # Fields
-- `method::Symbol`: Classification method used (`:logistic`, `:svm`, `:lda`, etc.)
 - `chance_level::Float64`: Expected chance-level performance (e.g., 0.5 for binary, 1/n_classes for n-class)
 - `n_iterations::Int64`: Number of iterations/permutations performed
 - `n_folds::Int64`: Number of cross-validation folds
@@ -20,7 +19,6 @@ Stores parameters used for decoding analysis.
 - `n_classes::Int64`: Number of classes/conditions being decoded
 """
 struct DecodingParameters
-    method::Symbol
     chance_level::Float64
     n_iterations::Int64
     n_folds::Int64
@@ -43,7 +41,7 @@ and metadata about the analysis parameters.
 - `times::Vector{Float64}`: Time points in seconds where decoding was performed
 - `average_score::Vector{Float64}`: Average classification accuracy at each time point
 - `channels::Vector{Symbol}`: Channel names used in the analysis
-- `parameters::DecodingParameters`: Decoding analysis parameters (method, chance_level, n_iterations, n_folds, class_coding, n_classes)
+- `parameters::DecodingParameters`: Decoding analysis parameters (chance_level, n_iterations, n_folds, class_coding, n_classes)
 - `stderror::Union{Vector{Float64}, Nothing}`: Standard error of accuracy (if computed)
 - `confusion_matrix::Union{Array{Float64, 3}, Nothing}`: Confusion matrices [time × true_class × predicted_class] (if computed)
 - `raw_predictions::Union{Array{Float64, 4}, Nothing}`: Raw predictions [iteration × fold × time × class] (if saved)
@@ -58,35 +56,35 @@ mutable struct DecodedData <: SingleDataFrameEeg
     stderror::Union{Vector{Float64}, Nothing}
     confusion_matrix::Union{Array{Float64, 3}, Nothing}
     raw_predictions::Union{Array{Float64, 4}, Nothing}
-end
+    
+    """
+        DecodedData constructor
 
-"""
-    DecodedData constructor
-
-Create a DecodedData object with required fields.
-"""
-function DecodedData(
-    file::String,
-    condition_names::Vector{String},
-    times::Vector{Float64},
-    average_score::Vector{Float64},
-    channels::Vector{Symbol},
-    parameters::DecodingParameters;
-    stderror::Union{Vector{Float64}, Nothing} = nothing,
-    confusion_matrix::Union{Array{Float64, 3}, Nothing} = nothing,
-    raw_predictions::Union{Array{Float64, 4}, Nothing} = nothing,
-)
-    return DecodedData(
-        file,
-        condition_names,
-        times,
-        average_score,
-        channels,
-        parameters,
-        stderror,
-        confusion_matrix,
-        raw_predictions,
+    Create a DecodedData object with required fields.
+    """
+    function DecodedData(
+        file::String,
+        condition_names::Vector{String},
+        times::Vector{Float64},
+        average_score::Vector{Float64},
+        channels::Vector{Symbol},
+        parameters::DecodingParameters;
+        stderror::Union{Vector{Float64}, Nothing} = nothing,
+        confusion_matrix::Union{Array{Float64, 3}, Nothing} = nothing,
+        raw_predictions::Union{Array{Float64, 4}, Nothing} = nothing,
     )
+        return new(
+            file,
+            condition_names,
+            times,
+            average_score,
+            channels,
+            parameters,
+            stderror,
+            confusion_matrix,
+            raw_predictions,
+        )
+    end
 end
 
 """
@@ -98,7 +96,6 @@ function Base.show(io::IO, decoded::DecodedData)
     println(io, "DecodedData:")
     println(io, "  File: $(decoded.file)")
     println(io, "  Conditions: $(join(decoded.condition_names, ", "))")
-    println(io, "  Method: $(decoded.parameters.method)")
     println(io, "  Classes: $(decoded.parameters.n_classes)")
     println(io, "  Time range: $(decoded.times[1]) to $(decoded.times[end]) s")
     println(io, "  Iterations: $(decoded.parameters.n_iterations)")

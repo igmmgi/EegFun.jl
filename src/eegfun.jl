@@ -1,9 +1,9 @@
 __precompile__(true)
 
-
 module eegfun
 
 # Core dependencies
+using AnovaFun
 using BiosemiDataFormat
 using BrainVisionDataFormat
 using CategoricalArrays
@@ -40,13 +40,9 @@ using StatsBase
 using TOML
 
 # Machine learning (for decoding/MVPA)
-using MLJ # 
-using MLJLinearModels
 using LIBSVM
-using MLJLIBSVMInterface
-using MLJMultivariateStatsInterface
+using Base: SubArray
 
-# Julia standard library
 # TODO: consider using Threads.@threads for parallel processing?
 # using Base.Threads
 
@@ -106,11 +102,11 @@ include("analysis/time_frequency/tf_stft.jl")
 include("analysis/time_frequency/tf_multitaper.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
-# RSA and decoding analysis
-include("analysis/decoding/svm_pegasos.jl")
-include("analysis/decoding/svm_libsvm.jl")
+# decoding analysis via libsvm
 include("analysis/decoding/decoding.jl")
 include("analysis/decoding/decoding_statistics.jl")
+
+# RSA/RDM
 include("analysis/rsa/rsa.jl")
 include("analysis/rsa/rsa_models.jl")
 
