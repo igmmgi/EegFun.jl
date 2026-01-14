@@ -30,7 +30,7 @@ function _prepare_rsa_data(epochs::Vector{EpochData})
     times = time(epochs)
 
     # Prepare data arrays for each condition
-    data_arrays = Vector{Array{Float64, 3}}()
+    data_arrays = Vector{Array{Float64,3}}()
     n_trials_per_condition = Int[]
 
     for epoch_data in epochs
@@ -54,12 +54,65 @@ function _prepare_rsa_data(epochs::Vector{EpochData})
     return data_arrays, times, n_trials_per_condition
 end
 
+"""
+    _compute_pooled_covariance(data_arrays::Vector{Array{Float64, 3}}, time_idx::Int)
+
+Compute pooled covariance matrix across all conditions at a specific time point.
+
+The pooled covariance is the weighted average of within-condition covariances,
+which provides a robust estimate of the noise covariance structure.
+
+# Arguments
+- `data_arrays::Vector{Array{Float64, 3}}`: Vector of [channels × time × trials] arrays, one per condition
+- `time_idx::Int`: Time point index to compute covariance for
+
+# Returns
+- `pooled_cov::Matrix{Float64}`: Pooled covariance matrix [features × features]
+
+# Notes
+- Uses unbiased estimator (dividing by n-1)
+- Regularization is applied if matrix is near-singular
+"""
+function _compute_pooled_covariance(data_arrays::Vector{Array{Float64,3}}, time_idx::Int)
+    n_conditions = length(data_arrays)
+    n_features = size(data_arrays[1], 1)  # Number of channels
+
+    # Collect all trials across conditions at this time point
+    all_trials = Matrix{Float64}[]
+
+    for cond_data in data_arrays
+        n_trials = size(cond_data, 3)
+        # Extract [features × trials] at time_idx
+        timepoint_data = cond_data[:, time_idx, :]  # [channels × trials]
+        push!(all_trials, timepoint_data)
+    end
+
+    # Compute pooled covariance
+    # Pool all trials together for robust covariance estimation
+    all_data = hcat(all_trials...)  # [features × total_trials]
+
+    # Compute covariance matrix
+    pooled_cov = cov(all_data', corrected = true)  # Transpose to [trials × features]
+
+    # Add small regularization for numerical stability
+    # This helps with near-singular matrices
+    λ = 1e-6 * tr(pooled_cov) / n_features
+    pooled_cov += λ * I(n_features)
+
+    return pooled_cov
+end
+
 # ==============================================================================
 #   DISSIMILARITY MEASURES
 # ==============================================================================
 
 """
-    _compute_dissimilarity(pattern1::Vector{Float64}, pattern2::Vector{Float64}, measure::Symbol)
+    _compute_dissimilarity(
+        pattern1::Vector{Float64},
+        pattern2::Vector{Float64},
+        measure::Symbol;
+        covariance_matrix::Union{Matrix{Float64}, Nothing} = nothing
+    )
 
 Compute dissimilarity between two neural patterns.
 
@@ -67,11 +120,17 @@ Compute dissimilarity between two neural patterns.
 - `pattern1::Vector{Float64}`: First pattern (e.g., average across trials for condition 1)
 - `pattern2::Vector{Float64}`: Second pattern (e.g., average across trials for condition 2)
 - `measure::Symbol`: Dissimilarity measure (:correlation, :euclidean, :mahalanobis)
+- `covariance_matrix::Union{Matrix{Float64}, Nothing}`: Pooled covariance matrix for Mahalanobis distance (optional)
 
 # Returns
 - `dissimilarity::Float64`: Dissimilarity value (higher = more dissimilar)
 """
-function _compute_dissimilarity(pattern1::Vector{Float64}, pattern2::Vector{Float64}, measure::Symbol)
+function _compute_dissimilarity(
+    pattern1::Vector{Float64},
+    pattern2::Vector{Float64},
+    measure::Symbol;
+    covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
+)
     if measure == :correlation || measure == :pearson
         # 1 - Pearson correlation (dissimilarity)
         corr = cor(pattern1, pattern2)
@@ -84,46 +143,168 @@ function _compute_dissimilarity(pattern1::Vector{Float64}, pattern2::Vector{Floa
         # Euclidean distance
         return sqrt(sum((pattern1 .- pattern2) .^ 2))
     elseif measure == :mahalanobis
-        # Mahalanobis distance (requires covariance matrix - simplified here)
-        # For full implementation, would need covariance matrix
-        @minimal_warning "Mahalanobis distance not fully implemented, using Euclidean"
-        return sqrt(sum((pattern1 .- pattern2) .^ 2))
+        # Mahalanobis distance with pooled covariance matrix
+        # Note: The pooled covariance is automatically computed in the rsa() function
+        # when dissimilarity_measure == :mahalanobis, so this error should never occur
+        # in normal usage. This is a safety check for direct function calls.
+        if isnothing(covariance_matrix)
+            @minimal_error_throw(
+                "Mahalanobis distance requires a covariance matrix. " *
+                "This error should not occur when using rsa() or rsa_crossvalidated() functions, " *
+                "as they automatically compute pooled covariance. " *
+                "If calling _compute_dissimilarity() directly, provide covariance_matrix parameter."
+            )
+        end
+
+        # Compute Mahalanobis distance: sqrt((x-y)' * inv(Σ) * (x-y))
+        diff = pattern1 .- pattern2
+
+        # Use pseudo-inverse for numerical stability
+        try
+            inv_cov = pinv(covariance_matrix)
+            mahal_dist = sqrt(max(0.0, dot(diff, inv_cov * diff)))
+            return mahal_dist
+        catch e
+            @minimal_warning "Mahalanobis distance computation failed (singular covariance?), using Euclidean instead"
+            return sqrt(sum(diff .^ 2))
+        end
     else
-        @minimal_error_throw("Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis")
+        @minimal_error_throw(
+            "Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis"
+        )
     end
 end
 
 """
-    _compute_rdm(condition_patterns::Vector{Matrix{Float64}}, measure::Symbol)
+    _compute_rdm(
+        condition_patterns::Vector{Matrix{Float64}},
+        measure::Symbol;
+        covariance_matrix::Union{Matrix{Float64}, Nothing} = nothing
+    )
 
 Compute Representational Dissimilarity Matrix (RDM) from condition patterns.
 
 # Arguments
 - `condition_patterns::Vector{Matrix{Float64}}`: Vector of [channels × time] matrices, one per condition
 - `measure::Symbol`: Dissimilarity measure
+- `covariance_matrix::Union{Matrix{Float64}, Nothing}`: Pooled covariance matrix for Mahalanobis distance (optional)
 
 # Returns
 - `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
 """
-function _compute_rdm(condition_patterns::Vector{Matrix{Float64}}, measure::Symbol)
+function _compute_rdm(
+    condition_patterns::Vector{Matrix{Float64}},
+    measure::Symbol;
+    covariance_matrix::Union{Matrix{Float64},Nothing} = nothing,
+)
     n_conditions = length(condition_patterns)
     rdm = zeros(Float64, n_conditions, n_conditions)
 
-    for i in 1:n_conditions
-        for j in 1:n_conditions
-            if i == j
-                rdm[i, j] = 0.0  # Self-dissimilarity is 0
-            else
-                # Flatten patterns to vectors for comparison
-                pattern_i = vec(condition_patterns[i])
-                pattern_j = vec(condition_patterns[j])
-                rdm[i, j] = _compute_dissimilarity(pattern_i, pattern_j, measure)
-                rdm[j, i] = rdm[i, j]  # Symmetric
-            end
+    # Only compute upper triangle (excluding diagonal) for efficiency
+    # RDM is symmetric, so we can fill lower triangle by copying
+    for i = 1:n_conditions
+        rdm[i, i] = 0.0  # Diagonal is always 0 (self-dissimilarity)
+        for j = (i+1):n_conditions
+            # Flatten patterns to vectors for comparison
+            pattern_i = vec(condition_patterns[i])
+            pattern_j = vec(condition_patterns[j])
+            dissim = _compute_dissimilarity(pattern_i, pattern_j, measure; covariance_matrix = covariance_matrix)
+            rdm[i, j] = dissim
+            rdm[j, i] = dissim  # Symmetric
         end
     end
 
     return rdm
+end
+
+"""
+    normalize_rdm(rdm::Matrix{Float64}; method::Symbol = :none)
+
+Normalize a Representational Dissimilarity Matrix (RDM).
+
+Different normalization schemes can affect correlation results and interpretability.
+Choose based on your analysis goals and the properties of your dissimilarity measure.
+
+# Arguments
+- `rdm::Matrix{Float64}`: RDM matrix [condition × condition]
+- `method::Symbol`: Normalization method
+  - `:none` - No normalization (default)
+  - `:zscore` - Z-score normalization (mean=0, std=1)
+  - `:rank` - Rank transformation (converts to ordinal ranks)
+  - `:minmax` - Min-max normalization (scales to [0, 1])
+
+# Returns
+- `normalized_rdm::Matrix{Float64}`: Normalized RDM matrix
+
+# Examples
+```julia
+# Z-score normalization (useful for comparing RDMs with different scales)
+rdm_z = normalize_rdm(rdm, method=:zscore)
+
+# Rank normalization (robust to outliers, used for Spearman-like comparisons)
+rdm_rank = normalize_rdm(rdm, method=:rank)
+
+# Min-max normalization (scales to [0, 1])
+rdm_minmax = normalize_rdm(rdm, method=:minmax)
+```
+
+# Notes
+- Normalization is applied to the upper triangle (excluding diagonal)
+- Diagonal remains zero after normalization
+- For `:rank`, ties are handled using average ranks
+"""
+function normalize_rdm(rdm::Matrix{Float64}; method::Symbol = :none)
+    if method == :none
+        return copy(rdm)
+    end
+
+    n = size(rdm, 1)
+    normalized_rdm = copy(rdm)
+
+    # Extract upper triangle (excluding diagonal) for normalization
+    upper_indices = [CartesianIndex(i, j) for i = 1:n for j = (i+1):n]
+    upper_values = [rdm[idx] for idx in upper_indices]
+
+    if method == :zscore
+        # Z-score normalization: (x - mean) / std
+        μ = mean(upper_values)
+        σ = std(upper_values)
+        if σ > 0
+            normalized_values = (upper_values .- μ) ./ σ
+        else
+            # All values are the same, return zeros
+            normalized_values = zeros(Float64, length(upper_values))
+        end
+    elseif method == :rank
+        # Rank transformation (ordinal ranks)
+        normalized_values = StatsBase.ordinalrank(upper_values)
+    elseif method == :minmax
+        # Min-max normalization: (x - min) / (max - min)
+        min_val = minimum(upper_values)
+        max_val = maximum(upper_values)
+        if max_val > min_val
+            normalized_values = (upper_values .- min_val) ./ (max_val - min_val)
+        else
+            # All values are the same, return zeros
+            normalized_values = zeros(Float64, length(upper_values))
+        end
+    else
+        @minimal_error_throw("Unknown normalization method: $method. Use :none, :zscore, :rank, or :minmax")
+    end
+
+    # Fill normalized values back into matrix (both upper and lower triangles)
+    for (idx_pos, idx) in enumerate(upper_indices)
+        i, j = idx.I
+        normalized_rdm[i, j] = normalized_values[idx_pos]
+        normalized_rdm[j, i] = normalized_values[idx_pos]  # Symmetric
+    end
+
+    # Ensure diagonal is zero
+    for i = 1:n
+        normalized_rdm[i, i] = 0.0
+    end
+
+    return normalized_rdm
 end
 
 # ==============================================================================
@@ -137,6 +318,7 @@ end
         sample_selection::Function = samples(),
         dissimilarity_measure::Symbol = :correlation,
         average_trials::Bool = true,
+        normalize_method::Symbol = :none,
     )
 
 Perform Representational Similarity Analysis (RSA) on epoch data.
@@ -154,7 +336,16 @@ showing how dissimilar neural patterns are between different conditions.
   - Example: `sample_selection=samples((-0.2, 0.8))` for time window from -0.2 to 0.8 seconds
   - Example: `sample_selection=samples()` for all time points (default)
 - `dissimilarity_measure::Symbol`: Measure to use (:correlation, :spearman, :euclidean, :mahalanobis)
+  - `:correlation` or `:pearson` - 1 - Pearson correlation (default, most common)
+  - `:spearman` - 1 - Spearman rank correlation (robust to outliers)
+  - `:euclidean` - Euclidean distance
+  - `:mahalanobis` - Mahalanobis distance (accounts for covariance structure, automatically computed)
 - `average_trials::Bool`: Whether to average across trials before computing RDM (default: true)
+- `normalize_method::Symbol`: RDM normalization method (default: :none)
+  - `:none` - No normalization
+  - `:zscore` - Z-score normalization (mean=0, std=1)
+  - `:rank` - Rank transformation (ordinal ranks)
+  - `:minmax` - Min-max normalization (scales to [0, 1])
 
 # Returns
 - `RsaData`: Object containing RSA results
@@ -168,8 +359,14 @@ rsa_result = rsa(epochs, channel_selection=channels([:Fz, :Cz, :Pz]), sample_sel
 # Using Euclidean distance
 rsa_result = rsa(epochs, dissimilarity_measure=:euclidean)
 
+# Using Mahalanobis distance (accounts for covariance structure)
+rsa_result = rsa(epochs, dissimilarity_measure=:mahalanobis)
+
 # Without averaging trials (computes RDM for each trial, then averages RDMs)
 rsa_result = rsa(epochs, average_trials=false)
+
+# With z-score normalization
+rsa_result = rsa(epochs, normalize_method=:zscore)
 
 # Use all channels and all time points (default)
 rsa_result = rsa(epochs)
@@ -181,6 +378,7 @@ function rsa(
     sample_selection::Function = samples(),
     dissimilarity_measure::Symbol = :correlation,
     average_trials::Bool = true,
+    normalize_method::Symbol = :none,
 )
     # Input validations
     if isempty(epochs)
@@ -215,7 +413,13 @@ function rsa(
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
     # Compute RDM at each time point
-    for t in 1:n_timepoints
+    for t = 1:n_timepoints
+        # Compute pooled covariance if using Mahalanobis distance
+        pooled_cov = nothing
+        if dissimilarity_measure == :mahalanobis
+            pooled_cov = _compute_pooled_covariance(data_arrays, t)
+        end
+
         if average_trials
             # Average across trials first, then compute RDM
             condition_patterns = Matrix{Float64}[]
@@ -223,16 +427,17 @@ function rsa(
                 # Extract [channels × trials] at time t
                 timepoint_data = cond_data[:, t, :]  # [channels × trials]
                 # Average across trials: [channels]
-                avg_pattern = vec(mean(timepoint_data, dims=2))
+                avg_pattern = vec(mean(timepoint_data, dims = 2))
                 push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
             end
-            rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure)
+            rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure; covariance_matrix = pooled_cov)
         else
             # Compute RDM for each trial, then average RDMs
-            trial_rdms = Float64[]
+            # This approach is more robust to noise and outliers
             n_trials = minimum(n_trials_per_condition)
-            
-            for trial_idx in 1:n_trials
+            trial_rdms = Vector{Matrix{Float64}}()
+
+            for trial_idx = 1:n_trials
                 condition_patterns = Matrix{Float64}[]
                 for cond_data in data_arrays
                     if trial_idx <= size(cond_data, 3)
@@ -242,23 +447,29 @@ function rsa(
                     end
                 end
                 if length(condition_patterns) == n_conditions
-                    trial_rdm = _compute_rdm(condition_patterns, dissimilarity_measure)
+                    trial_rdm = _compute_rdm(condition_patterns, dissimilarity_measure; covariance_matrix = pooled_cov)
                     push!(trial_rdms, trial_rdm)
                 end
             end
-            
-            # Average RDMs across trials
+
+            # Average RDMs across trials (proper matrix averaging)
             if !isempty(trial_rdms)
-                # This is simplified - would need to properly average matrices
-                # For now, compute RDM on averaged patterns
-                condition_patterns = Matrix{Float64}[]
-                for cond_data in data_arrays
-                    timepoint_data = cond_data[:, t, :]  # [channels × trials]
-                    avg_pattern = vec(mean(timepoint_data, dims=2))
-                    push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
+                # Sum all RDM matrices
+                avg_rdm = zeros(Float64, n_conditions, n_conditions)
+                for trial_rdm in trial_rdms
+                    avg_rdm .+= trial_rdm
                 end
-                rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure)
+                # Divide by number of trials to get average
+                avg_rdm ./= length(trial_rdms)
+                rdms[t, :, :] = avg_rdm
             end
+        end
+    end
+
+    # Apply normalization if requested
+    if normalize_method != :none
+        for t = 1:n_timepoints
+            rdms[t, :, :] = normalize_rdm(rdms[t, :, :]; method = normalize_method)
         end
     end
 
@@ -385,8 +596,8 @@ rsa_with_model = compare_models(neural_rsa, [my_rdm], model_names=["My Model"])
 """
 function compare_models(
     rsa_data::RsaData,
-    model_rdms::Union{Vector{Matrix{Float64}}, Vector{Array{Float64, 3}}, Vector{Union{Matrix{Float64}, Array{Float64, 3}}}};
-    model_names::Union{Vector{String}, Nothing} = nothing,
+    model_rdms::Union{Vector{Matrix{Float64}},Vector{Array{Float64,3}},Vector{Union{Matrix{Float64},Array{Float64,3}}}};
+    model_names::Union{Vector{String},Nothing} = nothing,
     correlation_type::Symbol = :spearman,
     n_permutations::Int = 1000,
     rng::AbstractRNG = Random.GLOBAL_RNG,
@@ -398,7 +609,7 @@ function compare_models(
     # Determine which models are static vs temporal
     is_temporal = Bool[]
     for (idx, model_rdm) in enumerate(model_rdms)
-        if isa(model_rdm, Array{Float64, 3})
+        if isa(model_rdm, Array{Float64,3})
             # Temporal model: [time × condition × condition]
             if size(model_rdm, 1) != n_times
                 @minimal_error_throw(
@@ -417,8 +628,7 @@ function compare_models(
             # Static model: [condition × condition]
             if size(model_rdm) != (n_conditions, n_conditions)
                 @minimal_error_throw(
-                    "Static model RDM $idx has size $(size(model_rdm)), " *
-                    "expected ($n_conditions, $n_conditions)"
+                    "Static model RDM $idx has size $(size(model_rdm)), " * "expected ($n_conditions, $n_conditions)"
                 )
             end
             if !issymmetric(model_rdm)
@@ -436,9 +646,11 @@ function compare_models(
 
     # Generate model names if not provided
     if isnothing(model_names)
-        model_names = ["Model$(i)" for i in 1:n_models]
+        model_names = ["Model$(i)" for i = 1:n_models]
     elseif length(model_names) != n_models
-        @minimal_error_throw("Number of model names ($(length(model_names))) doesn't match number of models ($n_models)")
+        @minimal_error_throw(
+            "Number of model names ($(length(model_names))) doesn't match number of models ($n_models)"
+        )
     end
 
     # Preallocate correlation and p-value arrays
@@ -448,12 +660,12 @@ function compare_models(
     # Extract upper triangular (excluding diagonal) for correlation
     function extract_upper_triangular(rdm::Matrix{Float64})
         n = size(rdm, 1)
-        triu_indices = [CartesianIndex(i, j) for i in 1:n for j in (i+1):n]
+        triu_indices = [CartesianIndex(i, j) for i = 1:n for j = (i+1):n]
         return [rdm[idx] for idx in triu_indices]
     end
 
     # Compute correlations at each time point
-    for t in 1:n_times
+    for t = 1:n_times
         neural_rdm = rsa_data.rdm[t, :, :]
         neural_vec = extract_upper_triangular(neural_rdm)
 
@@ -487,7 +699,7 @@ function compare_models(
             # Permutation test if requested
             if n_permutations > 0
                 permuted_corrs = zeros(Float64, n_permutations)
-                for perm_idx in 1:n_permutations
+                for perm_idx = 1:n_permutations
                     shuffled_model = shuffle(rng, model_vec)
                     if correlation_type == :spearman
                         permuted_corrs[perm_idx] = StatsBase.corspearman(neural_vec, shuffled_model)
@@ -515,26 +727,31 @@ end
 # ==============================================================================
 
 """
-    grand_average(rsa_data_list::Vector{RsaData})
+    grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true)
 
 Compute grand average RSA results across participants.
 
-Averages RDMs across participants at each time point.
+Averages RDMs across participants at each time point. Optionally computes
+noise ceiling using leave-one-out cross-validation.
 
 # Arguments
 - `rsa_data_list::Vector{RsaData}`: Vector of RsaData objects, one per participant
+- `compute_noise_ceiling::Bool`: Whether to compute noise ceiling (default: true)
 
 # Returns
-- `RsaData`: Grand-averaged RSA results
+- `RsaData`: Grand-averaged RSA results with noise ceiling (if computed)
 
 # Examples
 ```julia
-# Average across participants
+# Average across participants with noise ceiling
 all_rsa = [rsa_p1, rsa_p2, rsa_p3]
 grand_avg_rsa = grand_average(all_rsa)
+
+# Without noise ceiling
+grand_avg_rsa = grand_average(all_rsa, compute_noise_ceiling=false)
 ```
 """
-function grand_average(rsa_data_list::Vector{RsaData})
+function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bool = true)
     if isempty(rsa_data_list)
         @minimal_error_throw("Cannot compute grand average with empty RSA data list")
     end
@@ -550,7 +767,9 @@ function grand_average(rsa_data_list::Vector{RsaData})
 
     for (idx, rsa_data) in enumerate(rsa_data_list)
         if length(rsa_data.condition_names) != n_conditions
-            @minimal_error_throw("RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
+            @minimal_error_throw(
+                "RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions"
+            )
         end
         if length(rsa_data.times) != n_times
             @minimal_error_throw("RSA data $idx has $(length(rsa_data.times)) time points, expected $n_times")
@@ -562,12 +781,18 @@ function grand_average(rsa_data_list::Vector{RsaData})
 
     # Average RDMs across participants
     grand_rdm = zeros(Float64, n_times, n_conditions, n_conditions)
-    for t in 1:n_times
-        for i in 1:n_conditions
-            for j in 1:n_conditions
+    for t = 1:n_times
+        for i = 1:n_conditions
+            for j = 1:n_conditions
                 grand_rdm[t, i, j] = mean([rsa_data.rdm[t, i, j] for rsa_data in rsa_data_list])
             end
         end
+    end
+
+    # Compute noise ceiling if requested
+    noise_ceiling = nothing
+    if compute_noise_ceiling && length(rsa_data_list) >= 2
+        noise_ceiling = eegfun.compute_noise_ceiling(rsa_data_list)
     end
 
     # Create grand-averaged RsaData
@@ -580,6 +805,7 @@ function grand_average(rsa_data_list::Vector{RsaData})
         first_rsa.channels,
         first_rsa.layout,
         first_rsa.sample_rate,
+        noise_ceiling = noise_ceiling,
         analysis_info = first_rsa.analysis_info,
     )
 

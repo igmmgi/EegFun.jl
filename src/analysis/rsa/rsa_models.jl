@@ -181,21 +181,17 @@ embeddings = convert_my_embeddings(my_data, ["Face", "Object", "Scene"])
 rdm = create_rdm_from_vectors(embeddings)
 ```
 """
-function create_rdm_from_vectors(
-    vectors::Vector{Vector{Float64}};
-    dissimilarity_measure::Symbol = :correlation,
-)
+function create_rdm_from_vectors(vectors::Vector{Vector{Float64}}; dissimilarity_measure::Symbol = :correlation)
     n_conditions = length(vectors)
     rdm = zeros(Float64, n_conditions, n_conditions)
 
-    for i in 1:n_conditions
-        for j in 1:n_conditions
-            if i == j
-                rdm[i, j] = 0.0
-            else
-                rdm[i, j] = _compute_dissimilarity(vectors[i], vectors[j], dissimilarity_measure)
-                rdm[j, i] = rdm[i, j]  # Symmetric
-            end
+    # Only compute upper triangle for efficiency
+    for i = 1:n_conditions
+        rdm[i, i] = 0.0
+        for j = (i+1):n_conditions
+            dissim = _compute_dissimilarity(vectors[i], vectors[j], dissimilarity_measure)
+            rdm[i, j] = dissim
+            rdm[j, i] = dissim  # Symmetric
         end
     end
 
@@ -260,23 +256,19 @@ feature_matrix = convert_my_features(my_data, :condition, [:feat1, :feat2, :feat
 rdm = create_rdm_from_matrix(feature_matrix)
 ```
 """
-function create_rdm_from_matrix(
-    data_matrix::Matrix{Float64};
-    dissimilarity_measure::Symbol = :correlation,
-)
+function create_rdm_from_matrix(data_matrix::Matrix{Float64}; dissimilarity_measure::Symbol = :correlation)
     n_conditions = size(data_matrix, 1)
     rdm = zeros(Float64, n_conditions, n_conditions)
 
-    for i in 1:n_conditions
-        for j in 1:n_conditions
-            if i == j
-                rdm[i, j] = 0.0
-            else
-                pattern_i = vec(data_matrix[i, :])
-                pattern_j = vec(data_matrix[j, :])
-                rdm[i, j] = _compute_dissimilarity(pattern_i, pattern_j, dissimilarity_measure)
-                rdm[j, i] = rdm[i, j]  # Symmetric
-            end
+    # Only compute upper triangle for efficiency
+    for i = 1:n_conditions
+        rdm[i, i] = 0.0
+        for j = (i+1):n_conditions
+            pattern_i = vec(data_matrix[i, :])
+            pattern_j = vec(data_matrix[j, :])
+            dissim = _compute_dissimilarity(pattern_i, pattern_j, dissimilarity_measure)
+            rdm[i, j] = dissim
+            rdm[j, i] = dissim  # Symmetric
         end
     end
 
@@ -317,8 +309,8 @@ function create_rdm_from_distances(distances::Vector{Float64}, n_conditions::Int
     rdm = zeros(Float64, n_conditions, n_conditions)
     idx = 1
 
-    for i in 1:n_conditions
-        for j in (i+1):n_conditions
+    for i = 1:n_conditions
+        for j = (i+1):n_conditions
             rdm[i, j] = distances[idx]
             rdm[j, i] = distances[idx]
             idx += 1
@@ -354,10 +346,7 @@ similarity = [
 rdm = create_rdm_from_similarity_ratings(similarity, convert_to_dissimilarity=true)
 ```
 """
-function create_rdm_from_similarity_ratings(
-    similarity_matrix::Matrix{Float64};
-    convert_to_dissimilarity::Bool = true,
-)
+function create_rdm_from_similarity_ratings(similarity_matrix::Matrix{Float64}; convert_to_dissimilarity::Bool = true)
     if convert_to_dissimilarity
         # Normalize to [0, 1] and invert (similarity -> dissimilarity)
         max_val = maximum(similarity_matrix)
@@ -374,7 +363,7 @@ function create_rdm_from_similarity_ratings(
 
     # Ensure diagonal is zero
     n = size(rdm, 1)
-    for i in 1:n
+    for i = 1:n
         rdm[i, i] = 0.0
     end
 
@@ -429,14 +418,13 @@ function create_rdm_from_reaction_times(rts::Vector{Float64})
     n_conditions = length(rts)
     rdm = zeros(Float64, n_conditions, n_conditions)
 
-    for i in 1:n_conditions
-        for j in 1:n_conditions
-            if i == j
-                rdm[i, j] = 0.0
-            else
-                rdm[i, j] = abs(rts[i] - rts[j])
-                rdm[j, i] = rdm[i, j]
-            end
+    # Only compute upper triangle for efficiency
+    for i = 1:n_conditions
+        rdm[i, i] = 0.0
+        for j = (i+1):n_conditions
+            dissim = abs(rts[i] - rts[j])
+            rdm[i, j] = dissim
+            rdm[j, i] = dissim  # Symmetric
         end
     end
 
@@ -467,14 +455,13 @@ function create_rdm_from_categorical(categories::Vector{Int})
     n_conditions = length(categories)
     rdm = zeros(Float64, n_conditions, n_conditions)
 
-    for i in 1:n_conditions
-        for j in 1:n_conditions
-            if i == j
-                rdm[i, j] = 0.0
-            else
-                rdm[i, j] = categories[i] == categories[j] ? 0.0 : 1.0
-                rdm[j, i] = rdm[i, j]
-            end
+    # Only compute upper triangle for efficiency
+    for i = 1:n_conditions
+        rdm[i, i] = 0.0
+        for j = (i+1):n_conditions
+            dissim = categories[i] == categories[j] ? 0.0 : 1.0
+            rdm[i, j] = dissim
+            rdm[j, i] = dissim  # Symmetric
         end
     end
 
@@ -523,7 +510,7 @@ resampled_data, _ = resample_temporal_data(model_data, model_times, neural_times
 ```
 """
 function resample_temporal_data(
-    temporal_data::Array{Float64, 3},
+    temporal_data::Array{Float64,3},
     original_times::Vector{Float64},
     target_times::Vector{Float64};
     method::Symbol = :linear,
@@ -559,8 +546,8 @@ function resample_temporal_data(
     end
 
     # Interpolate each condition and feature
-    for cond_idx in 1:n_conditions
-        for feat_idx in 1:n_features
+    for cond_idx = 1:n_conditions
+        for feat_idx = 1:n_features
             # Extract time series for this condition/feature
             original_series = temporal_data[cond_idx, feat_idx, :]
 
@@ -591,9 +578,8 @@ function resample_temporal_data(
                             t_lower = original_times[lower_idx]
                             t_upper = original_times[upper_idx]
                             weight = (t_target - t_lower) / (t_upper - t_lower)
-                            resampled_series[t_idx] = 
-                                (1 - weight) * original_series[lower_idx] + 
-                                weight * original_series[upper_idx]
+                            resampled_series[t_idx] =
+                                (1 - weight) * original_series[lower_idx] + weight * original_series[upper_idx]
                         end
                     end
                 end
@@ -614,7 +600,7 @@ function resample_temporal_data(
             elseif method == :cubic
                 # Cubic interpolation (simplified - uses linear for now)
                 @minimal_warning "Cubic interpolation not fully implemented, using linear"
-                return resample_temporal_data(temporal_data, original_times, target_times; method=:linear)
+                return resample_temporal_data(temporal_data, original_times, target_times; method = :linear)
             else
                 @minimal_error_throw("Unknown interpolation method: $method. Use :linear, :nearest, or :cubic")
             end
@@ -745,10 +731,10 @@ rdms = create_temporal_rdm(model_data, model_times)  # No align_to parameter
 ```
 """
 function create_temporal_rdm(
-    temporal_data::Array{Float64, 3},
+    temporal_data::Array{Float64,3},
     times::Vector{Float64};
     dissimilarity_measure::Symbol = :correlation,
-    align_to::Union{Vector{Float64}, RsaData, Nothing} = nothing,
+    align_to::Union{Vector{Float64},RsaData,Nothing} = nothing,
     interpolation_method::Symbol = :linear,
 )
     # Handle align_to parameter - accept RsaData or Vector{Float64}
@@ -762,16 +748,11 @@ function create_temporal_rdm(
             @minimal_error_throw("align_to must be Vector{Float64} or RsaData, got $(typeof(align_to))")
         end
     end
-    
+
     # Resample if alignment is requested
     if !isnothing(target_times)
         @info "Resampling temporal model data from $(length(times)) to $(length(target_times)) timepoints"
-        temporal_data, times = resample_temporal_data(
-            temporal_data,
-            times,
-            target_times;
-            method=interpolation_method,
-        )
+        temporal_data, times = resample_temporal_data(temporal_data, times, target_times; method = interpolation_method)
     end
 
     n_conditions, n_features, n_timepoints = size(temporal_data)
@@ -786,13 +767,13 @@ function create_temporal_rdm(
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
     # Compute RDM at each time point
-    for t in 1:n_timepoints
+    for t = 1:n_timepoints
         # Extract data at time t: [conditions × features]
         timepoint_data = temporal_data[:, :, t]
 
         # Compute RDM for this time point
         condition_patterns = Matrix{Float64}[]
-        for cond_idx in 1:n_conditions
+        for cond_idx = 1:n_conditions
             # Extract feature vector for this condition at time t
             pattern = vec(timepoint_data[cond_idx, :])
             push!(condition_patterns, reshape(pattern, n_features, 1))
@@ -848,9 +829,7 @@ function create_temporal_rdm_from_vectors(
     # Validate structure
     for (cond_idx, cond_data) in enumerate(temporal_vectors)
         if length(cond_data) != n_timepoints
-            @minimal_error_throw(
-                "Condition $cond_idx has $(length(cond_data)) timepoints, expected $n_timepoints"
-            )
+            @minimal_error_throw("Condition $cond_idx has $(length(cond_data)) timepoints, expected $n_timepoints")
         end
     end
 
@@ -859,13 +838,13 @@ function create_temporal_rdm_from_vectors(
 
     # Convert to array format: [conditions × features × time]
     temporal_data = zeros(Float64, n_conditions, n_features, n_timepoints)
-    for cond_idx in 1:n_conditions
-        for t in 1:n_timepoints
+    for cond_idx = 1:n_conditions
+        for t = 1:n_timepoints
             temporal_data[cond_idx, :, t] = temporal_vectors[cond_idx][t]
         end
     end
 
-    return create_temporal_rdm(temporal_data, times; dissimilarity_measure=dissimilarity_measure)
+    return create_temporal_rdm(temporal_data, times; dissimilarity_measure = dissimilarity_measure)
 end
 
 """
@@ -926,13 +905,13 @@ rdms, names = create_temporal_model_rdms(
 ```
 """
 function create_temporal_model_rdms(
-    temporal_model_data::Dict{String, Any},
+    temporal_model_data::Dict{String,Any},
     times::Vector{Float64};
     dissimilarity_measure::Symbol = :correlation,
-    align_to::Union{Vector{Float64}, RsaData, Nothing} = nothing,
+    align_to::Union{Vector{Float64},RsaData,Nothing} = nothing,
     interpolation_method::Symbol = :linear,
 )
-    model_rdms = Array{Float64, 3}[]
+    model_rdms = Array{Float64,3}[]
     model_names = String[]
 
     for (name, data) in temporal_model_data
@@ -942,7 +921,7 @@ function create_temporal_model_rdms(
         if isa(data, Tuple) && length(data) == 2
             # Tuple: (data, times) - model has its own timepoints
             model_data, model_times = data
-            if !isa(model_data, Array{Float64, 3})
+            if !isa(model_data, Array{Float64,3})
                 @minimal_error_throw(
                     "Model '$name': Tuple first element must be Array{Float64, 3}, got $(typeof(model_data))"
                 )
@@ -956,19 +935,19 @@ function create_temporal_model_rdms(
             rdm = create_temporal_rdm(
                 model_data,
                 model_times;
-                dissimilarity_measure=dissimilarity_measure,
-                align_to=align_to,
-                interpolation_method=interpolation_method,
+                dissimilarity_measure = dissimilarity_measure,
+                align_to = align_to,
+                interpolation_method = interpolation_method,
             )
-        elseif isa(data, Array{Float64, 3})
+        elseif isa(data, Array{Float64,3})
             # Direct temporal data [conditions × features × time]
             # Use align_to if provided
             rdm = create_temporal_rdm(
                 data,
                 times;
-                dissimilarity_measure=dissimilarity_measure,
-                align_to=align_to,
-                interpolation_method=interpolation_method,
+                dissimilarity_measure = dissimilarity_measure,
+                align_to = align_to,
+                interpolation_method = interpolation_method,
             )
         elseif isa(data, Vector{Vector{Vector{Float64}}})
             # Temporal vectors - convert to array first
@@ -983,17 +962,17 @@ function create_temporal_model_rdms(
             n_timepoints = length(data[1])
             n_features = length(data[1][1])
             model_data = zeros(Float64, n_conditions, n_features, n_timepoints)
-            for cond_idx in 1:n_conditions
-                for t in 1:n_timepoints
+            for cond_idx = 1:n_conditions
+                for t = 1:n_timepoints
                     model_data[cond_idx, :, t] = data[cond_idx][t]
                 end
             end
             rdm = create_temporal_rdm(
                 model_data,
                 times;
-                dissimilarity_measure=dissimilarity_measure,
-                align_to=align_to,
-                interpolation_method=interpolation_method,
+                dissimilarity_measure = dissimilarity_measure,
+                align_to = align_to,
+                interpolation_method = interpolation_method,
             )
         else
             @minimal_error_throw(
@@ -1057,10 +1036,7 @@ rdms, names = create_model_rdms(models)
 rsa_with_models = compare_models(rsa_result, rdms, model_names=names)
 ```
 """
-function create_model_rdms(
-    model_data::Dict{String, Any};
-    condition_order::Union{Vector{String}, Nothing} = nothing,
-)
+function create_model_rdms(model_data::Dict{String,Any}; condition_order::Union{Vector{String},Nothing} = nothing)
     model_rdms = Matrix{Float64}[]
     model_names = String[]
 

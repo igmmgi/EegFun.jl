@@ -106,9 +106,11 @@ include("analysis/time_frequency/utils/utils.jl")
 include("analysis/decoding/decoding.jl")
 include("analysis/decoding/decoding_statistics.jl")
 
-# RSA/RDM
-include("analysis/rsa/rsa.jl")
+# RSA (Representational Similarity Analysis)
 include("analysis/rsa/rsa_models.jl")
+include("analysis/rsa/rsa.jl")
+include("analysis/rsa/rsa_noise_ceiling.jl")
+include("analysis/rsa/rsa_crossvalidation.jl")
 
 # analysis pipelines
 include("pipelines/utils/utils.jl")
