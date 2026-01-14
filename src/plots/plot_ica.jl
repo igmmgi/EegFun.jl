@@ -1318,14 +1318,14 @@ function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gri
             ica.mixing[:, comp_idx],
             ica.layout,
             gridscale,
-            ScatteredInterpolation.Linear(),
+            Interpolations.Linear(),
         )
     elseif method == :cubic
         return _data_interpolation_topo_scattered(
             ica.mixing[:, comp_idx],
             ica.layout,
             gridscale,
-            ScatteredInterpolation.Cubic(),
+            Interpolations.Cubic(),
         )
     else
         throw(

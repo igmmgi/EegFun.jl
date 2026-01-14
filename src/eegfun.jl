@@ -22,6 +22,7 @@ using CairoMakie
 using GLMakie
 using NativeFileDialog
 using ScatteredInterpolation
+using Interpolations
 
 # Utilities
 using Dates
