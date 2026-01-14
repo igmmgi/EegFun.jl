@@ -32,8 +32,6 @@ function _prepare_decoding_data(epochs::Vector{EpochData})
         condition_data = Array{Float64}(undef, n_channels, n_times, n_trials)
 
         for (trial_idx, trial_df) in enumerate(epoch_data.data)
-            # Extract channel data efficiently
-            # Use Matrix conversion for bulk operation, but assign directly to avoid transpose
             trial_matrix = Matrix(trial_df[!, channels])  # [time × channels]
             @inbounds for ch_idx = 1:n_channels
                 condition_data[ch_idx, :, trial_idx] = @view trial_matrix[:, ch_idx]
@@ -76,9 +74,7 @@ function _equalize_trials(
     min_trials = minimum(n_trials_per_condition)
     for (cond_idx, data_array) in enumerate(data_arrays)
         if size(data_array, 3) > min_trials
-            # Randomly select min_trials indices (sorted for cache efficiency)
             selected_trials = sort(shuffle(rng, 1:size(data_array, 3))[1:min_trials])
-            # Create new array with selected trials
             data_arrays[cond_idx] = data_array[:, :, selected_trials]
         end
     end
@@ -139,9 +135,6 @@ function _extract_timepoint_data!(
     row = 1
     @inbounds for (cond_idx, cond_data) in enumerate(data_arrays)
         trial_indices = shuffled_indices[cond_idx]
-        n_trials = length(trial_indices)
-        # Extract and copy directly to X_all using shuffled indices
-        # Use copyto! for more efficient copying
         for trial_idx in trial_indices
             copyto!(@view(X_all[row, :]), @view(cond_data[:, t, trial_idx]))
             labels[row] = cond_idx
@@ -165,13 +158,12 @@ Pre-compute all train/test indices for all cross-validation folds.
 function _precompute_cv_splits(n_trials_per_condition::Vector{Int}, n_folds::Int)
     splits = Vector{Tuple{Vector{Int},Vector{Int}}}(undef, n_folds)
     n_trials_per_fold = [div(n_trials, n_folds) for n_trials in n_trials_per_condition]
-    total_trials = sum(n_trials_per_condition)
 
     for fold = 1:n_folds
         test_indices = Vector{Int}()
         train_indices = Vector{Int}()
         sizehint!(test_indices, sum(n_trials_per_fold))
-        sizehint!(train_indices, total_trials - sum(n_trials_per_fold))
+        sizehint!(train_indices, sum(n_trials_per_condition) - sum(n_trials_per_fold))
 
         trial_start = 1
         for (cond_idx, n_trials) in enumerate(n_trials_per_condition)
@@ -357,8 +349,7 @@ function libsvm_classifier(
     # Fast path for binary classification with standard labels [1, 2]
     # This is the common case and we can skip all mapping overhead
     if classes == [1, 2]
-        # LIBSVM expects features in columns (each column is a feature, each row is a sample)
-        # X_train is [samples × features], so we need to transpose
+        # X_train is [samples × features], transpose for LIBSVM
         # Use transpose view instead of materializing to save allocations
         X_train_t = transpose(X_train)
         X_test_t = transpose(X_test)
@@ -403,10 +394,9 @@ function libsvm_classifier(
 end
 
 
-# ==============================================================================
-#   DECODE WITH DIRECT LIBSVM (NO MLJ)
-# ==============================================================================
-
+# ===========================
+#   DECODE WITH DIRECT LIBSVM 
+# ===========================
 """
     decode_libsvm(
         epochs::Vector{EpochData};
@@ -423,8 +413,6 @@ Perform multivariate pattern classification (decoding) analysis using direct LIB
 
 This function performs time-point-by-time-point decoding analysis on epoch data from one participant,
 using cross-validation to estimate classification accuracy at each time point.
-
-Uses LIBSVM.jl directly (no MLJ wrapper) - reduces dependencies while maintaining performance.
 
 # Arguments
 - `epochs::Vector{EpochData}`: Vector of EpochData from a SINGLE participant, one per condition/class.
@@ -601,9 +589,9 @@ function decode_libsvm(
 
 end
 
-# ==============================================================================
+# ====================================
 #   GRAND AVERAGE FOR DECODING RESULTS
-# ==============================================================================
+# ====================================
 
 """
     grand_average(decoded_list::Vector{DecodedData})
@@ -618,14 +606,6 @@ creating a single DecodedData object representing the group-level results.
 
 # Returns
 - `DecodedData`: Grand average decoding results
-
-# Examples
-```julia
-# Load decoding results from multiple participants
-decoded_participants = [load_decoded("p1_decoded.jld2"), load_decoded("p2_decoded.jld2")]
-grand_avg = grand_average(decoded_participants)
-plot_decoding(grand_avg)
-```
 """
 function grand_average(dat::Vector{DecodedData})
 
