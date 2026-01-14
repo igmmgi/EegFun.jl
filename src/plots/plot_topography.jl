@@ -610,17 +610,37 @@ function _legendre_polynomial(n::Int, x::Float64)
 
 end
 
-# Legendre polynomial evaluation for scalar input
+# Optimized Legendre polynomial series evaluation using recurrence
+# This computes all Legendre polynomials in one pass, avoiding redundant computation
 function _legendre_val(x::Float64, factors::Vector{Float64})
-    """Evaluate Legendre polynomial series for scalar input."""
-    result = 0.0
-    for (i, factor) in enumerate(factors)
-        if i == 1  # Skip the first factor (0.0)
-            continue
-        end
-        n = i - 1  # Legendre polynomial order
-        result += factor * _legendre_polynomial(n, x)
+    """Evaluate Legendre polynomial series efficiently using recurrence relation.
+    
+    factors[1] = 0.0 (for n=0, skipped)
+    factors[2] = factor for n=1
+    factors[3] = factor for n=2
+    etc.
+    """
+    max_order = length(factors) - 1  # factors[1] is 0.0, so skip it
+    if max_order < 1
+        return 0.0
     end
+    
+    # Initialize recurrence: P_0 = 1, P_1 = x
+    p_prev = 1.0  # P_0
+    p_curr = x     # P_1
+    
+    # Start with n=1 term: factors[2] * P_1(x) = factors[2] * x
+    result = factors[2] * p_curr
+    
+    # Compute remaining polynomials using recurrence (n=2 to max_order)
+    # Recurrence: P_n(x) = ((2n-1)*x*P_{n-1}(x) - (n-1)*P_{n-2}(x)) / n
+    @inbounds for n = 2:max_order
+        p_next = ((2n - 1) * x * p_curr - (n - 1) * p_prev) / n
+        result += factors[n + 1] * p_next
+        p_prev = p_curr
+        p_curr = p_next
+    end
+    
     return result
 end
 
