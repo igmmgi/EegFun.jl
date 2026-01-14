@@ -1,73 +1,3 @@
-"""
-    tf_morlet(dat::EpochData; 
-              channel_selection::Function=channels(),
-              sample_selection::Function=samples(),
-              frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40),
-              cycles::Union{Real,Tuple{Real,Real}}=7,
-              pad::Union{Nothing,Symbol}=nothing,
-              return_trials::Bool=false,
-              filter_edges::Bool=true)
-
-Time-frequency analysis using Morlet wavelets.
-
-Performs continuous wavelet transform using complex Morlet wavelets. The function supports both 
-linear and logarithmic frequency spacing, with optional padding to reduce edge artifacts.
-
-# Arguments
-- `dat::EpochData`: Epoched EEG data to analyze
-
-# Keyword Arguments
-- `channel_selection::Function=channels()`: Channel selection predicate. See `channels()` for options.
-  - Example: `channel_selection=channels(:Cz)` for single channel
-  - Example: `channel_selection=channels([:Cz, :Pz])` for multiple channels
-  - Default: all channels
-- `sample_selection::Function=samples()`: Sample selection predicate. See `samples()` for options.
-  - Example: `sample_selection=samples((-0.5, 2.0))` for time window from -0.5 to 2.0 seconds
-  - Example: `sample_selection=samples()` for all time points (default)
-  - Default: all samples
-- `frequencies::Union{AbstractRange,AbstractVector{<:Real}}=range(1, 40, length=40)`: Frequency specification.
-  - Can be any range or vector of frequencies in Hz
-  - For linear spacing: `frequencies=1:1:40` or `frequencies=range(1, 40, length=40)`
-  - For logarithmic spacing: `frequencies=logrange(1, 40, length=30)`
-  - Default: `range(1, 40, length=40)` (40 linearly-spaced frequencies from 1 to 40 Hz)
-- `cycles::Union{Real,Tuple{Real,Real}}=7`: Number of cycles in the wavelet. Controls time-frequency trade-off:
-  - Single number: fixed cycles for all frequencies (e.g., `cycles=5`)
-  - Tuple `(min, max)`: log-spaced cycles from `min` to `max` across frequencies
-  - More cycles = better frequency resolution, worse time resolution
-  - Default: `7` cycles
-- `pad::Union{Nothing,Symbol}=nothing`: Padding method to reduce edge artifacts. Options:
-  - `nothing`: No padding (default)
-  - `:pre`: Mirror data before each epoch
-  - `:post`: Mirror data after each epoch
-  - `:both`: Mirror data on both sides (recommended for best edge artifact reduction)
-  - Padding extends the data for convolution, then results are automatically unpadded
-- `return_trials::Bool=false`: Whether to preserve individual trials:
-  - `false` (default): Returns `TimeFreqData` with trials averaged
-  - `true`: Returns `TimeFreqEpochData` with individual trials preserved
-- `filter_edges::Bool=true`: Whether to filter edge regions where the wavelet extends beyond the data:
-  - `true` (default): Sets edge regions to `NaN` where the wavelet window extends beyond data boundaries
-  - `false`: Keeps all computed values (may include edge artifacts)
-  - Edge filtering accounts for padding if applied
-
-# Returns
-- `TimeFreqData` (if `return_trials=false`): Time-frequency data with trials averaged
-- `TimeFreqEpochData` (if `return_trials=true`): Time-frequency data with individual trials preserved
-
-# Examples
-```julia
-# Default: linear frequencies 1-40 Hz, 40 points, averaged across trials
-tf_data = tf_morlet(epochs)
-
-# Log-spaced frequencies (30 frequencies from 1 to 40 Hz)
-tf_data = tf_morlet(epochs; frequencies=logrange(1, 40, length=30))
-
-# Log-spaced frequencies, single channel
-tf_data = tf_morlet(epochs; channel_selection=channels(:Cz), frequencies=logrange(2, 80, length=30))
-
-# Linear frequencies with padding and individual trials preserved
-tf_epochs = tf_morlet(epochs; sample_selection=samples((-0.5, 2.0)), frequencies=2:2:80, pad=:both, return_trials=true)
-```
-"""
 function tf_morlet(
     dat::EpochData;
     channel_selection::Function = channels(),
@@ -216,64 +146,35 @@ function tf_morlet(
     # all trials and/or channels into a single matrix and then processing that
     # but it still seems too slow!!!
 
-    # Process each selected channel
+    # Process each selected channel and each trial separately
     for channel in channel_labels(dat)
 
         # Reset output arrays for this channel
         fill!(eegpower, 0)
         fill!(eegconv, 0)
 
-        # ==============================================================
-        # BATCH PROCESSING: Collect all trials into matrix
-        # ==============================================================
-        # Allocate matrix for all trials [n_samples × n_trials]
-        signal_matrix = zeros(Float64, n_samples_per_epoch, n_trials)
-        @inbounds for trial_idx = 1:n_trials
-            signal_matrix[:, trial_idx] .= dat.data[trial_idx][!, channel]
-        end
-
-        # ==============================================================
-        # FFT all trials at once (1 call instead of n_trials calls)
-        # ==============================================================
-        # Pad signal matrix for FFT
-        signal_matrix_padded = zeros(ComplexF64, n_conv_pow2, n_trials)
-        signal_matrix_padded[1:n_samples_per_epoch, :] .= signal_matrix
-
-        # FFT along first dimension for all trials
-        signal_fft_all = zeros(ComplexF64, n_conv_pow2, n_trials)
         for trial_idx = 1:n_trials
-            mul!(@view(signal_fft_all[:, trial_idx]), p_fft_signal, @view(signal_matrix_padded[:, trial_idx]))
-        end
 
-        # ==============================================================
-        # Process each frequency with all trials together
-        # ==============================================================
-        for fi = 1:num_frex
-            wavelet_fft = wavelet_ffts[fi]
-            conv_indices = conv_indices_per_freq[fi]
+            # Copy single trial data to padded buffer
+            fill!(signal_padded, 0)
+            signal_padded[1:n_samples_per_epoch] .= dat.data[trial_idx][!, channel]
 
-            # ==============================================================
-            # Multiply wavelet FFT with all trial FFTs and IFFT
-            # (40 IFFTs instead of 16,000)
-            # ==============================================================
-            conv_result_all = zeros(ComplexF64, n_conv_pow2, n_trials)
+            # FFT for this trial
+            mul!(eegfft, p_fft_signal, signal_padded)
 
-            for trial_idx = 1:n_trials
-                # Element-wise multiply
+            # Loop through frequencies - reuse pre-computed wavelet FFTs
+            for fi = 1:num_frex
+
+                # TODO: here is the problem!!! But need to test again concat option(s)
                 @inbounds @simd for i = 1:n_conv_pow2
-                    conv_buffer[i] = wavelet_fft[i] * signal_fft_all[i, trial_idx]
+                    conv_buffer[i] = wavelet_ffts[fi][i] * eegfft[i]
                 end
+                mul!(eegconv_buffer, p_ifft_conv, conv_buffer)
 
-                # IFFT for this trial
-                mul!(@view(conv_result_all[:, trial_idx]), p_ifft_conv, conv_buffer)
-            end
-
-            # ==============================================================
-            # Extract results for all trials
-            # ==============================================================
-            @inbounds for trial_idx = 1:n_trials
-                for (ti_out, ti_padded) in enumerate(time_indices_out)
-                    val = conv_result_all[conv_indices[ti_padded], trial_idx]
+                # Extract only original unpadded samples from convolution
+                conv_indices = conv_indices_per_freq[fi]
+                @inbounds for (ti_out, ti_padded) in enumerate(time_indices_out)
+                    val = eegconv_buffer[conv_indices[ti_padded]]
 
                     if return_trials
                         eegpower[fi, ti_out, trial_idx] = abs2(val)
@@ -282,6 +183,7 @@ function tf_morlet(
                         eegpower[fi, ti_out] += abs2(val)
                         eegconv[fi, ti_out] += val
                     end
+
                 end
             end
         end

@@ -31,9 +31,8 @@ tf_data = eegfun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3, p
 eegfun.plot_time_frequency(tf_data, ylogscale = false)
 
 # tf_morlet
-@btime tf_data = eegfun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3)
+tf_data = eegfun.tf_morlet(epochs_synthetic, frequencies = 1:1:40, cycles = 3)
 eegfun.plot_time_frequency(tf_data, ylogscale = false)
-
 
 tf_data = eegfun.tf_morlet(epochs_synthetic, frequencies = 1:0.5:40, cycles = 10)
 eegfun.plot_time_frequency(tf_data, ylogscale = false)
