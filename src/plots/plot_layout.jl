@@ -74,10 +74,11 @@ function plot_layout_2d!(
     kwargs...,
 )
 
-    _ensure_coordinates_2d!(layout)
-
     # Handle each component's kwargs directly using prefixes (no cross-component validation)
     head_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_HEAD_KWARGS, kwargs; validate = false)
+    
+    # Ensure coordinates are 2d
+    _ensure_coordinates_2d!(layout)
     point_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_POINT_KWARGS, kwargs; validate = false)
     label_kwargs = _merge_plot_kwargs(PLOT_LAYOUT_LABEL_KWARGS, kwargs; validate = false)
 
