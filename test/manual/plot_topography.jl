@@ -5,7 +5,7 @@ using BenchmarkTools
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Flank_C_3.bdf")
 layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-eegfun.polar_to_cartesian_xy!(layout_file)
+eegfun.polar_to_cartesian_xy!(layout_file, normalization_radius = 1.0)
 dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.rereference!(dat, :avg)
@@ -26,12 +26,11 @@ eegfun.plot_topography(
     dat,
     method = :spherical_spline,
     sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    gridscale = 150,
+    gridscale = 100,
 )
 
 eegfun.plot_topography(
     dat,
-    method = :thin_plate,
     sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
     ylim = (-30, 30),
     gridscale = 100,

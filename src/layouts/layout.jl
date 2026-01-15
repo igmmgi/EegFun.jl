@@ -231,12 +231,13 @@ function _ensure_coordinates_3d!(layout::Layout)
 end
 
 """
-    polar_to_cartesian_xy!(layout::Layout)
+    polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64=1.0)
 
 Converts polar coordinates (incidence and azimuth angles) from a layout into Cartesian coordinates (x, y).
 
 # Arguments
 - `layout::Layout`: A Layout containing the layout information with columns for incidence angles (`:inc`) and azimuth angles (`:azi`).
+- `normalization_radius::Float64`: Maximum radius for electrode positions (default: 1.0). The head circle is drawn at radius 1.0, so this controls how close electrodes can be to the head boundary.
 
 # Modifies
 - The input `layout` is modified in place to include new columns `x2` and `y2`, which represent the Cartesian coordinates calculated from the polar coordinates.
@@ -245,7 +246,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 # Returns
 - Nothing. The function modifies the `layout` directly.
 """
-function polar_to_cartesian_xy!(layout::Layout)
+function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64=1.0)
     # Get the DataFrame from Layout
     df = layout.data
 
@@ -267,14 +268,26 @@ function polar_to_cartesian_xy!(layout::Layout)
     df[!, :x2] = inc .* cos.(azi)
     df[!, :y2] = inc .* sin.(azi)
 
-    # Normalize to [-1, 1] range
-    x_range = maximum(df.x2) - minimum(df.x2)
-    y_range = maximum(df.y2) - minimum(df.y2)
-    max_range = max(x_range, y_range)
-
-    if max_range > 0
-        df.x2 = (df.x2 .- (maximum(df.x2) + minimum(df.x2)) / 2) ./ (max_range / 2)
-        df.y2 = (df.y2 .- (maximum(df.y2) + minimum(df.y2)) / 2) ./ (max_range / 2)
+    # Normalize to ensure all points are within unit circle
+    # First, center the coordinates
+    center_x = (maximum(df.x2) + minimum(df.x2)) / 2
+    center_y = (maximum(df.y2) + minimum(df.y2)) / 2
+    
+    df.x2 = df.x2 .- center_x
+    df.y2 = df.y2 .- center_y
+    
+    # Find maximum distance from center
+    max_radius = 0.0
+    @inbounds for i = 1:nrow(df)
+        radius = sqrt(df.x2[i]^2 + df.y2[i]^2)
+        max_radius = max(max_radius, radius)
+    end
+    
+    # Scale by maximum radius to ensure all points are within the specified normalization radius
+    if max_radius > 0
+        scale_factor = normalization_radius / max_radius
+        df.x2 = df.x2 .* scale_factor
+        df.y2 = df.y2 .* scale_factor
     end
 
     # Clear neighbours since coordinates have changed
