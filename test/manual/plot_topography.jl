@@ -17,6 +17,7 @@ eegfun.plot_topography_3d(
     method = :spherical_spline,
     sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
     gridscale = 150,
+    head_mesh_file = "/home/ian/Desktop/Super Average Head.obj"
 )
 
 
