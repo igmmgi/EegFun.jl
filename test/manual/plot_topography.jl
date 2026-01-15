@@ -31,7 +31,7 @@ eegfun.plot_topography(
 
 eegfun.plot_topography(
     dat,
-    method = :multiquadratic,
+    method = :thin_plate,
     sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
     ylim = (-30, 30),
     gridscale = 100,

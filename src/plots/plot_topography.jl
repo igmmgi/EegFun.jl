@@ -31,14 +31,16 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
 
     # Compute interpolated data
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
-    if method == :multiquadratic
-        data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale)
+    if method == :multiquadratic || method == :inverse_multiquadratic || method == :gaussian || 
+       method == :inverse_quadratic || method == :thin_plate || method == :polyharmonic ||
+       method == :shepard || method == :nearest
+        data = _data_interpolation_topo_multiquadratic(channel_data, layout, gridscale; rbf_type = method)
     elseif method == :spherical_spline
         data = _data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
     else
         throw(
             ArgumentError(
-                "Unknown interpolation method: $method. Supported: :multiquadratic, :spherical_spline",
+                "Unknown interpolation method: $method. Supported: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline",
             ),
         )
     end
@@ -395,16 +397,31 @@ end
 
 
 """
-    _data_interpolation_topo(dat::Vector{Float64}, points::Matrix{Float64}, grid_scale::Int)
+    _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int; rbf_type::Symbol=:multiquadratic)
 
-Interpolate EEG data using scattered interpolation 
+Interpolate EEG data using scattered interpolation with various radial basis functions.
+
+For detailed information about these interpolation methods, see:
+https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/
 
 # Arguments
 - `dat::Vector{<:AbstractFloat}`: EEG values at electrode positions
-- `points::Matrix{<:AbstractFloat}`: 2×N matrix of electrode coordinates
+- `layout::Layout`: Layout containing electrode 2D coordinates
 - `grid_scale::Int`: Size of the output grid
+- `rbf_type::Symbol`: Type of radial basis function or interpolation method. Options:
+  - `:multiquadratic` - Multiquadratic (default): φ(r) = √(1 + (εr)²)
+  - `:inverse_multiquadratic` - Inverse Multiquadratic: φ(r) = 1/√(1 + (εr)²)
+  - `:gaussian` - Gaussian: φ(r) = exp(-(εr)²)
+  - `:inverse_quadratic` - Inverse Quadratic: φ(r) = 1/(1 + (εr)²)
+  - `:thin_plate` - Thin Plate Spline: φ(r) = r²ln(r)
+  - `:polyharmonic` - Polyharmonic Spline (k=3): φ(r) = r³
+  - `:shepard` - Inverse Distance Weighting (Shepard interpolation): wᵢ(x) = 1/||x-xᵢ||ᵖ
+  - `:nearest` - Nearest Neighbor: returns value of nearest sample point
+
+# Returns
+- `Matrix{Float64}`: Interpolated data on a regular grid
 """
-function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int)
+function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int; rbf_type::Symbol=:multiquadratic)
 
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
@@ -426,14 +443,33 @@ function _data_interpolation_topo_multiquadratic(dat::Vector{<:AbstractFloat}, l
         end
     end
 
-    itp = ScatteredInterpolation.interpolate(Multiquadratic(), points, dat)
+    # Select radial basis function type or interpolation method
+    rbf = if rbf_type == :multiquadratic
+        ScatteredInterpolation.Multiquadratic()
+    elseif rbf_type == :inverse_multiquadratic
+        ScatteredInterpolation.InverseMultiquadratic()
+    elseif rbf_type == :gaussian
+        ScatteredInterpolation.Gaussian()
+    elseif rbf_type == :inverse_quadratic
+        ScatteredInterpolation.InverseQuadratic()
+    elseif rbf_type == :thin_plate
+        ScatteredInterpolation.ThinPlate()
+    elseif rbf_type == :polyharmonic
+        ScatteredInterpolation.Polyharmonic(3)  # k=3 for r³
+    elseif rbf_type == :shepard
+        ScatteredInterpolation.Shepard()  # Inverse Distance Weighting
+    elseif rbf_type == :nearest
+        ScatteredInterpolation.NearestNeighbor()
+    else
+        throw(ArgumentError("Unknown RBF type: $rbf_type. Supported: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest"))
+    end
+
+    itp = ScatteredInterpolation.interpolate(rbf, points, dat)
     result = reshape(ScatteredInterpolation.evaluate(itp, grid_points), grid_scale, grid_scale)
     _circle_mask!(result, grid_scale)
     return result
 
 end
-
-
 
 """
     _data_interpolation_topo_spherical_spline(dat::Vector{Float64}, layout::DataFrame, grid_scale::Int; m::Int=4, lambda::Float64=1e-5)

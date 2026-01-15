@@ -12,7 +12,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :interactive => (true, "Whether to enable interactive features"),
 
     # Topography parameters
-    :method => (:multiquadratic, "Interpolation method: :multiquadratic, :spherical_spline, or :nearest"),
+    :method => (:multiquadratic, "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on RBF methods."),
     :colormap => (:jet, "Colormap for the topography"),
     :gridscale => (200, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
