@@ -22,7 +22,6 @@ using CairoMakie
 using GLMakie
 using NativeFileDialog
 using ScatteredInterpolation
-using Interpolations
 
 # Utilities
 using Dates
@@ -148,6 +147,7 @@ include("plots/plot_triggers.jl")
 include("plots/plot_time_frequency.jl")
 include("plots/plot_spectrum.jl")
 include("plots/plot_filter.jl")
+
 include("analysis/decoding/plot_decoding.jl")
 include("analysis/rsa/plot_rsa.jl")
 
