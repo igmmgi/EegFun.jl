@@ -280,30 +280,36 @@ end
 Create confusion matrix from true and predicted labels.
 
 # Returns
-- `confusion::Matrix{Float64}`: Confusion matrix [true_class × predicted_class]
+- `confusion::Matrix{Int}`: Confusion matrix [true_class × predicted_class]
 """
 function _create_confusion_matrix(y_true::Vector{Int}, y_pred::Vector{Int}, n_classes::Int)
+    length(y_true) == length(y_pred) || @minimal_error_throw("y_true and y_pred must have same length")
+    
+    # Validate all labels are in valid range [1, n_classes]
+    for (i, label) in enumerate(y_true)
+        (label < 1 || label > n_classes) && @minimal_error_throw("Invalid true label at index $i: $label (must be in range [1, $n_classes])")
+    end
+    for (i, label) in enumerate(y_pred)
+        (label < 1 || label > n_classes) && @minimal_error_throw("Invalid predicted label at index $i: $label (must be in range [1, $n_classes])")
+    end
+    
     confusion = zeros(Int, n_classes, n_classes)
-    for (true_label, pred_label) in zip(y_true, y_pred)
-        if 1 <= true_label <= n_classes && 1 <= pred_label <= n_classes
-            confusion[true_label, pred_label] += 1
-        end
+    @inbounds for (true_label, pred_label) in zip(y_true, y_pred)
+        confusion[true_label, pred_label] += 1
     end
     return confusion
 end
 
 
 """
-LIBSVM classifier for decoding.
-
     libsvm_classifier(
         X_train::AbstractMatrix{Float64},
         y_train::Vector{Int},
         X_test::AbstractMatrix{Float64};
-        C::Float64 = 1.0,
+        cost::Float64 = 1.0,
     ) -> Vector{Int}
 
-Direct LIBSVM classifier matching the interface of `_mlj_classifier`.
+LIBSVM classifier for decoding.
 
 This function uses LIBSVM.jl directly (no MLJ wrapper) for SVM classification.
 
@@ -313,15 +319,14 @@ This function uses LIBSVM.jl directly (no MLJ wrapper) for SVM classification.
 - `X_test::AbstractMatrix{Float64}`: Test data [n_samples × n_features]
 
 # Keyword Arguments
-- `C::Float64`: Regularization parameter (default: 1.0). Larger values = less regularization.
-- `kernel`: Kernel type (default: `LIBSVM.Kernel.Linear`)
+- `cost::Float64`: Regularization parameter (default: 1.0). Larger values = less regularization.
 
 # Returns
 - `Vector{Int}`: Predicted class labels
 
 # Examples
 ```julia
-y_pred = libsvm_classifier(X_train, y_train, X_test, C=1.0)
+y_pred = libsvm_classifier(X_train, y_train, X_test, cost=1.0)
 ```
 """
 function libsvm_classifier(
@@ -409,7 +414,7 @@ end
         rng::AbstractRNG = Random.GLOBAL_RNG,
     )
 
-Perform multivariate pattern classification (decoding) analysis using direct LIBSVM (no MLJ).
+Perform multivariate pattern classification (decoding) analysis using LIBSVM 
 
 This function performs time-point-by-time-point decoding analysis on epoch data from one participant,
 using cross-validation to estimate classification accuracy at each time point.
@@ -429,7 +434,7 @@ using cross-validation to estimate classification accuracy at each time point.
 - `n_iterations::Int`: Number of iterations with random shuffling (default: 100, matches erplab default)
 - `n_folds::Int`: Number of cross-validation folds (default: 3, matches erplab default)
 - `equalize_trials::Bool`: Whether to equalize number of trials across conditions (default: true, matches erplab)
-- `C::Float64`: SVM regularization parameter (default: 1.0). Larger values = less regularization.
+- `cost::Float64`: SVM regularization parameter (default: 1.0). Larger values = less regularization.
 - `rng::AbstractRNG`: Random number generator for reproducibility
 
 # Returns
@@ -619,6 +624,7 @@ function grand_average(dat::Vector{DecodedData})
     first_channels = first_decoded.channels
     first_params = first_decoded.parameters
 
+    # TODO: should we check for this? warning vs. error?
     for decoded in dat[2:end]
         decoded.times != first_times && @minimal_error_throw("DecodedData objects have inconsistent time vectors")
         decoded.condition_names != first_condition_names &&

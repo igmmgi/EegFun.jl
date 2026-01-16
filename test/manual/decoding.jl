@@ -153,7 +153,7 @@ fig_stats_synthetic = eegfun.plot_decoding(
 
 
 println("\n[Quick Test] Statistical testing on synthetic data...")
-stats_synthetic = eegfun.test_against_chance_cluster(all_decoded, alpha = 0.2, tail = :right)
+stats_synthetic = eegfun.test_against_chance_cluster(all_decoded, alpha = 0.2)
 println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
 
 # Plot with significance
