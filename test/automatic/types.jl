@@ -36,8 +36,8 @@ using eegfun
         @test neighbours.distances == [10.0, 15.0]
         @test neighbours.weights == [0.5, 0.5]
 
-        # Test immutability
-        @test_throws ErrorException neighbours.electrodes = [:Pz]
+        # Test immutability - trying to set a non-existent field throws FieldError
+        @test_throws FieldError neighbours.electrodes = [:Pz]
     end
 
     @testset "Layout" begin

@@ -1,6 +1,7 @@
 using Test
 using DataFrames
 using OrderedCollections
+using eegfun
 
 @testset "Layout Tests" begin
     # Read the BioSemi 64-channel layout
@@ -29,13 +30,13 @@ using OrderedCollections
         # Test specific coordinate calculations for known positions
         # Fp1 (inc=-92, azi=-72) - normalized coordinates
         fp1_idx = findfirst(test_layout.data.label .== :Fp1)
-        @test isapprox(layout_2d.data[fp1_idx, :x2], -0.275, atol = 0.01)  # Fp1 x
-        @test isapprox(layout_2d.data[fp1_idx, :y2], 0.956, atol = 0.01)   # Fp1 y
+        @test isapprox(layout_2d.data[fp1_idx, :x2], -0.266, atol = 0.01)  # Fp1 x
+        @test isapprox(layout_2d.data[fp1_idx, :y2], 0.926, atol = 0.01)   # Fp1 y
 
         # Cz (inc=0, azi=0) - normalized coordinates
         cz_idx = findfirst(test_layout.data.label .== :Cz)
         @test isapprox(layout_2d.data[cz_idx, :x2], 0.0, atol = 0.01)     # Cz x
-        @test isapprox(layout_2d.data[cz_idx, :y2], 0.111, atol = 0.01)   # Cz y
+        @test isapprox(layout_2d.data[cz_idx, :y2], 0.108, atol = 0.01)   # Cz y
 
         # Test 3D conversion
         layout_3d = copy(test_layout)

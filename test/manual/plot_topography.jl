@@ -12,17 +12,6 @@ eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 
 
-eegfun.plot_topography_3d(
-    dat,
-    method = :spherical_spline,
-    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    gridscale = 150,
-    head_mesh_file = "/home/ian/Desktop/Super Average Head.obj"
-)
-
-
-
-
 eegfun.plot_topography(
     dat,
     method = :spherical_spline,
