@@ -47,71 +47,19 @@ mutable struct DecodingStatisticsResult
 end
 
 """
-    test_against_chance(decoded::DecodedData; alpha::Float64 = 0.05, tail::Symbol = :right, correction_method::Symbol = :none)
-
-Perform one-sample t-test against chance level for decoding results.
-
-Tests whether decoding accuracy is significantly above chance at each time point.
-This is typically used for grand average results (across participants).
-
-# Arguments
-- `decoded::DecodedData`: DecodedData object (should be grand average across participants)
-
-# Keyword Arguments
-- `alpha::Float64`: Significance threshold (default: 0.05)
-- `tail::Symbol`: Test tail - `:right` (default, tests if accuracy > chance), `:left`, or `:both`
-- `correction_method::Symbol`: Multiple comparison correction - `:none` (default) or `:bonferroni`
-
-# Returns
-- `DecodingStatisticsResult`: Results with t-statistics, p-values, and significance masks
-
-# Examples
-```julia
-# Test grand average against chance
-grand_avg = grand_average([decoded_p1, decoded_p2, decoded_p3])
-stats = test_against_chance(grand_avg, alpha=0.05, correction_method=:bonferroni)
-```
-"""
-function test_against_chance(
-    decoded::DecodedData;
-    alpha::Float64 = 0.05,
-    tail::Symbol = :right,
-    correction_method::Symbol = :none,
-)
-    tail ∈ (:left, :right, :both) || @minimal_error_throw("tail must be :left, :right, or :both, got :$tail")
-    correction_method ∈ (:none, :bonferroni) || @minimal_error_throw("correction_method must be :none or :bonferroni, got :$correction_method")
-    
-    # For now, this requires raw_predictions to compute statistics
-    # In the future, we could also accept a Vector{DecodedData} directly
-    if isnothing(decoded.raw_predictions)
-        @minimal_error_throw("test_against_chance requires raw_predictions. " *
-                            "Either save raw_predictions during decode() or pass a Vector{DecodedData} directly.")
-    end
-    
-    # Extract accuracy for each participant at each time point
-    # raw_predictions is [iterations × folds × timepoints × trials]
-    # We need to compute accuracy per participant, but we only have one DecodedData
-    # This function is designed for grand averages, so we need the individual participant data
-    
-    # For now, return an error suggesting to use the Vector{DecodedData} version
-    @minimal_error_throw("test_against_chance requires individual participant DecodedData objects. " *
-                        "Use test_against_chance(decoded_list::Vector{DecodedData}, ...) instead.")
-end
-
-"""
-    test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 = 0.05, tail::Symbol = :right, correction_method::Symbol = :none)
+    test_against_chance(decoded_list::Vector{DecodedData}; alpha::Float64 = 0.05, correction_method::Symbol = :none)
 
 Perform one-sample t-test against chance level across multiple participants.
 
 Tests whether decoding accuracy is significantly above chance at each time point,
-using the across-participant variance.
+using the across-participant variance. This is a one-tailed test (right tail) testing
+if accuracy > chance level.
 
 # Arguments
 - `decoded_list::Vector{DecodedData}`: Vector of DecodedData objects, one per participant
 
 # Keyword Arguments
 - `alpha::Float64`: Significance threshold (default: 0.05)
-- `tail::Symbol`: Test tail - `:right` (default, tests if accuracy > chance), `:left`, or `:both`
 - `correction_method::Symbol`: Multiple comparison correction - `:none` (default) or `:bonferroni`
 
 # Returns
@@ -127,10 +75,8 @@ stats = test_against_chance(decoded_list, alpha=0.05, correction_method=:bonferr
 function test_against_chance(
     decoded_list::Vector{DecodedData};
     alpha::Float64 = 0.05,
-    tail::Symbol = :right,
     correction_method::Symbol = :none,
 )
-    tail ∈ (:left, :right, :both) || @minimal_error_throw("tail must be :left, :right, or :both, got :$tail")
     correction_method ∈ (:none, :bonferroni) || @minimal_error_throw("correction_method must be :none or :bonferroni, got :$correction_method")
     
     isempty(decoded_list) && @minimal_error_throw("Cannot test empty decoded data list")
@@ -169,7 +115,8 @@ function test_against_chance(
         
         # Use paired_ttest to compare accuracies against chance level
         # This is equivalent to a one-sample t-test: H0: mean(accuracies) = chance_level
-        result = paired_ttest(accuracies_at_t, chance_vector, tail = tail)
+        # One-tailed test (right tail): tests if accuracy > chance
+        result = paired_ttest(accuracies_at_t, chance_vector, tail = :right)
         
         t_statistics[t_idx] = result.t
         p_values[t_idx] = result.p
@@ -220,15 +167,13 @@ end
 # ===================
 
 """
-    _find_temporal_clusters(mask::BitVector, times::Vector{Float64}, threshold_t::Float64, tail::Symbol)
+    _find_temporal_clusters(mask::BitVector, times::Vector{Float64})
 
 Find temporal clusters in 1D significant mask.
 
 # Arguments
-- `mask::BitVector`: Boolean mask indicating significant time points
+- `mask::BitVector`: Boolean mask indicating significant time points (already thresholded)
 - `times::Vector{Float64}`: Time points in seconds
-- `threshold_t::Float64`: Critical t-value for thresholding
-- `tail::Symbol`: Test tail - `:left`, `:right`, or `:both`
 
 # Returns
 - `clusters::Vector{TemporalCluster}`: Found temporal clusters
@@ -236,8 +181,6 @@ Find temporal clusters in 1D significant mask.
 function _find_temporal_clusters(
     mask::BitVector,
     times::Vector{Float64},
-    threshold_t::Float64,
-    tail::Symbol,
 )
     clusters = TemporalCluster[]
     
@@ -316,11 +259,9 @@ function _compute_cluster_statistics(
     cluster_stats = Float64[]
     
     for cluster in clusters
-        if statistic_type == :sum
-            # Sum of t-values in cluster
+        if statistic_type == :sum # Sum of t-values in cluster
             cluster_stat = sum(t_statistics[t_idx] for t_idx in cluster.time_indices)
-        elseif statistic_type == :max
-            # Maximum absolute t-value in cluster
+        elseif statistic_type == :max # Maximum absolute t-value in cluster
             cluster_stat = maximum(abs(t_statistics[t_idx]) for t_idx in cluster.time_indices)
         else
             @minimal_error_throw("statistic_type must be :sum or :max, got :$statistic_type")
@@ -334,7 +275,6 @@ end
 """
     test_against_chance_cluster(decoded_list::Vector{DecodedData};
                                alpha::Float64 = 0.05,
-                               tail::Symbol = :right,
                                n_permutations::Int = 1000,
                                cluster_statistic::Symbol = :sum,
                                random_seed::Union{Int, Nothing} = nothing,
@@ -345,13 +285,13 @@ Perform cluster-based permutation test against chance level for decoding results
 This method uses cluster-based permutation testing to control for multiple comparisons
 across time points. Clusters of contiguous significant time points are identified, and
 their cluster-level statistics are compared to a permutation distribution.
+This is a one-tailed test (right tail) testing if accuracy > chance level.
 
 # Arguments
 - `decoded_list::Vector{DecodedData}`: Vector of DecodedData objects, one per participant
 
 # Keyword Arguments
 - `alpha::Float64`: Significance threshold (default: 0.05)
-- `tail::Symbol`: Test tail - `:right` (default, tests if accuracy > chance), `:left`, or `:both`
 - `n_permutations::Int`: Number of permutations (default: 1000)
 - `cluster_statistic::Symbol`: Cluster statistic - `:sum` (default) or `:max`
 - `random_seed::Union{Int, Nothing}`: Random seed for reproducibility (default: nothing)
@@ -370,13 +310,11 @@ stats = test_against_chance_cluster(decoded_list, alpha=0.05, n_permutations=100
 function test_against_chance_cluster(
     decoded_list::Vector{DecodedData};
     alpha::Float64 = 0.05,
-    tail::Symbol = :right,
     n_permutations::Int = 1000,
     cluster_statistic::Symbol = :sum,
     random_seed::Union{Int, Nothing} = nothing,
     show_progress::Bool = true,
 )
-    tail ∈ (:left, :right, :both) || @minimal_error_throw("tail must be :left, :right, or :both, got :$tail")
     cluster_statistic ∈ (:sum, :max) || @minimal_error_throw("cluster_statistic must be :sum or :max, got :$cluster_statistic")
     
     isempty(decoded_list) && @minimal_error_throw("Cannot test empty decoded data list")
@@ -412,32 +350,21 @@ function test_against_chance_cluster(
     
     for t_idx in 1:n_timepoints
         accuracies_at_t = accuracies[:, t_idx]
-        result = paired_ttest(accuracies_at_t, chance_vector, tail = tail)
+        # One-tailed test (right tail): tests if accuracy > chance
+        result = paired_ttest(accuracies_at_t, chance_vector, tail = :right)
         t_statistics[t_idx] = result.t
         p_values[t_idx] = result.p
     end
     
-    # Compute critical t-value for thresholding
+    # Compute critical t-value for thresholding (one-tailed right)
     dist = TDist(df)
-    if tail == :both
-        critical_t = quantile(dist, 1.0 - alpha / 2.0)
-    elseif tail == :right
-        critical_t = quantile(dist, 1.0 - alpha)
-    else  # :left
-        critical_t = quantile(dist, alpha)
-    end
+    critical_t = quantile(dist, 1.0 - alpha)
     
-    # Threshold observed data
-    if tail == :both
-        mask_observed = (t_statistics .> critical_t) .| (t_statistics .< -critical_t)
-    elseif tail == :right
-        mask_observed = t_statistics .> critical_t
-    else  # :left
-        mask_observed = t_statistics .< critical_t
-    end
+    # Threshold observed data (right tail: accuracy > chance)
+    mask_observed = t_statistics .> critical_t
     
     # Find observed clusters
-    observed_clusters = _find_temporal_clusters(mask_observed, first_times, critical_t, tail)
+    observed_clusters = _find_temporal_clusters(mask_observed, first_times)
     
     # Compute observed cluster statistics
     if !isempty(observed_clusters)
@@ -469,21 +396,16 @@ function test_against_chance_cluster(
         t_statistics_perm = Vector{Float64}(undef, n_timepoints)
         for t_idx in 1:n_timepoints
             accuracies_at_t = shuffled_accuracies[:, t_idx]
-            result = paired_ttest(accuracies_at_t, chance_vector, tail = tail)
+            # One-tailed test (right tail): tests if accuracy > chance
+            result = paired_ttest(accuracies_at_t, chance_vector, tail = :right)
             t_statistics_perm[t_idx] = result.t
         end
         
-        # Threshold permuted data
-        if tail == :both
-            mask_perm = (t_statistics_perm .> critical_t) .| (t_statistics_perm .< -critical_t)
-        elseif tail == :right
-            mask_perm = t_statistics_perm .> critical_t
-        else  # :left
-            mask_perm = t_statistics_perm .< critical_t
-        end
+        # Threshold permuted data (right tail: accuracy > chance)
+        mask_perm = t_statistics_perm .> critical_t
         
         # Find clusters in permuted data
-        clusters_perm = _find_temporal_clusters(mask_perm, first_times, critical_t, tail)
+        clusters_perm = _find_temporal_clusters(mask_perm, first_times)
         
         # Compute max cluster statistic
         if !isempty(clusters_perm)

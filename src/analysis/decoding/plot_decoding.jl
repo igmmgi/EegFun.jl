@@ -30,7 +30,6 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :linestyle => (:solid, "Line style"),
 
     # Chance level
-    :show_chance => (true, "Show chance level line (true/false)"),
     :chance_color => (:gray, "Color for chance level line"),
     :chance_linestyle => (:dash, "Line style for chance level"),
     :chance_linewidth => (1, "Line width for chance level"),
@@ -50,6 +49,176 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Figure padding
     :figure_padding => ((10, 10, 10, 10), "Padding around entire figure as (left, right, top, bottom) tuple (in pixels)"),
 )
+
+# ==============================================================================
+#   HELPER FUNCTIONS
+# ==============================================================================
+
+"""
+    _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
+
+Add origin lines for decoding plots: x=0 and y=chance_level.
+Always plots chance level line with label.
+"""
+function _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
+    
+    # Add x=0 line if add_xy_origin is true
+        vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
+    # Always add y=chance_level line with label
+    hlines!(
+        ax,
+        chance_level,
+        color = plot_kwargs[:chance_color],
+        linewidth = plot_kwargs[:chance_linewidth],
+        linestyle = plot_kwargs[:chance_linestyle],
+        label = "Chance ($(round(chance_level, digits = 3)))",
+    )
+end
+
+"""
+    _plot_error_band!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64}, 
+                      stderror::Union{Vector{Float64}, Nothing}, plot_kwargs::Dict)
+
+Plot error band (standard error shading) on axis.
+"""
+function _plot_error_band!(
+    ax::Axis,
+    times::Vector{Float64},
+    accuracy::Vector{Float64},
+    stderror::Union{Vector{Float64},Nothing},
+    plot_kwargs::Dict,
+)
+    band!(
+        ax,
+        times,
+        accuracy .- stderror,
+        accuracy .+ stderror,
+        color = (plot_kwargs[:error_color], plot_kwargs[:error_alpha]),
+        label = "±1 SE",
+    )
+end
+
+"""
+    _plot_accuracy_curve!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64}, 
+                          plot_kwargs::Dict; label::String = "Accuracy")
+
+Plot main accuracy curve on axis.
+"""
+function _plot_accuracy_curve!(
+    ax::Axis,
+    times::Vector{Float64},
+    accuracy::Vector{Float64},
+    plot_kwargs::Dict;
+    label::String = "Accuracy",
+)
+    lines!(
+        ax,
+        times,
+        accuracy,
+        color = plot_kwargs[:color],
+        linewidth = plot_kwargs[:linewidth],
+        linestyle = plot_kwargs[:linestyle],
+        label = label,
+    )
+end
+
+"""
+    _setup_axis_limits!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64},
+                        stderror::Union{Vector{Float64}, Nothing}, plot_kwargs::Dict)
+
+Setup axis limits for decoding plot.
+"""
+function _setup_axis_limits!(
+    ax::Axis,
+    times::Vector{Float64},
+    accuracy::Vector{Float64},
+    stderror::Union{Vector{Float64}, Nothing},
+    plot_kwargs::Dict,
+)
+    # X-axis limits
+    xlim_val = plot_kwargs[:xlim]
+    if !isnothing(xlim_val)
+        xlims!(ax, xlim_val)
+    else
+        xlims!(ax, (times[1], times[end]))
+    end
+
+    # Y-axis limits
+    ylim_val = plot_kwargs[:ylim]
+    if !isnothing(ylim_val)
+        ylims!(ax, ylim_val)
+    else
+        # Auto-determine y limits
+        y_min = minimum(accuracy)
+        y_max = maximum(accuracy)
+        if plot_kwargs[:show_error] && !isnothing(stderror)
+            y_min = min(y_min, minimum(accuracy .- stderror))
+            y_max = max(y_max, maximum(accuracy .+ stderror))
+        end
+        y_range = y_max - y_min
+        ylims!(ax, (y_min - 0.05 * y_range, y_max + 0.05 * y_range))
+    end
+end
+
+"""
+    _plot_decoding_to_axis!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64},
+                            stderror::Union{Vector{Float64}, Nothing}, chance_level::Float64,
+                            plot_kwargs::Dict; show_legend::Bool = true, curve_label::String = "Accuracy")
+
+Base function that plots decoding data to an existing axis.
+
+This function handles the core plotting logic:
+- Setting up axis limits
+- Adding origin lines (x=0 and y=chance_level)
+- Plotting error band
+- Plotting accuracy curve
+- Optionally showing legend
+
+# Arguments
+- `ax::Axis`: The axis to plot to
+- `times::Vector{Float64}`: Time points
+- `accuracy::Vector{Float64}`: Accuracy values
+- `stderror::Union{Vector{Float64}, Nothing}`: Standard error values (optional)
+- `chance_level::Float64`: Chance level for reference line
+- `plot_kwargs::Dict`: Plotting keyword arguments
+- `show_legend::Bool`: Whether to show legend (default: true)
+- `curve_label::String`: Label for accuracy curve (default: "Accuracy")
+"""
+function _plot_decoding_to_axis!(
+    ax::Axis,
+    times::Vector{Float64},
+    accuracy::Vector{Float64},
+    stderror::Union{Vector{Float64}, Nothing},
+    chance_level::Float64,
+    plot_kwargs::Dict;
+    show_legend::Bool = true,
+    curve_label::String = "Accuracy",
+)
+    # Setup axis limits
+    _setup_axis_limits!(ax, times, accuracy, stderror, plot_kwargs)
+
+    # Add origin lines (x=0 and y=chance_level)
+    if plot_kwargs[:add_xy_origin]
+        _add_decoding_origin_lines!(ax, chance_level, plot_kwargs)
+    end
+
+    # Plot error band
+    if plot_kwargs[:show_error] && !isnothing(stderror)
+        _plot_error_band!(ax, times, accuracy, stderror, plot_kwargs)
+    end
+
+    # Plot main accuracy curve
+    _plot_accuracy_curve!(ax, times, accuracy, plot_kwargs; label = curve_label)
+
+    # Show legend if requested
+    if show_legend
+        axislegend(ax, position = :rt)
+    end
+end
+
+# ==============================================================================
+#   MAIN PLOTTING FUNCTIONS
+# ==============================================================================
 
 """
     plot_decoding(decoded::DecodedData; kwargs...)
@@ -77,29 +246,26 @@ plot_decoding(decoded, title="Face vs. Object Decoding")
 """
 function plot_decoding(decoded::DecodedData; kwargs...)
     # Merge defaults with user kwargs
-    plot_kwargs = merge(PLOT_DECODING_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
 
-    # Extract parameters (unwrap tuples if needed)
-    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
-    display_plot = _get_val(:display_plot)
-    figure_title = _get_val(:figure_title)
+    # Extract parameters
+    display_plot = plot_kwargs[:display_plot]
+    figure_title = plot_kwargs[:figure_title]
     times = decoded.times
     accuracy = decoded.average_score
     stderror = decoded.stderror
     chance_level = decoded.parameters.chance_level
-    show_chance = _get_val(:show_chance)
-    show_error = _get_val(:show_error) && !isnothing(stderror)
-    title_text = _get_val(:title)
-    show_title = _get_val(:show_title)
+    title_text = plot_kwargs[:title]
+    show_title = plot_kwargs[:show_title]
 
     # Create figure
     fig = Figure(title = figure_title, size = (800, 600))
     ax = Axis(
         fig[1, 1],
-        xlabel = _get_val(:xlabel),
-        ylabel = _get_val(:ylabel),
-        xgridvisible = _get_val(:xgrid),
-        ygridvisible = _get_val(:ygrid),
+        xlabel = plot_kwargs[:xlabel],
+        ylabel = plot_kwargs[:ylabel],
+        xgridvisible = plot_kwargs[:xgrid],
+        ygridvisible = plot_kwargs[:ygrid],
     )
 
     # Set title if requested
@@ -110,74 +276,8 @@ function plot_decoding(decoded::DecodedData; kwargs...)
         ax.title = "Decoding: $(join(decoded.condition_names, " vs "))"
     end
 
-    # Set axis limits
-    xlim_val = _get_val(:xlim)
-    if !isnothing(xlim_val)
-        xlims!(ax, xlim_val)
-    else
-        xlims!(ax, (times[1], times[end]))
-    end
-
-    ylim_val = _get_val(:ylim)
-    if !isnothing(ylim_val)
-        ylims!(ax, ylim_val)
-    else
-        # Auto-determine y limits
-        y_min = minimum(accuracy)
-        y_max = maximum(accuracy)
-        if show_error && !isnothing(stderror)
-            y_min = min(y_min, minimum(accuracy .- stderror))
-            y_max = max(y_max, maximum(accuracy .+ stderror))
-        end
-        y_range = y_max - y_min
-        ylims!(ax, (y_min - 0.05 * y_range, y_max + 0.05 * y_range))
-    end
-
-    # Add origin lines if requested
-    if _get_val(:add_xy_origin)
-        vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
-        hlines!(ax, chance_level, color = _get_val(:chance_color), linewidth = _get_val(:chance_linewidth), linestyle = _get_val(:chance_linestyle))
-    end
-
-    # Plot chance level line
-    if show_chance
-        hlines!(
-            ax,
-            chance_level,
-            color = _get_val(:chance_color),
-            linewidth = _get_val(:chance_linewidth),
-            linestyle = _get_val(:chance_linestyle),
-            label = "Chance ($(round(chance_level, digits = 3)))",
-        )
-    end
-
-    # Plot error shading if available
-    if show_error
-        band!(
-            ax,
-            times,
-            accuracy .- stderror,
-            accuracy .+ stderror,
-            color = (_get_val(:error_color), _get_val(:error_alpha)),
-            label = "±1 SE",
-        )
-    end
-
-    # Plot main accuracy curve
-    lines!(
-        ax,
-        times,
-        accuracy,
-        color = _get_val(:color),
-        linewidth = _get_val(:linewidth),
-        linestyle = _get_val(:linestyle),
-        label = "Accuracy",
-    )
-
-    # Add legend if multiple elements
-    if show_chance || show_error
-        axislegend(ax, position = :rt)
-    end
+    # Plot decoding data to axis
+    _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs)
 
     # Display if requested
     if display_plot
@@ -211,14 +311,13 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
     end
 
     # Merge defaults with user kwargs
-    plot_kwargs = merge(PLOT_DECODING_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
 
-    # Extract parameters (unwrap tuples if needed)
-    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
-    display_plot = _get_val(:display_plot)
-    figure_title = _get_val(:figure_title)
-    title_text = _get_val(:title)
-    show_title = _get_val(:show_title)
+    # Extract parameters
+    display_plot = plot_kwargs[:display_plot]
+    figure_title = plot_kwargs[:figure_title]
+    title_text = plot_kwargs[:title]
+    show_title = plot_kwargs[:show_title]
     
     # Determine optimal subplot layout using best_rect
     n_subjects = length(decoded_list)
@@ -259,12 +358,12 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
         # Create axis for this subject
         ax = Axis(
             fig[row, col],
-            xlabel = (row == rows) ? _get_val(:xlabel) : "",  # Only show xlabel on bottom row
-            ylabel = (col == 1) ? _get_val(:ylabel) : "",    # Only show ylabel on left column
-            xgridvisible = _get_val(:xgrid),
-            ygridvisible = _get_val(:ygrid),
+            xlabel = (row == rows) ? plot_kwargs[:xlabel] : "",  # Only show xlabel on bottom row
+            ylabel = (col == 1) ? plot_kwargs[:ylabel] : "",    # Only show ylabel on left column
+            xgridvisible = plot_kwargs[:xgrid],
+            ygridvisible = plot_kwargs[:ygrid],
         )
-        
+
         # Set title for this subplot
         if show_title
             if !isempty(title_text)
@@ -275,53 +374,18 @@ function plot_decoding(decoded_list::Vector{DecodedData}; kwargs...)
                 ax.title = subject_id
             end
         end
-        
+
         # Set axis limits
         xlims!(ax, (time_min, time_max))
         ylims!(ax, y_lims)
-        
-        # Add origin lines
-        if _get_val(:add_xy_origin)
-            vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
-            hlines!(ax, chance_level, color = _get_val(:chance_color), linewidth = _get_val(:chance_linewidth), linestyle = _get_val(:chance_linestyle))
-        end
-        
-        # Plot chance level
-        if _get_val(:show_chance)
-            hlines!(
-                ax,
-                chance_level,
-                color = _get_val(:chance_color),
-                linewidth = _get_val(:chance_linewidth),
-                linestyle = _get_val(:chance_linestyle),
-            )
-        end
-        
+
         # Get data for this subject
         times = decoded.times
         accuracy = decoded.average_score
         stderror = decoded.stderror
-        
-        # Plot error shading
-        if _get_val(:show_error) && !isnothing(stderror)
-            band!(
-                ax,
-                times,
-                accuracy .- stderror,
-                accuracy .+ stderror,
-                color = (_get_val(:error_color), _get_val(:error_alpha)),
-            )
-        end
-        
-        # Plot main accuracy curve
-        lines!(
-            ax,
-            times,
-            accuracy,
-            color = _get_val(:color),
-            linewidth = _get_val(:linewidth),
-            linestyle = _get_val(:linestyle),
-        )
+
+        # Plot decoding data to axis (no legend for individual subplots)
+        _plot_decoding_to_axis!(ax, times, accuracy, stderror, chance_level, plot_kwargs; show_legend = false, curve_label = "")
     end
     
     # Display if requested
@@ -355,10 +419,9 @@ plot_decoding(grand_avg, stats, show_significance=true)
 """
 function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kwargs...)
     # Merge defaults with user kwargs
-    plot_kwargs = merge(PLOT_DECODING_KWARGS, Dict(kwargs))
+    plot_kwargs = _merge_plot_kwargs(PLOT_DECODING_KWARGS, kwargs)
     
     # Extract parameters
-    _get_val(k) = isa(plot_kwargs[k], Tuple) ? plot_kwargs[k][1] : plot_kwargs[k]
     show_significance = get(kwargs, :show_significance, true)
     sig_color = get(kwargs, :sig_color, :yellow)
     sig_alpha = get(kwargs, :sig_alpha, 0.3)
@@ -370,7 +433,7 @@ function plot_decoding(decoded::DecodedData, stats::DecodingStatisticsResult; kw
     end
     
     # Create base plot (without displaying yet)
-    display_plot_orig = _get_val(:display_plot)
+    display_plot_orig = plot_kwargs[:display_plot]
     fig, ax = plot_decoding(decoded; kwargs..., display_plot=false, show_significance=false)
     
     # Compute y-limits from data for significance bar positioning
@@ -464,12 +527,10 @@ function _find_continuous_regions(mask::BitVector, times::Vector{Float64})
     region_start = 0
     
     for (idx, is_sig) in enumerate(mask)
-        if is_sig && !in_region
-            # Start new region
+        if is_sig && !in_region # Start new region
             in_region = true
             region_start = idx
-        elseif !is_sig && in_region
-            # End current region
+        elseif !is_sig && in_region # End current region
             in_region = false
             region_end = idx - 1
             push!(regions, (times[region_start], times[region_end]))
