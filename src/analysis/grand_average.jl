@@ -35,10 +35,13 @@ function _create_grand_average(erps::Vector{ErpData}, cond_num::Int)
 
     first_erp = erps[1]
 
-    # Get metadata columns and EEG channels
+    # Get metadata columns and find common EEG channels across all ERPs
     metadata_cols = meta_labels(first_erp)
-    eeg_channels = setdiff(propertynames(first_erp.data), metadata_cols)
-
+    
+    # Find intersection of channels across all ERPs (only average channels that exist in all)
+    all_channel_sets = [setdiff(propertynames(erp.data), metadata_cols) for erp in erps]
+    eeg_channels = collect(intersect(all_channel_sets...))
+    
     # Create a copy of the first ERP's data as the base
     grand_avg_data = copy(first_erp.data)
 
