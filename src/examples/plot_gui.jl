@@ -42,16 +42,14 @@ eegfun.plot_my_data_gui()
 """
 function plot_gui()
 
-    # Create the main figure with minimal padding
-    gui_fig = Figure(size = (600, 800), title = "Plot GUI", backgroundcolor = :lightgrey, figure_padding = (0, 0, 0, 0))
-
+    # main figure window, layout, and UI style
+    gui_fig = Figure(size = (600, 800), title = "Plot GUI", backgroundcolor = :lightgrey)
+    main_layout = GridLayout(gui_fig[1, 1:2])
     ui_style = UIStyle()
 
-    # Create main layout with 2-column structure
-    # We'll add spacing by using column sizing with Relative widths
-    main_layout = GridLayout(gui_fig[1, 1:2])
-
-    # Column 1: File & Data Selection
+    #########################################################
+    # COLUMN 1: SETTINGS
+    #########################################################
     # Select Directory Section - Place this first to create column 1
     directory_select_button = Button(
         main_layout[1, 1],
@@ -103,15 +101,10 @@ function plot_gui()
 
     # Selected channels display
     selected_channels_text = Observable("Selected: ")
-    selected_channels_label = Label(main_layout[3, 2], selected_channels_text, fontsize = ui_style.slider_font, color = :gray)
+    Label(main_layout[3, 2], selected_channels_text, fontsize = ui_style.slider_font, color = :gray)
 
     # Settings Section
     Label(main_layout[4, 2], "Axis Settings", fontsize = ui_style.label_font, font = :bold)
-
-    # Now that both columns exist, set their widths to create spacing
-    colsize!(main_layout, 1, Relative(0.45))  # First column takes 45% of width
-    colsize!(main_layout, 2, Relative(0.45))  # Second column takes 45% of width
-    # The remaining 10% creates natural spacing between columns
 
     # Layout Section
     layout_select_button = Button(
@@ -186,7 +179,9 @@ function plot_gui()
     )
 
 
-    # Column 2: Settings (Settings title already placed above)
+    #########################################################
+    # COLUMN 2: SETTINGS
+    #########################################################
     # X Limits Section
     Label(main_layout[5, 2], "X Limits", fontsize = ui_style.slider_font, font = :bold)
     x_limits_layout = GridLayout(main_layout[6, 2], tellwidth = false, colgap = 10)
@@ -287,13 +282,19 @@ function plot_gui()
     # Action Button Section - Outside the settings panel
     # Main plot button
     plot_button = Button(
-        main_layout[15, 2],
+        main_layout[15, 1:2],
         label = "PLOT",
         fontsize = ui_style.title_font,
         buttoncolor = :grey,
         width = 100,
         height = 50,
     )
+
+    # Set columns sizes
+    colsize!(main_layout, 1, Relative(0.4))  
+    colsize!(main_layout, 2, Relative(0.4))  
+
+
 
     # Data structure to store GUI state
     gui_state = (
@@ -318,6 +319,8 @@ function plot_gui()
 
     function execute_plot()
 
+        # TODO: different plots types and checking selected options make sense
+
         # Check if we have the required files
         if gui_state.filename[] == ""
             println("Error: No file filter specified!")
@@ -330,21 +333,10 @@ function plot_gui()
         end
 
         try
-            # Resolve layout file path - try as-is first, then search in package layouts
-            layout_file_path = gui_state.layout_file[]
-            if !isfile(layout_file_path)
-                # Try to find it in the package's data/layouts directory
-                package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
-                if isdir(package_layouts_dir)
-                    found_layout = eegfun.find_file(basename(layout_file_path), package_layouts_dir)
-                    if found_layout !== nothing
-                        layout_file_path = found_layout
-                    end
-                end
-            end
-            
-            if !isfile(layout_file_path)
-                println("Error: Layout file not found: $(gui_state.layout_file[])")
+            # Use the already loaded layout
+            layout = gui_state.layout_object[]
+            if layout === nothing
+                println("Error: No layout loaded. Please select a layout file first.")
                 return
             end
 
@@ -357,9 +349,6 @@ function plot_gui()
                 println("Error: Unsupported file format. Currently only .bdf files are supported.")
                 return
             end
-
-            println("Loading layout from: $layout_file_path")
-            layout = eegfun.read_layout(layout_file_path)
 
             println("Creating EEG dataframe...")
             dat = eegfun.create_eeg_dataframe(dat, layout)
@@ -443,12 +432,14 @@ function plot_gui()
                     # Load layout and populate electrode menu with channels from layout
                     try
                         layout = eegfun.read_layout(filename)
+                        gui_state.layout_object[] = layout  # Store for later use
                         channel_labels = eegfun.channel_labels(layout)
                         electrode_options = vcat(["Select"], string.(channel_labels))
                         channel_menu.options = electrode_options
                         println("Loaded layout with $(length(channel_labels)) channels")
                     catch layout_error
                         println("Error loading layout: $layout_error")
+                        gui_state.layout_object[] = nothing
                     end
                 end
             catch e
