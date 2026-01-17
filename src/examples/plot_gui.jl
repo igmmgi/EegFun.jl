@@ -98,12 +98,12 @@ function plot_gui()
 
     # Column 2: Electrode Section - Place this first to create column 2
     Label(main_layout[1, 2], "Channel(s)", fontsize = ui_style.label_font, font = :bold)
-    electrode_menu =
+    channel_menu =
         Menu(main_layout[2, 2], options = ["Select"], width = ui_style.input_width, height = ui_style.input_height)
 
-    # Multi-select electrode info
-    electrode_info =
-        Label(main_layout[3, 2], "Ctrl+Click for multiple selection", fontsize = ui_style.slider_font, color = :gray)
+    # Selected channels display
+    selected_channels_text = Observable("Selected: ")
+    selected_channels_label = Label(main_layout[3, 2], selected_channels_text, fontsize = ui_style.slider_font, color = :gray)
 
     # Settings Section
     Label(main_layout[4, 2], "Axis Settings", fontsize = ui_style.label_font, font = :bold)
@@ -306,7 +306,7 @@ function plot_gui()
         plottype = Observable("select"),
         layout = Observable("select"),
         layout_file = Observable(""),
-        electrodes = Observable(Int[]),
+        electrodes = Observable(String[]),
         xlim = Observable((nothing, nothing)),
         ylim = Observable((nothing, nothing)),
         zlim = Observable((nothing, nothing)),
@@ -315,23 +315,6 @@ function plot_gui()
         baseline_type = Observable("select"),
     )
 
-    # Callback functions
-
-    function update_plottype(selection)
-        # Handle both string and integer selection
-        if isa(selection, String)
-            gui_state.plottype[] = selection
-        else
-            gui_state.plottype[] = plottype_options[selection]
-        end
-    end
-
-
-    function update_electrode_labels(filetype_selection)
-        # This would be implemented to load electrode labels based on file type
-        # For now, just show a placeholder
-        electrode_menu.options = ["Select", "Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4", "O1", "O2"]
-    end
 
     function execute_plot()
 
@@ -385,7 +368,7 @@ function plot_gui()
             println("Updating electrode menu with channel labels...")
             channel_labels = eegfun.channel_labels(dat)
             electrode_options = vcat(["Select"], string.(channel_labels))
-            electrode_menu.options = electrode_options
+            channel_menu.options = electrode_options
             println("Found $(length(channel_labels)) channels: $(join(string.(channel_labels[1:min(10, length(channel_labels))]), ", "))$(length(channel_labels) > 10 ? "..." : "")")
 
             # Create a new screen/window for the plot to avoid overwriting the GUI
@@ -441,7 +424,7 @@ function plot_gui()
     end
 
     on(plottype_dropdown.selection) do selection
-        update_plottype(selection)
+        gui_state.plottype[] = selection
     end
 
     # Open layout file picker when Select button is clicked
@@ -456,6 +439,17 @@ function plot_gui()
                     gui_state.layout_file[] = filename
                     gui_state.layout[] = basename_only
                     layout_label_text[] = basename_only
+                    
+                    # Load layout and populate electrode menu with channels from layout
+                    try
+                        layout = eegfun.read_layout(filename)
+                        channel_labels = eegfun.channel_labels(layout)
+                        electrode_options = vcat(["Select"], string.(channel_labels))
+                        channel_menu.options = electrode_options
+                        println("Loaded layout with $(length(channel_labels)) channels")
+                    catch layout_error
+                        println("Error loading layout: $layout_error")
+                    end
                 end
             catch e
                 println("Layout file picker error: $e")
@@ -463,8 +457,26 @@ function plot_gui()
         end
     end
 
-    on(electrode_menu.selection) do selection
-        gui_state.electrodes[] = [selection]
+    # Helper function to update selected channels display
+    function update_selected_channels_display()
+        if isempty(gui_state.electrodes[])
+            selected_channels_text[] = "Selected: "
+        else
+            selected_channels_text[] = "Selected: " * join(gui_state.electrodes[], ", ")
+        end
+    end
+    
+    on(channel_menu.selection) do selection
+        if selection == "Select"
+            gui_state.electrodes[] = String[]
+            update_selected_channels_display()
+        elseif selection != "Select"
+            # Add to selection if not already present
+            if !(selection in gui_state.electrodes[])
+                gui_state.electrodes[] = vcat(gui_state.electrodes[], selection)
+            end
+            update_selected_channels_display()
+        end
     end
 
     on(participant_input.stored_string) do value
