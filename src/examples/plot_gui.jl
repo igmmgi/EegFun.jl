@@ -10,7 +10,6 @@ struct UIStyle
     input_width::Int
     input_height::Int
 
-    # Constructor with default values
     UIStyle() = new(
         BASE_FONTS.label,
         BASE_FONTS.button,
