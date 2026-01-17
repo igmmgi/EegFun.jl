@@ -29,17 +29,16 @@ end
 
 """Extract participant ID from filename, returns Int."""
 function _extract_participant_id(filename::String)
-    parts = split(replace(filename, ".jld2" => ""), "_")
-    participant_str = findfirst(p -> !isempty(p) && all(isdigit, p), parts)
-
-    if participant_str === nothing
-        # No numeric ID found, use hash of filename
-        participant = hash(filename) % 10000
-        @info "  No numeric participant ID found in filename, using hash: $participant"
-        return participant
-    else
-        return parse(Int, parts[participant_str])
+    # extract last numeric sequence from filename (e.g., "exp1a1" -> 1, "Pract6.bdf" -> 6)
+    numeric_matches = collect(eachmatch(r"\d+", filename))
+    if !isempty(numeric_matches)
+        return parse(Int, numeric_matches[end].match)
     end
+
+    # use hash of filename as fallback
+    participant = hash(filename) % 10000
+    @info "  No numeric participant ID found in filename, using hash: $participant"
+    return participant
 end
 
 

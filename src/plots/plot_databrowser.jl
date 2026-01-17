@@ -426,13 +426,31 @@ function create_labels_menu(fig, ax, state)
         elseif s == "Central"
             state.channels.visible .= occursin.(r"z$", String.(state.channels.labels))
         elseif s == "BioSemi16"
-            tmp_layout = read_layout("./data/layouts/biosemi/biosemi16.csv")
+            package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
+            layout_file = find_file("biosemi16.csv", package_layouts_dir)
+            if layout_file === nothing
+                @minimal_error "Layout file biosemi16.csv not found in $package_layouts_dir"
+                return
+            end
+            tmp_layout = read_layout(layout_file)
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         elseif s == "BioSemi32"
-            tmp_layout = read_layout("./data/layouts/biosemi/biosemi32.csv")
+            package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
+            layout_file = find_file("biosemi32.csv", package_layouts_dir)
+            if layout_file === nothing
+                @minimal_error "Layout file biosemi32.csv not found in $package_layouts_dir"
+                return
+            end
+            tmp_layout = read_layout(layout_file)
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         elseif s == "BioSemi64"
-            tmp_layout = read_layout("./data/layouts/biosemi/biosemi64.csv")
+            package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
+            layout_file = find_file("biosemi64.csv", package_layouts_dir)
+            if layout_file === nothing
+                @minimal_error "Layout file biosemi64.csv not found in $package_layouts_dir"
+                return
+            end
+            tmp_layout = read_layout(layout_file)
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         else
             state.channels.visible .= (state.channels.labels .== Symbol(s))
@@ -557,7 +575,7 @@ function show_additional_menu(state, clicked_region_idx = nothing)
                     return  # No data available, just return
                 end
                 if btn.label[] == "Topoplot"
-                    plot_topography(selected_data, method = :multiquadratic)
+                    plot_topography(selected_data)
                 elseif btn.label[] == "Spectrum"
                     plot_channel_spectrum(selected_data)
                 end
@@ -1720,7 +1738,7 @@ function plot_vertical_lines!(ax, marker, active)
 end
 
 
-function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
+function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
 
     # Check if CairoMakie is being used and warn about lack of interactivity
     if string(Makie.current_backend()) == "CairoMakie"
@@ -1744,7 +1762,12 @@ function plot_databrowser(dat::EegData, ica = nothing; kwargs...)
     draw(ax, state)
     draw_extra_channel!(ax, state)
 
-    display(fig)
+    # Display on the provided screen if given, otherwise use default display
+    if screen !== nothing
+        display(screen, fig)
+    else
+        display(fig)
+    end
 
     set_window_title("Makie")
     # Return the observable analysis settings
