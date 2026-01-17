@@ -10,8 +10,9 @@ dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.rereference!(dat, :avg)
+
 # TODO: tidy up regpion selection
-eegfun.plot_databrowser(dat)
+eegfun.plot_databrowser(dat);
 
 
 # # fig, ax = eegfun.plot_databrowser!(dat)

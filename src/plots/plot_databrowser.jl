@@ -46,10 +46,6 @@ mutable struct Marker
     visible::Bool
 end
 
-mutable struct ExtraChannelVis
-    visualization::Union{Nothing,Makie.Lines,Makie.PolyElement,Any}
-    label::Union{Nothing,Makie.Text}
-end
 
 mutable struct SelectionState
     active::Observable{Bool}
@@ -110,6 +106,7 @@ mutable struct ChannelState
     labels::Vector{Symbol}
     visible::Vector{Bool}
     selected::Vector{Bool}
+    individually_selected::Vector{Symbol}  # Track individually selected electrodes
     data_labels::Dict{Symbol,Makie.Text}
     data_lines::Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}
     function ChannelState(channel_labels::Vector{Symbol})
@@ -117,6 +114,7 @@ mutable struct ChannelState
             channel_labels,
             fill(true, length(channel_labels)),
             fill(false, length(channel_labels)),
+            Symbol[],  # Start with empty list
             Dict{Symbol,Makie.Text}(),
             Dict{Symbol,Union{Makie.Lines,Makie.PolyElement,Any}}(),
         )
@@ -417,15 +415,21 @@ function create_labels_menu(fig, ax, state)
     menu = create_menu(fig, options, "All", "Labels")
 
     on(menu[1].selection) do s
+        # Group selections clear individual selections
         if s == "All"
+            state.channels.individually_selected = Symbol[]
             state.channels.visible .= true
         elseif s == "Left"
+            state.channels.individually_selected = Symbol[]
             state.channels.visible .= occursin.(r"\d*[13579]$", String.(state.channels.labels))
         elseif s == "Right"
+            state.channels.individually_selected = Symbol[]
             state.channels.visible .= occursin.(r"\d*[24680]$", String.(state.channels.labels))
         elseif s == "Central"
+            state.channels.individually_selected = Symbol[]
             state.channels.visible .= occursin.(r"z$", String.(state.channels.labels))
         elseif s == "BioSemi16"
+            state.channels.individually_selected = Symbol[]
             package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
             layout_file = find_file("biosemi16.csv", package_layouts_dir)
             if layout_file === nothing
@@ -435,6 +439,7 @@ function create_labels_menu(fig, ax, state)
             tmp_layout = read_layout(layout_file)
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         elseif s == "BioSemi32"
+            state.channels.individually_selected = Symbol[]
             package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
             layout_file = find_file("biosemi32.csv", package_layouts_dir)
             if layout_file === nothing
@@ -444,6 +449,7 @@ function create_labels_menu(fig, ax, state)
             tmp_layout = read_layout(layout_file)
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         elseif s == "BioSemi64"
+            state.channels.individually_selected = Symbol[]
             package_layouts_dir = joinpath(@__DIR__, "..", "..", "data", "layouts")
             layout_file = find_file("biosemi64.csv", package_layouts_dir)
             if layout_file === nothing
@@ -453,7 +459,13 @@ function create_labels_menu(fig, ax, state)
             tmp_layout = read_layout(layout_file)
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         else
-            state.channels.visible .= (state.channels.labels .== Symbol(s))
+            # Individual electrode selection - append to list
+            selected_sym = Symbol(s)
+            if !(selected_sym in state.channels.individually_selected)
+                push!(state.channels.individually_selected, selected_sym)
+            end
+            # Update visibility to show only individually selected electrodes
+            state.channels.visible .= (state.channels.labels .∈ Ref(state.channels.individually_selected))
         end
 
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
@@ -471,7 +483,6 @@ function create_reference_menu(fig, state, dat)
     menu = create_menu(fig, options, String(dat.analysis_info.reference), "Reference")
 
     on(menu[1].selection) do s
-        old_reference = state.reference_state
         state.reference_state = s
 
         s == :none && return
@@ -595,7 +606,6 @@ function _channel_repair_menu(state, selected_channels, ax)
     # TODO: this looks ok for my typical 70/72 channel setup but could be improved for other setups
 
     cols = 7  # 7 columns
-    rows = ceil(Int, n_channels / cols)  # Calculate rows needed for all channels
 
     # Create the repair menu figure
     menu_fig = Figure(size = (700, 800))
@@ -640,7 +650,7 @@ function _channel_repair_menu(state, selected_channels, ax)
     end
 
     # Add repair method selection
-    method_label = Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
+    Label(menu_fig[3, 1], "Repair Method:", fontsize = 14)
     method_area = menu_fig[4, 1] = GridLayout()
     method_buttons = [
         Button(method_area[1, 1], label = "Neighbor Interpolation", width = 200),
@@ -789,7 +799,7 @@ function create_common_sliders(fig, state, dat)
     sliders = []
 
     # Extreme value slider
-    slider_extreme = Slider(fig[1, 2], range = 0:10:200, startvalue = 0, width = 100)
+    slider_extreme = Slider(fig[1, 2], range = 0:5:100, startvalue = 0, width = 100)
     on(slider_extreme.value) do x
         state.view.crit_val[] = x
     end
@@ -981,11 +991,6 @@ function is_mouse_in_axis(ax, pos)
     bbox = ax.layoutobservables.computedbbox[]
     return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) &&
            bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
-end
-
-function is_within_selection(state, mouse_x)
-    bounds = state.selection.bounds[]
-    return mouse_x >= min(bounds[1], bounds[2]) && mouse_x <= max(bounds[1], bounds[2])
 end
 
 function find_clicked_region(state, mouse_x)
