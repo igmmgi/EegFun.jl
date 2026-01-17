@@ -1,24 +1,20 @@
 # Base UI styling values
-const BASE_FONTS = (title = 24, label = 20, tick = 18, slider = 16, button = 18)
+const BASE_FONTS = (label = 20, button = 18, textbox = 14)
 const BASE_SIZES = (input_width = 150, input_height = 25)
 
 # UI styling parameters struct with defaults
 struct UIStyle
-    title_font::Int
     label_font::Int
-    tick_font::Int
-    slider_font::Int
     button_font::Int
+    textbox_font::Int
     input_width::Int
     input_height::Int
 
     # Constructor with default values
     UIStyle() = new(
-        BASE_FONTS.title,
         BASE_FONTS.label,
-        BASE_FONTS.tick,
-        BASE_FONTS.slider,
         BASE_FONTS.button,
+        BASE_FONTS.textbox,
         BASE_SIZES.input_width,
         BASE_SIZES.input_height,
     )
@@ -43,6 +39,7 @@ eegfun.plot_my_data_gui()
 function plot_gui()
 
     # main figure window, layout, and UI style
+    set_window_title("PLOT GUI")
     gui_fig = Figure(size = (600, 800), title = "Plot GUI", backgroundcolor = :lightgrey)
     main_layout = GridLayout(gui_fig[1, 1:2])
     ui_style = UIStyle()
@@ -66,7 +63,7 @@ function plot_gui()
     Label(
         main_layout[2, 1],
         directory_label_text,
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = ui_style.input_width,
         height = ui_style.input_height,
         halign = :center,
@@ -88,7 +85,7 @@ function plot_gui()
     Label(
         main_layout[4, 1],
         file_label_text,
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = ui_style.input_width,
         height = ui_style.input_height,
         halign = :center,
@@ -101,7 +98,7 @@ function plot_gui()
 
     # Selected channels display
     selected_channels_text = Observable("Selected: ")
-    Label(main_layout[3, 2], selected_channels_text, fontsize = ui_style.slider_font, color = :gray)
+    Label(main_layout[3, 2], selected_channels_text, fontsize = ui_style.textbox_font, color = :gray)
 
     # Settings Section
     Label(main_layout[4, 2], "Axis Settings", fontsize = ui_style.label_font, font = :bold)
@@ -122,7 +119,7 @@ function plot_gui()
     Label(
         main_layout[6, 1],
         layout_label_text,
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = ui_style.input_width,
         height = ui_style.input_height,
         halign = :center,
@@ -133,7 +130,7 @@ function plot_gui()
     Textbox(
         main_layout[8, 1],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = ui_style.input_width,
         height = ui_style.input_height,
         halign = :center,
@@ -159,7 +156,7 @@ function plot_gui()
     participant_input = Textbox(
         main_layout[12, 1],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = ui_style.input_width,
         height = ui_style.input_height,
         halign = :center,
@@ -171,7 +168,7 @@ function plot_gui()
     condition_input = Textbox(
         main_layout[14, 1],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = ui_style.input_width,
         height = ui_style.input_height,
         halign = :center,
@@ -183,12 +180,12 @@ function plot_gui()
     # COLUMN 2: SETTINGS
     #########################################################
     # X Limits Section
-    Label(main_layout[5, 2], "X Limits", fontsize = ui_style.slider_font, font = :bold)
+    Label(main_layout[5, 2], "X Limits", fontsize = ui_style.textbox_font, font = :bold)
     x_limits_layout = GridLayout(main_layout[6, 2], tellwidth = false, colgap = 10)
     xmin_input = Textbox(
         x_limits_layout[1, 1],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -197,7 +194,7 @@ function plot_gui()
     xmax_input = Textbox(
         x_limits_layout[1, 2],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -205,12 +202,12 @@ function plot_gui()
     )
 
     # Y Limits Section
-    Label(main_layout[7, 2], "Y Limits", fontsize = ui_style.slider_font, font = :bold)
+    Label(main_layout[7, 2], "Y Limits", fontsize = ui_style.textbox_font, font = :bold)
     y_limits_layout = GridLayout(main_layout[8, 2], tellwidth = false, colgap = 10)
     ymin_input = Textbox(
         y_limits_layout[1, 1],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -219,7 +216,7 @@ function plot_gui()
     ymax_input = Textbox(
         y_limits_layout[1, 2],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -227,12 +224,12 @@ function plot_gui()
     )
 
     # Z Limits Section
-    Label(main_layout[9, 2], "Z Limits", fontsize = ui_style.slider_font, font = :bold)
+    Label(main_layout[9, 2], "Z Limits", fontsize = ui_style.textbox_font, font = :bold)
     z_limits_layout = GridLayout(main_layout[10, 2], tellwidth = false, colgap = 10)
     Textbox(
         z_limits_layout[1, 1],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -241,7 +238,7 @@ function plot_gui()
     Textbox(
         z_limits_layout[1, 2],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -249,12 +246,12 @@ function plot_gui()
     )
 
     # Baseline Section
-    Label(main_layout[11, 2], "Baseline", fontsize = ui_style.slider_font, font = :bold)
+    Label(main_layout[11, 2], "Baseline", fontsize = ui_style.textbox_font, font = :bold)
     baseline_layout = GridLayout(main_layout[12, 2], tellwidth = false, colgap = 10)
     baseline_start = Textbox(
         baseline_layout[1, 1],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -263,7 +260,7 @@ function plot_gui()
     baseline_end = Textbox(
         baseline_layout[1, 2],
         placeholder = "",
-        fontsize = ui_style.slider_font,
+        fontsize = ui_style.textbox_font,
         width = 90,
         height = ui_style.input_height,
         halign = :center,
@@ -271,7 +268,7 @@ function plot_gui()
     )
 
     # Baseline Type
-    Label(main_layout[13, 2], "Baseline Type TF", fontsize = ui_style.slider_font, font = :bold)
+    Label(main_layout[13, 2], "Baseline Type TF", fontsize = ui_style.textbox_font, font = :bold)
     baseline_type = Menu(
         main_layout[14, 2],
         options = ["Select", "absolute", "relative", "relchange", "perchange", "db"],
@@ -284,8 +281,10 @@ function plot_gui()
     plot_button = Button(
         main_layout[15, 1:2],
         label = "PLOT",
-        fontsize = ui_style.title_font,
-        buttoncolor = :grey,
+        fontsize = ui_style.label_font,
+        buttoncolor = :darkgrey,
+        buttoncolor_hover = :grey,
+        buttoncolor_active = :green,
         width = 100,
         height = 50,
     )
@@ -506,5 +505,6 @@ function plot_gui()
 
     # Display the figure
     display(gui_fig)
+    set_window_title("Makie")
     return nothing
 end
