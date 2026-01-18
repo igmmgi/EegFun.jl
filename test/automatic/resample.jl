@@ -500,6 +500,8 @@ using JLD2
                     participant_selection = eegfun.participants([2, 4]),
                     output_dir = output_dir,
                 )
+                println("input_dir: $tmpdir")
+                println("output_dir: $output_dir")
 
                 # Check only selected participants were processed
                 @test !isfile(joinpath(output_dir, "1_continuous.jld2"))

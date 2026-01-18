@@ -101,7 +101,6 @@ eegfun.plot_topography(ica_result, method = :spherical_spline);
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     colorbar_plot = true,
     colorbar_position = :right,
     colorbar_vertical = true,
@@ -109,7 +108,6 @@ eegfun.plot_topography(
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     colorbar_plot = true,
     colorbar_position = :below,
     colorbar_vertical = false,
@@ -120,20 +118,17 @@ eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), m
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     point_plot = true,
 );
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     point_plot = true,
     label_plot = true,
 );
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     point_plot = true,
     label_plot = true,
     point_color = :red,
@@ -147,7 +142,6 @@ eegfun.plot_topography(
 eegfun.plot_topography(
     ica_result_infomax,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     point_plot = true,
     label_plot = true,
     point_color = :red,
@@ -161,13 +155,11 @@ eegfun.plot_topography(
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     colorbar_plot = true,
 );
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     colorbar_plot = true,
     colorbar_position = :below,
     colorbar_vertical = false,
@@ -175,7 +167,6 @@ eegfun.plot_topography(
 eegfun.plot_topography(
     ica_result,
     component_selection = eegfun.components(1),
-    method = :multiquadratic,
     colorbar_plot = true,
 );
 eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:2), method = :spherical_spline);

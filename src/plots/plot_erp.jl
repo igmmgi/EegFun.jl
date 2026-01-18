@@ -180,8 +180,7 @@ When `interactive = true` (default):
 # Mouse Selection
 - **Shift + Left Click + Drag**: Select a time region (blue rectangle)
 - **Right Click on Selection**: Open context menu with plot options
-  - Topoplot (multiquadratic)
-  - Topoplot (spherical_spline)
+  - Topoplot 
 """
 function plot_erp(
     dat::ErpData;
@@ -596,12 +595,11 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
     has_multiple_conditions = data_to_plot isa Vector{ErpData} && length(data_to_plot) > 1
 
-    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)"]
+    plot_types = ["Topoplot"]
 
     # Only add average options if multiple visible conditions
     if has_multiple_conditions
-        push!(plot_types, "Topoplot (average, multiquadratic)")
-        push!(plot_types, "Topoplot (average, spherical_spline)")
+        push!(plot_types, "Topoplot (average)")
     end
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
@@ -616,16 +614,11 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
             # Filter by visible conditions if condition_checked is available (already done above, but do again for consistency)
             data_to_plot = _filter_visible_conditions(original_data, condition_checked_ref)
 
-            if btn.label[] == "Topoplot (multiquadratic)"
-                plot_topography(data_to_plot, sample_selection = time_sample_selection, method = :multiquadratic)
-            elseif btn.label[] == "Topoplot (spherical_spline)"
-                plot_topography(data_to_plot, sample_selection = time_sample_selection, method = :spherical_spline)
-            elseif btn.label[] == "Topoplot (average, multiquadratic)"
+            if btn.label[] == "Topoplot"
+                plot_topography(data_to_plot, sample_selection = time_sample_selection)
+            elseif btn.label[] == "Topoplot (average)"
                 avg_data = _average_conditions(data_to_plot)
-                plot_topography(avg_data, sample_selection = time_sample_selection, method = :multiquadratic)
-            elseif btn.label[] == "Topoplot (average, spherical_spline)"
-                avg_data = _average_conditions(data_to_plot)
-                plot_topography(avg_data, sample_selection = time_sample_selection, method = :spherical_spline)
+                plot_topography(avg_data, sample_selection = time_sample_selection)
             end
         end
     end
