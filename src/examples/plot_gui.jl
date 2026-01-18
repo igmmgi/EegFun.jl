@@ -10,36 +10,70 @@ struct UIStyle
     input_width::Int
     input_height::Int
 
-    UIStyle() = new(
-        BASE_FONTS.label,
-        BASE_FONTS.button,
-        BASE_FONTS.textbox,
-        BASE_SIZES.input_width,
-        BASE_SIZES.input_height,
+    UIStyle() =
+        new(BASE_FONTS.label, BASE_FONTS.button, BASE_FONTS.textbox, BASE_SIZES.input_width, BASE_SIZES.input_height)
+end
+
+# Helper functions to reduce code repetition
+function create_select_button(parent, label, style::UIStyle)
+    Button(
+        parent,
+        label = label,
+        fontsize = style.button_font,
+        font = :bold,
+        width = style.input_width,
+        height = style.input_height,
+        buttoncolor = :darkgrey,
+        buttoncolor_hover = :grey,
+        buttoncolor_active = :green,
     )
 end
+
+function create_textbox(parent, style::UIStyle; width = nothing, placeholder = "")
+    Textbox(
+        parent,
+        placeholder = placeholder,
+        fontsize = style.textbox_font,
+        width = isnothing(width) ? style.input_width : width,
+        height = style.input_height,
+        halign = :center,
+        boxcolor = :white,
+    )
+end
+
+function create_label(parent, text, style::UIStyle; fontsize = nothing, bold = true, color = :black)
+    fontsize_val = isnothing(fontsize) ? style.label_font : fontsize
+    Label(parent, text, fontsize = fontsize_val, font = bold ? :bold : :regular, color = color)
+end
+
+function create_label_display(parent, observable, style::UIStyle)
+    Label(
+        parent,
+        observable,
+        fontsize = style.textbox_font,
+        width = style.input_width,
+        height = style.input_height,
+        halign = :center,
+    )
+end
+
 
 """
     plot_gui()
 
 Interactive GUI for quick data plotting 
 
-This GUI allows quick data exploration with various plotting options for EEG data.
-
-# Example
-```julia
-using eegfun
-eegfun.plot_my_data_gui()
-```
-
-# Returns
-- `fig::Figure`: The Makie figure object containing the interactive GUI
 """
 function plot_gui()
 
     # main figure window, layout, and UI style
     set_window_title("PLOT GUI")
-    gui_fig = Figure(size = (600, 800), title = "Plot GUI", backgroundcolor = :lightgrey)
+    gui_fig = Figure(
+        size = (600, 800),
+        title = "Plot GUI",
+        backgroundcolor = :lightgrey,
+        figure_padding = (0, 0, 0, 0),  # Remove padding: (left, right, bottom, top)
+    )
     main_layout = GridLayout(gui_fig[1, 1:2])
     ui_style = UIStyle()
 
@@ -47,102 +81,47 @@ function plot_gui()
     # COLUMN 1: SETTINGS
     #########################################################
     # Select Directory Section - Place this first to create column 1
-    directory_select_button = Button(
-        main_layout[1, 1],
-        label = "Select Directory",
-        fontsize = ui_style.button_font,
-        font = :bold,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        buttoncolor = :darkgrey,
-        buttoncolor_hover = :grey,
-        buttoncolor_active = :green,
-    )
+    directory_select_button = create_select_button(main_layout[1, 1], "Select Directory", ui_style)
     directory_label_text = Observable("")
-    Label(
-        main_layout[2, 1],
-        directory_label_text,
-        fontsize = ui_style.textbox_font,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        halign = :center,
-    )
+    create_label_display(main_layout[2, 1], directory_label_text, ui_style)
 
     # Select File Section
-    file_select_button = Button(
-        main_layout[3, 1],
-        label = "Select File",
-        fontsize = ui_style.button_font,
-        font = :bold,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        buttoncolor = :darkgrey,
-        buttoncolor_hover = :grey,
-        buttoncolor_active = :green,
-    )
+    file_select_button = create_select_button(main_layout[3, 1], "Select File", ui_style)
     file_label_text = Observable("")
-    Label(
-        main_layout[4, 1],
-        file_label_text,
-        fontsize = ui_style.textbox_font,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        halign = :center,
-    )
+    create_label_display(main_layout[4, 1], file_label_text, ui_style)
 
     # Column 2: Electrode Section - Place this first to create column 2
-    Label(main_layout[1, 2], "Channel(s)", fontsize = ui_style.label_font, font = :bold)
+    create_label(main_layout[1, 2], "Channel(s)", ui_style)
     channel_menu =
         Menu(main_layout[2, 2], options = ["Select"], width = ui_style.input_width, height = ui_style.input_height)
 
     # Selected channels display
     selected_channels_text = Observable("Selected: ")
-    Label(main_layout[3, 2], selected_channels_text, fontsize = ui_style.textbox_font, color = :gray)
+    create_label(
+        main_layout[3, 2],
+        selected_channels_text,
+        ui_style;
+        fontsize = ui_style.textbox_font,
+        bold = false,
+        color = :gray,
+    )
 
     # Settings Section
-    Label(main_layout[4, 2], "Axis Settings", fontsize = ui_style.label_font, font = :bold)
+    create_label(main_layout[4, 2], "Axis Settings", ui_style)
 
     # Layout Section
-    layout_select_button = Button(
-        main_layout[5, 1],
-        label = "Select Layout",
-        fontsize = ui_style.button_font,
-        font = :bold,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        buttoncolor = :darkgrey,
-        buttoncolor_hover = :grey,
-        buttoncolor_active = :green,
-    )
+    layout_select_button = create_select_button(main_layout[5, 1], "Select Layout", ui_style)
     layout_label_text = Observable("")
-    Label(
-        main_layout[6, 1],
-        layout_label_text,
-        fontsize = ui_style.textbox_font,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        halign = :center,
-    )
+    create_label_display(main_layout[6, 1], layout_label_text, ui_style)
 
     # File Filter Section
-    Label(main_layout[7, 1], "File Filter", fontsize = ui_style.label_font, font = :bold)
-    Textbox(
-        main_layout[8, 1],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
+    create_label(main_layout[7, 1], "File Filter", ui_style)
+    create_textbox(main_layout[8, 1], ui_style)
 
     # Plot Configuration (moved from column 2)
     # Plot Type Section
-    Label(main_layout[9, 1], "Plot Type", fontsize = ui_style.label_font, font = :bold)
-    plottype_options = [
-        "Select",
-        "Data Browser",
-    ]
+    create_label(main_layout[9, 1], "Plot Type", ui_style)
+    plottype_options = ["Select", "Data Browser"]
     plottype_dropdown = Menu(
         main_layout[10, 1],
         options = plottype_options,
@@ -151,123 +130,42 @@ function plot_gui()
     )
 
     # Participant Section
-    Label(main_layout[11, 1], "Participant", fontsize = ui_style.label_font, font = :bold)
-    participant_input = Textbox(
-        main_layout[12, 1],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
+    create_label(main_layout[11, 1], "Participant", ui_style)
+    participant_input = create_textbox(main_layout[12, 1], ui_style)
 
     # Condition Section
-    Label(main_layout[13, 1], "Condition", fontsize = ui_style.label_font, font = :bold)
-    condition_input = Textbox(
-        main_layout[14, 1],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = ui_style.input_width,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
-
+    create_label(main_layout[13, 1], "Condition", ui_style)
+    condition_input = create_textbox(main_layout[14, 1], ui_style)
 
     #########################################################
     # COLUMN 2: SETTINGS
     #########################################################
     # X Limits Section
-    Label(main_layout[5, 2], "X Limits", fontsize = ui_style.textbox_font, font = :bold)
+    create_label(main_layout[5, 2], "X Limits", ui_style; fontsize = ui_style.textbox_font)
     x_limits_layout = GridLayout(main_layout[6, 2], tellwidth = false, colgap = 10)
-    xmin_input = Textbox(
-        x_limits_layout[1, 1],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
-    xmax_input = Textbox(
-        x_limits_layout[1, 2],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
+    xmin_input = create_textbox(x_limits_layout[1, 1], ui_style; width = 90)
+    xmax_input = create_textbox(x_limits_layout[1, 2], ui_style; width = 90)
 
     # Y Limits Section
-    Label(main_layout[7, 2], "Y Limits", fontsize = ui_style.textbox_font, font = :bold)
+    create_label(main_layout[7, 2], "Y Limits", ui_style; fontsize = ui_style.textbox_font)
     y_limits_layout = GridLayout(main_layout[8, 2], tellwidth = false, colgap = 10)
-    ymin_input = Textbox(
-        y_limits_layout[1, 1],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
-    ymax_input = Textbox(
-        y_limits_layout[1, 2],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
+    ymin_input = create_textbox(y_limits_layout[1, 1], ui_style; width = 90)
+    ymax_input = create_textbox(y_limits_layout[1, 2], ui_style; width = 90)
 
     # Z Limits Section
-    Label(main_layout[9, 2], "Z Limits", fontsize = ui_style.textbox_font, font = :bold)
+    create_label(main_layout[9, 2], "Z Limits", ui_style; fontsize = ui_style.textbox_font)
     z_limits_layout = GridLayout(main_layout[10, 2], tellwidth = false, colgap = 10)
-    Textbox(
-        z_limits_layout[1, 1],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
-    Textbox(
-        z_limits_layout[1, 2],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
+    create_textbox(z_limits_layout[1, 1], ui_style; width = 90)
+    create_textbox(z_limits_layout[1, 2], ui_style; width = 90)
 
     # Baseline Section
-    Label(main_layout[11, 2], "Baseline", fontsize = ui_style.textbox_font, font = :bold)
+    create_label(main_layout[11, 2], "Baseline", ui_style; fontsize = ui_style.textbox_font)
     baseline_layout = GridLayout(main_layout[12, 2], tellwidth = false, colgap = 10)
-    baseline_start = Textbox(
-        baseline_layout[1, 1],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
-    baseline_end = Textbox(
-        baseline_layout[1, 2],
-        placeholder = "",
-        fontsize = ui_style.textbox_font,
-        width = 90,
-        height = ui_style.input_height,
-        halign = :center,
-        boxcolor = :white,
-    )
+    baseline_start = create_textbox(baseline_layout[1, 1], ui_style; width = 90)
+    baseline_end = create_textbox(baseline_layout[1, 2], ui_style; width = 90)
 
     # Baseline Type
-    Label(main_layout[13, 2], "Baseline Type TF", fontsize = ui_style.textbox_font, font = :bold)
+    create_label(main_layout[13, 2], "Baseline Type TF", ui_style; fontsize = ui_style.textbox_font)
     baseline_type = Menu(
         main_layout[14, 2],
         options = ["Select", "absolute", "relative", "relchange", "perchange", "db"],
@@ -289,10 +187,8 @@ function plot_gui()
     )
 
     # Set columns sizes
-    colsize!(main_layout, 1, Relative(0.4))  
-    colsize!(main_layout, 2, Relative(0.4))  
-
-
+    colsize!(main_layout, 1, Relative(0.4))
+    colsize!(main_layout, 2, Relative(0.4))
 
     # Data structure to store GUI state
     gui_state = (
@@ -314,70 +210,11 @@ function plot_gui()
         baseline_type = Observable("select"),
     )
 
-
-    function execute_plot()
-
-        # TODO: different plots types and checking selected options make sense
-
-        # Check if we have the required files
-        if gui_state.filename[] == ""
-            println("Error: No file filter specified!")
-            return
-        end
-
-        if gui_state.layout_file[] == ""
-            println("Error: No layout file selected!")
-            return
-        end
-
-        try
-            # Use the already loaded layout
-            layout = gui_state.layout_object[]
-            if layout === nothing
-                println("Error: No layout loaded. Please select a layout file first.")
-                return
-            end
-
-            println("Loading data file...")
-            # Load data file (could be BDF or other format)
-            file_path = gui_state.filename[]
-            if endswith(lowercase(file_path), ".bdf")
-                dat = eegfun.read_bdf(file_path)
-            else
-                println("Error: Unsupported file format. Currently only .bdf files are supported.")
-                return
-            end
-
-            println("Creating EEG dataframe...")
-            dat = eegfun.create_eeg_dataframe(dat, layout)
-
-            # Update electrode menu with actual channel labels from the loaded data
-            println("Updating electrode menu with channel labels...")
-            channel_labels = eegfun.channel_labels(dat)
-            electrode_options = vcat(["Select"], string.(channel_labels))
-            channel_menu.options = electrode_options
-            println("Found $(length(channel_labels)) channels: $(join(string.(channel_labels[1:min(10, length(channel_labels))]), ", "))$(length(channel_labels) > 10 ? "..." : "")")
-
-            # Create a new screen/window for the plot to avoid overwriting the GUI
-            println("Creating plot...")
-            @async begin
-                try
-                    # Create a new screen and pass it to plot_databrowser
-                    new_screen = GLMakie.Screen()
-                    eegfun.plot_databrowser(dat; screen = new_screen)
-                    println("Plot created and displayed successfully!")
-                catch plot_error
-                    println("Error creating plot: $plot_error")
-                end
-            end
-
-        catch e
-            println("Error creating EEG plot: $e")
-            println("Stacktrace:")
-            for (exc, bt) in Base.catch_stack()
-                showerror(stdout, exc, bt)
-                println()
-            end
+    function plot()
+        if gui_state.plottype[] == "Data Browser"
+            _plot_databrowser(gui_state, channel_menu)
+        else
+            println("Error: Unsupported plot type. Currently only Data Browser is supported.")
         end
     end
 
@@ -394,19 +231,13 @@ function plot_gui()
     # Connect callbacks
     # Open file picker when Select File button is clicked
     on(file_select_button.clicks) do _
-        @async begin
-            try
-                # Use the selected directory if available, otherwise use empty string
-                default_path = gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
-                filename = fetch(Threads.@spawn pick_file(default_path))
-                if filename !== nothing && filename != ""
-                    basename_only = basename(filename)
-                    gui_state.filename[] = filename
-                    file_label_text[] = strip(basename_only)
-                end
-            catch e
-                println("File picker error: $e")
-            end
+        default_path =
+            gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        filename = fetch(Threads.@spawn pick_file(default_path))
+        if filename !== nothing && filename != ""
+            basename_only = basename(filename)
+            gui_state.filename[] = filename
+            file_label_text[] = strip(basename_only)
         end
     end
 
@@ -416,32 +247,24 @@ function plot_gui()
 
     # Open layout file picker when Select button is clicked
     on(layout_select_button.clicks) do _
-        @async begin
+        default_path =
+            gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
+        filename = fetch(Threads.@spawn pick_file(default_path))
+        if filename !== nothing && filename != ""
+            basename_only = basename(filename)
+            gui_state.layout_file[] = filename
+            gui_state.layout[] = basename_only
+            layout_label_text[] = basename_only
+
+            # Load layout and populate electrode menu with channels from layout
             try
-                # Use the selected directory if available, otherwise use empty string
-                default_path = gui_state.directory[] !== nothing && gui_state.directory[] != "" ? gui_state.directory[] : ""
-                filename = fetch(Threads.@spawn pick_file(default_path))
-                if filename !== nothing && filename != ""
-                    basename_only = basename(filename)
-                    gui_state.layout_file[] = filename
-                    gui_state.layout[] = basename_only
-                    layout_label_text[] = basename_only
-                    
-                    # Load layout and populate electrode menu with channels from layout
-                    try
-                        layout = eegfun.read_layout(filename)
-                        gui_state.layout_object[] = layout  # Store for later use
-                        channel_labels = eegfun.channel_labels(layout)
-                        electrode_options = vcat(["Select"], string.(channel_labels))
-                        channel_menu.options = electrode_options
-                        println("Loaded layout with $(length(channel_labels)) channels")
-                    catch layout_error
-                        println("Error loading layout: $layout_error")
-                        gui_state.layout_object[] = nothing
-                    end
-                end
-            catch e
-                println("Layout file picker error: $e")
+                layout = read_layout(filename)
+                gui_state.layout_object[] = layout  # Store for later use
+                channel_menu.options = vcat(["Select"], string.(channel_labels(layout)))
+                println("Loaded layout with $(length(channel_labels)) channels")
+            catch layout_error
+                println("Error loading layout: $layout_error")
+                gui_state.layout_object[] = nothing
             end
         end
     end
@@ -454,7 +277,7 @@ function plot_gui()
             selected_channels_text[] = "Selected: " * join(gui_state.electrodes[], ", ")
         end
     end
-    
+
     on(channel_menu.selection) do selection
         if selection == "Select"
             gui_state.electrodes[] = String[]
@@ -478,16 +301,10 @@ function plot_gui()
 
     # Open directory picker when Select button is clicked
     on(directory_select_button.clicks) do _
-        @async begin
-            try
-                dir_path = fetch(Threads.@spawn pick_folder(""))
-                if dir_path !== nothing && dir_path != ""
-                    gui_state.directory[] = dir_path
-                    directory_label_text[] = strip(dir_path)
-                end
-            catch e
-                println("Directory picker error: $e")
-            end
+        dir_path = fetch(Threads.@spawn pick_folder(""))
+        if dir_path !== nothing && dir_path != ""
+            gui_state.directory[] = dir_path
+            directory_label_text[] = strip(dir_path)
         end
     end
 
@@ -498,12 +315,45 @@ function plot_gui()
     setup_limit_callback(ymax_input, gui_state.ylim, :max)
 
     on(plot_button.clicks) do _
-        execute_plot()
+        plot()
     end
-
 
     # Display the figure
     display(gui_fig)
     set_window_title("Makie")
+
     return nothing
+end
+
+
+
+function _plot_databrowser(gui_state, channel_menu)
+
+    # Check if we have the required files
+    gui_state.filename[] == "" && @minimal_error "Error: No file specified!"
+    gui_state.layout_file[] == "" && @minimal_error "Error: No layout file selected!"
+
+    # Load data file (could be BDF or other format)
+    file_ext = lowercase(splitext(gui_state.filename[])[2])  # [2] is the extension (with dot)
+    if file_ext ∉ [".bdf"]
+        @minimal_error "Error: Unsupported file format"
+    end
+
+    try
+
+        dat = read_bdf(gui_state.filename[])
+        dat = create_eeg_dataframe(dat, gui_state.layout_file[])
+
+        # Update electrode menu with actual channel labels from the loaded data
+        channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))
+
+        # Create a new screen/window for the plot to avoid overwriting the GUI
+        @async begin
+            new_screen = GLMakie.Screen()
+            plot_databrowser(dat; screen = new_screen)
+        end
+    catch e
+        println("Error creating EEG plot: $e")
+        showerror(stdout, e, catch_backtrace())
+    end
 end
