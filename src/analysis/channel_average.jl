@@ -314,7 +314,7 @@ function channel_average(
         # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Averaging channels")
 
-        _log_batch_summary(results, output_dir)
+        return _log_batch_summary(results, output_dir)
 
     finally
         _cleanup_logging(log_file, output_dir)

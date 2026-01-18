@@ -12,7 +12,7 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :interactive => (true, "Whether to enable interactive features"),
 
     # Topography parameters
-    :method => (:thin_plate, "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on RBF methods."),
+    :method => (:thin_plate, "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on methods."),
     :colormap => (:jet, "Colormap for the topography"),
     :gridscale => (200, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
@@ -349,7 +349,7 @@ mutable struct IcaComponentState
         component_selection,
         n_visible_components,
         window_size;
-        method = :multiquadratic,  # :multiquadratic or :spherical_spline
+        method = :thin_plate,  
         gridscale = 100,  # Grid resolution for interpolation
         kwargs...,
     )
@@ -1307,32 +1307,13 @@ end
 
 # Internal function to prepare ICA topoplot data (interpolation only)
 function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
-    if method == :spherical_spline
+    supported_methods = [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    if method ∈ supported_methods
+        return _data_interpolation_topo(ica.mixing[:, comp_idx], ica.layout, gridscale, method = method)
+    elseif method == :spherical_spline
         return _data_interpolation_topo_spherical_spline(ica.mixing[:, comp_idx], ica.layout, gridscale)
-    elseif method == :multiquadratic
-        return _data_interpolation_topo_multiquadratic(ica.mixing[:, comp_idx], ica.layout, gridscale)
-    elseif method == :nearest
-        return _data_interpolation_topo_nearest(ica.mixing[:, comp_idx], ica.layout, gridscale)
-    elseif method == :linear
-        return _data_interpolation_topo_scattered(
-            ica.mixing[:, comp_idx],
-            ica.layout,
-            gridscale,
-            Interpolations.Linear(),
-        )
-    elseif method == :cubic
-        return _data_interpolation_topo_scattered(
-            ica.mixing[:, comp_idx],
-            ica.layout,
-            gridscale,
-            Interpolations.Cubic(),
-        )
     else
-        throw(
-            ArgumentError(
-                "Unknown interpolation method: $method. Supported: :multiquadratic, :spherical_spline, :nearest, :linear, :cubic",
-            ),
-        )
+        throw(ArgumentError("Unknown interpolation method: $method. Supported: $supported_methods"))
     end
 end
 
@@ -2059,7 +2040,7 @@ a comprehensive visualization showing all identified artifact components with cl
 
 # Keyword Arguments
 All keyword arguments from `plot_topography` are supported, including:
-- `method::Symbol`: Interpolation method (:multiquadratic or :spherical_spline)
+- `method::Symbol`: Interpolation method (see `plot_topography` for supported methods)
 - `gridscale::Int`: Grid resolution for interpolation
 - `colormap`: Colormap for the topography
 - `display_plot::Bool`: Whether to display the plot

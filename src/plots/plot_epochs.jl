@@ -1207,12 +1207,11 @@ function _show_epochs_context_menu!(selection_state, data, condition_checked_ref
     data_to_plot = _filter_visible_conditions_epochs(data, condition_checked_ref)
     has_multiple_conditions = data_to_plot isa Vector{EpochData} && length(data_to_plot) > 1
 
-    plot_types = ["Topoplot (multiquadratic)", "Topoplot (spherical_spline)"]
+    plot_types = ["Topoplot"]
 
     # Only add average options if multiple visible conditions
     if has_multiple_conditions
-        push!(plot_types, "Topoplot (average, multiquadratic)")
-        push!(plot_types, "Topoplot (average, spherical_spline)")
+        push!(plot_types, "Topoplot (average)")
     end
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
@@ -1229,10 +1228,8 @@ function _show_epochs_context_menu!(selection_state, data, condition_checked_ref
 
             # Convert EpochData to ErpData for topoplot (average epochs first)
             if btn.label[] in [
-                "Topoplot (multiquadratic)",
-                "Topoplot (spherical_spline)",
-                "Topoplot (average, multiquadratic)",
-                "Topoplot (average, spherical_spline)",
+                "Topoplot",
+                "Topoplot (average)",
             ]
                 # Convert EpochData to ErpData by averaging epochs
                 erp_data =
@@ -1242,16 +1239,11 @@ function _show_epochs_context_menu!(selection_state, data, condition_checked_ref
                 # Handle single vs vector
                 erp_data = length(erp_data) == 1 ? erp_data[1] : erp_data
 
-                if btn.label[] == "Topoplot (multiquadratic)"
-                    plot_topography(erp_data, sample_selection = time_sample_selection, method = :multiquadratic)
-                elseif btn.label[] == "Topoplot (spherical_spline)"
-                    plot_topography(erp_data, sample_selection = time_sample_selection, method = :spherical_spline)
-                elseif btn.label[] == "Topoplot (average, multiquadratic)"
+                if btn.label[] == "Topoplot"
+                    plot_topography(erp_data, sample_selection = time_sample_selection)
+                elseif btn.label[] == "Topoplot (average)"
                     avg_data = erp_data isa Vector{ErpData} ? _average_conditions(erp_data) : erp_data
-                    plot_topography(avg_data, sample_selection = time_sample_selection, method = :multiquadratic)
-                elseif btn.label[] == "Topoplot (average, spherical_spline)"
-                    avg_data = erp_data isa Vector{ErpData} ? _average_conditions(erp_data) : erp_data
-                    plot_topography(avg_data, sample_selection = time_sample_selection, method = :spherical_spline)
+                    plot_topography(avg_data, sample_selection = time_sample_selection)
                 end
             end
         end

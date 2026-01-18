@@ -29,8 +29,11 @@ end
 
 """Extract participant ID from filename, returns Int."""
 function _extract_participant_id(filename::String)
-    # extract last numeric sequence from filename (e.g., "exp1a1" -> 1, "Pract6.bdf" -> 6)
-    numeric_matches = collect(eachmatch(r"\d+", filename))
+    # Only search the filename part (without extension)
+    name_without_ext, _ = splitext(filename)
+   
+    # extract last numeric sequence from filename (e.g., "exp1a1" -> 1, "Pract6" -> 6)
+    numeric_matches = collect(eachmatch(r"\d+", name_without_ext))
     if !isempty(numeric_matches)
         return parse(Int, numeric_matches[end].match)
     end
