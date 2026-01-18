@@ -46,17 +46,14 @@ function create_label(parent, text, style::UIStyle; fontsize = nothing, bold = t
     Label(parent, text, fontsize = fontsize_val, font = bold ? :bold : :regular, color = color)
 end
 
-function create_label_display(parent, observable, style::UIStyle)
-    Label(
-        parent,
-        observable,
-        fontsize = style.textbox_font,
-        width = style.input_width,
-        height = style.input_height,
-        halign = :center,
-    )
+"""Truncate a path string to a maximum length, showing the end with '...' prefix."""
+function truncate_path(path::String, max_length::Int = 30)
+    if length(path) <= max_length
+        return path
+    end
+    # Show last (max_length - 3) characters with "..." prefix (3 chars for "...")
+    return "..." * path[(end - (max_length - 4)):end]
 end
-
 
 """
     plot_gui()
@@ -82,13 +79,13 @@ function plot_gui()
     #########################################################
     # Select Directory Section - Place this first to create column 1
     directory_select_button = create_select_button(main_layout[1, 1], "Select Directory", ui_style)
-    directory_label_text = Observable("")
-    create_label_display(main_layout[2, 1], directory_label_text, ui_style)
+    directory_label_text = Observable("Dir: ")
+    create_label(main_layout[2, 1], directory_label_text, ui_style, fontsize = ui_style.textbox_font, bold = false, color = :gray)
 
     # Select File Section
     file_select_button = create_select_button(main_layout[3, 1], "Select File", ui_style)
-    file_label_text = Observable("")
-    create_label_display(main_layout[4, 1], file_label_text, ui_style)
+    file_label_text = Observable("File:")
+    create_label(main_layout[4, 1], file_label_text, ui_style, fontsize = ui_style.textbox_font, bold = false, color = :gray)
 
     # Column 2: Electrode Section - Place this first to create column 2
     create_label(main_layout[1, 2], "Channel(s)", ui_style)
@@ -96,23 +93,16 @@ function plot_gui()
         Menu(main_layout[2, 2], options = ["Select"], width = ui_style.input_width, height = ui_style.input_height)
 
     # Selected channels display
-    selected_channels_text = Observable("Selected: ")
-    create_label(
-        main_layout[3, 2],
-        selected_channels_text,
-        ui_style;
-        fontsize = ui_style.textbox_font,
-        bold = false,
-        color = :gray,
-    )
+    selected_channels_text = Observable("Channels: ")
+    create_label(main_layout[3, 2], selected_channels_text, ui_style; fontsize = ui_style.textbox_font, bold = false, color = :gray)
 
     # Settings Section
     create_label(main_layout[4, 2], "Axis Settings", ui_style)
 
     # Layout Section
     layout_select_button = create_select_button(main_layout[5, 1], "Select Layout", ui_style)
-    layout_label_text = Observable("")
-    create_label_display(main_layout[6, 1], layout_label_text, ui_style)
+    layout_label_text = Observable("File: ")
+    create_label(main_layout[6, 1], layout_label_text, ui_style, fontsize = ui_style.textbox_font, bold = false, color = :gray)
 
     # File Filter Section
     create_label(main_layout[7, 1], "File Filter", ui_style)
@@ -201,6 +191,7 @@ function plot_gui()
         plottype = Observable("select"),
         layout = Observable("select"),
         layout_file = Observable(""),
+        layout_object = Observable{Any}(nothing),
         electrodes = Observable(String[]),
         xlim = Observable((nothing, nothing)),
         ylim = Observable((nothing, nothing)),
@@ -261,7 +252,7 @@ function plot_gui()
                 layout = read_layout(filename)
                 gui_state.layout_object[] = layout  # Store for later use
                 channel_menu.options = vcat(["Select"], string.(channel_labels(layout)))
-                println("Loaded layout with $(length(channel_labels)) channels")
+                println("Loaded layout with $(length(channel_labels(layout))) channels")
             catch layout_error
                 println("Error loading layout: $layout_error")
                 gui_state.layout_object[] = nothing
@@ -304,7 +295,7 @@ function plot_gui()
         dir_path = fetch(Threads.@spawn pick_folder(""))
         if dir_path !== nothing && dir_path != ""
             gui_state.directory[] = dir_path
-            directory_label_text[] = strip(dir_path)
+            directory_label_text[] = "Dir: " * truncate_path(strip(dir_path))
         end
     end
 
