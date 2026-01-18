@@ -106,7 +106,6 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 )
 
                 ################### LOAD RAW DATA FILE ###################
-                # TODO: update for different file types!
                 @info section("Raw Data")
                 dat = load_data(data_file)
 
