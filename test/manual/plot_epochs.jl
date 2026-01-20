@@ -8,6 +8,9 @@ layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 eegfun.polar_to_cartesian_xy!(layout_file)
 dat = eegfun.read_bdf(data_file);
 dat = eegfun.create_eeg_dataframe(dat, layout_file);
+
+eegfun.plot_layout_2d(layout_file)
+
 eegfun.rereference!(dat, :avg)
 eegfun.filter_data!(dat, "hp", 1)
 eegfun.is_extreme_value!(dat, 500);
@@ -25,14 +28,6 @@ eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels
 eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))
 
-eegfun.plot_epochs(epochs[1], layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2]))
-eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2]))
-
-
-epochs[1].condition_name
-epochs[1].condition
-
-eegfun.plot_databrowser(epochs[1])
 
 eegfun.plot_epochs(epochs[1], layout = :single)
 eegfun.plot_epochs(epochs, layout = :single)
@@ -40,14 +35,12 @@ eegfun.plot_epochs(epochs[1], layout = :single, channel_selection = eegfun.chann
 eegfun.plot_epochs(epochs, layout = :single, channel_selection = eegfun.channels([:Fp1, :Fp2]))
 
 
-
 eegfun.plot_epochs(epochs[1], layout = :grid)
 eegfun.plot_epochs(epochs, layout = :grid)
 eegfun.plot_epochs(epochs[1], layout = :topo)
 eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false)
-eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false, theme_fontsize = 10)
+eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = true, theme_fontsize = 10, layout_topo_show_scale = true)
 eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false, theme_fontsize = 30)
 
-# TODO: ERP plotting bring to front
 eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))
 eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]); layout = :topo)

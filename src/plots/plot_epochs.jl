@@ -31,8 +31,8 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :layout_topo_plot_width => (0.10, "Width of individual plots (fraction of figure width)"),
     :layout_topo_plot_height => (0.10, "Height of individual plots (fraction of figure height)"),
     :layout_topo_margin => (0.12, "Margin between plots"),
-    :layout_topo_scale_offset => (0.1, "Offset factor for scale plot position"),
-    :layout_topo_scale_pos => ((0.8, -0.8), "Fallback position for scale plot in topo layout as (x, y) tuple"),
+    :layout_topo_scale_pos => ((0.0, 0.0), "Fallback position for scale plot in topo layout as (x, y) tuple"),
+    :layout_topo_show_scale => (false, "Whether to show a scale axis in topo layout"),
 
     # Grid layout parameters
     :layout_grid_rowgap => (10, "Gap between rows (in pixels)"),
@@ -737,37 +737,40 @@ function _plot_epochs_topo_multi!(
         ylim = (yr[1], yr[2])
     end
 
-    # Normalize positions to [0,1]
+    plot_w = plot_kwargs[:layout_topo_plot_width]
+    plot_h = plot_kwargs[:layout_topo_plot_height]
+
+    # Normalize positions to [0,1] based on ALL channels in the layout
+    # This ensures positions match the layout file regardless of which channels are selected
+    # This matches how _apply_layout! handles topo layouts
     x2 = dat.layout.data.x2
     y2 = dat.layout.data.y2
     minx, maxx = extrema(x2)
     miny, maxy = extrema(y2)
-    xrange = maxx - minx
-    yrange = maxy - miny
-    xrange = xrange == 0 ? 1.0 : xrange
-    yrange = yrange == 0 ? 1.0 : yrange
-
-    plot_w = plot_kwargs[:layout_topo_plot_width]
-    plot_h = plot_kwargs[:layout_topo_plot_height]
-    margin = plot_kwargs[:layout_topo_margin]
-
-    # Map channel -> position
-    pos_map = Dict{Symbol,Tuple{Float64,Float64}}()
-    for (lab, x, y) in zip(dat.layout.data.label, x2, y2)
-        nx = (x - minx) / xrange
-        ny = (y - miny) / yrange
-        pos_map[Symbol(lab)] = (nx, ny)
-    end
+    xrange = maxx - minx == 0 ? 1.0 : maxx - minx
+    yrange = maxy - miny == 0 ? 1.0 : maxy - miny
 
     # Create axes at positions
+    # Normalize positions to [0,1] - no margin needed since halign/valign centers the plot at the position
     for (ch_idx, ch) in enumerate(all_plot_channels)
-        pos = get(pos_map, ch, (0.5, 0.5))
+        idx = findfirst(==(ch), dat.layout.data.label)
+        if idx !== nothing
+            x = dat.layout.data.x2[idx]
+            y = dat.layout.data.y2[idx]
+            halign = (x - minx) / xrange
+            valign = (y - miny) / yrange
+        else
+            # Channel not in layout - use center position
+            halign = 0.5
+            valign = 0.5
+        end
+        
         ax = Axis(
             fig[1, 1],
             width = Relative(plot_w),
             height = Relative(plot_h),
-            halign = clamp(pos[1], margin, 1 - margin),
-            valign = clamp(pos[2], margin, 1 - margin),
+            halign = halign,
+            valign = valign,
         )
         push!(axes, ax)
 
@@ -828,7 +831,8 @@ function _plot_epochs_topo_multi!(
     # Optional extra scale axis in bottom-right
     # Note: This is a custom feature for plot_epochs, not present in plot_erp
     # Using layout_topo_scale_pos for consistency with the layout system
-    if haskey(plot_kwargs, :layout_show_scale) && plot_kwargs[:layout_show_scale]
+    if plot_kwargs[:layout_topo_show_scale]
+        println("Showing scale axis")
         scale_pos = plot_kwargs[:layout_topo_scale_pos]
         scale_ax = Axis(
             fig[1, 1],
@@ -858,6 +862,11 @@ function _plot_epochs_topo_multi!(
             yminorgrid = axis_kwargs[:yminorgrid],
         )
         _set_origin_lines!(scale_ax; add_xy_origin = axis_kwargs[:add_xy_origin])
+        # Scale axis should show labels and ticks (unlike channel axes which are hidden)
+        scale_ax.xticklabelsvisible = true
+        scale_ax.yticklabelsvisible = true
+        scale_ax.xticksvisible = true
+        scale_ax.yticksvisible = true
     end
 end
 
