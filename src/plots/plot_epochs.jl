@@ -82,7 +82,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 )
 
 """
-    plot_epochs(filepath::String; 
+    plot_epochs(filename::String; 
                channel_selection::Function = channels(),
                sample_selection::Function = samples(), 
                epoch_selection::Function = epochs(),
@@ -93,7 +93,7 @@ const PLOT_EPOCHS_KWARGS = Dict{Symbol,Tuple{Any,String}}(
 Load epoch data from a JLD2 file and create plots.
 
 # Arguments
-- `filepath::String`: Path to JLD2 file containing EpochData
+- `filename::String`: Path to JLD2 file containing EpochData or Vector{EpochData}
 - `channel_selection::Function`: Function that returns boolean vector for channel filtering
 - `sample_selection::Function`: Function that returns boolean vector for sample filtering
 - `epoch_selection::Function`: Function that returns boolean vector for epoch filtering
@@ -111,7 +111,7 @@ plot_epochs("Flank_C_3_epochs_original.jld2", channel_selection = channels([:PO7
 ```
 """
 function plot_epochs(
-    filepath::String;
+    filename::String;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
@@ -119,9 +119,8 @@ function plot_epochs(
     layout = :single,
     kwargs...,
 )
-
-    data = load_data(filepath)
-    isnothing(data) && @minimal_error_throw "No data found in file: $filepath"
+    data = load_data(filename)
+    isnothing(data) && @minimal_error_throw "No data found in file: $filename"
 
     # Dispatch to main plot_epochs function (handles both EpochData and Vector{EpochData})
     return plot_epochs(
