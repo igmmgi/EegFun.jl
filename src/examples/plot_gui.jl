@@ -359,7 +359,7 @@ function plot_gui()
         dir_path = fetch(Threads.@spawn pick_folder(""))
         if dir_path !== nothing && dir_path != ""
             gui_state.directory[] = dir_path
-            directory_label_text[] = "Dir: " * truncate_path(strip(dir_path))
+            directory_label_text[] = "Dir: " * truncate_path(String(strip(dir_path)))
         end
     end
 
@@ -395,9 +395,12 @@ function _plot_databrowser(gui_state, channel_menu)
     end
 
     try
-
+        # Load layout file
+        layout = read_layout(gui_state.layout_file[])
+        polar_to_cartesian_xy!(layout)
+        
         dat = read_bdf(gui_state.filename[])
-        dat = create_eeg_dataframe(dat, gui_state.layout_file[])
+        dat = create_eeg_dataframe(dat, layout)
 
         # Update electrode menu with actual channel labels from the loaded data
         channel_menu.options = vcat(["Select"], string.(channel_labels(dat)))

@@ -20,6 +20,9 @@ epoch_cfg = [
 epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
 erps = eegfun.average_epochs(epochs)
 
+fig, ax = eegfun.plot_erp(erps, layout = :single)
+fig, ax = eegfun.plot_erp(erps, layout = :grid)
+fig, ax = eegfun.plot_erp(erps, layout = :topo)
 
 
 fig, ax = eegfun.plot_erp(erps, layout = :grid, legend_channel = [:Fp1, :M2], yreversed = true)

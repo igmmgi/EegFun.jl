@@ -648,7 +648,7 @@ end
 function show_additional_menu(state, clicked_region_idx = nothing)
 
     # Create the menu figure
-    menu_fig = Figure()
+    menu_fig = Figure(size = (300, 300))
     plot_types = ["Topoplot", "Spectrum", "Get Selected Regions"]
 
     menu_buttons = [Button(menu_fig[idx, 1], label = plot_type) for (idx, plot_type) in enumerate(plot_types)]
@@ -676,7 +676,7 @@ function show_additional_menu(state, clicked_region_idx = nothing)
         end
     end
 
-    new_screen = GLMakie.Screen()
+    new_screen = GLMakie.Screen(size = (300, 300))
     display(new_screen, menu_fig)
 end
 
