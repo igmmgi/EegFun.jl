@@ -589,7 +589,7 @@ end
 
 function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
 
-    menu_fig = Figure()
+    menu_fig = Figure(size = (300, 300))
 
     # Filter by visible conditions to determine if we have multiple visible conditions
     data_to_plot = _filter_visible_conditions(data, condition_checked_ref)
@@ -623,7 +623,7 @@ function _show_erp_context_menu!(selection_state, data, condition_checked_ref)
         end
     end
 
-    new_screen = GLMakie.Screen()
+    new_screen = GLMakie.Screen(size = (300, 300))
     display(new_screen, menu_fig)
 end
 

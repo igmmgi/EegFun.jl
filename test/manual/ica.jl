@@ -48,7 +48,7 @@ ica_result_infomax = eegfun.run_ica(
     n_components = 1,
 )
 
-eegfun.plot_ica_component_activation(dat, ica_result_sobi)
+eegfun.plot_ica_component_activation(dat, ica_result)
 eegfun.plot_component_spectrum(ica_result_infomax, dat, component_selection = eegfun.components(1:70))
 
 eegfun.plot_ica_component_activation(dat, ica_result_infomax_extended)
