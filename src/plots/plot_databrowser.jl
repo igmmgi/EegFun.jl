@@ -32,6 +32,13 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :default_window_size => (5000, "Default window size in samples"),
     :default_amplitude_scale => (1.0, "Default amplitude scaling factor"),
     :default_butterfly => (false, "Default butterfly plot mode"),
+    
+    # Scale indicator
+    :show_scale_indicator => (true, "Show scale indicator bar"),
+    :scale_indicator_value => (100.0, "Scale indicator value in μV"),
+    :scale_indicator_position => ((0.96, 0.99), "Scale indicator position as (x, y) in axis coordinates (0-1)"),
+    :scale_indicator_color => (:black, "Color for scale indicator"),
+    :scale_indicator_linewidth => (1, "Line width for scale indicator"),
 )
 
 # Base type for data states
@@ -1817,6 +1824,77 @@ function plot_vertical_lines!(ax, marker, active)
     marker.text.position = [(x, ax.yaxis.attributes.limits[][2] * 0.98) for x in marker.data.time] # incase y changed
 end
 
+"""
+    _add_scale_indicator!(ax, state, plot_kwargs)
+
+Add a scale indicator bar to the plot showing the amplitude scale.
+"""
+function _add_scale_indicator!(ax, state, plot_kwargs)
+    if !plot_kwargs[:show_scale_indicator]
+        return nothing
+    end
+    
+    scale_value = plot_kwargs[:scale_indicator_value]
+    pos = plot_kwargs[:scale_indicator_position]
+    color = plot_kwargs[:scale_indicator_color]
+    linewidth = plot_kwargs[:scale_indicator_linewidth]
+    
+    # Get axis limits observables (they're already observables)
+    xlims_obs = ax.xaxis.attributes.limits
+    ylims_obs = ax.yaxis.attributes.limits
+    
+    # Calculate position in data coordinates
+    # pos[1] is x position (0 = left, 1 = right), pos[2] is y position (0 = bottom, 1 = top)
+    x_pos = @lift($xlims_obs[1] + ($xlims_obs[2] - $xlims_obs[1]) * pos[1])
+    # Position scale bar at the top of the plot
+    y_top = @lift($ylims_obs[1] + ($ylims_obs[2] - $ylims_obs[1]) * pos[2])
+    y_bottom = @lift($y_top - scale_value * $(state.view.amplitude_scale))
+    
+    # Draw vertical line
+    scale_line = lines!(
+        ax,
+        @lift([$x_pos, $x_pos]),
+        @lift([$y_bottom, $y_top]),
+        color = color,
+        linewidth = linewidth,
+    )
+    
+    # Draw horizontal tick marks
+    tick_length = @lift(($xlims_obs[2] - $xlims_obs[1]) * 0.005)
+    tick_left = @lift($x_pos - $tick_length)
+    tick_right = @lift($x_pos + $tick_length)
+    
+    bottom_tick = lines!(
+        ax,
+        @lift([$tick_left, $tick_right]),
+        @lift([$y_bottom, $y_bottom]),
+        color = color,
+        linewidth = linewidth,
+    )
+    
+    top_tick = lines!(
+        ax,
+        @lift([$tick_left, $tick_right]),
+        @lift([$y_top, $y_top]),
+        color = color,
+        linewidth = linewidth,
+    )
+    
+    # Add label
+    label_x = @lift($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01)
+    scale_label = text!(
+        ax,
+        @lift(Point2f($label_x, $y_top)),
+        text = "$(round(scale_value, digits=0)) μV",
+        align = (:left, :center),
+        fontsize = 14,
+        color = color,
+        space = :data,
+    )
+    
+    return (line = scale_line, bottom_tick = bottom_tick, top_tick = top_tick, label = scale_label)
+end
+
 
 function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs...)
 
@@ -1841,6 +1919,9 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
 
     draw(ax, state)
     draw_extra_channel!(ax, state)
+    
+    # Add scale indicator
+    _add_scale_indicator!(ax, state, plot_kwargs)
 
     # Display on the provided screen if given, otherwise use default display
     if screen !== nothing
