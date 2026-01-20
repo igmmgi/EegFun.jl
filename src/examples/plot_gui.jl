@@ -143,12 +143,9 @@ function plot_gui()
     create_label(main_layout[19, 1], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # Average channels toggle
-    create_label(main_layout[20, 1], "Avg Channels", ui_style, fontsize = 11)
-    avg_channels_menu = create_menu(
-        main_layout[21, 1],
-        ui_style,
-        options = ["false", "true"],
-    )
+    avg_channels_layout = GridLayout(main_layout[20, 1], tellwidth = false, colgap = 8)
+    create_label(avg_channels_layout[1, 1], "Average Channels", ui_style, fontsize = BASE_FONTS.textbox)
+    avg_channels_checkbox = Checkbox(avg_channels_layout[1, 2], checked = false)
 
     # Column 2: Axis Settings
     create_label(main_layout[1, 2], "Axis Settings", ui_style)
@@ -186,12 +183,9 @@ function plot_gui()
     )
 
     # Invert Y axis option
-    create_label(main_layout[12, 2], "Invert Y axis", ui_style; fontsize = ui_style.textbox_font)
-    invert_y_menu = create_menu(
-        main_layout[13, 2],
-        ui_style,
-        options = ["false", "true"],
-    )
+    invert_y_layout = GridLayout(main_layout[12, 2], tellwidth = false, colgap = 8)
+    create_label(invert_y_layout[1, 1], "Invert Y axis", ui_style, fontsize = ui_style.textbox_font)
+    invert_y_checkbox = Checkbox(invert_y_layout[1, 2], checked = false)
 
     # Main plot button
     plot_button = Button(
@@ -346,12 +340,12 @@ function plot_gui()
     end
 
     # Plot option callbacks
-    on(avg_channels_menu.selection) do selection
-        gui_state.average_channels[] = selection == "true"
+    on(avg_channels_checkbox.checked) do is_checked
+        gui_state.average_channels[] = is_checked
     end
 
-    on(invert_y_menu.selection) do selection
-        gui_state.invert_y[] = selection == "true"
+    on(invert_y_checkbox.checked) do is_checked
+        gui_state.invert_y[] = is_checked
     end
 
     # Open directory picker when Select button is clicked
