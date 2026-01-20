@@ -84,7 +84,6 @@ mutable struct ViewState
     butterfly::Observable{Bool}
     amplitude_scale::Observable{Float64}
     function ViewState(n_channels::Int, n_samples::Int, plot_kwargs)
-        # TODO: could this be done better?
         offset_scale = plot_kwargs[:channel_offset_scale]
         offset_margin = plot_kwargs[:channel_offset_margin]
         offset =
@@ -414,7 +413,14 @@ function create_labels_menu(fig, ax, state)
     options = vcat(["All", "Left", "Right", "Central", "BioSemi16", "BioSemi32", "BioSemi64"], state.channels.labels)
     menu = create_menu(fig, options, "All", "Labels")
 
+    # Flag to prevent recursive updates when programmatically setting menu selection
+    updating_menu = Ref(false)
+
     on(menu[1].selection) do s
+        # Skip if we're programmatically updating the menu
+        if updating_menu[]
+            return
+        end
         # Group selections clear individual selections
         if s == "All"
             state.channels.individually_selected = Symbol[]
@@ -459,13 +465,27 @@ function create_labels_menu(fig, ax, state)
             tmp_layout = read_layout(layout_file)
             state.channels.visible .= state.channels.labels .∈ Ref(tmp_layout.data.label)
         else
-            # Individual electrode selection - append to list
+            # Individual electrode selection - toggle selection
             selected_sym = Symbol(s)
-            if !(selected_sym in state.channels.individually_selected)
+            if selected_sym in state.channels.individually_selected
+                # Deselect if already selected
+                Base.filter!(x -> x != selected_sym, state.channels.individually_selected)
+            else
+                # Select if not already selected
                 push!(state.channels.individually_selected, selected_sym)
             end
             # Update visibility to show only individually selected electrodes
-            state.channels.visible .= (state.channels.labels .∈ Ref(state.channels.individually_selected))
+            if isempty(state.channels.individually_selected)
+                # If no individual selections, show all channels
+                state.channels.visible .= true
+            else
+                state.channels.visible .= (state.channels.labels .∈ Ref(state.channels.individually_selected))
+            end
+            # Always reset menu to "All" after toggling any individual channel
+            # This ensures clicking any channel (including the same one) will always trigger the callback
+            updating_menu[] = true
+            menu[1].selection[] = "All"
+            updating_menu[] = false
         end
 
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
@@ -500,30 +520,85 @@ function create_ica_menu(fig, ax, state, ica)
     options = vcat(["None"], ica.ica_label)
     menu = create_menu(fig, options, "None", "ICA Components")
 
-    on(menu[1].selection) do s
-        clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        component_to_remove_int = extract_int(String(s))
+    # Create observable for removed components display
+    removed_components_text = Observable("")
+    
+    # Create label to display removed components
+    removed_label = Label(
+        fig,
+        @lift(isempty($removed_components_text) ? "" : "Removed: $($removed_components_text)"),
+        fontsize = 16,
+        halign = :left,
+        color = :red,
+        tellwidth = false,
+    )
 
-        if !isnothing(component_to_remove_int)
-            apply_ica_removal!(state.data, state.ica_current, [component_to_remove_int])
-            state.ica_current = copy(state.ica_current)
-
-            # Track removed ICA component
-            push!(state.removed_ica_components, component_to_remove_int)
-        else # Selected "None" so reset to original ICA state
-            state.ica_current = copy(state.ica_original)
-            reset_to_original!(state.data)
-
-            # Clear removed ICA components
-            empty!(state.removed_ica_components)
+    # Function to update the removed components display
+    function update_removed_display()
+        if isempty(state.removed_ica_components)
+            removed_components_text[] = ""
+        else
+            # Sort components for consistent display
+            sorted_components = sort(state.removed_ica_components)
+            components_str = join(string.(sorted_components), ", ")
+            removed_components_text[] = components_str
         end
+    end
+
+    # Initialize display
+    update_removed_display()
+
+    on(menu[1].selection) do s
+
+        clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
+        
+        # Check explicitly for "None" first
+        if s == "None"
+            # Selected "None" - clear all removals and restore original data
+            # Clear removed ICA components first
+            empty!(state.removed_ica_components)
+            
+            # Reset to original ICA state
+            state.ica_current = copy(state.ica_original)
+            
+            # Reset data to original (no components removed)
+            reset_to_original!(state.data)
+        else
+            # Extract component number from selection string
+            component_to_toggle_int = extract_int(String(s))
+            
+            if !isnothing(component_to_toggle_int)
+                # Toggle component: if already removed, restore it; if not removed, remove it
+                if component_to_toggle_int in state.removed_ica_components
+                    # Restore component - remove from list
+                    Base.filter!(x -> x != component_to_toggle_int, state.removed_ica_components)
+                else
+                    # Remove component - add to list
+                    push!(state.removed_ica_components, component_to_toggle_int)
+                end
+
+                # Always reset to original data first
+                state.ica_current = copy(state.ica_original)
+                reset_to_original!(state.data)
+
+                # Then apply all currently removed components
+                if !isempty(state.removed_ica_components)
+                    apply_ica_removal!(state.data, state.ica_current, state.removed_ica_components)
+                end
+
+            end
+        end
+
+        # Update the removed components display
+        update_removed_display()
 
         notify_data_update(state.data)
         draw(ax, state)
         update_analysis_settings!(state)
     end
 
-    return menu
+    # Return menu and removed components label in a vertical stack
+    return vcat(menu, hcat(removed_label, Label(fig, "", fontsize = 16, tellwidth = false)))
 
 end
 
