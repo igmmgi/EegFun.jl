@@ -5,6 +5,7 @@ Test suite for src/analysis/batch/utils.jl
 using Test
 using JLD2
 using DataFrames
+using Logging
 
 
 @testset "Batch Utils" begin
@@ -108,9 +109,8 @@ using DataFrames
         jldsave(other_file; data = "test")
 
         result = eegfun.load_data(other_file)
-        # load_data returns the data (String in this case), it doesn't validate types
-        @test result !== nothing
-        @test result == "test"
+        # load_data only returns EegData, InfoIca, or Nothing - other types return nothing
+        @test result === nothing
 
         # Test with non-existent file (jldopen throws SystemError, not ArgumentError)
         @test_throws SystemError eegfun.load_data("/nonexistent/file.jld2")
@@ -249,7 +249,10 @@ using DataFrames
         output_dir = joinpath(test_dir, "batch_output")
         mkpath(output_dir)
 
-        results = eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+        # Use NullLogger to avoid stream initialization issues during tests
+        results = with_logger(NullLogger()) do
+            eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+        end
 
         @test length(results) == 3
         @test results[1].success == true
@@ -259,7 +262,9 @@ using DataFrames
         # Test error handling
         error_process_fn = (input_path, output_path) -> error("Test error")
 
-        results_error = eegfun._run_batch_operation(error_process_fn, files[1:1], test_dir, output_dir)
+        results_error = with_logger(NullLogger()) do
+            eegfun._run_batch_operation(error_process_fn, files[1:1], test_dir, output_dir)
+        end
 
         @test length(results_error) == 1
         @test results_error[1].success == false
@@ -277,7 +282,10 @@ using DataFrames
         output_dir = joinpath(test_dir, "summary_test")
         mkpath(output_dir)
 
-        summary = eegfun._log_batch_summary(results, output_dir)
+        # Use NullLogger to avoid stream initialization issues during tests
+        summary = with_logger(NullLogger()) do
+            eegfun._log_batch_summary(results, output_dir)
+        end
 
         @test summary.success == 2
         @test summary.errors == 1
@@ -364,7 +372,9 @@ using DataFrames
             # Test with processing function that returns nothing
             process_fn_nothing =
                 (input_path, output_path) -> eegfun.BatchResult(false, "test", "Function returned nothing")
-            results = eegfun._run_batch_operation(process_fn_nothing, ["test_1.jld2"], test_dir, test_dir)
+            results = with_logger(NullLogger()) do
+                eegfun._run_batch_operation(process_fn_nothing, ["test_1.jld2"], test_dir, test_dir)
+            end
             @test length(results) == 1
             @test results[1].success == false
             @test occursin("Function returned nothing", results[1].message)
@@ -381,7 +391,10 @@ using DataFrames
             end
 
             # Test complete workflow
-            files = eegfun._find_batch_files("test_erps", test_dir)
+            # Use NullLogger to avoid stream initialization issues during tests
+            files = with_logger(NullLogger()) do
+                eegfun._find_batch_files("test_erps", test_dir)
+            end
             @test length(files) == 4
 
             # Validate input directory
@@ -401,12 +414,17 @@ using DataFrames
             output_dir = joinpath(test_dir, "integration_output")
             mkpath(output_dir)
 
-            results = eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+            # Use NullLogger to avoid stream initialization issues during tests
+            results = with_logger(NullLogger()) do
+                eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+            end
             @test length(results) == 4
             @test all(r.success for r in results)
 
-            # Log summary
-            summary = eegfun._log_batch_summary(results, output_dir)
+            # Log summary (also with NullLogger)
+            summary = with_logger(NullLogger()) do
+                eegfun._log_batch_summary(results, output_dir)
+            end
             @test summary.success == 4
             @test summary.errors == 0
         end

@@ -1853,3 +1853,14 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
     # Return the observable analysis settings
     return fig, ax, state.analysis_settings
 end
+
+# can plot saved file
+function plot_databrowser(filename::String, ica = nothing; screen = nothing, kwargs...)
+    dat_eeg = load_data(filename)
+    if !isnothing(ica)
+        ica = load_data(ica)
+    end
+    plot_databrowser(dat_eeg, ica; screen = screen, kwargs...);
+end
+
+plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...) = plot_databrowser(data[1], ica; screen = screen, kwargs...);

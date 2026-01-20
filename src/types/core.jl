@@ -531,8 +531,10 @@ about the decomposition process.
 - `layout::Layout`: Layout information for the ICA components (contains channel labels)
 - `removed_activations::OrderedDict{Int, Matrix{Float64}}`: Removed component activations by epoch
 - `kurtosis_signs::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
+- `filename::String`: Filename of the input data file used to generate this ICA result
 """
 struct InfoIca
+    filename::String  # Filename of the input data file
     unmixing::Matrix{Float64}
     mixing::Matrix{Float64}
     sphere::Matrix{Float64}
@@ -738,6 +740,7 @@ function Base.show(io::IO, ica::InfoIca)
     n_channels = length(ica.layout.data.label)
 
     println(io, "InfoIca Result")
+    println(io, "├─ Filename: $(ica.filename)")
     println(io, "├─ Components: $n_components")
     println(io, "├─ Channels: $n_channels")
     println(io, "├─ Scale: $(round(ica.scale, digits=3))")
@@ -772,6 +775,7 @@ end
 # Custom copy method for InfoIca
 function Base.copy(ica::InfoIca)::InfoIca
     return InfoIca(
+        ica.filename,  # Filename is immutable, no need to copy
         copy(ica.unmixing),
         copy(ica.mixing),
         copy(ica.sphere),
