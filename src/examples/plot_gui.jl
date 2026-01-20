@@ -76,12 +76,12 @@ function plot_gui()
     # main figure window, layout, and UI style
     set_window_title("PLOT GUI")
     gui_fig = Figure(
-        size = (500, 875),
+        size = (650, 550),
         title = "Plot GUI",
         backgroundcolor = :lightgrey,
-        figure_padding = (0, 0, 0, 0),
+        figure_padding = (20, 20, 20, 20),
     )
-    main_layout = GridLayout(gui_fig[1, 1:2], rowgap = 2, colgap = 4)
+    main_layout = GridLayout(gui_fig[1, 1:3], rowgap = 2, colgap = 4)
     ui_style = UIStyle()
 
     # Select Directory Section
@@ -122,86 +122,86 @@ function plot_gui()
         options = plottype_options,
     )
 
+    # Column 2: Participant, Condition, Epoch, Channels, Average Channels
     # Participant Section
-    create_label(main_layout[11, 1], "Participant", ui_style)
-    participant_input = create_textbox(main_layout[12, 1], ui_style)
+    create_label(main_layout[1, 2], "Participant", ui_style)
+    participant_input = create_textbox(main_layout[2, 2], ui_style)
 
     # Condition Section
-    create_label(main_layout[13, 1], "Condition", ui_style)
-    condition_input = create_textbox(main_layout[14, 1], ui_style)
+    create_label(main_layout[3, 2], "Condition", ui_style)
+    condition_input = create_textbox(main_layout[4, 2], ui_style)
 
     # Epoch Section
-    create_label(main_layout[15, 1], "Epoch", ui_style)
-    epoch_input = create_textbox(main_layout[16, 1], ui_style)
+    create_label(main_layout[5, 2], "Epoch", ui_style)
+    epoch_input = create_textbox(main_layout[6, 2], ui_style)
 
-    # Channel(s) Section - Moved below Epoch
-    create_label(main_layout[17, 1], "Channel(s)", ui_style)
-    channel_menu = create_menu(main_layout[18, 1], ui_style, options = ["Select"])
+    # Channel(s) Section
+    create_label(main_layout[7, 2], "Channel(s)", ui_style)
+    channel_menu = create_menu(main_layout[8, 2], ui_style, options = ["Select"])
 
     # Selected channels display
     selected_channels_text = Observable("Channels: ")
-    create_label(main_layout[19, 1], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
+    create_label(main_layout[9, 2], selected_channels_text, ui_style, fontsize = ui_style.textbox_font, color = :gray)
 
     # Average channels toggle
-    avg_channels_layout = GridLayout(main_layout[20, 1], tellwidth = false, colgap = 8)
+    avg_channels_layout = GridLayout(main_layout[10, 2], tellwidth = false, colgap = 8)
     create_label(avg_channels_layout[1, 1], "Average Channels", ui_style, fontsize = BASE_FONTS.textbox)
     avg_channels_checkbox = Checkbox(avg_channels_layout[1, 2], checked = false)
 
-    # Column 2: Axis Settings
-    create_label(main_layout[1, 2], "Axis Settings", ui_style)
-
+    # Column 3: Axis Settings
     # X Limits Section
-    create_label(main_layout[2, 2], "X Limits", ui_style; fontsize = ui_style.textbox_font)
-    x_limits_layout = GridLayout(main_layout[3, 2], tellwidth = false, colgap = 8)
-    xmin_input = create_textbox(x_limits_layout[1, 1], ui_style; width = 80)
-    xmax_input = create_textbox(x_limits_layout[1, 2], ui_style; width = 80)
+    create_label(main_layout[1, 3], "X Limits", ui_style, fontsize = ui_style.textbox_font)
+    x_limits_layout = GridLayout(main_layout[2, 3], tellwidth = false, colgap = 8)
+    xmin_input = create_textbox(x_limits_layout[1, 1], ui_style, width = 80)
+    xmax_input = create_textbox(x_limits_layout[1, 2], ui_style, width = 80)
 
     # Y Limits Section
-    create_label(main_layout[4, 2], "Y Limits", ui_style; fontsize = ui_style.textbox_font)
-    y_limits_layout = GridLayout(main_layout[5, 2], tellwidth = false, colgap = 8)
-    ymin_input = create_textbox(y_limits_layout[1, 1], ui_style; width = 80)
-    ymax_input = create_textbox(y_limits_layout[1, 2], ui_style; width = 80)
+    create_label(main_layout[3, 3], "Y Limits", ui_style, fontsize = ui_style.textbox_font)
+    y_limits_layout = GridLayout(main_layout[4, 3], tellwidth = false, colgap = 8)
+    ymin_input = create_textbox(y_limits_layout[1, 1], ui_style, width = 80)
+    ymax_input = create_textbox(y_limits_layout[1, 2], ui_style, width = 80)
 
     # Z Limits Section (currently unused, but kept for future use)
-    create_label(main_layout[6, 2], "Z Limits", ui_style, fontsize = ui_style.textbox_font)
-    z_limits_layout = GridLayout(main_layout[7, 2], tellwidth = false, colgap = 8)
+    create_label(main_layout[5, 3], "Z Limits", ui_style, fontsize = ui_style.textbox_font)
+    z_limits_layout = GridLayout(main_layout[6, 3], tellwidth = false, colgap = 8)
     zmin_input = create_textbox(z_limits_layout[1, 1], ui_style, width = 80)
     zmax_input = create_textbox(z_limits_layout[1, 2], ui_style, width = 80)
 
     # Baseline Section
-    create_label(main_layout[8, 2], "Baseline", ui_style; fontsize = ui_style.textbox_font)
-    baseline_layout = GridLayout(main_layout[9, 2], tellwidth = false, colgap = 8)
-    baseline_start = create_textbox(baseline_layout[1, 1], ui_style; width = 80)
-    baseline_end = create_textbox(baseline_layout[1, 2], ui_style; width = 80)
+    create_label(main_layout[7, 3], "Baseline", ui_style, fontsize = ui_style.textbox_font)
+    baseline_layout = GridLayout(main_layout[8, 3], tellwidth = false, colgap = 8)
+    baseline_start = create_textbox(baseline_layout[1, 1], ui_style, width = 80)
+    baseline_end = create_textbox(baseline_layout[1, 2], ui_style, width = 80)
 
     # Baseline Type
-    create_label(main_layout[10, 2], "Baseline Type TF", ui_style; fontsize = ui_style.textbox_font)
+    create_label(main_layout[9, 3], "Baseline Type TF", ui_style, fontsize = ui_style.textbox_font)
     baseline_type = create_menu(
-        main_layout[11, 2],
+        main_layout[10, 3],
         ui_style,
         options = ["Select", "absolute", "relative", "relchange", "perchange", "db"],
     )
 
     # Invert Y axis option
-    invert_y_layout = GridLayout(main_layout[12, 2], tellwidth = false, colgap = 8)
+    invert_y_layout = GridLayout(main_layout[11, 3], tellwidth = false, colgap = 8)
     create_label(invert_y_layout[1, 1], "Invert Y axis", ui_style, fontsize = ui_style.textbox_font)
     invert_y_checkbox = Checkbox(invert_y_layout[1, 2], checked = false)
 
     # Main plot button
     plot_button = Button(
-        main_layout[14, 2],
+        main_layout[13, 3],
         label = "PLOT",
         fontsize = ui_style.button_font,
         buttoncolor = :darkgrey,
         buttoncolor_hover = :grey,
         buttoncolor_active = :green,
-        width = 85,
-        height = 35,
+        width = 100,
+        height = 50,
     )
 
     # Set columns sizes
-    colsize!(main_layout, 1, Relative(0.4))
-    colsize!(main_layout, 2, Relative(0.4))
+    colsize!(main_layout, 1, Relative(0.3))
+    colsize!(main_layout, 2, Relative(0.3))
+    colsize!(main_layout, 3, Relative(0.3))
 
     # Data structure to store GUI state
     gui_state = (
