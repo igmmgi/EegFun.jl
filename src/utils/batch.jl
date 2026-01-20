@@ -86,19 +86,52 @@ Load data from JLD2 file, returning the data directly, a Dict of all variables, 
 - If file has multiple variables: returns a Dict with all key-value pairs
 - If file is empty: returns `nothing`
 """
-function load_data(filepath::String)
-    # Use jldopen to properly access variables by name
+function load_data(filepath::String)::Union{EegData, Vector{<:EegData}, InfoIca, Vector{InfoIca}, Nothing}
     jldopen(filepath, "r") do file
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing
-
-        if length(keys_list) == 1 # Single variable - return it directly
-            return file[keys_list[1]]
-        else # Multiple variables - return a Dict
-            return Dict(k => file[k] for k in keys_list)
-        end
+        
+        data = length(keys_list) == 1 ? file[keys_list[1]] : Dict(k => file[k] for k in keys_list)
+        return _load_data(data)
     end
 end
+
+# Convert Vector{Any} to typed vector if all elements are the same type
+function _load_data(data::Vector{Any})::Union{Vector{<:EegData}, Vector{InfoIca}, Nothing}
+    isempty(data) && return nothing
+    T = typeof(data[1])
+    (T <: EegData || T <: InfoIca) && all(x -> typeof(x) == T, data) || return nothing
+    return Vector{T}(data)
+end
+
+# Extract EegData or InfoIca from Dict
+function _load_data(data::Dict)::Union{EegData, Vector{<:EegData}, InfoIca, Vector{InfoIca}, Nothing}
+    eeg_values = EegData[]
+    ica_values = InfoIca[]
+    for value in values(data)
+        result = _load_data(value)
+        isnothing(result) && continue
+        _add_to_collection!(result, eeg_values, ica_values)
+    end
+    # return single element if only one
+    !isempty(eeg_values) && return _single_or_vector(eeg_values)
+    !isempty(ica_values) && return _single_or_vector(ica_values)
+    return nothing
+end
+
+# load_data is not a generic function for everything; 
+# we just use it for data that is saved from eegfun
+_load_data(data::Union{EegData, Vector{<:EegData}, InfoIca, Vector{InfoIca}}) = data
+_load_data(::Any)::Nothing = nothing
+
+# Helper to add loaded data to appropriate collection
+_add_to_collection!(data::EegData, eeg_values, _) = push!(eeg_values, data)
+_add_to_collection!(data::Vector{<:EegData}, eeg_values, _) = append!(eeg_values, data)
+_add_to_collection!(data::InfoIca, _, ica_values) = push!(ica_values, data)
+_add_to_collection!(data::Vector{InfoIca}, _, ica_values) = append!(ica_values, data)
+
+# Return single element or vector
+_single_or_vector(v::Vector) = length(v) == 1 ? v[1] : v
 
 """
     _condition_select(data, condition_selection)

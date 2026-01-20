@@ -238,6 +238,7 @@ using eegfun
         # Test constructor
         is_sub_gaussian = falses(2)  # All super-Gaussian for test (all false)
         ica_info = eegfun.InfoIca(
+            "test_file.bdf",
             unmixing,
             mixing,
             sphere,
@@ -260,6 +261,7 @@ using eegfun
         @test ica_info.removed_activations == removed_activations
         @test ica_info.layout == layout
         @test ica_info.is_sub_gaussian == is_sub_gaussian
+        @test ica_info.filename == "test_file.bdf"
 
         # Test immutability
         @test_throws ErrorException ica_info.scale = 2.0
@@ -290,6 +292,7 @@ using eegfun
         ica_label = [:IC1, :IC2]
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
         ica_info = eegfun.InfoIca(
+            "test_file.bdf",
             unmixing,
             mixing,
             sphere,
@@ -322,6 +325,7 @@ using eegfun
         removed_activations[1] = [1.0 2.0; 3.0 4.0]
         layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
         ica_info = eegfun.InfoIca(
+            "test_file.bdf",
             unmixing,
             mixing,
             sphere,

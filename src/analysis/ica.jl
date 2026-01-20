@@ -77,9 +77,12 @@ function run_ica(
         dat_for_ica = _select_subsample!(dat_for_ica, percentage_of_data)
     end
 
+    # Get filename from the data
+    input_filename = filename(dat)
+
     # Dispatch to the appropriate ICA algorithm
     ica_result =
-        _run_ica_algorithm(dat_for_ica, ica_layout, n_components = n_components, algorithm = algorithm, params = params)
+        _run_ica_algorithm(dat_for_ica, ica_layout, input_filename; n_components = n_components, algorithm = algorithm, params = params)
 
     return ica_result
 end
@@ -192,10 +195,14 @@ function run_ica(
     # Create subsetted layout that matches the selected channels  
     ica_layout = subset_layout(reference_epoch_data.layout, channel_selection = channels(selected_channels))
 
+    # Get filename from the first epoch data
+    input_filename = filename(reference_epoch_data)
+
     # Dispatch to the appropriate ICA algorithm with concatenated data
     ica_result = _run_ica_algorithm(
         concatenated_matrix,
         ica_layout,
+        input_filename;
         n_components = n_components,
         algorithm = algorithm,
         params = params,
@@ -386,15 +393,16 @@ Internal dispatcher function that routes to the appropriate ICA algorithm implem
 """
 function _run_ica_algorithm(
     dat_ica::Matrix{Float64},
-    layout::Layout;
+    layout::Layout,
+    filename::String;
     n_components::Int,
     algorithm::Symbol = :infomax,
     params::IcaPrms = IcaPrms(),
 )
     if algorithm == :infomax
-        return infomax_ica(dat_ica, layout, n_components = n_components, params = params)
+        return infomax_ica(dat_ica, layout, filename; n_components = n_components, params = params)
     elseif algorithm == :infomax_extended
-        return infomax_extended_ica(dat_ica, layout, n_components = n_components, params = params)
+        return infomax_extended_ica(dat_ica, layout, filename; n_components = n_components, params = params)
     else
         error("Unknown ICA algorithm: $algorithm. Supported algorithms: :infomax, :infomax_extended")
     end
@@ -404,7 +412,7 @@ end
 # INFOMAX ICA IMPLEMENTATION
 # =============================================================================
 
-function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
+function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
 
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
@@ -526,6 +534,7 @@ function infomax_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int
     order = sortperm(meanvar_normalized, rev = true)
 
     return InfoIca(
+        filename,
         work.weights[order, :],
         mixing[:, order],
         sphere,
@@ -566,7 +575,7 @@ and super-Gaussian (kurtosis > 0) sources, making it more versatile than standar
 Lee, T. W., Girolami, M., & Sejnowski, T. J. (1999). Independent component analysis using an extended 
 infomax algorithm for mixed subgaussian and supergaussian sources. Neural computation, 11(2), 417-441.
 """
-function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_components::Int, params::IcaPrms = IcaPrms())
+function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout, filename::String; n_components::Int, params::IcaPrms = IcaPrms())
 
     # Store original mean before removing it
     original_mean = vec(mean(dat_ica, dims = 2))
@@ -770,6 +779,7 @@ function infomax_extended_ica(dat_ica::Matrix{Float64}, layout::Layout; n_compon
     order = sortperm(meanvar_normalized, rev = true)
 
     return InfoIca(
+        filename,
         work.weights[order, :],
         mixing[:, order],
         sphere,
