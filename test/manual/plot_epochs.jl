@@ -44,3 +44,5 @@ eegfun.plot_epochs(epochs[1], layout = :topo, add_xy_origin = false, theme_fonts
 
 eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]))
 eegfun.plot_epochs(epochs[1], channel_selection = eegfun.channels([:Fp1, :Fp2, :Cz]); layout = :topo)
+
+
