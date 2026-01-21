@@ -44,7 +44,7 @@ end
 
 
 """
-    StatisticalTestData
+    StatisticalData
 
 Stores prepared data for statistical tests (both permutation and analytic tests).
 
@@ -52,12 +52,12 @@ Stores prepared data for statistical tests (both permutation and analytic tests)
 - `data::Vector{ErpData}`: Grand average ERPs for conditions 1 and 2 (for visualization/storage)
 - `analysis::AnalysisData`: Core analysis data (design, data arrays, time points)
 """
-struct StatisticalTestData
+struct StatisticalData
     data::Vector{ErpData}
     analysis::AnalysisData
 end
 
-function Base.show(io::IO, data::StatisticalTestData)
+function Base.show(io::IO, data::StatisticalData)
     time_range_str(times) = isempty(times) ? "N/A" : "$(first(times)) to $(last(times)) s"
 
     # Get dimensions
@@ -71,7 +71,7 @@ function Base.show(io::IO, data::StatisticalTestData)
     time_range2_str = time_range_str(data.data[2].data[!, :time])
     analysis_time_range = time_range_str(data.analysis.time_points)
 
-    println(io, "StatisticalTestData")
+    println(io, "StatisticalData")
     println(io, "├─ Design: $(data.analysis.design)")
     println(io, "├─ Condition 1 ($(data.data[1].condition_name)): $n_participants1 participants")
     println(io, "│  └─ $(n_electrodes1) channels, $time_range1_str, $(data.data[1].sample_rate) Hz")
@@ -119,14 +119,12 @@ Stores cluster-specific parameters for cluster permutation tests.
 # Fields
 - `threshold_method::Symbol`: `:parametric`, `:nonparametric_individual`, or `:nonparametric_common`
 - `cluster_type::Symbol`: `:spatial`, `:temporal`, or `:spatiotemporal`
-- `cluster_statistic::Symbol`: `:sum`, `:max`, `:size`, or `:wcm`
 - `n_permutations::Int`: Number of permutations performed
 - `random_seed::Union{Int, Nothing}`: Random seed used (if any)
 """
 struct ClusterInfo
     threshold_method::Symbol
     cluster_type::Symbol
-    cluster_statistic::Symbol
     n_permutations::Int
     random_seed::Union{Int,Nothing}
 end
@@ -218,7 +216,7 @@ end
 # ==============
 
 """
-    StatisticalTestResult
+    StatsResult
 
 Abstract type for statistical test results. All statistical test results share common fields:
 - `test_info::TestInfo`: Test configuration and parameters
@@ -229,10 +227,10 @@ Abstract type for statistical test results. All statistical test results share c
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t`: Critical t-values (type varies by test method)
 """
-abstract type StatisticalTestResult end
+abstract type StatsResult end
 
 """
-    ClusterPermutationResult
+    PermutationResult
 
 Stores complete results from a cluster-based permutation test.
 
@@ -247,7 +245,7 @@ Stores complete results from a cluster-based permutation test.
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t::Union{Array{Float64, 2}, Tuple{Float64, Float64}, Tuple{Array{Float64, 2}, Array{Float64, 2}}}`: Critical t-values used
 """
-struct ClusterPermutationResult <: StatisticalTestResult
+struct PermutationResult <: StatsResult
     test_info::TestInfo
     data::Vector{ErpData}
     stat_matrix::StatMatrix
@@ -259,7 +257,7 @@ struct ClusterPermutationResult <: StatisticalTestResult
     critical_t::Union{Array{Float64,2},Tuple{Float64,Float64},Tuple{Array{Float64,2},Array{Float64,2}}}
 end
 
-function Base.show(io::IO, result::ClusterPermutationResult)
+function Base.show(io::IO, result::PermutationResult)
     n_electrodes = length(result.electrodes)
     n_time_points = length(result.time_points)
     time_range = isempty(result.time_points) ? "N/A" : "$(first(result.time_points)) to $(last(result.time_points)) s"
@@ -277,13 +275,12 @@ function Base.show(io::IO, result::ClusterPermutationResult)
     test_info = result.test_info
     cluster_info = test_info.cluster_info
 
-    println(io, "ClusterPermutationResult")
+    println(io, "PermutationResult")
     println(io, "├─ Design: $(test_info.type)")
     println(io, "├─ Degrees of freedom: $(round(Int, test_info.df))")
     println(io, "├─ Permutations: $(cluster_info.n_permutations)")
     println(io, "├─ Threshold: $(test_info.alpha) ($(cluster_info.threshold_method))")
     println(io, "├─ Cluster type: $(cluster_info.cluster_type)")
-    println(io, "├─ Cluster statistic: $(cluster_info.cluster_statistic)")
     println(io, "├─ Data dimensions: $n_electrodes electrodes × $n_time_points time points ($time_range)")
     println(io, "├─ Significant points: $n_sig_pos_points positive, $n_sig_neg_points negative")
     println(io, "├─ Clusters found: $n_pos_clusters positive, $n_neg_clusters negative")
@@ -352,7 +349,7 @@ function Base.show(io::IO, result::ClusterPermutationResult)
 end
 
 """
-    AnalyticTTestResult
+    AnalyticResult
 
 Stores results from an analytic (parametric) t-test without permutation.
 
@@ -365,7 +362,7 @@ Stores results from an analytic (parametric) t-test without permutation.
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t::Float64`: Critical t-value for significance (uniform across all points)
 """
-struct AnalyticTTestResult <: StatisticalTestResult
+struct AnalyticResult <: StatsResult
     test_info::TestInfo
     data::Vector{ErpData}
     stat_matrix::StatMatrix
@@ -375,7 +372,7 @@ struct AnalyticTTestResult <: StatisticalTestResult
     critical_t::Float64
 end
 
-function Base.show(io::IO, result::AnalyticTTestResult)
+function Base.show(io::IO, result::AnalyticResult)
     n_electrodes = length(result.electrodes)
     n_time_points = length(result.time_points)
     time_range = isempty(result.time_points) ? "N/A" : "$(first(result.time_points)) to $(last(result.time_points)) s"
@@ -383,7 +380,7 @@ function Base.show(io::IO, result::AnalyticTTestResult)
     n_sig_pos = count(result.masks.positive)
     n_sig_neg = count(result.masks.negative)
 
-    println(io, "AnalyticTTestResult")
+    println(io, "AnalyticResult")
     println(io, "├─ Test info")
     println(io, "│  ├─ Type: $(result.test_info.type)")
     println(io, "│  ├─ DF: $(result.test_info.df)")
