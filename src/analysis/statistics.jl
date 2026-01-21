@@ -91,8 +91,10 @@ function prepare_condition_comparison(
     n_time = length(time_points)
 
     # Extract data arrays: [participants × electrodes × time]
-    condition1 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
-    condition2 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
+    condition1 =
+        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
+    condition2 =
+        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
 
     return StatisticalTestData(
         [condition1_avg, condition2_avg],
@@ -152,7 +154,7 @@ end
 
 
 """
-    validate_permutation_inputs(prepared::StatisticalTestData, 
+    _validate_permutation_inputs(prepared::StatisticalTestData, 
                                 n_permutations::Int,
                                 threshold::Float64,
                                 cluster_type::Symbol,
@@ -172,7 +174,7 @@ Validate inputs for cluster permutation test.
 # Throws
 - `ArgumentError`: If any validation fails
 """
-function validate_permutation_inputs(
+function _validate_permutation_inputs(
     prepared::StatisticalTestData,
     n_permutations::Int,
     threshold::Float64,
@@ -308,8 +310,8 @@ function compute_t_matrix(
         # Fill pre-allocated t_matrix in-place
         t_matrix .= mean_diff ./ (std_diff ./ sqrt(n_participants))
         # Where std is zero: NaN if mean is also zero, Inf otherwise
-        t_matrix[zero_std_mask .& zero_mean_mask] .= NaN
-        t_matrix[zero_std_mask .& .!zero_mean_mask] .= Inf
+        t_matrix[zero_std_mask.&zero_mean_mask] .= NaN
+        t_matrix[zero_std_mask.&.!zero_mean_mask] .= Inf
 
         # Degrees of freedom (same for all points in paired design)
         df = Float64(n_participants - 1)
@@ -962,7 +964,7 @@ end
 # ===================
 
 """
-    build_connectivity_matrix(electrodes::Vector{Symbol},
+    _build_connectivity_matrix(electrodes::Vector{Symbol},
                               layout::Layout,
                               cluster_type::Symbol)
 
@@ -985,10 +987,10 @@ For temporal only, it's just consecutive time points.
 
 # Examples
 ```julia
-conn, n_elec, n_time = build_connectivity_matrix(electrodes, layout, :spatiotemporal)
+conn, n_elec, n_time = _build_connectivity_matrix(electrodes, layout, :spatiotemporal)
 ```
 """
-function build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, cluster_type::Symbol)
+function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, cluster_type::Symbol)
     n_electrodes = length(electrodes)
 
     if cluster_type == :spatial
@@ -1081,7 +1083,7 @@ end
 # ===================
 
 """
-    prefilter_mask_by_neighbors(mask::BitArray{2},
+    _prefilter_mask_by_neighbors(mask::BitArray{2},
                                 spatial_connectivity::SparseMatrixCSC{Bool},
                                 min_num_neighbors::Int)
 
@@ -1101,10 +1103,10 @@ This is done iteratively until no more points are removed.
 
 # Examples
 ```julia
-filtered_mask = prefilter_mask_by_neighbors(mask, spatial_connectivity, 3)
+filtered_mask = _prefilter_mask_by_neighbors(mask, spatial_connectivity, 3)
 ```
 """
-function prefilter_mask_by_neighbors(
+function _prefilter_mask_by_neighbors(
     mask::BitArray{2},
     spatial_connectivity::SparseMatrixCSC{Bool},
     min_num_neighbors::Int,
@@ -1160,7 +1162,7 @@ function prefilter_mask_by_neighbors(
 end
 
 # In-place version for performance (modifies mask directly)
-function prefilter_mask_by_neighbors!(
+function _prefilter_mask_by_neighbors!(
     mask::BitArray{2},
     spatial_connectivity::SparseMatrixCSC{Bool},
     min_num_neighbors::Int,
@@ -1213,7 +1215,7 @@ end
 # ===================
 
 """
-    set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
+    _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
 
 Create new Cluster objects with the specified polarity, copying all other fields.
 
@@ -1224,7 +1226,7 @@ Create new Cluster objects with the specified polarity, copying all other fields
 # Returns
 - `Vector{Cluster}`: New clusters with updated polarity
 """
-function set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
+function _set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
     @assert polarity in (:positive, :negative) "polarity must be :positive or :negative"
     return [
         Cluster(
@@ -1241,7 +1243,7 @@ function set_cluster_polarity(clusters::Vector{Cluster}, polarity::Symbol)
 end
 
 """
-    find_clusters_connected_components(mask::BitArray{2},
+    _find_clusters_connected_components(mask::BitArray{2},
                                        electrodes::Vector{Symbol},
                                        time_points::Vector{Float64},
                                        spatial_connectivity::SparseMatrixCSC{Bool},
@@ -1261,10 +1263,10 @@ Find connected clusters in thresholded data using BFS.
 
 # Examples
 ```julia
-clusters = find_clusters_connected_components(mask, electrodes, time_points, conn, :spatiotemporal)
+clusters = _find_clusters_connected_components(mask, electrodes, time_points, conn, :spatiotemporal)
 ```
 """
-function find_clusters_connected_components(
+function _find_clusters_connected_components(
     mask::BitArray{2},
     electrodes::Vector{Symbol},
     time_points::Vector{Float64},
@@ -1420,16 +1422,30 @@ function find_clusters(
     spatial_connectivity::SparseMatrixCSC{Bool},
     cluster_type::Symbol,
 )
-    # Find positive clusters
-    positive_clusters_raw =
-        find_clusters_connected_components(mask_positive, electrodes, time_points, spatial_connectivity, cluster_type)
-    positive_clusters = set_cluster_polarity(positive_clusters_raw, :positive)
+    positive_clusters = Cluster[]
+    negative_clusters = Cluster[]
 
-    # Find negative clusters
-    negative_clusters_raw =
-        find_clusters_connected_components(mask_negative, electrodes, time_points, spatial_connectivity, cluster_type)
-    negative_clusters = set_cluster_polarity(negative_clusters_raw, :negative)
+    if !isempty(mask_positive)
+        positive_clusters_raw = _find_clusters_connected_components(
+            mask_positive,
+            electrodes,
+            time_points,
+            spatial_connectivity,
+            cluster_type,
+        )
+        positive_clusters = _set_cluster_polarity(positive_clusters_raw, :positive)
+    end
 
+    if !isempty(mask_negative)
+        negative_clusters_raw = _find_clusters_connected_components(
+            mask_negative,
+            electrodes,
+            time_points,
+            spatial_connectivity,
+            cluster_type,
+        )
+        negative_clusters = _set_cluster_polarity(negative_clusters_raw, :negative)
+    end
     return positive_clusters, negative_clusters
 end
 
@@ -1633,7 +1649,7 @@ end
 # ===================
 
 """
-    shuffle_labels(prepared::StatisticalTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
+    _shuffle_labels(prepared::StatisticalTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
 
 Shuffle condition/group labels for permutation test.
 
@@ -1651,11 +1667,11 @@ For independent design: randomly shuffle participants between groups.
 """
 # Optimized version that accepts raw arrays and reuses buffers
 # Generate swap mask for paired design (avoids copying arrays)
-function generate_swap_mask(n_participants::Int, rng::AbstractRNG = Random.GLOBAL_RNG)
+function _generate_swap_mask(n_participants::Int, rng::AbstractRNG = Random.GLOBAL_RNG)
     return BitVector([rand(rng, Bool) for _ = 1:n_participants])
 end
 
-function shuffle_labels!(
+function _shuffle_labels!(
     shuffled_A::Array{Float64,3},
     shuffled_B::Array{Float64,3},
     data1::Array{Float64,3},
@@ -1732,7 +1748,7 @@ end
 function shuffle_labels(prepared::StatisticalTestData, rng::AbstractRNG = Random.GLOBAL_RNG)
     shuffled_A = similar(prepared.analysis.data[1])
     shuffled_B = similar(prepared.analysis.data[2])
-    return shuffle_labels!(
+    return _shuffle_labels!(
         shuffled_A,
         shuffled_B,
         prepared.analysis.data[1],
@@ -1764,7 +1780,7 @@ Run permutations and collect t-matrices for non-parametric thresholding.
 perm_t_matrices = collect_permutation_t_matrices(prepared, 1000)
 ```
 """
-function collect_permutation_t_matrices(
+function _collect_permutation_t_matrices(
     prepared::StatisticalTestData,
     n_permutations::Int,
     random_seed::Union{Int,Nothing} = nothing,
@@ -1780,7 +1796,7 @@ function collect_permutation_t_matrices(
     # Get dimensions from first permutation (using optimized functions)
     shuffled_A_buffer = similar(prepared.analysis.data[1])
     shuffled_B_buffer = similar(prepared.analysis.data[2])
-    shuffle_labels!(
+    _shuffle_labels!(
         shuffled_A_buffer,
         shuffled_B_buffer,
         prepared.analysis.data[1],
@@ -1805,7 +1821,7 @@ function collect_permutation_t_matrices(
 
     for perm_idx = 1:n_permutations
         # Shuffle labels using pre-allocated buffers
-        shuffle_labels!(
+        _shuffle_labels!(
             shuffled_A_buffer,
             shuffled_B_buffer,
             prepared.analysis.data[1],
@@ -1869,7 +1885,7 @@ perm_pos, perm_neg = run_permutations(prepared, 1000, 0.05, critical_t, conn,
                                      :spatiotemporal, :sum, :both, 0, 0)
 ```
 """
-function run_permutations(
+function _run_permutations(
     prepared::StatisticalTestData,
     n_permutations::Int,
     threshold::Float64,
@@ -1938,7 +1954,7 @@ function run_permutations(
             t_matrix_perm = permutation_t_matrices[:, :, perm_idx]
         else
             # Shuffle and compute t-matrix
-            shuffle_labels!(
+            _shuffle_labels!(
                 shuffled_A_buffer,
                 shuffled_B_buffer,
                 prepared.analysis.data[1],
@@ -1984,8 +2000,8 @@ function run_permutations(
 
         # Pre-filter masks (modify in place)
         if min_num_neighbors > 0
-            prefilter_mask_by_neighbors!(mask_pos_buffer, spatial_connectivity, min_num_neighbors)
-            prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
+            _prefilter_mask_by_neighbors!(mask_pos_buffer, spatial_connectivity, min_num_neighbors)
+            _prefilter_mask_by_neighbors!(mask_neg_buffer, spatial_connectivity, min_num_neighbors)
         end
 
         # Find clusters
@@ -2050,7 +2066,7 @@ Compute p-values for clusters by comparing to permutation distribution.
 clusters = compute_cluster_pvalues(clusters, stats, perm_max, 1000, 0.05)
 ```
 """
-function compute_cluster_pvalues(
+function _compute_cluster_pvalues(
     clusters::Vector{Cluster},
     cluster_stats::Vector{Float64},
     permutation_max::Vector{Float64},
@@ -2156,7 +2172,7 @@ function cluster_permutation_test(
     show_progress::Bool = true,
 )
     # Validate inputs
-    validate_permutation_inputs(prepared, n_permutations, threshold, cluster_type, cluster_statistic, tail)
+    _validate_permutation_inputs(prepared, n_permutations, threshold, cluster_type, cluster_statistic, tail)
 
     # Validate threshold method
     if !(threshold_method in [:parametric, :nonparametric_common, :nonparametric_individual])
@@ -2227,13 +2243,13 @@ function cluster_permutation_test(
 
     # Build connectivity matrix
     @info "Building connectivity matrix..."
-    spatial_connectivity, _, _ = build_connectivity_matrix(electrodes, layout, cluster_type)
+    spatial_connectivity, _, _ = _build_connectivity_matrix(electrodes, layout, cluster_type)
 
     # Pre-filter masks to remove isolated points (FieldTrip's minNumChannels approach)
     if min_num_neighbors > 0
         @info "Pre-filtering masks (min_num_neighbors=$min_num_neighbors)..."
-        mask_positive = prefilter_mask_by_neighbors(mask_positive, spatial_connectivity, min_num_neighbors)
-        mask_negative = prefilter_mask_by_neighbors(mask_negative, spatial_connectivity, min_num_neighbors)
+        mask_positive = _prefilter_mask_by_neighbors(mask_positive, spatial_connectivity, min_num_neighbors)
+        mask_negative = _prefilter_mask_by_neighbors(mask_negative, spatial_connectivity, min_num_neighbors)
     end
 
     # Find observed clusters
@@ -2264,7 +2280,7 @@ function cluster_permutation_test(
     else
         @info "Running $n_permutations permutations for cluster-level inference (reusing stored t-matrices)..."
     end
-    permutation_max_positive, permutation_max_negative = run_permutations(
+    permutation_max_positive, permutation_max_negative = _run_permutations(
         prepared,
         n_permutations,
         threshold,
@@ -2282,7 +2298,7 @@ function cluster_permutation_test(
     # Compute p-values
     @info "Computing p-values..."
     if !isempty(positive_clusters)
-        positive_clusters = compute_cluster_pvalues(
+        positive_clusters = _compute_cluster_pvalues(
             positive_clusters,
             cluster_stats_positive,
             permutation_max_positive,
@@ -2294,7 +2310,7 @@ function cluster_permutation_test(
     end
 
     if !isempty(negative_clusters)
-        negative_clusters = compute_cluster_pvalues(
+        negative_clusters = _compute_cluster_pvalues(
             negative_clusters,
             cluster_stats_negative,
             permutation_max_negative,
