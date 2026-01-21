@@ -21,7 +21,7 @@ input_dir = "/home/ian/Documents/Julia/output_data/filtered_erps_good_lp_30hz"
 file_pattern = "erps_good"
 
 println("Preparing data...")
-prepared = eegfun.prepare_condition_comparison(
+prepared = eegfun.prepare_stats(
     file_pattern,  # Pattern to match ERP files
     :paired;       # :paired for within-subject, :independent for between-subject
     input_dir = input_dir,
@@ -36,14 +36,14 @@ prepared = eegfun.prepare_condition_comparison(
 # ----------------------------------------------------------------------------
 # Option 2a: Analytic t-test with NO correction
 # ----------------------------------------------------------------------------
-result_analytic_no = eegfun.analytic_ttest(
+result_analytic_no = eegfun.analytic_test(
     prepared,
     alpha = 0.05,           # Significance threshold
     tail = :both,           # Two-tailed test (:both, :left, or :right)
     correction_method = :no, # No multiple comparison correction
 )
 
-fig = eegfun.plot_analytic_ttest(
+fig = eegfun.plot_analytic_test(
     result_analytic_no,
     channel = :PO8,
     plot_erp = true,
@@ -55,14 +55,14 @@ fig = eegfun.plot_analytic_ttest(
 # ----------------------------------------------------------------------------
 # Option 2b: Analytic t-test with BONFERRONI correction
 # ----------------------------------------------------------------------------
-result_analytic_bonf = eegfun.analytic_ttest(
+result_analytic_bonf = eegfun.analytic_test(
     prepared,
     alpha = 0.05,
     tail = :both,
     correction_method = :bonferroni,  # Bonferroni correction
 )
 
-fig = eegfun.plot_analytic_ttest(
+fig = eegfun.plot_analytic_test(
     result_analytic_bonf,
     channel = :PO8,
     plot_erp = true,
@@ -84,20 +84,19 @@ println("      number of significant points to the uncorrected test above.")
 # Option 3a: Parametric Thresholding (Default, Fastest)
 # ----------------------------------------------------------------------------
 
-@btime result_cluster_parametric = eegfun.cluster_permutation_test(
+result_permutation_parametric = eegfun.permutation_test(
     prepared,
     n_permutations = 1000,        # Number of permutations (more = more accurate)
     threshold = 0.05,             # Significance level
     threshold_method = :parametric,  # Use t-distribution for thresholding
     cluster_type = :spatiotemporal,  # Cluster in space AND time
-    cluster_statistic = :sum,     # Sum of t-values in cluster (default)
     min_num_neighbors = 3,       # Pre-filter: need 3+ neighbors
     tail = :both,                 # Two-tailed test
     show_progress = true,          # Show progress bar
 )
 
-fig = eegfun.plot_analytic_ttest(
-    result_cluster_parametric,
+fig = eegfun.plot_analytic_test(
+    result_permutation_parametric,
     channel = :PO8,
     plot_erp = true,
     plot_difference = false,
@@ -106,7 +105,7 @@ fig = eegfun.plot_analytic_ttest(
 )
 display(fig)
 
-println(result_cluster_parametric)
+println(result_permutation_parametric)
 
 # ----------------------------------------------------------------------------
 # Option 3b: Non-Parametric Common Thresholding
@@ -136,19 +135,18 @@ Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster',
                           clusterThreshold='nonparametric_common'
 """)
 
-@btime result_cluster_nonparametric_common = eegfun.cluster_permutation_test(
+result_permutation_nonparametric_common = eegfun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
     threshold_method = :nonparametric_common,  # Non-parametric common threshold
     cluster_type = :spatiotemporal,
-    cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
     show_progress = true,
 )
 
-println(result_cluster_nonparametric_common)
+println(result_permutation_nonparametric_common)
 
 # ----------------------------------------------------------------------------
 # Option 3c: Non-Parametric Individual Thresholding
@@ -180,19 +178,18 @@ Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster',
                           clusterThreshold='nonparametric_individual'
 """)
 
-result_cluster_nonparametric_individual = eegfun.cluster_permutation_test(
+result_permutation_nonparametric_individual = eegfun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
-    threshold_method = :nonparametric_common,  # Non-parametric individual thresholds
+    threshold_method = :nonparametric_individual,  # Non-parametric individual thresholds
     cluster_type = :spatiotemporal,
-    cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
     show_progress = true,
 )
 
-println(result_cluster_nonparametric_individual)
+println(result_permutation_nonparametric_individual)
 
 # ============================================================================
 # PART 3.5: CLUSTER TYPE OPTIONS
@@ -224,22 +221,21 @@ Use when:
 Example: Finding which electrode groups show effects at any time point.
 """)
 
-result_cluster_spatial = eegfun.cluster_permutation_test(
+result_permutation_spatial = eegfun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
     threshold_method = :parametric,
     cluster_type = :spatial,  # Only spatial adjacency
-    cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
     show_progress = true,
 )
 
-println(result_cluster_spatial)
+println(result_permutation_spatial)
 println("\nSpatial clusters found:")
-println("  Positive clusters: ", length(result_cluster_spatial.clusters.positive))
-println("  Negative clusters: ", length(result_cluster_spatial.clusters.negative))
+println("  Positive clusters: ", length(result_permutation_spatial.clusters.positive))
+println("  Negative clusters: ", length(result_permutation_spatial.clusters.negative))
 
 # ----------------------------------------------------------------------------
 # Option 3e: Temporal Clustering Only
@@ -260,22 +256,21 @@ Use when:
 Example: Finding sustained effects at specific electrodes over time.
 """)
 
-result_cluster_temporal = eegfun.cluster_permutation_test(
+result_permutation_temporal = eegfun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
     threshold_method = :parametric,
     cluster_type = :temporal,  # Only temporal adjacency
-    cluster_statistic = :sum,
     min_num_neighbors = 0,  # Not applicable for temporal-only
     tail = :both,
     show_progress = true,
 )
 
-println(result_cluster_temporal)
+println(result_permutation_temporal)
 println("\nTemporal clusters found:")
-println("  Positive clusters: ", length(result_cluster_temporal.clusters.positive))
-println("  Negative clusters: ", length(result_cluster_temporal.clusters.negative))
+println("  Positive clusters: ", length(result_permutation_temporal.clusters.positive))
+println("  Negative clusters: ", length(result_permutation_temporal.clusters.negative))
 
 # ----------------------------------------------------------------------------
 # Option 3f: Spatiotemporal Clustering (Default)
@@ -296,22 +291,21 @@ Use when:
 Example: Finding ERP components that show spatial and temporal clustering.
 """)
 
-result_cluster_spatiotemporal = eegfun.cluster_permutation_test(
+result_permutation_spatiotemporal = eegfun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
     threshold_method = :parametric,
     cluster_type = :spatiotemporal,  # Both spatial and temporal
-    cluster_statistic = :sum,
     min_num_neighbors = 3,
     tail = :both,
     show_progress = true,
 )
 
-println(result_cluster_spatiotemporal)
+println(result_permutation_spatiotemporal)
 println("\nSpatiotemporal clusters found:")
-println("  Positive clusters: ", length(result_cluster_spatiotemporal.clusters.positive))
-println("  Negative clusters: ", length(result_cluster_spatiotemporal.clusters.negative))
+println("  Positive clusters: ", length(result_permutation_spatiotemporal.clusters.positive))
+println("  Negative clusters: ", length(result_permutation_spatiotemporal.clusters.negative))
 
 # ----------------------------------------------------------------------------
 # Comparison of Cluster Types
@@ -345,23 +339,23 @@ the cluster_type, because the clustering algorithm groups points differently.
 println("\nCluster counts comparison:")
 println(
     "  Spatial:          ",
-    length(result_cluster_spatial.clusters.positive),
+    length(result_permutation_spatial.clusters.positive),
     " positive, ",
-    length(result_cluster_spatial.clusters.negative),
+    length(result_permutation_spatial.clusters.negative),
     " negative",
 )
 println(
     "  Temporal:         ",
-    length(result_cluster_temporal.clusters.positive),
+    length(result_permutation_temporal.clusters.positive),
     " positive, ",
-    length(result_cluster_temporal.clusters.negative),
+    length(result_permutation_temporal.clusters.negative),
     " negative",
 )
 println(
     "  Spatiotemporal:  ",
-    length(result_cluster_spatiotemporal.clusters.positive),
+    length(result_permutation_spatiotemporal.clusters.positive),
     " positive, ",
-    length(result_cluster_spatiotemporal.clusters.negative),
+    length(result_permutation_spatiotemporal.clusters.negative),
     " negative",
 )
 
@@ -381,48 +375,48 @@ println("-"^80)
 println("\nParametric thresholding:")
 println(
     "  Positive clusters: ",
-    count(c -> c.is_significant, result_cluster_parametric.clusters.positive),
+    count(c -> c.is_significant, result_permutation_parametric.clusters.positive),
     " significant out of ",
-    length(result_cluster_parametric.clusters.positive),
+    length(result_permutation_parametric.clusters.positive),
     " total",
 )
 println(
     "  Negative clusters: ",
-    count(c -> c.is_significant, result_cluster_parametric.clusters.negative),
+    count(c -> c.is_significant, result_permutation_parametric.clusters.negative),
     " significant out of ",
-    length(result_cluster_parametric.clusters.negative),
+    length(result_permutation_parametric.clusters.negative),
     " total",
 )
 
 println("\nNon-parametric common thresholding:")
 println(
     "  Positive clusters: ",
-    count(c -> c.is_significant, result_cluster_nonparametric_common.clusters.positive),
+    count(c -> c.is_significant, result_permutation_nonparametric_common.clusters.positive),
     " significant out of ",
-    length(result_cluster_nonparametric_common.clusters.positive),
+    length(result_permutation_nonparametric_common.clusters.positive),
     " total",
 )
 println(
     "  Negative clusters: ",
-    count(c -> c.is_significant, result_cluster_nonparametric_common.clusters.negative),
+    count(c -> c.is_significant, result_permutation_nonparametric_common.clusters.negative),
     " significant out of ",
-    length(result_cluster_nonparametric_common.clusters.negative),
+    length(result_permutation_nonparametric_common.clusters.negative),
     " total",
 )
 
 println("\nNon-parametric individual thresholding:")
 println(
     "  Positive clusters: ",
-    count(c -> c.is_significant, result_cluster_nonparametric_individual.clusters.positive),
+    count(c -> c.is_significant, result_permutation_nonparametric_individual.clusters.positive),
     " significant out of ",
-    length(result_cluster_nonparametric_individual.clusters.positive),
+    length(result_permutation_nonparametric_individual.clusters.positive),
     " total",
 )
 println(
     "  Negative clusters: ",
-    count(c -> c.is_significant, result_cluster_nonparametric_individual.clusters.negative),
+    count(c -> c.is_significant, result_permutation_nonparametric_individual.clusters.negative),
     " significant out of ",
-    length(result_cluster_nonparametric_individual.clusters.negative),
+    length(result_permutation_nonparametric_individual.clusters.negative),
     " total",
 )
 
@@ -473,9 +467,8 @@ using GLMakie  # or CairoMakie for static plots
 println("\n" * "-"^80)
 println("Example 1: ERP Waveforms Only")
 println("-"^80)
-fig1 = eegfun.plot_analytic_ttest(
+fig1 = eegfun.plot_analytic_test(
     result_analytic_no,
-    prepared,
     channel = :PO7,
     plot_erp = true,
     plot_difference = false,
@@ -487,9 +480,8 @@ display(fig1)
 println("\n" * "-"^80)
 println("Example 2: Difference Wave with Significance Markers")
 println("-"^80)
-fig2 = eegfun.plot_analytic_ttest(
+fig2 = eegfun.plot_analytic_test(
     result_analytic_no,
-    prepared,
     channel = :PO7,
     plot_erp = false,
     plot_difference = true,
@@ -506,9 +498,8 @@ println("""
 This shows the results from cluster-based permutation testing.
 Significance markers indicate points that are part of significant clusters.
 """)
-fig3 = eegfun.plot_analytic_ttest(
-    result_cluster_parametric,
-    prepared,
+fig3 = eegfun.plot_analytic_test(
+    result_permutation_parametric,
     channel = :PO7,
     plot_erp = false,
     plot_difference = true,
@@ -558,7 +549,7 @@ KEY PARAMETERS TO CONSIDER:
 
 - n_permutations: More = more accurate (1000 is standard, 10000 for publication)
 - min_num_neighbors: Pre-filters noise (3 is common, 0 = no filtering)
-- cluster_statistic: :sum (default), :max, :size, or :wcm
+- cluster_statistic: :maxsum (default) or :size
 - cluster_type: :spatiotemporal (default), :spatial, or :temporal
 
 For more information, see:

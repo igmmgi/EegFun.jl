@@ -54,7 +54,7 @@ Apply baseline correction in-place to EEG data.
 """
 function baseline!(
     dat::EegData,
-    baseline_interval::Union{AbstractInterval,Tuple{Real,Real}};
+    baseline_interval::Union{AbstractInterval,Tuple{Real,Real},Function};
     channel_selection::Function = channels(),
 )
     # Validate baseline interval
@@ -110,7 +110,7 @@ Apply baseline correction in-place to a vector of EpochData objects.
 """
 function baseline!(
     dat::Vector{EpochData},
-    baseline_interval::Union{AbstractInterval,Tuple{Real,Real}};
+    baseline_interval::Union{AbstractInterval,Tuple{Real,Real},Function};
     channel_selection::Function = channels(),
 )
     baseline!.(dat, Ref(baseline_interval); channel_selection = channel_selection)
@@ -233,15 +233,32 @@ end
 
 function _validate_baseline_interval(
     dat::MultiDataFrameEeg,
-    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Function},
 )::IntervalIndex
+    if baseline_interval isa Function
+        # assume all data have the same time, so we just use the first epoch to get indices
+        mask = baseline_interval(dat.data[1])
+        indices = findall(mask)
+        isempty(indices) && @minimal_error_throw "Baseline window selection returned no samples!"
+        return IntervalIndex(start = first(indices), stop = last(indices))
+    end
     return _validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
 end
 
 function _validate_baseline_interval(
     dat::SingleDataFrameEeg,
-    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real},Function},
 )::IntervalIndex
+    if baseline_interval isa Function
+        mask = baseline_interval(dat.data)
+        indices = findall(mask)
+        isempty(indices) && @minimal_error_throw "Baseline window selection returned no samples!"
+        # Check for contiguity (warn if not, but proceed)
+        if !all(diff(indices) .== 1)
+            @minimal_warning "Selected baseline window is not contiguous!"
+        end
+        return IntervalIndex(start = first(indices), stop = last(indices))
+    end
     return _validate_baseline_interval(dat.data.time, baseline_interval)
 end
 

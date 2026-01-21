@@ -40,7 +40,7 @@ function find_continuous_regions(mask::BitVector, time_points::Vector{Float64})
 end
 
 """
-    plot_analytic_ttest(result::StatisticalTestResult;
+    plot_analytic_test(result::StatsResult;
                         channel::Symbol,
                         plot_erp::Bool = true,
                         plot_difference::Bool = false,
@@ -49,12 +49,12 @@ end
                         show_critical_t::Bool = false,
                         shift_difference::Bool = false)
 
-Plot ERP waveforms and statistical results for analytic t-test or cluster permutation test with flexible component control.
+Plot ERP waveforms and statistical results for analytic test or permutation test with flexible component control.
 
-Works with both `AnalyticTTestResult` (from `analytic_ttest`) and `ClusterPermutationResult` (from `cluster_permutation_test`).
+Works with both `AnalyticResult` (from `analytic_test`) and `PermutationResult` (from `permutation_test`).
 
 # Arguments
-- `result::StatisticalTestResult`: Results from `analytic_ttest` or `cluster_permutation_test`
+- `result::StatsResult`: Results from `analytic_test` or `permutation_test`
 - `channel::Symbol`: Channel/electrode to plot
 - `plot_erp::Bool`: Whether to plot ERP waveforms (condition averages) (default: true)
 - `plot_difference::Bool`: Whether to plot difference wave (A-B) (default: false)
@@ -74,19 +74,19 @@ Works with both `AnalyticTTestResult` (from `analytic_ttest`) and `ClusterPermut
 
 # Examples
 ```julia
-# With analytic t-test results
-result_analytic = analytic_ttest(prepared, correction_method=:no)
-fig = plot_analytic_ttest(result_analytic, channel=:PO7, 
+# With analytic test results
+result_analytic = analytic_test(prepared, correction_method=:no)
+fig = plot_analytic_test(result_analytic, channel=:PO7, 
                          plot_erp=true, plot_difference=true, show_significance=true)
 
-# With cluster permutation test results
-result_cluster = cluster_permutation_test(prepared, n_permutations=1000)
-fig = plot_analytic_ttest(result_cluster, channel=:PO7,
+# With permutation test results
+result_perm = permutation_test(prepared, n_permutations=1000)
+fig = plot_analytic_test(result_perm, channel=:PO7,
                          plot_erp=true, plot_difference=true, show_significance=true, show_critical_t=true)
 ```
 """
-function plot_analytic_ttest(
-    result::StatisticalTestResult;
+function plot_analytic_test(
+    result::StatsResult;
     channel::Symbol,
     plot_erp::Bool = true,
     plot_difference::Bool = false,
@@ -116,11 +116,11 @@ function plot_analytic_ttest(
     time_points = result.time_points
     t_values = result.stat_matrix.t[channel_idx, :]
 
-    # Get p-values if available (only for AnalyticTTestResult)
-    p_values = if isa(result, AnalyticTTestResult)
+    # Get p-values if available (only for AnalyticResult)
+    p_values = if isa(result, AnalyticResult)
         result.stat_matrix.p[channel_idx, :]
     else
-        # For ClusterPermutationResult, we don't have p_matrix, but we don't need it for plotting
+        # For PermutationResult, we don't have p_matrix, but we don't need it for plotting
         similar(t_values, Float64)  # Dummy array, won't be used
     end
 
@@ -143,12 +143,12 @@ function plot_analytic_ttest(
     critical_t_pos = nothing
     critical_t_neg = nothing
     if (show_significance || show_critical_t) && plot_tvalues
-        if isa(result, AnalyticTTestResult)
+        if isa(result, AnalyticResult)
             # Use pre-computed critical t-value (uniform across all points)
             critical_t_pos = fill(result.critical_t, length(time_points))
             critical_t_neg = fill(-result.critical_t, length(time_points))
         else
-            # For ClusterPermutationResult, use the pre-computed critical_t (varies by electrode/time)
+            # For PermutationResult, use the pre-computed critical_t (varies by electrode/time)
             critical_t_channel = result.critical_t[channel_idx, :]
             critical_t_pos = critical_t_channel
             critical_t_neg = -critical_t_channel
@@ -160,10 +160,10 @@ function plot_analytic_ttest(
 
     # Always use single axis (no dual axes)
     # Get title suffix based on result type
-    title_suffix = if isa(result, AnalyticTTestResult)
-        "Analytic t-test ($(result.test_info.correction_method))"
+    title_suffix = if isa(result, AnalyticResult)
+        "Analytic test ($(result.test_info.correction_method))"
     else
-        "Cluster permutation test ($(result.test_info.cluster_info.threshold_method))"
+        "Permutation test ($(result.test_info.cluster_info.threshold_method))"
     end
 
     # Determine y-axis label
@@ -253,8 +253,8 @@ function plot_analytic_ttest(
     # Show significance regions as grey bars at y=0 (or bottom spine)
     if show_significance
         # Use the result's significance masks, which already have the correction applied
-        # For AnalyticTTestResult, these masks reflect the correction method (no correction or Bonferroni)
-        # For ClusterPermutationResult, these masks reflect cluster-level significance
+        # For AnalyticResult, these masks reflect the correction method (no correction or Bonferroni)
+        # For PermutationResult, these masks reflect cluster-level significance
         sig_pos = result.masks.positive[channel_idx, :]
         sig_neg = result.masks.negative[channel_idx, :]
         sig_any = sig_pos .| sig_neg  # Any significance (positive or negative)
