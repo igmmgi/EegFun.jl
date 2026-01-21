@@ -49,15 +49,8 @@ lrp_data = lrp(erps[1], erps[2], channel_selection = channels([:C3, :CP3]))
 # This calculates LRP for C3/C4 and CP3/CP4
 
 # Use channel predicates for pattern matching
-lrp_data = lrp(erps[1], erps[2], 
-               channel_selection = channels(x -> startswith.(string.(x), "C")))
+lrp_data = lrp(erps[1], erps[2], channel_selection = channels(x -> startswith.(string.(x), "C")))
 # Selects all C-channels: C1/C2, C3/C4, C5/C6, etc.
-
-# Full workflow example
-using JLD2
-erps = load("participant_05_erps.jld2", "erps")
-lrp_result = lrp(erps[1], erps[2], channel_selection = channels([:C3]))
-jldsave("participant_05_lrp.jld2"; data = lrp_result)
 ```
 """
 function lrp(erp_left::ErpData, erp_right::ErpData; channel_selection::Function = channels())::ErpData

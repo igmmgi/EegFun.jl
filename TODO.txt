@@ -1,0 +1,32 @@
+# Major
+- Do I change filter to avoid clash with Julia Base.filter function. This is probably needed
+  -- Alternatives? low_pass_filter, lp_filter, high_pass_filter, hp_filter
+
+- statistics.jl
+  - internal functions with _ underscore
+  - code volume!
+
+- mirror.jl 
+  - add additional option for amount of mirroring
+
+- lrp.jl 
+  - needs actual testing with proper dataset
+  - examples need updating
+
+- gfp.jl
+  - needs more testing
+  - examples need updating
+  - code repetition
+
+- erp_measurments.jl 
+  - testting!!!
+  - erp plot displays
+  - integration with AnovaFun
+
+- more consistent plot_decoding with rest of plotting code base
+- decoding statistics and permutation stats: overlap? reduce repetition?
+
+Do we use minimal_error? Make it just minimal_error_throw, or combine with minimal_stacktrace
+
+
+

@@ -1,9 +1,6 @@
 """
 Data mirroring for reducing edge artifacts.
-
-This module provides functions to mirror (reverse and append) EEG data before and/or
-after epochs. This is commonly used before filtering to reduce edge artifacts by
-creating smooth transitions at the epoch boundaries.
+Provides functions to mirror (reverse and append) EEG data before and/or after epochs. 
 """
 
 #=============================================================================
@@ -43,8 +40,6 @@ filter!(epochs, 1, filter_type = "hp")
 
 # Remove mirrored sections after filtering
 unmirror!(epochs, :both)
-
-# Continue with analysis
 ```
 
 # Use Cases

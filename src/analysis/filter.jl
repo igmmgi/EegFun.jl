@@ -16,11 +16,6 @@ A struct containing all information about a digital filter for EEG data processi
 - `order::Int`: Filter order (for IIR filters)
 - `n_taps::Union{Nothing,Int}`: Number of taps (for FIR filters, nothing for IIR)
 - `transition_band::Float64`: Width of transition band in Hz
-
-# Notes
-- This struct encapsulates all filter parameters and metadata
-- Makes it easy to pass filter information to print and plot functions
-- Provides a consistent interface regardless of filter type
 """
 struct FilterInfo
     filter_type::String
@@ -56,10 +51,6 @@ Create a digital filter object for the specified parameters.
 - `FilterInfo`: A struct containing all filter information and the actual filter object
 
 # Notes
-- Validates all input parameters
-- Creates appropriate filter prototype based on type and method
-- Returns a FilterInfo object that can be reused for multiple datasets
-- Optimized for EEG analysis with appropriate defaults
 - NOTE: When using filtfilt (default), effective filter order is approximately doubled
 
 # Examples

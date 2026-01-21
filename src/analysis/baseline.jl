@@ -58,7 +58,7 @@ function baseline!(
     channel_selection::Function = channels(),
 )
     # Validate baseline interval
-    baseline_interval = validate_baseline_interval(dat, baseline_interval)
+    baseline_interval = _validate_baseline_interval(dat, baseline_interval)
 
     # Get selected channels
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
@@ -73,45 +73,7 @@ function baseline!(
     return nothing
 end
 
-"""
-    baseline!(dat::EegData, baseline_selection::Function; channel_selection=channels())
 
-Apply baseline correction in-place to EEG data using a predicate function.
-
-# Arguments
-- `dat::EegData`: The data to baseline correct
-- `baseline_selection::Function`: Sample selection predicate (e.g., `samples((start, end))`). Applied to the data DataFrame to determine baseline window.
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies the input data in-place by subtracting the baseline mean
-- The predicate function is applied to `dat.data` to get a boolean mask
-- If the predicate selects all samples (default), baseline correction is skipped
-- If the predicate selects no samples, a warning is issued and baseline is skipped
-"""
-function baseline!(dat::EegData, baseline_selection::Function; channel_selection::Function = channels())
-    # Apply predicate to get baseline mask
-    baseline_mask = baseline_selection(dat.data)
-    baseline_indices = findall(baseline_mask)
-
-    # Skip baseline if window matches all samples (default) or no samples
-    if isempty(baseline_indices)
-        @minimal_warning "Baseline selection predicate matched no samples. Skipping baseline correction."
-        return nothing
-    end
-
-    if length(baseline_indices) >= n_samples(dat)
-        # Predicate selected all samples (default case) - skip baseline
-        return nothing
-    end
-
-    # Convert to interval
-    baseline_interval = IntervalIndex(start = first(baseline_indices), stop = last(baseline_indices))
-
-    # Call the interval-based method
-    baseline!(dat, baseline_interval; channel_selection = channel_selection)
-    return nothing
-end
 
 """
     baseline!(dat::EegData; channel_selection=channels())
@@ -155,24 +117,7 @@ function baseline!(
     return nothing
 end
 
-"""
-    baseline!(dat::Vector{EpochData}, baseline_selection::Function; channel_selection=channels())
 
-Apply baseline correction in-place to a vector of EpochData objects using a predicate function.
-
-# Arguments
-- `dat::Vector{EpochData}`: Vector of epoch data to baseline correct
-- `baseline_selection::Function`: Sample selection predicate (e.g., `samples((start, end))`)
-- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-
-# Notes
-- Modifies each EpochData in the vector in-place by subtracting the baseline mean
-- The predicate function is applied to each epoch's data DataFrame to determine the baseline window
-"""
-function baseline!(dat::Vector{EpochData}, baseline_selection::Function; channel_selection::Function = channels())
-    baseline!.(dat, Ref(baseline_selection); channel_selection = channel_selection)
-    return nothing
-end
 
 """
     baseline!(dat::Vector{EpochData}; channel_selection=channels())
@@ -192,17 +137,14 @@ function baseline!(dat::Vector{EpochData}; channel_selection::Function = channel
     return nothing
 end
 
-# generates all non-mutating versions
+# TODO: actually, these are probably not needed as baseline can just be applied inplace whenever it is needed
+# For now, just keep for a little bit of consistency with other functions?
 @add_nonmutating baseline!
 
 
 #=============================================================================
     BASELINE-SPECIFIC HELPERS
 =============================================================================#
-
-# TODO: actually, these are probably not needed as baseline can just be applied inplace whenever it is needed
-# For now, juse keep for a little bit of consistency with other functions
-
 """Generate default output directory name for baseline operation."""
 function _default_baseline_output_dir(
     input_dir::String,
@@ -213,10 +155,98 @@ function _default_baseline_output_dir(
     joinpath(input_dir, "baseline_$(pattern)_$(interval_str)")
 end
 
-function _default_baseline_output_dir(input_dir::String, pattern::String, baseline_selection::Function)
-    # For predicates, use a generic name (could be improved to extract time range from predicate)
-    joinpath(input_dir, "baseline_$(pattern)_predicate")
+
+"""
+    _validate_baseline_interval(baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}) -> Union{IntervalIndex,IntervalTime}
+
+Validate baseline interval structure (without data). Returns normalized interval.
+Converts tuples to IntervalTime. For full validation with bounds checking, use the version that takes time vector or data.
+
+# Arguments
+- `baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}`: Interval to validate
+
+# Returns
+- `Union{IntervalIndex,IntervalTime}`: Normalized interval (tuples converted to IntervalTime)
+
+# Throws
+- `ArgumentError`: If interval structure is invalid
+"""
+function _validate_baseline_interval(
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+)::Union{IntervalIndex,IntervalTime}
+    # Convert tuple to IntervalTime
+    if baseline_interval isa Tuple
+        length(baseline_interval) == 2 ||
+            @minimal_error_throw "Baseline interval tuple must have 2 elements (start, stop), got: $baseline_interval"
+        baseline_interval = IntervalTime(start = Float64(baseline_interval[1]), stop = Float64(baseline_interval[2]))
+    end
+
+    # Validate structure
+    if baseline_interval isa IntervalTime
+        baseline_interval.start > baseline_interval.stop &&
+            @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+    elseif baseline_interval isa IntervalIndex
+        baseline_interval.start > baseline_interval.stop &&
+            @minimal_error_throw "Baseline start must be <= stop, got: $baseline_interval"
+    end
+
+    return baseline_interval
 end
+
+"""
+    _validate_baseline_interval(time::AbstractVector, baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}) -> IntervalIndex
+
+Validate and convert baseline interval to index format with bounds checking.
+
+# Arguments
+- `time::AbstractVector`: Time points vector
+- `baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}}`: Interval to validate
+
+# Returns
+- `IntervalIndex`: Validated interval in index format
+
+# Throws
+- `ArgumentError`: If interval is invalid
+"""
+function _validate_baseline_interval(
+    time::AbstractVector,
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+)::IntervalIndex
+    # First normalize (convert tuple, validate structure)
+    baseline_interval = _validate_baseline_interval(baseline_interval)
+
+    # Convert IntervalTime to IntervalIndex
+    if baseline_interval isa IntervalTime
+        start_idx, stop_idx = find_idx_start_end(time, baseline_interval.start, baseline_interval.stop)
+        baseline_interval = IntervalIndex(start = start_idx, stop = stop_idx)
+    end
+
+    # Validate bounds
+    if !(1 <= baseline_interval.start <= length(time)) ||
+       !(1 <= baseline_interval.stop <= length(time)) ||
+       !(baseline_interval.start <= baseline_interval.stop)
+        @minimal_error "Invalid baseline_interval: $baseline_interval (time vector length: $(length(time)))"
+    end
+
+    return baseline_interval
+end
+
+function _validate_baseline_interval(
+    dat::MultiDataFrameEeg,
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+)::IntervalIndex
+    return _validate_baseline_interval(dat.data[1].time, baseline_interval) # assume all data have the same time
+end
+
+function _validate_baseline_interval(
+    dat::SingleDataFrameEeg,
+    baseline_interval::Union{IntervalIndex,IntervalTime,Tuple{Real,Real}},
+)::IntervalIndex
+    return _validate_baseline_interval(dat.data.time, baseline_interval)
+end
+
+
+
 
 
 """
@@ -254,40 +284,6 @@ function _process_baseline_file(
     return BatchResult(true, filename, "Baseline corrected successfully")
 end
 
-function _process_baseline_file(
-    filepath::String,
-    output_path::String,
-    baseline_selection::Function,
-    condition_selection::Function,
-)
-    filename = basename(filepath)
-
-    # Load data
-    data = load_data(filepath)
-    if isnothing(data)
-        return BatchResult(false, filename, "No data variables found")
-    end
-
-    # Validate that data is valid EEG data (Vector of ErpData or EpochData)
-    if !(data isa Vector{<:Union{ErpData,EpochData}})
-        return BatchResult(false, filename, "Invalid data type: expected Vector{ErpData} or Vector{EpochData}")
-    end
-
-    # Select conditions
-    data = _condition_select(data, condition_selection)
-
-    # Apply baseline correction using predicate (mutates data in-place)
-    baseline!.(data, Ref(baseline_selection))
-
-    # Save (always use "data" as variable name since load_data finds by type)
-    jldsave(output_path; data = data)
-
-    return BatchResult(true, filename, "Baseline corrected successfully")
-end
-
-#=============================================================================
-    MAIN API FUNCTION
-=============================================================================#
 
 """
     baseline(file_pattern::String, baseline_interval; 
@@ -304,25 +300,24 @@ Apply baseline correction to EEG/ERP data from JLD2 files and save to a new dire
   - `Tuple{Real,Real}`: Time interval in seconds (e.g., `(-0.2, 0.0)`)
   - `IntervalTime`: Time interval struct (e.g., `IntervalTime(start=-0.2, stop=0.0)`)
   - `IntervalIndex`: Index interval struct (e.g., `IntervalIndex(start=1, stop=51)`)
-  - `Function`: Sample selection predicate (e.g., `samples((start, end))`)
 - `input_dir::String`: Input directory containing JLD2 files (default: current directory)
 - `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
 - `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
 - `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on baseline settings)
+
+# Notes
+- For in-memory data with function-based baseline selection, use `baseline!(data, samples((-0.2, 0.0)))` instead
 
 # Example
 ```julia
 # Baseline correct all epochs from -0.2 to 0.0 seconds
 baseline("epochs", (-0.2, 0.0))
 
-# Baseline correct using predicate
-baseline("epochs", samples((-0.2, 0.0)))
-
 # Baseline correct specific participant
-baseline("epochs", (-0.2, 0.0), participants=3)
+baseline("epochs", (-0.2, 0.0), participant_selection=participants(3))
 
 # Baseline correct specific participants and conditions
-baseline("epochs", (-0.2, 0.0), participants=[3, 4], conditions=[1, 2])
+baseline("epochs", (-0.2, 0.0), participant_selection=participants([3, 4]), condition_selection=conditions([1, 2]))
 
 # Use IntervalTime explicitly
 baseline("epochs", IntervalTime(start=-0.2, stop=0.0))
@@ -352,7 +347,7 @@ function baseline(
         end
 
         # Validate and normalize baseline interval (converts tuple to IntervalTime, validates structure)
-        baseline_interval = validate_baseline_interval(baseline_interval)
+        baseline_interval = _validate_baseline_interval(baseline_interval)
 
         # Setup directories
         output_dir = something(output_dir, _default_baseline_output_dir(input_dir, file_pattern, baseline_interval))
@@ -382,275 +377,6 @@ function baseline(
     end
 end
 
-function baseline(
-    file_pattern::String,
-    baseline_selection::Function;
-    input_dir::String = pwd(),
-    participant_selection::Function = participants(),
-    condition_selection::Function = conditions(),
-    output_dir::Union{String,Nothing} = nothing,
-)
-    # Convert predicate to interval by loading a sample file
-    # (The interval-based version will handle all file finding, validation, etc.)
-    files = _find_batch_files(file_pattern, input_dir, participant_selection)
-    sample_data = load_data(joinpath(input_dir, files[1]))
-    first_item = sample_data isa Vector{<:Union{ErpData,EpochData}} ? sample_data[1] : sample_data
-    sample_df = first_item.data isa Vector{DataFrame} ? first_item.data[1] : first_item.data
 
-    baseline_indices = findall(baseline_selection(sample_df))
-    isempty(baseline_indices) && error("Baseline selection matched no samples")
-    length(baseline_indices) >= nrow(sample_df) && return nothing
 
-    baseline_interval = IntervalIndex(start = first(baseline_indices), stop = last(baseline_indices))
-    baseline(
-        file_pattern,
-        baseline_interval;
-        input_dir = input_dir,
-        participant_selection = participant_selection,
-        condition_selection = condition_selection,
-        output_dir = output_dir,
-    )
-end
 
-# ============================================================================
-# TF Baseline for TimeFreqData structs
-# ============================================================================
-
-"""
-    tf_baseline!(tf_data::TimeFreqData, baseline_window; method=:db)
-
-Apply baseline correction to TimeFreqData in-place.
-
-# Arguments
-- `tf_data::TimeFreqData`: Time-frequency data to baseline correct
-- `baseline_window::Tuple{Real,Real}`: Time window for baseline (start, stop) in seconds
-
-# Keyword Arguments
-- `method::Symbol=:db`: Baseline method 
-  - `:absolute`: Absolute change (power - baseline_mean) - simple subtraction, no normalization
-  - `:relative`: Relative power (power / baseline_mean) - ratio, 
-  - `:relchange`: Relative change ((power - baseline_mean) / baseline_mean) - fractional change 
-  - `:normchange`: Normalized change ((power - baseline) / (power + baseline)) - symmetric normalization
-  - `:db`: Decibel change (10 * log10(power/baseline_mean)) 
-  - `:vssum`: Variance-stabilized sum ((power - baseline) / (power + baseline)) 
-  - `:zscore`: Z-score normalization ((power - baseline_mean) / baseline_std) 
-  - `:percent`: Percent change (100 * (power - baseline) / baseline) - convenience alias for relchange × 100
-
-# Example
-```julia
-tf_baseline!(tf_data, (-0.3, 0.0); method=:db)
-```
-"""
-function tf_baseline!(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
-    # Check if baseline has already been applied
-    if tf_data.baseline !== nothing
-        error("Baseline correction has already been applied to this data (method: $(tf_data.baseline.method), window: $(tf_data.baseline.window)). " *
-              "Baseline corrections are non-linear and cannot be chained. Use the original data to apply a different baseline.")
-    end
-    
-    # The DataFrame is structured as: all frequencies for time 1, then all frequencies for time 2, etc.
-    # unique() returns frequencies in the order they first appear, which matches freqs_out from tf_analysis
-    # So we can use direct indexing: row_idx = (ti - 1) * n_freqs + fi
-    times = unique(tf_data.data_power.time)
-    freqs_unique = unique(tf_data.data_power.freq)  # Already in correct order (matches freqs_out)
-    n_freqs = length(freqs_unique)
-    n_times = length(times)
-    
-    # Find baseline time indices (MATLAB: dsearchn finds nearest time points)
-    # Find the nearest time points to the baseline window boundaries
-    baseline_start_idx = argmin(abs.(times .- baseline_window[1]))
-    baseline_end_idx = argmin(abs.(times .- baseline_window[2]))
-    
-    # Create mask for baseline time points
-    base_mask = falses(n_times)
-    base_mask[baseline_start_idx:baseline_end_idx] .= true
-    if !any(base_mask)
-        error("Baseline window $(baseline_window) does not overlap with data times")
-    end
-    
-    # Get channel columns
-    ch_labels = channel_labels(tf_data)
-    
-    # Process each channel 
-    for ch in ch_labels
-        # Reshape to freq × time matrix for baseline calculation
-        # DataFrame structure: [freq1_t1, freq2_t1, ..., freqN_t1, freq1_t2, ...]
-        # freqs_unique is already in the correct order (matches DataFrame row order)
-        # So row_idx = (ti - 1) * n_freqs + fi
-        power_mat = zeros(n_freqs, n_times)
-        
-        for ti in 1:n_times
-            for fi in 1:n_freqs
-                row_idx = (ti - 1) * n_freqs + fi
-                power_mat[fi, ti] = tf_data.data_power[row_idx, ch]
-            end
-        end
-        
-        # Compute baseline statistics per frequency
-        # base_mask is a boolean vector for time points
-        # power_mat is (n_freqs, n_times)
-        # We want mean (and std for zscore) across time points in baseline window for each frequency
-        # Skip NaN values (from edge filtering) when computing baseline statistics 
-        baseline_power = zeros(n_freqs)
-        for fi = 1:n_freqs
-            baseline_values = power_mat[fi, base_mask]
-            baseline_values_no_nan = baseline_values[.!isnan.(baseline_values)]
-            if isempty(baseline_values_no_nan)
-                baseline_power[fi] = NaN  # All baseline values are NaN
-            else
-                baseline_power[fi] = mean(baseline_values_no_nan)
-            end
-        end
-        
-        # Apply baseline correction 
-        if method == :absolute
-            # 'absolute': data - meanVals (simple subtraction)
-            @info "Applying absolute baseline correction"
-            power_mat .= power_mat .- reshape(baseline_power, n_freqs, 1)
-        elseif method == :relative
-            # 'relative': power / baseline_mean
-            @info "Applying relative baseline correction"
-            min_baseline = max.(baseline_power, 1e-30)
-            power_mat .= power_mat ./ reshape(min_baseline, n_freqs, 1)
-        elseif method == :relchange
-            # 'relchange': (power - baseline_mean) / baseline_mean
-            @info "Applying relchange baseline correction"
-            min_baseline = max.(baseline_power, 1e-30)
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
-        elseif method == :normchange
-            # 'normchange': (power - baseline) / (power + baseline)
-            @info "Applying normchange baseline correction"
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
-        elseif method == :db
-            # 'db': 10 * log10(power / baseline_mean)
-            @info "Applying db baseline correction"
-            min_power = max.(baseline_power, 1e-30)
-            power_mat .= 10 .* log10.(max.(power_mat, 1e-30) ./ reshape(min_power, n_freqs, 1))
-        elseif method == :vssum
-            # 'vssum': (power - baseline) / (power + baseline) - same as normchange
-            @info "Applying vssum baseline correction"
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ (power_mat .+ reshape(baseline_power, n_freqs, 1))
-        elseif method == :zscore
-            # 'zscore': (power - baseline_mean) / baseline_std
-            # uses population std (divide by N, not N-1): nanstd(data(:,:,baselineTimes),1, 3)
-            @info "Applying z-score baseline correction"
-            # Compute standard deviation for each frequency across baseline time points
-            # Skip NaN values (from edge filtering) when computing std 
-            baseline_std = zeros(n_freqs)
-            for fi = 1:n_freqs
-                baseline_values = power_mat[fi, base_mask]
-                baseline_values_no_nan = baseline_values[.!isnan.(baseline_values)]
-                if isempty(baseline_values_no_nan) || length(baseline_values_no_nan) < 2
-                    baseline_std[fi] = NaN  # All baseline values are NaN or insufficient data
-                else
-                    # Use population std (divide by N, not N-1) 
-                    baseline_std[fi] = std(baseline_values_no_nan, corrected=false)
-                end
-            end
-            # Avoid division by zero - use minimum threshold for std
-            min_std = max.(baseline_std, 1e-30)
-            power_mat .= (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_std, n_freqs, 1)
-        elseif method == :percent
-            # Convenience alias: percent change = relchange × 100
-            @info "Applying percent baseline correction (convenience alias for relchange × 100)"
-            min_baseline = max.(baseline_power, 1e-30)
-            power_mat .= 100 .* (power_mat .- reshape(baseline_power, n_freqs, 1)) ./ reshape(min_baseline, n_freqs, 1)
-        else
-            error("Unknown baseline method: $method. Use :absolute, :relative, :relchange, :normchange, :db, :vssum, :zscore, or :percent")
-        end
-        
-        # Write back to DataFrame (using same indexing)
-        for ti in 1:n_times
-            for fi in 1:n_freqs
-                row_idx = (ti - 1) * n_freqs + fi
-                tf_data.data_power[row_idx, ch] = power_mat[fi, ti]
-            end
-        end
-    end
-    
-    # Store baseline information
-    tf_data.baseline = BaselineInfo(method=method, window=(Float64(baseline_window[1]), Float64(baseline_window[2])))
-    
-    return nothing
-end
-
-# Non-mutating version
-function tf_baseline(tf_data::TimeFreqData, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
-    tf_copy = copy(tf_data)  # Use custom copy method instead of deepcopy
-    tf_baseline!(tf_copy, baseline_window; method=method)
-    return tf_copy
-end
-
-# Vector version
-function tf_baseline!(tf_data::Vector{TimeFreqData}, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
-    tf_baseline!.(tf_data, Ref(baseline_window); method=method)
-    return nothing
-end
-
-function tf_baseline(tf_data::Vector{TimeFreqData}, baseline_window::Tuple{Real,Real}; method::Symbol=:db)
-    return [tf_baseline(tf, baseline_window; method=method) for tf in tf_data]
-end
-
-"""
-    tf_baseline(file_pattern::String, baseline_window;
-                method=:db, input_dir=pwd(), output_dir=nothing,
-                participant_selection=participants(), condition_selection=conditions())
-
-Apply baseline correction to TimeFreqData files.
-
-# Example
-```julia
-tf_baseline("tf_epochs_wavelet", (-0.3, 0.0); method=:db)
-```
-"""
-function tf_baseline(
-    file_pattern::String,
-    baseline_window::Tuple{Real,Real};
-    method::Symbol=:db,
-    input_dir::String=pwd(),
-    output_dir::Union{String,Nothing}=nothing,
-    participant_selection::Function=participants(),
-    condition_selection::Function=conditions()
-)
-    log_file = "tf_baseline.log"
-    setup_global_logging(log_file)
-
-    try
-        @info "Batch TF baseline started at $(now())"
-        @log_call "tf_baseline"
-
-        if (error_msg = _validate_input_dir(input_dir)) !== nothing
-            @minimal_error_throw(error_msg)
-        end
-
-        output_dir = something(output_dir, joinpath(input_dir, "tf_baseline_$(file_pattern)"))
-        mkpath(output_dir)
-
-        files = _find_batch_files(file_pattern, input_dir, participant_selection)
-        if isempty(files)
-            @minimal_warning "No JLD2 files found matching pattern '$file_pattern'"
-            return nothing
-        end
-
-        @info "Found $(length(files)) files, baseline: $baseline_window, method: $method"
-
-        process_fn = (input_path, output_path) -> begin
-            filename = basename(input_path)
-            data = load_data(input_path)
-            if isnothing(data) || !(data isa Vector{TimeFreqData})
-                return BatchResult(false, filename, "Invalid data type")
-            end
-            data = _condition_select(data, condition_selection)
-            tf_baseline!(data, baseline_window; method=method)
-            jldsave(output_path; data=data)
-            return BatchResult(true, filename, "Baseline corrected")
-        end
-
-        results = _run_batch_operation(process_fn, files, input_dir, output_dir; 
-                                       operation_name="TF baseline")
-        _log_batch_summary(results, output_dir)
-
-    finally
-        _cleanup_logging(log_file, output_dir)
-    end
-end

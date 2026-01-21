@@ -49,11 +49,6 @@ realign!(epochs, :rt)
 - The realignment value should be constant within each epoch (checked automatically)
 - After realignment, epoch length may be shorter due to cropping to common window
 - Trials with insufficient data before/after the realignment point will determine the final epoch length
-
-# Use Cases
-- Response-locked LRP analysis from stimulus-locked data
-- Saccade-locked analysis from fixation-locked data
-- Any re-referencing to a different event within the epoch
 """
 function realign!(dat::EpochData, realignment_column::Symbol)::Nothing
 

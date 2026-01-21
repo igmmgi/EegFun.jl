@@ -594,7 +594,7 @@ function tail(dat::EegData; n = nothing)
     data = all_data(dat)
     nrows = nrow(data)
     n = min(n, nrows)  # Don't exceed available rows
-    result = n > 0 ? data[max(1, nrows-n+1):nrows, :] : DataFrame()
+    result = n > 0 ? data[max(1, nrows - n + 1):nrows, :] : DataFrame()
     viewer(result)
     return result
 end
@@ -1139,7 +1139,7 @@ condition_info(dat::TimeFreqData) = (dat.condition, dat.condition_name)
 condition_info(dat::TimeFreqEpochData) = (dat.condition, dat.condition_name)
 condition_info(dat::SingleDataFrameEeg) = (
     hasproperty(dat, :condition) ? dat.condition : 1,
-    hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous"
+    hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous",
 )
 
 # Helper function predicates for easier participant filtering (for Vector{Int} of participant IDs)
@@ -1612,7 +1612,7 @@ function create_eeg_dataframe(dat::BrainVisionDataFormat.BrainVisionData)::DataF
     df = hcat(
         DataFrame(time = time, sample = sample, triggers = triggers, triggers_info = triggers_info),
         DataFrame(dat.data, channel_labels),
-    );
+    )
 
     return df
 end

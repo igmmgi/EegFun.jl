@@ -43,7 +43,7 @@ function get_package_version(; package_name::String = "eegfun")
             end
         end
         return version
-    catch # TODO: can this actually fail?
+    catch # TODO: can this actually fail if installed properly?
         return "unknown"
     end
 end

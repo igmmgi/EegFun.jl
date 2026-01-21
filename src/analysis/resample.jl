@@ -1,22 +1,10 @@
 """
-Resampling of EEG data to different sampling rates.
-
-This function downsamples EEG data by a specified factor, reducing the sampling
-rate while preserving all metadata including triggers, trial information, and
-other columns. Works with continuous, epoched, and ERP data.
-"""
-
-# =============================================================================
-#     CORE RESAMPLING FUNCTIONS
-# =============================================================================
-
-"""
 Helper function to resample a single DataFrame by downsampling.
 Handles trigger preservation and sample column updates.
 """
 function _resample_dataframe!(df::DataFrame, factor::Int, trigger_col::Symbol)
     # Get indices of samples to keep (regular downsampling grid)
-    keep_indices = collect(1:factor:nrow(df))
+    keep_indices = 1:factor:nrow(df)
 
     # If trigger column exists, preserve triggers by scaling their positions
     if hasproperty(df, trigger_col)
@@ -38,13 +26,9 @@ function _resample_dataframe!(df::DataFrame, factor::Int, trigger_col::Symbol)
         end
 
         df_resampled = df_new
-    else
-        # No triggers, just downsample
+    else # No triggers, just downsample
         df_resampled = df[keep_indices, :]
     end
-
-    # Note: sample column is already correct after downsampling
-    # (it contains the sample numbers from the kept rows)
 
     return df_resampled
 end
@@ -76,23 +60,17 @@ data = load("participant_1_continuous.jld2", "data")
 
 # Downsample to 256 Hz (factor of 2)
 resample!(data, 2)
-
-# Now data.sample_rate == 256
 ```
 
 # Notes
 - Factor must be a positive integer
 - New sample rate must be an integer (old_rate must be divisible by factor)
-- Simple decimation is used (no anti-aliasing filter applied)
+- Simple decimation is used 
 - For proper downsampling, low-pass filter data first to avoid aliasing
 - All DataFrame columns are preserved, including time, triggers, and metadata
-
-# Use Cases
-- Reduce data size for faster processing
-- Match sampling rates across different recordings
-- Prepare data for algorithms requiring specific sampling rates
 """
 function resample!(dat::SingleDataFrameEeg, factor::Int)::Nothing
+
     # Validation
     if factor < 1
         @minimal_error_throw("Downsampling factor must be positive, got $factor")
@@ -159,8 +137,6 @@ epochs = load("participant_1_epochs.jld2", "epochs")
 
 # Downsample to 256 Hz (factor of 2)
 resample!(epochs, 2)
-
-# Now epochs.sample_rate == 256
 ```
 
 # Notes
@@ -170,11 +146,6 @@ resample!(epochs, 2)
 - For proper downsampling, low-pass filter data first to avoid aliasing
 - All DataFrame columns in each epoch are preserved
 - Triggers and metadata are maintained for each epoch
-
-# Use Cases
-- Reduce epoch data size for faster processing
-- Match sampling rates for cross-study comparisons
-- Prepare epoched data for machine learning pipelines
 """
 function resample!(dat::EpochData, factor::Int)::Nothing
     # Validation
@@ -280,8 +251,6 @@ function resample!(data_vec::Vector{T}, factor::Int)::Nothing where {T<:EegData}
     end
     return nothing
 end
-
-
 
 
 

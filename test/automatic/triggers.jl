@@ -552,7 +552,7 @@ using OrderedCollections
             layout = eegfun.Layout(DataFrame(label = [:channel], inc = [0.0], azi = [0.0]), nothing, nothing)
             dat = eegfun.ContinuousData("test_data", df, layout, 100, eegfun.AnalysisInfo())
 
-            @test_throws AssertionError eegfun.trigger_count(dat)
+            @test_throws ErrorException eegfun.trigger_count(dat)
         end
 
         @testset "consistent output types" begin
@@ -687,7 +687,7 @@ using OrderedCollections
             @test length(eegfun.search_sequence(large_triggers, 1:3)) == 3000
 
             # Many sequences
-            many_sequences = [[i, i+1] for i = 1:100]
+            many_sequences = [[i, i + 1] for i = 1:100]
             @test length(eegfun.search_sequence([1, 2, 3, 4, 5, 6], many_sequences)) == 5
 
             # Very long sequences

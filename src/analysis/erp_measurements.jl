@@ -48,8 +48,7 @@ function _validate_analysis_type(analysis_type::String)
         "fractional_area_latency",
         "fractional_peak_latency",
     ]
-    analysis_type ∉ valid_types &&
-        return "Analysis type must be one of: $(join(valid_types, ", ")). Got: $analysis_type"
+    analysis_type ∉ valid_types && return "Analysis type must be one of: $(join(valid_types, ", ")). Got: $analysis_type"
     return nothing
 end
 
@@ -121,14 +120,10 @@ Compute fractional area latency - finds the point that divides area into specifi
 Returns latency at which fraction of area is to the left.
 """
 function _fractional_area_latency(data::AbstractVector, time_col::AbstractVector, fraction::Float64)
+  
     # Edge cases
-    if isempty(data) || isempty(time_col)
-        return NaN
-    end
-
-    if length(data) == 1
-        return time_col[1]
-    end
+    (isempty(data) || isempty(time_col)) && return NaN
+    length(data) == 1 && return time_col[1]
 
     # Compute total area using rectangular integration (fine for uniform sampling)
     dt = mean(diff(time_col))

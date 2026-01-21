@@ -448,7 +448,7 @@ function _legendre_polynomial(cos_theta, m)
         p_prev1 = cos_theta
 
         for n = 2:m
-            p_current = ((2*n - 1) * cos_theta * p_prev1 - (n - 1) * p_prev2) / n
+            p_current = ((2 * n - 1) * cos_theta * p_prev1 - (n - 1) * p_prev2) / n
             p_prev2 = p_prev1
             p_prev1 = p_current
         end

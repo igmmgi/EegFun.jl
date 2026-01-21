@@ -679,17 +679,19 @@ function average_epochs(dat::EpochData)
     try
         first_epoch = first(dat.data)
         n_timepoints = nrow(first_epoch)
-        
+
         # Verify all epochs have the same length
         for (i, epoch) in enumerate(dat.data)
             if nrow(epoch) != n_timepoints
-                @minimal_error_throw("Epoch $i has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length.")
+                @minimal_error_throw(
+                    "Epoch $i has $(nrow(epoch)) timepoints, expected $n_timepoints. All epochs must have the same length."
+                )
             end
         end
 
         # Create result DataFrame with metadata columns from first epoch
         erp = DataFrame()
-        
+
         # Copy metadata columns (time, sample, epoch, etc.) from first epoch
         metadata_cols = meta_labels(dat)
         for col in metadata_cols
@@ -697,13 +699,13 @@ function average_epochs(dat::EpochData)
                 erp[!, col] = first_epoch[!, col]
             end
         end
-        
+
         # Average EEG channels across epochs by row index
         for ch in eeg_channels
             # Stack all epochs for this channel: n_epochs × n_timepoints
             channel_matrix = hcat([epoch[!, ch] for epoch in dat.data]...)
             # Average across epochs (mean of each row = each timepoint)
-            erp[!, ch] = vec(mean(channel_matrix, dims=2))
+            erp[!, ch] = vec(mean(channel_matrix, dims = 2))
         end
 
         # Count epochs
@@ -1036,7 +1038,7 @@ Log an epochs table with message and return the DataFrame.
 Combines logging and table creation in one clean call.
 """
 function log_epochs_table(epochs...; print_table::Bool = false, kwargs...)
-    df = epochs_table(epochs...; print_table = print_table);
+    df = epochs_table(epochs...; print_table = print_table)
     table_output = sprint() do output_io
         io_context = IOContext(output_io, :displaysize => displaysize(stdout))
         pretty_table(io_context, df; alignment = [:l, :r, :l, :r, :r, :r], kwargs...)

@@ -177,7 +177,6 @@ function read_layout(file)
     df = DataFrame(CSV.File(file, types = Dict(:label => Symbol)))
     rename!(df, Symbol.(names(df)))
 
-
     return Layout(df, nothing, nothing)
 end
 
