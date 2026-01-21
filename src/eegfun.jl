@@ -101,6 +101,7 @@ include("analysis/triggers.jl")
 include("analysis/time_frequency/tf_morlet.jl")
 include("analysis/time_frequency/tf_stft.jl")
 include("analysis/time_frequency/tf_multitaper.jl")
+include("analysis/time_frequency/baseline.jl")
 include("analysis/time_frequency/utils/utils.jl")
 
 # decoding analysis via libsvm
@@ -148,6 +149,7 @@ include("plots/plot_triggers.jl")
 include("plots/plot_time_frequency.jl")
 include("plots/plot_spectrum.jl")
 include("plots/plot_filter.jl")
+include("plots/plot_gui.jl")
 
 include("analysis/decoding/plot_decoding.jl")
 include("analysis/rsa/plot_rsa.jl")
@@ -155,10 +157,9 @@ include("analysis/rsa/plot_rsa.jl")
 # Plot utilities
 include("plots/utils/help_system.jl")
 
-# Examples
-include("examples/signal_example_1.jl")
-include("examples/signal_example_2.jl")
-include("examples/plot_gui.jl")
-include("examples/simulate_erp.jl")
+# Demos
+include("demos/signal_example_1.jl")
+include("demos/signal_example_2.jl")
+include("demos/simulate_erp.jl")
 
 end # module eegfun 

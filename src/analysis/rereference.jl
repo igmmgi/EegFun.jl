@@ -9,7 +9,7 @@ Internal function that applies rereferencing to specified channels in a DataFram
 - `reference_selection::Vector{Symbol}`: Names of channels to use for reference calculation
 """
 function _apply_rereference!(dat::DataFrame, channel_selection::Vector{Symbol}, reference_selection::Vector{Symbol})
-    reference = calculate_reference(dat, reference_selection)
+    reference = _calculate_reference(dat, reference_selection)
     @views dat[!, channel_selection] .-= reference
     return nothing
 end
@@ -29,7 +29,7 @@ function _apply_rereference!(
 end
 
 """
-    calculate_reference(dat::DataFrame, reference_channels)
+    _calculate_reference(dat::DataFrame, reference_channels)
 
 Calculate reference signal from specified channels.
 
@@ -40,7 +40,7 @@ Calculate reference signal from specified channels.
 # Returns
 - Vector containing the average of specified reference channels
 """
-function calculate_reference(dat::DataFrame, reference_channels)
+function _calculate_reference(dat::DataFrame, reference_channels)
     reference = zeros(n_samples(dat))
     @inbounds for channel in reference_channels
         @views reference .+= dat[!, channel]
@@ -74,7 +74,7 @@ Apply rereferencing to EEG data types using predicate-based channel selection.
 - For EpochData, the same reference channels are used across all epochs, but the reference signal is calculated from each epoch's data
 """
 # helper function to handle special reference cases such as :avg and :mastoid
-function get_reference_channels(dat, reference_channel::Vector{Symbol})
+function _get_reference_channels(dat, reference_channel::Vector{Symbol})
     if reference_channel[1] == :none
         return Symbol[]  # No reference channels for :none
     elseif reference_channel[1] == :avg # all channels
@@ -85,8 +85,8 @@ function get_reference_channels(dat, reference_channel::Vector{Symbol})
     return reference_channel
 end
 
-function get_reference_channels(dat::EegData, reference_channel::Symbol)
-    return get_reference_channels(dat, [reference_channel])
+function _get_reference_channels(dat::EegData, reference_channel::Symbol)
+    return _get_reference_channels(dat, [reference_channel])
 end
 
 # Single method for all EEG data types
@@ -96,7 +96,7 @@ function rereference!(
     channel_selection::Function = channels(),
 )
 
-    reference_channels = get_reference_channels(dat, reference_selection)
+    reference_channels = _get_reference_channels(dat, reference_selection)
 
     # If no reference channels (e.g., :none), return early without rereferencing
     if isempty(reference_channels)

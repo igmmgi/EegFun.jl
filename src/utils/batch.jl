@@ -31,7 +31,7 @@ end
 function _extract_participant_id(filename::String)
     # Only search the filename part (without extension)
     name_without_ext, _ = splitext(filename)
-   
+
     # extract last numeric sequence from filename (e.g., "exp1a1" -> 1, "Pract6" -> 6)
     numeric_matches = collect(eachmatch(r"\d+", name_without_ext))
     if !isempty(numeric_matches)
@@ -86,18 +86,18 @@ Load data from JLD2 file, returning the data directly, a Dict of all variables, 
 - If file has multiple variables: returns a Dict with all key-value pairs
 - If file is empty: returns `nothing`
 """
-function load_data(filepath::String)::Union{EegData, Vector{<:EegData}, InfoIca, Vector{InfoIca}, Nothing}
+function load_data(filepath::String)::Union{EegData,Vector{<:EegData},InfoIca,Vector{InfoIca},Nothing}
     jldopen(filepath, "r") do file
         keys_list = collect(keys(file))
         isempty(keys_list) && return nothing
-        
+
         data = length(keys_list) == 1 ? file[keys_list[1]] : Dict(k => file[k] for k in keys_list)
         return _load_data(data)
     end
 end
 
 # Convert Vector{Any} to typed vector if all elements are the same type
-function _load_data(data::Vector{Any})::Union{Vector{<:EegData}, Vector{InfoIca}, Nothing}
+function _load_data(data::Vector{Any})::Union{Vector{<:EegData},Vector{InfoIca},Nothing}
     isempty(data) && return nothing
     T = typeof(data[1])
     (T <: EegData || T <: InfoIca) && all(x -> typeof(x) == T, data) || return nothing
@@ -105,7 +105,7 @@ function _load_data(data::Vector{Any})::Union{Vector{<:EegData}, Vector{InfoIca}
 end
 
 # Extract EegData or InfoIca from Dict
-function _load_data(data::Dict)::Union{EegData, Vector{<:EegData}, InfoIca, Vector{InfoIca}, Nothing}
+function _load_data(data::Dict)::Union{EegData,Vector{<:EegData},InfoIca,Vector{InfoIca},Nothing}
     eeg_values = EegData[]
     ica_values = InfoIca[]
     for value in values(data)
@@ -121,7 +121,7 @@ end
 
 # load_data is not a generic function for everything; 
 # we just use it for data that is saved from eegfun
-_load_data(data::Union{EegData, Vector{<:EegData}, InfoIca, Vector{InfoIca}}) = data
+_load_data(data::Union{EegData,Vector{<:EegData},InfoIca,Vector{InfoIca}}) = data
 _load_data(::Any)::Nothing = nothing
 
 # Helper to add loaded data to appropriate collection
@@ -211,8 +211,11 @@ function load_all_data(::Type{T}, files::Vector{String}, input_dir::String) wher
         @info "Loading: $file ($i/$(length(files)))"
         file_data = load_data(input_path)
         isnothing(file_data) && continue
-        file_data isa Vector{<:T} || continue
-        append!(all_data, file_data)
+        if file_data isa Vector{<:T}
+            append!(all_data, file_data)
+        elseif file_data isa T
+            push!(all_data, file_data)
+        end
     end
     return all_data
 end
@@ -378,7 +381,7 @@ function _run_batch_operation(
         result = try
             process_fn(input_path, output_path)
         catch e
-            @error "Error processing $file" exception=(e, catch_backtrace())
+            @error "Error processing $file" exception = (e, catch_backtrace())
             BatchResult(false, file, "Exception: $(sprint(showerror, e))")
         end
 

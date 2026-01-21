@@ -50,15 +50,15 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
         # Resolve relative/absolute paths
         resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
-        
+
         # Resolve input directory
         input_directory = resolve_path(cfg["files"]["input"]["directory"])
         !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
-        
+
         # Resolve output directory
         output_directory = resolve_path(cfg["files"]["output"]["directory"])
         !isdir(output_directory) && mkpath(output_directory)
-        
+
         # Resolve epoch condition file path
         epoch_condition_file = resolve_path(cfg["files"]["input"]["epoch_condition_file"])
 
@@ -72,8 +72,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
         @info "Found $(length(raw_data_files)) files: $(print_vector(basename.(raw_data_files)))"
 
         # Read the epoch conditions defined within the toml file (See XXX for examples)
-        !isfile(epoch_condition_file) &&
-            @minimal_error "File missing: $epoch_condition_file"
+        !isfile(epoch_condition_file) && @minimal_error "File missing: $epoch_condition_file"
         epoch_cfgs = condition_parse_epoch(TOML.parsefile(epoch_condition_file))
         @info "Loading/parsing epoch file: $epoch_condition_file"
 
@@ -322,7 +321,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Check if any epochs have empty data
                 empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]
                 if !isempty(empty_epochs)
-                    @eegfun.minimal_error_throw "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch window parameters and trigger locations."
+                    eegfun.@minimal_error_throw "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch window parameters and trigger locations."
                 end
 
                 #################### BASELINE WHOLE EPOCHS ##############

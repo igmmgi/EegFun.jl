@@ -1,12 +1,4 @@
 """
-Statistical test functions for EEG/ERP data analysis.
-
-This module provides functions for cluster-based permutation tests
-and analytic t-tests for EEG/ERP data.
-"""
-
-
-"""
     prepare_condition_comparison(erps::Vector{ErpData}; design::Symbol = :paired, condition_selection::Function = conditions([1, 2]), channel_selection::Function = channels(), sample_selection::Function = samples(), baseline_window::Function = samples(), analysis_window::Function = samples())
 
 Prepare ErpData for comparing two conditions in statistical tests (permutation and analytic tests).
@@ -29,7 +21,7 @@ Validates the design and ensures data consistency across conditions.
 function prepare_condition_comparison(
     erps::Vector{ErpData};
     design::Symbol = :paired,
-    condition_selection::Function = conditions([1, 2]),
+    condition_selection::Function = conditions(),
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     baseline_window::Function = samples(),
@@ -99,10 +91,8 @@ function prepare_condition_comparison(
     n_time = length(time_points)
 
     # Extract data arrays: [participants × electrodes × time]
-    condition1 =
-        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
-    condition2 =
-        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
+    condition1 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
+    condition2 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
 
     return StatisticalTestData(
         [condition1_avg, condition2_avg],
@@ -160,9 +150,6 @@ function prepare_condition_comparison(
     )
 end
 
-# ======================================
-# CLUSTER PERMUTATION TESTS
-# ======================================
 
 """
     validate_permutation_inputs(prepared::StatisticalTestData, 

@@ -5,7 +5,7 @@
 % - epochs_data.csv: Combined data with columns [trial, time, channel1, channel2, ...]
 % - epochs_metadata.csv: Metadata (fsample, labels, trialinfo, sampleinfo)
 
-function matlab_to_csv(epochs, output_dir)
+function fieldtrip_epochs_to_csv(epochs, output_dir)
 
     % Create output directory if it doesn't exist
     if ~exist(output_dir, 'dir')
@@ -23,9 +23,8 @@ function matlab_to_csv(epochs, output_dir)
     all_data = [];
     
     for trial_idx = 1:n_trials
-        % Get trial data (channels × samples)
         trial_data = epochs.trial{trial_idx};
-        time_vec = epochs.time{trial_idx};
+        time_vec = epochs.time{1}; # assume all the same
         
         % Transpose to samples × channels
         trial_data_transposed = trial_data';

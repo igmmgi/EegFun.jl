@@ -56,27 +56,28 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
         # Resolve relative paths in config relative to base_dir
         # Helper function to resolve paths
         resolve_path(path::String) = isabspath(path) ? path : joinpath(base_dir, path)
-        
+
         # Resolve input directory
         input_directory = resolve_path(cfg["files"]["input"]["directory"])
         !isdir(input_directory) && @minimal_error "Input directory does not exist: $input_directory"
-        
+
         # Resolve output directory
         output_directory = resolve_path(cfg["files"]["output"]["directory"])
         !isdir(output_directory) && mkpath(output_directory)
-        
+
         # Resolve layout file path - try resolved path first, then fall back to package layouts
         layout_file_path = resolve_path(cfg["files"]["input"]["layout_file"])
         if !isfile(layout_file_path)
             # Fall back to searching in package layouts directory
-            layout_file = find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
+            layout_file =
+                find_file(cfg["files"]["input"]["layout_file"], joinpath(@__DIR__, "..", "..", "data", "layouts"))
             if layout_file !== nothing
                 layout_file_path = layout_file
             end
         end
         !isfile(layout_file_path) && @minimal_error "Layout file not found: $layout_file_path"
         layout = read_layout(layout_file_path)
-        
+
         # Resolve epoch condition file path
         epoch_condition_file = resolve_path(cfg["files"]["input"]["epoch_condition_file"])
 
@@ -90,8 +91,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
         @info "Found $(length(raw_data_files)) files: $(print_vector(basename.(raw_data_files)))"
 
         # Read the epoch conditions defined within the toml file (See XXX for examples)
-        !isfile(epoch_condition_file) &&
-            @minimal_error "File missing: $epoch_condition_file"
+        !isfile(epoch_condition_file) && @minimal_error "File missing: $epoch_condition_file"
         epoch_cfgs = condition_parse_epoch(TOML.parsefile(epoch_condition_file))
         @info "Loading/parsing epoch file: $epoch_condition_file"
 

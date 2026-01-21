@@ -1,7 +1,3 @@
-using eegfun
-using CSV
-using DataFrames
-using Statistics
 
 """
     load_csv(data_dir::String; 
@@ -11,8 +7,7 @@ using Statistics
                       fsample::Union{Int,Nothing}=nothing) -> EpochData
 
 Load FieldTrip epochs data saved as CSV and convert to EpochData.
-
-The CSV file should be created using the MATLAB function `matlab_to_csv.m`.
+The CSV file should be created using the MATLAB function `fieldtrip_epochs_to_csv.m`.
 
 # Arguments
 - `data_dir::String`: Directory containing `epochs_data.csv`
@@ -51,7 +46,6 @@ function load_csv(
     
     # First two columns should be 'trial' and 'time'
     # CSV.read returns column names as strings, so compare with strings
-    println("hahahah")
     if length(actual_cols) < 2 || actual_cols[1] != "trial" || actual_cols[2] != "time"
         error("Expected first two columns to be 'trial' and 'time', got: $(actual_cols[1:min(2, length(actual_cols))])")
     end

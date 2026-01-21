@@ -15,7 +15,7 @@ if Base.JLOptions().code_coverage != 0
 end
 
 println("Running eegfun.jl Test Suite")
-println("=" ^ 40)
+println("="^40)
 
 @testset "eegfun" begin
 

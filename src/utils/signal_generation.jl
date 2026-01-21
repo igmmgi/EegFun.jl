@@ -76,10 +76,8 @@ end
                      file::String="synthetic", condition::Int=1, condition_name::String="test") -> Union{EpochData, ErpData}
 
 Internal function: Convert signal data from `generate_signal` to `EpochData` or `ErpData` format.
-
 Returns `ErpData` when there is only one epoch, otherwise returns `EpochData`.
 
-Used internally for testing. Not part of the public API.
 """
 function signal_to_data(
     times,

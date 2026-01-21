@@ -1,7 +1,3 @@
-# =============================================================================
-# TRIGGER CLEANING FUNCTIONS
-# =============================================================================
-
 """
     _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
 
@@ -37,9 +33,6 @@ function _clean_triggers(trigger_data::Vector{<:Integer})::Vector{<:Integer}
 
 end
 
-# =============================================================================
-# TRIGGER COUNTING FUNCTIONS
-# =============================================================================
 
 """
     trigger_count(dat::ContinuousData)::TriggerInfo
@@ -78,7 +71,10 @@ trigger_counts.data.count
 ```
 """
 function trigger_count(df::DataFrame)::TriggerInfo
-    @assert hasproperty(df, :triggers) "DataFrame must have a triggers column"
+
+    if !hasproperty(df, :triggers)
+        @minimal_error_throw "DataFrame must have a triggers column"
+    end
 
     # Check if triggers_info column exists and pass it along
     triggers_info = hasproperty(df, :triggers_info) ? df.triggers_info : nothing
@@ -90,7 +86,7 @@ trigger_count(dat::ContinuousData)::TriggerInfo = trigger_count(dat.data)
 """
     _trigger_count_impl(trigger_datasets, column_names; triggers_info=nothing)
 
-Simplified trigger counting function with optional trigger info support.
+Trigger counting function with optional trigger info support.
 
 # Arguments
 - `trigger_datasets::Vector{<:Vector{<:Integer}}`: Vector of trigger datasets to analyze
@@ -160,6 +156,8 @@ function _trigger_count_impl(
     return TriggerInfo(result_df)
 end
 
+
+# Prettier trigger display info
 function Base.show(io::IO, info::TriggerInfo)
 
     if isempty(info.data)
