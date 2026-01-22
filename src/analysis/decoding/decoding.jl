@@ -16,9 +16,8 @@ Returns arrays ready for classification.
 function _prepare_decoding_data(epochs::Vector{EpochData})
 
     channels = channel_labels(epochs)
-    times = time(epochs)
     n_channels = length(channels)
-    n_times = length(times)
+    n_times = length(time(epochs))
 
     # Prepare data arrays for each condition
     data_arrays = Vector{Array{Float64,3}}(undef, length(epochs))
@@ -65,12 +64,7 @@ This ensures balanced classification by preventing bias toward conditions with m
 - `data_arrays::Vector{Array{Float64, 3}}`: Equalized data arrays
 - `n_trials_per_condition::Vector{Int}`: Updated trial counts (all equal to minimum)
 """
-function _equalize_trials(
-    data_arrays::Vector{Array{Float64,3}},
-    n_trials_per_condition::Vector{Int},
-    n_classes::Int,
-    rng::AbstractRNG,
-)
+function _equalize_trials(data_arrays::Vector{Array{Float64,3}}, n_trials_per_condition::Vector{Int}, n_classes::Int, rng::AbstractRNG)
     min_trials = minimum(n_trials_per_condition)
     for (cond_idx, data_array) in enumerate(data_arrays)
         if size(data_array, 3) > min_trials
@@ -284,15 +278,17 @@ Create confusion matrix from true and predicted labels.
 """
 function _create_confusion_matrix(y_true::Vector{Int}, y_pred::Vector{Int}, n_classes::Int)
     length(y_true) == length(y_pred) || @minimal_error_throw("y_true and y_pred must have same length")
-    
+
     # Validate all labels are in valid range [1, n_classes]
     for (i, label) in enumerate(y_true)
-        (label < 1 || label > n_classes) && @minimal_error_throw("Invalid true label at index $i: $label (must be in range [1, $n_classes])")
+        (label < 1 || label > n_classes) &&
+            @minimal_error_throw("Invalid true label at index $i: $label (must be in range [1, $n_classes])")
     end
     for (i, label) in enumerate(y_pred)
-        (label < 1 || label > n_classes) && @minimal_error_throw("Invalid predicted label at index $i: $label (must be in range [1, $n_classes])")
+        (label < 1 || label > n_classes) &&
+            @minimal_error_throw("Invalid predicted label at index $i: $label (must be in range [1, $n_classes])")
     end
-    
+
     confusion = zeros(Int, n_classes, n_classes)
     @inbounds for (true_label, pred_label) in zip(y_true, y_pred)
         confusion[true_label, pred_label] += 1
@@ -462,12 +458,7 @@ function decode_libsvm(
     n_folds < 2 && @minimal_error_throw("Need at least 2 folds for cross-validation, got $n_folds")
 
     # Subset epochs by channel and sample selection
-    epochs = subset(
-        epochs;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        include_extra = false,
-    )
+    epochs = subset(epochs; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = false)
     isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
     isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
 
@@ -562,15 +553,8 @@ function decode_libsvm(
     stderror = vec(std(mean(all_accuracies, dims = 2), dims = 1) / sqrt(n_iterations))  # SE across iterations
 
     # Compute confusion matrices
-    confusion_matrices = _compute_confusion_matrices(
-        all_targets,
-        all_predictions,
-        n_trials_per_fold,
-        n_timepoints,
-        n_classes,
-        n_iterations,
-        n_folds,
-    )
+    confusion_matrices =
+        _compute_confusion_matrices(all_targets, all_predictions, n_trials_per_fold, n_timepoints, n_classes, n_iterations, n_folds)
 
     parameters = DecodingParameters(
         1.0 / n_classes,  # chance_level
@@ -627,8 +611,7 @@ function grand_average(dat::Vector{DecodedData})
     # TODO: should we check for this? warning vs. error?
     for decoded in dat[2:end]
         decoded.times != first_times && @minimal_error_throw("DecodedData objects have inconsistent time vectors")
-        decoded.condition_names != first_condition_names &&
-            @minimal_error_throw("DecodedData objects have inconsistent condition names")
+        decoded.condition_names != first_condition_names && @minimal_error_throw("DecodedData objects have inconsistent condition names")
         decoded.channels != first_channels && @minimal_error_throw("DecodedData objects have inconsistent channels")
         decoded.parameters.n_classes != first_params.n_classes && @minimal_error_throw(
             "DecodedData objects have inconsistent number of classes: $(first_params.n_classes) vs $(decoded.parameters.n_classes)"
