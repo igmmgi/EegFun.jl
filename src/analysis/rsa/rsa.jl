@@ -169,9 +169,7 @@ function _compute_dissimilarity(
             return sqrt(sum(diff .^ 2))
         end
     else
-        @minimal_error_throw(
-            "Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis"
-        )
+        @minimal_error_throw("Unknown dissimilarity measure: $measure. Use :correlation, :spearman, :euclidean, or :mahalanobis")
     end
 end
 
@@ -380,58 +378,29 @@ function rsa(
     average_trials::Bool = true,
     normalize_method::Symbol = :none,
 )
-    # Input validations
-    if isempty(epochs)
-        @minimal_error_throw("Cannot perform RSA with empty epochs vector")
-    end
+    # Prepare and validate data using shared helper
+    data_arrays, times, n_trials_per_condition, condition_names, selected_channels, first_epoch =
+        _prepare_and_validate_rsa(epochs, channel_selection, sample_selection)
 
-    if length(epochs) < 2
-        @minimal_error_throw("Need at least 2 conditions for RSA, got $(length(epochs))")
-    end
-
-    # Subset epochs by channel and sample selection
-    epochs = subset(
-        epochs;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        include_extra = false,
-    )
-    isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
-    isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
-
-    # Prepare data from subsetted epochs
-    data_arrays, times, n_trials_per_condition = _prepare_rsa_data(epochs)
-    n_conditions = length(epochs)
+    n_conditions = length(condition_names)
     n_timepoints = length(times)
-
-    # Get metadata from first epoch
-    first_epoch = epochs[1]
-    condition_names = [e.condition_name for e in epochs]
-    selected_channels = channel_labels(epochs)
 
     # Preallocate RDM array: [time × condition × condition]
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
     # Compute RDM at each time point
     for t = 1:n_timepoints
-        # Compute pooled covariance if using Mahalanobis distance
-        pooled_cov = nothing
-        if dissimilarity_measure == :mahalanobis
-            pooled_cov = _compute_pooled_covariance(data_arrays, t)
-        end
-
         if average_trials
-            # Average across trials first, then compute RDM
-            condition_patterns = Matrix{Float64}[]
-            for (cond_idx, cond_data) in enumerate(data_arrays)
-                # Extract [channels × trials] at time t
-                timepoint_data = cond_data[:, t, :]  # [channels × trials]
-                # Average across trials: [channels]
-                avg_pattern = vec(mean(timepoint_data, dims = 2))
-                push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
-            end
-            rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure; covariance_matrix = pooled_cov)
+            # Use shared helper to compute RDMs from data
+            rdms = _compute_rdms_from_data(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+            break # _compute_rdms_from_data handles the loop
         else
+            # Compute pooled covariance if using Mahalanobis distance
+            pooled_cov = nothing
+            if dissimilarity_measure == :mahalanobis
+                pooled_cov = _compute_pooled_covariance(data_arrays, t)
+            end
+
             # Compute RDM for each trial, then average RDMs
             # This approach is more robust to noise and outliers
             n_trials = minimum(n_trials_per_condition)
@@ -466,12 +435,8 @@ function rsa(
         end
     end
 
-    # Apply normalization if requested
-    if normalize_method != :none
-        for t = 1:n_timepoints
-            rdms[t, :, :] = normalize_rdm(rdms[t, :, :]; method = normalize_method)
-        end
-    end
+    # Apply normalization if requested using shared helper
+    _normalize_rdms!(rdms, normalize_method)
 
     # Create RsaData object
     rsa_result = RsaData(
@@ -483,6 +448,7 @@ function rsa(
         selected_channels,
         first_epoch.layout,
         first_epoch.sample_rate,
+        # Default analysis_info if not present
         analysis_info = first_epoch.analysis_info,
     )
 
@@ -606,113 +572,18 @@ function compare_models(
     n_conditions = length(rsa_data.condition_names)
     n_times = length(rsa_data.times)
 
-    # Determine which models are static vs temporal
-    is_temporal = Bool[]
-    for (idx, model_rdm) in enumerate(model_rdms)
-        if isa(model_rdm, Array{Float64,3})
-            # Temporal model: [time × condition × condition]
-            if size(model_rdm, 1) != n_times
-                @minimal_error_throw(
-                    "Temporal model RDM $idx has $(size(model_rdm, 1)) timepoints, " *
-                    "expected $n_times to match neural data"
-                )
-            end
-            if size(model_rdm, 2) != n_conditions || size(model_rdm, 3) != n_conditions
-                @minimal_error_throw(
-                    "Temporal model RDM $idx has condition dimensions $(size(model_rdm, 2))×$(size(model_rdm, 3)), " *
-                    "expected $n_conditions×$n_conditions"
-                )
-            end
-            push!(is_temporal, true)
-        elseif isa(model_rdm, Matrix{Float64})
-            # Static model: [condition × condition]
-            if size(model_rdm) != (n_conditions, n_conditions)
-                @minimal_error_throw(
-                    "Static model RDM $idx has size $(size(model_rdm)), " * "expected ($n_conditions, $n_conditions)"
-                )
-            end
-            if !issymmetric(model_rdm)
-                @minimal_warning "Static model RDM $idx is not symmetric, symmetrizing"
-                model_rdms[idx] = (model_rdm + model_rdm') / 2
-            end
-            push!(is_temporal, false)
-        else
-            @minimal_error_throw(
-                "Model RDM $idx has unsupported type $(typeof(model_rdm)). " *
-                "Expected Matrix{Float64} (static) or Array{Float64, 3} (temporal)"
-            )
-        end
-    end
+    # Validate model RDMs and determine which are temporal
+    is_temporal = _validate_model_rdms(model_rdms, n_conditions, n_times)
 
     # Generate model names if not provided
     if isnothing(model_names)
         model_names = ["Model$(i)" for i = 1:n_models]
     elseif length(model_names) != n_models
-        @minimal_error_throw(
-            "Number of model names ($(length(model_names))) doesn't match number of models ($n_models)"
-        )
-    end
-
-    # Preallocate correlation and p-value arrays
-    correlations = zeros(Float64, n_times, n_models)
-    p_values = n_permutations > 0 ? zeros(Float64, n_times, n_models) : nothing
-
-    # Extract upper triangular (excluding diagonal) for correlation
-    function extract_upper_triangular(rdm::Matrix{Float64})
-        n = size(rdm, 1)
-        triu_indices = [CartesianIndex(i, j) for i = 1:n for j = (i+1):n]
-        return [rdm[idx] for idx in triu_indices]
+        @minimal_error_throw("Number of model names ($(length(model_names))) doesn't match number of models ($n_models)")
     end
 
     # Compute correlations at each time point
-    for t = 1:n_times
-        neural_rdm = rsa_data.rdm[t, :, :]
-        neural_vec = extract_upper_triangular(neural_rdm)
-
-        for (model_idx, model_rdm) in enumerate(model_rdms)
-            # Get model RDM for this time point
-            if is_temporal[model_idx]
-                # Temporal model: extract RDM at time t
-                model_rdm_t = model_rdm[t, :, :]
-                # Symmetrize if needed
-                if !issymmetric(model_rdm_t)
-                    model_rdm_t = (model_rdm_t + model_rdm_t') / 2
-                end
-            else
-                # Static model: use same RDM at all time points
-                model_rdm_t = model_rdm
-            end
-
-            model_vec = extract_upper_triangular(model_rdm_t)
-
-            # Compute correlation
-            if correlation_type == :spearman
-                corr = StatsBase.corspearman(neural_vec, model_vec)
-            elseif correlation_type == :pearson
-                corr = cor(neural_vec, model_vec)
-            else
-                @minimal_error_throw("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
-            end
-
-            correlations[t, model_idx] = corr
-
-            # Permutation test if requested
-            if n_permutations > 0
-                permuted_corrs = zeros(Float64, n_permutations)
-                for perm_idx = 1:n_permutations
-                    shuffled_model = shuffle(rng, model_vec)
-                    if correlation_type == :spearman
-                        permuted_corrs[perm_idx] = StatsBase.corspearman(neural_vec, shuffled_model)
-                    else
-                        permuted_corrs[perm_idx] = cor(neural_vec, shuffled_model)
-                    end
-                end
-                # Two-tailed p-value
-                p_val = sum(abs.(permuted_corrs) .>= abs(corr)) / n_permutations
-                p_values[t, model_idx] = p_val
-            end
-        end
-    end
+    correlations, p_values = _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations, rng)
 
     # Update RsaData
     rsa_data.model_correlations = correlations
@@ -767,9 +638,7 @@ function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bo
 
     for (idx, rsa_data) in enumerate(rsa_data_list)
         if length(rsa_data.condition_names) != n_conditions
-            @minimal_error_throw(
-                "RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions"
-            )
+            @minimal_error_throw("RSA data $idx has $(length(rsa_data.condition_names)) conditions, expected $n_conditions")
         end
         if length(rsa_data.times) != n_times
             @minimal_error_throw("RSA data $idx has $(length(rsa_data.times)) time points, expected $n_times")
@@ -804,11 +673,241 @@ function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bo
         first_rsa.dissimilarity_measure,
         first_rsa.channels,
         first_rsa.layout,
-        first_rsa.sample_rate,
+        first_rsa.sample_rate;
         noise_ceiling = noise_ceiling,
         analysis_info = first_rsa.analysis_info,
     )
 
     return grand_rsa
+end
+
+# ==============================================================================
+#   INTERNAL HELPERS
+# ==============================================================================
+
+"""
+    _validate_model_rdms(model_rdms, n_conditions, n_times)
+
+Validate dimensions and types of model RDMs. Returns a vector of booleans
+indicating whether each model is temporal.
+"""
+function _validate_model_rdms(model_rdms, n_conditions, n_times)
+    is_temporal = Bool[]
+    for (idx, model_rdm) in enumerate(model_rdms)
+        if isa(model_rdm, Array{Float64,3})
+            # Temporal model: [time × condition × condition]
+            if size(model_rdm, 1) != n_times
+                @minimal_error_throw(
+                    "Temporal model RDM $idx has $(size(model_rdm, 1)) timepoints, " * "expected $n_times to match neural data"
+                )
+            end
+            if size(model_rdm, 2) != n_conditions || size(model_rdm, 3) != n_conditions
+                @minimal_error_throw(
+                    "Temporal model RDM $idx has condition dimensions $(size(model_rdm, 2))×$(size(model_rdm, 3)), " *
+                    "expected $n_conditions×$n_conditions"
+                )
+            end
+            push!(is_temporal, true)
+        elseif isa(model_rdm, Matrix{Float64})
+            # Static model: [condition × condition]
+            if size(model_rdm) != (n_conditions, n_conditions)
+                @minimal_error_throw("Static model RDM $idx has size $(size(model_rdm)), " * "expected ($n_conditions, $n_conditions)")
+            end
+            if !issymmetric(model_rdm)
+                @minimal_warning "Static model RDM $idx is not symmetric, symmetrizing"
+                model_rdms[idx] = (model_rdm + model_rdm') / 2
+            end
+            push!(is_temporal, false)
+        else
+            @minimal_error_throw(
+                "Model RDM $idx has unsupported type $(typeof(model_rdm)). " *
+                "Expected Matrix{Float64} (static) or Array{Float64, 3} (temporal)"
+            )
+        end
+    end
+    return is_temporal
+end
+
+"""
+    _compute_model_correlations(rsa_data, model_rdms, is_temporal, correlation_type, n_permutations, rng)
+
+Compute correlations between neural RDMs and model RDMs across time.
+"""
+function _compute_model_correlations(
+    rsa_data::RsaData,
+    model_rdms,
+    is_temporal::Vector{Bool},
+    correlation_type::Symbol,
+    n_permutations::Int,
+    rng::AbstractRNG,
+)
+    n_times = length(rsa_data.times)
+    n_models = length(model_rdms)
+
+    correlations = zeros(Float64, n_times, n_models)
+    p_values = n_permutations > 0 ? zeros(Float64, n_times, n_models) : nothing
+
+    for t = 1:n_times
+        neural_rdm = rsa_data.rdm[t, :, :]
+        neural_vec = _extract_upper_triangular(neural_rdm)
+
+        for (model_idx, model_rdm) in enumerate(model_rdms)
+            # Get model RDM for this time point
+            if is_temporal[model_idx]
+                model_rdm_t = model_rdm[t, :, :]
+                if !issymmetric(model_rdm_t)
+                    model_rdm_t = (model_rdm_t + model_rdm_t') / 2
+                end
+            else
+                model_rdm_t = model_rdm
+            end
+
+            model_vec = _extract_upper_triangular(model_rdm_t)
+
+            # Compute correlation
+            corr = _correlate_vectors(neural_vec, model_vec, correlation_type)
+            correlations[t, model_idx] = corr
+
+            # Permutation test if requested
+            if n_permutations > 0
+                p_values[t, model_idx] = _run_model_permutations(neural_vec, model_vec, corr, correlation_type, n_permutations, rng)
+            end
+        end
+    end
+
+    return correlations, p_values
+end
+
+"""
+    _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations, rng)
+
+Perform permutation testing for model correlations.
+"""
+function _run_model_permutations(neural_vec, model_vec, observed_corr, correlation_type, n_permutations, rng)
+    permuted_corrs = zeros(Float64, n_permutations)
+    for perm_idx = 1:n_permutations
+        shuffled_model = shuffle(rng, model_vec)
+        permuted_corrs[perm_idx] = _correlate_vectors(neural_vec, shuffled_model, correlation_type)
+    end
+    # Two-tailed p-value
+    return sum(abs.(permuted_corrs) .>= abs(observed_corr)) / n_permutations
+end
+
+"""
+    _correlate_vectors(vec1, vec2, correlation_type)
+
+Helper to compute correlation between two vectors.
+"""
+function _correlate_vectors(vec1, vec2, correlation_type)
+    if correlation_type == :spearman
+        return StatsBase.corspearman(vec1, vec2)
+    elseif correlation_type == :pearson
+        return cor(vec1, vec2)
+    else
+        @minimal_error_throw("Unknown correlation type: $correlation_type. Use :spearman or :pearson")
+    end
+end
+
+"""
+    _extract_upper_triangular(rdm::Matrix{Float64})
+
+Extract upper triangular values (excluding diagonal) from an RDM.
+"""
+function _extract_upper_triangular(rdm::Matrix{Float64})
+    n = size(rdm, 1)
+    triu_indices = [CartesianIndex(i, j) for i = 1:n for j = (i+1):n]
+    return [rdm[idx] for idx in triu_indices]
+end
+
+"""
+    _prepare_and_validate_rsa(epochs, channel_selection, sample_selection)
+
+Shared data preparation and validation for RSA modules.
+"""
+function _prepare_and_validate_rsa(epochs, channel_selection, sample_selection)
+    # Input validations
+    if isempty(epochs)
+        @minimal_error_throw("Cannot perform RSA with empty epochs vector")
+    end
+
+    if length(epochs) < 2
+        @minimal_error_throw("Need at least 2 conditions for RSA, got $(length(epochs))")
+    end
+
+    # Subset epochs by channel and sample selection
+    epochs_subset = subset(epochs; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = false)
+
+    if isempty(epochs_subset) || isempty(channel_labels(epochs_subset[1]))
+        @minimal_error_throw("Channel selection produced no channels")
+    end
+
+    if isempty(epochs_subset[1].data) || isempty(epochs_subset[1].data[1][!, :time])
+        @minimal_error_throw("Sample selection produced no time points")
+    end
+
+    # Prepare data from subsetted epochs
+    data_arrays, times, n_trials_per_condition = _prepare_rsa_data(epochs_subset)
+
+    # Metadata extraction
+    first_epoch = epochs_subset[1]
+    condition_names = [e.condition_name for e in epochs_subset]
+    selected_channels = channel_labels(epochs_subset)
+
+    return data_arrays, times, n_trials_per_condition, condition_names, selected_channels, first_epoch
+end
+
+"""
+    _normalize_rdms!(rdms, method)
+
+In-place normalization of an RDM array [time × condition × condition].
+"""
+function _normalize_rdms!(rdms::Array{Float64,3}, method::Symbol)
+    if method == :none
+        return rdms
+    end
+
+    n_times = size(rdms, 1)
+    for t = 1:n_times
+        rdms[t, :, :] = normalize_rdm(rdms[t, :, :]; method = method)
+    end
+    return rdms
+end
+
+"""
+    _compute_rdms_from_data(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+
+Compute RDMs at each time point from data arrays [channels × time × trials].
+
+This is a shared helper used by both `rsa()` and `rsa_crossvalidated()`.
+"""
+function _compute_rdms_from_data(
+    data_arrays::Vector{Array{Float64,3}},
+    n_timepoints::Int,
+    n_conditions::Int,
+    selected_channels::Vector{Symbol},
+    dissimilarity_measure::Symbol,
+)
+    rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
+
+    for t = 1:n_timepoints
+        # Compute pooled covariance if using Mahalanobis distance
+        pooled_cov = nothing
+        if dissimilarity_measure == :mahalanobis
+            pooled_cov = _compute_pooled_covariance(data_arrays, t)
+        end
+
+        # Average across trials first, then compute RDM
+        condition_patterns = Matrix{Float64}[]
+        for cond_data in data_arrays
+            # Extract [channels × trials] at time t
+            timepoint_data = cond_data[:, t, :]  # [channels × trials]
+            # Average across trials: [channels]
+            avg_pattern = vec(mean(timepoint_data, dims = 2))
+            push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
+        end
+        rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure; covariance_matrix = pooled_cov)
+    end
+
+    return rdms
 end
 

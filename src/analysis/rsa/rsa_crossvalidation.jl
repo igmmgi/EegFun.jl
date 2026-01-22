@@ -95,28 +95,11 @@ function rsa_crossvalidated(
     normalize_method::Symbol = :none,
     rng::AbstractRNG = Random.GLOBAL_RNG,
 )
-    # Input validations
-    if isempty(epochs)
-        @minimal_error_throw("Cannot perform cross-validated RSA with empty epochs vector")
-    end
+    # Prepare and validate data using shared helper
+    data_arrays, times, n_trials_per_condition, condition_names, selected_channels, first_epoch =
+        _prepare_and_validate_rsa(epochs, channel_selection, sample_selection)
 
-    if length(epochs) < 2
-        @minimal_error_throw("Need at least 2 conditions for RSA, got $(length(epochs))")
-    end
-
-    # Subset epochs by channel and sample selection
-    epochs = subset(
-        epochs;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        include_extra = false,
-    )
-    isempty(channel_labels(epochs[1])) && @minimal_error_throw("Channel selection produced no channels")
-    isempty(epochs[1].data[1][!, :time]) && @minimal_error_throw("Sample selection produced no time points")
-
-    # Prepare data from subsetted epochs
-    data_arrays, times, n_trials_per_condition = _prepare_rsa_data(epochs)
-    n_conditions = length(epochs)
+    n_conditions = length(condition_names)
     n_timepoints = length(times)
 
     # Check minimum trials
@@ -129,40 +112,22 @@ function rsa_crossvalidated(
         @minimal_error_throw("K-fold CV requires at least $n_folds trials per condition, got $min_trials")
     end
 
-    # Get metadata
-    first_epoch = epochs[1]
-    condition_names = [e.condition_name for e in epochs]
-    selected_channels = channel_labels(epochs)
-
     # Preallocate RDM array
     rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
 
     # Compute cross-validated RDMs based on method
     if cv_method == :splithalf
-        rdms = _cv_splithalf(
-            data_arrays,
-            n_timepoints,
-            n_conditions,
-            selected_channels,
-            dissimilarity_measure,
-            n_iterations,
-            rng,
-        )
+        rdms = _cv_splithalf(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_iterations, rng)
     elseif cv_method == :leaveoneout
         rdms = _cv_leaveoneout(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
     elseif cv_method == :kfold
-        rdms =
-            _cv_kfold(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_folds, rng)
+        rdms = _cv_kfold(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure, n_folds, rng)
     else
         @minimal_error_throw("Unknown CV method: $cv_method. Use :splithalf, :leaveoneout, or :kfold")
     end
 
-    # Apply normalization if requested
-    if normalize_method != :none
-        for t = 1:n_timepoints
-            rdms[t, :, :] = normalize_rdm(rdms[t, :, :]; method = normalize_method)
-        end
-    end
+    # Apply normalization using shared helper
+    _normalize_rdms!(rdms, normalize_method)
 
     # Create RsaData object
     rsa_result = RsaData(
@@ -174,6 +139,7 @@ function rsa_crossvalidated(
         selected_channels,
         first_epoch.layout,
         first_epoch.sample_rate,
+        # Default analysis_info if not present
         analysis_info = first_epoch.analysis_info,
     )
 
@@ -219,10 +185,8 @@ function _cv_splithalf(
         end
 
         # Compute RDMs for each half
-        rdm_half1 =
-            _compute_rdms_from_data(half1_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
-        rdm_half2 =
-            _compute_rdms_from_data(half2_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+        rdm_half1 = _compute_rdms_from_data(half1_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+        rdm_half2 = _compute_rdms_from_data(half2_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
 
         # Average the two halves
         rdms_sum .+= (rdm_half1 .+ rdm_half2) ./ 2
@@ -264,8 +228,7 @@ function _cv_leaveoneout(
         end
 
         # Compute RDM without this trial
-        rdm_loo =
-            _compute_rdms_from_data(loo_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+        rdm_loo = _compute_rdms_from_data(loo_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
         rdms_sum .+= rdm_loo
     end
 
@@ -311,8 +274,7 @@ function _cv_kfold(
         end
 
         # Compute RDM for this fold
-        rdm_fold =
-            _compute_rdms_from_data(fold_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
+        rdm_fold = _compute_rdms_from_data(fold_data, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
         rdms_sum .+= rdm_fold
     end
 
@@ -320,38 +282,4 @@ function _cv_kfold(
     return rdms_sum ./ n_folds
 end
 
-"""
-    _compute_rdms_from_data(data_arrays, n_timepoints, n_conditions, selected_channels, dissimilarity_measure)
-
-Helper function to compute RDMs from data arrays.
-"""
-function _compute_rdms_from_data(
-    data_arrays::Vector{Array{Float64,3}},
-    n_timepoints::Int,
-    n_conditions::Int,
-    selected_channels::Vector{Symbol},
-    dissimilarity_measure::Symbol,
-)
-    rdms = zeros(Float64, n_timepoints, n_conditions, n_conditions)
-
-    for t = 1:n_timepoints
-        # Compute pooled covariance if using Mahalanobis distance
-        pooled_cov = nothing
-        if dissimilarity_measure == :mahalanobis
-            pooled_cov = _compute_pooled_covariance(data_arrays, t)
-        end
-
-        # Average across trials first, then compute RDM
-        condition_patterns = Matrix{Float64}[]
-        for cond_data in data_arrays
-            # Extract [channels × trials] at time t
-            timepoint_data = cond_data[:, t, :]  # [channels × trials]
-            # Average across trials: [channels]
-            avg_pattern = vec(mean(timepoint_data, dims = 2))
-            push!(condition_patterns, reshape(avg_pattern, length(selected_channels), 1))
-        end
-        rdms[t, :, :] = _compute_rdm(condition_patterns, dissimilarity_measure; covariance_matrix = pooled_cov)
-    end
-
-    return rdms
-end
+# Helper function is now shared in rsa.jl
