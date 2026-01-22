@@ -206,7 +206,7 @@ end
 # =============================================================================
 
 """
-    _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::Function = filtfilt)
+    _apply_filter!(dat::DataFrame, channels::Vector{Symbol}, filter; filter_func::String = "filtfilt")
 
 Internal helper function to apply a digital filter to specified columns in a DataFrame.
 Modifies the data in place.
@@ -215,7 +215,7 @@ Modifies the data in place.
 - `dat::DataFrame`: DataFrame containing the data to filter
 - `channels::Vector{Symbol}`: Vector of column names to filter
 - `filter`: Digital filter object to apply (can be DSP.jl filter or FilterInfo)
-- `filter_func::Function`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
+- `filter_func::String`: Filtering function to use (default: "filtfilt" for two-pass filtering, or "filt" for one-pass filtering)
 """
 function _apply_filter!(
     dat::DataFrame,
@@ -387,16 +387,12 @@ A NamedTuple containing:
 - `stopband_atten`: Mean attenuation in stopband in dB
 - `phase_delay`: Mean phase delay in passband (samples)
 - `group_delay`: Mean group delay in passband (samples)
-- `transition_width`: Width of transition band in Hz
+- `transition_band`: Width of transition band in Hz
 - `filter_type`: Detected filter type ("hp" or "lp")
 """
 function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000)
-    # Calculate transition_width from transition_band and cutoff_freq
-    transition_width = filter_info.transition_band / filter_info.cutoff_freq
-
     # Calculate frequency response
     freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = npoints))  # log spacing
-    # freqs = range(0, sample_rate/2, length=npoints) # linear spacing
     w = 2π * freqs / filter_info.sample_rate
 
     # Get frequency response based on filter type
@@ -444,17 +440,13 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
     # Use -3dB points for filter type detection and other calculations
     cutoff_freq = cutoff_freq_3db
 
-    # Determine filter type based on response shape
-    start_response = mag_db[2]  # Use second point to avoid DC issues
-    end_response = mag_db[end]
-
     # Determine filter type and masks
     if filter_info.filter_type == "lp"
         passband_mask = freqs .<= cutoff_freq[1]
-        stopband_mask = freqs .>= (cutoff_freq[1] + transition_width)
+        stopband_mask = freqs .>= (cutoff_freq[1] + filter_info.transition_band)
     else  # highpass
         passband_mask = freqs .>= cutoff_freq[1]
-        stopband_mask = freqs .<= (cutoff_freq[1] - transition_width)
+        stopband_mask = freqs .<= (cutoff_freq[1] - filter_info.transition_band)
     end
 
     # Calculate passband ripple and stopband attenuation
@@ -476,7 +468,7 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
         stopband_atten = stopband_atten,
         phase_delay = mean(phase_delay[passband_mask]),
         group_delay = mean(group_delay[passband_mask[1:(end-1)]]),
-        transition_width = transition_width,
+        transition_band = filter_info.transition_band,
         filter_type = filter_info.filter_type,
     )
 end
@@ -493,7 +485,7 @@ function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 10
     @info "--------------------------------------------------------------------------------"
     @info "Filter Characteristics: $(uppercase(chars.filter_type)) $(filter_info.cutoff_freq) Hz"
     @info "Cutoff: -3 dB = $(round.(chars.cutoff_freq_3db, digits=2)) Hz, -6 dB = $(round.(chars.cutoff_freq_6db, digits=2)) Hz"
-    @info "Transition width: $(round(chars.transition_width, digits=1)) Hz"
+    @info "Transition band: $(round(chars.transition_band, digits=1)) Hz"
     @info "Stopband attenuation: $(round(chars.stopband_atten, digits=1)) dB"
     @info "Single-pass characteristics: Group delay = $(round(chars.group_delay * 1000/filter_info.sample_rate, digits=1)) ms, Phase delay = $(round(chars.phase_delay * 1000/filter_info.sample_rate, digits=1)) ms "
 
