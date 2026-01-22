@@ -43,20 +43,20 @@ function load_csv(
 
     # Column names: trial, time, channel1, channel2, ...
     actual_cols = names(all_data)
-    
+
     # First two columns should be 'trial' and 'time'
     # CSV.read returns column names as strings, so compare with strings
     if length(actual_cols) < 2 || actual_cols[1] != "trial" || actual_cols[2] != "time"
         error("Expected first two columns to be 'trial' and 'time', got: $(actual_cols[1:min(2, length(actual_cols))])")
     end
-    
+
     channel_labels = [Symbol(col) for col in actual_cols[3:end]]
     n_trials = length(unique(all_data.trial))
-    
+
     # Estimate sample rate from time column if not provided
     if isnothing(fsample)
         # Get time differences for first trial
-        trial1_data = Base.filter(row -> row.trial == 1, all_data)
+        trial1_data = filter(row -> row.trial == 1, all_data)
         if length(trial1_data.time) > 1
             time_diffs = diff(sort(trial1_data.time))
             # Most common time difference should be 1/fsample
@@ -69,7 +69,11 @@ function load_csv(
     end
 
     # Create layout
-    layout_df = DataFrame(:label => channel_labels, :inc => zeros(length(channel_labels)), :azi => zeros(length(channel_labels)))
+    layout_df = DataFrame(
+        :label => channel_labels,
+        :inc => zeros(length(channel_labels)),
+        :azi => zeros(length(channel_labels)),
+    )
     layout = eegfun.Layout(layout_df, nothing, nothing)
 
     # Create AnalysisInfo
@@ -79,7 +83,7 @@ function load_csv(
     trial_dfs = Vector{DataFrame}(undef, n_trials)
     for trial_idx = 1:n_trials
         # Filter data for this trial
-        trial_data = Base.filter(row -> row.trial == trial_idx, all_data)
+        trial_data = filter(row -> row.trial == trial_idx, all_data)
 
         # Create DataFrame with time and channel columns
         trial_df = DataFrame(:time => trial_data.time, :epoch => fill(trial_idx, nrow(trial_data)))

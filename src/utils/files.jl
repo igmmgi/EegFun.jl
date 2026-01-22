@@ -13,7 +13,7 @@ end
 
 function get_files(directory::String, files::String)
     # replace common wildcard with regex syntax
-    matching_files = Base.filter(f -> occursin(Regex(files), f), readdir(directory))
+    matching_files = filter(f -> occursin(Regex(files), f), readdir(directory))
     # Natural order: "file_10" comes after "file_3"
     sorted_files = sort(matching_files, by = x -> (natural_sort_key(x), x))
     return [joinpath(directory, file) for file in sorted_files]

@@ -1306,7 +1306,7 @@ function identify_eog_components(
 
     # Calculate vEOG/hEOG step2: lagged correlations with primary vEOG/hEOG components
     # Create low-pass filter for component time series (EOG artifacts are typically < 15 Hz)
-    lp_filter = create_filter("lp", "iir", 10.0, dat.sample_rate; order = 3)
+    lp_filter = create_lowpass_filter(10.0, dat.sample_rate; order = 3)
 
     # Lag range: +- 100ms  
     # Convert to samples based on sample rate

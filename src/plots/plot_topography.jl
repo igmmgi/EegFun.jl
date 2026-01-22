@@ -31,7 +31,16 @@ function _plot_topography!(fig::Figure, ax::Axis, dat::DataFrame, layout::Layout
 
     # Compute interpolated data
     channel_data = mean.(eachcol(dat[!, layout.data.label]))
-    supported_methods = [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    supported_methods = [
+        :multiquadratic,
+        :inverse_multiquadratic,
+        :gaussian,
+        :inverse_quadratic,
+        :thin_plate,
+        :polyharmonic,
+        :shepard,
+        :nearest,
+    ]
     if method ∈ supported_methods
         data = _data_interpolation_topo(channel_data, layout, gridscale; method = method)
     elseif method == :spherical_spline
@@ -416,7 +425,12 @@ https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/
 # Returns
 - `Matrix{Float64}`: Interpolated data on a regular grid
 """
-function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, grid_scale::Int; method::Symbol=:thin_plate)
+function _data_interpolation_topo(
+    dat::Vector{<:AbstractFloat},
+    layout::Layout,
+    grid_scale::Int;
+    method::Symbol = :thin_plate,
+)
 
     if any(isnan, dat) || any(isinf, dat)
         throw(ArgumentError("Input data contains NaN or Inf values"))
@@ -439,7 +453,16 @@ function _data_interpolation_topo(dat::Vector{<:AbstractFloat}, layout::Layout, 
     end
 
     # Select radial basis function type or interpolation method
-    supported_methods = [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    supported_methods = [
+        :multiquadratic,
+        :inverse_multiquadratic,
+        :gaussian,
+        :inverse_quadratic,
+        :thin_plate,
+        :polyharmonic,
+        :shepard,
+        :nearest,
+    ]
     method = if method == :multiquadratic
         ScatteredInterpolation.Multiquadratic()
     elseif method == :inverse_multiquadratic
@@ -1099,7 +1122,7 @@ This approach uses the real layout data from the topographic plot.
 function _find_electrodes_in_region(x_min::Float64, y_min::Float64, x_max::Float64, y_max::Float64, original_data)
     # Filter electrodes that are inside the selection rectangle
     selected_rows =
-        Base.filter(row -> x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max, eachrow(original_data.layout.data))
+        filter(row -> x_min <= row.x2 <= x_max && y_min <= row.y2 <= y_max, eachrow(original_data.layout.data))
     return [Symbol(row.label) for row in selected_rows]
 end
 

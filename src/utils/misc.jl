@@ -170,13 +170,13 @@ indices, times = find_times(time_vec, requested)
 # times = [0.0, 0.01, 0.02]
 ```
 """
-function find_times(time::AbstractVector, requested_times::AbstractVector)::Tuple{Vector{Int}, Vector{Float64}}
+function find_times(time::AbstractVector, requested_times::AbstractVector)::Tuple{Vector{Int},Vector{Float64}}
     time_min = minimum(time)
     time_max = maximum(time)
-    
+
     indices = Int[]
     times_out = Float64[]
-    
+
     for t_requested in requested_times
         # Only include if within data range
         if t_requested >= time_min && t_requested <= time_max
@@ -187,7 +187,7 @@ function find_times(time::AbstractVector, requested_times::AbstractVector)::Tupl
                 idx = idx - 1
             end
             idx = min(idx, length(time))  # Ensure within bounds
-            
+
             # Avoid duplicates
             if isempty(indices) || indices[end] != idx
                 push!(indices, idx)
@@ -195,7 +195,7 @@ function find_times(time::AbstractVector, requested_times::AbstractVector)::Tupl
             end
         end
     end
-    
+
     return indices, times_out
 end
 
@@ -248,7 +248,7 @@ extract_int("no_numbers_here")   # Returns: nothing
 ```
 """
 function extract_int(s::String)::Union{Int,Nothing}
-    digits_only = Base.filter(isdigit, s)
+    digits_only = filter(isdigit, s)
     return isempty(digits_only) ? nothing : parse(Int, digits_only)
 end
 
@@ -445,7 +445,7 @@ function parse_string_to_ints(text::String)
     end
 
     # Split by comma or semicolon and filter empty parts
-    parts = Base.filter(!isempty, strip.(split(text, r"[,;]")))
+    parts = filter(!isempty, strip.(split(text, r"[,;]")))
 
     # Filter non-numeric parts (except :) and warn
     numeric_parts = []

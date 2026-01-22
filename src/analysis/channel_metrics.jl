@@ -428,7 +428,7 @@ add_zscore_columns!(cm, [:row, :channel_name])
 """
 function add_zscore_columns!(df::DataFrame, exclude_columns::Vector{Symbol} = [:row])
     # Get numeric columns (excluding specified columns)
-    numeric_columns = Base.filter(col -> eltype(df[!, col]) <: Number && !(col in exclude_columns), names(df))
+    numeric_columns = filter(col -> eltype(df[!, col]) <: Number && !(col in exclude_columns), names(df))
 
     if isempty(numeric_columns)
         @minimal_error "No numeric columns found for z-score calculation"
@@ -571,7 +571,7 @@ function identify_bad_channels(
 )::Vector{Symbol}
 
     # Identify bad channels based on z-variance criterion
-    bad_by_zvar = summary_df[abs.(summary_df.zvar) .> zvar_criterion, :channel]
+    bad_by_zvar = summary_df[abs.(summary_df.zvar).>zvar_criterion, :channel]
 
     # Identify bad channels based on joint probability criterion
     bad_by_jp = joint_prob_df[joint_prob_df.rejection, :channel]
@@ -620,7 +620,7 @@ function partition_channels_by_eog_correlation(
 
     eog_related = Symbol[]
     for ch in bad_channels
-        rows = eog_correlation_df[eog_correlation_df.row .== ch, :]
+        rows = eog_correlation_df[eog_correlation_df.row.==ch, :]
         if nrow(rows) > 0
             if any(hasproperty(rows, c) && abs(rows[1, c]) > threshold for c in cols_to_use)
                 push!(eog_related, ch)
