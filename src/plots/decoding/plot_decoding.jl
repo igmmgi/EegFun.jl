@@ -1,8 +1,5 @@
 """
-Plotting functions for MVPA/decoding results.
-
-This module provides functions for visualizing decoding accuracy over time,
-confusion matrices, and other decoding analysis results.
+Plotting function for MVPA/decoding results.
 """
 # ==============================================================================
 #   DEFAULT KEYWORD ARGUMENTS
@@ -58,13 +55,10 @@ const PLOT_DECODING_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
 
 Add origin lines for decoding plots: x=0 and y=chance_level.
-Always plots chance level line with label.
 """
 function _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwargs::Dict)
-    
-    # Add x=0 line if add_xy_origin is true
-        vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
-    # Always add y=chance_level line with label
+    # Add x=0 line and y=chance_level line
+    vlines!(ax, 0, color = :black, linewidth = 1, linestyle = :dash)
     hlines!(
         ax,
         chance_level,
@@ -74,6 +68,7 @@ function _add_decoding_origin_lines!(ax::Axis, chance_level::Float64, plot_kwarg
         label = "Chance ($(round(chance_level, digits = 3)))",
     )
 end
+
 
 """
     _plot_error_band!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64}, 
@@ -97,6 +92,7 @@ function _plot_error_band!(
         label = "±1 SE",
     )
 end
+
 
 """
     _plot_accuracy_curve!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64}, 
@@ -160,6 +156,7 @@ function _setup_axis_limits!(
     end
 end
 
+
 """
     _plot_decoding_to_axis!(ax::Axis, times::Vector{Float64}, accuracy::Vector{Float64},
                             stderror::Union{Vector{Float64}, Nothing}, chance_level::Float64,
@@ -194,7 +191,7 @@ function _plot_decoding_to_axis!(
     show_legend::Bool = true,
     curve_label::String = "Accuracy",
 )
-    # Setup axis limits
+
     _setup_axis_limits!(ax, times, accuracy, stderror, plot_kwargs)
 
     # Add origin lines (x=0 and y=chance_level)
