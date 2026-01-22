@@ -1,5 +1,5 @@
 indent = 4
-margin = 120
+margin = 140
 
 align_assignment = true
 align_struct_field = true

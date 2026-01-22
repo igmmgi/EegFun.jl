@@ -52,13 +52,7 @@ using JLD2
         @test dat.analysis_info.hp_filter == 1.0
 
         # Low-pass; update lp field and modify both channels when selecting both
-        eegfun.lowpass_filter!(
-            dat,
-            30.0;
-            order = 3,
-            filter_method = "iir",
-            channel_selection = eegfun.channels([:Ch1, :Ch2]),
-        )
+        eegfun.lowpass_filter!(dat, 30.0; order = 3, filter_method = "iir", channel_selection = eegfun.channels([:Ch1, :Ch2]))
         @test dat.analysis_info.lp_filter == 30.0
         @test !all(dat.data.Ch2 .== dat_orig.data.Ch2)
     end
@@ -105,15 +99,7 @@ using JLD2
         # Add epoch identifiers to the versions that will be filtered
         df1.epoch = fill(1, nrow(df1))
         df2.epoch = fill(2, nrow(df2))
-        ep = eegfun.EpochData(
-            base.file,
-            1,
-            "condition_1",
-            [df1, df2],
-            base.layout,
-            base.sample_rate,
-            eegfun.AnalysisInfo(),
-        )
+        ep = eegfun.EpochData(base.file, 1, "condition_1", [df1, df2], base.layout, base.sample_rate, eegfun.AnalysisInfo())
         eegfun.highpass_filter!(ep, 0.5)
         @test ep.analysis_info.hp_filter == 0.5
         @test !all(ep.data[1].Ch1 .== df1o.Ch1)
@@ -149,7 +135,7 @@ using JLD2
         fi = eegfun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)
         chars = eegfun.get_filter_characteristics(fi; npoints = 256)
         @test chars.filter_type == "lp"
-        @test isapprox(chars.transition_width, 0.1; atol = 1e-6)
+        @test isapprox(chars.transition_band, 4.0; atol = 1e-6)  # 40 Hz * 0.1 = 4.0 Hz
         @test any(abs.(chars.cutoff_freq_3db .- 40.0) .< 5.0)  # near cutoff
         @test chars.stopband_atten < -10  # should be attenuated
         # print helper should not error
