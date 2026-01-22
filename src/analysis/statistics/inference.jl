@@ -88,3 +88,29 @@ function _create_significance_mask(p_matrix::Array{Float64,2}, alpha::Float64, m
     method == :bonferroni && (alpha = alpha / count(!isnan, p_matrix))
     return .!isnan.(p_matrix) .& (p_matrix .<= alpha)
 end
+
+"""
+    _apply_bonferroni_correction(p_values::Vector{Float64}, alpha::Float64)
+
+Apply Bonferroni correction to p-values and return significance mask.
+
+Shared utility function used by both general statistics and decoding statistics modules.
+
+# Arguments
+- `p_values::Vector{Float64}`: Uncorrected p-values
+- `alpha::Float64`: Significance threshold
+
+# Returns
+- `BitVector`: Boolean mask indicating significant values after Bonferroni correction
+
+# Examples
+```julia
+significant_mask = _apply_bonferroni_correction(p_values, 0.05)
+```
+"""
+function _apply_bonferroni_correction(p_values::Vector{Float64}, alpha::Float64)
+    n_comparisons = count(!isnan, p_values)
+    corrected_alpha = n_comparisons > 0 ? alpha / n_comparisons : 0.0
+    return p_values .<= corrected_alpha
+end
+

@@ -59,15 +59,13 @@ function prepare_stats(
     if design == :paired # Paired design: same participants in both conditions, in the same order
         vps1 != vps2 && @minimal_error "Paired design requires same participants in both conditions"
     elseif design == :independent # Independent design: different participants (or allow overlap)
-        length(vps1) < 2 ||
-            length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
+        length(vps1) < 2 || length(vps2) < 2 && @minimal_error "Independent design requires at least 2 participants per group"
     end
 
     # Validate all ERPs have same structure within each condition
     have_same_structure(condition1) || @minimal_error("Condition 1: ERPs have inconsistent structure")
     have_same_structure(condition2) || @minimal_error("Condition 2: ERPs have inconsistent structure")
-    have_same_structure(condition1[1], condition2[1]) ||
-        @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
+    have_same_structure(condition1[1], condition2[1]) || @minimal_error("Condition 1 vs. 2: ERPs have inconsistent structure")
 
     condition1 = subset(condition1; channel_selection = channel_selection, sample_selection = sample_selection)
     isempty(condition1) && @minimal_error_throw "No data matched the selection criteria!"
@@ -92,20 +90,14 @@ function prepare_stats(
 
     # Get dimensions and metadata from analysis subset
     electrodes = channel_labels(condition1[1])
-    n_electrodes = length(electrodes)
     time_points = condition1[1].data[!, :time]
     n_time = length(time_points)
 
     # Extract data arrays: [participants × electrodes × time]
-    condition1 =
-        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
-    condition2 =
-        cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
+    condition1 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition1]..., dims = 1)
+    condition2 = cat([reshape(Matrix(erp.data[!, electrodes])', 1, n_electrodes, n_time) for erp in condition2]..., dims = 1)
 
-    return StatisticalData(
-        [condition1_avg, condition2_avg],
-        AnalysisData(design, [condition1, condition2], time_points),
-    )
+    return StatisticalData([condition1_avg, condition2_avg], AnalysisData(design, [condition1, condition2], time_points))
 
 end
 
@@ -142,8 +134,7 @@ function prepare_stats(
     analysis_window::Function = samples(),
 )
     # just load all appropriate data and call the main preparation function
-    all_erps =
-        load_all_data(ErpData, file_pattern; input_dir = input_dir, participant_selection = participant_selection)
+    all_erps = load_all_data(ErpData, file_pattern; input_dir = input_dir, participant_selection = participant_selection)
     isempty(all_erps) && @minimal_error_throw "No valid ERP data found matching pattern '$file_pattern' in $input_dir"
 
     return prepare_stats(
@@ -336,12 +327,7 @@ function _compute_t_matrix(
 end
 
 function _compute_t_matrix(prepared::StatisticalData; tail::Symbol = :both)
-    return _compute_t_matrix(
-        prepared.analysis.data[1],
-        prepared.analysis.data[2],
-        prepared.analysis.design,
-        tail = tail,
-    )
+    return _compute_t_matrix(prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, tail = tail)
 end
 
 """
@@ -366,12 +352,7 @@ Compute critical t-values for parametric thresholding.
 critical_t = _compute_critical_t_values(df, size(t_matrix), 0.05, :both)
 ```
 """
-function _compute_critical_t_values(
-    df::Float64,
-    matrix_size::Tuple{Int,Int},
-    alpha::Float64 = 0.05,
-    tail::Symbol = :both,
-)
+function _compute_critical_t_values(df::Float64, matrix_size::Tuple{Int,Int}, alpha::Float64 = 0.05, tail::Symbol = :both)
     critical_t_values = Array{Float64,2}(undef, matrix_size)
 
     if isnan(df) || isinf(df) || df <= 0

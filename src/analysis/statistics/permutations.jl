@@ -106,14 +106,7 @@ Shuffle condition/group labels for permutation test.
 function _shuffle_labels(prepared::StatisticalData, rng::AbstractRNG = Random.GLOBAL_RNG)
     shuffled_A = similar(prepared.analysis.data[1])
     shuffled_B = similar(prepared.analysis.data[2])
-    return _shuffle_labels!(
-        shuffled_A,
-        shuffled_B,
-        prepared.analysis.data[1],
-        prepared.analysis.data[2],
-        prepared.analysis.design,
-        rng,
-    )
+    return _shuffle_labels!(shuffled_A, shuffled_B, prepared.analysis.data[1], prepared.analysis.data[2], prepared.analysis.design, rng)
 end
 
 """
@@ -148,19 +141,9 @@ function _collect_permutation_t_matrices(
         rng = Random.GLOBAL_RNG
     end
 
-    # Get dimensions from first permutation (using optimized functions)
-    shuffled_A_buffer = similar(prepared.analysis.data[1])
-    shuffled_B_buffer = similar(prepared.analysis.data[2])
-    _shuffle_labels!(
-        shuffled_A_buffer,
-        shuffled_B_buffer,
-        prepared.analysis.data[1],
-        prepared.analysis.data[2],
-        prepared.analysis.design,
-        rng,
-    )
-    t_matrix_sample, _, _ = _compute_t_matrix(shuffled_A_buffer, shuffled_B_buffer, prepared.analysis.design)
-    n_electrodes, n_time = size(t_matrix_sample)
+    # Get dimensions directly from data
+    n_electrodes = size(prepared.analysis.data[1], 2)
+    n_time = size(prepared.analysis.data[1], 3)
 
     # Pre-allocate array for all t-matrices
     permutation_t_matrices = Array{Float64,3}(undef, n_electrodes, n_time, n_permutations)
@@ -244,8 +227,7 @@ function _run_permutations(
 )
     # Determine thresholding type from critical_t_values type
     is_parametric = isa(critical_t_values, Array{Float64,2})
-    is_nonparametric_common =
-        isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
+    is_nonparametric_common = isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Float64)
     is_nonparametric_individual =
         isa(critical_t_values, Tuple) && length(critical_t_values) == 2 && isa(critical_t_values[1], Array{Float64,2})
 
@@ -271,10 +253,8 @@ function _run_permutations(
     if prepared.analysis.design == :paired
         mean1_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
         mean2_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        mean_diff_buffer =
-            Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
-        std_diff_buffer =
-            Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        mean_diff_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
+        std_diff_buffer = Array{Float64,2}(undef, size(prepared.analysis.data[1], 2), size(prepared.analysis.data[1], 3))
     else
         mean1_buffer = mean2_buffer = mean_diff_buffer = std_diff_buffer = nothing
     end
@@ -321,24 +301,10 @@ function _run_permutations(
             _threshold_t_matrix_parametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, critical_t_values, tail)
         elseif is_nonparametric_common
             thresh_pos, thresh_neg = critical_t_values
-            _threshold_t_matrix_nonparametric!(
-                mask_pos_buffer,
-                mask_neg_buffer,
-                t_matrix_perm,
-                thresh_pos,
-                thresh_neg,
-                tail,
-            )
+            _threshold_t_matrix_nonparametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos, thresh_neg, tail)
         elseif is_nonparametric_individual
             thresh_pos_mat, thresh_neg_mat = critical_t_values
-            _threshold_t_matrix_nonparametric!(
-                mask_pos_buffer,
-                mask_neg_buffer,
-                t_matrix_perm,
-                thresh_pos_mat,
-                thresh_neg_mat,
-                tail,
-            )
+            _threshold_t_matrix_nonparametric!(mask_pos_buffer, mask_neg_buffer, t_matrix_perm, thresh_pos_mat, thresh_neg_mat, tail)
         end
 
         # Pre-filter masks (modify in place)
@@ -348,27 +314,19 @@ function _run_permutations(
         end
 
         # Find clusters
-        pos_clusters_perm, neg_clusters_perm = _find_clusters(
-            mask_pos_buffer,
-            mask_neg_buffer,
-            electrodes,
-            time_points,
-            spatial_connectivity,
-            cluster_type,
-        )
+        pos_clusters_perm, neg_clusters_perm =
+            _find_clusters(mask_pos_buffer, mask_neg_buffer, electrodes, time_points, spatial_connectivity, cluster_type)
 
         # Compute statistics without creating new Cluster objects (use pre-allocated lookup)
         if !isempty(pos_clusters_perm)
-            pos_stats_perm =
-                _compute_cluster_statistics(pos_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
+            pos_stats_perm = _compute_cluster_statistics(pos_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
             max_pos = isempty(pos_stats_perm) ? 0.0 : maximum(pos_stats_perm)
         else
             max_pos = 0.0
         end
 
         if !isempty(neg_clusters_perm)
-            neg_stats_perm =
-                _compute_cluster_statistics(neg_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
+            neg_stats_perm = _compute_cluster_statistics(neg_clusters_perm, t_matrix_perm, electrode_to_idx, return_clusters = false)
             # For negative clusters, the statistic is negative (sum of negative t-values)
             # The most extreme negative value is the MINIMUM (most negative), not maximum
             max_neg = isempty(neg_stats_perm) ? 0.0 : minimum(neg_stats_perm)
