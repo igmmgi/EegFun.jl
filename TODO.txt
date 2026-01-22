@@ -1,7 +1,3 @@
-# Major
-- Do I change filter to avoid clash with Julia Base.filter function. This is probably needed
-  -- Alternatives? low_pass_filter, lp_filter, high_pass_filter, hp_filter
-
 - statistics.jl
   - internal functions with _ underscore
   - code volume!

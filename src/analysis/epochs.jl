@@ -349,7 +349,7 @@ function mark_epoch_windows!(
 
         # Apply after/before filtering if specified
         if condition.after !== nothing || condition.before !== nothing
-            sequence_indices = Base.filter(sequence_indices) do seq_start_idx
+            sequence_indices = filter(sequence_indices) do seq_start_idx
                 # Check after constraint
                 if condition.after !== nothing
                     found_after = any(dat.data.triggers[1:(seq_start_idx-1)] .== condition.after)
@@ -382,7 +382,7 @@ function mark_epoch_windows!(
            condition.min_interval !== nothing &&
            condition.max_interval !== nothing
 
-            sequence_indices = Base.filter(sequence_indices) do seq_start_idx
+            sequence_indices = filter(sequence_indices) do seq_start_idx
                 for (start_idx, end_idx) in condition.timing_pairs
                     # Calculate actual indices in the trigger array
                     actual_start_idx = seq_start_idx + (start_idx - 1)

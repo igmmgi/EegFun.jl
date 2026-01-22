@@ -256,7 +256,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
             ylims!(ax, (initial_min - 5, initial_max + 5))
         else
             # For linear units, use log scale
-            positive_powers = Base.filter(x -> x > 0, all_initial_powers)
+            positive_powers = filter(x -> x > 0, all_initial_powers)
             if isempty(positive_powers)
                 log_min, log_max = 0.001, 1.0
             else
@@ -354,7 +354,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
                 ylims!(ax, (new_min_power - 5, new_max_power + 5))
             else
                 # For linear units, use log scale
-                positive_powers = Base.filter(x -> x > 0, all_powers)
+                positive_powers = filter(x -> x > 0, all_powers)
                 if isempty(positive_powers)
                     log_min, log_max = 0.001, 1.0
                 else
@@ -389,7 +389,7 @@ function _plot_power_spectrum!(fig, ax, df::DataFrame, channels_to_plot::Vector{
                 ylims!(ax, (current_min - 5, current_max + 5))
             else
                 # Calculate valid limits first
-                positive_powers = Base.filter(x -> x > 0, all_powers)
+                positive_powers = filter(x -> x > 0, all_powers)
                 if isempty(positive_powers)
                     # Fallback: no positive values, use safe defaults
                     log_min = 0.001

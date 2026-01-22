@@ -5,8 +5,8 @@ Apply analysis settings to data in-place.
 """
 function apply_analysis_settings!(dat::EegData, settings::AnalysisSettings)
 
-    settings.hp_filter != 0 && filter_data!(dat, "hp", settings.hp_filter)
-    settings.lp_filter != 0 && filter_data!(dat, "lp", settings.lp_filter)
+    settings.hp_filter != 0 && highpass_filter!(dat, settings.hp_filter)
+    settings.lp_filter != 0 && lowpass_filter!(dat, settings.lp_filter)
     settings.reference != :none && rereference!(dat, settings.reference)
     !isempty(settings.repaired_channels) &&
         repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)
@@ -24,8 +24,8 @@ Apply analysis settings to data in-place, including ICA component removal.
 """
 function apply_analysis_settings!(dat::EegData, ica::InfoIca, settings::AnalysisSettings)
 
-    settings.hp_filter != 0 && filter_data!(dat, "hp", settings.hp_filter)
-    settings.lp_filter != 0 && filter_data!(dat, "lp", settings.lp_filter)
+    settings.hp_filter != 0 && highpass_filter!(dat, settings.hp_filter)
+    settings.lp_filter != 0 && lowpass_filter!(dat, settings.lp_filter)
     settings.reference != :none && rereference!(dat, settings.reference)
     !isempty(settings.repaired_channels) &&
         repair_channels!(dat, settings.repaired_channels, method = settings.repair_method)

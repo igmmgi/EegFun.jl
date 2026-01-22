@@ -60,7 +60,7 @@ plot_rdm(rsa_result)
 plot_rdm(rsa_result, time_point=50)
 ```
 """
-function plot_rdm(rsa_data::RsaData; time_point::Union{Float64, Int, Nothing} = nothing, kwargs...)
+function plot_rdm(rsa_data::RsaData; time_point::Union{Float64,Int,Nothing} = nothing, kwargs...)
     # Merge defaults with user kwargs
     plot_kwargs = merge(PLOT_RSA_KWARGS, Dict(kwargs))
 
@@ -77,7 +77,7 @@ function plot_rdm(rsa_data::RsaData; time_point::Union{Float64, Int, Nothing} = 
 
     if isnothing(time_point)
         # Average across time
-        rdm_to_plot = mean(rsa_data.rdm, dims=1)[1, :, :]
+        rdm_to_plot = mean(rsa_data.rdm, dims = 1)[1, :, :]
         time_label = "Average"
     elseif isa(time_point, Int)
         # Use time index
@@ -95,7 +95,7 @@ function plot_rdm(rsa_data::RsaData; time_point::Union{Float64, Int, Nothing} = 
 
     # Create figure
     fig = Figure(title = figure_title, resolution = (600, 600))
-    
+
     if isempty(title_text)
         title_str = "RDM at $time_label"
     else
@@ -118,13 +118,7 @@ function plot_rdm(rsa_data::RsaData; time_point::Union{Float64, Int, Nothing} = 
 
     # Plot heatmap
     colormap_val = _get_val(:colormap)
-    hm = heatmap!(
-        ax,
-        1:n_conditions,
-        1:n_conditions,
-        rdm_to_plot,
-        colormap = colormap_val,
-    )
+    hm = heatmap!(ax, 1:n_conditions, 1:n_conditions, rdm_to_plot, colormap = colormap_val)
 
     # Add colorbar if requested
     if _get_val(:show_colorbar)
@@ -181,14 +175,14 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     colors = get(kwargs, :colors, nothing)
     if isnothing(colors)
         colors = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray]
-        colors = [colors[mod1(i, length(colors))] for i in 1:n_models]
+        colors = [colors[mod1(i, length(colors))] for i = 1:n_models]
     elseif colors isa Symbol
         colors = fill(colors, n_models)
     end
 
     # Create figure
     fig = Figure(title = figure_title, resolution = (800, 600))
-    
+
     if isempty(title_text)
         title_str = "Model Correlations"
     else
@@ -216,8 +210,7 @@ function plot_model_correlations(rsa_data::RsaData; kwargs...)
     if !isnothing(ylim_val)
         ylims!(ax, ylim_val)
     else
-        # Handle NaN values - use Base.filter to avoid conflict with eegfun.filter
-        correlations_clean = Base.filter(!isnan, vec(correlations))
+        correlations_clean = filter(!isnan, vec(correlations))
         if isempty(correlations_clean)
             ylims!(ax, (-1.0, 1.0))  # Default range if all NaN
         else
@@ -297,7 +290,7 @@ plot_rsa(rsa_result, plot_type=:rdm, time_point=0.3)
 """
 function plot_rsa(rsa_data::RsaData; kwargs...)
     plot_type = get(kwargs, :plot_type, nothing)
-    
+
     if isnothing(plot_type)
         # Auto-detect: prefer model correlations if available
         if !isnothing(rsa_data.model_correlations)

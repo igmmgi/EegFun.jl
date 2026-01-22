@@ -245,7 +245,7 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 # Returns
 - Nothing. The function modifies the `layout` directly.
 """
-function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64=1.0)
+function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64 = 1.0)
     # Get the DataFrame from Layout
     df = layout.data
 
@@ -271,17 +271,17 @@ function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64=1.
     # First, center the coordinates
     center_x = (maximum(df.x2) + minimum(df.x2)) / 2
     center_y = (maximum(df.y2) + minimum(df.y2)) / 2
-    
+
     df.x2 = df.x2 .- center_x
     df.y2 = df.y2 .- center_y
-    
+
     # Find maximum distance from center
     max_radius = 0.0
     @inbounds for i = 1:nrow(df)
         radius = sqrt(df.x2[i]^2 + df.y2[i]^2)
         max_radius = max(max_radius, radius)
     end
-    
+
     # Scale by maximum radius to ensure all points are within the specified normalization radius
     if max_radius > 0
         scale_factor = normalization_radius / max_radius
@@ -884,7 +884,7 @@ function rename_channel!(layout::Layout, rename_dict::Dict{Symbol,Symbol})
 
     # Check for duplicates in final names
     if length(final_names) != length(unique(final_names))
-        duplicate_names = Base.filter(x -> count(==(x), final_names) > 1, unique(final_names))
+        duplicate_names = filter(x -> count(==(x), final_names) > 1, unique(final_names))
         @minimal_error_throw "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
     end
 

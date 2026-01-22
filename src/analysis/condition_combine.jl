@@ -47,7 +47,7 @@ function _condition_combine_process_file(filepath::String, output_path::String, 
 
     for (group_idx, original_conditions) in enumerate(condition_groups)
         # Validate that all requested conditions exist
-        missing_conditions = Base.filter(c -> c > max_condition || c < 1, original_conditions)
+        missing_conditions = filter(c -> c > max_condition || c < 1, original_conditions)
         if !isempty(missing_conditions)
             return BatchResult(
                 false,

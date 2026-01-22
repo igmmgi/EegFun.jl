@@ -12,7 +12,10 @@ const PLOT_TOPOGRAPHY_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :interactive => (true, "Whether to enable interactive features"),
 
     # Topography parameters
-    :method => (:thin_plate, "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on methods."),
+    :method => (
+        :thin_plate,
+        "Interpolation method: :multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest, :spherical_spline. See https://eljungsk.github.io/ScatteredInterpolation.jl/dev/methods/ for details on methods.",
+    ),
     :colormap => (:jet, "Colormap for the topography"),
     :gridscale => (200, "Grid resolution for interpolation"),
     :dims => (nothing, "Grid dimensions (rows, cols). If nothing, calculates best square-ish grid"),
@@ -287,7 +290,7 @@ function plot_topography(ica::InfoIca; component_selection = components(), kwarg
     # Add keyboard event handling for scaling
     on(events(fig).keyboardbutton) do event
         if event.action == Keyboard.press && event.key in (Keyboard.up, Keyboard.down)
-            axes = Base.filter(ax -> ax isa Axis, fig.content)
+            axes = filter(ax -> ax isa Axis, fig.content)
             if event.key == Keyboard.up
                 _topo_scale_up!.(axes)
             else
@@ -349,7 +352,7 @@ mutable struct IcaComponentState
         component_selection,
         n_visible_components,
         window_size;
-        method = :thin_plate,  
+        method = :thin_plate,
         gridscale = 100,  # Grid resolution for interpolation
         kwargs...,
     )
@@ -565,7 +568,7 @@ function _calculate_topo_levels(
 
     # Find local min/max, ignoring NaNs
     local_min, local_max = -1.0, 1.0
-    valid_values = Base.filter(!isnan, data)
+    valid_values = filter(!isnan, data)
     if !isempty(valid_values)
         local_min = minimum(valid_values)
         local_max = maximum(valid_values)
@@ -1307,7 +1310,16 @@ end
 
 # Internal function to prepare ICA topoplot data (interpolation only)
 function _prepare_ica_topo_data(ica::InfoIca, comp_idx::Int, method::Symbol, gridscale::Int)
-    supported_methods = [:multiquadratic, :inverse_multiquadratic, :gaussian, :inverse_quadratic, :thin_plate, :polyharmonic, :shepard, :nearest]
+    supported_methods = [
+        :multiquadratic,
+        :inverse_multiquadratic,
+        :gaussian,
+        :inverse_quadratic,
+        :thin_plate,
+        :polyharmonic,
+        :shepard,
+        :nearest,
+    ]
     if method ∈ supported_methods
         return _data_interpolation_topo(ica.mixing[:, comp_idx], ica.layout, gridscale, method = method)
     elseif method == :spherical_spline
@@ -1326,7 +1338,7 @@ function _calculate_ica_topo_levels(
     global_max = nothing,
 )
     if use_global_scale # Find global min/max across all data 
-        valid_data = Base.filter(!isnan, vcat(all_data...))
+        valid_data = filter(!isnan, vcat(all_data...))
         if !isempty(valid_data)
             actual_min, actual_max = extrema(valid_data)
             # Use provided min/max if given, otherwise use actual min/max
@@ -2003,7 +2015,7 @@ function plot_ecg_component_features(identified_comps::Vector{Int64}, metrics_df
     max_hr = 120  # Default maximum heart rate
     if !isempty(ecg_df) && any(.!isnan.(ecg_df.heart_rate_bpm))
         # Use the actual range from identified components
-        valid_hrs = Base.filter(!isnan, ecg_df.heart_rate_bpm)
+        valid_hrs = filter(!isnan, ecg_df.heart_rate_bpm)
         if !isempty(valid_hrs)
             min_hr = floor(Int, minimum(valid_hrs))
             max_hr = ceil(Int, maximum(valid_hrs))

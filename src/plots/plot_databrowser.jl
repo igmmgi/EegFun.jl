@@ -32,7 +32,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     :default_window_size => (5000, "Default window size in samples"),
     :default_amplitude_scale => (1.0, "Default amplitude scaling factor"),
     :default_butterfly => (false, "Default butterfly plot mode"),
-    
+
     # Scale indicator
     :show_scale_indicator => (true, "Show scale indicator bar"),
     :scale_indicator_value => (100.0, "Scale indicator value in μV"),
@@ -476,7 +476,7 @@ function create_labels_menu(fig, ax, state)
             selected_sym = Symbol(s)
             if selected_sym in state.channels.individually_selected
                 # Deselect if already selected
-                Base.filter!(x -> x != selected_sym, state.channels.individually_selected)
+                filter!(x -> x != selected_sym, state.channels.individually_selected)
             else
                 # Select if not already selected
                 push!(state.channels.individually_selected, selected_sym)
@@ -529,7 +529,7 @@ function create_ica_menu(fig, ax, state, ica)
 
     # Create observable for removed components display
     removed_components_text = Observable("")
-    
+
     # Create label to display removed components
     removed_label = Label(
         fig,
@@ -558,27 +558,27 @@ function create_ica_menu(fig, ax, state, ica)
     on(menu[1].selection) do s
 
         clear_axes!(ax, [state.channels.data_lines, state.channels.data_labels])
-        
+
         # Check explicitly for "None" first
         if s == "None"
             # Selected "None" - clear all removals and restore original data
             # Clear removed ICA components first
             empty!(state.removed_ica_components)
-            
+
             # Reset to original ICA state
             state.ica_current = copy(state.ica_original)
-            
+
             # Reset data to original (no components removed)
             reset_to_original!(state.data)
         else
             # Extract component number from selection string
             component_to_toggle_int = extract_int(String(s))
-            
+
             if !isnothing(component_to_toggle_int)
                 # Toggle component: if already removed, restore it; if not removed, remove it
                 if component_to_toggle_int in state.removed_ica_components
                     # Restore component - remove from list
-                    Base.filter!(x -> x != component_to_toggle_int, state.removed_ica_components)
+                    filter!(x -> x != component_to_toggle_int, state.removed_ica_components)
                 else
                     # Remove component - add to list
                     push!(state.removed_ica_components, component_to_toggle_int)
@@ -916,14 +916,14 @@ function create_sliders(fig, state::ContinuousDataBrowserState, dat)
     slider_x = Slider(fig[2, 1], range = 1:50:nrow(state.data.current[].data), startvalue = 1, snap = true)
 
     on(slider_range.value) do x
-        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x+slider_x.value.val)
+        new_range = slider_x.value.val:min(nrow(state.data.current[].data), x + slider_x.value.val)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
     end
 
     on(slider_x.value) do x
-        new_range = x:min(nrow(state.data.current[].data), (x+slider_range.value.val)-1)
+        new_range = x:min(nrow(state.data.current[].data), (x + slider_range.value.val) - 1)
         if length(new_range) > 1
             state.view.xrange[] = new_range
         end
@@ -1471,7 +1471,11 @@ end
 function apply_filter!(state::DataBrowserState{T}, filter_type, freq) where {T<:AbstractDataState}
     # Get the current data, apply filter, then update the observable
     current_data = state.data.current[]
-    filter_data!(current_data, String(filter_type), freq;)
+    if filter_type == :hp
+        highpass_filter!(current_data, freq)
+    elseif filter_type == :lp
+        lowpass_filter!(current_data, freq)
+    end
     state.data.current[] = current_data  # Explicitly update the observable
 end
 
@@ -1833,37 +1837,31 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     if !plot_kwargs[:show_scale_indicator]
         return nothing
     end
-    
+
     scale_value = plot_kwargs[:scale_indicator_value]
     pos = plot_kwargs[:scale_indicator_position]
     color = plot_kwargs[:scale_indicator_color]
     linewidth = plot_kwargs[:scale_indicator_linewidth]
-    
+
     # Get axis limits observables (they're already observables)
     xlims_obs = ax.xaxis.attributes.limits
     ylims_obs = ax.yaxis.attributes.limits
-    
+
     # Calculate position in data coordinates
     # pos[1] is x position (0 = left, 1 = right), pos[2] is y position (0 = bottom, 1 = top)
     x_pos = @lift($xlims_obs[1] + ($xlims_obs[2] - $xlims_obs[1]) * pos[1])
     # Position scale bar at the top of the plot
     y_top = @lift($ylims_obs[1] + ($ylims_obs[2] - $ylims_obs[1]) * pos[2])
     y_bottom = @lift($y_top - scale_value * $(state.view.amplitude_scale))
-    
+
     # Draw vertical line
-    scale_line = lines!(
-        ax,
-        @lift([$x_pos, $x_pos]),
-        @lift([$y_bottom, $y_top]),
-        color = color,
-        linewidth = linewidth,
-    )
-    
+    scale_line = lines!(ax, @lift([$x_pos, $x_pos]), @lift([$y_bottom, $y_top]), color = color, linewidth = linewidth)
+
     # Draw horizontal tick marks
     tick_length = @lift(($xlims_obs[2] - $xlims_obs[1]) * 0.005)
     tick_left = @lift($x_pos - $tick_length)
     tick_right = @lift($x_pos + $tick_length)
-    
+
     bottom_tick = lines!(
         ax,
         @lift([$tick_left, $tick_right]),
@@ -1871,15 +1869,10 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
         color = color,
         linewidth = linewidth,
     )
-    
-    top_tick = lines!(
-        ax,
-        @lift([$tick_left, $tick_right]),
-        @lift([$y_top, $y_top]),
-        color = color,
-        linewidth = linewidth,
-    )
-    
+
+    top_tick =
+        lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_top, $y_top]), color = color, linewidth = linewidth)
+
     # Add label
     label_x = @lift($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01)
     scale_label = text!(
@@ -1891,7 +1884,7 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
         color = color,
         space = :data,
     )
-    
+
     return (line = scale_line, bottom_tick = bottom_tick, top_tick = top_tick, label = scale_label)
 end
 
@@ -1919,7 +1912,7 @@ function plot_databrowser(dat::EegData, ica = nothing; screen = nothing, kwargs.
 
     draw(ax, state)
     draw_extra_channel!(ax, state)
-    
+
     # Add scale indicator
     _add_scale_indicator!(ax, state, plot_kwargs)
 
@@ -1941,7 +1934,8 @@ function plot_databrowser(filename::String, ica = nothing; screen = nothing, kwa
     if !isnothing(ica)
         ica = load_data(ica)
     end
-    plot_databrowser(dat_eeg, ica; screen = screen, kwargs...);
+    plot_databrowser(dat_eeg, ica; screen = screen, kwargs...)
 end
 
-plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...) = plot_databrowser(data[1], ica; screen = screen, kwargs...);
+plot_databrowser(data::Vector{<:EegData}, ica = nothing; screen = nothing, kwargs...) =
+    plot_databrowser(data[1], ica; screen = screen, kwargs...);

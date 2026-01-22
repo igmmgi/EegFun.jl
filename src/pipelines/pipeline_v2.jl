@@ -246,8 +246,8 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
 
                     # Apply ICA-specific filters
                     @info subsection("ICA filters")
-                    @info "ICA data filters: $(_applied_filters(preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass]))"
-                    filter_data!(dat_ica, preprocess_cfg.filter, filter_sections = [:ica_highpass, :ica_lowpass])
+                    highpass_filter!(dat_ica, preprocess_cfg.filter, section = :ica_highpass)
+                    lowpass_filter!(dat_ica, preprocess_cfg.filter, section = :ica_lowpass)
 
                     @info subsection("Running ICA")
                     ica = run_ica(

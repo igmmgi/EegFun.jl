@@ -66,7 +66,8 @@ function plot_freq_spectrum(
     line_alpha::Real = 0.8,
 )
     # Get selected channels
-    selected_channels = get_selected_channels(spectrum_data, channel_selection; include_meta = false, include_extra = false)
+    selected_channels =
+        get_selected_channels(spectrum_data, channel_selection; include_meta = false, include_extra = false)
     isempty(selected_channels) && error("No channels selected. Available channels: $(channel_labels(spectrum_data))")
 
     # Filter to only channels that actually exist in the spectrum data
@@ -74,11 +75,13 @@ function plot_freq_spectrum(
     all_names = propertynames(spectrum_data.data)
     available_channels = [ch for ch in all_names if ch != :freq]
     valid_channels = [ch for ch in selected_channels if ch in available_channels]
-    
+
     if isempty(valid_channels)
-        error("No valid channels found in spectrum data. Selected channels: $(selected_channels), Available channels: $(available_channels)")
+        error(
+            "No valid channels found in spectrum data. Selected channels: $(selected_channels), Available channels: $(available_channels)",
+        )
     end
-    
+
     # Warn about channels that were selected but don't exist
     missing_channels = setdiff(selected_channels, valid_channels)
     if !isempty(missing_channels)
@@ -164,7 +167,7 @@ function plot_freq_spectrum(
 
     if y_scale == :log10
         all_powers = vcat([power_data[ch] for ch in keys(power_data)]...)
-        positive_powers = Base.filter(x -> x > 0, all_powers)
+        positive_powers = filter(x -> x > 0, all_powers)
         if !isempty(positive_powers)
             log_min = max(0.001, minimum(positive_powers))
             log_max = maximum(positive_powers)

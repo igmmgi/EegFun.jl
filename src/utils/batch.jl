@@ -58,7 +58,7 @@ function _find_batch_files(pattern::String, dir::String, participant_selection::
 
     # Filter by pattern and extension
     all_files = readdir(dir)
-    files = Base.filter(all_files) do f
+    files = filter(all_files) do f
         endswith(f, ".jld2") && contains(f, pattern)
     end
 

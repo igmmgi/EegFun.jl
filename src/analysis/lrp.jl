@@ -89,8 +89,8 @@ Returns (letters, digit) or (letters, nothing) if no digit found.
 """
 function _parse_channel_label(label::Symbol)
     label_str = String(label)
-    digits_only = Base.filter(isdigit, label_str)
-    letters_only = Base.filter(isletter, label_str)
+    digits_only = filter(isdigit, label_str)
+    letters_only = filter(isletter, label_str)
 
     digit = isempty(digits_only) ? nothing : parse(Int, digits_only)
     return (letters_only, digit)

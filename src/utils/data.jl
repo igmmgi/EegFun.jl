@@ -791,7 +791,7 @@ function ylimits(
     chs = channel_labels(dat_sub)
     # Compute limits per epoch and combine
     limits = map(df -> data_limits_y(df, chs), dat_sub.data)
-    limits = Base.filter(!isnothing, limits)
+    limits = filter(!isnothing, limits)
     isempty(limits) && return (0.0, 1.0)
     min_val = minimum(lim[1] for lim in limits)
     max_val = maximum(lim[2] for lim in limits)
@@ -1393,7 +1393,7 @@ function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, 
 
     # Check for duplicates in final names
     if length(final_names) != length(unique(final_names))
-        duplicate_names = Base.filter(x -> count(==(x), final_names) > 1, unique(final_names))
+        duplicate_names = filter(x -> count(==(x), final_names) > 1, unique(final_names))
         @minimal_error_throw "Cannot rename channels to duplicate names: $(join(duplicate_names, ", "))"
     end
 
@@ -1437,7 +1437,7 @@ function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, 
     # Phase 2: rename temporary names to final names
     for (old_name, new_name) in final_renames
         # Find the temporary assigned to this old_name
-        tmp = only(last.(Base.filter(p -> first(p) == old_name, temp_renames)))
+        tmp = only(last.(filter(p -> first(p) == old_name, temp_renames)))
         rename!(df, tmp => new_name)
     end
 end

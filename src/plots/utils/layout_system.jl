@@ -358,7 +358,7 @@ function best_rect(n::Int)
     end
 
     # Filter out 1×n arrangements (unless it's the only option)
-    good_factors = Base.filter(f -> f[1] > 1, exact_factors)
+    good_factors = filter(f -> f[1] > 1, exact_factors)
 
     if !isempty(good_factors)
         # Use the factor pair with the smallest difference (most square-like)
@@ -507,8 +507,8 @@ function _apply_layout_axis_properties!(axes::Vector{Axis}, plot_layout::PlotLay
     if plot_layout.type == :grid
         rows, cols = plot_layout.dims
         for (idx, ax) in enumerate(axes)
-            row = fld(idx-1, cols) + 1
-            col = mod(idx-1, cols) + 1
+            row = fld(idx - 1, cols) + 1
+            col = mod(idx - 1, cols) + 1
             _set_grid_axis_properties!(ax, plot_layout.channels[idx], row, col, rows, cols; kwargs...)
         end
     elseif plot_layout.type == :topo

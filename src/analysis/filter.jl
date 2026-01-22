@@ -28,22 +28,21 @@ struct FilterInfo
     transition_band::Float64
 end
 
-
 # =============================================================================
 # FILTER CREATION
 # =============================================================================
-
 """
-    create_filter(filter_type::String, filter_method::String, filter_freq::Real, sample_rate::Real; 
-                 order::Integer = 2, transition_width::Real = 0.1)
+    create_lowpass_filter(cutoff_freq::Real, sample_rate::Real; 
+    filter_method::String = "iir", 
+    order::Integer = 2, 
+    transition_width::Real = 0.1)::FilterInfo
 
 Create a digital filter object for the specified parameters.
 
 # Arguments
-- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
-- `filter_method`: String specifying filter implementation ("iir" or "fir")
 - `cutoff_freq`: Cutoff frequency in Hz
 - `sample_rate`: Sampling rate in Hz
+- `filter_method`: String specifying filter implementation ("iir" or "fir")
 - `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
 - `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
 
@@ -55,40 +54,114 @@ Create a digital filter object for the specified parameters.
 
 # Examples
 ```julia
-# Create a lowpass filter
-filter_info = create_filter("lp", "iir", 30.0, 256.0)
-
-# Create a highpass filter with custom order
-filter_info = create_filter("hp", "iir", 1.0, 256.0, order = 4)
-
-# Create a FIR filter
-filter_info = create_filter("lp", "fir", 40.0, 256.0)
-
-# Plot the filter response
+# Create a lowpass filter and plot the response
+filter_info = create_lowpass_filter(30.0, 256.0)
 plot_filter_response(filter_info)
-
-# Print filter characteristics
 print_filter_characteristics(filter_info)
 ```
 """
-function create_filter(
-    filter_type::String,
-    filter_method::String,
+function create_lowpass_filter(
     cutoff_freq::Real,
     sample_rate::Real;
+    filter_method::String = "iir",
+    order::Integer = 2,
+    transition_width::Real = 0.1,
+)
+    return _create_filter(
+        "lp",
+        cutoff_freq,
+        sample_rate,
+        filter_method = filter_method,
+        order = order,
+        transition_width = transition_width,
+    )
+end
+
+
+"""
+    create_highpass_filter(cutoff_freq::Real, sample_rate::Real; 
+    filter_method::String = "iir", 
+    order::Integer = 2, 
+    transition_width::Real = 0.1)::FilterInfo
+
+Create a digital filter object for the specified parameters.
+
+# Arguments
+- `cutoff_freq`: Cutoff frequency in Hz
+- `sample_rate`: Sampling rate in Hz
+- `filter_method`: String specifying filter implementation ("iir" or "fir")
+- `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
+- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
+
+# Returns
+- `FilterInfo`: A struct containing all filter information and the actual filter object
+
+# Notes
+- NOTE: When using filtfilt (default), effective filter order is approximately doubled
+
+# Examples
+```julia
+# Create a highpass filter and plot the response
+filter_info = create_highpass_filter(0.1, 256.0)
+plot_filter_response(filter_info)
+print_filter_characteristics(filter_info)
+```
+"""
+function create_highpass_filter(
+    cutoff_freq::Real,
+    sample_rate::Real;
+    filter_method::String = "iir",
+    order::Integer = 2,
+    transition_width::Real = 0.1,
+)
+    return _create_filter(
+        "hp",
+        cutoff_freq,
+        sample_rate,
+        filter_method = filter_method,
+        order = order,
+        transition_width = transition_width,
+    )
+end
+
+
+"""
+    _create_filter(filter_type::String, cutoff_freq::Real, sample_rate::Real; filter_method::String, order::Integer = 2, transition_width::Real = 0.1)
+
+Create a digital filter object for the specified parameters.
+
+# Arguments
+- `filter_type`: String specifying filter type ("hp"=highpass, "lp"=lowpass)
+- `cutoff_freq`: Cutoff frequency in Hz
+- `sample_rate`: Sampling rate in Hz
+- `filter_method`: String specifying filter implementation ("iir" or "fir")
+- `order`: Filter order for IIR filters (default: 2, becomes effective order 4 with filtfilt)
+- `transition_width`: Relative width of transition band as fraction of cutoff (default: 0.1 for EEG)
+
+# Returns
+- `FilterInfo`: A struct containing all filter information and the actual filter object
+
+# Notes
+- NOTE: When using filtfilt (default), effective filter order is approximately doubled
+"""
+function _create_filter(
+    filter_type::String,
+    cutoff_freq::Real,
+    sample_rate::Real;
+    filter_method::String = "iir",
     order::Integer = 2,
     transition_width::Real = 0.1,
 )
 
     # Input validation
-    valid_types = ("hp", "lp")
-    if !(filter_type in valid_types)
-        @minimal_error "filter_type '$filter_type' must be one of: $valid_types"
+    valid_filter_types = ("hp", "lp")
+    if !(filter_type in valid_filter_types)
+        @minimal_error "filter_type '$filter_type' must be one of: $valid_filter_types"
     end
 
-    valid_methods = ("iir", "fir")
-    if !(filter_method in valid_methods)
-        @minimal_error "filter_method '$filter_method' must be one of: $valid_methods"
+    valid_filter_methods = ("iir", "fir")
+    if !(filter_method in valid_filter_methods)
+        @minimal_error "filter_method '$filter_method' must be one of: $valid_filter_methods"
     end
 
     if order <= 0
@@ -111,10 +184,8 @@ function create_filter(
 
     # Create filter with chosen method
     if filter_method == "iir"
-        # For EEG, use higher order Butterworth for steeper rolloff
         filter_object = digitalfilter(filter_prototype, Butterworth(order); fs = sample_rate)
     elseif filter_method == "fir"
-        # Calculate number of taps (ensure not too small + next pow2 + odd) for FIR filter
         n_taps = Int(ceil(4.0 * sample_rate / transition_band))
         n_taps = max(n_taps, 101)
         n_taps = nextpow(2, n_taps)
@@ -123,16 +194,8 @@ function create_filter(
     end
 
     # Create FilterInfo struct
-    filter_info = FilterInfo(
-        filter_type,
-        filter_object,
-        filter_method,
-        Float64(cutoff_freq),
-        Float64(sample_rate),
-        order,
-        n_taps,
-        Float64(transition_band),
-    )
+    filter_info =
+        FilterInfo(filter_type, filter_object, filter_method, cutoff_freq, sample_rate, order, n_taps, transition_band)
 
     return filter_info
 end
@@ -187,115 +250,116 @@ function _update_filter_info!(dat::EegData, filter_info::FilterInfo)::Nothing
 end
 
 """
-    filter_data!(dat::EegData, filter_type::String, cutoff_freq::Real; kwargs...)
+    lowpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
 
-Apply a digital filter to EEG data. Modifies the data in place.
+Apply a digital lowpass filter to EEG data. Modifies the data in place.
 
 # Arguments
 - `dat::EegData`: EegData object (ContinuousData, ErpData, or EpochData)
-- `filter_type::String`: Filter type ("hp"=highpass, "lp"=lowpass)
 - `cutoff_freq::Real`: Cutoff frequency in Hz
 
 # Keyword Arguments
-- `order::Integer`: Filter order for IIR filters (default: 3)
-- `transition_width::Real`: Relative width of transition band as fraction of cutoff (default: 0.25)
+- `order::Integer`: Filter order (default: 3)
+- `transition_width::Real`: Relative width of transition band (default: 0.1)
 - `filter_method::String`: Filter implementation ("iir" or "fir")
 - `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
-- `filter_func::String`: Filtering function to use (default: filtfilt, for two-pass filtering). Use `filt` for one-pass filtering.
-
-# Examples
-```julia
-# Apply highpass filter
-filter_data!(dat, "hp", 1.0)
-
-# Apply lowpass filter with custom parameters
-filter_data!(dat, "lp", 30.0, order = 4, filter_method = "fir")
-
-# Apply filter to specific channels
-filter_data!(dat, "hp", 1.0, channel_selection = channels([:Fp1, :Fp2]))
-```
+- `filter_func::String`: Filtering function ("filtfilt" or "filt")
 """
-function filter_data!(
+function lowpass_filter!(
     dat::EegData,
-    filter_type::String,
     cutoff_freq::Real;
-    order::Int = filter_type == "hp" ? 1 : 3,
-    transition_width::Real = filter_type == "hp" ? 0.25 : 0.1,
+    order::Int = 3,
+    transition_width::Real = 0.1,
     filter_method::String = "iir",
     channel_selection::Function = channels(),
     filter_func::String = "filtfilt",
 )
-
     selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
     if isempty(selected_channels)
-        @minimal_warning "No channels selected for filtering"
+        @minimal_warning "No channels selected for lowpass filtering"
         return nothing
     end
-    @debug "filter_data! applying $filter_type filter to $(length(selected_channels)) channels"
+    @debug "lowpass_filter! applying lp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
 
-    # Create and apply filter
-    filter_info = create_filter(
-        filter_type,
-        filter_method,
+    filter_info = create_lowpass_filter(
         cutoff_freq,
         dat.sample_rate;
+        filter_method = filter_method,
         order = order,
         transition_width = transition_width,
     )
     _update_filter_info!(dat, filter_info)
     _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
-
 end
 
-# generates all non-mutating versions
-@add_nonmutating filter_data!
-
 """
-    filter_data!(dat::EegData, filter_cfg::Dict)
+    highpass_filter!(dat::EegData, cutoff_freq::Real; kwargs...)
 
-Apply filters to EEG data based on configuration dictionary. Modifies the data in place.
+Apply a digital highpass filter to EEG data. Modifies the data in place.
 
 # Arguments
-- `dat::EegData`: EegData object to filter
-- `filter_cfg::Dict`: Configuration dictionary containing filter settings
+- `dat::EegData`: EegData object (ContinuousData, ErpData, or EpochData)
+- `cutoff_freq::Real`: Cutoff frequency in Hz
 
-# Configuration Structure
-The `filter_cfg` should contain filter sections with keys like:
-- `"highpass"`, `"lowpass"`: Standard filters
-- `"ica_highpass"`, `"ica_lowpass"`: ICA-specific filters
-- Any other filter section with keys `"apply"`, `"freq"`, `"order"`, `"method"`, `"func"`
-
-# Examples
-```julia
-# Apply standard filters
-filter_data!(dat, cfg["filter"])
-
-# Apply ICA-specific filters
-filter_data!(dat, cfg["filter"], filter_sections = ["ica_highpass", "ica_lowpass"])
-
-# Apply only highpass filter
-filter_data!(dat, Dict("highpass" => Dict("apply" => true, "freq" => 1.0, "order" => 2, "method" => "iir", "func" => "filtfilt")))
-```
+# Keyword Arguments
+- `order::Integer`: Filter order (default: 1)
+- `transition_width::Real`: Relative width of transition band (default: 0.25)
+- `filter_method::String`: Filter implementation ("iir" or "fir")
+- `channel_selection::Function`: Channel selection predicate (default: channels() - all channels)
+- `filter_func::String`: Filtering function ("filtfilt" or "filt")
 """
-# Wrapper method that works directly with FilterSection
-function filter_data!(dat::EegData, section_filter::FilterSection)
-    if section_filter.apply
-        filter_data!(
-            dat,
-            section_filter.type,
-            section_filter.freq;
-            order = section_filter.order,
-            filter_method = section_filter.method,
-            filter_func = section_filter.func,
-        )
+function highpass_filter!(
+    dat::EegData,
+    cutoff_freq::Real;
+    order::Int = 1,
+    transition_width::Real = 0.25,
+    filter_method::String = "iir",
+    channel_selection::Function = channels(),
+    filter_func::String = "filtfilt",
+)
+    selected_channels = get_selected_channels(dat, channel_selection, include_meta = false, include_extra = false)
+    if isempty(selected_channels)
+        @minimal_warning "No channels selected for highpass filtering"
+        return nothing
+    end
+    @debug "highpass_filter! applying hp filter at $cutoff_freq Hz to $(length(selected_channels)) channels"
+
+    filter_info = create_highpass_filter(
+        cutoff_freq,
+        dat.sample_rate;
+        filter_method = filter_method,
+        order = order,
+        transition_width = transition_width,
+    )
+    _update_filter_info!(dat, filter_info)
+    _apply_filter!(dat.data, selected_channels, filter_info, filter_func = filter_func)
+end
+
+# Generate non-mutating versions
+@add_nonmutating lowpass_filter!
+@add_nonmutating highpass_filter!
+
+"""
+    lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
+
+Apply lowpass filter to EEG data based on configuration.
+"""
+function lowpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :lowpass)
+    sec = getfield(filter_cfg, section)
+    if sec.apply
+        lowpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     end
 end
 
-# Main method for FilterConfig
-function filter_data!(dat::EegData, filter_cfg::FilterConfig; filter_sections::Vector{Symbol} = [:highpass, :lowpass])
-    for section in filter_sections
-        section_filter = getfield(filter_cfg, section)
-        filter_data!(dat, section_filter)
+"""
+    highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
+
+Apply highpass filter to EEG data based on configuration.
+"""
+function highpass_filter!(dat::EegData, filter_cfg::FilterConfig; section::Symbol = :highpass)
+    sec = getfield(filter_cfg, section)
+    if sec.apply
+        highpass_filter!(dat, sec.freq; order = sec.order, filter_method = sec.method, filter_func = sec.func)
     end
 end
 
@@ -331,7 +395,7 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
     transition_width = filter_info.transition_band / filter_info.cutoff_freq
 
     # Calculate frequency response
-    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate/2), length = npoints))  # log spacing
+    freqs = exp10.(range(log10(0.01), log10(filter_info.sample_rate / 2), length = npoints))  # log spacing
     # freqs = range(0, sample_rate/2, length=npoints) # linear spacing
     w = 2π * freqs / filter_info.sample_rate
 
@@ -418,23 +482,9 @@ function get_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000
 end
 
 """
-    print_filter_characteristics(filter, sample_rate::Real, filter_freq::Union{Real,Tuple}, transition_width::Real; npoints::Int=1000)
+    print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000)
 
 Print a formatted summary of filter characteristics.
-
-# Arguments
-- `filter`: A digital filter object
-- `sample_rate::Real`: Sampling rate in Hz
-- `filter_freq::Union{Real,Tuple}`: Cutoff frequency in Hz
-- `transition_width::Real`: Width of transition band in Hz
-- `npoints::Int`: Number of frequency points for analysis (default: 1000)
-
-# Examples
-```julia
-# Print characteristics of a lowpass filter
-filter = create_filter("lp", "fir", 40.0, 1000.0)
-print_filter_characteristics(filter, 1000.0, 40.0, 10.0)
-```
 """
 function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 1000)
 
@@ -450,34 +500,16 @@ function print_filter_characteristics(filter_info::FilterInfo; npoints::Int = 10
 end
 
 
-"""
-Batch filtering for EEG/ERP data.
-"""
-
-#=============================================================================
-    FILTER-SPECIFIC VALIDATION
-=============================================================================#
-
-"""Validate filter-specific parameters, returning error message or nothing."""
-function _validate_filter_params(cutoff_freq::Real, filter_type::String)
-    cutoff_freq <= 0 && return "Cutoff frequency must be positive, got: $cutoff_freq"
-    filter_type ∉ ["lp", "hp"] && return "Filter type must be one of: lp, hp, got: $filter_type"
-    return nothing
-end
+# =============================================================================
+# BATCH FILTERING API
+# =============================================================================
 
 """Generate default output directory name for filter operation."""
 function _default_filter_output_dir(input_dir::String, pattern::String, filter_type::String, freq::Real)
     joinpath(input_dir, "filtered_$(pattern)_$(filter_type)_$(freq)hz")
 end
 
-#=============================================================================
-    FILTER-SPECIFIC PROCESSING
-=============================================================================#
-
-"""
-Process a single file through filtering pipeline.
-Returns BatchResult with success/failure info.
-"""
+"""Process a single file through filtering pipeline."""
 function _process_filter_file(
     filepath::String,
     output_path::String,
@@ -501,75 +533,100 @@ function _process_filter_file(
     # Select conditions
     data = _condition_select(data, condition_selection)
 
-    # Apply filter (mutates data in-place)
-    filter_data!.(data, filter_type, cutoff_freq)
+    # Apply filter based on type
+    if filter_type == "lp"
+        lowpass_filter!.(data, cutoff_freq)
+    else
+        highpass_filter!.(data, cutoff_freq)
+    end
 
-    # Save (always use "data" as variable name since load_data finds by type)
+    # Save
     jldsave(output_path; data = data)
 
     return BatchResult(true, filename, "Filtered successfully")
 end
 
-#=============================================================================
-    MAIN API FUNCTION
-=============================================================================#
-
 """
-    filter(file_pattern::String, cutoff_freq::Real; 
-           input_dir::String = pwd(), 
-           filter_type::String = "lp", 
-           participant_selection::Function = participants(),
-           condition_selection::Function = conditions(),
-           output_dir::Union{String, Nothing} = nothing)
+    lowpass_filter(file_pattern::String, cutoff_freq::Real; kwargs...)
 
-Filter EEG/ERP data from JLD2 files and save to a new directory.
+Batch lowpass filter EEG/ERP data from JLD2 files.
 
 # Arguments
-- `file_pattern::String`: Pattern to match files ("epochs", "erps", "cleaned", "original", or custom)
+- `file_pattern::String`: Pattern to match files ("epochs", "erps", etc.)
 - `cutoff_freq::Real`: Cutoff frequency in Hz
-- `input_dir::String`: Input directory containing JLD2 files (default: current directory)
-- `filter_type::String`: Type of filter ("lp", "hp")
-- `participant_selection::Function`: Participant selection predicate (default: `participants()` for all)
-- `condition_selection::Function`: Condition selection predicate (default: `conditions()` for all)
-- `output_dir::Union{String, Nothing}`: Output directory (default: creates subdirectory based on filter settings)
 
-# Example
-```julia
-# Filter all epochs at 30 Hz
-filter("epochs", 30.0)
-
-# Filter specific participant
-filter("epochs", 30.0, participants=3)
-
-# Filter specific participants and conditions
-filter("epochs", 30.0, participants=[3, 4], conditions=[1, 2])
-```
+# Keyword Arguments
+- `input_dir::String`: Input directory (default: pwd())
+- `participant_selection::Function`: Participant selection (default: participants())
+- `condition_selection::Function`: Condition selection (default: conditions())
+- `output_dir::Union{String, Nothing}`: Output directory
 """
-function filter(
+function lowpass_filter(
     file_pattern::String,
     cutoff_freq::Real;
     input_dir::String = pwd(),
-    filter_type::String = "lp",
     participant_selection::Function = participants(),
     condition_selection::Function = conditions(),
     output_dir::Union{String,Nothing} = nothing,
 )
+    return _run_filter_batch(
+        file_pattern,
+        cutoff_freq,
+        "lp";
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+        condition_selection = condition_selection,
+        output_dir = output_dir,
+    )
+end
 
-    # Setup logging
-    log_file = "filter.log"
+"""
+    highpass_filter(file_pattern::String, cutoff_freq::Real; kwargs...)
+
+Batch highpass filter EEG/ERP data from JLD2 files.
+"""
+function highpass_filter(
+    file_pattern::String,
+    cutoff_freq::Real;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    return _run_filter_batch(
+        file_pattern,
+        cutoff_freq,
+        "hp";
+        input_dir = input_dir,
+        participant_selection = participant_selection,
+        condition_selection = condition_selection,
+        output_dir = output_dir,
+    )
+end
+
+# Internal common batch runner
+function _run_filter_batch(
+    file_pattern::String,
+    cutoff_freq::Real,
+    filter_type::String;
+    input_dir::String = pwd(),
+    participant_selection::Function = participants(),
+    condition_selection::Function = conditions(),
+    output_dir::Union{String,Nothing} = nothing,
+)
+    log_file = "filter_$(filter_type).log"
     setup_global_logging(log_file)
 
     try
-        @info ""
-        @info "Batch filtering started at $(now())"
-        @log_call "filter"
+        @info "Batch $(filter_type == "lp" ? "lowpass" : "highpass") filtering started at $(now())"
+        @info "  cutoff: $cutoff_freq Hz"
 
-        # Validation 
+        # Validation
         if (error_msg = _validate_input_dir(input_dir)) !== nothing
             @minimal_error_throw(error_msg)
         end
-        if (error_msg = _validate_filter_params(cutoff_freq, filter_type)) !== nothing
-            @minimal_error_throw(error_msg)
+        if cutoff_freq <= 0
+            @minimal_error_throw("Cutoff frequency must be positive, got: $cutoff_freq")
         end
 
         # Setup directories
@@ -583,19 +640,14 @@ function filter(
             @minimal_warning "No JLD2 files found matching pattern '$file_pattern' in $input_dir"
             return nothing
         end
-        @info "Found $(length(files)) JLD2 files matching pattern '$file_pattern'"
 
-        # Create processing function with captured parameters
-        @info "Filter settings: filter_type=\"$filter_type\", cutoff: $cutoff_freq Hz"
+        # Execute
         process_fn =
             (input_path, output_path) ->
                 _process_filter_file(input_path, output_path, filter_type, cutoff_freq, condition_selection)
-
-        # Execute batch operation
         results = _run_batch_operation(process_fn, files, input_dir, output_dir; operation_name = "Filtering")
 
-        _log_batch_summary(results, output_dir)
-
+        return _log_batch_summary(results, output_dir)
     finally
         _cleanup_logging(log_file, output_dir)
     end

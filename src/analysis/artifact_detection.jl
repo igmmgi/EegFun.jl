@@ -1256,7 +1256,7 @@ function subset_bad_data(data_path::String, threshold::Float64; subset_directory
     all_files = readdir(output_directory)
     for participant_id in bad_participants
         # Find all files that contain participant_id
-        matching_files = Base.filter(all_files) do filename
+        matching_files = filter(all_files) do filename
             occursin(participant_id, filename)
         end
         # Move each matching file
