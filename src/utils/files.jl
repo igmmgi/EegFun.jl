@@ -1,5 +1,3 @@
-
-
 function check_files_exist(files::Vector{String})
     all_files_exist = true
     for fname in files
