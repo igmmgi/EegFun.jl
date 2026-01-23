@@ -28,7 +28,7 @@ participants (Nili et al., 2014).
 Nili, H., Wingfield, C., Walther, A., Su, L., Marslen-Wilson, W., & Kriegeskorte, N. (2014).
 A toolbox for representational similarity analysis. PLoS computational biology, 10(4), e1003553.
 """
-struct NoiseCeiling
+struct NoiseCeiling <: EegFunData
     lower_bound::Vector{Float64}  # [time]
     upper_bound::Vector{Float64}  # [time]
     n_participants::Int
@@ -43,14 +43,8 @@ function Base.show(io::IO, nc::NoiseCeiling)
     println(io, "NoiseCeiling:")
     println(io, "  Participants: $(nc.n_participants)")
     println(io, "  Time points: $(length(nc.lower_bound))")
-    println(
-        io,
-        "  Lower bound: $(round(minimum(nc.lower_bound), digits=3)) to $(round(maximum(nc.lower_bound), digits=3))",
-    )
-    println(
-        io,
-        "  Upper bound: $(round(minimum(nc.upper_bound), digits=3)) to $(round(maximum(nc.upper_bound), digits=3))",
-    )
+    println(io, "  Lower bound: $(round(minimum(nc.lower_bound), digits=3)) to $(round(maximum(nc.lower_bound), digits=3))")
+    println(io, "  Upper bound: $(round(minimum(nc.upper_bound), digits=3)) to $(round(maximum(nc.upper_bound), digits=3))")
 end
 
 """
@@ -151,10 +145,7 @@ function Base.show(io::IO, rsa::RsaData)
         for (idx, model_name) in enumerate(rsa.model_names)
             max_corr = maximum(rsa.model_correlations[:, idx])
             max_idx = argmax(rsa.model_correlations[:, idx])
-            println(
-                io,
-                "    - $model_name: max r=$(round(max_corr, digits=3)) at $(round(rsa.times[max_idx], digits=3)) s",
-            )
+            println(io, "    - $model_name: max r=$(round(max_corr, digits=3)) at $(round(rsa.times[max_idx], digits=3)) s")
         end
     end
 

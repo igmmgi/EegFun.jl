@@ -61,7 +61,7 @@ Stores complete results from a TF cluster-based permutation test.
 - `frequencies::Vector{Float64}`: Frequencies
 - `time_points::Vector{Float64}`: Time points
 """
-struct TFClusterPermutationResult
+struct TFClusterPermutationResult <: EegFunData
     test_info::TestInfo
     stat_matrix::Array{Float64,3}
     masks_positive::BitArray{3}
