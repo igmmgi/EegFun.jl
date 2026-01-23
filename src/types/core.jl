@@ -1,5 +1,12 @@
 # === ABSTRACT TYPES ===
 """
+    EegFunData
+
+Abstract supertype for all primary eegfun data and result structures.
+"""
+abstract type EegFunData end
+
+"""
     EegData
 
 Abstract supertype for all EEG data structures.
@@ -8,7 +15,7 @@ This type represents the base interface for EEG data objects, providing a common
 interface for different data formats including continuous data, event-related
 potentials, and epoch-based data.
 """
-abstract type EegData end
+abstract type EegData <: EegFunData end
 
 """
     SingleDataFrameEeg
@@ -533,7 +540,7 @@ about the decomposition process.
 - `kurtosis_signs::Vector{Bool}`: Boolean vector indicating if each component is sub-Gaussian (true = sub-Gaussian, false = super-Gaussian). For regular Infomax, all components are super-Gaussian (all false).
 - `filename::String`: Filename of the input data file used to generate this ICA result
 """
-struct InfoIca
+struct InfoIca <: EegFunData
     filename::String  # Filename of the input data file
     unmixing::Matrix{Float64}
     mixing::Matrix{Float64}
@@ -607,10 +614,7 @@ function Base.show(io::IO, layout::Layout)
     has_neigh = has_neighbours(layout)
 
     println(io, "Layout ($n_electrodes channels)")
-    println(
-        io,
-        "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")",
-    )
+    println(io, "2D coords: $(has_2d ? "✓" : "✗"), 3D coords: $(has_3d ? "✓" : "✗"), Neighbours: $(has_neigh ? "✓" : "✗")")
 
     if has_neigh
         avg_neighbours = average_number_of_neighbours(layout.neighbours)
@@ -669,10 +673,7 @@ function Base.show(io::IO, ::MIME"text/plain", neighbours_dict::OrderedDict{Symb
     n_electrodes = length(neighbours_dict)
     avg_neighbours = average_number_of_neighbours(neighbours_dict)
 
-    println(
-        io,
-        "Neighbours Dictionary ($n_electrodes electrodes): Average neighbours per electrode: $(round(avg_neighbours, digits=1))",
-    )
+    println(io, "Neighbours Dictionary ($n_electrodes electrodes): Average neighbours per electrode: $(round(avg_neighbours, digits=1))")
     println(io)
 
     # Don't print too much noise!
@@ -699,10 +700,7 @@ function Base.show(io::IO, dat::MultiDataFrameEeg)
     println(io, "File: $(filename(dat))")
     println(io, "Type: $(typeof(dat))")
     println(io, "Condition $(condition_number(dat)): $(condition_name(dat))")
-    println(
-        io,
-        "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_labels(dat))) (columns)",
-    )
+    println(io, "Size: $(n_epochs(dat)) (epoch) x $(nrow(meta_data(dat))) (rows) x $(length(channel_labels(dat))) (columns)")
     println(io, "Labels: ", print_vector(channel_labels(dat)))
     println(io, "Duration: ", duration(dat), " S")
     println(io, "Sample Rate: ", sample_rate(dat))
@@ -761,10 +759,7 @@ function Base.show(io::IO, ica::InfoIca)
     println(io, "│  ├─ Mixing: $(size(ica.mixing))")
     println(io, "│  └─ Sphere: $(size(ica.sphere))")
 
-    println(
-        io,
-        "└─ Channel labels: $(join(ica.layout.data.label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")",
-    )
+    println(io, "└─ Channel labels: $(join(ica.layout.data.label[1:min(5, n_channels)], ", "))$(n_channels > 5 ? " ..." : "")")
 end
 
 # Compact display for arrays

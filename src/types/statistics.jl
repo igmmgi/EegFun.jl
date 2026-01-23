@@ -14,9 +14,7 @@ const TTestResult = NamedTuple{(:df, :t, :p),Tuple{Float64,Float64,Float64}}
 
 # Format t-value and p-value for display
 function Base.show(io::IO, result::TTestResult)
-    t_str =
-        isnan(result.t) ? "NaN" :
-        (isinf(result.t) ? (result.t > 0 ? "Inf" : "-Inf") : Printf.@sprintf("%.4f", result.t))
+    t_str = isnan(result.t) ? "NaN" : (isinf(result.t) ? (result.t > 0 ? "Inf" : "-Inf") : Printf.@sprintf("%.4f", result.t))
     p_str = isnan(result.p) ? "NaN" : Printf.@sprintf("%.4f", result.p)
     df_str = isnan(result.df) ? "NaN" : string(round(Int, result.df))
     print(io, "t($df_str) = $t_str, p = $p_str")
@@ -227,7 +225,7 @@ Abstract type for statistical test results. All statistical test results share c
 - `time_points::Vector{Float64}`: Time points in seconds
 - `critical_t`: Critical t-values (type varies by test method)
 """
-abstract type StatsResult end
+abstract type StatsResult <: EegFunData end
 
 """
     PermutationResult
@@ -314,10 +312,7 @@ function Base.show(io::IO, result::PermutationResult)
                 stat_str = Printf.@sprintf("%.2f", cluster.cluster_stat)
                 time_str = "$(cluster.time_range[1])-$(cluster.time_range[2]) s"
                 n_elec = length(cluster.electrodes)
-                println(
-                    io,
-                    "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str",
-                )
+                println(io, "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str")
             end
         end
 
@@ -331,10 +326,7 @@ function Base.show(io::IO, result::PermutationResult)
                 stat_str = Printf.@sprintf("%.2f", cluster.cluster_stat)
                 time_str = "$(cluster.time_range[1])-$(cluster.time_range[2]) s"
                 n_elec = length(cluster.electrodes)
-                println(
-                    io,
-                    "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str",
-                )
+                println(io, "     [$sig_marker] Cluster $(cluster.id): stat=$stat_str, p=$p_str, $n_elec electrodes, $time_str")
             end
         end
 

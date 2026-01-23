@@ -1,6 +1,6 @@
 #  === EEG DATA UTILITIES ===
 #
-# This file provides utilities for accessing and manipulating EEG data structures.
+# This file provides utilities for accessing EegFun data structures.
 # It includes functions for column identification, data access, convenience functions,
 # data viewing, mathematical utilities, and subsetting operations.
 #
@@ -11,7 +11,6 @@
 # - Data Viewing: head, tail, viewer functions
 # - Mathematical Utilities: datarange, colmeans, data_limits
 # - Subsetting: Functions to subset EEG data objects
-#
 
 # === COLUMN IDENTIFICATION SYSTEM ===
 """
@@ -30,7 +29,6 @@ Get columns by group type for EegData objects using layout-based identification.
 - `:channels`: EEG channel columns (intersection of layout labels and DataFrame columns)
 - `:metadata`: System columns (all columns before first layout label)
 - `:extra`: Derived columns (all columns after last layout label)
-
 """
 function get_cols_by_group(dat::EegData, group::Symbol)
 
@@ -76,6 +74,7 @@ all_data(dat::SingleDataFrameEeg)::DataFrame = dat.data # single data frame
 all_data(dat::MultiDataFrameEeg)::DataFrame = to_data_frame(dat) # single data frame with all epochs
 all_data(dat::Vector{<:MultiDataFrameEeg})::DataFrame = to_data_frame(dat) # single data frame with all epochs from all objects
 
+# Handle collections and epoch selections
 function all_data(dat::Union{MultiDataFrameEeg,Vector{<:MultiDataFrameEeg}}; epoch_selection::Function = epochs())
     return to_data_frame(subset(dat, epoch_selection = epoch_selection))
 end
@@ -137,48 +136,39 @@ Get metadata column names from the EEG data.
 """
 meta_labels(dat::EegData) = get_cols_by_group(dat, :metadata)
 
+# Internal helper for grouped column access
+function _get_cols_data(dat::SingleDataFrameEeg, group::Symbol)
+    cols = get_cols_by_group(dat, group)
+    return isempty(cols) ? DataFrame() : dat.data[:, cols]
+end
+
+function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol, epoch::Int)
+    cols = get_cols_by_group(dat, group)
+    return isempty(cols) ? DataFrame() : dat.data[epoch][:, cols]
+end
+
+function _get_cols_data(dat::MultiDataFrameEeg, group::Symbol)
+    cols = get_cols_by_group(dat, group)
+    return isempty(cols) ? DataFrame() : to_data_frame(dat)[:, cols]
+end
 
 """
     meta_data(eeg_data::EegData) -> DataFrame
 
 Get meta data columns from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `DataFrame`: DataFrame containing metadata columns
 """
-function meta_data(dat::SingleDataFrameEeg)
-    meta_cols = get_cols_by_group(dat, :metadata)
-    return isempty(meta_cols) ? DataFrame() : dat.data[:, meta_cols]
-end
-
-function meta_data(dat::MultiDataFrameEeg, epoch::Int)
-    meta_cols = get_cols_by_group(dat, :metadata)
-    return isempty(meta_cols) ? DataFrame() : dat.data[epoch][:, meta_cols]
-end
-
-function meta_data(dat::MultiDataFrameEeg)
-    meta_cols = get_cols_by_group(dat, :metadata)
-    return isempty(meta_cols) ? DataFrame() : to_data_frame(dat)[:, meta_cols]
-end
+meta_data(dat::SingleDataFrameEeg) = _get_cols_data(dat, :metadata)
+meta_data(dat::MultiDataFrameEeg, epoch::Int) = _get_cols_data(dat, :metadata, epoch)
+meta_data(dat::MultiDataFrameEeg) = _get_cols_data(dat, :metadata)
 
 
 """
-    channel_data(eeg_data::EegData) -> DataFrame
+    channel_labels(dat::EegData) -> Vector{Symbol}
 
-Get EEG channel data columns from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `DataFrame`: DataFrame containing EEG channel columns
+Get EEG channel column names from the EEG data.
 """
 channel_labels(dat::EegData)::Vector{Symbol} = get_cols_by_group(dat, :channels)
-channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbol} =
-    channel_labels(dat)[channel_numbers...]
+channel_labels(dat::EegData, channel_numbers::Vector{<:UnitRange})::Vector{Symbol} = channel_labels(dat)[channel_numbers...]
 channel_labels(dat::EegData, channel_numbers)::Vector{Symbol} = channel_labels(dat)[channel_numbers]
 channel_labels(dat::EegData, channel_numbers::Int)::Vector{Symbol} = channel_labels(dat)[[channel_numbers]]
 
@@ -191,30 +181,13 @@ channel_labels(dat::Vector{<:EegData})::Vector{Symbol} = channel_labels(first(da
     channel_data(eeg_data::EegData) -> DataFrame
 
 Get EEG channel data columns from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `DataFrame`: DataFrame containing EEG channel columns
 """
-function channel_data(dat::SingleDataFrameEeg)::DataFrame
-    channel_cols = get_cols_by_group(dat, :channels)
-    return isempty(channel_cols) ? DataFrame() : dat.data[:, channel_cols]
-end
-
-function channel_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame
-    channel_cols = get_cols_by_group(dat, :channels)
-    return isempty(channel_cols) ? DataFrame() : dat.data[epoch][:, channel_cols]
-end
-
-function channel_data(dat::MultiDataFrameEeg)::DataFrame
-    channel_cols = get_cols_by_group(dat, :channels)
-    return isempty(channel_cols) ? DataFrame() : to_data_frame(dat)[:, channel_cols]
-end
+channel_data(dat::SingleDataFrameEeg)::DataFrame = _get_cols_data(dat, :channels)
+channel_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = _get_cols_data(dat, :channels, epoch)
+channel_data(dat::MultiDataFrameEeg)::DataFrame = _get_cols_data(dat, :channels)
 
 # Extract channel signals as vectors (returns vector of signals for processing)
-channel_data(dat::EpochData, channel::Symbol) = reduce(vcat, (trial[!, channel] for trial in dat.data))
+channel_data(dat::MultiDataFrameEeg, channel::Symbol) = reduce(vcat, (trial[!, channel] for trial in dat.data))
 channel_data(dat::SingleDataFrameEeg, channel::Symbol)::Vector{Float64} = dat.data[!, channel]
 
 """
@@ -241,28 +214,10 @@ extra_labels(dat::Vector{<:EegData})::Vector{Symbol} = extra_labels(first(dat))
     extra_data(eeg_data::EegData) -> DataFrame
 
 Get extra/derived columns (EOG, flags, etc.) from the EEG data.
-
-# Arguments
-- `eeg_data::EegData`: The EEG data object
-
-# Returns
-- `DataFrame`: DataFrame containing extra/derived columns
 """
-function extra_data(dat::SingleDataFrameEeg)::DataFrame
-    extra_cols = get_cols_by_group(dat, :extra)
-    return isempty(extra_cols) ? DataFrame() : dat.data[:, extra_cols]
-end
-
-function extra_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame
-    extra_cols = get_cols_by_group(dat, :extra)
-    return isempty(extra_cols) ? DataFrame() : dat.data[epoch][:, extra_cols]
-end
-
-
-function extra_data(dat::MultiDataFrameEeg)::DataFrame
-    extra_cols = get_cols_by_group(dat, :extra)
-    return isempty(extra_cols) ? DataFrame() : to_data_frame(dat)[:, extra_cols]
-end
+extra_data(dat::SingleDataFrameEeg)::DataFrame = _get_cols_data(dat, :extra)
+extra_data(dat::MultiDataFrameEeg, epoch::Int)::DataFrame = _get_cols_data(dat, :extra, epoch)
+extra_data(dat::MultiDataFrameEeg)::DataFrame = _get_cols_data(dat, :extra)
 
 
 
@@ -357,36 +312,37 @@ n_layout(layout::Layout)::Int = nrow(layout.data)
     n_epochs(dat::EegData) -> Int
 
 Get the number of epochs in the EEG data.
-
-# Arguments
-- `dat::EegData`: The EEG data object
-
-# Returns
-- `Int`: Number of epochs
 """
 n_epochs(dat::SingleDataFrameEeg)::Int = 1
 n_epochs(dat::MultiDataFrameEeg)::Int = length(dat.data)
 n_epochs(dat::ErpData)::Int = dat.n_epochs
 
+"""
+    condition_number(dat::EegFunData) -> Union{Int, String}
 
+Get the condition number or identifier.
+"""
+condition_number(dat::EegFunData) = hasproperty(dat, :condition) ? dat.condition : "N/A"
 condition_number(dat::ContinuousData)::String = "Raw Data"
-condition_number(dat::ErpData)::Int = dat.condition
-condition_number(dat::EpochData)::Int = dat.condition
-condition_number(dat::TimeFreqData)::Int = dat.condition
-condition_number(dat::TimeFreqEpochData)::Int = dat.condition
-condition_number(dat::SpectrumData)::Int = dat.condition
 
+"""
+    condition_name(dat::EegFunData) -> String
+
+Get the condition name.
+"""
+condition_name(dat::EegFunData) = hasproperty(dat, :condition_name) ? dat.condition_name : "N/A"
 condition_name(dat::ContinuousData)::String = "Raw Data"
-condition_name(dat::ErpData)::String = dat.condition_name
-condition_name(dat::EpochData)::String = dat.condition_name
-condition_name(dat::TimeFreqData)::String = dat.condition_name
-condition_name(dat::TimeFreqEpochData)::String = dat.condition_name
-condition_name(dat::SpectrumData)::String = dat.condition_name
 
-file_name(dat::EpochData)::String = dat.file
-file_name(dat::TimeFreqData)::String = dat.file
-file_name(dat::TimeFreqEpochData)::String = dat.file
-file_name(dat::SpectrumData)::String = dat.file
+"""
+    file_name(dat::EegFunData) -> String
+
+Get the source filename.
+"""
+function file_name(dat::EegFunData)
+    hasproperty(dat, :file) && return dat.file
+    hasproperty(dat, :filename) && return dat.filename
+    return "Unknown"
+end
 
 
 """
@@ -403,11 +359,9 @@ Get the duration of the EEG data in seconds.
 duration(dat::SingleDataFrameEeg)::Float64 =
     hasproperty(dat.data, :time) && !isempty(dat.data.time) ? last(dat.data.time) - first(dat.data.time) : 0.0
 duration(dat::MultiDataFrameEeg)::Float64 =
-    hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) :
-    0.0
+    hasproperty(dat.data[1], :time) && !isempty(dat.data[1].time) ? last(dat.data[1].time) - first(dat.data[1].time) : 0.0
 duration(dat::MultiDataFrameEeg, epoch::Int)::Float64 =
-    hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ?
-    last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
+    hasproperty(dat.data[epoch], :time) && !isempty(dat.data[epoch].time) ? last(dat.data[epoch].time) - first(dat.data[epoch].time) : 0.0
 duration(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? 0.0 : duration(dat[1])
 
 
@@ -435,30 +389,22 @@ have_same_structure(erps)
 """
 function have_same_structure(dat1::EegData, dat2::EegData)::Bool
     if sample_rate(dat1) != sample_rate(dat2)
-        @minimal_error_throw(
-            "Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
-        )
+        @minimal_error_throw("Sample rates do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     if n_samples(dat1) != n_samples(dat2)
-        @minimal_error_throw(
-            "Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
-        )
+        @minimal_error_throw("Number of samples do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     if channel_labels(dat1) != channel_labels(dat2)
-        @minimal_error_throw(
-            "Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
-        )
+        @minimal_error_throw("Channel labels do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     # Check time vectors match (if they exist)
     time1 = time(dat1)
     time2 = time(dat2)
     if !isempty(time1) && !isempty(time2) && !all(time1 .≈ time2)
-        @minimal_error_throw(
-            "Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)"
-        )
+        @minimal_error_throw("Time vectors do not match: $(dat1.file)/$(dat1.condition) vs. $(dat2.file)/$(dat2.condition)")
         return false
     end
     return true
@@ -468,30 +414,10 @@ function have_same_structure(dats::Vector{<:EegData})::Bool
     isempty(dats) && return true
     length(dats) == 1 && return true
 
-    sample_rates = sample_rate.(dats)
-    n_samps = n_samples.(dats)
-    ch_labels = channel_labels.(dats)
-    time_vectors = time.(dats)
-
-    if !all(x -> x == sample_rates[1], sample_rates)
-        @minimal_error_throw("Inconsistent sample rates")
-        return false
-    end
-    if !all(x -> x == n_samps[1], n_samps)
-        @minimal_error_throw("Inconsistent number of samples")
-        return false
-    end
-    if !all(x -> x == ch_labels[1], ch_labels)
-        @minimal_error_throw("Inconsistent channel labels")
-        return false
-    end
-    # Check time vectors match (if they exist)
-    first_time = time_vectors[1]
-    if !isempty(first_time)
-        if !all(tv -> !isempty(tv) && all(tv .≈ first_time), time_vectors)
-            @minimal_error_throw("Inconsistent time vectors")
-            return false
-        end
+    # Check all against the first one
+    template = first(dats)
+    for i = 2:length(dats)
+        !have_same_structure(template, dats[i]) && return false
     end
     return true
 end
@@ -511,8 +437,7 @@ Get the time column from the EEG data or DataFrame as a vector.
 """
 time(dat::SingleDataFrameEeg)::Vector{Float64} = hasproperty(dat.data, :time) ? dat.data[!, :time] : Float64[]
 time(dat::MultiDataFrameEeg)::Vector{Float64} = hasproperty(dat.data[1], :time) ? dat.data[1][!, :time] : Float64[]
-time(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} =
-    hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
+time(dat::MultiDataFrameEeg, epoch::Int)::Vector{Float64} = hasproperty(dat.data[epoch], :time) ? dat.data[epoch][!, :time] : Float64[]
 time(dat::Vector{T}) where {T<:EegData} = isempty(dat) ? Float64[] : time(dat[1])
 time(df::DataFrame)::Vector{Float64} = hasproperty(df, :time) ? df[!, :time] : Float64[]
 
@@ -600,17 +525,11 @@ function tail(dat::EegData; n = nothing)
 end
 
 """
-    to_data_frame(dat::EpochData) -> DataFrame
+    to_data_frame(dat::MultiDataFrameEeg) -> DataFrame
 
-Convert EpochData to a single DataFrame by concatenating all epochs.
-
-# Arguments
-- `dat::EpochData`: The epoch data to convert
-
-# Returns
-- `DataFrame`: Single DataFrame with all epochs concatenated vertically
+Convert a multi-dataframe EEG object to a single DataFrame by concatenating all epochs.
 """
-function to_data_frame(dat::EpochData)
+function to_data_frame(dat::MultiDataFrameEeg)
     isempty(dat.data) && return DataFrame()
     return vcat(dat.data...)
 end
@@ -756,12 +675,7 @@ function ylimits(
     sample_selection::Function = samples(),
     include_extra::Bool = false,
 )::Tuple{Float64,Float64}
-    dat_sub = subset(
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        include_extra = include_extra,
-    )
+    dat_sub = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = include_extra)
     chs = channel_labels(dat_sub)
     lims = data_limits_y(dat_sub.data, chs)
     return (lims[1], lims[2])
@@ -781,12 +695,7 @@ function ylimits(
 )::Tuple{Float64,Float64}
 
     # Apply predicates via subset first
-    dat_sub = subset(
-        dat;
-        channel_selection = channel_selection,
-        sample_selection = sample_selection,
-        include_extra = include_extra,
-    )
+    dat_sub = subset(dat; channel_selection = channel_selection, sample_selection = sample_selection, include_extra = include_extra)
     # Determine which value columns to use
     chs = channel_labels(dat_sub)
     # Compute limits per epoch and combine
@@ -868,113 +777,56 @@ Internal helper for subsetting EpochData with epoch selection.
 # Returns
 - `Tuple`: (selected_epochs, selected_channels, selected_samples, layout_subset)
 """
-function _subset_common(dat::EpochData, epoch_selection, channel_selection, sample_selection, include_extra)
+function _subset_common(dat::MultiDataFrameEeg, epoch_selection, channel_selection, sample_selection, include_extra)
     @debug "Subsetting $(typeof(dat)): selecting epochs, channels and samples"
     # Get subset selected epochs, channels, samples, and layout
     selected_epochs = get_selected_epochs(dat, epoch_selection)
-    selected_channels, selected_samples, layout_subset =
-        _subset_common(dat, channel_selection, sample_selection, include_extra)
+    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
     return selected_epochs, selected_channels, selected_samples, layout_subset
 end
 
-"""
-    _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info) -> ContinuousData
-
-Internal helper to create ContinuousData from subset DataFrame.
-"""
-function _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, file::String)
-    return ContinuousData(file, data_subset, layout, sample_rate, analysis_info)
-end
-
-"""
-    _create_subset(data_subset::DataFrame, layout, sample_rate::Int, analysis_info, n_epochs::Int) -> ErpData
-
-Internal helper to create ErpData from subset DataFrame.
-"""
-function _create_subset(
-    data_subset::DataFrame,
-    layout,
-    sample_rate::Int,
-    analysis_info,
-    n_epochs::Int,
-    condition::Int,
-    condition_name::String,
-    file::String,
+# Helper constructors for subsetting
+_create_subset(dat::ContinuousData, ds, ls) = ContinuousData(dat.file, ds, ls, dat.sample_rate, dat.analysis_info)
+_create_subset(dat::ErpData, ds, ls) =
+    ErpData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.analysis_info, dat.n_epochs)
+_create_subset(dat::EpochData, ds, ls) = EpochData(dat.file, dat.condition, dat.condition_name, ds, ls, dat.sample_rate, dat.analysis_info)
+_create_subset(dat::TimeFreqData, ds, ls) = TimeFreqData(
+    dat.file,
+    dat.condition,
+    dat.condition_name,
+    ds.data_power,
+    ds.data_phase,
+    ls,
+    dat.sample_rate,
+    dat.method,
+    dat.baseline,
+    dat.analysis_info,
 )
-    return ErpData(file, condition, condition_name, data_subset, layout, sample_rate, analysis_info, n_epochs)
-end
-
-"""
-    _create_subset(data_subset::Vector{DataFrame}, layout, sample_rate::Int, analysis_info) -> EpochData
-
-Internal helper to create EpochData from subset DataFrames.
-"""
-function _create_subset(
-    data_subset::Vector{DataFrame},
-    layout,
-    sample_rate::Int,
-    analysis_info,
-    condition::Int,
-    condition_name::String,
-    file::String,
-)
-    return EpochData(file, condition, condition_name, data_subset, layout, sample_rate, analysis_info)
-end
 
 # === SUBSET IMPLEMENTATIONS ===
 
 function subset(
-    dat::SingleDataFrameEeg;
+    dat::T;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     include_extra::Bool = false,
-)::SingleDataFrameEeg
-    selected_channels, selected_samples, layout_subset =
-        _subset_common(dat, channel_selection, sample_selection, include_extra)
+)::T where {T<:SingleDataFrameEeg}
+    selected_channels, selected_samples, layout_subset = _subset_common(dat, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
-    return _create_subset(dat_subset, layout_subset, dat.sample_rate, dat.analysis_info, dat.file)
+    return _create_subset(dat, dat_subset, layout_subset)
 end
 
 function subset(
-    dat::ErpData;
-    channel_selection::Function = channels(),
-    sample_selection::Function = samples(),
-    include_extra::Bool = false,
-)::ErpData
-    selected_channels, selected_samples, layout_subset =
-        _subset_common(dat, channel_selection, sample_selection, include_extra)
-    dat_subset = subset_dataframe(dat.data, selected_channels, selected_samples)
-    return _create_subset(
-        dat_subset,
-        layout_subset,
-        dat.sample_rate,
-        dat.analysis_info,
-        dat.n_epochs,
-        dat.condition,
-        dat.condition_name,
-        dat.file,
-    )
-end
-
-function subset(
-    dat::EpochData;
+    dat::T;
     channel_selection::Function = channels(),
     sample_selection::Function = samples(),
     epoch_selection::Function = epochs(),
     include_extra::Bool = false,
-)::EpochData
+)::T where {T<:MultiDataFrameEeg}
     selected_epochs, selected_channels, selected_samples, layout_subset =
         _subset_common(dat, epoch_selection, channel_selection, sample_selection, include_extra)
     dat_subset = subset_dataframes(dat.data, selected_epochs, selected_channels, selected_samples)
-    return _create_subset(
-        dat_subset,
-        layout_subset,
-        dat.sample_rate,
-        dat.analysis_info,
-        dat.condition,
-        dat.condition_name,
-        dat.file,
-    )
+    return _create_subset(dat, dat_subset, layout_subset)
 end
 
 function subset(
@@ -1137,10 +989,8 @@ condition_info(dat::EpochData) = (dat.condition, dat.condition_name)
 condition_info(dat::ErpData) = (dat.condition, dat.condition_name)
 condition_info(dat::TimeFreqData) = (dat.condition, dat.condition_name)
 condition_info(dat::TimeFreqEpochData) = (dat.condition, dat.condition_name)
-condition_info(dat::SingleDataFrameEeg) = (
-    hasproperty(dat, :condition) ? dat.condition : 1,
-    hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous",
-)
+condition_info(dat::SingleDataFrameEeg) =
+    (hasproperty(dat, :condition) ? dat.condition : 1, hasproperty(dat, :condition_name) ? dat.condition_name : "Continuous")
 
 # Helper function predicates for easier participant filtering (for Vector{Int} of participant IDs)
 participants() = x -> fill(true, length(x))  # Default: select all participants given
@@ -1163,11 +1013,7 @@ conditions_not(condition_names::Vector{String}) = x -> .!([_get_condition_name(d
 conditions_not(condition_name::String) = x -> .!([_get_condition_name(dat) == condition_name for dat in x])
 
 # Internal helper to validate and preserve order for channel names
-function _handle_channel_names_order(
-    user_order::Vector{Symbol},
-    selectable_cols::Vector{Symbol},
-    selected::Vector{Symbol},
-)
+function _handle_channel_names_order(user_order::Vector{Symbol}, selectable_cols::Vector{Symbol}, selected::Vector{Symbol})
     # Validate: check for missing channels and duplicates
     seen = Set{Symbol}()
     for ch in user_order
@@ -1442,11 +1288,7 @@ function _rename_data_columns!(df::DataFrame, rename_dict::Dict{Symbol,Symbol}, 
     end
 end
 
-function _rename_data_columns!(
-    dat::SingleDataFrameEeg,
-    rename_dict::Dict{Symbol,Symbol},
-    existing_channels::Set{Symbol},
-)
+function _rename_data_columns!(dat::SingleDataFrameEeg, rename_dict::Dict{Symbol,Symbol}, existing_channels::Set{Symbol})
     _rename_data_columns!(dat.data, rename_dict, existing_channels)
 end
 
