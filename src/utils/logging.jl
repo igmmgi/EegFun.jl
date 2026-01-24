@@ -14,7 +14,7 @@ const LOG_STATE = LoggingState(
     nothing,               # log_start_time
     nothing,               # global_log_handle
     nothing,               # global_log_start_time
-    ConsoleLogger(stdout), # saved_logger
+    nothing,               # saved_logger (captured at runtime)
     Logging.Info,          # log_level
 )
 
@@ -24,32 +24,27 @@ const LOG_STATE = LoggingState(
 Format a duration in a human-readable way, choosing appropriate units.
 """
 function format_duration(duration::Millisecond)
-    total_seconds = Int(round(duration.value / 1000))
-
-    if total_seconds < 60
-        return "$total_seconds seconds"
-    elseif total_seconds < 3600
-        minutes = div(total_seconds, 60)
-        seconds = rem(total_seconds, 60)
-        return "$minutes minutes, $seconds seconds"
-    else
-        hours = div(total_seconds, 3600)
-        minutes = div(rem(total_seconds, 3600), 60)
-        seconds = rem(total_seconds, 60)
-        return "$hours hours, $minutes minutes, $seconds seconds"
-    end
+    s = round(Int, duration.value / 1000) # nearest S
+    s == 0 && return "0 seconds"
+    return string(Dates.canonicalize(Second(s)))
 end
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
 
+# Internal: map symbols to log levels
+const LOG_LEVEL_MAP = Dict{Symbol,Logging.LogLevel}(
+    :debug => Logging.Debug,
+    :info => Logging.Info,
+    :warn => Logging.Warn,
+    :warning => Logging.Warn,
+    :error => Logging.Error,
+)
+
 # Internal: normalize log level
-_to_loglevel(level::Symbol) =
-    level === :debug ? Logging.Debug :
-    level === :info  ? Logging.Info  :
-    level === :warn  ? Logging.Warn  :
-    level === :error ? Logging.Error : Logging.Info
+_to_loglevel(level::Logging.LogLevel) = level
+_to_loglevel(level::Symbol) = get(LOG_LEVEL_MAP, level, Logging.Info)
 
 # Back-compat overload for String input
 _to_loglevel(level::String) = _to_loglevel(Symbol(lowercase(level)))
@@ -118,130 +113,89 @@ end
 
 Create a TeeLogger that writes to both console and file.
 """
-function _create_tee_logger(
-    console_level::Logging.LogLevel,
-    file_handle::IO,
-    file_level::Logging.LogLevel;
-    include_kwargs::Bool = false,
-)
+function _create_tee_logger(console_level::Logging.LogLevel, file_handle::IO, file_level::Logging.LogLevel; include_kwargs::Bool = false)
     console_logger = ConsoleLogger(stdout, console_level)
     file_logger = _create_file_logger(file_handle, file_level; include_kwargs = include_kwargs)
     return TeeLogger(console_logger, file_logger)
 end
 
 """
-    setup_global_logging(log_file::String)
+    setup_logging(log_file::String; log_level::Symbol = :info, is_global::Bool = false, include_kwargs::Bool = !is_global)
 
-Set up a global log file that will persist throughout the session. This is meant to be used
-for overall program logging, while individual file processing can use setup_logging.
+Set up logging to both stdout and a file. 
 
 # Arguments
-- `log_file::String`: Path to the global log file
+- `log_file`: Path to the log file.
+- `log_level`: Logging level (:debug, :info, :warn, :error).
+- `is_global`: If true, sets up a session-wide log. If false (default), sets up for individual file processing.
+- `include_kwargs`: Whether to include metadata in the log. Defaults to true for local logs.
 
 # Returns
-- The opened file handle for direct writing (using write/println)
-
-# Example
-```julia
-global_log = setup_global_logging("global_analysis.log")
-@info "This is logged to the global log and stdout"
-write(global_log, "Direct write to global log\\n")
-```
+- The file handle (for direct writing if desired).
 """
-
-function setup_global_logging(log_file::String; log_level::Symbol = :info)
-    # Convert log level and store it
+function setup_logging(log_file::String; log_level::Symbol = :info, is_global::Bool = false, include_kwargs::Bool = !is_global)
     level = _to_loglevel(log_level)
     LOG_STATE.log_level = level
 
-    # Open log file (handles closing existing, recording time, writing header)
-    handle, start_time = _open_log_file(LOG_STATE.global_log_handle, LOG_STATE.global_log_start_time, log_file)
-    LOG_STATE.global_log_handle = handle
-    LOG_STATE.global_log_start_time = start_time
+    h_field = is_global ? :global_log_handle : :log_handle
+    t_field = is_global ? :global_log_start_time : :log_start_time
 
-    # Set up the global logger, but only if we're not already file logging
-    if isnothing(LOG_STATE.log_handle)
-        # Save current logger before replacing
+    # Capture original logger if we haven't yet (before replacing with our first file logger)
+    if isnothing(LOG_STATE.log_handle) && isnothing(LOG_STATE.global_log_handle)
         LOG_STATE.saved_logger = global_logger()
-
-        # Create and set the combined logger
-        logger = _create_tee_logger(level, handle, level)
-        global_logger(logger)
     end
+
+    # Open log file (closes existing if necessary)
+    handle, start_time = _open_log_file(getproperty(LOG_STATE, h_field), getproperty(LOG_STATE, t_field), log_file)
+
+    # Update state
+    setproperty!(LOG_STATE, h_field, handle)
+    setproperty!(LOG_STATE, t_field, start_time)
+
+    # Re-apply logger.
+    # If local is active, it always takes precedence. Otherwise global.
+    active_handle = !isnothing(LOG_STATE.log_handle) ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
+    active_include = !isnothing(LOG_STATE.log_handle) ? true : false
+
+    global_logger(_create_tee_logger(level, active_handle, level; include_kwargs = active_include))
 
     return handle
 end
 
+# Convenience aliases
+setup_global_logging(args...; kwargs...) = setup_logging(args...; is_global = true, kwargs...)
+
 """
-    close_global_logging()
+    close_logging(; is_global::Bool = false)
 
-Close the global log file and add a closing timestamp with duration.
+Close the currently active log file and restore previous logger.
 """
-function close_global_logging()
-    _close_log_file(LOG_STATE.global_log_handle, LOG_STATE.global_log_start_time, "Duration")
-    LOG_STATE.global_log_handle = nothing
-    LOG_STATE.global_log_start_time = nothing
+function close_logging(; is_global::Bool = false)
+    h_field = is_global ? :global_log_handle : :log_handle
+    t_field = is_global ? :global_log_start_time : :log_start_time
+    label = is_global ? "Global session duration" : "File processing duration"
 
-    # Only restore logger if we're not in file logging mode
-    isnothing(LOG_STATE.log_handle) && global_logger(LOG_STATE.saved_logger)
+    _close_log_file(getproperty(LOG_STATE, h_field), getproperty(LOG_STATE, t_field), label)
 
+    setproperty!(LOG_STATE, h_field, nothing)
+    setproperty!(LOG_STATE, t_field, nothing)
+
+    # If both file loggers are now closed, restore the original saved logger
+    if isnothing(LOG_STATE.log_handle) && isnothing(LOG_STATE.global_log_handle)
+        if !isnothing(LOG_STATE.saved_logger)
+            global_logger(LOG_STATE.saved_logger)
+            LOG_STATE.saved_logger = nothing
+        end
+    else
+        # Still have one file logger active (must be the global one if were closing local, 
+        # or we just closed global while local was active)
+        active_handle = !isnothing(LOG_STATE.log_handle) ? LOG_STATE.log_handle : LOG_STATE.global_log_handle
+        active_include = !isnothing(LOG_STATE.log_handle) ? true : false
+        global_logger(_create_tee_logger(LOG_STATE.log_level, active_handle, LOG_STATE.log_level; include_kwargs = active_include))
+    end
 end
 
-"""
-    setup_logging(log_file::String)
-
-Set up logging to both stdout and a file for processing an individual file.
-This temporarily replaces any global logger and restores it when close_logging is called.
-
-# Arguments
-- `log_file::String`: Path to the log file
-
-# Returns
-- Nothing (use standard logging macros: @info, @warn, @error)
-
-# Example
-```julia
-setup_logging("my_analysis.log")
-@info "This will be logged to both stdout and the file"
-```
-"""
-function setup_logging(log_file::String; log_level::Symbol = :info)
-    # Convert log level and store it
-    level = _to_loglevel(log_level)
-    LOG_STATE.log_level = level
-
-    # Check if we're entering logging for the first time (need to save logger)
-    was_logging = !isnothing(LOG_STATE.log_handle)
-
-    # Open log file (handles closing existing, recording time, writing header)
-    handle, start_time = _open_log_file(LOG_STATE.log_handle, LOG_STATE.log_start_time, log_file)
-    LOG_STATE.log_handle = handle
-    LOG_STATE.log_start_time = start_time
-
-    # Only save logger if we're entering logging for the first time
-    !was_logging && (LOG_STATE.saved_logger = global_logger())
-
-    # Create and set the combined logger (with kwargs support for file logging)
-    logger = _create_tee_logger(level, handle, level; include_kwargs = true)
-    global_logger(logger)
-
-    return nothing
-end
-
-"""
-    close_logging()
-
-Close the individual log file and add a closing timestamp with duration.
-Restores the previous logger (which may be the global logger).
-"""
-function close_logging()
-    _close_log_file(LOG_STATE.log_handle, LOG_STATE.log_start_time, "File Processing Duration")
-    LOG_STATE.log_handle = nothing
-    LOG_STATE.log_start_time = nothing
-
-    # Restore the saved logger (which was the global logger before file logging replaced it)
-    global_logger(LOG_STATE.saved_logger)
-end
+close_global_logging() = close_logging(is_global = true)
 
 
 # ============================================================================
@@ -272,14 +226,20 @@ end
     @log_call func_name
 
 Macro to log a function call by reading the last command from history file.
+If history is unavailable, it logs the provided function name.
 
-# Notes
-- Simply reads the last line from Julia's REPL history file
-- Logs the actual command as entered
+# Arguments
+- `func_name`: String or Symbol representing the function name.
 """
 macro log_call(func_name)
-    func_name isa String || error("@log_call: argument must be a string (function name)")
+    # Ensure func_name is a string for logging
+    name_str = string(func_name)
     return quote
         last_line = _get_last_history_line()
+        if isnothing(last_line)
+            @info "Function call: $($name_str)"
+        else
+            @info "Function call: $last_line"
+        end
     end
 end
