@@ -66,21 +66,27 @@ end
     splitgroups(v::AbstractVector) -> Tuple{Vector{Int64},Vector{Int64}}
 
 Split vector into groups based on consecutive numbers.
+Refined to a single pass to avoid intermediate allocations.
 
 # Returns
 - `Tuple{Vector{Int64},Vector{Int64}}`: Start and end indices of groups
 """
 function splitgroups(v::AbstractVector{<:Integer})
-
     isempty(v) && return Int64[], Int64[]
 
-    start, start_idx, end_idx = 1, Int64[], Int64[]
-    for stop in [findall(diff(v) .> 1); lastindex(v)]
-        push!(start_idx, v[start])
-        push!(end_idx, v[stop])
-        start = stop + 1
+    n = length(v)
+    start_vals = [Int64(v[1])]
+    end_vals = Int64[]
+
+    @inbounds for i = 2:n
+        if v[i] > v[i-1] + 1
+            push!(end_vals, Int64(v[i-1]))
+            push!(start_vals, Int64(v[i]))
+        end
     end
-    return start_idx, end_idx
+    push!(end_vals, Int64(v[end]))
+
+    return start_vals, end_vals
 end
 
 
@@ -102,10 +108,13 @@ Get column indices for specified channel labels.
 - `ArgumentError`: If no matching channels found
 """
 function get_channel_indices(dat::DataFrame, channel_labels::AbstractVector{<:AbstractString})::Vector{Int}
-    isempty(channel_labels) && @minimal_error "channel_labels cannot be empty"
+    isempty(channel_labels) && @minimal_error_throw "channel_labels cannot be empty"
 
-    channel_indices = findall(col -> col in channel_labels, names(dat))
-    isempty(channel_indices) && @minimal_error "No matching channel_labels found in the data frame"
+    # Use Set for O(1) membership check during search
+    labels_set = Set(channel_labels)
+    channel_indices = findall(col -> col in labels_set, names(dat))
+
+    isempty(channel_indices) && @minimal_error_throw "No matching channel_labels found in the data frame"
 
     return channel_indices
 end
@@ -141,8 +150,7 @@ Assumes time vector is sorted in ascending order.
 """
 find_idx_start_end(time::AbstractVector, start_time::Real, end_time::Real) =
     searchsortedfirst(time, start_time), searchsortedlast(time, end_time)
-find_idx_start_end(time::AbstractVector, limits::AbstractVector) =
-    searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
+find_idx_start_end(time::AbstractVector, limits::AbstractVector) = searchsortedfirst(time, limits[1]), searchsortedlast(time, limits[end])
 
 
 """
@@ -171,24 +179,26 @@ indices, times = find_times(time_vec, requested)
 ```
 """
 function find_times(time::AbstractVector, requested_times::AbstractVector)::Tuple{Vector{Int},Vector{Float64}}
-    time_min = minimum(time)
-    time_max = maximum(time)
+    # Pre-allocate for performance if we have many requested times
+    n_req = length(requested_times)
+    indices = sizehint!(Int[], n_req)
+    times_out = sizehint!(Float64[], n_req)
 
-    indices = Int[]
-    times_out = Float64[]
+    isempty(time) && return indices, times_out
 
-    for t_requested in requested_times
+    time_min, time_max = time[1], time[end] # Assumes sorted
+
+    for t_req in requested_times
         # Only include if within data range
-        if t_requested >= time_min && t_requested <= time_max
-            # Use searchsortedfirst (same as find_idx_range/find_idx_start_end)
-            idx = searchsortedfirst(time, t_requested)
+        if t_req >= time_min && t_req <= time_max
+            idx = searchsortedfirst(time, t_req)
             # Find nearest (check previous index if closer)
-            if idx > 1 && abs(time[idx-1] - t_requested) < abs(time[min(idx, length(time))] - t_requested)
+            if idx > 1 && abs(time[idx-1] - t_req) <= abs(time[min(idx, length(time))] - t_req)
                 idx = idx - 1
             end
-            idx = min(idx, length(time))  # Ensure within bounds
+            idx = min(idx, length(time))
 
-            # Avoid duplicates
+            # Avoid duplicates of the same index
             if isempty(indices) || indices[end] != idx
                 push!(indices, idx)
                 push!(times_out, time[idx])
@@ -204,7 +214,8 @@ end
 """
     detrend(x::AbstractVector, y::AbstractVector) -> Vector{Float64}
 
-Remove linear trend from data using least squares regression.
+Remove linear trend from data using closed-form least squares regression.
+More efficient than matrix-based regression `(X \\ y)`.
 
 # Arguments
 - `x::AbstractVector`: Independent variable (e.g., time points)
@@ -212,21 +223,33 @@ Remove linear trend from data using least squares regression.
 
 # Returns
 - `Vector{Float64}`: Detrended data with linear trend removed
-
-# Example
-```julia
-x = 1:10
-y = 2 .* x .+ randn(10)  # Linear trend with noise
-y_detrended = detrend(x, y)
-```
 """
 function detrend(x::AbstractVector, y::AbstractVector)::Vector{Float64}
-    length(x) == length(y) || @minimal_error "x and y must have the same length"
-    length(x) < 2 && @minimal_error "Need at least 2 points for detrending"
+    n = length(x)
+    n == length(y) || @minimal_error "x and y must have the same length"
+    n < 2 && @minimal_error "Need at least 2 points for detrending"
 
-    X = hcat(ones(length(x)), x)  # Design matrix (with intercept)
-    β = X \ y  # Solve for coefficients (m, b)
-    return y - (X * β)
+    # Use closed-form formulas for slope (m) and intercept (b)
+    # m = (nΣxy - ΣxΣy) / (nΣx² - (Σx)²)
+    # b = (Σy - mΣx) / n
+
+    sum_x = sum(x)
+    sum_y = sum(y)
+    sum_xy = dot(x, y)
+    sum_x2 = dot(x, x)
+
+    denom = (n * sum_x2 - sum_x^2)
+
+    # Handle zero denominator (vertical line or identical points)
+    if abs(denom) < 1e-15
+        return y .- (sum_y / n) # Just remove mean
+    end
+
+    m = (n * sum_xy - sum_x * sum_y) / denom
+    b = (sum_y - m * sum_x) / n
+
+    # Return detrended: y - (mx + b)
+    return [y_val - (m * x_val + b) for (x_val, y_val) in zip(x, y)]
 end
 
 
@@ -362,13 +385,7 @@ The data and layout DataFrames are copied with `copycols=true` to ensure
 independence, while immutable fields are shared.
 """
 function Base.copy(dat::ContinuousData)::ContinuousData
-    return ContinuousData(
-        dat.file,
-        copy(dat.data, copycols = true),
-        copy(dat.layout),
-        dat.sample_rate,
-        copy(dat.analysis_info),
-    )
+    return ContinuousData(dat.file, copy(dat.data, copycols = true), copy(dat.layout), dat.sample_rate, copy(dat.analysis_info))
 end
 
 """
@@ -433,54 +450,43 @@ into a sorted, unique vector of valid component indices.
                  Returns an empty vector if input is empty or invalid.
 """
 function parse_string_to_ints(text::String)
+    isempty(text) && return Int[]
+
+    # Check for decimal points and error (EEG channel/component indices are always integers)
+    occursin('.', text) && throw(ArgumentError("Decimal points not allowed in integer selection: '$text'"))
 
     components = Int[]
-    if isempty(text)
-        return components
-    end
 
-    # Check for decimal points and error
-    if occursin('.', text)
-        throw(ArgumentError("Decimal points not allowed in int selection: '$text'"))
-    end
+    # Split by comma or semicolon
+    for part in split(text, r"[,;]")
+        s_part = strip(part)
+        isempty(s_part) && continue
 
-    # Split by comma or semicolon and filter empty parts
-    parts = filter(!isempty, strip.(split(text, r"[,;]")))
-
-    # Filter non-numeric parts (except :) and warn
-    numeric_parts = []
-    for part in parts
-        if all(c -> isdigit(c) || c == ':', part)
-            push!(numeric_parts, part)
-        else
-            @minimal_warning "Skipping non-numeric component: '$part'"
-        end
-    end
-
-    for part in numeric_parts
-        if occursin(':', part) # Handle ranges like "1:5"
-            range_parts = strip.(split(part, ':'))
-            if length(range_parts) == 2
-                start_num = parse(Int, range_parts[1])
-                end_num = parse(Int, range_parts[2])
-                if start_num <= end_num
-                    append!(components, start_num:end_num)
+        if occursin(':', s_part)
+            range_splits = split(s_part, ':')
+            if length(range_splits) == 2
+                start_str, end_str = strip(range_splits[1]), strip(range_splits[2])
+                if all(isdigit, start_str) && all(isdigit, end_str)
+                    s_idx, e_idx = parse(Int, start_str), parse(Int, end_str)
+                    s_idx <= e_idx && append!(components, s_idx:e_idx)
                 end
             end
-        else # Handle single numbers
-            num = parse(Int, part)
-            push!(components, num)
+        elseif all(isdigit, s_part)
+            push!(components, parse(Int, s_part))
+        else
+            @minimal_warning "Skipping invalid integer selection part: '$s_part'"
         end
     end
 
-    # Remove duplicates and sort
-    unique!(sort!(components))
-    return components
+    return unique!(sort!(components))
 end
 
 function parse_string_to_ints(text::String, max_count::Int)
-    all_components = parse_string_to_ints(text)
-    return all_components[1:min(length(all_components), max_count)]
+    all_indices = parse_string_to_ints(text)
+    if length(all_indices) > max_count
+        return all_indices[1:max_count]
+    end
+    return all_indices
 end
 
 
@@ -511,11 +517,7 @@ plot_kwargs = _merge_plot_kwargs(PLOT_KWARGS, kwargs)
 plot_kwargs = _merge_plot_kwargs(PLOT_KWARGS, kwargs; validate=false)
 ```
 """
-function _merge_plot_kwargs(
-    defaults_dict::Dict{Symbol,Tuple{Any,String}},
-    user_kwargs::NamedTuple;
-    validate::Bool = true,
-)::Dict{Symbol,Any}
+function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::NamedTuple; validate::Bool = true)::Dict{Symbol,Any}
 
     # Get default and user kwargs
     defaults = _get_defaults(defaults_dict)
@@ -537,20 +539,12 @@ function _merge_plot_kwargs(
 end
 
 # Convenience function for the common pattern
-function _merge_plot_kwargs(
-    defaults_dict::Dict{Symbol,Tuple{Any,String}},
-    user_kwargs::Dict;
-    validate::Bool = true,
-)::Dict{Symbol,Any}
+function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Dict; validate::Bool = true)::Dict{Symbol,Any}
     return _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
 end
 
 # Handle empty keyword arguments (Base.Pairs)
-function _merge_plot_kwargs(
-    defaults_dict::Dict{Symbol,Tuple{Any,String}},
-    user_kwargs::Base.Pairs;
-    validate::Bool = true,
-)::Dict{Symbol,Any}
+function _merge_plot_kwargs(defaults_dict::Dict{Symbol,Tuple{Any,String}}, user_kwargs::Base.Pairs; validate::Bool = true)::Dict{Symbol,Any}
     return _merge_plot_kwargs(defaults_dict, NamedTuple(user_kwargs); validate = validate)
 end
 
@@ -612,12 +606,7 @@ combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :and)
 combine_boolean_columns!(dat, [:is_extreme_value_100, :is_eog_onset], :or, output_column = :any_artifact)
 ```
 """
-function combine_boolean_columns!(
-    dat::ContinuousData,
-    columns::Vector{Symbol},
-    operation::Symbol;
-    output_column::Symbol = :combined_flags,
-)
+function combine_boolean_columns!(dat::ContinuousData, columns::Vector{Symbol}, operation::Symbol; output_column::Symbol = :combined_flags)
     # Input validation
     @assert !isempty(columns) "Must specify at least one column to combine"
     @assert all(col -> hasproperty(dat.data, col), columns) "All specified columns must exist in the data"

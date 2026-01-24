@@ -10,9 +10,9 @@ using eegfun
         # Test format_duration with different durations
         @test eegfun.format_duration(Millisecond(5000)) == "5 seconds"
         @test eegfun.format_duration(Millisecond(30000)) == "30 seconds"
-        @test eegfun.format_duration(Millisecond(90000)) == "1 minutes, 30 seconds"
-        @test eegfun.format_duration(Millisecond(3661000)) == "1 hours, 1 minutes, 1 seconds"
-        @test eegfun.format_duration(Millisecond(7200000)) == "2 hours, 0 minutes, 0 seconds"
+        @test eegfun.format_duration(Millisecond(90000)) == "1 minute, 30 seconds"
+        @test eegfun.format_duration(Millisecond(3661000)) == "1 hour, 1 minute, 1 second"
+        @test eegfun.format_duration(Millisecond(7200000)) == "2 hours"
     end
 
     @testset "Global logging setup and teardown" begin
@@ -151,7 +151,7 @@ using eegfun
         eegfun.setup_logging(log_file)
 
         # Test logging with keyword arguments
-        @info "Message with kwargs" key1="value1" key2=42
+        @info "Message with kwargs" key1 = "value1" key2 = 42
 
         eegfun.close_logging()
 
@@ -168,13 +168,13 @@ using eegfun
         @test eegfun.format_duration(Millisecond(1)) == "0 seconds"  # 1ms rounds to 0 seconds
 
         # Test exactly 1 minute
-        @test eegfun.format_duration(Millisecond(60000)) == "1 minutes, 0 seconds"
+        @test eegfun.format_duration(Millisecond(60000)) == "1 minute"
 
         # Test exactly 1 hour
-        @test eegfun.format_duration(Millisecond(3600000)) == "1 hours, 0 minutes, 0 seconds"
+        @test eegfun.format_duration(Millisecond(3600000)) == "1 hour"
 
         # Test very long duration
-        @test eegfun.format_duration(Millisecond(3661000)) == "1 hours, 1 minutes, 1 seconds"
+        @test eegfun.format_duration(Millisecond(3661000)) == "1 hour, 1 minute, 1 second"
     end
 
     # Clean up
