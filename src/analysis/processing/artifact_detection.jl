@@ -821,9 +821,9 @@ function _calculate_epoch_metrics(
     metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold]
     metrics = Dict(k => Dict(ch => Int[] for ch in selected_channels) for k in metric_keys)
 
-    n_epochs = n_epochs(dat)
+    num_epochs = n_epochs(dat)
     for ch in selected_channels
-        channel_data_all = Vector{Vector{Float64}}(undef, n_epochs)
+        channel_data_all = Vector{Vector{Float64}}(undef, num_epochs)
         for (i, epoch) in enumerate(dat.data)
             channel_data_all[i] = epoch[!, ch]
         end
