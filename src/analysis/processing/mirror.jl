@@ -27,7 +27,7 @@ at epoch boundaries.
 
 # Examples
 ```julia
-using eegfun, JLD2
+using EegFun, JLD2
 
 # Load epochs
 epochs = load("participant_1_epochs.jld2", "epochs")

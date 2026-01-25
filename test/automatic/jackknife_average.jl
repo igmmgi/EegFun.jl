@@ -17,14 +17,14 @@ using DataFrames
             erps = [create_test_erp_data(i, 1) for i = 1:4]
 
             # Create jackknife averages
-            jackknife_results = eegfun.jackknife_average(erps)
+            jackknife_results = EegFun.jackknife_average(erps)
 
             # Should have 4 jackknife averages (one per participant)
             @test length(jackknife_results) == 4
 
             # Each jackknife should be an ErpData object
             for jk in jackknife_results
-                @test jk isa eegfun.ErpData
+                @test jk isa EegFun.ErpData
                 @test jk.sample_rate == 1000.0
                 @test nrow(jk.data) == 2501
             end
@@ -34,7 +34,7 @@ using DataFrames
             # Create simple test data with known values
             erps = [create_test_erp_data(i, 1, fs = 50) for i = 1:3]
 
-            jackknife_results = eegfun.jackknife_average(erps)
+            jackknife_results = EegFun.jackknife_average(erps)
 
             # Jackknife 1 should be average of participants 2 and 3
             # Jackknife 2 should be average of participants 1 and 3
@@ -60,7 +60,7 @@ using DataFrames
             # Test that all channels are processed correctly
             erps = [create_test_erp_data(i, 1, fs = 50, n_channels = 3) for i = 1:3]
 
-            jackknife_results = eegfun.jackknife_average(erps)
+            jackknife_results = EegFun.jackknife_average(erps)
 
             # Verify all channels are present in jackknife results
             for jk in jackknife_results
@@ -73,14 +73,14 @@ using DataFrames
         @testset "Error handling: insufficient participants" begin
             # Only 1 participant - should throw error
             erps = [create_test_erp_data(1, 1)]
-            @test_throws Exception eegfun.jackknife_average(erps)
+            @test_throws Exception EegFun.jackknife_average(erps)
         end
 
         @testset "Error handling: mismatched sample rates" begin
             # Create ERPs with different sample rates
             erp1 = create_test_erp_data(1, 1)
             erp2 = create_test_erp_data(2, 1)
-            erp2 = eegfun.ErpData(
+            erp2 = EegFun.ErpData(
                 erp2.file,
                 erp2.condition,
                 erp2.condition_name,
@@ -91,7 +91,7 @@ using DataFrames
                 erp2.n_epochs,
             )  # Different sample rate
 
-            @test_throws Exception eegfun.jackknife_average([erp1, erp2])
+            @test_throws Exception EegFun.jackknife_average([erp1, erp2])
         end
 
         @testset "Error handling: mismatched time points" begin
@@ -99,13 +99,13 @@ using DataFrames
             erp1 = create_test_erp_data(1, 1, fs = 100)
             erp2 = create_test_erp_data(2, 1, fs = 50)
 
-            @test_throws Exception eegfun.jackknife_average([erp1, erp2])
+            @test_throws Exception EegFun.jackknife_average([erp1, erp2])
         end
 
         @testset "Metadata preservation" begin
             erps = [create_test_erp_data(i, 1) for i = 1:3]
 
-            jackknife_results = eegfun.jackknife_average(erps)
+            jackknife_results = EegFun.jackknife_average(erps)
 
             # Check that metadata is preserved
             for (i, jk) in enumerate(jackknife_results)
@@ -121,7 +121,7 @@ using DataFrames
             # Create ERPs with specific n_epochs
             erps = [create_test_erp_data(i, 1) for i = 1:4]
             for (i, erp) in enumerate(erps)
-                erps[i] = eegfun.ErpData(
+                erps[i] = EegFun.ErpData(
                     erp.file,
                     erp.condition,
                     erp.condition_name,
@@ -133,7 +133,7 @@ using DataFrames
                 )
             end
 
-            jackknife_results = eegfun.jackknife_average(erps)
+            jackknife_results = EegFun.jackknife_average(erps)
 
             # Jackknife 1 excludes participant 1 (10 epochs), includes 2 (20) + 3 (30) + 4 (40) = 90
             @test jackknife_results[1].n_epochs == 90
@@ -164,7 +164,7 @@ using DataFrames
             output_dir = joinpath(test_dir, "jackknife_test")
 
             # Test basic jackknife averaging
-            result = eegfun.jackknife_average("lrp", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.jackknife_average("lrp", input_dir = test_dir, output_dir = output_dir)
 
             # Verify output directory was created
             @test isdir(output_dir)
@@ -178,7 +178,7 @@ using DataFrames
 
             # Load and verify jackknife data
             jk1 = load(joinpath(output_dir, "1_lrp.jld2"), "data")
-            @test jk1 isa eegfun.ErpData
+            @test jk1 isa EegFun.ErpData
             @test nrow(jk1.data) == 2501
         end
 
@@ -192,13 +192,13 @@ using DataFrames
 
             output_dir = joinpath(test_dir, "jackknife_multi")
 
-            result = eegfun.jackknife_average("multi_lrp", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.jackknife_average("multi_lrp", input_dir = test_dir, output_dir = output_dir)
 
             @test isdir(output_dir)
 
             # Load and verify - should have vector of ErpData for multiple conditions
             jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "data")
-            @test jk1 isa Vector{eegfun.ErpData}
+            @test jk1 isa Vector{EegFun.ErpData}
             @test length(jk1) == 2
 
             # Verify each condition
@@ -212,10 +212,10 @@ using DataFrames
             # Test with specific participants
             # Note: pattern "lrp" matches both "_lrp" and "_multi_lrp" files
             # So we need to check the actual output corresponds to input files
-            result = eegfun.jackknife_average(
+            result = EegFun.jackknife_average(
                 "lrp",
                 input_dir = test_dir,
-                participant_selection = eegfun.participants([1, 2, 3]),
+                participant_selection = EegFun.participants([1, 2, 3]),
                 output_dir = output_dir,
             )
 
@@ -242,10 +242,10 @@ using DataFrames
             output_dir = joinpath(test_dir, "jackknife_cond_filter")
 
             # Test with specific conditions
-            result = eegfun.jackknife_average(
+            result = EegFun.jackknife_average(
                 "multi_lrp",
                 input_dir = test_dir,
-                condition_selection = eegfun.conditions([1]),
+                condition_selection = EegFun.conditions([1]),
                 output_dir = output_dir,
             )
 
@@ -253,7 +253,7 @@ using DataFrames
 
             # Load and verify - should only have condition 1
             jk1 = load(joinpath(output_dir, "1_multi_lrp.jld2"), "data")
-            @test jk1 isa eegfun.ErpData  # Single ErpData, not vector
+            @test jk1 isa EegFun.ErpData  # Single ErpData, not vector
             @test jk1.condition == 1
         end
 
@@ -268,7 +268,7 @@ using DataFrames
             output_dir = joinpath(test_dir, "jackknife_erps")
 
             # Test with different data variable name
-            result = eegfun.jackknife_average("erps", input_dir = test_dir, output_dir = output_dir, data_var = "erps")
+            result = EegFun.jackknife_average("erps", input_dir = test_dir, output_dir = output_dir, data_var = "erps")
 
             @test isdir(output_dir)
 
@@ -291,7 +291,7 @@ using DataFrames
 
             output_dir = joinpath(verify_dir, "jackknife_output")
 
-            result = eegfun.jackknife_average("verify", input_dir = verify_dir, output_dir = output_dir)
+            result = EegFun.jackknife_average("verify", input_dir = verify_dir, output_dir = output_dir)
 
             # Load original data
             lrp1 = load(joinpath(verify_dir, "1_verify.jld2"), "data")
@@ -302,7 +302,7 @@ using DataFrames
             jk1 = load(joinpath(output_dir, "1_verify.jld2"), "data")
 
             # Since there's only one condition, should be single ErpData
-            @test jk1 isa eegfun.ErpData
+            @test jk1 isa EegFun.ErpData
 
             # Verify: jackknife 1 should be average of participants 2 and 3
             expected_ch = (lrp2.data.Ch1 .+ lrp3.data.Ch1) ./ 2
@@ -319,7 +319,7 @@ using DataFrames
 
             output_dir = joinpath(single_dir, "jackknife_insufficient")
 
-            result = eegfun.jackknife_average("lrp", input_dir = single_dir, output_dir = output_dir)
+            result = EegFun.jackknife_average("lrp", input_dir = single_dir, output_dir = output_dir)
 
             # Should return nothing due to insufficient participants
             @test result === nothing
@@ -330,7 +330,7 @@ using DataFrames
         @testset "Error handling: no matching files" begin
             output_dir = joinpath(test_dir, "jackknife_nomatch")
 
-            result = eegfun.jackknife_average("nonexistent", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.jackknife_average("nonexistent", input_dir = test_dir, output_dir = output_dir)
 
             # Should return nothing when no files found
             @test result === nothing
@@ -339,7 +339,7 @@ using DataFrames
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "jackknife_logging")
 
-            result = eegfun.jackknife_average("lrp", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.jackknife_average("lrp", input_dir = test_dir, output_dir = output_dir)
 
             # Check that log file was created
             log_file = joinpath(output_dir, "jackknife.log")
@@ -355,10 +355,10 @@ using DataFrames
         @testset "Output structure" begin
             output_dir = joinpath(test_dir, "jackknife_structure")
 
-            result = eegfun.jackknife_average(
+            result = EegFun.jackknife_average(
                 "lrp",
                 input_dir = test_dir,
-                participant_selection = eegfun.participants([1, 2]),
+                participant_selection = EegFun.participants([1, 2]),
                 output_dir = output_dir,
             )
 
@@ -367,13 +367,13 @@ using DataFrames
             # When multiple conditions exist, result is Vector{ErpData}, otherwise single ErpData
             if jk1 isa Vector
                 @test length(jk1) > 0
-                @test all(x -> x isa eegfun.ErpData, jk1)
+                @test all(x -> x isa EegFun.ErpData, jk1)
 
                 # Test first condition
                 jk1_cond = jk1[1]
                 @test jk1_cond.sample_rate == 1000.0
-                @test jk1_cond.layout isa eegfun.Layout
-                @test jk1_cond.analysis_info isa eegfun.AnalysisInfo
+                @test jk1_cond.layout isa EegFun.Layout
+                @test jk1_cond.analysis_info isa EegFun.AnalysisInfo
                 @test jk1_cond.data isa DataFrame
                 @test nrow(jk1_cond.data) == 2501
                 @test "time" in names(jk1_cond.data)
@@ -385,10 +385,10 @@ using DataFrames
                 @test "Ch3" in names(jk1_cond.data)
             else
                 # Single condition case
-                @test jk1 isa eegfun.ErpData
+                @test jk1 isa EegFun.ErpData
                 @test jk1.sample_rate == 1000.0
-                @test jk1.layout isa eegfun.Layout
-                @test jk1.analysis_info isa eegfun.AnalysisInfo
+                @test jk1.layout isa EegFun.Layout
+                @test jk1.analysis_info isa EegFun.AnalysisInfo
                 @test jk1.data isa DataFrame
                 @test nrow(jk1.data) == 2501
                 @test "time" in names(jk1.data)
@@ -402,7 +402,7 @@ using DataFrames
         end
 
         @testset "Auto-generated output directory" begin
-            result = eegfun.jackknife_average("lrp", input_dir = test_dir)
+            result = EegFun.jackknife_average("lrp", input_dir = test_dir)
 
             # Should create directory with pattern-based name
             expected_dir = joinpath(test_dir, "jackknife_lrp")

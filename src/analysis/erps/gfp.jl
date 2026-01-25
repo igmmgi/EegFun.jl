@@ -36,7 +36,7 @@ time point, providing a reference-independent measure of global response strengt
 
 # Examples
 ```julia
-using eegfun, JLD2
+using EegFun, JLD2
 
 # Load ERP data
 erp_data = load("participant_1_erps.jld2", "erps")[1]
@@ -199,11 +199,7 @@ gd_result = global_dissimilarity(erp_data,
 - These peaks may indicate transitions between different brain states or ERP components
 - Normalization to 0-100% facilitates comparison across datasets
 """
-function global_dissimilarity(
-    dat::ErpData;
-    channel_selection::Function = channels(),
-    normalize::Bool = false,
-)::DataFrame
+function global_dissimilarity(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = false)::DataFrame
 
     @info "Calculating Global Dissimilarity (GD)"
 
@@ -276,11 +272,7 @@ Calculate Global Dissimilarity for multiple ERP datasets.
 
 See single-dataset version for details.
 """
-function global_dissimilarity(
-    dat::Vector{ErpData};
-    channel_selection::Function = channels(),
-    normalize::Bool = false,
-)::Vector{DataFrame}
+function global_dissimilarity(dat::Vector{ErpData}; channel_selection::Function = channels(), normalize::Bool = false)::Vector{DataFrame}
 
     @info "Calculating Global Dissimilarity for $(length(dat)) dataset(s)"
 
@@ -326,11 +318,7 @@ dissimilarity_values = result.dissimilarity
 result = gfp_and_dissimilarity(erp_data, normalize = true)
 ```
 """
-function gfp_and_dissimilarity(
-    dat::ErpData;
-    channel_selection::Function = channels(),
-    normalize::Bool = false,
-)::DataFrame
+function gfp_and_dissimilarity(dat::ErpData; channel_selection::Function = channels(), normalize::Bool = false)::DataFrame
 
     @info "Calculating Global Field Power and Global Dissimilarity"
 

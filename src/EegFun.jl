@@ -1,6 +1,6 @@
 __precompile__(true)
 
-module eegfun
+module EegFun
 
 # Core dependencies
 using AnovaFun
@@ -174,4 +174,4 @@ include("demos/signal_example_1.jl")
 include("demos/signal_example_2.jl")
 include("demos/simulate_erp.jl")
 
-end # module eegfun 
+end # module EegFun 

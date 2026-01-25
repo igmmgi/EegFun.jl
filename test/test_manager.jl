@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 """
-Test Runner and Coverage Analysis Tool for eegfun
+Test Runner and Coverage Analysis Tool for EegFun
 
 This is a pure Julia equivalent of test.sh that provides:
 - Running tests with coverage
@@ -49,7 +49,7 @@ function print_colored(color::String, message::String)
 end
 
 function print_header()
-    print_colored(BLUE, "=== eegfun Test Runner and Coverage Analysis ===")
+    print_colored(BLUE, "=== EegFun Test Runner and Coverage Analysis ===")
     println()
 end
 

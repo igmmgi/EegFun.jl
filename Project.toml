@@ -1,4 +1,4 @@
-name = "eegfun"
+name = "EegFun"
 uuid = "aa15e9e4-a77e-4972-a32b-58bceaaa184b"
 version = "0.1.0"
 authors = ["igmmgi <ian.mackenzie@uni-tuebingen.de>"]

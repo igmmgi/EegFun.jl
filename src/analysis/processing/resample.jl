@@ -53,7 +53,7 @@ conditions, etc.) are preserved. The sample rate is updated accordingly.
 
 # Examples
 ```julia
-using eegfun
+using EegFun
 
 # Load continuous data at 512 Hz
 data = load("participant_1_continuous.jld2", "data")
@@ -130,7 +130,7 @@ conditions, etc.) are preserved in each epoch. The sample rate is updated accord
 
 # Examples
 ```julia
-using eegfun
+using EegFun
 
 # Load epoched data at 512 Hz
 epochs = load("participant_1_epochs.jld2", "epochs")

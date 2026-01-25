@@ -16,7 +16,7 @@ using DataFrames
         original_time_max = maximum(epoch_data.data[1].time)
 
         # Realign to RT
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # Check that original data is unchanged
         @test minimum(epoch_data.data[1].time) ≈ original_time_min
@@ -37,7 +37,7 @@ using DataFrames
         end
 
         # Check structure
-        @test realigned isa eegfun.EpochData
+        @test realigned isa EegFun.EpochData
         @test length(realigned.data) == 10
     end
 
@@ -48,7 +48,7 @@ using DataFrames
         original_rts = [epoch.rt[1] for epoch in epoch_data.data]
 
         # Realign in-place
-        eegfun.realign!(epoch_data, :rt)
+        EegFun.realign!(epoch_data, :rt)
 
         # Check that data was modified
         # RT column should now be 0 (or very close to 0)
@@ -71,7 +71,7 @@ using DataFrames
         original_lengths = [nrow(epoch) for epoch in epoch_data.data]
 
         # Realign
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # Check that epochs are cropped
         realigned_lengths = [nrow(epoch) for epoch in realigned.data]
@@ -96,7 +96,7 @@ using DataFrames
             create_test_epoch_data_with_rt(1, 1, 10, 200, 3, epoch_start = -0.5, epoch_end = 1.5, rt_range = (0.2, 1.0))
 
         # Realign
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # The common window should accommodate all trials
         # Early RTs (e.g., 0.2s) limit how much pre-response data we can have
@@ -123,7 +123,7 @@ using DataFrames
         original_value = epoch_data.data[1].Ch1[time_idx]
 
         # Realign
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # Channel data should be preserved (just shifted in time)
         # We can't easily verify the exact values without knowing the RT,
@@ -136,7 +136,7 @@ using DataFrames
         epoch_data = create_test_epoch_data_with_rt(1, 1, 10, 200, 3)
 
         # Realign
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # Check that metadata columns are preserved
         for i = 1:length(realigned.data)
@@ -158,7 +158,7 @@ using DataFrames
         epoch_data = create_test_epoch_data_with_rt(1, 1, 10, 200, 3)
 
         # Try to realign to non-existent column
-        @test_throws Exception eegfun.realign(epoch_data, :nonexistent_column)
+        @test_throws Exception EegFun.realign(epoch_data, :nonexistent_column)
     end
 
     @testset "Error handling: varying values within epoch" begin
@@ -168,7 +168,7 @@ using DataFrames
         epoch_data.data[1].rt .= collect(1:nrow(epoch_data.data[1]))
 
         # Should error because RT should be constant within epoch
-        @test_throws Exception eegfun.realign(epoch_data, :rt)
+        @test_throws Exception EegFun.realign(epoch_data, :rt)
     end
 
     @testset "Error handling: non-finite values" begin
@@ -178,7 +178,7 @@ using DataFrames
         epoch_data.data[1].rt .= NaN
 
         # Should error
-        @test_throws Exception eegfun.realign(epoch_data, :rt)
+        @test_throws Exception EegFun.realign(epoch_data, :rt)
     end
 
     @testset "Error handling: insufficient epoch length" begin
@@ -189,7 +189,7 @@ using DataFrames
         # This might work or fail depending on exact RTs
         # If it fails, it should fail gracefully with a clear message
         try
-            realigned = eegfun.realign(epoch_data, :rt)
+            realigned = EegFun.realign(epoch_data, :rt)
             # If it succeeds, check that result is valid
             @test all(length(realigned.data[i].time) > 0 for i = 1:length(realigned.data))
         catch e
@@ -204,7 +204,7 @@ using DataFrames
         epoch_data = create_test_epoch_data_with_rt(1, 1, 5, 100, 10)
 
         # Realign
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # All channels should be present
         for i = 1:10
@@ -213,8 +213,8 @@ using DataFrames
         end
 
         # Number of channels should match
-        n_channels_original = length(eegfun.channel_labels(epoch_data))
-        n_channels_realigned = length(eegfun.channel_labels(realigned))
+        n_channels_original = length(EegFun.channel_labels(epoch_data))
+        n_channels_realigned = length(EegFun.channel_labels(realigned))
         @test n_channels_original == n_channels_realigned
     end
 
@@ -228,7 +228,7 @@ using DataFrames
         end
 
         # Realign
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # With identical RTs, all epochs should have the same length as before
         # (no cropping needed)
@@ -251,7 +251,7 @@ using DataFrames
         original_rts = [epoch.rt[1] for epoch in epoch_data.data]
 
         # Realign to response
-        realigned = eegfun.realign(epoch_data, :rt)
+        realigned = EegFun.realign(epoch_data, :rt)
 
         # Verify that:
         # 1. All epochs have the same time vector
@@ -289,7 +289,7 @@ end
         output_dir = joinpath(test_dir, "realigned_test")
 
         # Test basic realignment
-        result = eegfun.realign("epochs", :rt, input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.realign("epochs", :rt, input_dir = test_dir, output_dir = output_dir)
 
         # Verify output directory was created
         @test isdir(output_dir)
@@ -302,7 +302,7 @@ end
 
         # Load and verify one file
         realigned = load(joinpath(output_dir, "1_epochs.jld2"), "data")
-        @test realigned isa eegfun.EpochData
+        @test realigned isa EegFun.EpochData
 
         # Check that RT is now 0
         for epoch in realigned.data
@@ -314,11 +314,11 @@ end
         output_dir = joinpath(test_dir, "realigned_filtered")
 
         # Process only participants 1 and 2
-        result = eegfun.realign(
+        result = EegFun.realign(
             "epochs",
             :rt,
             input_dir = test_dir,
-            participant_selection = eegfun.participants([1, 2]),
+            participant_selection = EegFun.participants([1, 2]),
             output_dir = output_dir,
         )
 
@@ -335,7 +335,7 @@ end
     @testset "Batch error handling: no matching files" begin
         output_dir = joinpath(test_dir, "realigned_nomatch")
 
-        result = eegfun.realign("nonexistent", :rt, input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.realign("nonexistent", :rt, input_dir = test_dir, output_dir = output_dir)
 
         # Should return nothing when no files found
         @test result === nothing
@@ -344,7 +344,7 @@ end
     @testset "Batch logging" begin
         output_dir = joinpath(test_dir, "realigned_logging")
 
-        result = eegfun.realign("epochs", :rt, input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.realign("epochs", :rt, input_dir = test_dir, output_dir = output_dir)
 
         # Check that log file was created
         log_file = joinpath(output_dir, "realign.log")

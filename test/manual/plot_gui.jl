@@ -1,3 +1,3 @@
-using eegfun
+using EegFun
 
-eegfun.plot_gui()
+EegFun.plot_gui()

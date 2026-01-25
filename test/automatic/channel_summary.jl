@@ -1,19 +1,19 @@
 using Test
 using DataFrames
-using eegfun
+using EegFun
 using JLD2
 using Statistics
 using CSV
 
 
-@testset "eegfun" begin
+@testset "EegFun" begin
     @testset "channel_summary" begin
 
         @testset "_channel_summary_impl core function" begin
             dat = create_test_data()
 
             # Test basic functionality
-            result = eegfun._channel_summary_impl(dat.data, collect(1:50), [:Ch1, :Ch2])
+            result = EegFun._channel_summary_impl(dat.data, collect(1:50), [:Ch1, :Ch2])
 
             @test result isa DataFrame
             @test nrow(result) == 2  # Two channels
@@ -43,11 +43,11 @@ using CSV
         @testset "_channel_summary_impl input validation" begin
             dat = create_test_data(n_channels = 4)
 
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, Int[], [:Ch1, :Ch2])
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, [1, 2, 3], Symbol[])
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, [1, 2, 3], [:NonExistent])
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, [3000], [:Ch1])  # Out of bounds
-            @test_throws Exception eegfun._channel_summary_impl(dat.data, [0], [:Ch1])     # Below bounds
+            @test_throws Exception EegFun._channel_summary_impl(dat.data, Int[], [:Ch1, :Ch2])
+            @test_throws Exception EegFun._channel_summary_impl(dat.data, [1, 2, 3], Symbol[])
+            @test_throws Exception EegFun._channel_summary_impl(dat.data, [1, 2, 3], [:NonExistent])
+            @test_throws Exception EegFun._channel_summary_impl(dat.data, [3000], [:Ch1])  # Out of bounds
+            @test_throws Exception EegFun._channel_summary_impl(dat.data, [0], [:Ch1])     # Below bounds
 
         end
 
@@ -55,19 +55,19 @@ using CSV
             dat = create_test_data(n_channels = 4)
 
             # Test single sample
-            result = eegfun._channel_summary_impl(dat.data, [1], [:Ch1])
+            result = EegFun._channel_summary_impl(dat.data, [1], [:Ch1])
             @test nrow(result) == 1
             @test result.range[1] == 0.0  # min == max for single sample
             @test isnan(result.std[1]) || result.std[1] == 0.0  # std is NaN for single sample in Julia
 
             # Test single channel
-            result = eegfun._channel_summary_impl(dat.data, collect(1:10), [:Ch1])
+            result = EegFun._channel_summary_impl(dat.data, collect(1:10), [:Ch1])
             @test nrow(result) == 1
             @test result.channel[1] == :Ch1
 
             # Test with constant signal (zero variance case)
             dat.data[!, :Ch4] .= 1.0
-            result = eegfun._channel_summary_impl(dat.data, collect(1:50), [:Ch4])  # Ch4 is constant
+            result = EegFun._channel_summary_impl(dat.data, collect(1:50), [:Ch4])  # Ch4 is constant
             @test result.var[1] ≈ 0.0
             @test result.zvar[1] == 0.0  # Should handle zero variance case
         end
@@ -76,7 +76,7 @@ using CSV
             dat = create_test_data(n_channels = 4)
 
             # Test basic functionality with defaults
-            result = eegfun.channel_summary(dat)
+            result = EegFun.channel_summary(dat)
             @test result isa DataFrame
             @test nrow(result) == 4  # Four layout channels (Ch1, Ch2, Ch3, Ch4)
             @test :channel in propertynames(result)
@@ -85,22 +85,22 @@ using CSV
             @test Set(result.channel) == Set([:Ch1, :Ch2, :Ch3, :Ch4])
 
             # Test specific channel selection
-            result_subset = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Ch1, :Ch2]))
+            result_subset = EegFun.channel_summary(dat, channel_selection = EegFun.channels([:Ch1, :Ch2]))
             @test nrow(result_subset) == 2
             @test Set(result_subset.channel) == Set([:Ch1, :Ch2])
 
             # Test sample selection (first half)
             n_samples = nrow(dat.data)
-            result_samples = eegfun.channel_summary(dat, sample_selection = x -> 1:nrow(x) .<= div(nrow(x), 2))
+            result_samples = EegFun.channel_summary(dat, sample_selection = x -> 1:nrow(x) .<= div(nrow(x), 2))
             @test result_samples isa DataFrame
             @test nrow(result_samples) == 4
 
             # Test include_meta and include_extra flags
-            result_meta = eegfun.channel_summary(dat, include_meta = true)
+            result_meta = EegFun.channel_summary(dat, include_meta = true)
             @test :time in result_meta.channel || :triggers in result_meta.channel  # Should include meta columns
 
             # Test statistics are reasonable
-            result = eegfun.channel_summary(dat)
+            result = EegFun.channel_summary(dat)
             @test all(result.range .>= 0)  # Range should be non-negative
             @test all(result.var .>= 0)    # Variance should be non-negative
             @test all(result.std .>= 0)    # Standard deviation should be non-negative
@@ -109,22 +109,22 @@ using CSV
         @testset "channel_summary SingleDataFrameEeg input validation" begin
             # Test empty data
             empty_df = DataFrame()
-            layout = eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
-            empty_dat = eegfun.ContinuousData("test_data", empty_df, layout, 100, eegfun.AnalysisInfo())
-            @test_throws Exception eegfun.channel_summary(empty_dat)
+            layout = EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
+            empty_dat = EegFun.ContinuousData("test_data", empty_df, layout, 100, EegFun.AnalysisInfo())
+            @test_throws Exception EegFun.channel_summary(empty_dat)
         end
 
         @testset "channel_summary MultiDataFrameEeg" begin
             epoch_dat = create_test_epoch_data()
 
             # Test basic functionality
-            result = eegfun.channel_summary(epoch_dat)
+            result = EegFun.channel_summary(epoch_dat)
             @test result isa DataFrame
             @test :epoch in propertynames(result)
             @test :channel in propertynames(result)
 
             # Test that we have results for each epoch and channel
-            n_epochs = eegfun.n_epochs(epoch_dat)
+            n_epochs = EegFun.n_epochs(epoch_dat)
             n_channels = 3  # A, B, C
             @test nrow(result) == n_epochs * n_channels
 
@@ -134,7 +134,7 @@ using CSV
             @test Set(result_epoch_numbers) == Set(original_epoch_numbers)
 
             # Test channel selection works across epochs
-            result_subset = eegfun.channel_summary(epoch_dat, channel_selection = eegfun.channels([:Ch1]))
+            result_subset = EegFun.channel_summary(epoch_dat, channel_selection = EegFun.channels([:Ch1]))
             @test nrow(result_subset) == n_epochs  # One channel per epoch
             @test all(result_subset.channel .== :Ch1)
 
@@ -149,16 +149,16 @@ using CSV
         @testset "channel_summary MultiDataFrameEeg input validation" begin
             # Test empty epoch data
             empty_layout =
-                eegfun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
+                EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
             empty_epochs =
-                eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, eegfun.AnalysisInfo())
-            @test_throws Exception eegfun.channel_summary(empty_epochs)
+                EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, EegFun.AnalysisInfo())
+            @test_throws Exception EegFun.channel_summary(empty_epochs)
         end
 
         @testset "channel_summary statistical properties" begin
             dat = create_test_data(n_channels = 4)
             dat.data[!, :Ch4] .= 1.0
-            result = eegfun.channel_summary(dat)
+            result = EegFun.channel_summary(dat)
 
             # Test that constant channel has zero variance
             constant_row = result[result.channel .== :Ch4, :]
@@ -184,13 +184,13 @@ using CSV
             dat = create_test_data()
 
             # Test that results are consistent between calls
-            result1 = eegfun.channel_summary(dat)
-            result2 = eegfun.channel_summary(dat)
+            result1 = EegFun.channel_summary(dat)
+            result2 = EegFun.channel_summary(dat)
             @test result1 == result2
 
             # Test that subsetting gives expected results
-            full_result = eegfun.channel_summary(dat)
-            subset_result = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Ch1, :Ch2]))
+            full_result = EegFun.channel_summary(dat)
+            subset_result = EegFun.channel_summary(dat, channel_selection = EegFun.channels([:Ch1, :Ch2]))
 
             # The subset should match the corresponding rows from the full result
             full_subset = full_result[in([:Ch1, :Ch2]).(full_result.channel), :]
@@ -204,23 +204,23 @@ using CSV
             dat = create_test_data(n_channels = 4)
 
             # Test with different selection functions
-            # Note: These functions are defined in the eegfun package
-            result_all = eegfun.channel_summary(dat, channel_selection = eegfun.channels())
+            # Note: These functions are defined in the EegFun package
+            result_all = EegFun.channel_summary(dat, channel_selection = EegFun.channels())
             @test nrow(result_all) == 4
 
             # Test channel selection by name
-            result_specific = eegfun.channel_summary(dat, channel_selection = eegfun.channels([:Ch1]))
+            result_specific = EegFun.channel_summary(dat, channel_selection = EegFun.channels([:Ch1]))
             @test nrow(result_specific) == 1
             @test result_specific.channel[1] == :Ch1
 
             # Test sample selection by range
-            result_half = eegfun.channel_summary(dat, sample_selection = x -> 1:nrow(x) .<= div(nrow(x), 2))
+            result_half = EegFun.channel_summary(dat, sample_selection = x -> 1:nrow(x) .<= div(nrow(x), 2))
             @test result_half isa DataFrame
             @test nrow(result_half) == 4  # Same number of channels
         end
 
     end # channel_summary testset
-end # eegfun testset
+end # EegFun testset
 
 
 @testset "Batch Channel Summary" begin
@@ -244,7 +244,7 @@ end # eegfun testset
             output_dir = joinpath(test_dir, "summary_output")
 
             # Test basic channel summary
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             @test isdir(output_dir)
 
@@ -278,11 +278,11 @@ end # eegfun testset
         @testset "Summary specific participants" begin
             output_dir = joinpath(test_dir, "summary_participant")
 
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
+                participant_selection = EegFun.participants(1),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -297,11 +297,11 @@ end # eegfun testset
         @testset "Summary multiple participants" begin
             output_dir = joinpath(test_dir, "summary_multi_participants")
 
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants([1, 2]),
+                participant_selection = EegFun.participants([1, 2]),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -316,11 +316,11 @@ end # eegfun testset
         @testset "Summary specific conditions" begin
             output_dir = joinpath(test_dir, "summary_condition")
 
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(1),
+                condition_selection = EegFun.conditions(1),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -334,11 +334,11 @@ end # eegfun testset
         @testset "Summary multiple conditions" begin
             output_dir = joinpath(test_dir, "summary_multi_conditions")
 
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions([1, 2]),
+                condition_selection = EegFun.conditions([1, 2]),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -354,11 +354,11 @@ end # eegfun testset
             output_dir = joinpath(test_dir, "summary_channel_select")
 
             # Select only Ch1 and Ch2
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                channel_selection = eegfun.channels([:Ch1, :Ch2]),
+                channel_selection = EegFun.channels([:Ch1, :Ch2]),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -375,11 +375,11 @@ end # eegfun testset
             output_dir = joinpath(test_dir, "summary_channel_exclude")
 
             # Exclude Ch3
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                channel_selection = eegfun.channels_not([:Ch3]),
+                channel_selection = EegFun.channels_not([:Ch3]),
             )
 
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -393,7 +393,7 @@ end # eegfun testset
         @testset "Custom output filename" begin
             output_dir = joinpath(test_dir, "summary_custom_name")
 
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -411,7 +411,7 @@ end # eegfun testset
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception eegfun.channel_summary("erps_cleaned", input_dir = "/nonexistent/path")
+            @test_throws Exception EegFun.channel_summary("erps_cleaned", input_dir = "/nonexistent/path")
         end
 
         @testset "No matching files" begin
@@ -419,7 +419,7 @@ end # eegfun testset
             mkpath(empty_dir)
 
             # Directory exists but has no JLD2 files matching pattern
-            result = eegfun.channel_summary("erps_cleaned", input_dir = empty_dir)
+            result = EegFun.channel_summary("erps_cleaned", input_dir = empty_dir)
 
             @test result === nothing  # No files to process
         end
@@ -427,7 +427,7 @@ end # eegfun testset
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "summary_with_log")
 
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             # Check log file exists
             log_file = joinpath(output_dir, "channel_summary.log")
@@ -449,7 +449,7 @@ end # eegfun testset
             @test isfile(joinpath(output_dir, "dummy.txt"))
 
             # Run channel_summary - should work fine with existing directory
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             @test isfile(joinpath(output_dir, "dummy.txt"))  # Original file preserved
             @test isfile(joinpath(output_dir, "channel_summary.csv"))
@@ -467,7 +467,7 @@ end # eegfun testset
             jldsave(joinpath(partial_dir, "2_erps_cleaned.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "summary_partial")
-            eegfun.channel_summary("erps_cleaned", input_dir = partial_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = partial_dir, output_dir = output_dir)
 
             # Should have results from the valid file only
             csv_file = joinpath(output_dir, "channel_summary.csv")
@@ -482,11 +482,11 @@ end # eegfun testset
             output_dir = joinpath(test_dir, "summary_invalid_condition")
 
             # Request condition 5 when only 2 exist
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(5),
+                condition_selection = EegFun.conditions(5),
             )
 
             # Should produce empty results
@@ -517,18 +517,18 @@ end # eegfun testset
                 Ch3 = zeros(n_samples),
             )
 
-            layout = eegfun.Layout(
+            layout = EegFun.Layout(
                 DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
                 nothing,
                 nothing,
             )
 
-            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(stats_dir, "1_erps_stats.jld2"); data = erps)
 
             # Process
             output_dir = joinpath(test_dir, "summary_stats")
-            eegfun.channel_summary("erps_stats", input_dir = stats_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_stats", input_dir = stats_dir, output_dir = output_dir)
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
 
@@ -559,13 +559,13 @@ end # eegfun testset
             output_dir = joinpath(test_dir, "summary_combined")
 
             # Summary for specific participant AND condition AND channels
-            eegfun.channel_summary(
+            EegFun.channel_summary(
                 "erps_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
-                condition_selection = eegfun.conditions(1),
-                channel_selection = eegfun.channels([:Ch1, :Ch2]),
+                participant_selection = EegFun.participants(1),
+                condition_selection = EegFun.conditions(1),
+                channel_selection = EegFun.channels([:Ch1, :Ch2]),
             )
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
@@ -589,14 +589,14 @@ end # eegfun testset
 
             # Test pattern matching "erps_original"
             output_dir1 = joinpath(test_dir, "summary_original")
-            eegfun.channel_summary("erps_original", input_dir = pattern_dir, output_dir = output_dir1)
+            EegFun.channel_summary("erps_original", input_dir = pattern_dir, output_dir = output_dir1)
 
             results1 = CSV.read(joinpath(output_dir1, "channel_summary.csv"), DataFrame)
             @test nrow(results1) == 6  # 1 file × 2 conditions × 3 channels
 
             # Test pattern matching "erps" (should match all)
             output_dir2 = joinpath(test_dir, "summary_all_erps")
-            eegfun.channel_summary("erps", input_dir = pattern_dir, output_dir = output_dir2)
+            EegFun.channel_summary("erps", input_dir = pattern_dir, output_dir = output_dir2)
 
             results2 = CSV.read(joinpath(output_dir2, "channel_summary.csv"), DataFrame)
             @test nrow(results2) == 18  # 3 files × 2 conditions × 3 channels
@@ -605,7 +605,7 @@ end # eegfun testset
         @testset "File metadata preservation" begin
             output_dir = joinpath(test_dir, "summary_metadata")
 
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
 
@@ -630,7 +630,7 @@ end # eegfun testset
             overwrite_dir = joinpath(test_dir, "summary_overwrite")
 
             # First run
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
 
             csv_file = joinpath(overwrite_dir, "channel_summary.csv")
             mtime1 = stat(csv_file).mtime
@@ -639,7 +639,7 @@ end # eegfun testset
             sleep(0.1)
 
             # Second run (should overwrite)
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
 
             # Verify file was overwritten
             mtime2 = stat(csv_file).mtime
@@ -663,14 +663,14 @@ end # eegfun testset
                 df[!, ch] = i .* randn(n_samples)  # Different variance for each channel
             end
 
-            layout = eegfun.Layout(DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10)), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10)), nothing, nothing)
 
-            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(many_ch_dir, "1_erps_many.jld2"); data = erps)
 
             # Process
             output_dir = joinpath(test_dir, "summary_many_ch")
-            eegfun.channel_summary("erps_many", input_dir = many_ch_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_many", input_dir = many_ch_dir, output_dir = output_dir)
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
 
@@ -685,7 +685,7 @@ end # eegfun testset
             # Test that zvar is correctly computed
             output_dir = joinpath(test_dir, "summary_zvar")
 
-            eegfun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
 

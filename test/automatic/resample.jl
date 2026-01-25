@@ -29,16 +29,16 @@ using JLD2
             data.triggers[100] = 1  # Add a trigger
             data.triggers[500] = 2
 
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 data,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
             # Resample by factor of 2
-            resampled = eegfun.resample(continuous, 2)
+            resampled = EegFun.resample(continuous, 2)
 
             # Check sample rate
             @test resampled.sample_rate == 256
@@ -68,18 +68,18 @@ using JLD2
 
             data = DataFrame(time = time, C3 = randn(n_samples), C4 = randn(n_samples))
 
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 data,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
             original_nrow = nrow(continuous.data)
 
             # Resample in-place
-            eegfun.resample!(continuous, 2)
+            EegFun.resample!(continuous, 2)
 
             # Check modifications
             @test continuous.sample_rate == 256
@@ -94,16 +94,16 @@ using JLD2
 
             data = DataFrame(time = time, C3 = randn(n_samples))
 
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 data,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
             # Downsample by 4
-            resampled = eegfun.resample(continuous, 4)
+            resampled = EegFun.resample(continuous, 4)
 
             @test resampled.sample_rate == 256
             @test nrow(resampled.data) == 256
@@ -112,16 +112,16 @@ using JLD2
         end
 
         @testset "Factor of 1 (no change)" begin
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0]),
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 1000,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
             original_nrow = nrow(continuous.data)
-            eegfun.resample!(continuous, 1)
+            EegFun.resample!(continuous, 1)
 
             @test continuous.sample_rate == 1000
             @test nrow(continuous.data) == original_nrow
@@ -141,15 +141,15 @@ using JLD2
             )
             data.triggers[100] = 1
 
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 data,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 500,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
-            resampled = eegfun.resample(continuous, 5)
+            resampled = EegFun.resample(continuous, 5)
 
             # All columns should be present
             @test names(resampled.data) == names(continuous.data)
@@ -190,18 +190,18 @@ using JLD2
                 push!(epochs, epoch)
             end
 
-            epoch_data = eegfun.EpochData(
+            epoch_data = EegFun.EpochData(
                 "test_data",
                 1,
                 "condition_1",
                 epochs,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
             # Resample by factor of 2
-            resampled = eegfun.resample(epoch_data, 2)
+            resampled = EegFun.resample(epoch_data, 2)
 
             # Check sample rate
             @test resampled.sample_rate == 256
@@ -233,20 +233,20 @@ using JLD2
                 push!(epochs, epoch)
             end
 
-            epoch_data = eegfun.EpochData(
+            epoch_data = EegFun.EpochData(
                 "test_data",
                 1,
                 "condition_1",
                 epochs,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 512,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
             original_n_samples = nrow(epoch_data.data[1])
 
             # Resample in-place
-            eegfun.resample!(epoch_data, 4)
+            EegFun.resample!(epoch_data, 4)
 
             @test epoch_data.sample_rate == 128
             @test nrow(epoch_data.data[1]) == original_n_samples ÷ 4
@@ -267,17 +267,17 @@ using JLD2
                 push!(epochs, epoch)
             end
 
-            epoch_data = eegfun.EpochData(
+            epoch_data = EegFun.EpochData(
                 "test_data",
                 1,
                 "condition_1",
                 epochs,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 256,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
-            resampled = eegfun.resample(epoch_data, 2)
+            resampled = EegFun.resample(epoch_data, 2)
 
             # Check columns preserved
             @test names(resampled.data[1]) == names(epoch_data.data[1])
@@ -303,19 +303,19 @@ using JLD2
 
             data = DataFrame(time = time, C3 = sin.(2π .* 10 .* time), C4 = cos.(2π .* 10 .* time))
 
-            erp = eegfun.ErpData(
+            erp = EegFun.ErpData(
                 "test_data",
                 1,
                 "condition_1",
                 data,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 sample_rate,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
                 50,  # 50 epochs averaged
             )
 
             # Resample by factor of 2
-            resampled = eegfun.resample(erp, 2)
+            resampled = EegFun.resample(erp, 2)
 
             # Check sample rate
             @test resampled.sample_rate == 256
@@ -337,18 +337,18 @@ using JLD2
             # Create ERP with condition info
             data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
 
-            erp = eegfun.ErpData(
+            erp = EegFun.ErpData(
                 "test_data",
                 1,
                 "Target",
                 data,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 512,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
                 30,
             )
 
-            resampled = eegfun.resample(erp, 4)
+            resampled = EegFun.resample(erp, 4)
 
             @test resampled.sample_rate == 128
             @test nrow(resampled.data) == 128
@@ -364,32 +364,32 @@ using JLD2
     @testset "Error handling" begin
 
         @testset "Invalid factors" begin
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 DataFrame(time = [0.0, 0.001], C3 = [1.0, 2.0]),
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 1000,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
             # Zero factor
-            @test_throws Exception eegfun.resample(continuous, 0)
+            @test_throws Exception EegFun.resample(continuous, 0)
 
             # Negative factor
-            @test_throws Exception eegfun.resample(continuous, -1)
+            @test_throws Exception EegFun.resample(continuous, -1)
         end
 
         @testset "Non-divisible sample rate" begin
             # 500 Hz cannot be evenly divided by 3
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 DataFrame(time = [0.0, 0.002], C3 = [1.0, 2.0]),
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 500,
-                eegfun.AnalysisInfo(),
+                EegFun.AnalysisInfo(),
             )
 
-            @test_throws Exception eegfun.resample(continuous, 3)
+            @test_throws Exception EegFun.resample(continuous, 3)
         end
     end
 
@@ -406,12 +406,12 @@ using JLD2
                 for i = 1:3
                     data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512), C4 = randn(512))
 
-                    continuous = eegfun.ContinuousData(
+                    continuous = EegFun.ContinuousData(
                         "test_data",
                         data,
-                        eegfun.Layout(DataFrame(), nothing, nothing),
+                        EegFun.Layout(DataFrame(), nothing, nothing),
                         512,
-                        eegfun.AnalysisInfo(),
+                        EegFun.AnalysisInfo(),
                     )
 
                     jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
@@ -421,7 +421,7 @@ using JLD2
                 output_dir = joinpath(tmpdir, "resampled")
 
                 # Batch resample
-                eegfun.resample("continuous", 2, input_dir = tmpdir, output_dir = output_dir)
+                EegFun.resample("continuous", 2, input_dir = tmpdir, output_dir = output_dir)
 
                 # Check output files exist
                 @test isfile(joinpath(output_dir, "1_continuous.jld2"))
@@ -430,7 +430,7 @@ using JLD2
 
                 # Load and check one file
                 resampled = load(joinpath(output_dir, "1_continuous.jld2"), "data")
-                @test resampled isa eegfun.ContinuousData
+                @test resampled isa EegFun.ContinuousData
                 @test resampled.sample_rate == 256
                 @test nrow(resampled.data) == 256
             end
@@ -446,14 +446,14 @@ using JLD2
                         push!(epochs, epoch)
                     end
 
-                    epoch_data = eegfun.EpochData(
+                    epoch_data = EegFun.EpochData(
                         "test_data",
                         1,
                         "condition_1",
                         epochs,
-                        eegfun.Layout(DataFrame(), nothing, nothing),
+                        EegFun.Layout(DataFrame(), nothing, nothing),
                         256,
-                        eegfun.AnalysisInfo(),
+                        EegFun.AnalysisInfo(),
                     )
 
                     jldsave(joinpath(tmpdir, "$(i)_epochs.jld2"); data = epoch_data)
@@ -462,14 +462,14 @@ using JLD2
                 output_dir = joinpath(tmpdir, "resampled")
 
                 # Batch resample
-                eegfun.resample("epochs", 2, input_dir = tmpdir, output_dir = output_dir)
+                EegFun.resample("epochs", 2, input_dir = tmpdir, output_dir = output_dir)
 
                 # Check output
                 @test isfile(joinpath(output_dir, "1_epochs.jld2"))
 
                 # Load and verify
                 resampled = load(joinpath(output_dir, "1_epochs.jld2"), "data")
-                @test resampled isa eegfun.EpochData
+                @test resampled isa EegFun.EpochData
                 @test resampled.sample_rate == 128
                 @test nrow(resampled.data[1]) == 128
             end
@@ -480,12 +480,12 @@ using JLD2
                 # Create files for participants 1-5
                 for i = 1:5
                     data = DataFrame(time = collect(0:255) ./ 256, C3 = randn(256))
-                    continuous = eegfun.ContinuousData(
+                    continuous = EegFun.ContinuousData(
                         "test_data",
                         data,
-                        eegfun.Layout(DataFrame(), nothing, nothing),
+                        EegFun.Layout(DataFrame(), nothing, nothing),
                         256,
-                        eegfun.AnalysisInfo(),
+                        EegFun.AnalysisInfo(),
                     )
                     jldsave(joinpath(tmpdir, "$(i)_continuous.jld2"); data = continuous)
                 end
@@ -493,11 +493,11 @@ using JLD2
                 output_dir = joinpath(tmpdir, "resampled")
 
                 # Process only participants 2 and 4
-                eegfun.resample(
+                EegFun.resample(
                     "continuous",
                     2,
                     input_dir = tmpdir,
-                    participant_selection = eegfun.participants([2, 4]),
+                    participant_selection = EegFun.participants([2, 4]),
                     output_dir = output_dir,
                 )
                 println("input_dir: $tmpdir")
@@ -523,17 +523,17 @@ using JLD2
         @testset "Continuous data analysis info" begin
             data = DataFrame(time = collect(0:511) ./ 512, C3 = randn(512))
 
-            analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 40.0)
+            analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 40.0)
 
-            continuous = eegfun.ContinuousData(
+            continuous = EegFun.ContinuousData(
                 "test_data",
                 data,
-                eegfun.Layout(DataFrame(), nothing, nothing),
+                EegFun.Layout(DataFrame(), nothing, nothing),
                 512,
                 analysis_info,
             )
 
-            resampled = eegfun.resample(continuous, 2)
+            resampled = EegFun.resample(continuous, 2)
 
             # Analysis info should be preserved
             @test resampled.analysis_info.reference == :avg

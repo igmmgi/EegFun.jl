@@ -1,69 +1,69 @@
 using Test
 using Dates
 using OrderedCollections
-using eegfun
+using EegFun
 
 @testset "Print Utilities" begin
     @testset "Vector Printing" begin
         # Test short vector
         v = [1, 2, 3]
-        @test eegfun.print_vector(v) == "1, 2, 3"
+        @test EegFun.print_vector(v) == "1, 2, 3"
 
         # Test long vector
         v = collect(1:20)
-        result = eegfun.print_vector(v)
+        result = EegFun.print_vector(v)
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "16, 17, 18, 19, 20")
 
         # Test UnitRange
         v = 1:20
-        result = eegfun.print_vector(v)
+        result = EegFun.print_vector(v)
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "16, 17, 18, 19, 20")
 
         # Test custom max_length and n_ends
         v = collect(1:20)
-        result = eegfun.print_vector(v, max_length = 15, n_ends = 3)
+        result = EegFun.print_vector(v, max_length = 15, n_ends = 3)
         @test startswith(result, "1, 2, 3, ...")
         @test endswith(result, "18, 19, 20")
 
         # Test edge cases
-        @test eegfun.print_vector(Int[]) == "[]"  # Empty vector
-        @test eegfun.print_vector([1]) == "1"  # Single element
-        @test eegfun.print_vector([1, 2]) == "1, 2"  # Two elements
-        @test eegfun.print_vector([1, 2, 3, 4, 5]) == "1, 2, 3, 4, 5"  # Exactly max_length
+        @test EegFun.print_vector(Int[]) == "[]"  # Empty vector
+        @test EegFun.print_vector([1]) == "1"  # Single element
+        @test EegFun.print_vector([1, 2]) == "1, 2"  # Two elements
+        @test EegFun.print_vector([1, 2, 3, 4, 5]) == "1, 2, 3, 4, 5"  # Exactly max_length
 
         # Test with different data types
-        @test eegfun.print_vector([:a, :b, :c]) == "a, b, c"  # Symbols
-        @test eegfun.print_vector(["a", "b", "c"]) == "a, b, c"  # Strings (no quotes added)
-        @test eegfun.print_vector([1.5, 2.5, 3.5]) == "1.5, 2.5, 3.5"  # Floats
-        @test eegfun.print_vector([true, false, true]) == "true, false, true"  # Booleans
+        @test EegFun.print_vector([:a, :b, :c]) == "a, b, c"  # Symbols
+        @test EegFun.print_vector(["a", "b", "c"]) == "a, b, c"  # Strings (no quotes added)
+        @test EegFun.print_vector([1.5, 2.5, 3.5]) == "1.5, 2.5, 3.5"  # Floats
+        @test EegFun.print_vector([true, false, true]) == "true, false, true"  # Booleans
 
         # Test with very long vectors
         v = collect(1:100)
-        result = eegfun.print_vector(v, max_length = 5, n_ends = 2)
+        result = EegFun.print_vector(v, max_length = 5, n_ends = 2)
         @test startswith(result, "1, 2, ...")
         @test endswith(result, "99, 100")
         @test count(==("..."), split(result, ", ")) == 1  # Only one ellipsis
 
         # Test with max_length smaller than n_ends
         v = collect(1:10)
-        result = eegfun.print_vector(v, max_length = 5, n_ends = 10)
+        result = EegFun.print_vector(v, max_length = 5, n_ends = 10)
         # When n_ends > max_length, it shows all elements since vector is shorter than n_ends
         @test result == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ..., 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"
 
         # Test with zero n_ends (should show only first part)
         v = collect(1:10)
-        result = eegfun.print_vector(v, max_length = 5, n_ends = 0)
+        result = EegFun.print_vector(v, max_length = 5, n_ends = 0)
         @test result == "..."  # When n_ends is 0, only ellipsis is shown
 
         # Test with negative n_ends (should throw error)
         v = collect(1:10)
-        @test_throws ArgumentError eegfun.print_vector(v, max_length = 5, n_ends = -2)
+        @test_throws ArgumentError EegFun.print_vector(v, max_length = 5, n_ends = -2)
     end
 
     @testset "Version" begin
-        version = eegfun.get_package_version(package_name = "eegfun")
+        version = EegFun.get_package_version(package_name = "EegFun")
         @test typeof(version) === String
         @test !isempty(version)
 
@@ -79,7 +79,7 @@ using eegfun
 
         # Test printing to string
         io = IOBuffer()
-        eegfun.print_config(config, io)
+        EegFun.print_config(config, io)
         output = String(take!(io))
         @test contains(output, "test")
         @test contains(output, "value = 1")
@@ -89,11 +89,11 @@ using eegfun
         @test contains(output, "metadata")
         @test contains(output, "date")
         @test contains(output, "julia_version")
-        @test contains(output, "eegfun_version")
+        @test contains(output, "EegFun_version")
 
         # Test printing to file
         test_file = "test_config.toml"
-        eegfun.print_config(config, test_file)
+        EegFun.print_config(config, test_file)
         @test isfile(test_file)
 
         # Verify file contents
@@ -111,7 +111,7 @@ using eegfun
         # Test with empty config
         empty_config = Dict{String,Any}()
         io = IOBuffer()
-        eegfun.print_config(empty_config, io)
+        EegFun.print_config(empty_config, io)
         output = String(take!(io))
         @test contains(output, "metadata")
         @test !contains(output, "test")
@@ -119,7 +119,7 @@ using eegfun
         # Test with config containing metadata
         config_with_meta = Dict("metadata" => Dict("old" => "value"), "test" => Dict("value" => 1))
         io = IOBuffer()
-        eegfun.print_config(config_with_meta, io)
+        EegFun.print_config(config_with_meta, io)
         output = String(take!(io))
         @test contains(output, "metadata")
         @test !contains(output, "old = \"value\"")  # Old metadata should be replaced
@@ -144,7 +144,7 @@ using eegfun
         )
 
         io = IOBuffer()
-        eegfun.print_config(complex_config, io)
+        EegFun.print_config(complex_config, io)
         output = String(take!(io))
 
         # Test that all values are properly formatted
@@ -163,12 +163,12 @@ using eegfun
         @test contains(output, "[metadata]")
         @test contains(output, "date = ")
         @test contains(output, "julia_version = ")
-        @test contains(output, "eegfun_version = ")
+        @test contains(output, "EegFun_version = ")
 
         # Test with Symbol keys (should be converted to strings)
         symbol_config = Dict(:symbol_key => Dict(:nested_symbol => "value"))
         io = IOBuffer()
-        eegfun.print_config(symbol_config, io)
+        EegFun.print_config(symbol_config, io)
         output = String(take!(io))
         @test contains(output, "symbol_key")
         @test contains(output, "nested_symbol = \"value\"")
@@ -176,7 +176,7 @@ using eegfun
         # Test error handling for file operations
         # Test with invalid filename (directory that doesn't exist)
         invalid_file = "/nonexistent/directory/test.toml"
-        @test_throws SystemError eegfun.print_config(config, invalid_file)
+        @test_throws SystemError EegFun.print_config(config, invalid_file)
 
         # Test with read-only directory (if possible)
         # This would require creating a read-only directory, which is complex
@@ -185,17 +185,17 @@ using eegfun
 
     @testset "Edge Cases and Error Handling" begin
         # Test print_vector with various edge cases
-        @test eegfun.print_vector([NaN]) == "NaN"
-        @test eegfun.print_vector([Inf]) == "Inf"
-        @test eegfun.print_vector([-Inf]) == "-Inf"
-        @test eegfun.print_vector([missing]) == "missing"
-        @test eegfun.print_vector([nothing]) == "nothing"
+        @test EegFun.print_vector([NaN]) == "NaN"
+        @test EegFun.print_vector([Inf]) == "Inf"
+        @test EegFun.print_vector([-Inf]) == "-Inf"
+        @test EegFun.print_vector([missing]) == "missing"
+        @test EegFun.print_vector([nothing]) == "nothing"
 
         # Test with very large numbers
-        @test eegfun.print_vector([1e10, 1e-10]) == "1.0e10, 1.0e-10"
+        @test EegFun.print_vector([1e10, 1e-10]) == "1.0e10, 1.0e-10"
 
         # Test with special characters in strings
-        @test eegfun.print_vector(["a\nb", "c\td"]) == "a\nb, c\td"  # No escaping in print_vector
+        @test EegFun.print_vector(["a\nb", "c\td"]) == "a\nb, c\td"  # No escaping in print_vector
 
         # Test config printing with TOML-compatible data types
         edge_config = Dict(
@@ -211,7 +211,7 @@ using eegfun
         )
 
         io = IOBuffer()
-        eegfun.print_config(edge_config, io)
+        EegFun.print_config(edge_config, io)
         output = String(take!(io))
 
         # Test that special values are handled properly
@@ -234,7 +234,7 @@ using eegfun
     @testset "Performance and Memory" begin
         # Test print_vector with very large vectors
         large_vector = collect(1:10000)
-        result = eegfun.print_vector(large_vector, max_length = 10, n_ends = 5)
+        result = EegFun.print_vector(large_vector, max_length = 10, n_ends = 5)
         @test length(result) < 100  # Should be truncated
         @test startswith(result, "1, 2, 3, 4, 5, ...")
         @test endswith(result, "9996, 9997, 9998, 9999, 10000")
@@ -242,7 +242,7 @@ using eegfun
         # Test config printing with large nested structures
         large_config = Dict("large_section" => Dict("array" => collect(1:100)))
         io = IOBuffer()
-        eegfun.print_config(large_config, io)
+        EegFun.print_config(large_config, io)
         output = String(take!(io))
         @test contains(output, "large_section")
         @test contains(

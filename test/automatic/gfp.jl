@@ -15,7 +15,7 @@ using GLMakie
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate GFP
-        gfp_result = eegfun.gfp(erp_data)
+        gfp_result = EegFun.gfp(erp_data)
 
         # Check structure
         @test gfp_result isa DataFrame
@@ -38,7 +38,7 @@ using GLMakie
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate normalized GFP
-        gfp_result = eegfun.gfp(erp_data, normalize = true)
+        gfp_result = EegFun.gfp(erp_data, normalize = true)
 
         # Check that values are in 0-100 range
         @test all(0 .<= gfp_result.gfp .<= 100)
@@ -52,13 +52,13 @@ using GLMakie
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate GFP with subset of channels
-        gfp_result = eegfun.gfp(erp_data, channel_selection = eegfun.channels([:Ch1, :Ch2, :Ch3]))
+        gfp_result = EegFun.gfp(erp_data, channel_selection = EegFun.channels([:Ch1, :Ch2, :Ch3]))
 
         @test gfp_result isa DataFrame
         @test nrow(gfp_result) == 126
 
         # Should produce different result than using all channels
-        gfp_all = eegfun.gfp(erp_data)
+        gfp_all = EegFun.gfp(erp_data)
         @test gfp_result.gfp != gfp_all.gfp
     end
 
@@ -66,7 +66,7 @@ using GLMakie
         erps = [create_test_erp_data(1, 1, fs = 50, n_channels = 5) for _ = 1:3]
 
         # Calculate GFP for all
-        gfp_results = eegfun.gfp(erps)
+        gfp_results = EegFun.gfp(erps)
 
         @test gfp_results isa Vector{DataFrame}
         @test length(gfp_results) == 3
@@ -81,7 +81,7 @@ using GLMakie
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Should error with no channels selected
-        @test_throws Exception eegfun.gfp(erp_data, channel_selection = eegfun.channels([]))
+        @test_throws Exception EegFun.gfp(erp_data, channel_selection = EegFun.channels([]))
     end
 
     @testset "GFP calculation correctness" begin
@@ -96,15 +96,15 @@ using GLMakie
         df.Ch2 = [2.0, 3.0, 4.0]
         df.Ch3 = [3.0, 4.0, 5.0]
 
-        layout = eegfun.Layout(
+        layout = EegFun.Layout(
             DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
             nothing,
             nothing,
         )
-        erp_data = eegfun.ErpData("test_data", 1, "test", df, layout, 1000, eegfun.AnalysisInfo(), 10)
+        erp_data = EegFun.ErpData("test_data", 1, "test", df, layout, 1000, EegFun.AnalysisInfo(), 10)
 
         # Calculate GFP
-        gfp_result = eegfun.gfp(erp_data, normalize = false)
+        gfp_result = EegFun.gfp(erp_data, normalize = false)
 
         # Verify GFP values (std of [1,2,3], [2,3,4], [3,4,5])
         expected_gfp = [std([1.0, 2.0, 3.0]), std([2.0, 3.0, 4.0]), std([3.0, 4.0, 5.0])]
@@ -117,7 +117,7 @@ end
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate dissimilarity
-        gd_result = eegfun.global_dissimilarity(erp_data)
+        gd_result = EegFun.global_dissimilarity(erp_data)
 
         # Check structure
         @test gd_result isa DataFrame
@@ -135,7 +135,7 @@ end
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate normalized dissimilarity
-        gd_result = eegfun.global_dissimilarity(erp_data, normalize = true)
+        gd_result = EegFun.global_dissimilarity(erp_data, normalize = true)
 
         # Check that values are in 0-100 range
         @test all(0 .<= gd_result.dissimilarity .<= 100)
@@ -147,7 +147,7 @@ end
         erps = [create_test_erp_data(1, 1, fs = 50, n_channels = 5) for _ = 1:3]
 
         # Calculate dissimilarity for all
-        gd_results = eegfun.global_dissimilarity(erps)
+        gd_results = EegFun.global_dissimilarity(erps)
 
         @test gd_results isa Vector{DataFrame}
         @test length(gd_results) == 3
@@ -164,7 +164,7 @@ end
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate both
-        result = eegfun.gfp_and_dissimilarity(erp_data)
+        result = EegFun.gfp_and_dissimilarity(erp_data)
 
         # Check structure
         @test result isa DataFrame
@@ -178,7 +178,7 @@ end
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate both with normalization
-        result = eegfun.gfp_and_dissimilarity(erp_data, normalize = true)
+        result = EegFun.gfp_and_dissimilarity(erp_data, normalize = true)
 
         # Check normalization
         @test all(0 .<= result.gfp .<= 100)
@@ -189,11 +189,11 @@ end
         erp_data = create_test_erp_data(1, 1, fs = 50, n_channels = 5)
 
         # Calculate combined
-        combined = eegfun.gfp_and_dissimilarity(erp_data, normalize = true)
+        combined = EegFun.gfp_and_dissimilarity(erp_data, normalize = true)
 
         # Calculate separately
-        gfp_only = eegfun.gfp(erp_data, normalize = true)
-        gd_only = eegfun.global_dissimilarity(erp_data, normalize = true)
+        gfp_only = EegFun.gfp(erp_data, normalize = true)
+        gd_only = EegFun.global_dissimilarity(erp_data, normalize = true)
 
         # Results should match
         @test all(abs.(combined.gfp .- gfp_only.gfp) .< 1e-10)
@@ -204,7 +204,7 @@ end
         erps = [create_test_erp_data(1, 1, fs = 50, n_channels = 5) for _ = 1:3]
 
         # Calculate for all
-        results = eegfun.gfp_and_dissimilarity(erps)
+        results = EegFun.gfp_and_dissimilarity(erps)
 
         @test results isa Vector{DataFrame}
         @test length(results) == 3
@@ -221,7 +221,7 @@ end
         erp_data = create_test_erp_data(1, 1, fs = 100, n_channels = 5)
 
         # Create plot (without displaying)
-        fig = eegfun.plot_gfp(erp_data, display_plot = false)
+        fig = EegFun.plot_gfp(erp_data, display_plot = false)
 
         @test fig isa Figure
     end
@@ -229,7 +229,7 @@ end
     @testset "Plot with ERP traces" begin
         erp_data = create_test_erp_data(1, 1, fs = 100, n_channels = 5)
 
-        fig = eegfun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true)
+        fig = EegFun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true)
 
         @test fig isa Figure
     end
@@ -237,7 +237,7 @@ end
     @testset "Plot with dissimilarity" begin
         erp_data = create_test_erp_data(1, 1, fs = 100, n_channels = 5)
 
-        fig = eegfun.plot_gfp(erp_data, display_plot = false, show_dissimilarity = true)
+        fig = EegFun.plot_gfp(erp_data, display_plot = false, show_dissimilarity = true)
 
         @test fig isa Figure
     end
@@ -245,7 +245,7 @@ end
     @testset "Plot all panels" begin
         erp_data = create_test_erp_data(1, 1, fs = 100, n_channels = 5)
 
-        fig = eegfun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true, show_dissimilarity = true)
+        fig = EegFun.plot_gfp(erp_data, display_plot = false, show_erp_traces = true, show_dissimilarity = true)
 
         @test fig isa Figure
     end
@@ -253,34 +253,34 @@ end
     @testset "Plot multiple datasets" begin
         erps = [create_test_erp_data(1, 1, fs = 100, n_channels = 5) for _ = 1:3]
 
-        fig = eegfun.plot_gfp(erps, display_plot = false)
+        fig = EegFun.plot_gfp(erps, display_plot = false)
 
         @test fig isa Figure
     end
 
     @testset "Plot from pre-computed GFP" begin
         erp_data = create_test_erp_data(1, 1, fs = 100, n_channels = 5)
-        gfp_result = eegfun.gfp(erp_data, normalize = true)
+        gfp_result = EegFun.gfp(erp_data, normalize = true)
 
-        fig = eegfun.plot_gfp(gfp_result, display_plot = false)
+        fig = EegFun.plot_gfp(gfp_result, display_plot = false)
 
         @test fig isa Figure
     end
 
     @testset "Plot from pre-computed GFP with dissimilarity" begin
         erp_data = create_test_erp_data(1, 1, fs = 100, n_channels = 5)
-        result = eegfun.gfp_and_dissimilarity(erp_data, normalize = true)
+        result = EegFun.gfp_and_dissimilarity(erp_data, normalize = true)
 
-        fig = eegfun.plot_gfp(result, display_plot = false, show_dissimilarity = true)
+        fig = EegFun.plot_gfp(result, display_plot = false, show_dissimilarity = true)
 
         @test fig isa Figure
     end
 
     @testset "Plot multiple pre-computed GFP" begin
         erps = [create_test_erp_data(1, 1, fs = 100, n_channels = 5) for _ = 1:3]
-        gfp_results = eegfun.gfp.(erps, normalize = true)
+        gfp_results = EegFun.gfp.(erps, normalize = true)
 
-        fig = eegfun.plot_gfp(gfp_results, display_plot = false)
+        fig = EegFun.plot_gfp(gfp_results, display_plot = false)
 
         @test fig isa Figure
     end
@@ -288,7 +288,7 @@ end
     @testset "Plot with custom styling" begin
         erp_data = create_test_erp_data(1, 1, fs = 100, n_channels = 5)
 
-        fig = eegfun.plot_gfp(
+        fig = EegFun.plot_gfp(
             erp_data,
             display_plot = false,
             color = :blue,
@@ -304,7 +304,7 @@ end
         # DataFrame without required columns
         bad_df = DataFrame(x = [1, 2, 3])
 
-        @test_throws Exception eegfun.plot_gfp(bad_df, display_plot = false)
+        @test_throws Exception EegFun.plot_gfp(bad_df, display_plot = false)
     end
 end
 
@@ -319,15 +319,15 @@ end
         df.Ch2 = [1.0, 2.0, 3.0]
         df.Ch3 = [1.0, 2.0, 3.0]
 
-        layout = eegfun.Layout(
+        layout = EegFun.Layout(
             DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
             nothing,
             nothing,
         )
-        erp_data = eegfun.ErpData("test_data", 1, "test", df, layout, 1000, eegfun.AnalysisInfo(), 10)
+        erp_data = EegFun.ErpData("test_data", 1, "test", df, layout, 1000, EegFun.AnalysisInfo(), 10)
 
         # Calculate GFP
-        gfp_result = eegfun.gfp(erp_data, normalize = false)
+        gfp_result = EegFun.gfp(erp_data, normalize = false)
 
         # GFP should be zero (all channels identical)
         @test all(gfp_result.gfp .≈ 0.0)
@@ -343,15 +343,15 @@ end
         df.Ch2 = [0.0, 0.0, 0.0]
         df.Ch3 = [-10.0, -10.0, -10.0]
 
-        layout = eegfun.Layout(
+        layout = EegFun.Layout(
             DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
             nothing,
             nothing,
         )
-        erp_data = eegfun.ErpData("test_data", 1, "test", df, layout, 1000, eegfun.AnalysisInfo(), 10)
+        erp_data = EegFun.ErpData("test_data", 1, "test", df, layout, 1000, EegFun.AnalysisInfo(), 10)
 
         # Calculate GFP
-        gfp_result = eegfun.gfp(erp_data, normalize = false)
+        gfp_result = EegFun.gfp(erp_data, normalize = false)
 
         # GFP should be high (large variance)
         @test all(gfp_result.gfp .> 5.0)

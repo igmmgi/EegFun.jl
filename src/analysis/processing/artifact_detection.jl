@@ -19,13 +19,7 @@ detect_eog_onsets!(dat, 30.0, :hEOG, :is_hEOG) # Detect horizontal EOG onsets
 ```
 """
 
-function detect_eog_onsets!(
-    dat::ContinuousData,
-    criterion::Real,
-    channel_in::Symbol,
-    channel_out::Symbol;
-    step_size::Int = 20,
-)
+function detect_eog_onsets!(dat::ContinuousData, criterion::Real, channel_in::Symbol, channel_out::Symbol; step_size::Int = 20)
     @info "Detecting EOG onsets in channel $(channel_in) with stepsize criterion $(criterion) μV"
     channel_in ∉ propertynames(dat.data) && @minimal_error_throw("channel $(channel_in) not found in data")
 
@@ -633,7 +627,7 @@ This function can use two types of criteria for epoch rejection:
 
 # Examples
 ```julia
-using eegfun, JLD2
+using EegFun, JLD2
 
 # Load epoched data
 epochs = load("participant_1_epochs.jld2")
@@ -751,9 +745,7 @@ function detect_bad_epochs_automatic(
     end
 
     # Create z-score rejection info if z_criterion > 0
-    z_rejections =
-        z_criterion > 0 ? ZScoreRejectionInfo(z_measures, z_variance, z_max, z_min, z_abs, z_range, z_kurtosis) :
-        nothing
+    z_rejections = z_criterion > 0 ? ZScoreRejectionInfo(z_measures, z_variance, z_max, z_min, z_abs, z_range, z_kurtosis) : nothing
 
     # Create rejection info
     info = EpochInfo(dat.condition, dat.condition_name, length(dat.data))
@@ -829,7 +821,7 @@ function _calculate_epoch_metrics(
     metric_keys = [:z_variance, :z_max, :z_min, :z_abs, :z_range, :z_kurtosis, :absolute_threshold]
     metrics = Dict(k => Dict(ch => Int[] for ch in selected_channels) for k in metric_keys)
 
-    n_epochs = eegfun.n_epochs(dat)
+    n_epochs = n_epochs(dat)
     for ch in selected_channels
         channel_data_all = Vector{Vector{Float64}}(undef, n_epochs)
         for (i, epoch) in enumerate(dat.data)
@@ -837,8 +829,7 @@ function _calculate_epoch_metrics(
         end
 
         if abs_criterion > 0
-            abs_threshold_violations =
-                findall(epoch_data -> maximum(abs.(epoch_data)) > abs_criterion, channel_data_all)
+            abs_threshold_violations = findall(epoch_data -> maximum(abs.(epoch_data)) > abs_criterion, channel_data_all)
             append!(metrics[:absolute_threshold][ch], abs_threshold_violations)
         end
 
@@ -916,10 +907,7 @@ function Base.show(io::IO, info::EpochRejectionInfo)
         if !isempty(nonempty_selected)
             println(io, "  Rejection breakdown (z-score):")
             for (vec, label) in nonempty_selected
-                println(
-                    io,
-                    "    $(label):  $(length(unique_epochs(vec))) unique epochs, $(length(unique_channels(vec))) unique channels",
-                )
+                println(io, "    $(label):  $(length(unique_epochs(vec))) unique epochs, $(length(unique_channels(vec))) unique channels")
             end
         end
     end
@@ -953,12 +941,7 @@ Repair detected artifacts using the specified method.
 # Returns
 Nothing (mutates dat in-place)
 """
-function repair_artifacts!(
-    dat::EpochData,
-    artifacts::EpochRejectionInfo;
-    method::Symbol = :neighbor_interpolation,
-    kwargs...,
-)
+function repair_artifacts!(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
 
     if method ∉ [:neighbor_interpolation, :spherical_spline]
         throw(ArgumentError("Unknown repair method: $method. Available: :neighbor_interpolation, :spherical_spline"))
@@ -1007,12 +990,7 @@ repaired_epochs = repair_artifacts(epochs, artifacts, :spherical_spline)
 clean_epochs = reject_epochs(epochs, artifacts)
 ```
 """
-function repair_artifacts(
-    dat::EpochData,
-    artifacts::EpochRejectionInfo;
-    method::Symbol = :neighbor_interpolation,
-    kwargs...,
-)
+function repair_artifacts(dat::EpochData, artifacts::EpochRejectionInfo; method::Symbol = :neighbor_interpolation, kwargs...)
     dat_copy = copy(dat)
     repair_artifacts!(dat_copy, artifacts; method, kwargs...)
     return dat_copy
@@ -1081,8 +1059,7 @@ function channel_repairable!(artifacts::EpochRejectionInfo, layout::Layout)
     return artifacts
 end
 
-channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) =
-    channel_repairable!.(artifacts, Ref(layout))
+channel_repairable!(artifacts::Vector{EpochRejectionInfo}, layout::Layout) = channel_repairable!.(artifacts, Ref(layout))
 
 
 """
@@ -1145,12 +1122,7 @@ Repair artifacts using spherical spline interpolation.
 # Returns
 - `EpochData`: The repaired epoch data (same object, modified in-place)
 """
-function repair_artifacts_spherical_spline!(
-    dat::EpochData,
-    artifacts::EpochRejectionInfo;
-    m::Int = 4,
-    lambda::Float64 = 1e-5,
-)
+function repair_artifacts_spherical_spline!(dat::EpochData, artifacts::EpochRejectionInfo; m::Int = 4, lambda::Float64 = 1e-5)
 
     _ensure_coordinates_3d!(dat.layout)
 
@@ -1165,14 +1137,7 @@ function repair_artifacts_spherical_spline!(
         @info "Repairing epoch $epoch_idx channels $(bad_channels) using spherical spline interpolation"
 
         # Use unified channel repair function with epoch selection
-        repair_channels!(
-            dat,
-            bad_channels;
-            method = :spherical_spline,
-            epoch_selection = epochs([epoch_idx]),
-            m = m,
-            lambda = lambda,
-        )
+        repair_channels!(dat, bad_channels; method = :spherical_spline, epoch_selection = epochs([epoch_idx]), m = m, lambda = lambda)
     end
 
     return dat
@@ -1211,8 +1176,7 @@ subset_bad_data("/path/to/preprocessed", 80.0, subset_directory="excluded")
 function subset_bad_data(data_path::String, threshold::Float64; subset_directory::String = "excluded")
 
     # Validate inputs/outputs
-    (threshold < 0.0 || threshold > 100.0) &&
-        @minimal_error_throw("threshold must be 0 < threshold < 100, got $threshold")
+    (threshold < 0.0 || threshold > 100.0) && @minimal_error_throw("threshold must be 0 < threshold < 100, got $threshold")
     !isdir(data_path) && @minimal_error_throw("data_path must be a directory: $data_path")
 
     epoch_summary_path = joinpath(data_path, "epoch_summary.jld2")

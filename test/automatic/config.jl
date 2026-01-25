@@ -3,7 +3,7 @@ using TOML
 using Dates
 
 # Import the package (which includes the config module)
-using eegfun
+using EegFun
 
 @testset "Configuration System Tests" begin
 
@@ -16,14 +16,14 @@ using eegfun
 
     @testset "ConfigParameter Tests" begin
         # Test ConfigParameter struct creation
-        param = eegfun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0, max = 2.0)
+        param = EegFun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0, max = 2.0)
         @test param.description == "Test parameter"
         @test param.default == 1.0
         @test param.min == 0.0
         @test param.max == 2.0
 
         # Test ConfigParameter with nothing values
-        param = eegfun.ConfigParameter{String}(
+        param = EegFun.ConfigParameter{String}(
             description = "Test parameter",
             default = nothing,
             min = nothing,
@@ -43,69 +43,69 @@ using eegfun
 
     @testset "PARAMETERS Dictionary Tests" begin
         # Test that all required parameters exist
-        @test haskey(eegfun.PARAMETERS, "files.input.directory")
-        @test haskey(eegfun.PARAMETERS, "files.input.raw_data_files")
-        @test haskey(eegfun.PARAMETERS, "files.input.layout_file")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.highpass.freq")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.lowpass.freq")
-        @test haskey(eegfun.PARAMETERS, "preprocess.epoch_start")
-        @test haskey(eegfun.PARAMETERS, "preprocess.epoch_end")
+        @test haskey(EegFun.PARAMETERS, "files.input.directory")
+        @test haskey(EegFun.PARAMETERS, "files.input.raw_data_files")
+        @test haskey(EegFun.PARAMETERS, "files.input.layout_file")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.highpass.freq")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.lowpass.freq")
+        @test haskey(EegFun.PARAMETERS, "preprocess.epoch_start")
+        @test haskey(EegFun.PARAMETERS, "preprocess.epoch_end")
 
         # Test parameter types
-        @test eegfun.PARAMETERS["files.input.directory"] isa eegfun.ConfigParameter{String}
-        @test eegfun.PARAMETERS["preprocess.filter.highpass.freq"] isa eegfun.ConfigParameter{Real}
-        @test eegfun.PARAMETERS["preprocess.filter.highpass.order"] isa eegfun.ConfigParameter{Real}
-        @test eegfun.PARAMETERS["files.output.save_continuous_data_original"] isa eegfun.ConfigParameter{Bool}
-        @test eegfun.PARAMETERS["files.output.save_continuous_data_cleaned"] isa eegfun.ConfigParameter{Bool}
+        @test EegFun.PARAMETERS["files.input.directory"] isa EegFun.ConfigParameter{String}
+        @test EegFun.PARAMETERS["preprocess.filter.highpass.freq"] isa EegFun.ConfigParameter{Real}
+        @test EegFun.PARAMETERS["preprocess.filter.highpass.order"] isa EegFun.ConfigParameter{Real}
+        @test EegFun.PARAMETERS["files.output.save_continuous_data_original"] isa EegFun.ConfigParameter{Bool}
+        @test EegFun.PARAMETERS["files.output.save_continuous_data_cleaned"] isa EegFun.ConfigParameter{Bool}
 
         # Test that all parameters have valid descriptions
-        for (path, param) in eegfun.PARAMETERS
+        for (path, param) in EegFun.PARAMETERS
             @test !isempty(param.description)
-            @test param isa eegfun.ConfigParameter
+            @test param isa EegFun.ConfigParameter
         end
 
         # Test specific parameter properties
-        param = eegfun.PARAMETERS["preprocess.filter.highpass.freq"]
+        param = EegFun.PARAMETERS["preprocess.filter.highpass.freq"]
         @test param.description == "Cutoff frequency (Hz)"
         @test param.min == 0.01
         @test param.max == 20.0
         @test param.default == 0.1
 
         # Test non-existent parameter
-        @test !haskey(eegfun.PARAMETERS, "nonexistent")
+        @test !haskey(EegFun.PARAMETERS, "nonexistent")
 
         # Test that all filter parameters exist
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.highpass.apply")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.highpass.method")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.highpass.func")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.lowpass.apply")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.lowpass.method")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.lowpass.func")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.ica_highpass.apply")
-        @test haskey(eegfun.PARAMETERS, "preprocess.filter.ica_lowpass.apply")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.highpass.apply")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.highpass.method")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.highpass.func")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.lowpass.apply")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.lowpass.method")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.lowpass.func")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.ica_highpass.apply")
+        @test haskey(EegFun.PARAMETERS, "preprocess.filter.ica_lowpass.apply")
 
         # Test that all file parameters exist
-        @test haskey(eegfun.PARAMETERS, "files.output.directory")
-        @test haskey(eegfun.PARAMETERS, "files.output.save_ica_data")
-        @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_original")
-        @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_cleaned")
-        @test haskey(eegfun.PARAMETERS, "files.output.save_epoch_data_good")
-        @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_original")
-        @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_cleaned")
-        @test haskey(eegfun.PARAMETERS, "files.output.save_erp_data_good")
+        @test haskey(EegFun.PARAMETERS, "files.output.directory")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_ica_data")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_original")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_cleaned")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_epoch_data_good")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_original")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_cleaned")
+        @test haskey(EegFun.PARAMETERS, "files.output.save_erp_data_good")
 
         # Test that all preprocess parameters exist
-        @test haskey(eegfun.PARAMETERS, "preprocess.reference_channel")
-        @test haskey(eegfun.PARAMETERS, "preprocess.layout.neighbour_criterion")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eog.vEOG_channels")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eog.hEOG_channels")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eog.vEOG_criterion")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eog.hEOG_criterion")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.extreme_value_abs_criterion")
-        @test haskey(eegfun.PARAMETERS, "preprocess.eeg.artifact_value_abs_criterion")
+        @test haskey(EegFun.PARAMETERS, "preprocess.reference_channel")
+        @test haskey(EegFun.PARAMETERS, "preprocess.layout.neighbour_criterion")
+        @test haskey(EegFun.PARAMETERS, "preprocess.eog.vEOG_channels")
+        @test haskey(EegFun.PARAMETERS, "preprocess.eog.hEOG_channels")
+        @test haskey(EegFun.PARAMETERS, "preprocess.eog.vEOG_criterion")
+        @test haskey(EegFun.PARAMETERS, "preprocess.eog.hEOG_criterion")
+        @test haskey(EegFun.PARAMETERS, "preprocess.eeg.extreme_value_abs_criterion")
+        @test haskey(EegFun.PARAMETERS, "preprocess.eeg.artifact_value_abs_criterion")
 
         # Test that ICA parameters exist
-        @test haskey(eegfun.PARAMETERS, "preprocess.ica.apply")
+        @test haskey(EegFun.PARAMETERS, "preprocess.ica.apply")
     end
 
     # # =============================================================================
@@ -117,7 +117,7 @@ using eegfun
         @testset "Valid Configuration Loading" begin
             # Test 1: Load default config only - should work without errors
             default_config =
-                eegfun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
+                EegFun.load_config(joinpath(dirname(@__FILE__), "..", "..", "src", "config", "default.toml"))
             @test default_config isa Dict
             @test haskey(default_config, "preprocess")
             @test haskey(default_config["preprocess"], "filter")
@@ -134,7 +134,7 @@ using eegfun
                 println(io, "epoch_end = 3.0")
             end
 
-            config = eegfun.load_config(user_config_path)
+            config = EegFun.load_config(user_config_path)
             @test config isa Dict
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 1.0
             @test config["preprocess"]["filter"]["highpass"]["apply"] == true
@@ -163,7 +163,7 @@ using eegfun
                 println(io, "apply = true")  # Add the "on" key that the test expects
             end
 
-            config = eegfun.load_config(nested_config_path)
+            config = EegFun.load_config(nested_config_path)
             @test config["files"]["output"]["directory"] == "/custom/output"
             @test config["files"]["output"]["save_erp_data_original"] == false
             @test config["files"]["output"]["save_ica_data"] == true  # default preserved
@@ -173,7 +173,7 @@ using eegfun
 
         @testset "Error Handling" begin
             # Test 6: Non-existent file - expect nothing to be returned
-            result = eegfun.load_config("nonexistent_file.toml")
+            result = EegFun.load_config("nonexistent_file.toml")
             @test result === nothing
 
             # Test 7: Invalid TOML syntax - expect nothing to be returned
@@ -182,7 +182,7 @@ using eegfun
                 println(io, "[section")  # Missing closing bracket
                 println(io, "key = value")
             end
-            result = eegfun.load_config(invalid_toml_path)
+            result = EegFun.load_config(invalid_toml_path)
             @test result === nothing
 
             # Test 8: Invalid parameter values - expect nothing to be returned
@@ -191,7 +191,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = -5.0")  # Below minimum
             end
-            result = eegfun.load_config(invalid_values_path)
+            result = EegFun.load_config(invalid_values_path)
             @test result === nothing
 
             # Test 9: Invalid parameter type - expect nothing to be returned
@@ -200,7 +200,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = \"not_a_number\"")  # Wrong type
             end
-            result = eegfun.load_config(invalid_type_path)
+            result = EegFun.load_config(invalid_type_path)
             @test result === nothing
 
             # Test 10: Invalid allowed values - expect nothing to be returned
@@ -209,7 +209,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "type = \"invalid_type\"")  # Not in allowed values
             end
-            result = eegfun.load_config(invalid_allowed_path)
+            result = EegFun.load_config(invalid_allowed_path)
             @test result === nothing
         end
 
@@ -222,7 +222,7 @@ using eegfun
                 println(io, "order = 1")      # Minimum allowed
             end
 
-            config = eegfun.load_config(min_boundary_path)
+            config = EegFun.load_config(min_boundary_path)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.01
             @test config["preprocess"]["filter"]["highpass"]["order"] == 1
 
@@ -234,7 +234,7 @@ using eegfun
                 println(io, "order = 4")      # Maximum allowed
             end
 
-            config = eegfun.load_config(max_boundary_path)
+            config = EegFun.load_config(max_boundary_path)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 20.0
             @test config["preprocess"]["filter"]["highpass"]["order"] == 4
         end
@@ -248,7 +248,7 @@ using eegfun
                 println(io, "order = 2.0")    # Float should convert to Int
             end
 
-            config = eegfun.load_config(conversion_path)
+            config = EegFun.load_config(conversion_path)
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 1.0  # Converted to Float
             @test config["preprocess"]["filter"]["highpass"]["order"] == 2     # Converted to Int
         end
@@ -261,7 +261,7 @@ using eegfun
                 println(io, "# Empty config file")
             end
 
-            config = eegfun.load_config(complete_config_path)
+            config = EegFun.load_config(complete_config_path)
 
             # Verify main sections exist
             @test haskey(config, "files")
@@ -293,7 +293,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
             end
 
-            config = eegfun.load_config(empty_sections_path)
+            config = EegFun.load_config(empty_sections_path)
             @test haskey(config, "files")
             @test haskey(config["files"], "input")
 
@@ -304,7 +304,7 @@ using eegfun
                 println(io, "directory = \"/path/with spaces/and/special@chars\"")
             end
 
-            config = eegfun.load_config(special_chars_path)
+            config = EegFun.load_config(special_chars_path)
             @test config["files"]["input"]["directory"] == "/path/with spaces/and/special@chars"
         end
 
@@ -316,7 +316,7 @@ using eegfun
                 println(io, "raw_data_files = [\"file1.bdf\", \"file2.bdf\"]")
             end
 
-            config = eegfun.load_config(array_config_path)
+            config = EegFun.load_config(array_config_path)
             @test config["files"]["input"]["raw_data_files"] == ["file1.bdf", "file2.bdf"]
 
             # Test boolean values
@@ -328,7 +328,7 @@ using eegfun
                 println(io, "save_ica_data = false")
             end
 
-            config = eegfun.load_config(bool_config_path)
+            config = EegFun.load_config(bool_config_path)
             @test config["files"]["output"]["save_continuous_data_original"] == true
             @test config["files"]["output"]["save_continuous_data_cleaned"] == true
             @test config["files"]["output"]["save_ica_data"] == false
@@ -340,7 +340,7 @@ using eegfun
                 println(io, "directory = \"/path/with spaces/and/special@chars\"")
             end
 
-            config = eegfun.load_config(special_config_path)
+            config = EegFun.load_config(special_config_path)
             @test config["files"]["input"]["directory"] == "/path/with spaces/and/special@chars"
         end
 
@@ -351,7 +351,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.005")  # Below minimum
             end
-            result = eegfun.load_config(range_config_path)
+            result = EegFun.load_config(range_config_path)
             @test result === nothing
 
             # Test allowed values validation
@@ -360,7 +360,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "method = \"invalid\"")  # Not in allowed values
             end
-            result = eegfun.load_config(allowed_config_path)
+            result = EegFun.load_config(allowed_config_path)
             @test result === nothing
 
             # Test type conversion validation
@@ -369,7 +369,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")  # Invalid type
             end
-            result = eegfun.load_config(type_config_path)
+            result = EegFun.load_config(type_config_path)
             @test result === nothing
         end
 
@@ -382,7 +382,7 @@ using eegfun
                 println(io, "method = \"fir\"")
                 println(io, "order = 2")
             end
-            config = eegfun.load_config(valid_config_path)
+            config = EegFun.load_config(valid_config_path)
             @test config !== nothing
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
 
@@ -392,7 +392,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = -1.0")  # Below minimum
             end
-            result = eegfun.load_config(invalid_value_path)
+            result = EegFun.load_config(invalid_value_path)
             @test result === nothing
 
             # Test invalid parameter type
@@ -401,7 +401,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")
             end
-            result = eegfun.load_config(invalid_type_path)
+            result = EegFun.load_config(invalid_type_path)
             @test result === nothing
         end
 
@@ -412,7 +412,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.5")
             end
-            config = eegfun.load_config(custom_config_path)
+            config = EegFun.load_config(custom_config_path)
             @test config !== nothing
             @test config["preprocess"]["filter"]["highpass"]["freq"] == 0.5
             @test config["preprocess"]["filter"]["highpass"]["method"] == "iir"  # Default value
@@ -425,7 +425,7 @@ using eegfun
                 println(io, "directory = \"/custom/path\"")
                 println(io, "raw_data_files = [\"file1.bdf\", \"file2.bdf\"]")
             end
-            config = eegfun.load_config(nested_config_path)
+            config = EegFun.load_config(nested_config_path)
             @test config !== nothing
             @test config["files"]["input"]["directory"] == "/custom/path"
             @test config["files"]["input"]["raw_data_files"] == ["file1.bdf", "file2.bdf"]
@@ -438,7 +438,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "freq = 0.005")  # Below minimum
             end
-            result = eegfun.load_config(range_config_path)
+            result = EegFun.load_config(range_config_path)
             @test result === nothing
 
             # Test allowed values validation
@@ -447,7 +447,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "method = \"invalid\"")  # Not in allowed values
             end
-            result = eegfun.load_config(allowed_config_path)
+            result = EegFun.load_config(allowed_config_path)
             @test result === nothing
 
             # Test type conversion validation
@@ -456,7 +456,7 @@ using eegfun
                 println(io, "[preprocess.filter.highpass]")
                 println(io, "order = \"not_a_number\"")  # Invalid type
             end
-            result = eegfun.load_config(type_config_path)
+            result = EegFun.load_config(type_config_path)
             @test result === nothing
 
             # Test optional parameters
@@ -465,7 +465,7 @@ using eegfun
                 println(io, "[files.input]")
                 println(io, "epoch_condition_file = \"\"")  # Empty string for optional parameter
             end
-            config = eegfun.load_config(optional_config_path)
+            config = EegFun.load_config(optional_config_path)
             @test config !== nothing
             @test config["files"]["input"]["epoch_condition_file"] == ""
         end
@@ -477,19 +477,19 @@ using eegfun
 
     @testset "ValidationResult Tests" begin
         # Test successful validation
-        result = eegfun.ValidationResult(success = true)
+        result = EegFun.ValidationResult(success = true)
         @test result.success
         @test result.error === nothing
         @test result.key_path === nothing
 
         # Test failed validation with error
-        result = eegfun.ValidationResult(success = false, error = "Test error")
+        result = EegFun.ValidationResult(success = false, error = "Test error")
         @test !result.success
         @test result.error == "Test error"
         @test result.key_path === nothing
 
         # Test failed validation with path
-        result = eegfun.ValidationResult(success = false, error = "Test error", key_path = "test.path")
+        result = EegFun.ValidationResult(success = false, error = "Test error", key_path = "test.path")
         @test !result.success
         @test result.error == "Test error"
         @test result.key_path == "test.path"
@@ -505,7 +505,7 @@ using eegfun
                 ),
             ),
         )
-        result = eegfun._validate_config(valid_config)
+        result = EegFun._validate_config(valid_config)
         @test result.success
 
         # Test invalid configuration - wrong type
@@ -521,7 +521,7 @@ using eegfun
                 ),
             ),
         )
-        result = eegfun._validate_config(invalid_config)
+        result = EegFun._validate_config(invalid_config)
         @test !result.success
         @test result.error !== nothing
         @test result.key_path !== nothing
@@ -539,7 +539,7 @@ using eegfun
                 ),
             ),
         )
-        result = eegfun._validate_config(invalid_config)
+        result = EegFun._validate_config(invalid_config)
         @test !result.success
         @test result.error !== nothing
         @test result.key_path !== nothing
@@ -557,7 +557,7 @@ using eegfun
                 ),
             ),
         )
-        result = eegfun._validate_config(invalid_config)
+        result = EegFun._validate_config(invalid_config)
         @test !result.success
         @test result.error !== nothing
         @test result.key_path !== nothing
@@ -570,7 +570,7 @@ using eegfun
     @testset "Config Template Generation" begin
         # Test template generation
         template_path = joinpath(test_dir, "template.toml")
-        eegfun.generate_config_template(filename = template_path)
+        EegFun.generate_config_template(filename = template_path)
         @test isfile(template_path)
 
         # Verify template contents
@@ -581,7 +581,7 @@ using eegfun
 
         # Test template with custom filename
         custom_path = joinpath(test_dir, "custom.toml")
-        eegfun.generate_config_template(filename = custom_path)
+        EegFun.generate_config_template(filename = custom_path)
         @test isfile(custom_path)
     end
 
@@ -591,53 +591,53 @@ using eegfun
 
     @testset "Parameter Constructor Helper Tests" begin
         # Test string_param
-        param = eegfun.string_param("Test string", "default")
-        @test param isa eegfun.ConfigParameter{Union{Vector{String},String}}
+        param = EegFun.string_param("Test string", "default")
+        @test param isa EegFun.ConfigParameter{Union{Vector{String},String}}
         @test param.description == "Test string"
         @test param.default == "default"
 
         # Test string_param with allowed values
-        param = eegfun.string_param("Test string", "default", allowed = ["a", "b", "c"])
+        param = EegFun.string_param("Test string", "default", allowed = ["a", "b", "c"])
         @test param.allowed == ["a", "b", "c"]
 
         # Test string_param with default empty string
-        param = eegfun.string_param("Test string")
+        param = EegFun.string_param("Test string")
         @test param.default == ""
 
         # Test bool_param
-        param = eegfun.bool_param("Test bool", true)
-        @test param isa eegfun.ConfigParameter{Bool}
+        param = EegFun.bool_param("Test bool", true)
+        @test param isa EegFun.ConfigParameter{Bool}
         @test param.description == "Test bool"
         @test param.default == true
 
         # Test bool_param with default false
-        param = eegfun.bool_param("Test bool")
+        param = EegFun.bool_param("Test bool")
         @test param.default == false
 
         # Test number_param
-        param = eegfun.number_param("Test number", 5.0, 0.0, 10.0)
-        @test param isa eegfun.ConfigParameter{Real}
+        param = EegFun.number_param("Test number", 5.0, 0.0, 10.0)
+        @test param isa EegFun.ConfigParameter{Real}
         @test param.description == "Test number"
         @test param.default == 5.0
         @test param.min == 0.0
         @test param.max == 10.0
 
         # Test number_param without min/max
-        param = eegfun.number_param("Test number", 5.0)
+        param = EegFun.number_param("Test number", 5.0)
         @test param.default == 5.0
         @test param.min === nothing
         @test param.max === nothing
 
         # Test channel_groups_param
         default = [["Fp1"], ["Fp2"]]
-        param = eegfun.channel_groups_param("Test channels", default)
-        @test param isa eegfun.ConfigParameter{Vector{Vector{String}}}
+        param = EegFun.channel_groups_param("Test channels", default)
+        @test param isa EegFun.ConfigParameter{Vector{Vector{String}}}
         @test param.description == "Test channels"
         @test param.default == default
 
         # Test _param helper function directly
-        param = eegfun._param(Int, "Test int", 42, min = 0, max = 100)
-        @test param isa eegfun.ConfigParameter{Int}
+        param = EegFun._param(Int, "Test int", 42, min = 0, max = 100)
+        @test param isa EegFun.ConfigParameter{Int}
         @test param.description == "Test int"
         @test param.default == 42
         @test param.min == 0
@@ -646,34 +646,34 @@ using eegfun
 
     @testset "Parameter Constructor Edge Cases" begin
         # Test string_param with empty allowed list
-        param = eegfun.string_param("Test string", "default", allowed = String[])
+        param = EegFun.string_param("Test string", "default", allowed = String[])
         @test param.allowed == String[]
 
         # Test number_param with negative min/max
-        param = eegfun.number_param("Test number", 0.0, -10.0, 10.0)
+        param = EegFun.number_param("Test number", 0.0, -10.0, 10.0)
         @test param.min == -10.0
         @test param.max == 10.0
 
         # Test channel_groups_param with empty groups
-        param = eegfun.channel_groups_param("Test channels", Vector{Vector{String}}())
+        param = EegFun.channel_groups_param("Test channels", Vector{Vector{String}}())
         @test param.default == Vector{Vector{String}}()
 
         # Test _param with Union types
-        param = eegfun._param(Union{String,Nothing}, "Test union", nothing)
-        @test param isa eegfun.ConfigParameter{Union{String,Nothing}}
+        param = EegFun._param(Union{String,Nothing}, "Test union", nothing)
+        @test param isa EegFun.ConfigParameter{Union{String,Nothing}}
         @test param.default === nothing
     end
 
     @testset "ConfigParameter Constructor Tests" begin
         # Test with all fields
-        param = eegfun.ConfigParameter{Int}(description = "Test parameter", default = 5, min = 1, max = 10)
+        param = EegFun.ConfigParameter{Int}(description = "Test parameter", default = 5, min = 1, max = 10)
         @test param.description == "Test parameter"
         @test param.default == 5
         @test param.min == 1
         @test param.max == 10
 
         # Test with minimal fields
-        param = eegfun.ConfigParameter{String}(description = "Test parameter")
+        param = EegFun.ConfigParameter{String}(description = "Test parameter")
         @test param.description == "Test parameter"
         @test param.default === nothing
         @test param.min === nothing
@@ -681,7 +681,7 @@ using eegfun
         @test param.allowed === nothing
 
         # Test with some fields
-        param = eegfun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0)
+        param = EegFun.ConfigParameter{Float64}(description = "Test parameter", default = 1.0, min = 0.0)
         @test param.description == "Test parameter"
         @test param.default == 1.0
         @test param.min == 0.0
@@ -695,29 +695,29 @@ using eegfun
 
     @testset "_param Helper Function Tests" begin
         # Test basic parameter creation
-        param = eegfun._param(String, "Test param", "default")
-        @test param isa eegfun.ConfigParameter{String}
+        param = EegFun._param(String, "Test param", "default")
+        @test param isa EegFun.ConfigParameter{String}
         @test param.description == "Test param"
         @test param.default == "default"
 
         # Test with allowed values
-        param = eegfun._param(String, "Test param", "default", allowed = ["a", "b"])
+        param = EegFun._param(String, "Test param", "default", allowed = ["a", "b"])
         @test param.allowed == ["a", "b"]
 
         # Test with min/max values
-        param = eegfun._param(Real, "Test param", 5.0, min = 0.0, max = 10.0)
+        param = EegFun._param(Real, "Test param", 5.0, min = 0.0, max = 10.0)
         @test param.min == 0.0
         @test param.max == 10.0
 
         # Test with nothing defaults
-        param = eegfun._param(Bool, "Test param")
+        param = EegFun._param(Bool, "Test param")
         @test param.default === nothing
         @test param.allowed === nothing
     end
 
     @testset "_filter_param_spec Tests" begin
         # Test filter parameter specification creation
-        filter_spec = eegfun._filter_param_spec("test.prefix", true, "hp", 1.0, 0.1, 10.0, 2, 1, 5)
+        filter_spec = EegFun._filter_param_spec("test.prefix", true, "hp", 1.0, 0.1, 10.0, 2, 1, 5)
 
         @test haskey(filter_spec, "test.prefix.apply")
         @test haskey(filter_spec, "test.prefix.type")
@@ -727,10 +727,10 @@ using eegfun
         @test haskey(filter_spec, "test.prefix.order")
 
         # Test parameter types
-        @test filter_spec["test.prefix.apply"] isa eegfun.ConfigParameter{Bool}
-        @test filter_spec["test.prefix.type"] isa eegfun.ConfigParameter{Union{Vector{String},String}}
-        @test filter_spec["test.prefix.method"] isa eegfun.ConfigParameter{Union{Vector{String},String}}
-        @test filter_spec["test.prefix.freq"] isa eegfun.ConfigParameter{Real}
+        @test filter_spec["test.prefix.apply"] isa EegFun.ConfigParameter{Bool}
+        @test filter_spec["test.prefix.type"] isa EegFun.ConfigParameter{Union{Vector{String},String}}
+        @test filter_spec["test.prefix.method"] isa EegFun.ConfigParameter{Union{Vector{String},String}}
+        @test filter_spec["test.prefix.freq"] isa EegFun.ConfigParameter{Real}
 
         # Test parameter values
         @test filter_spec["test.prefix.type"].default == "hp"
@@ -744,7 +744,7 @@ using eegfun
 
     @testset "_group_parameters_by_section Tests" begin
         # Test parameter grouping
-        sections = eegfun._group_parameters_by_section()
+        sections = EegFun._group_parameters_by_section()
 
         @test haskey(sections, "files")
         @test haskey(sections, "preprocess")
@@ -765,24 +765,24 @@ using eegfun
 
     @testset "_extract_subsection Tests" begin
         # Test basic subsection extraction
-        @test eegfun._extract_subsection("files", "files.input.directory") == "input"
-        @test eegfun._extract_subsection("preprocess.filter", "preprocess.filter.highpass.freq") == "highpass"
+        @test EegFun._extract_subsection("files", "files.input.directory") == "input"
+        @test EegFun._extract_subsection("preprocess.filter", "preprocess.filter.highpass.freq") == "highpass"
 
         # Test nested subsections
-        @test eegfun._extract_subsection("preprocess.filter", "preprocess.filter.ica_highpass.freq") == "ica_highpass"
+        @test EegFun._extract_subsection("preprocess.filter", "preprocess.filter.ica_highpass.freq") == "ica_highpass"
 
         # Test no subsection
-        @test eegfun._extract_subsection("preprocess.ica", "preprocess.ica.apply") == ""
+        @test EegFun._extract_subsection("preprocess.ica", "preprocess.ica.apply") == ""
 
         # Test non-matching prefix
-        @test eegfun._extract_subsection("files", "preprocess.filter.highpass.freq") == ""
+        @test EegFun._extract_subsection("files", "preprocess.filter.highpass.freq") == ""
     end
 
     @testset "_group_params_by_subsection Tests" begin
         # Test parameter grouping by subsection
         matching_params =
             ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
-        grouped = eegfun._group_params_by_subsection("preprocess.filter", matching_params)
+        grouped = EegFun._group_params_by_subsection("preprocess.filter", matching_params)
 
         @test haskey(grouped, "highpass")
         @test haskey(grouped, "lowpass")
@@ -797,31 +797,31 @@ using eegfun
 
     @testset "_merge_configs Tests" begin
         # Test merging with empty configs
-        @test isempty(eegfun._merge_configs(Dict(), Dict()))
+        @test isempty(EegFun._merge_configs(Dict(), Dict()))
 
         # Test merging with one empty config
         default = Dict("a" => 1)
         user = Dict()
-        merged = eegfun._merge_configs(default, user)
+        merged = EegFun._merge_configs(default, user)
         @test merged["a"] == 1
 
         # Test deep merging
         default = Dict("a" => Dict("b" => Dict("c" => 1)))
         user = Dict("a" => Dict("b" => Dict("d" => 2)))
-        merged = eegfun._merge_configs(default, user)
+        merged = EegFun._merge_configs(default, user)
         @test merged["a"]["b"]["c"] == 1
         @test merged["a"]["b"]["d"] == 2
 
         # Test user config overrides default
         default = Dict("a" => 1)
         user = Dict("a" => 2)
-        merged = eegfun._merge_configs(default, user)
+        merged = EegFun._merge_configs(default, user)
         @test merged["a"] == 2
 
         # Test nested user config overrides default
         default = Dict("a" => Dict("b" => 1, "c" => 2))
         user = Dict("a" => Dict("b" => 3))
-        merged = eegfun._merge_configs(default, user)
+        merged = EegFun._merge_configs(default, user)
         @test merged["a"]["b"] == 3
         @test merged["a"]["c"] == 2
     end
@@ -831,7 +831,7 @@ using eegfun
         target = Dict("a" => Dict("b" => 1), "c" => 5)
         source = Dict("a" => Dict("d" => 2), "c" => 10)  # Override with compatible types
 
-        eegfun._merge_nested!(target, source)
+        EegFun._merge_nested!(target, source)
         @test target["a"]["b"] == 1  # Original value preserved
         @test target["a"]["d"] == 2  # New value added
         @test target["c"] == 10      # Value overridden
@@ -841,43 +841,43 @@ using eegfun
         source = Dict()
         original_target = copy(target)
 
-        eegfun._merge_nested!(target, source)
+        EegFun._merge_nested!(target, source)
         @test target == original_target  # Should be unchanged
     end
 
     @testset "_validate_parameter Tests" begin
         # Test valid parameter
-        param = eegfun.ConfigParameter{Real}(description = "Test", default = 5.0, min = 0.0, max = 10.0)
-        result = eegfun._validate_parameter(5.0, param, "test.param")
+        param = EegFun.ConfigParameter{Real}(description = "Test", default = 5.0, min = 0.0, max = 10.0)
+        result = EegFun._validate_parameter(5.0, param, "test.param")
         @test result.success == true
 
         # Test value below minimum
-        result = eegfun._validate_parameter(-1.0, param, "test.param")
+        result = EegFun._validate_parameter(-1.0, param, "test.param")
         @test result.success == false
         @test contains(result.error, "must be >=")
 
         # Test value above maximum
-        result = eegfun._validate_parameter(15.0, param, "test.param")
+        result = EegFun._validate_parameter(15.0, param, "test.param")
         @test result.success == false
         @test contains(result.error, "must be <=")
 
         # Test wrong type
-        result = eegfun._validate_parameter("string", param, "test.param")
+        result = EegFun._validate_parameter("string", param, "test.param")
         @test result.success == false
         @test contains(result.error, "must be a number")
 
         # Test allowed values
-        param = eegfun.ConfigParameter{String}(description = "Test", default = "a", allowed = ["a", "b", "c"])
-        result = eegfun._validate_parameter("b", param, "test.param")
+        param = EegFun.ConfigParameter{String}(description = "Test", default = "a", allowed = ["a", "b", "c"])
+        result = EegFun._validate_parameter("b", param, "test.param")
         @test result.success == true
 
-        result = eegfun._validate_parameter("d", param, "test.param")
+        result = EegFun._validate_parameter("d", param, "test.param")
         @test result.success == false
         @test contains(result.error, "must be one of")
 
         # Test numeric type conversion (Int to Float)
-        param = eegfun.ConfigParameter{Float64}(description = "Test", default = 5.0)
-        result = eegfun._validate_parameter(5, param, "test.param")  # Int value
+        param = EegFun.ConfigParameter{Float64}(description = "Test", default = 5.0)
+        result = EegFun._validate_parameter(5, param, "test.param")  # Int value
         @test result.success == true  # Should accept Int for Float64
     end
 
@@ -887,25 +887,25 @@ using eegfun
 
     @testset "Parameter Info Display" begin
         # Test that all parameters exist and have required properties
-        for (path, param) in eegfun.PARAMETERS
+        for (path, param) in EegFun.PARAMETERS
             @test !isempty(param.description)
-            @test param isa eegfun.ConfigParameter
+            @test param isa EegFun.ConfigParameter
         end
 
         # Test specific parameter properties
-        param = eegfun.PARAMETERS["preprocess.filter.highpass.freq"]
+        param = EegFun.PARAMETERS["preprocess.filter.highpass.freq"]
         @test param.description == "Cutoff frequency (Hz)"
         @test param.min == 0.01
         @test param.max == 20.0
         @test param.default == 0.1
 
         # Test non-existent parameter
-        @test !haskey(eegfun.PARAMETERS, "nonexistent")
+        @test !haskey(EegFun.PARAMETERS, "nonexistent")
     end
 
     @testset "_show_parameter_details Tests" begin
         # Test with parameter that has all fields
-        param = eegfun.ConfigParameter{Real}(
+        param = EegFun.ConfigParameter{Real}(
             description = "Test param",
             default = 5.0,
             min = 0.0,
@@ -914,36 +914,36 @@ using eegfun
         )
 
         # Capture output (this is tricky with @info, so we'll test the function exists)
-        @test typeof(eegfun._show_parameter_details) <: Function
+        @test typeof(EegFun._show_parameter_details) <: Function
     end
 
     @testset "_display_section Tests" begin
         # Test section display
-        sections = eegfun._group_parameters_by_section()
+        sections = EegFun._group_parameters_by_section()
         files_section = sections["files"]
 
         # Test function exists and can be called
-        @test typeof(eegfun._display_section) <: Function
+        @test typeof(EegFun._display_section) <: Function
     end
 
     @testset "_display_subsection Tests" begin
         # Test subsection display
-        sections = eegfun._group_parameters_by_section()
+        sections = EegFun._group_parameters_by_section()
         input_params = sections["files"]["input"]
 
         # Test function exists and can be called
-        @test typeof(eegfun._display_subsection) <: Function
+        @test typeof(EegFun._display_subsection) <: Function
     end
 
     @testset "_show_specific_parameter Tests" begin
         # Test with exact parameter match
-        @test typeof(eegfun._show_specific_parameter) <: Function
+        @test typeof(EegFun._show_specific_parameter) <: Function
 
         # Test with section prefix
-        @test typeof(eegfun._show_specific_parameter) <: Function
+        @test typeof(EegFun._show_specific_parameter) <: Function
 
         # Test with non-existent parameter
-        @test typeof(eegfun._show_specific_parameter) <: Function
+        @test typeof(EegFun._show_specific_parameter) <: Function
     end
 
     @testset "_show_section_overview Tests" begin
@@ -952,21 +952,21 @@ using eegfun
             ["preprocess.filter.highpass.freq", "preprocess.filter.highpass.apply", "preprocess.filter.lowpass.freq"]
 
         # Test function exists and can be called
-        @test typeof(eegfun._show_section_overview) <: Function
+        @test typeof(EegFun._show_section_overview) <: Function
     end
 
     @testset "_display_grouped_params Tests" begin
         # Test grouped parameters display
-        sections = eegfun._group_parameters_by_section()
+        sections = EegFun._group_parameters_by_section()
         files_section = sections["files"]
 
         # Test function exists and can be called
-        @test typeof(eegfun._display_grouped_params) <: Function
+        @test typeof(EegFun._display_grouped_params) <: Function
     end
 
     @testset "_show_all_parameters Tests" begin
         # Test that the function exists and can be called
-        @test typeof(eegfun._show_all_parameters) <: Function
+        @test typeof(EegFun._show_all_parameters) <: Function
 
         # Test that it doesn't throw errors when called
         # (This function uses @info for output, so we can't easily capture it)
@@ -980,13 +980,13 @@ using eegfun
     @testset "_write_parameter_value Edge Cases" begin
         # Test string with special characters that need escaping
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", "path\\with\\backslashes")
+        EegFun._write_parameter_value(io, "test_param", "path\\with\\backslashes")
         @test contains(String(take!(io)), "path\\\\with\\\\backslashes")
 
         # Test vector with nested vectors (channel groups)
         io = IOBuffer()
         nested_vector = [["Fp1", "IO1"], ["Fp2", "IO2"]]
-        eegfun._write_parameter_value(io, "test_param", nested_vector)
+        EegFun._write_parameter_value(io, "test_param", nested_vector)
         output = String(take!(io))
         @test contains(output, "test_param = [")
         @test contains(output, "Fp1")
@@ -994,27 +994,27 @@ using eegfun
 
         # Test empty vector
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", String[])
+        EegFun._write_parameter_value(io, "test_param", String[])
         @test String(take!(io)) == "test_param = []\n"
 
         # Test nothing value
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", nothing)
+        EegFun._write_parameter_value(io, "test_param", nothing)
         @test String(take!(io)) == "test_param = nothing\n"
 
         # Test numeric values
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", 42)
+        EegFun._write_parameter_value(io, "test_param", 42)
         @test String(take!(io)) == "test_param = 42\n"
 
         # Test float values
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", 3.14)
+        EegFun._write_parameter_value(io, "test_param", 3.14)
         @test String(take!(io)) == "test_param = 3.14\n"
 
         # Test boolean values
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", true)
+        EegFun._write_parameter_value(io, "test_param", true)
         @test String(take!(io)) == "test_param = true\n"
     end
 
@@ -1024,22 +1024,22 @@ using eegfun
 
     @testset "show_parameter_info Integration Tests" begin
         # Test with empty parameter name (show all)
-        @test typeof(eegfun.show_parameter_info) <: Function
+        @test typeof(EegFun.show_parameter_info) <: Function
 
         # Test with specific parameter
-        @test typeof(eegfun.show_parameter_info) <: Function
+        @test typeof(EegFun.show_parameter_info) <: Function
 
         # Test with section prefix
-        @test typeof(eegfun.show_parameter_info) <: Function
+        @test typeof(EegFun.show_parameter_info) <: Function
 
         # Test with non-existent parameter
-        @test typeof(eegfun.show_parameter_info) <: Function
+        @test typeof(EegFun.show_parameter_info) <: Function
     end
 
     @testset "Template Generation Integration Tests" begin
         # Test template generation with custom filename
         custom_template = joinpath(test_dir, "custom_template.toml")
-        eegfun.generate_config_template(filename = custom_template)
+        EegFun.generate_config_template(filename = custom_template)
         @test isfile(custom_template)
 
         # Verify template content
@@ -1056,7 +1056,7 @@ using eegfun
 
     @testset "_write_template_header Tests" begin
         io = IOBuffer()
-        eegfun._write_template_header(io)
+        EegFun._write_template_header(io)
         output = String(take!(io))
 
         @test contains(output, "# EEG Processing Configuration Template")
@@ -1068,11 +1068,11 @@ using eegfun
 
     @testset "_write_section Tests" begin
         # Create test data using the actual PARAMETERS structure
-        sections = eegfun._group_parameters_by_section()
+        sections = EegFun._group_parameters_by_section()
         files_section = sections["files"]
 
         io = IOBuffer()
-        eegfun._write_section(io, "files", files_section)
+        EegFun._write_section(io, "files", files_section)
         output = String(take!(io))
 
         @test contains(output, "# files Settings")
@@ -1085,11 +1085,11 @@ using eegfun
 
     @testset "_write_subsection Tests" begin
         # Create test data using the actual PARAMETERS structure
-        sections = eegfun._group_parameters_by_section()
+        sections = EegFun._group_parameters_by_section()
         input_params = sections["files"]["input"]
 
         io = IOBuffer()
-        eegfun._write_subsection(io, "files", "input", input_params)
+        EegFun._write_subsection(io, "files", "input", input_params)
         output = String(take!(io))
 
         @test contains(output, "# input Settings")
@@ -1099,7 +1099,7 @@ using eegfun
 
     @testset "_write_template_sections Tests" begin
         io = IOBuffer()
-        eegfun._write_template_sections(io)
+        EegFun._write_template_sections(io)
         output = String(take!(io))
 
         # Should contain all major sections
@@ -1111,7 +1111,7 @@ using eegfun
 
     @testset "_write_parameter_docs Tests" begin
         # Test parameter with all fields
-        param = eegfun.ConfigParameter{Real}(
+        param = EegFun.ConfigParameter{Real}(
             description = "Test param",
             default = 5.0,
             min = 0.0,
@@ -1119,7 +1119,7 @@ using eegfun
             allowed = ["a", "b"],
         )
         io = IOBuffer()
-        eegfun._write_parameter_docs(io, param)
+        EegFun._write_parameter_docs(io, param)
         output = String(take!(io))
 
         @test contains(output, "# Test param")
@@ -1129,9 +1129,9 @@ using eegfun
         @test contains(output, "# Default: 5.0")
 
         # Test required parameter
-        param = eegfun.ConfigParameter{String}(description = "Required param", default = nothing)
+        param = EegFun.ConfigParameter{String}(description = "Required param", default = nothing)
         io = IOBuffer()
-        eegfun._write_parameter_docs(io, param)
+        EegFun._write_parameter_docs(io, param)
         output = String(take!(io))
 
         @test contains(output, "# [REQUIRED]")
@@ -1141,32 +1141,32 @@ using eegfun
     @testset "_write_parameter_value Tests" begin
         # Test string value writing
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", "test_value")
+        EegFun._write_parameter_value(io, "test_param", "test_value")
         @test String(take!(io)) == "test_param = \"test_value\"\n"
 
         # Test numeric value writing
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", 42)
+        EegFun._write_parameter_value(io, "test_param", 42)
         @test String(take!(io)) == "test_param = 42\n"
 
         # Test boolean value writing
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", true)
+        EegFun._write_parameter_value(io, "test_param", true)
         @test String(take!(io)) == "test_param = true\n"
 
         # Test empty vector writing
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", String[])
+        EegFun._write_parameter_value(io, "test_param", String[])
         @test String(take!(io)) == "test_param = []\n"
 
         # Test vector with values writing
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", ["a", "b", "c"])
+        EegFun._write_parameter_value(io, "test_param", ["a", "b", "c"])
         @test String(take!(io)) == "test_param = [a, b, c]\n"
 
         # Test vector with mixed types
         io = IOBuffer()
-        eegfun._write_parameter_value(io, "test_param", [1, "two", 3.0])
+        EegFun._write_parameter_value(io, "test_param", [1, "two", 3.0])
         @test String(take!(io)) == "test_param = [1, two, 3.0]\n"
     end
 
@@ -1180,7 +1180,7 @@ using eegfun
 
         # This should not throw an error but return gracefully
         # (The actual error handling depends on the implementation)
-        @test typeof(eegfun.generate_config_template) <: Function
+        @test typeof(EegFun.generate_config_template) <: Function
     end
 
     # Cleanup

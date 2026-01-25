@@ -1,82 +1,82 @@
-using eegfun
+using EegFun
 using GLMakie
 using BenchmarkTools
 # using BenchmarkTools
 # Get some basic data with initial preprocessing steps (high-pass filter, epoch)
 data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "Flank_C_17.bdf")
-layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-eegfun.polar_to_cartesian_xy!(layout_file)
-dat = eegfun.read_bdf(data_file);
-dat = eegfun.create_eeg_dataframe(dat, layout_file);
-eegfun.rereference!(dat, :avg)
-# eegfun.filter_data!(dat, "hp", 0.5)
-eegfun.filter_data!(dat, "hp", 1)
-# eegfun.resample!(dat, 4)
-eegfun.is_extreme_value!(dat, 200);
-eegfun.channel_difference!(
+layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout_file)
+dat = EegFun.read_bdf(data_file);
+dat = EegFun.create_eeg_dataframe(dat, layout_file);
+EegFun.rereference!(dat, :avg)
+# EegFun.filter_data!(dat, "hp", 0.5)
+EegFun.filter_data!(dat, "hp", 1)
+# EegFun.resample!(dat, 4)
+EegFun.is_extreme_value!(dat, 200);
+EegFun.channel_difference!(
     dat,
-    channel_selection1 = eegfun.channels([:Fp1, :Fp2]),
-    channel_selection2 = eegfun.channels([:IO1, :IO2]),
+    channel_selection1 = EegFun.channels([:Fp1, :Fp2]),
+    channel_selection2 = EegFun.channels([:IO1, :IO2]),
     channel_out = :vEOG,
 ); # vertical EOG = mean(Fp1, Fp2) - mean(IO1, I02)
-eegfun.channel_difference!(
+EegFun.channel_difference!(
     dat,
-    channel_selection1 = eegfun.channels([:F9]),
-    channel_selection2 = eegfun.channels([:F10]),
+    channel_selection1 = EegFun.channels([:F9]),
+    channel_selection2 = EegFun.channels([:F10]),
     channel_out = :hEOG,
 ); # horizontal EOG = F9 - F10
 # ICA on continuous data
-# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-# ica_result = eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
+# ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_100))
+# ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_100))
+# ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200), percentage_of_data = 50)
 
 @time ica_result_sobi =
-    eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
+    EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
 
 ica_result_infomax =
-    eegfun.run_ica(dat; sample_selection = eegfun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
-ica_result_infomax_extended = eegfun.run_ica(
+    EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_200), percentage_of_data = 10)
+ica_result_infomax_extended = EegFun.run_ica(
     dat;
-    sample_selection = eegfun.samples_not(:is_extreme_value_200),
+    sample_selection = EegFun.samples_not(:is_extreme_value_200),
     percentage_of_data = 10,
     algorithm = :infomax_extended,
 )
-ica_result_infomax = eegfun.run_ica(
+ica_result_infomax = EegFun.run_ica(
     dat;
-    sample_selection = eegfun.samples_not(:is_extreme_value_200),
+    sample_selection = EegFun.samples_not(:is_extreme_value_200),
     percentage_of_data = 10,
     n_components = 1,
 )
 
-eegfun.plot_ica_component_activation(dat, ica_result)
-eegfun.plot_component_spectrum(ica_result_infomax, dat, component_selection = eegfun.components(1:70))
+EegFun.plot_ica_component_activation(dat, ica_result)
+EegFun.plot_component_spectrum(ica_result_infomax, dat, component_selection = EegFun.components(1:70))
 
-eegfun.plot_ica_component_activation(dat, ica_result_infomax_extended)
+EegFun.plot_ica_component_activation(dat, ica_result_infomax_extended)
 
 # Calculate components for valid samples
-selected_samples = eegfun.get_selected_samples(dat, eegfun.samples_not(:is_extreme_value_200))
-components, n_components = eegfun._prepare_ica_data_matrix(dat, ica_result, selected_samples)
+selected_samples = EegFun.get_selected_samples(dat, EegFun.samples_not(:is_extreme_value_200))
+components, n_components = EegFun._prepare_ica_data_matrix(dat, ica_result, selected_samples)
 
 crosscov(components[1, 1:2000], components[17, 1:2000])
 corspearman(abs.(zscore(components[1, :])), abs.(zscore(components[17, :])))
 
-lp_filter = eegfun.create_filter("lp", "iir", 5.0, dat.sample_rate; order = 3)
-comp1 = eegfun.filtfilt(lp_filter.filter_object, components[1, :])
-comp2 = eegfun.filtfilt(lp_filter.filter_object, components[17, :])
+lp_filter = EegFun.create_filter("lp", "iir", 5.0, dat.sample_rate; order = 3)
+comp1 = EegFun.filtfilt(lp_filter.filter_object, components[1, :])
+comp2 = EegFun.filtfilt(lp_filter.filter_object, components[17, :])
 
 component_artifacts, component_metrics =
-    eegfun.identify_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_200))
+    EegFun.identify_components(dat, ica_result, sample_selection = EegFun.samples_not(:is_extreme_value_200))
 
-eegfun.identify_ecg_components(dat, ica_result; sample_selection = eegfun.samples_not(:is_extreme_value_200))
+EegFun.identify_ecg_components(dat, ica_result; sample_selection = EegFun.samples_not(:is_extreme_value_200))
 
 
-fig, ax, analysis_settings = eegfun.plot_databrowser(dat, ica_result_infomax)
-dat_new = eegfun.apply_analysis_settings(dat, ica_result, analysis_settings)
-eegfun.plot_databrowser(dat_new)
+fig, ax, analysis_settings = EegFun.plot_databrowser(dat, ica_result_infomax)
+dat_new = EegFun.apply_analysis_settings(dat, ica_result, analysis_settings)
+EegFun.plot_databrowser(dat_new)
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result_infomax,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
     colorbar_position = :below,
@@ -84,9 +84,9 @@ eegfun.plot_topography(
     colorbar_plot_numbers = [1, 2],
 );
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result_infomax,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
     colorbar_position = :below,
@@ -96,39 +96,39 @@ eegfun.plot_topography(
 # TODO: units and colorbar appropriateness for ICA plots???
 
 # Test single component plotting (simplified approach)
-eegfun.plot_topography(ica_result_infomax, method = :multiquadratic);
-eegfun.plot_topography(ica_result, method = :spherical_spline);
-eegfun.plot_topography(
+EegFun.plot_topography(ica_result_infomax, method = :multiquadratic);
+EegFun.plot_topography(ica_result, method = :spherical_spline);
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1),
+    component_selection = EegFun.components(1),
     colorbar_plot = true,
     colorbar_position = :right,
     colorbar_vertical = true,
 );
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1),
+    component_selection = EegFun.components(1),
     colorbar_plot = true,
     colorbar_position = :below,
     colorbar_vertical = false,
 );
 
 # Test multiple components (original approach)
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1), method = :multiquadratic);
-eegfun.plot_topography(
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1), method = :multiquadratic);
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1),
+    component_selection = EegFun.components(1),
     point_plot = true,
 );
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1),
+    component_selection = EegFun.components(1),
     point_plot = true,
     label_plot = true,
 );
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1),
+    component_selection = EegFun.components(1),
     point_plot = true,
     label_plot = true,
     point_color = :red,
@@ -139,9 +139,9 @@ eegfun.plot_topography(
     head_radius = 1.1,
 );
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result_infomax,
-    component_selection = eegfun.components(1),
+    component_selection = EegFun.components(1),
     point_plot = true,
     label_plot = true,
     point_color = :red,
@@ -152,118 +152,118 @@ eegfun.plot_topography(
     colorbar_plot = true,
 );
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1),
+    component_selection = EegFun.components(1),
     colorbar_plot = true,
 );
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1),
-    colorbar_plot = true,
-    colorbar_position = :below,
-    colorbar_vertical = false,
-);
-eegfun.plot_topography(
-    ica_result,
-    component_selection = eegfun.components(1),
-    colorbar_plot = true,
-);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:2), method = :spherical_spline);
-eegfun.plot_topography(
-    ica_result,
-    component_selection = eegfun.components(1:2),
-    method = :spherical_spline,
-    colorbar_plot = true,
-);
-eegfun.plot_topography(
-    ica_result,
-    component_selection = eegfun.components(1:4),
-    method = :spherical_spline,
-    colorbar_plot = true,
-);
-eegfun.plot_topography(
-    ica_result,
-    component_selection = eegfun.components(1:4),
-    method = :spherical_spline,
+    component_selection = EegFun.components(1),
     colorbar_plot = true,
     colorbar_position = :below,
     colorbar_vertical = false,
 );
-eegfun.plot_topography(ica_result_infomax, component_selection = eegfun.components(1:4), method = :spherical_spline);
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1),
+    colorbar_plot = true,
+);
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:2), method = :spherical_spline);
+EegFun.plot_topography(
+    ica_result,
+    component_selection = EegFun.components(1:2),
+    method = :spherical_spline,
+    colorbar_plot = true,
+);
+EegFun.plot_topography(
+    ica_result,
+    component_selection = EegFun.components(1:4),
+    method = :spherical_spline,
+    colorbar_plot = true,
+);
+EegFun.plot_topography(
+    ica_result,
+    component_selection = EegFun.components(1:4),
+    method = :spherical_spline,
+    colorbar_plot = true,
+    colorbar_position = :below,
+    colorbar_vertical = false,
+);
+EegFun.plot_topography(ica_result_infomax, component_selection = EegFun.components(1:4), method = :spherical_spline);
+EegFun.plot_topography(
+    ica_result,
+    component_selection = EegFun.components(1:4),
     method = :spherical_spline,
     dims = (4, 1),
 );
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = false,
 );
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result_infomax,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
     colorbar_position = (2, 1),
     colorbar_vertical = false,
 );
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result_infomax,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
     colorbar_components = [1, 3],
 );
 
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1:4),
     method = :spherical_spline,
     colorbar_plot = true,
     colorbar_plot_numbers = [1],
 );
 
 # plot_topography
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10), method = :multiquadratic);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10), method = :multiquadratic);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
-eegfun.plot_topography(ica_result)
-eegfun.plot_topography(ica_result, colorbar_plot = true, use_global_scale = true);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), plot_labels = false);
-eegfun.plot_topography(
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:10), method = :multiquadratic);
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:10), method = :multiquadratic);
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:4), method = :spherical_spline);
+EegFun.plot_topography(ica_result)
+EegFun.plot_topography(ica_result, colorbar_plot = true, use_global_scale = true);
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:4), plot_labels = false);
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1:4),
+    component_selection = EegFun.components(1:4),
     plot_labels = false,
     colorbar_plot = true,
 );
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10), colorbar_plot = true);
-eegfun.plot_topography(
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:10), colorbar_plot = true);
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1:10),
+    component_selection = EegFun.components(1:10),
     colorbar_plot = true,
     colorbar_plot_numbers = [5, 10],
 );
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components(1:10),
+    component_selection = EegFun.components(1:10),
     colorbar_plot = true,
     colorbar_plot_numbers = [1, 5, 10],
 );
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:10), use_global_scale = true);
-eegfun.plot_topography(ica_result; component_selection = eegfun.components(1:10), method = :spherical_spline)
-eegfun.plot_topography(ica_result; component_selection = eegfun.components(1:10), method = :multiquadratic)
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:10), use_global_scale = true);
+EegFun.plot_topography(ica_result; component_selection = EegFun.components(1:10), method = :spherical_spline)
+EegFun.plot_topography(ica_result; component_selection = EegFun.components(1:10), method = :multiquadratic)
 
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components([1, 3, 5]);
+    component_selection = EegFun.components([1, 3, 5]);
     use_global_scale = true,
     colorbar_plot = true,
     colorbar_plot_numbers = [5],
@@ -271,9 +271,9 @@ eegfun.plot_topography(
 
 
 
-eegfun.plot_topography(
+EegFun.plot_topography(
     ica_result,
-    component_selection = eegfun.components([1, 3, 5, 7, 9]);
+    component_selection = EegFun.components([1, 3, 5, 7, 9]);
     dims = (2, 3),
     use_global_scale = true,
     colorbar_plot = true,
@@ -282,12 +282,12 @@ eegfun.plot_topography(
 
 
 # plot_ica_component_activation
-eegfun.plot_ica_component_activation(dat, ica_result)
-eegfun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
-eegfun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
+EegFun.plot_ica_component_activation(dat, ica_result)
+EegFun.plot_ica_component_activation(dat, ica_result, method = :multiquadratic)
+EegFun.plot_ica_component_activation(dat, ica_result, method = :spherical_spline)
 
 component_artifacts, component_metrics =
-    eegfun.identify_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_100))
+    EegFun.identify_components(dat, ica_result, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 
 
 
@@ -297,61 +297,61 @@ component_artifacts, component_metrics =
 #################################
 # some epoched data
 epoch_cfg = [
-    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
-    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]]),
+    EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
+    EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]]),
 ]
-epochs = eegfun.extract_epochs(dat, epoch_cfg, -2, 4)
+epochs = EegFun.extract_epochs(dat, epoch_cfg, -2, 4)
 
 # ICA on epoched data
-ica_result = eegfun.run_ica(epochs[1]; sample_selection = eegfun.samples_not(:is_extreme_value_100))
-ica_result = eegfun.run_ica(epochs; sample_selection = eegfun.samples_not(:is_extreme_value_100))
+ica_result = EegFun.run_ica(epochs[1]; sample_selection = EegFun.samples_not(:is_extreme_value_100))
+ica_result = EegFun.run_ica(epochs; sample_selection = EegFun.samples_not(:is_extreme_value_100))
 
 # ICA Plots
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :multiquadratic);
-eegfun.plot_topography(ica_result, component_selection = eegfun.components(1:4), method = :spherical_spline);
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:4), method = :multiquadratic);
+EegFun.plot_topography(ica_result, component_selection = EegFun.components(1:4), method = :spherical_spline);
 
 
 
-eegfun.plot_topography(ica_result)
-eegfun.plot_ica_component_activation(dat, ica_result)
+EegFun.plot_topography(ica_result)
+EegFun.plot_ica_component_activation(dat, ica_result)
 
-eegfun.plot_component_spectrum(ica_result, dat, component_selection = eegfun.components(1))
-eegfun.plot_databrowser(dat, ica_result)
+EegFun.plot_component_spectrum(ica_result, dat, component_selection = EegFun.components(1))
+EegFun.plot_databrowser(dat, ica_result)
 
 # Identify ICA components
 eog_comps, eog_comps_metrics_df =
-    eegfun.identify_eog_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_100))
+    EegFun.identify_eog_components(dat, ica_result, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 ecg_comps, ecg_comps_metrics_df =
-    eegfun.identify_ecg_components(dat, ica_result, sample_selection = eegfun.samples_not(:is_extreme_value_100))
+    EegFun.identify_ecg_components(dat, ica_result, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 
-line_noise_comps, line_noise_comps_metrics_df = eegfun.identify_line_noise_components(dat, ica_result)
-channel_noise_comps, channel_noise_comps_metrics_df = eegfun.identify_spatial_kurtosis_components(ica_result)
+line_noise_comps, line_noise_comps_metrics_df = EegFun.identify_line_noise_components(dat, ica_result)
+channel_noise_comps, channel_noise_comps_metrics_df = EegFun.identify_spatial_kurtosis_components(ica_result)
 
 # Combine existing results and plot
-artifacts = eegfun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
-eegfun.plot_artifact_components(ica_result, artifacts; gridscale = 500, plot_points = true)
+artifacts = EegFun.combine_artifact_components(eog_comps, ecg_comps, line_noise_comps, channel_noise_comps)
+EegFun.plot_artifact_components(ica_result, artifacts; gridscale = 500, plot_points = true)
 
 
 # Get all identified component artifacts
-all_comps = eegfun.get_all_ica_components(artifacts)
+all_comps = EegFun.get_all_ica_components(artifacts)
 dat_ica_removed, ica_result_updated =
-    eegfun.remove_ica_components(dat, ica_result, component_selection = eegfun.components(all_comps))
+    EegFun.remove_ica_components(dat, ica_result, component_selection = EegFun.components(all_comps))
 
 # Reconstruct for sanity check
-dat_ica_reconstructed, ica_result_restored = eegfun.restore_ica_components(
+dat_ica_reconstructed, ica_result_restored = EegFun.restore_ica_components(
     dat_ica_removed,
     ica_result_updated,
-    component_selection = eegfun.components(all_comps),
+    component_selection = EegFun.components(all_comps),
 )
 
 # Original should = reconstructed
-eegfun.channel_data(dat) ≈ eegfun.channel_data(dat_ica_reconstructed)
+EegFun.channel_data(dat) ≈ EegFun.channel_data(dat_ica_reconstructed)
 
 # Plot component features
-fig, ax = eegfun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
-fig, ax = eegfun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
-fig, ax = eegfun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
-fig, ax = eegfun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
+fig, ax = EegFun.plot_eog_component_features(eog_comps, eog_comps_metrics_df)
+fig, ax = EegFun.plot_ecg_component_features_(ecg_comps, ecg_comps_metrics_df)
+fig, ax = EegFun.plot_line_noise_components(line_noise_comps, line_noise_comps_metrics_df)
+fig, ax = EegFun.plot_spatial_kurtosis_components(channel_noise_comps, channel_noise_comps_metrics_df)
 
 
 GLMakie.closeall()

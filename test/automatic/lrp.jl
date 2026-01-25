@@ -17,15 +17,15 @@ using DataFrames
         erp_right = create_test_lrp_erp(1, 2, 100, 1.5)
 
         # Calculate LRP
-        lrp_data = eegfun.lrp(erp_left, erp_right)
+        lrp_data = EegFun.lrp(erp_left, erp_right)
 
         # Verify structure
-        @test lrp_data isa eegfun.ErpData
+        @test lrp_data isa EegFun.ErpData
         @test lrp_data.sample_rate == erp_left.sample_rate
         @test nrow(lrp_data.data) == nrow(erp_left.data)
 
         # Verify LRP channels were created
-        lrp_channels = eegfun.channel_labels(lrp_data)
+        lrp_channels = EegFun.channel_labels(lrp_data)
         @test :C3 in lrp_channels
         @test :C4 in lrp_channels
         @test :C1 in lrp_channels
@@ -78,13 +78,13 @@ using DataFrames
         )
 
         # Create layouts and ErpData objects
-        layout = eegfun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-        erp_left = eegfun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, eegfun.AnalysisInfo(), 10)
-        erp_right = eegfun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, eegfun.AnalysisInfo(), 10)
+        erp_left = EegFun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, EegFun.AnalysisInfo(), 10)
+        erp_right = EegFun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, EegFun.AnalysisInfo(), 10)
 
         # Calculate LRP
-        lrp_data = eegfun.lrp(erp_left, erp_right)
+        lrp_data = EegFun.lrp(erp_left, erp_right)
 
         # Manual calculation:
         # C3_left = 1.0, C4_left = 2.0, C3_right = 3.0, C4_right = 4.0
@@ -109,10 +109,10 @@ using DataFrames
 
         # Calculate LRP for specific left channels only (C3, C1)
         # Function will automatically pair with C4, C2
-        lrp_data = eegfun.lrp(erp_left, erp_right, channel_selection = eegfun.channels([:C3, :C1]))
+        lrp_data = EegFun.lrp(erp_left, erp_right, channel_selection = EegFun.channels([:C3, :C1]))
 
         # Verify only specified channels are in the result
-        lrp_channels = eegfun.channel_labels(lrp_data)
+        lrp_channels = EegFun.channel_labels(lrp_data)
         @test :C3 in lrp_channels
         @test :C4 in lrp_channels
         @test :C1 in lrp_channels
@@ -127,12 +127,12 @@ using DataFrames
         erp_left = create_test_lrp_erp(1, 1, 100, 1.0)
         erp_right = create_test_lrp_erp(1, 2, 100, 1.5)
 
-        lrp_data = eegfun.lrp(erp_left, erp_right)
+        lrp_data = EegFun.lrp(erp_left, erp_right)
 
         # Verify layout contains only LRP channels
         layout_labels = lrp_data.layout.data.label
-        @test length(layout_labels) == length(eegfun.channel_labels(lrp_data))
-        @test all(ch in layout_labels for ch in eegfun.channel_labels(lrp_data))
+        @test length(layout_labels) == length(EegFun.channel_labels(lrp_data))
+        @test all(ch in layout_labels for ch in EegFun.channel_labels(lrp_data))
     end
 
     @testset "Error handling" begin
@@ -143,30 +143,30 @@ using DataFrames
             erp_wrong_rate = create_test_lrp_erp(1, 2, 100, 1.5)
             erp_wrong_rate.sample_rate = 500  # Different sample rate
 
-            @test_throws Exception eegfun.lrp(erp_left, erp_wrong_rate)
+            @test_throws Exception EegFun.lrp(erp_left, erp_wrong_rate)
         end
 
         @testset "Mismatched time points" begin
             erp_wrong_length = create_test_lrp_erp(1, 2, 50, 1.5)  # Different length
 
-            @test_throws Exception eegfun.lrp(erp_left, erp_wrong_length)
+            @test_throws Exception EegFun.lrp(erp_left, erp_wrong_length)
         end
 
         @testset "Invalid channel selection" begin
             # Non-existent channels
-            @test_throws Exception eegfun.lrp(
+            @test_throws Exception EegFun.lrp(
                 erp_left,
                 erp_right,
-                channel_selection = eegfun.channels([:NonExistent1, :NonExistent2]),
+                channel_selection = EegFun.channels([:NonExistent1, :NonExistent2]),
             )
         end
 
         @testset "Even channel selection (should error)" begin
             # Selecting even channel should fail (needs odd for left hemisphere)
-            @test_throws Exception eegfun.lrp(
+            @test_throws Exception EegFun.lrp(
                 erp_left,
                 erp_right,
-                channel_selection = eegfun.channels([:C4]),  # Even number not valid
+                channel_selection = EegFun.channels([:C4]),  # Even number not valid
             )
         end
 
@@ -186,10 +186,10 @@ using DataFrames
                 Cz = randn(n_timepoints),
             )
 
-            layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-            erp_no_pairs = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, eegfun.AnalysisInfo(), 10)
+            layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+            erp_no_pairs = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, EegFun.AnalysisInfo(), 10)
 
-            @test_throws Exception eegfun.lrp(erp_no_pairs, erp_no_pairs)
+            @test_throws Exception EegFun.lrp(erp_no_pairs, erp_no_pairs)
         end
     end
 
@@ -212,14 +212,14 @@ using DataFrames
         )
 
         layout =
-            eegfun.Layout(DataFrame(label = [:CP3, :CP4, :PO7, :PO8], inc = zeros(4), azi = zeros(4)), nothing, nothing)
-        erp1 = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, eegfun.AnalysisInfo(), 10)
-        erp2 = eegfun.ErpData("test_data", 2, "condition_2", copy(df), layout, 250, eegfun.AnalysisInfo(), 10)
+            EegFun.Layout(DataFrame(label = [:CP3, :CP4, :PO7, :PO8], inc = zeros(4), azi = zeros(4)), nothing, nothing)
+        erp1 = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, EegFun.AnalysisInfo(), 10)
+        erp2 = EegFun.ErpData("test_data", 2, "condition_2", copy(df), layout, 250, EegFun.AnalysisInfo(), 10)
 
-        lrp_data = eegfun.lrp(erp1, erp2)
+        lrp_data = EegFun.lrp(erp1, erp2)
 
         # Should detect CP3/CP4 but not PO7/PO8 (7 and 8 are not consecutive odd/even)
-        lrp_channels = eegfun.channel_labels(lrp_data)
+        lrp_channels = EegFun.channel_labels(lrp_data)
         @test :CP3 in lrp_channels
         @test :CP4 in lrp_channels
 
@@ -237,7 +237,7 @@ using DataFrames
         erp_left.analysis_info.hp_filter = 0.1
         erp_left.analysis_info.lp_filter = 30.0
 
-        lrp_data = eegfun.lrp(erp_left, erp_right)
+        lrp_data = EegFun.lrp(erp_left, erp_right)
 
         # Verify analysis info is preserved
         @test lrp_data.analysis_info.reference == :avg
@@ -249,7 +249,7 @@ using DataFrames
         erp_left = create_test_lrp_erp(1, 1, 100, 1.0)
         erp_right = create_test_lrp_erp(1, 2, 100, 1.5)
 
-        lrp_data = eegfun.lrp(erp_left, erp_right)
+        lrp_data = EegFun.lrp(erp_left, erp_right)
 
         # Verify time vectors are identical
         @test all(lrp_data.data.time .≈ erp_left.data.time)
@@ -286,12 +286,12 @@ using DataFrames
             C4 = fill(1.0, n_timepoints),  # Right hemisphere: low activity
         )
 
-        layout = eegfun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:C3, :C4], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-        erp_left = eegfun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, eegfun.AnalysisInfo(), 10)
-        erp_right = eegfun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, eegfun.AnalysisInfo(), 10)
+        erp_left = EegFun.ErpData("test_data", 1, "condition_1", df_left, layout, 250, EegFun.AnalysisInfo(), 10)
+        erp_right = EegFun.ErpData("test_data", 2, "condition_2", df_right, layout, 250, EegFun.AnalysisInfo(), 10)
 
-        lrp_data = eegfun.lrp(erp_left, erp_right)
+        lrp_data = EegFun.lrp(erp_left, erp_right)
 
         # For perfectly symmetric data, LRP at C3 and C4 should have opposite signs
         # C3 should be positive, C4 should be negative (or vice versa)
@@ -310,7 +310,7 @@ using DataFrames
 
     @testset "Batch LRP calculation for multiple condition pairs" begin
         # Create test data with multiple conditions (16 conditions: odd=left, even=right)
-        erps = eegfun.ErpData[]
+        erps = EegFun.ErpData[]
         for cond = 1:16
             # Alternate between "left" and "right" patterns
             is_left = isodd(cond)
@@ -322,15 +322,15 @@ using DataFrames
         condition_pairs = [(i, i+1) for i = 1:2:15]
 
         # Calculate LRP for all pairs
-        lrp_results = eegfun.lrp(erps, condition_pairs)
+        lrp_results = EegFun.lrp(erps, condition_pairs)
 
         # Verify structure
-        @test lrp_results isa Vector{eegfun.ErpData}
+        @test lrp_results isa Vector{EegFun.ErpData}
         @test length(lrp_results) == 8  # 8 pairs from 16 conditions
 
         # Verify each LRP result
         for (idx, lrp_data) in enumerate(lrp_results)
-            @test lrp_data isa eegfun.ErpData
+            @test lrp_data isa EegFun.ErpData
             @test lrp_data.condition == idx
 
             # Verify condition name format
@@ -340,8 +340,8 @@ using DataFrames
             @test lrp_data.condition_name == expected_name
 
             # Verify channels are present
-            @test :C3 in eegfun.channel_labels(lrp_data)
-            @test :C4 in eegfun.channel_labels(lrp_data)
+            @test :C3 in EegFun.channel_labels(lrp_data)
+            @test :C4 in EegFun.channel_labels(lrp_data)
         end
     end
 
@@ -350,7 +350,7 @@ using DataFrames
         erps = [create_test_lrp_erp(1, i, 100, 1.0) for i = 1:8]
 
         # Calculate LRP for specific pairs only
-        lrp_results = eegfun.lrp(erps, [(1, 2), (3, 4), (7, 8)])
+        lrp_results = EegFun.lrp(erps, [(1, 2), (3, 4), (7, 8)])
 
         @test length(lrp_results) == 3
         @test lrp_results[1].condition_name == "lrp_1_2"
@@ -362,15 +362,15 @@ using DataFrames
         erps = [create_test_lrp_erp(1, i, 100, 1.0) for i = 1:4]
 
         @testset "Invalid condition index - too high" begin
-            @test_throws Exception eegfun.lrp(erps, [(1, 2), (5, 6)])
+            @test_throws Exception EegFun.lrp(erps, [(1, 2), (5, 6)])
         end
 
         @testset "Invalid condition index - zero" begin
-            @test_throws Exception eegfun.lrp(erps, [(0, 1)])
+            @test_throws Exception EegFun.lrp(erps, [(0, 1)])
         end
 
         @testset "Invalid condition index - negative" begin
-            @test_throws Exception eegfun.lrp(erps, [(-1, 2)])
+            @test_throws Exception EegFun.lrp(erps, [(-1, 2)])
         end
     end
 
@@ -379,13 +379,13 @@ using DataFrames
 
         # Calculate LRP for specific left channels only (C3)
         # Function will automatically pair with C4
-        lrp_results = eegfun.lrp(erps, [(1, 2), (3, 4)], channel_selection = eegfun.channels([:C3]))
+        lrp_results = EegFun.lrp(erps, [(1, 2), (3, 4)], channel_selection = EegFun.channels([:C3]))
 
         @test length(lrp_results) == 2
 
         # Verify only C3/C4 are in the results
         for lrp_data in lrp_results
-            channels = eegfun.channel_labels(lrp_data)
+            channels = EegFun.channel_labels(lrp_data)
             @test :C3 in channels
             @test :C4 in channels
             @test :C1 ∉ channels  # Should not be included

@@ -32,7 +32,7 @@ window determined by the latest start time and earliest end time across all epoc
 
 # Examples
 ```julia
-using eegfun
+using EegFun
 
 # Load stimulus-locked epoched data
 epochs = load("participant_1_epochs.jld2", "epochs")
@@ -113,8 +113,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
     for (i, epoch) in enumerate(dat.data)
         if !hasproperty(epoch, realignment_column)
             @minimal_error_throw(
-                "Realignment column :$realignment_column not found in epoch $i. " *
-                "Available columns: $(propertynames(epoch))"
+                "Realignment column :$realignment_column not found in epoch $i. " * "Available columns: $(propertynames(epoch))"
             )
         end
 
@@ -129,9 +128,7 @@ function _validate_realignment_column(dat::EpochData, realignment_column::Symbol
 
         # Check that the realignment value is finite
         if !isfinite(realignment_values[1])
-            @minimal_error_throw(
-                "Realignment column :$realignment_column has non-finite value (NaN or Inf) in epoch $i"
-            )
+            @minimal_error_throw("Realignment column :$realignment_column has non-finite value (NaN or Inf) in epoch $i")
         end
     end
 

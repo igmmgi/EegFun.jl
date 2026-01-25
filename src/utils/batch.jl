@@ -91,10 +91,10 @@ function load_data(filepath::String)::Union{EegFunData,Vector{<:EegFunData},Noth
     end
 end
 
-# Convert Vector{Any} to typed vector if all elements are eegfun data
+# Convert Vector{Any} to typed vector if all elements are EegFun data
 function _load_data(data::Vector{Any})::Union{Vector{<:EegFunData},Nothing}
     isempty(data) && return nothing
-    # Ensure every element is some kind of eegfun data
+    # Ensure every element is some kind of EegFun data
     !all(x -> x isa EegFunData, data) && return nothing
 
     # Use a comprehension to let Julia infer the best (narrowest) type
@@ -117,7 +117,7 @@ function _load_data(data::Dict)::Union{EegFunData,Vector{<:EegFunData},Nothing}
     return isempty(values_found) ? nothing : _single_or_vector(values_found)
 end
 
-# NB. load_data is not a generic function for everything; we just use it for data that is saved from eegfun
+# NB. load_data is not a generic function for everything; we just use it for data that is saved from EegFun
 _load_data(data::Union{EegFunData,Vector{<:EegFunData}}) = data
 _load_data(::Any)::Nothing = nothing
 

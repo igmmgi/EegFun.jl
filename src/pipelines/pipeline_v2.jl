@@ -321,7 +321,7 @@ function preprocess_v2(config::String; base_dir::Union{String,Nothing} = nothing
                 # Check if any epochs have empty data
                 empty_epochs = [i for (i, ep) in enumerate(epochs) if isempty(ep.data)]
                 if !isempty(empty_epochs)
-                    eegfun.@minimal_error_throw "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch window parameters and trigger locations."
+                    EegFun.@minimal_error_throw "Epoch extraction resulted in empty epochs for conditions: $(join([epochs[i].condition_name for i in empty_epochs], ", ")). Check epoch window parameters and trigger locations."
                 end
 
                 #################### BASELINE WHOLE EPOCHS ##############

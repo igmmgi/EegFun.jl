@@ -1,6 +1,6 @@
 using Test
 using DataFrames
-using eegfun
+using EegFun
 using Makie
 using Statistics
 using JLD2
@@ -12,8 +12,8 @@ using JLD2
     @testset "create_filter" begin
         fs = 1000.0
         # IIR low-pass
-        fi_iir = eegfun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)
-        @test fi_iir isa eegfun.FilterInfo
+        fi_iir = EegFun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)
+        @test fi_iir isa EegFun.FilterInfo
         @test fi_iir.filter_type == "lp"
         @test fi_iir.filter_method == "iir"
         @test fi_iir.cutoff_freq == 40.0
@@ -22,8 +22,8 @@ using JLD2
         @test fi_iir.n_taps === nothing
 
         # FIR high-pass
-        fi_fir = eegfun.create_highpass_filter(1.0, fs; filter_method = "fir", transition_width = 0.25)
-        @test fi_fir isa eegfun.FilterInfo
+        fi_fir = EegFun.create_highpass_filter(1.0, fs; filter_method = "fir", transition_width = 0.25)
+        @test fi_fir isa EegFun.FilterInfo
         @test fi_fir.filter_type == "hp"
         @test fi_fir.filter_method == "fir"
         @test fi_fir.n_taps !== nothing
@@ -31,8 +31,8 @@ using JLD2
         @test fi_fir.n_taps >= 101
 
         # FIR low-pass and tap sizing monotonicity
-        fi_lp_wide = eegfun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.2)
-        fi_lp_narrow = eegfun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.05)
+        fi_lp_wide = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.2)
+        fi_lp_narrow = EegFun.create_lowpass_filter(40.0, fs; filter_method = "fir", transition_width = 0.05)
         @test fi_lp_wide.n_taps !== nothing && fi_lp_narrow.n_taps !== nothing
         @test fi_lp_narrow.n_taps > fi_lp_wide.n_taps
 
@@ -43,7 +43,7 @@ using JLD2
         dat_orig = copy(dat)
 
         # High-pass to remove DC; check mean is reduced towards ~0 for channel Ch1
-        eegfun.highpass_filter!(dat, 1.0; order = 1, filter_method = "iir", channel_selection = eegfun.channels([:Ch1]))
+        EegFun.highpass_filter!(dat, 1.0; order = 1, filter_method = "iir", channel_selection = EegFun.channels([:Ch1]))
         @test abs(mean(dat.data.Ch1)) < abs(mean(dat_orig.data.Ch1))
         # Only selected channel modified
         @test !all(dat.data.Ch1 .== dat_orig.data.Ch1)
@@ -52,7 +52,7 @@ using JLD2
         @test dat.analysis_info.hp_filter == 1.0
 
         # Low-pass; update lp field and modify both channels when selecting both
-        eegfun.lowpass_filter!(dat, 30.0; order = 3, filter_method = "iir", channel_selection = eegfun.channels([:Ch1, :Ch2]))
+        EegFun.lowpass_filter!(dat, 30.0; order = 3, filter_method = "iir", channel_selection = EegFun.channels([:Ch1, :Ch2]))
         @test dat.analysis_info.lp_filter == 30.0
         @test !all(dat.data.Ch2 .== dat_orig.data.Ch2)
     end
@@ -60,7 +60,7 @@ using JLD2
     @testset "non-mutating lowpass_filter" begin
         dat = create_test_data()
         dat_orig = copy(dat)
-        dat2 = eegfun.lowpass_filter(dat, 30.0; order = 3)
+        dat2 = EegFun.lowpass_filter(dat, 30.0; order = 3)
         # Original unchanged
         @test all(dat.data.Ch1 .== dat_orig.data.Ch1)
         # Copy modified
@@ -71,7 +71,7 @@ using JLD2
         dat = create_test_data()
         dat_orig = copy(dat)
         # channel_selection picks none
-        result = eegfun.highpass_filter!(dat, 1.0; channel_selection = eegfun.channels(Symbol[]))
+        result = EegFun.highpass_filter!(dat, 1.0; channel_selection = EegFun.channels(Symbol[]))
         @test result === nothing
         # Data and analysis_info unchanged
         @test all(dat.data.Ch1 .== dat_orig.data.Ch1)
@@ -83,8 +83,8 @@ using JLD2
         dat1 = create_test_data()
         dat2 = copy(dat1)
         # Single-pass introduces phase; zero-phase differs from single-pass
-        eegfun.lowpass_filter!(dat1, 20.0; filter_func = "filt")
-        eegfun.lowpass_filter!(dat2, 20.0; filter_func = "filtfilt")
+        EegFun.lowpass_filter!(dat1, 20.0; filter_func = "filt")
+        EegFun.lowpass_filter!(dat2, 20.0; filter_func = "filtfilt")
         @test !all(dat1.data.Ch1 .== dat2.data.Ch1)
     end
 
@@ -99,8 +99,8 @@ using JLD2
         # Add epoch identifiers to the versions that will be filtered
         df1.epoch = fill(1, nrow(df1))
         df2.epoch = fill(2, nrow(df2))
-        ep = eegfun.EpochData(base.file, 1, "condition_1", [df1, df2], base.layout, base.sample_rate, eegfun.AnalysisInfo())
-        eegfun.highpass_filter!(ep, 0.5)
+        ep = EegFun.EpochData(base.file, 1, "condition_1", [df1, df2], base.layout, base.sample_rate, EegFun.AnalysisInfo())
+        EegFun.highpass_filter!(ep, 0.5)
         @test ep.analysis_info.hp_filter == 0.5
         @test !all(ep.data[1].Ch1 .== df1o.Ch1)
         @test !all(ep.data[2].Ch1 .== df2o.Ch1)
@@ -110,46 +110,46 @@ using JLD2
         # Build ERP from base
         base = create_test_data(; n = 2000, fs = 1000)
         erp_df = select(base.data, [:time, :Ch1, :Ch2])
-        erp = eegfun.ErpData(
+        erp = EegFun.ErpData(
             base.file,
             1,
             "condition_1",
             copy(erp_df, copycols = true),
             base.layout,
             base.sample_rate,
-            eegfun.AnalysisInfo(),
+            EegFun.AnalysisInfo(),
             25,
         )
         erp_orig = copy(erp)
-        eegfun.lowpass_filter!(erp, 30.0; order = 3)
+        EegFun.lowpass_filter!(erp, 30.0; order = 3)
         @test erp.analysis_info.lp_filter == 30.0
         @test !all(erp.data.Ch1 .== erp_orig.data.Ch1)
         # Non-mutating path
-        erp2 = eegfun.highpass_filter(erp_orig, 0.5)
+        erp2 = EegFun.highpass_filter(erp_orig, 0.5)
         @test erp_orig.analysis_info.hp_filter == 0.0  # unchanged
         @test erp2.analysis_info.hp_filter == 0.5
     end
 
     @testset "filter characteristics" begin
         fs = 1000.0
-        fi = eegfun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)
-        chars = eegfun.get_filter_characteristics(fi; npoints = 256)
+        fi = EegFun.create_lowpass_filter(40.0, fs; order = 4, transition_width = 0.1)
+        chars = EegFun.get_filter_characteristics(fi; npoints = 256)
         @test chars.filter_type == "lp"
         @test isapprox(chars.transition_band, 4.0; atol = 1e-6)  # 40 Hz * 0.1 = 4.0 Hz
         @test any(abs.(chars.cutoff_freq_3db .- 40.0) .< 5.0)  # near cutoff
         @test chars.stopband_atten < -10  # should be attenuated
         # print helper should not error
-        @test eegfun.print_filter_characteristics(fi; npoints = 128) === nothing
+        @test EegFun.print_filter_characteristics(fi; npoints = 128) === nothing
     end
 
     @testset "plot_filter_response (no display)" begin
         fs = 1000.0
-        fi = eegfun.create_highpass_filter(1.0, fs)
-        fig, axes = eegfun.plot_filter_response(fi; xscale = :linear, display_plot = false)
+        fi = EegFun.create_highpass_filter(1.0, fs)
+        fig, axes = EegFun.plot_filter_response(fi; xscale = :linear, display_plot = false)
         @test fig isa Figure
         @test length(axes) == 3
         # log scale path
-        fig2, axes2 = eegfun.plot_filter_response(fi; xscale = :log, display_plot = false)
+        fig2, axes2 = EegFun.plot_filter_response(fi; xscale = :log, display_plot = false)
         @test fig2 isa Figure
         @test length(axes2) == 3
     end
@@ -178,7 +178,7 @@ end
             output_dir = joinpath(test_dir, "filtered_output")
 
             # Test low-pass filtering
-            result = eegfun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             @test result !== nothing
             @test result.success == 2
@@ -192,7 +192,7 @@ end
             # Load and verify filtered data
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
             @test length(filtered_data) == 2  # 2 conditions
-            @test filtered_data[1] isa eegfun.ErpData
+            @test filtered_data[1] isa EegFun.ErpData
             @test hasproperty(filtered_data[1].data, :Ch1)
             @test hasproperty(filtered_data[1].data, :Ch2)
 
@@ -203,12 +203,12 @@ end
         @testset "Filter specific participants" begin
             output_dir = joinpath(test_dir, "filtered_participant")
 
-            result = eegfun.lowpass_filter(
+            result = EegFun.lowpass_filter(
                 "erps",
                 30.0,
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
+                participant_selection = EegFun.participants(1),
             )
 
             @test result.success == 1
@@ -220,12 +220,12 @@ end
         @testset "Filter specific conditions" begin
             output_dir = joinpath(test_dir, "filtered_condition")
 
-            result = eegfun.lowpass_filter(
+            result = EegFun.lowpass_filter(
                 "erps",
                 30.0,
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(1),
+                condition_selection = EegFun.conditions(1),
             )
 
             @test result.success == 2
@@ -239,29 +239,29 @@ end
         @testset "High-pass filter" begin
             output_dir = joinpath(test_dir, "filtered_hp")
 
-            result = eegfun.highpass_filter("erps", 1.0, input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.highpass_filter("erps", 1.0, input_dir = test_dir, output_dir = output_dir)
 
             @test result.success == 2
             @test result.errors == 0
 
             # Load and verify
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
-            @test filtered_data[1] isa eegfun.ErpData
+            @test filtered_data[1] isa EegFun.ErpData
         end
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception eegfun.lowpass_filter("erps", 30.0, input_dir = "/nonexistent/path")
+            @test_throws Exception EegFun.lowpass_filter("erps", 30.0, input_dir = "/nonexistent/path")
 
             # Invalid cutoff frequency
-            @test_throws Exception eegfun.lowpass_filter("erps", -10.0, input_dir = test_dir)
+            @test_throws Exception EegFun.lowpass_filter("erps", -10.0, input_dir = test_dir)
         end
 
         @testset "No matching files" begin
             output_dir = joinpath(test_dir, "filtered_nomatch")
 
             # Pattern that won't match any files
-            result = eegfun.lowpass_filter("nonexistent_pattern", 30.0, input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.lowpass_filter("nonexistent_pattern", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             @test result === nothing  # Function returns nothing when no files found
         end
@@ -270,7 +270,7 @@ end
             output_dir = joinpath(test_dir, "filtered_with_log")
 
             # Use lowpass_filter explicitly
-            result = eegfun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             # Check log file exists
             # Check log file exists (it should be filter_lp.log for lowpass)
@@ -289,12 +289,12 @@ end
             output_dir = joinpath(test_dir, "filtered_multi_participants")
 
             # Filter both participants
-            result = eegfun.lowpass_filter(
+            result = EegFun.lowpass_filter(
                 "erps",
                 30.0,
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants([1, 2]),
+                participant_selection = EegFun.participants([1, 2]),
             )
 
             @test result.success == 2
@@ -307,12 +307,12 @@ end
             output_dir = joinpath(test_dir, "filtered_multi_conditions")
 
             # Filter both conditions
-            result = eegfun.lowpass_filter(
+            result = EegFun.lowpass_filter(
                 "erps",
                 30.0,
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions([1, 2]),
+                condition_selection = EegFun.conditions([1, 2]),
             )
 
             @test result.success == 2
@@ -338,7 +338,7 @@ end
 
             # Filter epoch data
             output_dir = joinpath(test_dir, "filtered_epochs")
-            result = eegfun.lowpass_filter("epochs", 30.0, input_dir = epochs_dir, output_dir = output_dir)
+            result = EegFun.lowpass_filter("epochs", 30.0, input_dir = epochs_dir, output_dir = output_dir)
 
             @test result.success == 1
             @test result.errors == 0
@@ -346,7 +346,7 @@ end
 
             # Load and verify
             filtered_epochs = load(joinpath(output_dir, "1_epochs.jld2"), "data")
-            @test filtered_epochs[1] isa eegfun.EpochData
+            @test filtered_epochs[1] isa EegFun.EpochData
             @test length(filtered_epochs) == 2  # 2 conditions
         end
 
@@ -359,7 +359,7 @@ end
             @test isfile(joinpath(output_dir, "dummy.txt"))
 
             # Run filter - should work fine with existing directory
-            result = eegfun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             @test result.success == 2
             @test isfile(joinpath(output_dir, "dummy.txt"))  # Original file preserved
@@ -378,7 +378,7 @@ end
             jldsave(joinpath(partial_dir, "2_erps.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "filtered_partial")
-            result = eegfun.lowpass_filter("erps", 30.0, input_dir = partial_dir, output_dir = output_dir)
+            result = EegFun.lowpass_filter("erps", 30.0, input_dir = partial_dir, output_dir = output_dir)
 
             @test result.success == 1
             @test result.errors == 1
@@ -391,12 +391,12 @@ end
 
             # Request condition 5 when only 2 exist
             # With predicate-based selection, this results in empty selection but successful processing
-            result = eegfun.lowpass_filter(
+            result = EegFun.lowpass_filter(
                 "erps",
                 30.0,
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(5),
+                condition_selection = EegFun.conditions(5),
             )
 
             # Files are processed successfully but with empty condition selection
@@ -409,7 +409,7 @@ end
             mkpath(empty_dir)
 
             # Directory exists but has no JLD2 files
-            result = eegfun.lowpass_filter("erps", 30.0, input_dir = empty_dir)
+            result = EegFun.lowpass_filter("erps", 30.0, input_dir = empty_dir)
 
             @test result === nothing  # No files to process
         end
@@ -417,7 +417,7 @@ end
         @testset "Return value structure" begin
             output_dir = joinpath(test_dir, "filtered_return_check")
 
-            result = eegfun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             # Check result structure
             @test hasfield(typeof(result), :success)
@@ -437,7 +437,7 @@ end
             original_signal = original_data[1].data.Ch1
 
             # Apply low-pass filter
-            eegfun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
+            EegFun.lowpass_filter("erps", 30.0, input_dir = test_dir, output_dir = output_dir)
 
             # Load filtered data
             filtered_data = load(joinpath(output_dir, "1_erps.jld2"), "data")
@@ -457,13 +457,13 @@ end
             output_dir = joinpath(test_dir, "filtered_combined")
 
             # Filter specific participant AND condition
-            result = eegfun.lowpass_filter(
+            result = EegFun.lowpass_filter(
                 "erps",
                 30.0,
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
-                condition_selection = eegfun.conditions(1),
+                participant_selection = EegFun.participants(1),
+                condition_selection = EegFun.conditions(1),
             )
 
             @test result.success == 1

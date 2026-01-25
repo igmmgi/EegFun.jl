@@ -1,15 +1,15 @@
 using Test
 using DataFrames
-using eegfun
+using EegFun
 
 @testset "channel_difference" begin
 
     # 1) Basic difference A - B
     dat = create_test_data(n = 500)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
         channel_out = :Ch1_minus_Ch2,
     )
     @test :Ch1_minus_Ch2 ∈ propertynames(dat.data)
@@ -17,10 +17,10 @@ using eegfun
 
     # 2) Group average difference mean(A,B) - C
     dat = create_test_data(n = 500)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat;
-        channel_selection1 = eegfun.channels([:Ch1, :Ch2]),
-        channel_selection2 = eegfun.channels([:Ch3]),
+        channel_selection1 = EegFun.channels([:Ch1, :Ch2]),
+        channel_selection2 = EegFun.channels([:Ch3]),
         channel_out = :Ch1_Ch2_minus_Ch3,
     )
     @test :Ch1_Ch2_minus_Ch3 ∈ propertynames(dat.data)
@@ -28,20 +28,20 @@ using eegfun
 
     # 3) Predicate selection (same as explicit)
     dat = create_test_data(n = 500)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat;
-        channel_selection1 = eegfun.channels([:Ch1, :Ch2]),
-        channel_selection2 = eegfun.channels([:Ch3]),
+        channel_selection1 = EegFun.channels([:Ch1, :Ch2]),
+        channel_selection2 = EegFun.channels([:Ch3]),
         channel_out = :out,
     )
     @test all(dat.data.out .== ((dat.data.Ch1 .+ dat.data.Ch2) ./ 2 .- dat.data.Ch3))
 
     # 4) Non-mutating version returns a new object; original unchanged
     dat = create_test_data(n = 500)
-    dat = eegfun.channel_difference(
+    dat = EegFun.channel_difference(
         dat;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch3]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch3]),
         channel_out = :out,
     )
     @test :out ∈ propertynames(dat.data)
@@ -51,20 +51,20 @@ using eegfun
     # 5) Overwrite behavior: write then overwrite with different groups
     dat = create_test_data(n = 500)
     dat.data[!, :X] = zeros(500)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat;
-        channel_selection1 = eegfun.channels([:Ch2]),
-        channel_selection2 = eegfun.channels([:Ch1]),
+        channel_selection1 = EegFun.channels([:Ch2]),
+        channel_selection2 = EegFun.channels([:Ch1]),
         channel_out = :X,
     )
     @test all(dat.data.X .== (dat.data.Ch2 .- dat.data.Ch1))
 
     # 6) EpochData: append to each epoch
     dat = create_test_epoch_data(n = 500)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
     )
     @test :diff ∈ propertynames(dat.data[1]) && :diff ∈ propertynames(dat.data[2])
     @test all(dat.data[1].diff .== (dat.data[1].Ch1 .- dat.data[1].Ch2))
@@ -72,10 +72,10 @@ using eegfun
 
     # 7) ErpData (SingleDataFrameEeg): append
     dat = create_test_epoch_data(n = 500)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat;
-        channel_selection1 = eegfun.channels([:Ch3]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch3]),
+        channel_selection2 = EegFun.channels([:Ch2]),
         channel_out = :Ch3_minus_Ch2,
     )
     @test :Ch3_minus_Ch2 ∈ propertynames(dat.data[1])
@@ -84,17 +84,17 @@ using eegfun
     # 10) Commutativity sanity: A-B == -(B-A)
     dat = create_test_epoch_data(n = 500)
     dat_Ch1_Ch2 = copy(dat)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat_Ch1_Ch2;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
         channel_out = :Ch1_minus_Ch2,
     )
     dat_Ch2_Ch1 = copy(dat)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat_Ch2_Ch1;
-        channel_selection1 = eegfun.channels([:Ch2]),
-        channel_selection2 = eegfun.channels([:Ch1]),
+        channel_selection1 = EegFun.channels([:Ch2]),
+        channel_selection2 = EegFun.channels([:Ch1]),
         channel_out = :Ch2_minus_Ch1,
     )
     @test all(dat_Ch1_Ch2.data[1].Ch1_minus_Ch2 .== .-(dat_Ch2_Ch1.data[1].Ch2_minus_Ch1))
@@ -103,7 +103,7 @@ using eegfun
 
     # 11) Default behavior: all channels vs all channels (should be zero)
     dat = create_test_data(n = 100)
-    eegfun.channel_difference!(dat)
+    EegFun.channel_difference!(dat)
     @test :diff ∈ propertynames(dat.data)
     # Note: Due to floating point precision and how channels() selects, might not be exactly zero
     # But should be very close to zero
@@ -111,10 +111,10 @@ using eegfun
 
     # 12) Test with ErpData
     erp = create_test_erp_data(1, 1, n_channels = 3)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         erp;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
         channel_out = :Ch1_minus_Ch2,
     )
     @test :Ch1_minus_Ch2 ∈ propertynames(erp.data)
@@ -125,10 +125,10 @@ using eegfun
     dat.data[!, :existing_channel] = ones(nrow(dat.data))
     original_value = copy(dat.data.existing_channel)
 
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
         channel_out = :existing_channel,
     )
     # Should overwrite with difference
@@ -147,16 +147,16 @@ using eegfun
 
     # Update layout to include new channels
     layout_df = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2, :F9, :F10], inc = zeros(9), azi = zeros(9))
-    dat.layout = eegfun.Layout(layout_df, nothing, nothing)
+    dat.layout = EegFun.Layout(layout_df, nothing, nothing)
 
-    eog_cfg = eegfun.EogConfig(
+    eog_cfg = EegFun.EogConfig(
         vEOG_criterion = 50.0,
         hEOG_criterion = 30.0,
         vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
         hEOG_channels = [["F9"], ["F10"], ["hEOG"]],
     )
 
-    eegfun.calculate_eog_channels!(dat, eog_cfg)
+    EegFun.calculate_eog_channels!(dat, eog_cfg)
 
     @test :vEOG ∈ propertynames(dat.data)
     @test :hEOG ∈ propertynames(dat.data)
@@ -177,7 +177,7 @@ using eegfun
 
     layout_df2 =
         DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2, :F9, :F10], inc = zeros(9), azi = zeros(9))
-    dat2.layout = eegfun.Layout(layout_df2, nothing, nothing)
+    dat2.layout = EegFun.Layout(layout_df2, nothing, nothing)
 
     eog_cfg_dict = Dict(
         "vEOG_criterion" => 50.0,
@@ -186,7 +186,7 @@ using eegfun
         "hEOG_channels" => [["F9"], ["F10"], ["hEOG"]],
     )
 
-    eegfun.calculate_eog_channels!(dat2, eog_cfg_dict)
+    EegFun.calculate_eog_channels!(dat2, eog_cfg_dict)
 
     @test :vEOG ∈ propertynames(dat2.data)
     @test :hEOG ∈ propertynames(dat2.data)
@@ -201,16 +201,16 @@ using eegfun
     end
 
     layout_df3 = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2], inc = zeros(7), azi = zeros(7))
-    epochs.layout = eegfun.Layout(layout_df3, nothing, nothing)
+    epochs.layout = EegFun.Layout(layout_df3, nothing, nothing)
 
-    eog_cfg_epochs = eegfun.EogConfig(
+    eog_cfg_epochs = EegFun.EogConfig(
         vEOG_criterion = 50.0,
         hEOG_criterion = 30.0,
         vEOG_channels = [["Fp1", "Fp2"], ["IO1", "IO2"], ["vEOG"]],
         hEOG_channels = [["Ch1"], ["Ch2"], ["hEOG"]],  # Use existing channels
     )
 
-    eegfun.calculate_eog_channels!(epochs, eog_cfg_epochs)
+    EegFun.calculate_eog_channels!(epochs, eog_cfg_epochs)
 
     @test :vEOG ∈ propertynames(epochs.data[1])
     @test :hEOG ∈ propertynames(epochs.data[1])
@@ -236,16 +236,16 @@ using eegfun
     dat3.data[!, :hEOG] = hEOG_signal
 
     layout_df4 = DataFrame(label = [:Ch1, :Ch2, :Ch3, :vEOG, :hEOG], inc = zeros(5), azi = zeros(5))
-    dat3.layout = eegfun.Layout(layout_df4, nothing, nothing)
+    dat3.layout = EegFun.Layout(layout_df4, nothing, nothing)
 
-    eog_cfg_detect = eegfun.EogConfig(
+    eog_cfg_detect = EegFun.EogConfig(
         vEOG_criterion = 50.0,
         hEOG_criterion = 30.0,
         vEOG_channels = [["Fp1"], ["Fp2"], ["vEOG"]],
         hEOG_channels = [["F9"], ["F10"], ["hEOG"]],
     )
 
-    eegfun.detect_eog_signals!(dat3, eog_cfg_detect)
+    EegFun.detect_eog_signals!(dat3, eog_cfg_detect)
 
     @test :is_vEOG ∈ propertynames(dat3.data)
     @test :is_hEOG ∈ propertynames(dat3.data)
@@ -260,10 +260,10 @@ using eegfun
     dat4 = create_test_data(n = 100)
     # When one channel selection is empty, division by zero occurs
     try
-        eegfun.channel_difference!(
+        EegFun.channel_difference!(
             dat4;
-            channel_selection1 = eegfun.channels([:NonExistentChannel]),
-            channel_selection2 = eegfun.channels([:Ch1]),
+            channel_selection1 = EegFun.channels([:NonExistentChannel]),
+            channel_selection2 = EegFun.channels([:Ch1]),
         )
         # If we get here, check that the result contains NaN or Inf (division by zero result)
         @test any(isnan.(dat4.data.diff)) || any(isinf.(dat4.data.diff))
@@ -275,10 +275,10 @@ using eegfun
     # Test with both channels missing (both empty vectors)
     dat4b = create_test_data(n = 100)
     try
-        eegfun.channel_difference!(
+        EegFun.channel_difference!(
             dat4b;
-            channel_selection1 = eegfun.channels([:NonExistentChannel1]),
-            channel_selection2 = eegfun.channels([:NonExistentChannel2]),
+            channel_selection1 = EegFun.channels([:NonExistentChannel1]),
+            channel_selection2 = EegFun.channels([:NonExistentChannel2]),
         )
         # If we get here, check that the result contains NaN or Inf (division by zero result)
         @test any(isnan.(dat4b.data.diff)) || any(isinf.(dat4b.data.diff))
@@ -289,20 +289,20 @@ using eegfun
 
     # 19) Test with single channel in each group
     dat5 = create_test_data(n = 100)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat5;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
         channel_out = :single_diff,
     )
     @test all(dat5.data.single_diff .== (dat5.data.Ch1 .- dat5.data.Ch2))
 
     # 20) Test with multiple channels in first group, single in second
     dat6 = create_test_data(n = 100)
-    eegfun.channel_difference!(
+    EegFun.channel_difference!(
         dat6;
-        channel_selection1 = eegfun.channels([:Ch1, :Ch2, :Ch3]),
-        channel_selection2 = eegfun.channels([:Ch1]),
+        channel_selection1 = EegFun.channels([:Ch1, :Ch2, :Ch3]),
+        channel_selection2 = EegFun.channels([:Ch1]),
         channel_out = :multi_single_diff,
     )
     expected_multi_single = ((dat6.data.Ch1 .+ dat6.data.Ch2 .+ dat6.data.Ch3) ./ 3) .- dat6.data.Ch1
@@ -310,10 +310,10 @@ using eegfun
 
     # 21) Test non-mutating version with EpochData
     epochs2 = create_test_epoch_data(n = 100, n_epochs = 2)
-    epochs2_result = eegfun.channel_difference(
+    epochs2_result = EegFun.channel_difference(
         epochs2;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
         channel_out = :diff_result,
     )
     @test epochs2_result !== epochs2
@@ -322,10 +322,10 @@ using eegfun
 
     # 22) Test non-mutating version with ErpData
     erp2 = create_test_erp_data(1, 1, n_channels = 3)
-    erp2_result = eegfun.channel_difference(
+    erp2_result = EegFun.channel_difference(
         erp2;
-        channel_selection1 = eegfun.channels([:Ch1]),
-        channel_selection2 = eegfun.channels([:Ch2]),
+        channel_selection1 = EegFun.channels([:Ch1]),
+        channel_selection2 = EegFun.channels([:Ch2]),
     )
     @test erp2_result !== erp2
     @test :diff ∈ propertynames(erp2_result.data)
@@ -336,7 +336,7 @@ using eegfun
     original_time = copy(dat7.data.time)
     original_sample = copy(dat7.data.sample)
 
-    eegfun.channel_difference!(dat7)
+    EegFun.channel_difference!(dat7)
 
     # Metadata should be unchanged
     @test dat7.data.time == original_time

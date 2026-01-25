@@ -747,7 +747,7 @@ Remove epochs identified in `info` from `dat` in-place.
 
 # Examples
 ```julia
-using eegfun, JLD2
+using EegFun, JLD2
 
 # Load epoched data
 epochs = load("participant_1_epochs.jld2", "epochs")

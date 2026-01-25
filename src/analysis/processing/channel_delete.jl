@@ -27,31 +27,31 @@ function channel_delete!(dat::EegData, channels_to_delete::Union{Symbol,Vector{S
     # Check which channels exist in the data columns (includes extra channels)
     existing_data_channels = Set(all_labels(dat))
     channels_in_data = intersect(existing_data_channels, Set(channels_to_delete))
-    
+
     # Check which channels exist in the layout (only for layout removal)
     existing_layout_channels = Set(dat.layout.data.label)
     channels_in_layout = intersect(existing_layout_channels, Set(channels_to_delete))
-    
+
     if isempty(channels_in_data)
         @info "channel_delete!: No channels found to delete in data"
         return nothing
     end
-    
+
     # Remove channels from layout (only if they exist in layout)
     if !isempty(channels_in_layout)
         layout_mask = [label ∉ channels_in_layout for label in dat.layout.data.label]
         dat.layout.data = dat.layout.data[layout_mask, :]
-        
+
         # Clear neighbours if they exist (since channels have changed)
         if has_neighbours(dat.layout)
             @info "channel_delete!: Clearing neighbours since channels have changed"
             clear_neighbours!(dat.layout)
         end
     end
-    
+
     # Remove channels from data columns using multiple dispatch
     _delete_data_columns!(dat, channels_in_data)
-    
+
     @info "channel_delete!: Deleted $(length(channels_in_data)) channel(s): $(join(string.(channels_in_data), ", "))"
     return nothing
 end
@@ -61,18 +61,18 @@ channel_delete!(dat::EegData, channel::Symbol) = channel_delete!(dat, [channel])
 function _delete_data_columns!(df::DataFrame, channels_to_delete::Set{Symbol})
     existing_cols = Set(propertynames(df))
     cols_to_remove = intersect(existing_cols, channels_to_delete)
-    
+
     if !isempty(cols_to_remove)
         select!(df, Not(collect(cols_to_remove)))
     end
     return nothing
 end
 
-function _delete_data_columns!( dat::SingleDataFrameEeg, channels_to_delete::Set{Symbol})
+function _delete_data_columns!(dat::SingleDataFrameEeg, channels_to_delete::Set{Symbol})
     _delete_data_columns!(dat.data, channels_to_delete)
 end
 
-function _delete_data_columns!( dat::MultiDataFrameEeg, channels_to_delete::Set{Symbol})
+function _delete_data_columns!(dat::MultiDataFrameEeg, channels_to_delete::Set{Symbol})
     _delete_data_columns!.(dat.data, Ref(channels_to_delete))
 end
 

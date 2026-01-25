@@ -1,4 +1,4 @@
-using eegfun
+using EegFun
 using DataFrames
 using Random
 using BenchmarkTools
@@ -13,13 +13,13 @@ sample_rate = 1000
 channels = [:Fz, :Cz, :Pz, :POz]
 
 # Create layout
-layout = eegfun.Layout(
+layout = EegFun.Layout(
     DataFrame(label = channels, inc = [90.0, 0.0, -90.0, -90.0], azi = [0.0, 0.0, 0.0, 0.0]),
     nothing,
     nothing,
 )
 
-analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 time = collect(range(-0.2, 0.8, length = n_timepoints))
 
 # Function to create epochs
@@ -53,7 +53,7 @@ function create_participant_condition_epochs(
         push!(epochs, df)
     end
 
-    return eegfun.EpochData(
+    return EegFun.EpochData(
         "participant_$(participant_id)",
         condition_id,
         condition_name,
@@ -74,7 +74,7 @@ println("Configuration: 10 iterations, 3 folds, 200 timepoints, 4 channels, 60 t
 println()
 
 # Benchmark
-result = @btime eegfun.decode_libsvm($epochs_p1; n_iterations = 10, n_folds = 3, equalize_trials = true)
+result = @btime EegFun.decode_libsvm($epochs_p1; n_iterations = 10, n_folds = 3, equalize_trials = true)
 
 println()
 println("Decoding complete!")

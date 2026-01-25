@@ -24,11 +24,7 @@ Internal implementation for computing channel summary statistics.
 - `var`: Variance per channel
 - `zvar`: Z-scored variance (relative to other channels)
 """
-function _channel_summary_impl(
-    data::DataFrame,
-    sample_selection::Vector{Int},
-    channel_selection::Vector{Symbol},
-)::DataFrame
+function _channel_summary_impl(data::DataFrame, sample_selection::Vector{Int}, channel_selection::Vector{Symbol})::DataFrame
     # Input validation
     isempty(sample_selection) && @minimal_error_throw("No samples selected for channel summary")
     isempty(channel_selection) && @minimal_error_throw("No channels selected for channel summary")
@@ -38,7 +34,7 @@ function _channel_summary_impl(
     !isempty(missing_channels) && @minimal_error_throw("Channels not found in data: $(missing_channels)")
 
     # Check that all sample indices are valid
-    invalid_samples = sample_selection[(sample_selection .< 1) .| (sample_selection .> nrow(data))]
+    invalid_samples = sample_selection[(sample_selection.<1).|(sample_selection.>nrow(data))]
     !isempty(invalid_samples) && @minimal_error_throw("Invalid sample indices: $(invalid_samples)")
 
     selected_data = @view data[sample_selection, channel_selection]
@@ -178,8 +174,7 @@ function channel_summary(
     # Input validation
     nrow(dat.data) == 0 && @minimal_error_throw("Cannot compute channel summary: data is empty")
 
-    selected_channels =
-        get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = include_meta, include_extra = include_extra)
     selected_samples = get_selected_samples(dat, sample_selection)
 
     return _channel_summary_impl(dat.data, selected_samples, selected_channels)
@@ -317,12 +312,8 @@ function _process_channel_summary_file(
         condition = condition_numbers[cond_idx]
 
         # Compute channel summary
-        summary_df = eegfun.channel_summary(
-            data;
-            sample_selection = sample_selection,
-            channel_selection = channel_selection,
-            include_extra = include_extra,
-        )
+        summary_df =
+            channel_summary(data; sample_selection = sample_selection, channel_selection = channel_selection, include_extra = include_extra)
 
         # Add metadata columns
         insertcols!(summary_df, 1, :file => splitext(filename)[1])
@@ -431,15 +422,9 @@ function channel_summary(
             input_path = joinpath(input_dir, file)
 
             result, summary_dfs = try
-                _process_channel_summary_file(
-                    input_path,
-                    condition_selection,
-                    sample_selection,
-                    channel_selection,
-                    include_extra,
-                )
+                _process_channel_summary_file(input_path, condition_selection, sample_selection, channel_selection, include_extra)
             catch e
-                @error "Error processing $file" exception=(e, catch_backtrace())
+                @error "Error processing $file" exception = (e, catch_backtrace())
                 (BatchResult(false, file, "Exception: $(sprint(showerror, e))"), DataFrame[])
             end
 

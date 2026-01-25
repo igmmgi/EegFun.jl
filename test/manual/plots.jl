@@ -1,5 +1,5 @@
 # package
-using eegfun
+using EegFun
 using GLMakie
 # using CairoMakie
 # using BenchmarkTools
@@ -7,32 +7,32 @@ using GLMakie
 function get_data()
 
     # read **.bdf file 
-    dat = eegfun.read_bdf("../Flank_C_3.bdf");
-    layout = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-    dat = eegfun.create_eeg_dataframe(dat, layout);
+    dat = EegFun.read_bdf("../Flank_C_3.bdf");
+    layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+    dat = EegFun.create_eeg_dataframe(dat, layout);
 
     # neighbours
-    eegfun.polar_to_cartesian_xy!(layout);
-    eegfun.get_layout_neighbours_xy!(layout, 40);
-    eegfun.polar_to_cartesian_xyz!(layout);
-    eegfun.get_layout_neighbours_xyz!(layout, 40);
+    EegFun.polar_to_cartesian_xy!(layout);
+    EegFun.get_layout_neighbours_xy!(layout, 40);
+    EegFun.polar_to_cartesian_xyz!(layout);
+    EegFun.get_layout_neighbours_xyz!(layout, 40);
 
     # basic preprocessing
-    eegfun.filter_data!(dat, "hp", 1)
-    eegfun.rereference!(dat, :avg)
+    EegFun.filter_data!(dat, "hp", 1)
+    EegFun.rereference!(dat, :avg)
 
     # epoching
     epoch_cfg = [
-        eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
-        eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]]),
+        EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
+        EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[3]]),
     ]
-    epochs = eegfun.EpochData[]
+    epochs = EegFun.EpochData[]
     for (idx, epoch) in enumerate(epoch_cfg)
-        push!(epochs, eegfun.extract_epochs(dat, idx, epoch, -2, 4))
+        push!(epochs, EegFun.extract_epochs(dat, idx, epoch, -2, 4))
     end
 
     # ERP average
-    erps = [eegfun.average_epochs(epoch) for epoch in epochs]
+    erps = [EegFun.average_epochs(epoch) for epoch in epochs]
 
     return dat, epochs, erps, layout
 end
@@ -47,13 +47,13 @@ function test_channel_summary()
     println("\n=== Testing Channel Summary Plots ===")
     dat, epochs, erps, layout = get_data()
 
-    cs = eegfun.channel_summary(dat)
+    cs = EegFun.channel_summary(dat)
 
     # Plots
-    fig, ax = eegfun.plot_channel_summary(cs, :max)
-    fig, ax = eegfun.plot_channel_summary(cs, :max, ylabel = "Max Value", title = "Channel Max", bar_color = :blue)
-    fig, ax = eegfun.plot_channel_summary(cs, :std, title = "Channel Standard Deviation")
-    fig, ax = eegfun.plot_channel_summary(cs, :range, title = "Channel Range")
+    fig, ax = EegFun.plot_channel_summary(cs, :max)
+    fig, ax = EegFun.plot_channel_summary(cs, :max, ylabel = "Max Value", title = "Channel Max", bar_color = :blue)
+    fig, ax = EegFun.plot_channel_summary(cs, :std, title = "Channel Standard Deviation")
+    fig, ax = EegFun.plot_channel_summary(cs, :range, title = "Channel Range")
 
     println("✓ Channel summary plots completed")
 end
@@ -67,19 +67,19 @@ function test_correlation_heatmap()
     # setup data and call function
     println("\n=== Testing Correlation Heatmap Plots ===")
     dat, epochs, erps, layout = get_data()
-    cm = eegfun.correlation_matrix(dat)
+    cm = EegFun.correlation_matrix(dat)
 
     # Plots
-    fig, ax = eegfun.plot_correlation_heatmap(cm, title = "Full Correlation Matrix")
+    fig, ax = EegFun.plot_correlation_heatmap(cm, title = "Full Correlation Matrix")
 
-    cm = eegfun.correlation_matrix(dat, channel_selection = eegfun.channels([:Fp1, :Fp2, :F3, :F4, :C3, :C4]))
-    fig, ax = eegfun.plot_correlation_heatmap(
+    cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4, :C3, :C4]))
+    fig, ax = EegFun.plot_correlation_heatmap(
         cm,
         title = "Frontal-Central Correlations",
         colorrange = (0, 1),
         colormap = :viridis,
     )
-    fig, ax = eegfun.plot_correlation_heatmap(
+    fig, ax = EegFun.plot_correlation_heatmap(
         cm,
         title = "Masked Correlations (0.3-0.7)",
         mask_range = (0.3, 0.7),
@@ -99,11 +99,11 @@ function test_joint_probability()
     println("\n=== Testing Joint Probability Plots ===")
     dat, epochs, erps, layout = get_data()
 
-    jp = eegfun.channel_joint_probability(dat)
+    jp = EegFun.channel_joint_probability(dat)
 
     # Plots 
-    fig, ax = eegfun.plot_joint_probability(jp, title = "Channel Joint Probability")
-    fig, ax = eegfun.plot_joint_probability(
+    fig, ax = EegFun.plot_joint_probability(jp, title = "Channel Joint Probability")
+    fig, ax = EegFun.plot_joint_probability(
         jp,
         title = "Joint Probability - Custom Style",
         bar_color = :red,
@@ -122,9 +122,9 @@ function test_layout_plots()
     dat, epochs, erps, layout = get_data()
 
     # Plots
-    fig, ax = eegfun.plot_layout_2d(layout, title = "2D Electrode Layout")
-    fig, ax = eegfun.plot_layout_3d(layout, title = "3D Electrode Layout")
-    fig, ax = eegfun.plot_layout_2d(
+    fig, ax = EegFun.plot_layout_2d(layout, title = "2D Electrode Layout")
+    fig, ax = EegFun.plot_layout_3d(layout, title = "3D Electrode Layout")
+    fig, ax = EegFun.plot_layout_2d(
         layout,
         title = "Custom 2D Layout",
         head_color = :red,
@@ -145,17 +145,17 @@ function test_topography_plots()
     dat, epochs, erps, layout = get_data()
 
     # Plots
-    fig, ax = eegfun.plot_topography(dat)
-    fig, ax = eegfun.plot_topography(
+    fig, ax = EegFun.plot_topography(dat)
+    fig, ax = EegFun.plot_topography(
         dat,
         title = "Custom Topography",
         colormap = :jet,
         gridscale = 100,
         method = :spherical_spline,
     )
-    fig, ax = eegfun.plot_topography(dat, title = "Test Title", title_fontsize = 20, show_title = true)
-    fig, ax = eegfun.plot_topography(dat, show_title = false)
-    fig, ax = eegfun.plot_topography(
+    fig, ax = EegFun.plot_topography(dat, title = "Test Title", title_fontsize = 20, show_title = true)
+    fig, ax = EegFun.plot_topography(dat, show_title = false)
+    fig, ax = EegFun.plot_topography(
         dat,
         title = "Test with New Parameters",
         colorrange = (-2, 2),
@@ -168,7 +168,7 @@ function test_topography_plots()
         colorbar_fontsize = 14,
     )
 
-    fig, ax = eegfun.plot_topography(dat, title = "Non-interactive Plot", interactive = false, display_plot = false)
+    fig, ax = EegFun.plot_topography(dat, title = "Non-interactive Plot", interactive = false, display_plot = false)
 
     println("✓ Topography plots completed")
 end
@@ -181,13 +181,13 @@ function test_plot_filter()
     println("\n=== Testing Filter Plots ===")
 
     # Create lowpass IIR filter using create_filter
-    filter_info = eegfun.create_filter("lp", "iir", 30.0, 256.0)
+    filter_info = EegFun.create_filter("lp", "iir", 30.0, 256.0)
 
     # Plot filter response
-    fig, ax = eegfun.plot_filter_response(filter_info)
+    fig, ax = EegFun.plot_filter_response(filter_info)
 
     # Test with custom parameters
-    fig, ax = eegfun.plot_filter_response(
+    fig, ax = EegFun.plot_filter_response(
         filter_info,
         title = "Custom Lowpass Filter Plot",
         actual_color = :blue,
@@ -199,9 +199,9 @@ function test_plot_filter()
     )
 
     # Create highpass IIR filter using create_filter
-    filter_info2 = eegfun.create_filter("hp", "iir", 1.0, 256.0)
+    filter_info2 = EegFun.create_filter("hp", "iir", 1.0, 256.0)
 
-    fig, ax = eegfun.plot_filter_response(
+    fig, ax = EegFun.plot_filter_response(
         filter_info2,
         title = "High-pass Filter",
         actual_color = :green,
@@ -209,9 +209,9 @@ function test_plot_filter()
     )
 
     # Create FIR filter using create_filter
-    filter_info3 = eegfun.create_filter("lp", "fir", 40.0, 256.0)
+    filter_info3 = EegFun.create_filter("lp", "fir", 40.0, 256.0)
 
-    fig, ax = eegfun.plot_filter_response(
+    fig, ax = EegFun.plot_filter_response(
         filter_info3,
         title = "FIR Lowpass Filter",
         actual_color = :purple,
@@ -219,8 +219,8 @@ function test_plot_filter()
     )
 
     # Test additional filter with separate plotting
-    filter_info4 = eegfun.create_filter("hp", "iir", 0.5, 256.0)
-    fig, ax = eegfun.plot_filter_response(
+    filter_info4 = EegFun.create_filter("hp", "iir", 0.5, 256.0)
+    fig, ax = EegFun.plot_filter_response(
         filter_info4,
         title = "High-pass Filter with Plot",
         actual_color = :orange,
@@ -240,15 +240,15 @@ function test_plot_power_spectrum()
 
     # Plots
     fig, ax =
-        eegfun.plot_channel_spectrum(dat, channel_selection = eegfun.channels([:Fp1]), title = "Fp1 Power Spectrum")
-    fig, ax = eegfun.plot_channel_spectrum(
+        EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1]), title = "Fp1 Power Spectrum")
+    fig, ax = EegFun.plot_channel_spectrum(
         dat,
-        channel_selection = eegfun.channels([:Fp1, :Fp2, :F3, :F4]),
+        channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4]),
         title = "Frontal Channels Power Spectrum",
     )
-    fig, ax = eegfun.plot_channel_spectrum(
+    fig, ax = EegFun.plot_channel_spectrum(
         dat,
-        channel_selection = eegfun.channels([:Fp1, :Fp2]),
+        channel_selection = EegFun.channels([:Fp1, :Fp2]),
         title = "Custom Power Spectrum",
         x_scale = :log10,
         y_scale = :log10,
@@ -257,11 +257,11 @@ function test_plot_power_spectrum()
         line_width = 3,
         show_freq_bands = false,
     )
-    fig, ax = eegfun.plot_channel_spectrum(
+    fig, ax = EegFun.plot_channel_spectrum(
         dat,
-        channel_selection = eegfun.channels([:Fp1]),
+        channel_selection = EegFun.channels([:Fp1]),
         title = "Power Spectrum with Hamming Window",
-        window_function = eegfun.DSP.hamming,
+        window_function = EegFun.DSP.hamming,
         overlap = 0.75,
     )
 
@@ -279,9 +279,9 @@ function test_erp_plots()
     dat, epochs, erps, layout = get_data()
 
     # Plots
-    fig, ax = eegfun.plot_erp(erps[1], title = "ERP Waveform")
-    fig, ax = eegfun.plot_erp(erps, title = "Multiple ERP Conditions")
-    fig, ax = eegfun.plot_erp(erp, title = "Custom ERP Plot", color = :red, linewidth = 2, ylabel = "Amplitude (μV)")
+    fig, ax = EegFun.plot_erp(erps[1], title = "ERP Waveform")
+    fig, ax = EegFun.plot_erp(erps, title = "Multiple ERP Conditions")
+    fig, ax = EegFun.plot_erp(erp, title = "Custom ERP Plot", color = :red, linewidth = 2, ylabel = "Amplitude (μV)")
 
     println("✓ ERP plots completed")
 end
@@ -295,8 +295,8 @@ function test_epoch_plots()
     dat, epochs, erps, layout = get_data()
 
     # Plots
-    fig, ax = eegfun.plot_epochs(epochs[1], title = "Epochs Plot")
-    fig, ax = eegfun.plot_epochs(epochs[1], title = "Custom Epochs Plot", color = [:blue, :red], alpha = [0.7, 1.0])
+    fig, ax = EegFun.plot_epochs(epochs[1], title = "Epochs Plot")
+    fig, ax = EegFun.plot_epochs(epochs[1], title = "Custom Epochs Plot", color = [:blue, :red], alpha = [0.7, 1.0])
 
     println("✓ Epochs plots completed")
 end
@@ -310,9 +310,9 @@ function test_erp_image()
     dat, epochs, erps, layout = get_data()
 
     # Plots
-    fig, ax = eegfun.plot_erp_image(epochs[1], title = "ERP Image")
-    fig, ax = eegfun.plot_erp_image(epochs[1], title = "ERP Image with Smoothing", boxcar_average = 5)
-    fig, ax = eegfun.plot_erp_image(epochs[1], title = "Custom ERP Image", colormap = :viridis)
+    fig, ax = EegFun.plot_erp_image(epochs[1], title = "ERP Image")
+    fig, ax = EegFun.plot_erp_image(epochs[1], title = "ERP Image with Smoothing", boxcar_average = 5)
+    fig, ax = EegFun.plot_erp_image(epochs[1], title = "Custom ERP Image", colormap = :viridis)
 
     println("✓ ERP image plots completed")
 end
@@ -326,8 +326,8 @@ function test_databrowser()
     dat, epochs, erps, layout = get_data()
 
     # Plots
-    # fig, ax = eegfun.plot_databrowser(dat) 
-    fig, ax = eegfun.plot_databrowser(epochs[1])
+    # fig, ax = EegFun.plot_databrowser(dat) 
+    fig, ax = EegFun.plot_databrowser(epochs[1])
 
     println("✓ Data browser plots completed")
 end
