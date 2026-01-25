@@ -14,8 +14,8 @@ The plot shows both the continuous signal (blue line) and sampled points (red ci
 
 # Example
 ```julia
-using eegfun
-eegfun.signal_example_1()
+using EegFun
+EegFun.signal_example_1()
 ```
 
 # Returns

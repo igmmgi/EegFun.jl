@@ -3,7 +3,7 @@
 Tutorial: Statistical Analysis Options for ERP Data
 
 This script provides a comprehensive introduction to the statistical analysis
-options available in eegfun, following FieldTrip's approach. It demonstrates:
+options available in EegFun, following FieldTrip's approach. It demonstrates:
 
 1. Data preparation for statistical tests
 2. Analytic t-tests (with/without multiple comparison correction)
@@ -13,7 +13,7 @@ options available in eegfun, following FieldTrip's approach. It demonstrates:
 Each section includes explanations of when and why to use each method.
 """
 
-using eegfun
+using EegFun
 using BenchmarkTools
 
 
@@ -21,29 +21,29 @@ input_dir = "/home/ian/Documents/Julia/output_data/filtered_erps_good_lp_30hz"
 file_pattern = "erps_good"
 
 println("Preparing data...")
-prepared = eegfun.prepare_stats(
+prepared = EegFun.prepare_stats(
     file_pattern,  # Pattern to match ERP files
     :paired;       # :paired for within-subject, :independent for between-subject
     input_dir = input_dir,
-    participant_selection = eegfun.participants(3:18),  # Select participants 3-18
-    condition_selection = eegfun.conditions([1, 2]),    # Conditions to compare
-    channel_selection = eegfun.channels(1:72),          # Select all 72 channels
-    sample_selection = eegfun.samples((-0.5, 2.0)),     # Full time window
-    baseline_window = eegfun.samples((-0.2, 0.0)),      # Baseline: -200 to 0 ms
-    analysis_window = eegfun.samples((0.1, 1.0)),       # Analysis window: 100-1000 ms
+    participant_selection = EegFun.participants(3:18),  # Select participants 3-18
+    condition_selection = EegFun.conditions([1, 2]),    # Conditions to compare
+    channel_selection = EegFun.channels(1:72),          # Select all 72 channels
+    sample_selection = EegFun.samples((-0.5, 2.0)),     # Full time window
+    baseline_window = EegFun.samples((-0.2, 0.0)),      # Baseline: -200 to 0 ms
+    analysis_window = EegFun.samples((0.1, 1.0)),       # Analysis window: 100-1000 ms
 )
 
 # ----------------------------------------------------------------------------
 # Option 2a: Analytic t-test with NO correction
 # ----------------------------------------------------------------------------
-result_analytic_no = eegfun.analytic_test(
+result_analytic_no = EegFun.analytic_test(
     prepared,
     alpha = 0.05,           # Significance threshold
     tail = :both,           # Two-tailed test (:both, :left, or :right)
     correction_method = :no, # No multiple comparison correction
 )
 
-fig = eegfun.plot_analytic_test(
+fig = EegFun.plot_analytic_test(
     result_analytic_no,
     channel = :PO8,
     plot_erp = true,
@@ -55,14 +55,14 @@ fig = eegfun.plot_analytic_test(
 # ----------------------------------------------------------------------------
 # Option 2b: Analytic t-test with BONFERRONI correction
 # ----------------------------------------------------------------------------
-result_analytic_bonf = eegfun.analytic_test(
+result_analytic_bonf = EegFun.analytic_test(
     prepared,
     alpha = 0.05,
     tail = :both,
     correction_method = :bonferroni,  # Bonferroni correction
 )
 
-fig = eegfun.plot_analytic_test(
+fig = EegFun.plot_analytic_test(
     result_analytic_bonf,
     channel = :PO8,
     plot_erp = true,
@@ -84,7 +84,7 @@ println("      number of significant points to the uncorrected test above.")
 # Option 3a: Parametric Thresholding (Default, Fastest)
 # ----------------------------------------------------------------------------
 
-result_permutation_parametric = eegfun.permutation_test(
+result_permutation_parametric = EegFun.permutation_test(
     prepared,
     n_permutations = 1000,        # Number of permutations (more = more accurate)
     threshold = 0.05,             # Significance level
@@ -95,7 +95,7 @@ result_permutation_parametric = eegfun.permutation_test(
     show_progress = true,          # Show progress bar
 )
 
-fig = eegfun.plot_analytic_test(
+fig = EegFun.plot_analytic_test(
     result_permutation_parametric,
     channel = :PO8,
     plot_erp = true,
@@ -135,7 +135,7 @@ Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster',
                           clusterThreshold='nonparametric_common'
 """)
 
-result_permutation_nonparametric_common = eegfun.permutation_test(
+result_permutation_nonparametric_common = EegFun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
@@ -178,7 +178,7 @@ Equivalent to FieldTrip: method='montecarlo', corrMethod='cluster',
                           clusterThreshold='nonparametric_individual'
 """)
 
-result_permutation_nonparametric_individual = eegfun.permutation_test(
+result_permutation_nonparametric_individual = EegFun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
@@ -221,7 +221,7 @@ Use when:
 Example: Finding which electrode groups show effects at any time point.
 """)
 
-result_permutation_spatial = eegfun.permutation_test(
+result_permutation_spatial = EegFun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
@@ -256,7 +256,7 @@ Use when:
 Example: Finding sustained effects at specific electrodes over time.
 """)
 
-result_permutation_temporal = eegfun.permutation_test(
+result_permutation_temporal = EegFun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
@@ -291,7 +291,7 @@ Use when:
 Example: Finding ERP components that show spatial and temporal clustering.
 """)
 
-result_permutation_spatiotemporal = eegfun.permutation_test(
+result_permutation_spatiotemporal = EegFun.permutation_test(
     prepared,
     n_permutations = 1000,
     threshold = 0.05,
@@ -467,7 +467,7 @@ using GLMakie  # or CairoMakie for static plots
 println("\n" * "-"^80)
 println("Example 1: ERP Waveforms Only")
 println("-"^80)
-fig1 = eegfun.plot_analytic_test(
+fig1 = EegFun.plot_analytic_test(
     result_analytic_no,
     channel = :PO7,
     plot_erp = true,
@@ -480,7 +480,7 @@ display(fig1)
 println("\n" * "-"^80)
 println("Example 2: Difference Wave with Significance Markers")
 println("-"^80)
-fig2 = eegfun.plot_analytic_test(
+fig2 = EegFun.plot_analytic_test(
     result_analytic_no,
     channel = :PO7,
     plot_erp = false,
@@ -498,7 +498,7 @@ println("""
 This shows the results from cluster-based permutation testing.
 Significance markers indicate points that are part of significant clusters.
 """)
-fig3 = eegfun.plot_analytic_test(
+fig3 = EegFun.plot_analytic_test(
     result_permutation_parametric,
     channel = :PO7,
     plot_erp = false,
@@ -554,7 +554,7 @@ KEY PARAMETERS TO CONSIDER:
 
 For more information, see:
 - FieldTrip documentation: https://www.fieldtriptoolbox.org/tutorial/stats/statistics/
-- eegfun documentation: IMPLEMENTED_FEATURES.md
+- EegFun documentation: IMPLEMENTED_FEATURES.md
 """)
 
 println("\n" * "="^80)

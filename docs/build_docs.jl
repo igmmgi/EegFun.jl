@@ -4,7 +4,7 @@ using Logging
 using Pkg
 
 # Load documentation packages from extras in temporary environment
-Pkg.activate(; temp=true)
+Pkg.activate(; temp = true)
 Pkg.add(["Documenter", "DocumenterTools", "JuliaFormatter"])
 
 # Now load the packages
@@ -13,7 +13,7 @@ using DocumenterTools
 using JuliaFormatter
 
 """
-Documentation Manager for eegfun
+Documentation Manager for EegFun.jl
 
 This is a comprehensive documentation management tool that provides:
 - Building documentation with Documenter.jl
@@ -50,7 +50,7 @@ function print_colored(color::String, message::String)
 end
 
 function print_header()
-    print_colored(BLUE, "=== eegfun Documentation Manager ===")
+    print_colored(BLUE, "=== EegFun.jl Documentation Manager ===")
     println()
 end
 
@@ -66,7 +66,7 @@ function build_documentation(project_root::String)
         # Build documentation
         build_jl_path = joinpath(project_root, "docs", "build.jl")
         print_colored(GREEN, "✓ Building documentation with Documenter.jl...")
-        
+
         # Suppress warnings during build
         old_logger = global_logger()
         try
@@ -79,12 +79,12 @@ function build_documentation(project_root::String)
             global_logger(old_logger)
         end
         print_colored(GREEN, "✓ Documentation built successfully")
-        
+
     catch e
         print_colored(RED, "✗ Error building documentation: $e")
         return false
     end
-    
+
     println()
     return true
 end
@@ -94,22 +94,22 @@ end
 
 function check_doc_coverage(project_root::String; skip_build_check::Bool = false)
     print_colored(YELLOW, "Checking documentation coverage...")
-    
+
     try
         # Check for basic documentation files
         doc_files = [
             joinpath(project_root, "docs", "src", "index.md"),
             joinpath(project_root, "docs", "src", "api.md"),
-            joinpath(project_root, "docs", "build.jl")
+            joinpath(project_root, "docs", "build.jl"),
         ]
         missing_files = []
-        
+
         for file in doc_files
             if !isfile(file)
                 push!(missing_files, file)
             end
         end
-        
+
         if !isempty(missing_files)
             print_colored(RED, "✗ Missing documentation files:")
             for file in missing_files
@@ -117,7 +117,7 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
             end
             return false
         end
-        
+
         # Check if documentation has been built (only if not skipping)
         if !skip_build_check
             build_dir = joinpath(project_root, "docs", "build")
@@ -126,11 +126,11 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                 return true
             end
         end
-        
+
         # Analyze source code documentation (docstrings)
         println("\nSource Code Documentation Analysis:")
-        println("=" ^ 50)
-        
+        println("="^50)
+
         # Find all Julia source files
         src_dir = joinpath(project_root, "src")
         source_files = String[]
@@ -141,55 +141,55 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                 end
             end
         end
-        
+
         total_functions = 0
         documented_functions = 0
         total_docstring_chars = 0
         files_with_docs = 0
-        
+
         println("📁 Analyzing $(length(source_files)) source files...")
-        
+
         for file in source_files
             try
                 content = read(file, String)
                 lines = split(content, '\n')
-                
+
                 # Count functions and docstrings
                 file_functions = 0
                 file_documented = 0
                 file_doc_chars = 0
-                
+
                 i = 1
                 while i <= length(lines)
                     line = strip(lines[i])
-                    
+
                     # Look for function definitions
                     if occursin(r"^function\s+\w+", line) || occursin(r"^\w+\(.*\)\s*=", line)
                         file_functions += 1
                         total_functions += 1
-                        
+
                         # Check if there's a docstring above (look back up to 3 lines)
                         docstring_found = false
-                        for j in max(1, i-3):i-1
+                        for j = max(1, i - 3):i-1
                             if j <= length(lines)
                                 prev_line = strip(lines[j])
                                 if startswith(prev_line, "\"\"\"") || (startswith(prev_line, "\"") && !endswith(prev_line, "\""))
                                     file_documented += 1
                                     documented_functions += 1
                                     docstring_found = true
-                                    
+
                                     # Count docstring characters
                                     if startswith(prev_line, "\"\"\"")
                                         # Multi-line docstring
                                         doc_start = j
                                         doc_end = j
-                                        for k in j+1:length(lines)
+                                        for k = j+1:length(lines)
                                             if endswith(strip(lines[k]), "\"\"\"")
                                                 doc_end = k
                                                 break
                                             end
                                         end
-                                        for k in doc_start:doc_end
+                                        for k = doc_start:doc_end
                                             file_doc_chars += length(strip(lines[k]))
                                         end
                                     else
@@ -203,28 +203,28 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
                     end
                     i += 1
                 end
-                
+
                 if file_documented > 0
                     files_with_docs += 1
                     total_docstring_chars += file_doc_chars
                     println("  📄 $(basename(file)): $file_documented/$file_functions functions documented")
                 end
-                
+
             catch e
                 println("  ⚠️ Error reading $file: $e")
             end
         end
-        
+
         # Calculate coverage percentage
-        coverage_percent = total_functions > 0 ? round((documented_functions / total_functions) * 100, digits=1) : 0
-        
+        coverage_percent = total_functions > 0 ? round((documented_functions / total_functions) * 100, digits = 1) : 0
+
         println("\n📊 Documentation Coverage Summary:")
         println("  🔧 Total functions: $total_functions")
         println("  📝 Documented functions: $documented_functions")
         println("  📈 Coverage: $coverage_percent%")
         println("  📁 Files with documentation: $files_with_docs/$(length(source_files))")
         println("  📄 Total docstring characters: $total_docstring_chars")
-        
+
         # Overall assessment
         println("\nOverall Assessment:")
         if coverage_percent >= 80
@@ -236,40 +236,40 @@ function check_doc_coverage(project_root::String; skip_build_check::Bool = false
         else
             print_colored(RED, "✗ Limited documentation coverage ($coverage_percent%) - needs significant work")
         end
-        
+
         print_colored(GREEN, "\n✓ Documentation coverage analysis completed")
-        
+
     catch e
         print_colored(RED, "✗ Error checking documentation coverage: $e")
         return false
     end
-    
+
     println()
     return true
 end
 
 function clean_docs(project_root::String)
     print_colored(YELLOW, "Cleaning documentation build artifacts...")
-    
+
     # Clean build directory
     build_dir = joinpath(project_root, "docs", "build")
     if isdir(build_dir)
-        rm(build_dir, recursive=true)
+        rm(build_dir, recursive = true)
         print_colored(GREEN, "✓ Removed docs/build directory")
     else
         print_colored(YELLOW, "No build directory found")
     end
-    
+
     # Clean other common build artifacts
     artifacts = ["site", ".documenter", "Manifest.toml"]
     for artifact in artifacts
         artifact_path = joinpath(project_root, "docs", artifact)
         if isdir(artifact_path) || isfile(artifact_path)
-            rm(artifact_path, recursive=true)
+            rm(artifact_path, recursive = true)
             print_colored(GREEN, "✓ Removed docs/$artifact")
         end
     end
-    
+
     print_colored(GREEN, "✓ Documentation cleanup completed")
     println()
 end
@@ -373,37 +373,37 @@ end
 function run_all_docs(project_root::String)
     print_colored(GREEN, "Running complete documentation workflow...")
     println()
-    
+
     # Step 1: Format source files
     print_colored(YELLOW, "Step 1: Formatting source files...")
     if !format_source_files(project_root)
         print_colored(RED, "✗ Formatting failed")
         return false
     end
-    
+
     # Step 2: Build documentation
     print_colored(YELLOW, "Step 2: Building documentation...")
     if !build_documentation(project_root)
         print_colored(RED, "✗ Documentation build failed")
         return false
     end
-    
+
     # Step 3: Check documentation coverage
     print_colored(YELLOW, "Step 3: Checking documentation coverage...")
     check_doc_coverage(project_root)
-    
+
     print_colored(GREEN, "=== Documentation Workflow Complete ===")
     println("Next steps:")
     println("1. Review the built documentation in docs/build/")
     println("2. Open docs/build/index.html in your browser to view documentation")
     println("3. Deploy to GitHub Pages when ready")
-    
+
     return true
 end
 
 function show_interactive_menu(project_root::String)
     print_header()
-    
+
     while true
         println("\nChoose an option:")
         println("1. Build documentation")
@@ -413,10 +413,10 @@ function show_interactive_menu(project_root::String)
         println("5. Clean build artifacts")
         println("6. Run complete workflow")
         println("7. Exit")
-        
+
         print("\nEnter your choice (1-7): ")
         choice = readline()
-        
+
         if choice == "1"
             build_documentation(project_root)
             if isfile(joinpath(project_root, "docs", "build", "index.html"))
@@ -443,7 +443,7 @@ end
 
 function main()
     project_root = get_project_root()
-    
+
     # Simple command line argument parsing
     if length(ARGS) == 0
         command = "interactive"
@@ -453,7 +453,7 @@ function main()
         command = ARGS[1]
         # Additional arguments could be handled here
     end
-    
+
     if command == "build"
         build_documentation(project_root)
     elseif command == "coverage"

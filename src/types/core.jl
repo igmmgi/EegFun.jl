@@ -2,7 +2,7 @@
 """
     EegFunData
 
-Abstract supertype for all primary eegfun data and result structures.
+Abstract supertype for all primary EegFun data and result structures.
 """
 abstract type EegFunData end
 

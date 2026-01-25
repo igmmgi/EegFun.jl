@@ -6,7 +6,7 @@ Test script for new RSA features:
 3. RDM normalization integration
 """
 
-using eegfun
+using EegFun
 using DataFrames
 using Random
 using Statistics
@@ -24,7 +24,7 @@ println("="^70)
 function create_test_epochs(condition_id::Int, condition_name::String, n_epochs::Int, participant_id::Int = 1)
     channels = [:Fz, :Cz, :Pz]
     layout =
-        eegfun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+        EegFun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
 
     epochs = Vector{DataFrame}()
     sample_rate = 250
@@ -44,14 +44,14 @@ function create_test_epochs(condition_id::Int, condition_name::String, n_epochs:
         push!(epochs, epoch_data)
     end
 
-    return eegfun.EpochData(
+    return EegFun.EpochData(
         "test_p$(participant_id)_$(condition_name).jld2",
         condition_id,
         condition_name,
         epochs,
         layout,
         sample_rate,
-        eegfun.AnalysisInfo(),
+        EegFun.AnalysisInfo(),
     )
 end
 
@@ -71,7 +71,7 @@ epochs = [
 normalization_methods = [:none, :zscore, :rank, :minmax]
 
 for method in normalization_methods
-    rsa_result = eegfun.rsa(epochs; dissimilarity_measure = :correlation, normalize_method = method)
+    rsa_result = EegFun.rsa(epochs; dissimilarity_measure = :correlation, normalize_method = method)
     println("  ✓ Normalization method :$method works")
 
     # Check that normalization was applied
@@ -108,7 +108,7 @@ epochs_cv = [
 
 # Test split-half
 println("  Testing split-half cross-validation...")
-rsa_splithalf = eegfun.rsa_crossvalidated(
+rsa_splithalf = EegFun.rsa_crossvalidated(
     epochs_cv;
     cv_method = :splithalf,
     n_iterations = 10,  # Reduced for speed
@@ -118,12 +118,12 @@ println("    ✓ Split-half CV works")
 
 # Test leave-one-out
 println("  Testing leave-one-out cross-validation...")
-rsa_loo = eegfun.rsa_crossvalidated(epochs_cv; cv_method = :leaveoneout, dissimilarity_measure = :correlation)
+rsa_loo = EegFun.rsa_crossvalidated(epochs_cv; cv_method = :leaveoneout, dissimilarity_measure = :correlation)
 println("    ✓ Leave-one-out CV works")
 
 # Test k-fold
 println("  Testing k-fold cross-validation...")
-rsa_kfold = eegfun.rsa_crossvalidated(epochs_cv; cv_method = :kfold, n_folds = 5, dissimilarity_measure = :correlation)
+rsa_kfold = EegFun.rsa_crossvalidated(epochs_cv; cv_method = :kfold, n_folds = 5, dissimilarity_measure = :correlation)
 println("    ✓ K-fold CV works")
 
 # Compare results - they should be similar but not identical
@@ -145,7 +145,7 @@ println("\n[3/4] Testing noise ceiling estimation...")
 
 # Create data for multiple participants
 n_participants = 5
-all_rsa = Vector{eegfun.RsaData}()
+all_rsa = Vector{EegFun.RsaData}()
 
 for p = 1:n_participants
     participant_epochs = [
@@ -153,13 +153,13 @@ for p = 1:n_participants
         create_test_epochs(2, "Condition2", 30, p),
         create_test_epochs(3, "Condition3", 30, p),
     ]
-    rsa_result = eegfun.rsa(participant_epochs; dissimilarity_measure = :correlation)
+    rsa_result = EegFun.rsa(participant_epochs; dissimilarity_measure = :correlation)
     push!(all_rsa, rsa_result)
 end
 
 # Compute noise ceiling directly
 println("  Computing noise ceiling...")
-nc = eegfun.compute_noise_ceiling(all_rsa)
+nc = EegFun.compute_noise_ceiling(all_rsa)
 println("    ✓ Noise ceiling computed")
 println("    Participants: $(nc.n_participants)")
 println("    Time points: $(length(nc.lower_bound))")
@@ -178,13 +178,13 @@ println("  ✓ Noise ceiling bounds are valid")
 
 # Test grand average with automatic noise ceiling
 println("  Testing grand average with noise ceiling...")
-grand_avg = eegfun.grand_average(all_rsa)
+grand_avg = EegFun.grand_average(all_rsa)
 @assert !isnothing(grand_avg.noise_ceiling) "Grand average should have noise ceiling"
 @assert grand_avg.noise_ceiling.n_participants == n_participants "Noise ceiling should use all participants"
 println("    ✓ Grand average automatically computed noise ceiling")
 
 # Test without noise ceiling
-grand_avg_no_nc = eegfun.grand_average(all_rsa, compute_noise_ceiling = false)
+grand_avg_no_nc = EegFun.grand_average(all_rsa, compute_noise_ceiling = false)
 @assert isnothing(grand_avg_no_nc.noise_ceiling) "Grand average should not have noise ceiling when disabled"
 println("    ✓ Grand average respects compute_noise_ceiling=false")
 
@@ -199,7 +199,7 @@ println(grand_avg)
 println("\n[4/4] Integration test: CV + Normalization + Noise Ceiling...")
 
 # Cross-validated RDM with normalization for all participants
-all_rsa_cv = Vector{eegfun.RsaData}()
+all_rsa_cv = Vector{EegFun.RsaData}()
 
 for p = 1:n_participants
     participant_epochs = [
@@ -207,7 +207,7 @@ for p = 1:n_participants
         create_test_epochs(2, "Condition2", 40, p),
         create_test_epochs(3, "Condition3", 40, p),
     ]
-    rsa_cv = eegfun.rsa_crossvalidated(
+    rsa_cv = EegFun.rsa_crossvalidated(
         participant_epochs;
         cv_method = :splithalf,
         n_iterations = 10,
@@ -218,7 +218,7 @@ for p = 1:n_participants
 end
 
 # Grand average with noise ceiling
-grand_avg_cv = eegfun.grand_average(all_rsa_cv)
+grand_avg_cv = EegFun.grand_average(all_rsa_cv)
 
 println("  ✓ Cross-validated RDM with normalization works")
 println("  ✓ Grand average with noise ceiling works")
@@ -232,12 +232,12 @@ println(grand_avg_cv)
 println("\n[5/5] Testing backward compatibility...")
 
 # Old-style RSA call (should still work)
-rsa_old = eegfun.rsa(epochs; dissimilarity_measure = :correlation, average_trials = true)
+rsa_old = EegFun.rsa(epochs; dissimilarity_measure = :correlation, average_trials = true)
 @assert isnothing(rsa_old.noise_ceiling) "Single-participant RSA should not have noise ceiling"
 println("  ✓ Old-style rsa() call works")
 
 # Old-style grand average (should still work)
-grand_avg_old = eegfun.grand_average(all_rsa, compute_noise_ceiling = false)
+grand_avg_old = EegFun.grand_average(all_rsa, compute_noise_ceiling = false)
 @assert isnothing(grand_avg_old.noise_ceiling) "Grand average without noise ceiling works"
 println("  ✓ Old-style grand_average() call works")
 

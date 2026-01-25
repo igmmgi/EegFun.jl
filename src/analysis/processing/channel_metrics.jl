@@ -29,10 +29,9 @@ function correlation_matrix(
     channel_selection::Function = channels(),
     include_extra::Bool = false,
 )::DataFrame
-    selected_channels =
-        eegfun.get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    selected_channels = EegFun.get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && @minimal_error_throw "No channels selected for correlation matrix"
-    selected_samples = eegfun.get_selected_samples(dat, sample_selection)
+    selected_samples = EegFun.get_selected_samples(dat, sample_selection)
     return _correlation_matrix(dat.data, selected_samples, selected_channels)
 end
 
@@ -48,11 +47,7 @@ Internal function to calculate correlation matrix for specified channels.
 # Returns
 - `DataFrame`: Correlation matrix with channel names as both row and column names
 """
-function _correlation_matrix(
-    dat::DataFrame,
-    selected_samples::Vector{Int},
-    selected_channels::Vector{Symbol},
-)::DataFrame
+function _correlation_matrix(dat::DataFrame, selected_samples::Vector{Int}, selected_channels::Vector{Symbol})::DataFrame
     selected_data = select(dat, selected_channels)[selected_samples, :]
     df = DataFrame(cor(Matrix(selected_data)), selected_channels)
     insertcols!(df, 1, :row => selected_channels)
@@ -118,10 +113,8 @@ function correlation_matrix_dual_selection(
     include_extra_selection2::Bool = true,
 )::DataFrame
     # Get selected channels for both sets with separate include_extra settings
-    selected_channels1 =
-        get_selected_channels(dat, channel_selection1; include_meta = false, include_extra = include_extra_selection1)
-    selected_channels2 =
-        get_selected_channels(dat, channel_selection2; include_meta = false, include_extra = include_extra_selection2)
+    selected_channels1 = get_selected_channels(dat, channel_selection1; include_meta = false, include_extra = include_extra_selection1)
+    selected_channels2 = get_selected_channels(dat, channel_selection2; include_meta = false, include_extra = include_extra_selection2)
 
     isempty(selected_channels1) && @minimal_error_throw "No channels selected for first channel set"
     isempty(selected_channels2) && @minimal_error_throw "No channels selected for second channel set"
@@ -204,8 +197,7 @@ function channel_joint_probability(
     normalize::Int = 2,
     discret::Int = 1000,
 )::DataFrame
-    selected_channels =
-        get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
+    selected_channels = get_selected_channels(dat, channel_selection; include_meta = false, include_extra = include_extra)
     isempty(selected_channels) && @minimal_error_throw "No channels selected for joint probability calculation"
     selected_samples = get_selected_samples(dat, sample_selection)
 
@@ -564,11 +556,7 @@ bad_channels = identify_bad_channels(summary_df, joint_prob_df)
 bad_channels = identify_bad_channels(summary_df, joint_prob_df, zvar_criterion = 2.5)
 ```
 """
-function identify_bad_channels(
-    summary_df::DataFrame,
-    joint_prob_df::DataFrame;
-    zvar_criterion::Real = 3.0,
-)::Vector{Symbol}
+function identify_bad_channels(summary_df::DataFrame, joint_prob_df::DataFrame; zvar_criterion::Real = 3.0)::Vector{Symbol}
 
     # Identify bad channels based on z-variance criterion
     bad_by_zvar = summary_df[abs.(summary_df.zvar).>zvar_criterion, :channel]

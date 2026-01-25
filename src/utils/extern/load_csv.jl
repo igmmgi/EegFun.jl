@@ -74,10 +74,10 @@ function load_csv(
         :inc => zeros(length(channel_labels)),
         :azi => zeros(length(channel_labels)),
     )
-    layout = eegfun.Layout(layout_df, nothing, nothing)
+    layout = EegFun.Layout(layout_df, nothing, nothing)
 
     # Create AnalysisInfo
-    analysis_info = eegfun.AnalysisInfo()
+    analysis_info = EegFun.AnalysisInfo()
 
     # Split data into trials
     trial_dfs = Vector{DataFrame}(undef, n_trials)
@@ -97,6 +97,6 @@ function load_csv(
     end
 
     # Create EpochData
-    return eegfun.EpochData(file, condition, condition_name, trial_dfs, layout, fsample, analysis_info)
+    return EegFun.EpochData(file, condition, condition_name, trial_dfs, layout, fsample, analysis_info)
 end
 

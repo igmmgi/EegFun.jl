@@ -1,17 +1,17 @@
 # API Reference
 
-This page provides a comprehensive reference for all functions and types in eegfun.jl.
+This page provides a comprehensive reference for all functions and types in EegFun.jl.
 
 ## Types
 
 ```@autodocs
-Modules = [eegfun]
+Modules = [EegFun]
 Filter = t -> typeof(t) <: Type && t != Module && t != Union
 ```
 
 ## Functions
 
 ```@autodocs
-Modules = [eegfun]
+Modules = [EegFun]
 Filter = f -> typeof(f) <: Function
 ```

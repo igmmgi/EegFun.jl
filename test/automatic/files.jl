@@ -1,5 +1,5 @@
 using Test
-using eegfun
+using EegFun
 
 @testset "File Utilities" begin
     # Create temporary test directory
@@ -40,103 +40,103 @@ using eegfun
     @testset "check_files_exist with Vector{String}" begin
         # Test with existing files
         existing_files = [joinpath(test_dir, "1_epochs_cleaned.jld2"), joinpath(test_dir, "2_epochs_cleaned.jld2")]
-        result = eegfun.check_files_exist(existing_files)
+        result = EegFun.check_files_exist(existing_files)
         @test result == true
 
         # Test with non-existing files
         missing_files = [joinpath(test_dir, "nonexistent1.jld2"), joinpath(test_dir, "nonexistent2.jld2")]
-        result = eegfun.check_files_exist(missing_files)
+        result = EegFun.check_files_exist(missing_files)
         @test result == false
 
         # Test with mixed existing and missing files
         mixed_files = [joinpath(test_dir, "1_epochs_cleaned.jld2"), joinpath(test_dir, "nonexistent.jld2")]
-        result = eegfun.check_files_exist(mixed_files)
+        result = EegFun.check_files_exist(mixed_files)
         @test result == false
     end
 
 
     @testset "get_files with String pattern" begin
         # Test with regex pattern
-        files = eegfun.get_files(test_dir, ".*epochs_cleaned.*")
+        files = EegFun.get_files(test_dir, ".*epochs_cleaned.*")
         @test length(files) == 6  # 3 numbered files + 3 Flank files
         @test all(contains.(files, "epochs_cleaned"))
 
         # Test with specific pattern
-        files = eegfun.get_files(test_dir, "1_.*")
+        files = EegFun.get_files(test_dir, "1_.*")
         @test length(files) == 2  # 1_epochs_cleaned.jld2 and 1_erps_cleaned.jld2
         @test all(contains.(files, "1_"))
 
         # Test with no matches
-        files = eegfun.get_files(test_dir, "nonexistent.*")
+        files = EegFun.get_files(test_dir, "nonexistent.*")
         @test isempty(files)
     end
 
     @testset "get_files with Vector{String}" begin
         # Test with specific filenames
         specific_files = ["1_epochs_cleaned.jld2", "2_epochs_cleaned.jld2"]
-        files = eegfun.get_files(test_dir, specific_files)
+        files = EegFun.get_files(test_dir, specific_files)
         @test length(files) == 2
         @test all(isfile.(files))
 
         # Test with non-existing files
         missing_files = ["nonexistent1.jld2", "nonexistent2.jld2"]
-        files = eegfun.get_files(test_dir, missing_files)
+        files = EegFun.get_files(test_dir, missing_files)
         @test length(files) == 2  # Still returns paths, even if files don't exist
         @test all(contains.(files, "nonexistent"))
     end
 
     @testset "find_file" begin
         # Test exact match in root directory
-        result = eegfun.find_file("test_file.csv", test_dir)
+        result = EegFun.find_file("test_file.csv", test_dir)
         @test result == joinpath(test_dir, "test_file.csv")
 
         # Test exact match in subdirectory (recursive)
-        result = eegfun.find_file("biosemi64.csv", test_dir)
+        result = EegFun.find_file("biosemi64.csv", test_dir)
         @test result == joinpath(subdir1, "biosemi64.csv")
 
         # Test with extensions
-        result = eegfun.find_file("biosemi64", test_dir, extensions = [".csv"])
+        result = EegFun.find_file("biosemi64", test_dir, extensions = [".csv"])
         @test result == joinpath(subdir1, "biosemi64.csv")
 
         # Test with multiple extensions
-        result = eegfun.find_file("config", test_dir, extensions = [".toml", ".csv"])
+        result = EegFun.find_file("config", test_dir, extensions = [".toml", ".csv"])
         @test result == joinpath(subdir1, "config.toml")
 
         # Test non-recursive search
-        result = eegfun.find_file("biosemi64.csv", test_dir, recursive = false)
+        result = EegFun.find_file("biosemi64.csv", test_dir, recursive = false)
         @test result === nothing  # File is in subdirectory
 
         # Test non-recursive search in subdirectory
-        result = eegfun.find_file("biosemi64.csv", subdir1, recursive = false)
+        result = EegFun.find_file("biosemi64.csv", subdir1, recursive = false)
         @test result == joinpath(subdir1, "biosemi64.csv")
 
         # Test file not found
-        result = eegfun.find_file("nonexistent.csv", test_dir)
+        result = EegFun.find_file("nonexistent.csv", test_dir)
         @test result === nothing
 
         # Test directory doesn't exist
-        result = eegfun.find_file("test.csv", "/nonexistent/directory")
+        result = EegFun.find_file("test.csv", "/nonexistent/directory")
         @test result === nothing
 
         # Test with empty extensions
-        result = eegfun.find_file("test_file.csv", test_dir, extensions = String[])
+        result = EegFun.find_file("test_file.csv", test_dir, extensions = String[])
         @test result == joinpath(test_dir, "test_file.csv")
     end
 
 
     @testset "Edge cases and error handling" begin
         # Test with empty vectors
-        result = eegfun.check_files_exist(String[])
+        result = EegFun.check_files_exist(String[])
         @test result == true  # Empty list should return true
 
 
         # Test find_file with empty filename
-        result = eegfun.find_file("", test_dir)
+        result = EegFun.find_file("", test_dir)
         @test result === nothing
 
         # Test get_files with empty directory
         empty_dir = mktempdir()
-        files = eegfun.get_files(empty_dir, ".*")
+        files = EegFun.get_files(empty_dir, ".*")
         @test isempty(files)
 
         # Clean up empty directory

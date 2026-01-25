@@ -1,9 +1,9 @@
 """
-Shared test utilities for eegfun.jl test suite
+Shared test utilities for EegFun.jl test suite
 """
 
 using DataFrames
-using eegfun
+using EegFun
 using Random
 
 function create_test_data(; n::Int = 2000, fs::Int = 1000, n_channels::Int = 3)
@@ -19,13 +19,13 @@ function create_test_data(; n::Int = 2000, fs::Int = 1000, n_channels::Int = 3)
     end
 
     # just fake layout
-    layout = eegfun.Layout(
+    layout = EegFun.Layout(
         DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
         nothing,
         nothing,
     )
 
-    dat = eegfun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
+    dat = EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo())
     return dat
 end
 
@@ -47,17 +47,17 @@ function create_test_epoch_data(;
     channel_labels = [Symbol("Ch$i") for i = 1:n_channels]
 
     # Create layout (same for all conditions)
-    layout = eegfun.Layout(
+    layout = EegFun.Layout(
         DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
         nothing,
         nothing,
     )
 
     # Create analysis info
-    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+    analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 
     # Create EpochData for each condition
-    condition_data = eegfun.EpochData[]
+    condition_data = EegFun.EpochData[]
     for condition in conditions
         dfs = DataFrame[]
         for epoch = 1:n_epochs
@@ -75,7 +75,7 @@ function create_test_epoch_data(;
 
         push!(
             condition_data,
-            eegfun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, analysis_info),
+            EegFun.EpochData("test_data", condition, "condition_$(condition)", dfs, layout, fs, analysis_info),
         )
     end
 
@@ -107,22 +107,22 @@ function create_test_erp_data(participant::Int, condition::Int; fs::Int = 1000, 
     end
 
     # Create layout
-    layout = eegfun.Layout(
+    layout = EegFun.Layout(
         DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
         nothing,
         nothing,
     )
 
     # Create analysis info
-    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+    analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 
-    return eegfun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, analysis_info, 10)
+    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, fs, analysis_info, 10)
 end
 
 
 # Helper function to create test ERP data for batch processing
 function create_batch_test_erp_data(n_conditions::Int = 2; fs::Int = 1000, n_channels::Int = 3)
-    erps = eegfun.ErpData[]
+    erps = EegFun.ErpData[]
     for cond = 1:n_conditions
         erp_data = create_test_erp_data(1, cond, fs = fs, n_channels = n_channels)
         push!(erps, erp_data)
@@ -192,16 +192,16 @@ function create_test_epoch_data_with_rt(
     end
 
     # Create layout
-    layout = eegfun.Layout(
+    layout = EegFun.Layout(
         DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels))),
         nothing,
         nothing,
     )
 
     # Create analysis info
-    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+    analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 
-    return eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, 1000, analysis_info)
+    return EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, 1000, analysis_info)
 end
 
 # Helper function to create continuous data with triggers
@@ -227,8 +227,8 @@ function create_test_continuous_data_with_triggers(; n::Int = 1000, fs::Int = 10
     triggers[950:952] .= [1, 2, 3]  # Consecutive sequence [1,2,3] after trigger 9
 
     df = DataFrame(time = t, triggers = triggers, A = x)
-    layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
-    dat = eegfun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, eegfun.AnalysisInfo())
+    layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+    dat = EegFun.ContinuousData("test_data", copy(df, copycols = true), layout, fs, EegFun.AnalysisInfo())
     return dat
 end
 
@@ -241,9 +241,9 @@ function create_empty_trigger_data(; n_samples::Int = 1000, fs::Int = 1000)
     df = DataFrame(time = time, triggers = triggers, channel1 = randn(n_samples), channel2 = randn(n_samples))
 
     layout =
-        eegfun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
+        EegFun.Layout(DataFrame(label = [:channel1, :channel2], inc = [0.0, 90.0], azi = [0.0, 0.0]), nothing, nothing)
 
-    dat = eegfun.ContinuousData("test_data", df, layout, fs, eegfun.AnalysisInfo())
+    dat = EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo())
     return dat
 end
 
@@ -279,13 +279,13 @@ function create_test_lrp_erp(participant::Int, condition::Int, n_timepoints::Int
     channel_labels = [:C3, :C4, :C1, :C2, :Fp1, :Fp2, :Fz]
     layout_df =
         DataFrame(label = channel_labels, inc = zeros(length(channel_labels)), azi = zeros(length(channel_labels)))
-    layout = eegfun.Layout(layout_df, nothing, nothing)
+    layout = EegFun.Layout(layout_df, nothing, nothing)
 
     # Create AnalysisInfo
-    analysis_info = eegfun.AnalysisInfo()
+    analysis_info = EegFun.AnalysisInfo()
 
     # Create ErpData
-    return eegfun.ErpData("test_data", condition, "condition_$condition", df, layout, 250, analysis_info, 10)
+    return EegFun.ErpData("test_data", condition, "condition_$condition", df, layout, 250, analysis_info, 10)
 end
 
 
@@ -330,7 +330,7 @@ function create_test_layout(; n_channels::Int = 4, layout_type::Symbol = :grid)
         error("Unknown layout_type: $layout_type")
     end
 
-    return eegfun.Layout(layout_data, nothing, nothing)
+    return EegFun.Layout(layout_data, nothing, nothing)
 end
 
 # Helper functions for creating test summary data
@@ -388,13 +388,13 @@ function create_epoch_test_data()
 
     # Create layout
     layout =
-        eegfun.Layout(DataFrame(label = [:A, :B, :C], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
+        EegFun.Layout(DataFrame(label = [:A, :B, :C], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
 
     # Create analysis info
-    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+    analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 
     # Create EpochData
-    return eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, 1000, analysis_info)
+    return EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, 1000, analysis_info)
 end
 
 """
@@ -459,7 +459,7 @@ function create_test_epochs_with_artifacts(
     end
 
     # Create layout
-    layout = eegfun.Layout(
+    layout = EegFun.Layout(
         DataFrame(
             label = [Symbol("Ch$i") for i = 1:n_channels],
             inc = fill(0.0, n_channels),
@@ -470,10 +470,10 @@ function create_test_epochs_with_artifacts(
     )
 
     # Create analysis info
-    analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+    analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 
     # Create EpochData
-    epoch_data = eegfun.EpochData("test_data", condition, "condition_$condition", dfs, layout, 1000, analysis_info)
+    epoch_data = EegFun.EpochData("test_data", condition, "condition_$condition", dfs, layout, 1000, analysis_info)
 
     return epoch_data, bad_indices
 end

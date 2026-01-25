@@ -18,7 +18,7 @@ end
 
 
 """
-    get_package_version(; package_name::String = "eegfun")
+    get_package_version(; package_name::String = "EegFun")
 
 Get the package version from Project.toml.
 
@@ -28,7 +28,7 @@ from the package root.
 # Returns
 - `String`: The version string from Project.toml, or "unknown" if not available/problem
 """
-function get_package_version(; package_name::String = "eegfun")
+function get_package_version(; package_name::String = "EegFun")
     try
         pkg_path = Base.find_package(package_name)
         version = "unknown"
@@ -75,7 +75,7 @@ function print_config(config, io::IO = stdout)
     # Always add fresh metadata first
     config_with_meta["metadata"] = OrderedDict(
         "julia_version" => string(VERSION),
-        "eegfun_version" => get_package_version(package_name = "eegfun"),
+        "EegFun_version" => get_package_version(package_name = "EegFun"),
         "date" => string(now()),
     )
 
@@ -97,13 +97,13 @@ function print_config(config, filename::String)
 end
 
 """
-    eegfun_version_info() -> Dict{String,Any}
+    EegFun_version_info() -> Dict{String,Any}
 
 Get comprehensive version information for logging purposes.
 
 This function returns a dictionary containing:
 - `julia_version`: Julia version
-- `eegfun_version`: EEGfun package version
+- `EegFun_version`: EEGfun package version
 - `git_commit`: Git commit hash (if available)
 - `timestamp`: Current timestamp
 
@@ -113,24 +113,24 @@ This function returns a dictionary containing:
 # Examples
 ```julia
 # Get version info for logging
-ver_info = eegfun_version_info()
+ver_info = EegFun_version_info()
 @info "Starting analysis" ver_info...
 
 # Log specific fields
-ver_info = eegfun_version_info()
-@info "Running eegfun \$(ver_info["eegfun_version"]) on Julia \$(ver_info["julia_version"])"
+ver_info = EegFun_version_info()
+@info "Running EegFun \$(ver_info["EegFun_version"]) on Julia \$(ver_info["julia_version"])"
 
 # Write to log file
-ver_info = eegfun_version_info()
+ver_info = EegFun_version_info()
 open("analysis.log", "a") do io
-    println(io, "Version: \$(ver_info["eegfun_version"]), Commit: \$(ver_info["git_commit"])")
+    println(io, "Version: \$(ver_info["EegFun_version"]), Commit: \$(ver_info["git_commit"])")
 end
 ```
 """
-function eegfun_version_info()
+function EegFun_version_info()
     return Dict{String,Any}(
         "julia_version" => string(VERSION),
-        "eegfun_version" => get_package_version(package_name = "eegfun"),
+        "EegFun_version" => get_package_version(package_name = "EegFun"),
         "timestamp" => string(now()),
     )
 end

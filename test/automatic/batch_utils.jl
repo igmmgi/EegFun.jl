@@ -19,7 +19,7 @@ using Logging
 
     @testset "BatchResult struct" begin
         # Test BatchResult creation and access
-        result = eegfun.BatchResult(true, "test_file.jld2", "Success message")
+        result = EegFun.BatchResult(true, "test_file.jld2", "Success message")
 
         @test result.success == true
         @test result.filename == "test_file.jld2"
@@ -29,7 +29,7 @@ using Logging
         @test_throws ErrorException result.success = false
 
         # Test with false success
-        result_fail = eegfun.BatchResult(false, "error.jld2", "Error message")
+        result_fail = EegFun.BatchResult(false, "error.jld2", "Error message")
         @test result_fail.success == false
         @test result_fail.filename == "error.jld2"
         @test result_fail.message == "Error message"
@@ -37,7 +37,7 @@ using Logging
 
     @testset "BatchConfig struct" begin
         # Test BatchConfig creation and access
-        config = eegfun.BatchConfig("test_pattern", "/input", "/output", [1, 2], [1, 2])
+        config = EegFun.BatchConfig("test_pattern", "/input", "/output", [1, 2], [1, 2])
 
         @test config.file_pattern == "test_pattern"
         @test config.input_dir == "/input"
@@ -46,12 +46,12 @@ using Logging
         @test config.conditions == [1, 2]
 
         # Test with nothing values
-        config_nothing = eegfun.BatchConfig("test", "/input", "/output", nothing, nothing)
+        config_nothing = EegFun.BatchConfig("test", "/input", "/output", nothing, nothing)
         @test config_nothing.participants === nothing
         @test config_nothing.conditions === nothing
 
         # Test with single Int
-        config_single = eegfun.BatchConfig("test", "/input", "/output", 1, 1)
+        config_single = EegFun.BatchConfig("test", "/input", "/output", 1, 1)
         @test config_single.participants == 1
         @test config_single.conditions == 1
     end
@@ -72,35 +72,35 @@ using Logging
         end
 
         # Test basic file finding
-        files = eegfun._find_batch_files("erps_cleaned", test_dir)
+        files = EegFun._find_batch_files("erps_cleaned", test_dir)
         @test length(files) == 5
         @test all(endswith.(files, ".jld2"))
         @test all(contains.(files, "erps_cleaned"))
 
         # Test participant filtering
-        files_filtered = eegfun._find_batch_files("erps_cleaned", test_dir, eegfun.participants([1, 3, 5]))
+        files_filtered = EegFun._find_batch_files("erps_cleaned", test_dir, EegFun.participants([1, 3, 5]))
         @test length(files_filtered) == 3
         @test "1_erps_cleaned.jld2" in files_filtered
         @test "3_erps_cleaned.jld2" in files_filtered
         @test "5_erps_cleaned.jld2" in files_filtered
 
         # Test single participant
-        files_single = eegfun._find_batch_files("erps_cleaned", test_dir, eegfun.participants(2))
+        files_single = EegFun._find_batch_files("erps_cleaned", test_dir, EegFun.participants(2))
         @test length(files_single) == 1
         @test "2_erps_cleaned.jld2" in files_single
 
         # Test no participants (should return all)
-        files_all = eegfun._find_batch_files("erps_cleaned", test_dir, nothing)
+        files_all = EegFun._find_batch_files("erps_cleaned", test_dir, nothing)
         @test length(files_all) == 5
 
         # Test non-matching pattern
-        files_none = eegfun._find_batch_files("nonexistent", test_dir)
+        files_none = EegFun._find_batch_files("nonexistent", test_dir)
         @test isempty(files_none)
 
         # Test with empty directory
         empty_dir = joinpath(test_dir, "empty")
         mkpath(empty_dir)
-        files_empty = eegfun._find_batch_files("pattern", empty_dir)
+        files_empty = EegFun._find_batch_files("pattern", empty_dir)
         @test isempty(files_empty)
     end
 
@@ -109,48 +109,48 @@ using Logging
         data = [create_test_erp_data(1, i) for i = 1:5]
 
         # Test with nothing (should return original)
-        result = eegfun._condition_select(data, nothing)
+        result = EegFun._condition_select(data, nothing)
         @test result == data
 
         # Test with single condition (Int)
-        result = eegfun._condition_select(data, 3)
+        result = EegFun._condition_select(data, 3)
         @test length(result) == 1
         @test result[1] == data[3]
 
         # Test with multiple conditions (Vector{Int})
-        result = eegfun._condition_select(data, [1, 3, 5])
+        result = EegFun._condition_select(data, [1, 3, 5])
         @test length(result) == 3
         @test result[1] == data[1]
         @test result[2] == data[3]
         @test result[3] == data[5]
 
         # Test with empty selection
-        result = eegfun._condition_select(data, Int[])
+        result = EegFun._condition_select(data, Int[])
         @test isempty(result)
 
         # Test with empty data
-        result = eegfun._condition_select([], [1, 2])
+        result = EegFun._condition_select([], [1, 2])
         @test isempty(result)
 
         # Test with empty data and nothing
-        result = eegfun._condition_select([], nothing)
+        result = EegFun._condition_select([], nothing)
         @test isempty(result)
     end
 
     @testset "_validate_input_dir" begin
         # Test existing directory
-        result = eegfun._validate_input_dir(test_dir)
+        result = EegFun._validate_input_dir(test_dir)
         @test result === nothing
 
         # Test non-existent directory
-        result = eegfun._validate_input_dir("/nonexistent/directory")
+        result = EegFun._validate_input_dir("/nonexistent/directory")
         @test result isa String
         @test occursin("does not exist", result)
 
         # Test file instead of directory
         test_file = joinpath(test_dir, "test_file.txt")
         write(test_file, "test")
-        result = eegfun._validate_input_dir(test_file)
+        result = EegFun._validate_input_dir(test_file)
         @test result isa String
         @test occursin("does not exist", result)
     end
@@ -158,106 +158,106 @@ using Logging
     @testset "_validate_channel_groups" begin
         # Test valid channel groups
         groups = [[:Fz, :Cz], [:Pz, :Oz], [:M1, :M2]]
-        result = eegfun._validate_channel_groups(groups)
+        result = EegFun._validate_channel_groups(groups)
         @test result === nothing
 
         # Test empty groups
-        result = eegfun._validate_channel_groups(Vector{Symbol}[])
+        result = EegFun._validate_channel_groups(Vector{Symbol}[])
         @test result isa String
         @test occursin("cannot be empty", result)
 
         # Test empty group
-        result = eegfun._validate_channel_groups([Symbol[]])
+        result = EegFun._validate_channel_groups([Symbol[]])
         @test result isa String
         @test occursin("Channel group 1 is empty", result)
 
         # Test single channel group (should warn but not error)
         groups_single = [[:Fz], [:Cz, :Pz]]
-        result = eegfun._validate_channel_groups(groups_single)
+        result = EegFun._validate_channel_groups(groups_single)
         @test result === nothing  # Should not error, just warn
 
         # Test multiple single-channel groups
         groups_multi_single = [[:Fz], [:Cz], [:Pz]]
-        result = eegfun._validate_channel_groups(groups_multi_single)
+        result = EegFun._validate_channel_groups(groups_multi_single)
         @test result === nothing  # Should warn but not error
 
         # Test large groups
         groups_large = [[:Fz, :Cz, :Pz, :Oz, :M1, :M2]]
-        result = eegfun._validate_channel_groups(groups_large)
+        result = EegFun._validate_channel_groups(groups_large)
         @test result === nothing
     end
 
     @testset "_validate_condition_groups" begin
         # Test valid condition groups
         groups = [[1, 2], [3, 4], [5, 6]]
-        result = eegfun._validate_condition_groups(groups)
+        result = EegFun._validate_condition_groups(groups)
         @test result === nothing
 
         # Test empty groups
-        result = eegfun._validate_condition_groups(Vector{Int}[])
+        result = EegFun._validate_condition_groups(Vector{Int}[])
         @test result isa String
         @test occursin("cannot be empty", result)
 
         # Test duplicate removal
         groups_with_duplicates = [[1, 1, 2], [3, 4]]
         groups_copy = deepcopy(groups_with_duplicates)
-        result = eegfun._validate_condition_groups(groups_copy)
+        result = EegFun._validate_condition_groups(groups_copy)
         @test result === nothing
         @test groups_copy[1] == [1, 2]  # Duplicates should be removed
 
         # Test multiple duplicates
         groups_multi_dup = [[1, 1, 1, 2, 2], [3, 4]]
         groups_copy2 = deepcopy(groups_multi_dup)
-        result = eegfun._validate_condition_groups(groups_copy2)
+        result = EegFun._validate_condition_groups(groups_copy2)
         @test result === nothing
         @test groups_copy2[1] == [1, 2]  # All duplicates removed
 
         # Test overlap detection (should warn but not error)
         groups_overlap = [[1, 2], [2, 3]]
         groups_copy3 = deepcopy(groups_overlap)
-        result = eegfun._validate_condition_groups(groups_copy3)
+        result = EegFun._validate_condition_groups(groups_copy3)
         @test result === nothing  # Should warn but not error
 
         # Test multiple overlaps
         groups_multi_overlap = [[1, 2], [2, 3], [3, 4]]
         groups_copy4 = deepcopy(groups_multi_overlap)
-        result = eegfun._validate_condition_groups(groups_copy4)
+        result = EegFun._validate_condition_groups(groups_copy4)
         @test result === nothing
 
         # Test single condition groups
         groups_single = [[1], [2], [3]]
-        result = eegfun._validate_condition_groups(groups_single)
+        result = EegFun._validate_condition_groups(groups_single)
         @test result === nothing
     end
 
     @testset "_validate_condition_pairs" begin
         # Test valid condition pairs (tuples)
         pairs_tuples = [(1, 2), (3, 4), (5, 6)]
-        result = eegfun._validate_condition_pairs(pairs_tuples)
+        result = EegFun._validate_condition_pairs(pairs_tuples)
         @test result === nothing
 
         # Test valid condition pairs (vectors)
         pairs_vectors = [[1, 2], [3, 4], [5, 6]]
-        result = eegfun._validate_condition_pairs(pairs_vectors)
+        result = EegFun._validate_condition_pairs(pairs_vectors)
         @test result === nothing
 
         # Test empty pairs
-        result = eegfun._validate_condition_pairs(Tuple{Int,Int}[])
+        result = EegFun._validate_condition_pairs(Tuple{Int,Int}[])
         @test result isa String
         @test occursin("cannot be empty", result)
 
-        result = eegfun._validate_condition_pairs(Vector{Int}[])
+        result = EegFun._validate_condition_pairs(Vector{Int}[])
         @test result isa String
         @test occursin("cannot be empty", result)
 
         # Test identical conditions (should warn but not error)
         pairs_identical = [(1, 1), (2, 3)]
-        result = eegfun._validate_condition_pairs(pairs_identical)
+        result = EegFun._validate_condition_pairs(pairs_identical)
         @test result === nothing  # Should warn but not error
 
         # Test multiple identical pairs
         pairs_multi_identical = [(1, 1), (2, 2), (3, 3)]
-        result = eegfun._validate_condition_pairs(pairs_multi_identical)
+        result = EegFun._validate_condition_pairs(pairs_multi_identical)
         @test result === nothing
 
         # Test mixed tuples and vectors (should error at type level, but test what we can)
@@ -278,16 +278,16 @@ using Logging
         process_fn =
             (input_path, output_path) -> begin
                 if basename(input_path) == "test_2.jld2"
-                    return eegfun.BatchResult(false, basename(input_path), "Simulated error")
+                    return EegFun.BatchResult(false, basename(input_path), "Simulated error")
                 else
-                    return eegfun.BatchResult(true, basename(input_path), "Success")
+                    return EegFun.BatchResult(true, basename(input_path), "Success")
                 end
             end
 
         output_dir = joinpath(test_dir, "batch_output")
         mkpath(output_dir)
 
-        results = eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+        results = EegFun._run_batch_operation(process_fn, files, test_dir, output_dir)
 
         @test length(results) == 3
         @test results[1].success == true
@@ -300,7 +300,7 @@ using Logging
         # Test error handling
         error_process_fn = (input_path, output_path) -> error("Test error")
 
-        results_error = eegfun._run_batch_operation(error_process_fn, files[1:1], test_dir, output_dir)
+        results_error = EegFun._run_batch_operation(error_process_fn, files[1:1], test_dir, output_dir)
 
         @test length(results_error) == 1
         @test results_error[1].success == false
@@ -308,11 +308,11 @@ using Logging
         @test occursin("Test error", results_error[1].message)
 
         # Test with empty file list
-        results_empty = eegfun._run_batch_operation(process_fn, String[], test_dir, output_dir)
+        results_empty = EegFun._run_batch_operation(process_fn, String[], test_dir, output_dir)
         @test isempty(results_empty)
 
         # Test with custom operation name
-        results_custom = eegfun._run_batch_operation(
+        results_custom = EegFun._run_batch_operation(
             process_fn,
             files[1:1],
             test_dir,
@@ -324,53 +324,53 @@ using Logging
 
     @testset "_log_batch_summary" begin
         # Test with mixed results
-        results = Vector{eegfun.BatchResult}([
-            eegfun.BatchResult(true, "file1.jld2", "Success"),
-            eegfun.BatchResult(false, "file2.jld2", "Error"),
-            eegfun.BatchResult(true, "file3.jld2", "Success"),
+        results = Vector{EegFun.BatchResult}([
+            EegFun.BatchResult(true, "file1.jld2", "Success"),
+            EegFun.BatchResult(false, "file2.jld2", "Error"),
+            EegFun.BatchResult(true, "file3.jld2", "Success"),
         ])
 
         output_dir = joinpath(test_dir, "summary_test")
         mkpath(output_dir)
 
-        summary = eegfun._log_batch_summary(results, output_dir)
+        summary = EegFun._log_batch_summary(results, output_dir)
 
         @test summary.success == 2
         @test summary.errors == 1
 
         # Test with all successes
-        results_all_success = Vector{eegfun.BatchResult}([
-            eegfun.BatchResult(true, "file1.jld2", "Success"),
-            eegfun.BatchResult(true, "file2.jld2", "Success"),
+        results_all_success = Vector{EegFun.BatchResult}([
+            EegFun.BatchResult(true, "file1.jld2", "Success"),
+            EegFun.BatchResult(true, "file2.jld2", "Success"),
         ])
-        summary_all = eegfun._log_batch_summary(results_all_success, output_dir)
+        summary_all = EegFun._log_batch_summary(results_all_success, output_dir)
         @test summary_all.success == 2
         @test summary_all.errors == 0
 
         # Test with all errors
-        results_all_error = Vector{eegfun.BatchResult}([
-            eegfun.BatchResult(false, "file1.jld2", "Error 1"),
-            eegfun.BatchResult(false, "file2.jld2", "Error 2"),
+        results_all_error = Vector{EegFun.BatchResult}([
+            EegFun.BatchResult(false, "file1.jld2", "Error 1"),
+            EegFun.BatchResult(false, "file2.jld2", "Error 2"),
         ])
-        summary_all_error = eegfun._log_batch_summary(results_all_error, output_dir)
+        summary_all_error = EegFun._log_batch_summary(results_all_error, output_dir)
         @test summary_all_error.success == 0
         @test summary_all_error.errors == 2
 
         # Test with empty results
-        summary_empty = eegfun._log_batch_summary(Vector{eegfun.BatchResult}(), output_dir)
+        summary_empty = EegFun._log_batch_summary(Vector{EegFun.BatchResult}(), output_dir)
         @test summary_empty.success == 0
         @test summary_empty.errors == 0
     end
 
     @testset "_cleanup_logging" begin
         # Test cleanup without output directory
-        eegfun._cleanup_logging("nonexistent.log", nothing)
+        EegFun._cleanup_logging("nonexistent.log", nothing)
         # Should not throw error
 
         # Test cleanup with existing log file
         log_file = joinpath(test_dir, "test.log")
         write(log_file, "test log content")
-        eegfun._cleanup_logging(log_file, test_dir)
+        EegFun._cleanup_logging(log_file, test_dir)
         # Should not throw error
 
         # Test cleanup with output directory
@@ -382,7 +382,7 @@ using Logging
         write(log_file, "Test log content")
         push!(created_log_files, log_file)
 
-        eegfun._cleanup_logging(log_file, output_dir)
+        EegFun._cleanup_logging(log_file, output_dir)
 
         # Check if log file was moved
         moved_log = joinpath(output_dir, "test_cleanup.log")
@@ -398,7 +398,7 @@ using Logging
         # Test cleanup when log file and destination are the same
         log_file_same = joinpath(output_dir, "same.log")
         write(log_file_same, "Same file")
-        eegfun._cleanup_logging(log_file_same, output_dir)
+        EegFun._cleanup_logging(log_file_same, output_dir)
         @test isfile(log_file_same)  # Should still exist (not moved to itself)
     end
 
@@ -406,7 +406,7 @@ using Logging
     @testset "@log_call macro" begin
         # Test @log_call with function name only (current simplified form)
         function test_func1(x, y; opt1 = 1, opt2 = "test")
-            eegfun.@log_call "test_func1"
+            EegFun.@log_call "test_func1"
             return x + y + opt1
         end
 
@@ -416,7 +416,7 @@ using Logging
 
         # Test @log_call with different function name
         function test_func2(x, y, z; opt1 = 1)
-            eegfun.@log_call "test_func2"
+            EegFun.@log_call "test_func2"
             return x + y + z + opt1
         end
 
@@ -425,7 +425,7 @@ using Logging
 
         # Test @log_call in function with single arg
         function test_func3(x; opt1 = 1)
-            eegfun.@log_call "test_func3"
+            EegFun.@log_call "test_func3"
             return x + opt1
         end
 
@@ -434,7 +434,7 @@ using Logging
 
         # Test @log_call in function with no positional args
         function test_func4(; opt1 = 1, opt2 = "test")
-            eegfun.@log_call "test_func4"
+            EegFun.@log_call "test_func4"
             return opt1
         end
 
@@ -446,35 +446,35 @@ using Logging
     @testset "Edge cases and error handling" begin
         @testset "File system edge cases" begin
             # Test with non-existent directory
-            @test_throws Base.IOError eegfun._find_batch_files("pattern", "/nonexistent")
+            @test_throws Base.IOError EegFun._find_batch_files("pattern", "/nonexistent")
 
             # Test with file instead of directory
             test_file = joinpath(test_dir, "test_file.txt")
             write(test_file, "test")
-            @test_throws Base.IOError eegfun._find_batch_files("pattern", test_file)
+            @test_throws Base.IOError EegFun._find_batch_files("pattern", test_file)
         end
 
         @testset "Data validation edge cases" begin
             # Test with very large condition numbers
             groups_large = [[1000, 2000], [3000, 4000]]
-            result = eegfun._validate_condition_groups(groups_large)
+            result = EegFun._validate_condition_groups(groups_large)
             @test result === nothing
 
             # Test with negative condition numbers
             groups_negative = [[-1, 1], [2, 3]]
-            result = eegfun._validate_condition_groups(groups_negative)
+            result = EegFun._validate_condition_groups(groups_negative)
             @test result === nothing  # Should not error, just process
 
             # Test with zero
             groups_zero = [[0, 1], [2, 3]]
-            result = eegfun._validate_condition_groups(groups_zero)
+            result = EegFun._validate_condition_groups(groups_zero)
             @test result === nothing
         end
 
         @testset "Batch operation edge cases" begin
             # Test with empty file list (use NullLogger to avoid stream issues)
             results = with_logger(NullLogger()) do
-                eegfun._run_batch_operation((x, y) -> eegfun.BatchResult(true, "test", "ok"), String[], test_dir, test_dir)
+                EegFun._run_batch_operation((x, y) -> EegFun.BatchResult(true, "test", "ok"), String[], test_dir, test_dir)
             end
             @test isempty(results)
 
@@ -486,8 +486,8 @@ using Logging
 
             files_long = [long_filename]
             results_long = with_logger(NullLogger()) do
-                eegfun._run_batch_operation(
-                    (x, y) -> eegfun.BatchResult(true, basename(x), "Success"),
+                EegFun._run_batch_operation(
+                    (x, y) -> EegFun.BatchResult(true, basename(x), "Success"),
                     files_long,
                     test_dir,
                     test_dir,
@@ -501,13 +501,13 @@ using Logging
             data = [create_test_erp_data(1, i) for i = 1:5]
 
             # Test with out-of-bounds indices (throws BoundsError for indices > length)
-            @test_throws BoundsError eegfun._condition_select(data, [10])
+            @test_throws BoundsError EegFun._condition_select(data, [10])
 
             # Test with negative indices (throws BoundsError from array indexing)
-            @test_throws BoundsError eegfun._condition_select(data, [-1])
+            @test_throws BoundsError EegFun._condition_select(data, [-1])
 
             # Test with zero index (throws BoundsError from array indexing)
-            @test_throws BoundsError eegfun._condition_select(data, [0])
+            @test_throws BoundsError EegFun._condition_select(data, [0])
         end
     end
 
@@ -521,21 +521,21 @@ using Logging
             end
 
             # Test complete workflow
-            files = eegfun._find_batch_files("test_erps", test_dir)
+            files = EegFun._find_batch_files("test_erps", test_dir)
             @test length(files) == 3
 
             # Validate input directory
-            validation = eegfun._validate_input_dir(test_dir)
+            validation = EegFun._validate_input_dir(test_dir)
             @test validation === nothing
 
             # Process files
             process_fn =
                 (input_path, output_path) -> begin
-                    data_result = eegfun.load_data(input_path)
+                    data_result = EegFun.load_data(input_path)
                     if isnothing(data_result)
-                        return eegfun.BatchResult(false, basename(input_path), "No data")
+                        return EegFun.BatchResult(false, basename(input_path), "No data")
                     end
-                    return eegfun.BatchResult(true, basename(input_path), "Processed")
+                    return EegFun.BatchResult(true, basename(input_path), "Processed")
                 end
 
             output_dir = joinpath(test_dir, "integration_output")
@@ -543,14 +543,14 @@ using Logging
 
             # Use NullLogger to avoid stream initialization issues during tests
             results = with_logger(NullLogger()) do
-                eegfun._run_batch_operation(process_fn, files, test_dir, output_dir)
+                EegFun._run_batch_operation(process_fn, files, test_dir, output_dir)
             end
             @test length(results) == 3
             @test all(r.success for r in results)
 
             # Log summary (also with NullLogger)
             summary = with_logger(NullLogger()) do
-                eegfun._log_batch_summary(results, output_dir)
+                EegFun._log_batch_summary(results, output_dir)
             end
             @test summary.success == 3
             @test summary.errors == 0
@@ -568,7 +568,7 @@ using Logging
         end
 
     # Close any open global logging and restore initial logger
-    safe_cleanup(() -> eegfun.close_global_logging())
+    safe_cleanup(() -> EegFun.close_global_logging())
     global_logger(initial_logger)
 
     # Clean up log files created in current directory

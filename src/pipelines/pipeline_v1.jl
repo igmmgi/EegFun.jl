@@ -166,15 +166,15 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
 
                 # Calculate correlations between all channels and EOG channels
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix")
-                hEOG_vEOG_cm = eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog)
-                eegfun.add_zscore_columns!(hEOG_vEOG_cm)
+                hEOG_vEOG_cm = EegFun.correlation_matrix_eog(dat, preprocess_cfg.eog)
+                EegFun.add_zscore_columns!(hEOG_vEOG_cm)
                 log_pretty_table(hEOG_vEOG_cm; title = "Channel x vEOG/hEOG Correlation Matrix (whole dataset)")
 
                 # Calculate correlations between all channels and EOG channels (epoch window)
                 @info subsection("Channel x vEOG/hEOG Correlation Matrix (epoch window)")
                 hEOG_vEOG_cm_epoch =
-                    eegfun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
-                eegfun.add_zscore_columns!(hEOG_vEOG_cm_epoch)
+                    EegFun.correlation_matrix_eog(dat, preprocess_cfg.eog; sample_selection = samples(:epoch_window))
+                EegFun.add_zscore_columns!(hEOG_vEOG_cm_epoch)
                 log_pretty_table(hEOG_vEOG_cm_epoch; title = "Channel x vEOG/hEOG Correlation Matrix (epoch window)")
 
                 #################### INITIAL EPOCH and ERP EXTRACTION ###################

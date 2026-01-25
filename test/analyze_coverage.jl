@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 """
-Coverage Analysis Script for eegfun
+Coverage Analysis Script for EegFun
 
 This script provides various coverage analysis functions that can be run
 individually or as a complete workflow.

@@ -1,7 +1,7 @@
 using Test
 
 # Import the package
-using eegfun
+using EegFun
 
 # Include shared test utilities first
 include("test_utils.jl")
@@ -14,10 +14,10 @@ if Base.JLOptions().code_coverage != 0
     Coverage.clean_folder(@__DIR__)
 end
 
-println("Running eegfun.jl Test Suite")
+println("Running EegFun.jl Test Suite")
 println("="^40)
 
-@testset "eegfun" begin
+@testset "EegFun" begin
 
     include("automatic/apply.jl")
     include("automatic/artifact_detection.jl")

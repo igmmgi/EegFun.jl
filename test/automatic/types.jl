@@ -1,25 +1,25 @@
 using Test
 using DataFrames
 using OrderedCollections
-using eegfun
+using EegFun
 
 @testset "Type Definitions and Display Functions" begin
     @testset "Abstract Types" begin
         # Test that abstract types are properly defined
-        @test eegfun.EegData isa Type
-        @test eegfun.SingleDataFrameEeg <: eegfun.EegData
-        @test eegfun.MultiDataFrameEeg <: eegfun.EegData
+        @test EegFun.EegData isa Type
+        @test EegFun.SingleDataFrameEeg <: EegFun.EegData
+        @test EegFun.MultiDataFrameEeg <: EegFun.EegData
     end
 
     @testset "AnalysisInfo" begin
         # Test default constructor
-        info = eegfun.AnalysisInfo()
+        info = EegFun.AnalysisInfo()
         @test info.reference == :none
         @test info.hp_filter == 0.0
         @test info.lp_filter == 0.0
 
         # Test keyword constructor
-        info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
+        info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
         @test info.reference == :avg
         @test info.hp_filter == 0.1
         @test info.lp_filter == 30.0
@@ -31,7 +31,7 @@ using eegfun
 
     @testset "Neighbours" begin
         # Test constructor
-        neighbours = eegfun.Neighbours([:Fz, :Cz], [10.0, 15.0], [0.5, 0.5])
+        neighbours = EegFun.Neighbours([:Fz, :Cz], [10.0, 15.0], [0.5, 0.5])
         @test neighbours.channels == [:Fz, :Cz]
         @test neighbours.distances == [10.0, 15.0]
         @test neighbours.weights == [0.5, 0.5]
@@ -45,7 +45,7 @@ using eegfun
         df = DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
 
         # Test constructor
-        layout = eegfun.Layout(df, nothing, nothing)
+        layout = EegFun.Layout(df, nothing, nothing)
         @test layout.data == df
         @test layout.neighbours === nothing
         @test layout.criterion === nothing
@@ -55,9 +55,9 @@ using eegfun
         @test layout.criterion == 50.0
 
         # Test with neighbours
-        neighbours_dict = OrderedDict{Symbol,eegfun.Neighbours}()
-        neighbours_dict[:Fz] = eegfun.Neighbours([:Cz], [10.0], [1.0])
-        layout_with_neighbours = eegfun.Layout(df, neighbours_dict, 50.0)
+        neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
+        neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
+        layout_with_neighbours = EegFun.Layout(df, neighbours_dict, 50.0)
         @test layout_with_neighbours.neighbours == neighbours_dict
         @test layout_with_neighbours.criterion == 50.0
     end
@@ -65,9 +65,9 @@ using eegfun
     @testset "Layout copy function" begin
         # Create test layout
         df = DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0])
-        neighbours_dict = OrderedDict{Symbol,eegfun.Neighbours}()
-        neighbours_dict[:Fz] = eegfun.Neighbours([:Cz], [10.0], [1.0])
-        layout = eegfun.Layout(df, neighbours_dict, 50.0)
+        neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
+        neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
+        layout = EegFun.Layout(df, neighbours_dict, 50.0)
 
         # Test copy
         copied = copy(layout)
@@ -83,29 +83,29 @@ using eegfun
     @testset "ContinuousData" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
-        continuous_data = eegfun.ContinuousData("test_data", df, layout, 250, analysis_info)
+        continuous_data = EegFun.ContinuousData("test_data", df, layout, 250, analysis_info)
         @test continuous_data.data == df
         @test continuous_data.layout == layout
         @test continuous_data.sample_rate == 250
         @test continuous_data.analysis_info == analysis_info
 
         # Test inheritance
-        @test continuous_data isa eegfun.SingleDataFrameEeg
-        @test continuous_data isa eegfun.EegData
+        @test continuous_data isa EegFun.SingleDataFrameEeg
+        @test continuous_data isa EegFun.EegData
     end
 
     @testset "ErpData" begin
         # Create test data
         df = DataFrame(time = [0.1, 0.2, 0.3], Fz = [1.0, 2.0, 3.0], Cz = [4.0, 5.0, 6.0])
-        layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
-        erp_data = eegfun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 10)
+        erp_data = EegFun.ErpData("test_data", 1, "condition_1", df, layout, 250, analysis_info, 10)
         @test erp_data.data == df
         @test erp_data.layout == layout
         @test erp_data.sample_rate == 250
@@ -113,32 +113,32 @@ using eegfun
         @test erp_data.n_epochs == 10
 
         # Test inheritance
-        @test erp_data isa eegfun.SingleDataFrameEeg
-        @test erp_data isa eegfun.EegData
+        @test erp_data isa EegFun.SingleDataFrameEeg
+        @test erp_data isa EegFun.EegData
     end
 
     @testset "EpochData" begin
         # Create test data
         epoch1 = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0], Cz = [3.0, 4.0])
         epoch2 = DataFrame(time = [0.1, 0.2], Fz = [5.0, 6.0], Cz = [7.0, 8.0])
-        layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        analysis_info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        analysis_info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
 
         # Test constructor
-        epoch_data = eegfun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = EegFun.EpochData("test_data", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
         @test epoch_data.data == [epoch1, epoch2]
         @test epoch_data.layout == layout
         @test epoch_data.sample_rate == 250
         @test epoch_data.analysis_info == analysis_info
 
         # Test inheritance
-        @test epoch_data isa eegfun.MultiDataFrameEeg
-        @test epoch_data isa eegfun.EegData
+        @test epoch_data isa EegFun.MultiDataFrameEeg
+        @test epoch_data isa EegFun.EegData
     end
 
     @testset "IntervalTime" begin
         # Test constructor
-        interval = eegfun.IntervalTime(start = 0.1, stop = 0.5)
+        interval = EegFun.IntervalTime(start = 0.1, stop = 0.5)
         @test interval.start == 0.1
         @test interval.stop == 0.5
 
@@ -148,7 +148,7 @@ using eegfun
 
     @testset "EpochCondition" begin
         # Test default constructor
-        condition = eegfun.EpochCondition(name = "test_condition", trigger_sequences = [[1, 2, 3]])
+        condition = EegFun.EpochCondition(name = "test_condition", trigger_sequences = [[1, 2, 3]])
         @test condition.name == "test_condition"
         @test condition.trigger_sequences == [[1, 2, 3]]
         @test condition.reference_index == 1
@@ -159,7 +159,7 @@ using eegfun
         @test condition.before === nothing
 
         # Test with all parameters
-        condition = eegfun.EpochCondition(
+        condition = EegFun.EpochCondition(
             name = "complex_condition",
             trigger_sequences = [[1, :any, 3], [1:5]],
             reference_index = 2,
@@ -181,7 +181,7 @@ using eegfun
 
     @testset "IntervalIndex" begin
         # Test constructor
-        interval = eegfun.IntervalIndex(start = 10, stop = 50)
+        interval = EegFun.IntervalIndex(start = 10, stop = 50)
         @test interval.start == 10
         @test interval.stop == 50
 
@@ -191,7 +191,7 @@ using eegfun
 
     @testset "IcaPrms" begin
         # Test constructor with all parameters
-        ica_params = eegfun.IcaPrms(
+        ica_params = EegFun.IcaPrms(
             0.001,  # l_rate
             1000,   # max_iter
             1e-6,   # w_change
@@ -233,11 +233,11 @@ using eegfun
         ica_label = [:IC1, :IC2]
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
         removed_activations[1] = [1.0 2.0; 3.0 4.0]
-        layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
         # Test constructor
         is_sub_gaussian = falses(2)  # All super-Gaussian for test (all false)
-        ica_info = eegfun.InfoIca(
+        ica_info = EegFun.InfoIca(
             "test_file.bdf",
             unmixing,
             mixing,
@@ -270,18 +270,18 @@ using eegfun
     @testset "Display functions" begin
         # Test Layout display
         df = DataFrame(label = [:Fz, :Cz, :Pz], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0])
-        layout = eegfun.Layout(df, nothing, nothing)
+        layout = EegFun.Layout(df, nothing, nothing)
 
         # Test that show doesn't throw errors
         @test_nowarn show(stdout, layout)
         @test_nowarn show(stdout, MIME"text/plain"(), layout)
 
         # Test AnalysisInfo display
-        info = eegfun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
+        info = EegFun.AnalysisInfo(reference = :avg, hp_filter = 0.1, lp_filter = 30.0)
         @test_nowarn show(stdout, info)
 
         # Test EegData display (skip due to dependency issues)
-        # continuous_data = eegfun.ContinuousData(df, layout, 250, info)
+        # continuous_data = EegFun.ContinuousData(df, layout, 250, info)
         # @test_nowarn show(stdout, continuous_data)
 
         # Test InfoIca display
@@ -291,7 +291,7 @@ using eegfun
         variance = [0.5, 0.3]
         ica_label = [:IC1, :IC2]
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
-        ica_info = eegfun.InfoIca(
+        ica_info = EegFun.InfoIca(
             "test_file.bdf",
             unmixing,
             mixing,
@@ -308,8 +308,8 @@ using eegfun
         @test_nowarn show(stdout, MIME"text/plain"(), ica_info)
 
         # Test Neighbours OrderedDict display
-        neighbours_dict = OrderedDict{Symbol,eegfun.Neighbours}()
-        neighbours_dict[:Fz] = eegfun.Neighbours([:Cz], [10.0], [1.0])
+        neighbours_dict = OrderedDict{Symbol,EegFun.Neighbours}()
+        neighbours_dict[:Fz] = EegFun.Neighbours([:Cz], [10.0], [1.0])
         @test_nowarn show(stdout, neighbours_dict)
         @test_nowarn show(stdout, MIME"text/plain"(), neighbours_dict)
     end
@@ -323,8 +323,8 @@ using eegfun
         ica_label = [:IC1, :IC2]
         removed_activations = OrderedDict{Int,Matrix{Float64}}()
         removed_activations[1] = [1.0 2.0; 3.0 4.0]
-        layout = eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-        ica_info = eegfun.InfoIca(
+        layout = EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+        ica_info = EegFun.InfoIca(
             "test_file.bdf",
             unmixing,
             mixing,
@@ -357,17 +357,17 @@ using eegfun
     @testset "Filename functions" begin
         # Test filename function for SingleDataFrameEeg
         df = DataFrame(time = [0.1, 0.2], Fz = [1.0, 2.0])
-        layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
-        analysis_info = eegfun.AnalysisInfo()
-        continuous_data = eegfun.ContinuousData("test_file.jld2", df, layout, 250, analysis_info)
+        layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
+        analysis_info = EegFun.AnalysisInfo()
+        continuous_data = EegFun.ContinuousData("test_file.jld2", df, layout, 250, analysis_info)
 
-        @test eegfun.filename(continuous_data) == "test_file.jld2"
+        @test EegFun.filename(continuous_data) == "test_file.jld2"
 
         # Test filename function for MultiDataFrameEeg
         epoch1 = DataFrame(time = [0.1], Fz = [1.0])
         epoch2 = DataFrame(time = [0.2], Fz = [2.0])
-        epoch_data = eegfun.EpochData("test_file.jld2", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
+        epoch_data = EegFun.EpochData("test_file.jld2", 1, "condition_1", [epoch1, epoch2], layout, 250, analysis_info)
 
-        @test eegfun.filename(epoch_data) == "test_file.jld2"
+        @test EegFun.filename(epoch_data) == "test_file.jld2"
     end
 end

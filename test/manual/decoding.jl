@@ -1,4 +1,4 @@
-using eegfun
+using EegFun
 using DataFrames
 using Random
 using BenchmarkTools
@@ -25,7 +25,7 @@ sample_rate = 1000
 channels = [:Fz, :Cz, :Pz, :POz]  # 4 channels for MVPA
 
 # Create layout (must match channel names exactly)
-layout = eegfun.Layout(
+layout = EegFun.Layout(
     DataFrame(
         label = channels,  # [:Fz, :Cz, :Pz, :POz]
         inc = [90.0, 0.0, -90.0, -90.0],  # Rough positions
@@ -35,7 +35,7 @@ layout = eegfun.Layout(
     nothing,
 )
 
-analysis_info = eegfun.AnalysisInfo(:none, 0.0, 0.0)
+analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 
 # Create time vector
 time = collect(range(-0.2, 0.8, length = n_timepoints))
@@ -78,7 +78,7 @@ function create_participant_condition_epochs(
         push!(epochs, df)
     end
 
-    return eegfun.EpochData(
+    return EegFun.EpochData(
         "participant_$(participant_id)",
         condition_id,
         condition_name,
@@ -111,22 +111,22 @@ epochs_p2 = all_participant_epochs[2]
 epochs_p3 = all_participant_epochs[3]
 
 
-decoded_p1 = eegfun.decode_libsvm(
+decoded_p1 = EegFun.decode_libsvm(
     epochs_p1;
     n_iterations = 10,  # Reduced for testing
     n_folds = 3,
     equalize_trials = true,
 )
 # Decode for Participant 2 - default model used automatically
-decoded_p2 = eegfun.decode_libsvm(epochs_p2, n_iterations = 10, n_folds = 3, equalize_trials = true)
+decoded_p2 = EegFun.decode_libsvm(epochs_p2, n_iterations = 10, n_folds = 3, equalize_trials = true)
 # Decode for Participant 3 - default model used automatically
-decoded_p3 = eegfun.decode_libsvm(epochs_p3, n_iterations = 10, n_folds = 3, equalize_trials = true)
+decoded_p3 = EegFun.decode_libsvm(epochs_p3, n_iterations = 10, n_folds = 3, equalize_trials = true)
 # Grand average
 all_decoded = [decoded_p1, decoded_p2, decoded_p3]
-grand_avg_decoded = eegfun.grand_average(all_decoded)
+grand_avg_decoded = EegFun.grand_average(all_decoded)
 
-# fig = eegfun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
-fig = eegfun.plot_decoding(grand_avg_decoded, title = "Test Decoding")
+# fig = EegFun.plot_decoding(all_decoded, title = "Grand Average: Face vs Object ($(model_method))")
+fig = EegFun.plot_decoding(grand_avg_decoded, title = "Test Decoding")
 
 
 # ============================================================================
@@ -134,7 +134,7 @@ fig = eegfun.plot_decoding(grand_avg_decoded, title = "Test Decoding")
 # ============================================================================
 # Quick statistical test on synthetic data
 println("\n[Quick Test] Statistical testing on synthetic data...")
-stats_synthetic = eegfun.test_against_chance(
+stats_synthetic = EegFun.test_against_chance(
     all_decoded,
     alpha = 0.05,
     tail = :right,
@@ -144,7 +144,7 @@ stats_synthetic = eegfun.test_against_chance(
 println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
 
 # Plot with significance
-fig_stats_synthetic = eegfun.plot_decoding(
+fig_stats_synthetic = EegFun.plot_decoding(
     grand_avg_decoded,
     stats_synthetic,
     title = "Synthetic Data with Significance",
@@ -153,11 +153,11 @@ fig_stats_synthetic = eegfun.plot_decoding(
 
 
 println("\n[Quick Test] Statistical testing on synthetic data...")
-stats_synthetic = eegfun.test_against_chance_cluster(all_decoded, alpha = 0.2)
+stats_synthetic = EegFun.test_against_chance_cluster(all_decoded, alpha = 0.2)
 println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
 
 # Plot with significance
-fig_stats_synthetic = eegfun.plot_decoding(
+fig_stats_synthetic = EegFun.plot_decoding(
     grand_avg_decoded,
     stats_synthetic,
     title = "Synthetic Data with Significance",
@@ -166,18 +166,18 @@ fig_stats_synthetic = eegfun.plot_decoding(
 
 
 
-using eegfun
+using EegFun
 using Glob  # For finding files (or use readdir with filter)
 
 # Configuration
 data_dir = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded")
-layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv")
-eegfun.polar_to_cartesian_xy!(layout_file)
+layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv")
+EegFun.polar_to_cartesian_xy!(layout_file)
 
 # Epoch configuration
 epoch_cfg = [
-    eegfun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [3]]),
-    eegfun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2], [4]]),
+    EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1], [3]]),
+    EegFun.EpochCondition(name = "ExampleEpoch2", trigger_sequences = [[2], [4]]),
 ]
 
 # Find all .bdf files in directory
@@ -185,25 +185,25 @@ bdf_files = glob("*.bdf", data_dir)
 println("Found $(length(bdf_files)) files to process")
 
 # Process each file
-all_decoded = eegfun.DecodedData[]
+all_decoded = EegFun.DecodedData[]
 for (file_idx, data_file) in enumerate(bdf_files)
     participant_id = basename(data_file)
     println("\n[$(file_idx)/$(length(bdf_files))] Processing: $participant_id")
 
     try
         # Preprocessing (same for all files)
-        dat = eegfun.read_bdf(data_file)
-        dat = eegfun.create_eeg_dataframe(dat, layout_file)
-        eegfun.rereference!(dat, :avg)
-        eegfun.filter_data!(dat, "hp", 1)
+        dat = EegFun.read_bdf(data_file)
+        dat = EegFun.create_eeg_dataframe(dat, layout_file)
+        EegFun.rereference!(dat, :avg)
+        EegFun.filter_data!(dat, "hp", 1)
 
         # Extract epochs
-        epochs = eegfun.extract_epochs(dat, epoch_cfg, -0.2, 2.5)
+        epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 2.5)
 
         # Decode
-        decoded = eegfun.decode_libsvm(
+        decoded = EegFun.decode_libsvm(
             epochs,
-            channel_selection = eegfun.channels([:PO7, :PO8]),
+            channel_selection = EegFun.channels([:PO7, :PO8]),
             n_iterations = 10,
             n_folds = 3,
             equalize_trials = true,
@@ -218,7 +218,7 @@ for (file_idx, data_file) in enumerate(bdf_files)
     end
 end
 
-grand_avg_decoded = eegfun.grand_average(all_decoded)
+grand_avg_decoded = EegFun.grand_average(all_decoded)
 println("  ✓ Grand average created")
 println("    Max accuracy: $(round(maximum(grand_avg_decoded.average_score), digits=3))")
 println(
@@ -226,7 +226,7 @@ println(
 )
 
 # Plot grand average
-fig = eegfun.plot_decoding(grand_avg_decoded, title = "Grand Average: Test Decoding")
+fig = EegFun.plot_decoding(grand_avg_decoded, title = "Grand Average: Test Decoding")
 println("  ✓ Plot created")
 
 
@@ -240,7 +240,7 @@ println("="^70)
 
 # Test 1: One-sample t-test against chance (with Bonferroni correction)
 println("\n[1/2] One-sample t-test against chance (Bonferroni correction)...")
-stats_bonferroni = eegfun.test_against_chance(
+stats_bonferroni = EegFun.test_against_chance(
     all_decoded,
     alpha = 0.05,
     tail = :right,  # Test if accuracy > chance
@@ -255,7 +255,7 @@ println("    Min p-value: $(round(minimum(stats_bonferroni.p_values), digits=4))
 println("    Max t-value: $(round(maximum(stats_bonferroni.t_statistics), digits=3))")
 
 # Plot with significance markers (Bonferroni)
-fig_stats_bonf = eegfun.plot_decoding(
+fig_stats_bonf = EegFun.plot_decoding(
     grand_avg_decoded,
     stats_bonferroni,
     title = "Grand Average with Significance (Bonferroni)",
@@ -267,7 +267,7 @@ println("  ✓ Plot with significance markers created")
 
 # Test 2: Cluster-based permutation test
 println("\n[2/2] Cluster-based permutation test...")
-stats_cluster = eegfun.test_against_chance_cluster(
+stats_cluster = EegFun.test_against_chance_cluster(
     all_decoded,
     alpha = 0.05,
     tail = :right,
@@ -295,7 +295,7 @@ println(
 )
 
 # Plot with cluster-based significance markers
-fig_stats_cluster = eegfun.plot_decoding(
+fig_stats_cluster = EegFun.plot_decoding(
     grand_avg_decoded,
     stats_cluster,
     title = "Grand Average with Cluster-Based Significance",

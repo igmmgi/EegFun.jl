@@ -1,12 +1,12 @@
 using Test
 using DataFrames
 using OrderedCollections
-using eegfun
+using EegFun
 
 @testset "Layout Tests" begin
     # Read the BioSemi 64-channel layout
     layout_path = joinpath(@__DIR__, "..", "..", "data", "layouts", "biosemi", "biosemi64.csv")
-    test_layout = eegfun.read_layout(layout_path)
+    test_layout = EegFun.read_layout(layout_path)
 
     @testset "Layout Reading" begin
         @test nrow(test_layout.data) == 64  # Should have 64 channels
@@ -16,13 +16,13 @@ using eegfun
         @test all(test_layout.data.azi .!== missing)    # No missing azimuths
 
         # Test error handling for read_layout
-        @test_throws Exception eegfun.read_layout("nonexistent_file.csv")
+        @test_throws Exception EegFun.read_layout("nonexistent_file.csv")
     end
 
     @testset "Polar to Cartesian Conversion" begin
         # Test 2D conversion
         layout_2d = copy(test_layout)
-        eegfun.polar_to_cartesian_xy!(layout_2d)
+        EegFun.polar_to_cartesian_xy!(layout_2d)
 
         @test all(col -> col in propertynames(layout_2d.data), [:x2, :y2])
         @test nrow(layout_2d.data) == 64
@@ -40,7 +40,7 @@ using eegfun
 
         # Test 3D conversion
         layout_3d = copy(test_layout)
-        eegfun.polar_to_cartesian_xyz!(layout_3d)
+        EegFun.polar_to_cartesian_xyz!(layout_3d)
 
         @test all(col -> col in propertynames(layout_3d.data), [:x3, :y3, :z3])
         @test nrow(layout_3d.data) == 64
@@ -59,27 +59,27 @@ using eegfun
 
     @testset "Distance Calculations" begin
         # Test 2D distance
-        @test isapprox(eegfun.distance_xy(0, 0, 3, 4), 5.0)
-        @test isapprox(eegfun.squared_distance_xy(0, 0, 3, 4), 25.0)
+        @test isapprox(EegFun.distance_xy(0, 0, 3, 4), 5.0)
+        @test isapprox(EegFun.squared_distance_xy(0, 0, 3, 4), 25.0)
 
         # Test 3D distance
-        @test isapprox(eegfun.distance_xyz(0, 0, 0, 1, 2, 2), 3.0)
-        @test isapprox(eegfun.squared_distance_xyz(0, 0, 0, 1, 2, 2), 9.0)
+        @test isapprox(EegFun.distance_xyz(0, 0, 0, 1, 2, 2), 3.0)
+        @test isapprox(EegFun.squared_distance_xyz(0, 0, 0, 1, 2, 2), 9.0)
 
         # Test additional cases
-        @test isapprox(eegfun.distance_xy(-1, -1, 1, 1), 2.8284271247461903)
-        @test isapprox(eegfun.distance_xyz(-1, -1, -1, 1, 1, 1), 3.4641016151377544)
+        @test isapprox(EegFun.distance_xy(-1, -1, 1, 1), 2.8284271247461903)
+        @test isapprox(EegFun.distance_xyz(-1, -1, -1, 1, 1, 1), 3.4641016151377544)
 
         # Test zero distance
-        @test isapprox(eegfun.distance_xy(1, 1, 1, 1), 0.0)
-        @test isapprox(eegfun.distance_xyz(1, 1, 1, 1, 1, 1), 0.0)
+        @test isapprox(EegFun.distance_xy(1, 1, 1, 1), 0.0)
+        @test isapprox(EegFun.distance_xyz(1, 1, 1, 1, 1, 1), 0.0)
     end
 
     @testset "Electrode Neighbours" begin
         # Test 2D neighbours
         layout_xy = copy(test_layout)
-        eegfun.polar_to_cartesian_xy!(layout_xy)
-        eegfun.get_layout_neighbours_xy!(layout_xy, 50.0)
+        EegFun.polar_to_cartesian_xy!(layout_xy)
+        EegFun.get_layout_neighbours_xy!(layout_xy, 50.0)
 
         @test !isnothing(layout_xy.neighbours)
         @test haskey(layout_xy.neighbours, :Fp1)
@@ -95,8 +95,8 @@ using eegfun
 
         # Test 3D neighbours
         layout_xyz = copy(test_layout)
-        eegfun.polar_to_cartesian_xyz!(layout_xyz)
-        eegfun.get_layout_neighbours_xyz!(layout_xyz, 50.0)
+        EegFun.polar_to_cartesian_xyz!(layout_xyz)
+        EegFun.get_layout_neighbours_xyz!(layout_xyz, 50.0)
 
         @test !isnothing(layout_xyz.neighbours)
         @test haskey(layout_xyz.neighbours, :Fp1)
@@ -107,24 +107,24 @@ using eegfun
         @test isapprox(sum(layout_xyz.neighbours[:Fp1].weights), 1.0, atol = 1e-10)
 
         # Test error handling
-        result = eegfun.get_layout_neighbours_xy!(test_layout, -1.0) # Negative distance
+        result = EegFun.get_layout_neighbours_xy!(test_layout, -1.0) # Negative distance
         @test result === nothing
     end
 
     @testset "Error Handling" begin
         # Test missing columns
-        invalid_layout = eegfun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing)
-        @test_throws ArgumentError eegfun.polar_to_cartesian_xy!(invalid_layout)
-        @test_throws ArgumentError eegfun.polar_to_cartesian_xyz!(invalid_layout)
+        invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing)
+        @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
+        @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
         # Test invalid data types
-        invalid_types = eegfun.Layout(
+        invalid_types = EegFun.Layout(
             DataFrame(label = [:Fp1, :Fp2], inc = ["invalid", "invalid"], azi = ["invalid", "invalid"]),
             nothing,
             nothing,
         )
-        @test_throws ArgumentError eegfun.polar_to_cartesian_xy!(invalid_types)
-        @test_throws ArgumentError eegfun.polar_to_cartesian_xyz!(invalid_types)
+        @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_types)
+        @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_types)
     end
 
     @testset "Layout Functions" begin
@@ -132,20 +132,20 @@ using eegfun
         @testset "read_layout" begin
             # Test reading a valid layout file
             layout_file = joinpath(@__DIR__, "..", "..", "data", "layouts", "biosemi", "biosemi64.csv")
-            layout = eegfun.read_layout(layout_file)
+            layout = EegFun.read_layout(layout_file)
             @test size(layout.data, 1) > 0
             @test :label in propertynames(layout.data)
             @test :inc in propertynames(layout.data)
             @test :azi in propertynames(layout.data)
 
             # Test error handling for non-existent file
-            @test_throws Exception eegfun.read_layout("nonexistent.csv")
+            @test_throws Exception EegFun.read_layout("nonexistent.csv")
         end
 
         # Test polar to cartesian conversions
         @testset "polar_to_cartesian" begin
             # Create test layout
-            layout = eegfun.Layout(
+            layout = EegFun.Layout(
                 DataFrame(
                     label = [:Fp1, :Fp2, :F3, :F4],
                     inc = [90.0, 90.0, 45.0, 45.0],
@@ -156,14 +156,14 @@ using eegfun
             )
 
             # Test xy conversion
-            eegfun.polar_to_cartesian_xy!(layout)
+            EegFun.polar_to_cartesian_xy!(layout)
             @test :x2 in propertynames(layout.data)
             @test :y2 in propertynames(layout.data)
             @test all(isfinite.(layout.data.x2))
             @test all(isfinite.(layout.data.y2))
 
             # Test xyz conversion
-            eegfun.polar_to_cartesian_xyz!(layout)
+            EegFun.polar_to_cartesian_xyz!(layout)
             @test :x3 in propertynames(layout.data)
             @test :y3 in propertynames(layout.data)
             @test :z3 in propertynames(layout.data)
@@ -172,38 +172,38 @@ using eegfun
             @test all(isfinite.(layout.data.z3))
 
             # Test error handling for missing columns
-            invalid_layout = eegfun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing)
-            @test_throws ArgumentError eegfun.polar_to_cartesian_xy!(invalid_layout)
-            @test_throws ArgumentError eegfun.polar_to_cartesian_xyz!(invalid_layout)
+            invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2]), nothing, nothing)
+            @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
+            @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
             # Test error handling for non-numeric values
             invalid_layout =
-                eegfun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["90", "90"], azi = ["0", "180"]), nothing, nothing)
-            @test_throws ArgumentError eegfun.polar_to_cartesian_xy!(invalid_layout)
-            @test_throws ArgumentError eegfun.polar_to_cartesian_xyz!(invalid_layout)
+                EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["90", "90"], azi = ["0", "180"]), nothing, nothing)
+            @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
+            @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
         end
 
         # Test distance calculations
         @testset "distance_calculations" begin
             # Test 2D distance
-            @test eegfun.distance_xy(0, 0, 3, 4) ≈ 5.0
-            @test eegfun.squared_distance_xy(0, 0, 3, 4) ≈ 25.0
+            @test EegFun.distance_xy(0, 0, 3, 4) ≈ 5.0
+            @test EegFun.squared_distance_xy(0, 0, 3, 4) ≈ 25.0
 
             # Test 3D distance
-            @test eegfun.distance_xyz(0, 0, 0, 1, 2, 2) ≈ 3.0
-            @test eegfun.squared_distance_xyz(0, 0, 0, 1, 2, 2) ≈ 9.0
+            @test EegFun.distance_xyz(0, 0, 0, 1, 2, 2) ≈ 3.0
+            @test EegFun.squared_distance_xyz(0, 0, 0, 1, 2, 2) ≈ 9.0
 
             # Test edge cases
-            @test eegfun.distance_xy(0, 0, 0, 0) ≈ 0.0
-            @test eegfun.distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
-            @test eegfun.squared_distance_xy(0, 0, 0, 0) ≈ 0.0
-            @test eegfun.squared_distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
+            @test EegFun.distance_xy(0, 0, 0, 0) ≈ 0.0
+            @test EegFun.distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
+            @test EegFun.squared_distance_xy(0, 0, 0, 0) ≈ 0.0
+            @test EegFun.squared_distance_xyz(0, 0, 0, 0, 0, 0) ≈ 0.0
         end
 
         # Test electrode neighbours
         @testset "electrode_neighbours" begin
             # Create test layout
-            layout = eegfun.Layout(
+            layout = EegFun.Layout(
                 DataFrame(
                     label = [:Fp1, :Fp2, :F3, :F4],
                     inc = [90.0, 90.0, 45.0, 45.0],
@@ -212,32 +212,32 @@ using eegfun
                 nothing,
                 nothing,
             )
-            eegfun.polar_to_cartesian_xy!(layout)
+            EegFun.polar_to_cartesian_xy!(layout)
 
             # Test xy neighbours
-            eegfun.get_layout_neighbours_xy!(layout, 100.0)
+            EegFun.get_layout_neighbours_xy!(layout, 100.0)
             @test !isnothing(layout.neighbours)
             @test length(layout.neighbours) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            result = eegfun.get_layout_neighbours_xy!(layout, -1.0)
+            result = EegFun.get_layout_neighbours_xy!(layout, -1.0)
             @test result === nothing
 
             # Test xyz neighbours
-            eegfun.polar_to_cartesian_xyz!(layout)
-            eegfun.get_layout_neighbours_xyz!(layout, 100.0)
+            EegFun.polar_to_cartesian_xyz!(layout)
+            EegFun.get_layout_neighbours_xyz!(layout, 100.0)
             @test !isnothing(layout.neighbours)
             @test length(layout.neighbours) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            result = eegfun.get_layout_neighbours_xyz!(layout, -1.0)
+            result = EegFun.get_layout_neighbours_xyz!(layout, -1.0)
             @test result === nothing
         end
     end
 
     @testset "Channel Renaming" begin
         # Create a simple test layout
-        test_layout = eegfun.Layout(
+        test_layout = EegFun.Layout(
             DataFrame(
                 label = [:Fp1, :Fp2, :F3, :F4, :Cz],
                 inc = [90.0, 90.0, 45.0, 45.0, 0.0],
@@ -252,7 +252,7 @@ using eegfun
             original_labels = copy(layout.data.label)
 
             # Rename a single channel
-            eegfun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
+            EegFun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
 
             @test :Fpz in layout.data.label
             @test :Fp1 ∉ layout.data.label
@@ -271,7 +271,7 @@ using eegfun
 
             # Rename multiple channels to unique names
             rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fp2_new, :F3 => :F3_new)
-            eegfun.rename_channel!(layout, rename_dict)
+            EegFun.rename_channel!(layout, rename_dict)
 
             @test :Fpz in layout.data.label
             @test :Fp2_new in layout.data.label
@@ -292,7 +292,7 @@ using eegfun
 
             # When multiple channels would be renamed to the same name, an error should be thrown
             rename_dict = Dict(:Fp1 => :Fpz, :Fp2 => :Fpz)
-            @test_throws Any eegfun.rename_channel!(layout, rename_dict)
+            @test_throws Any EegFun.rename_channel!(layout, rename_dict)
 
             # Layout should remain unchanged
             @test layout.data.label == test_layout.data.label
@@ -303,7 +303,7 @@ using eegfun
             original_labels = copy(layout.data.label)
 
             # Try to rename channels that don't exist
-            eegfun.rename_channel!(layout, Dict(:NonExistent => :NewName))
+            EegFun.rename_channel!(layout, Dict(:NonExistent => :NewName))
 
             # Layout should remain unchanged
             @test layout.data.label == original_labels
@@ -314,7 +314,7 @@ using eegfun
             original_labels = copy(layout.data.label)
 
             # Empty rename dictionary should do nothing
-            eegfun.rename_channel!(layout, Dict{Symbol,Symbol}())
+            EegFun.rename_channel!(layout, Dict{Symbol,Symbol}())
 
             # Layout should remain unchanged
             @test layout.data.label == original_labels
@@ -325,7 +325,7 @@ using eegfun
             original_layout = copy(test_layout)
 
             # Use non-mutating version
-            new_layout = eegfun.rename_channel(layout, Dict(:Fp1 => :Fpz))
+            new_layout = EegFun.rename_channel(layout, Dict(:Fp1 => :Fpz))
 
             # Original should be unchanged
             @test original_layout.data.label == test_layout.data.label
@@ -342,15 +342,15 @@ using eegfun
             layout = copy(test_layout)
 
             # Add some neighbours first
-            eegfun.polar_to_cartesian_xy!(layout)
-            eegfun.get_layout_neighbours_xy!(layout, 100.0)
+            EegFun.polar_to_cartesian_xy!(layout)
+            EegFun.get_layout_neighbours_xy!(layout, 100.0)
 
             # Verify neighbours exist
             @test !isnothing(layout.neighbours)
             @test haskey(layout.neighbours, :Fp1)
 
             # Rename a channel
-            eegfun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
+            EegFun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
 
             # Neighbours should be cleared
             @test isnothing(layout.neighbours)
@@ -360,8 +360,8 @@ using eegfun
             layout = copy(test_layout)
 
             # Add coordinates first
-            eegfun.polar_to_cartesian_xy!(layout)
-            eegfun.polar_to_cartesian_xyz!(layout)
+            EegFun.polar_to_cartesian_xy!(layout)
+            EegFun.polar_to_cartesian_xyz!(layout)
 
             # Store original coordinates for Fp1
             fp1_idx = findfirst(layout.data.label .== :Fp1)
@@ -372,7 +372,7 @@ using eegfun
             original_z3 = layout.data[fp1_idx, :z3]
 
             # Rename Fp1 to Fpz
-            eegfun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
+            EegFun.rename_channel!(layout, Dict(:Fp1 => :Fpz))
 
             # Find the renamed channel
             fpz_idx = findfirst(layout.data.label .== :Fpz)
@@ -389,13 +389,13 @@ using eegfun
             layout = copy(test_layout)
 
             # Test renaming to the same name (should be a no-op)
-            eegfun.rename_channel!(layout, Dict(:Fp1 => :Fp1))
+            EegFun.rename_channel!(layout, Dict(:Fp1 => :Fp1))
             @test :Fp1 in layout.data.label
 
             # Test renaming all channels
             all_channels = copy(layout.data.label)
             rename_dict = Dict(old => Symbol("new_$(old)") for old in all_channels)
-            eegfun.rename_channel!(layout, rename_dict)
+            EegFun.rename_channel!(layout, rename_dict)
 
             # All original names should be gone, all new names should exist
             for old in all_channels
@@ -412,7 +412,7 @@ using eegfun
 
             # Test swapping Fp1 and Fp2
             swap_dict = Dict(:Fp1 => :Fp2, :Fp2 => :Fp1)
-            eegfun.rename_channel!(layout, swap_dict)
+            EegFun.rename_channel!(layout, swap_dict)
 
             # Should have swapped positions
             @test layout.data.label[1] == :Fp2  # First position now has Fp2
@@ -428,7 +428,7 @@ using eegfun
 
             # Verify it's a proper swap by checking the inverse operation
             inverse_swap = Dict(:Fp2 => :Fp1, :Fp1 => :Fp2)
-            eegfun.rename_channel!(layout, inverse_swap)
+            EegFun.rename_channel!(layout, inverse_swap)
 
             # Should be back to original
             @test layout.data.label == original_labels

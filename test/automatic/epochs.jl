@@ -1,6 +1,6 @@
 using Test
 using DataFrames
-using eegfun
+using EegFun
 using Statistics
 using JLD2
 using Random
@@ -26,7 +26,7 @@ using Random
                 ],
             ),
         )
-        conds = eegfun.condition_parse_epoch(cfg)
+        conds = EegFun.condition_parse_epoch(cfg)
         @test length(conds) == 2
         @test conds[1].name == "c1"
         @test conds[1].reference_index == 2
@@ -34,7 +34,7 @@ using Random
 
         # Missing trigger_sequences → throws
         bad_cfg1 = Dict("epochs" => Dict("conditions" => [Dict("name" => "bad1")]))
-        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg1)
+        @test_throws Exception EegFun.condition_parse_epoch(bad_cfg1)
 
         # after and before both set → throws
         bad_cfg2 = Dict(
@@ -43,7 +43,7 @@ using Random
                     [Dict("name" => "bad2", "trigger_sequences" => [[1, 2, 3]], "after" => 1, "before" => 2)],
             ),
         )
-        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg2)
+        @test_throws Exception EegFun.condition_parse_epoch(bad_cfg2)
 
         # reference_index out of bounds → throws
         bad_cfg3 = Dict(
@@ -52,7 +52,7 @@ using Random
                     [Dict("name" => "bad3", "trigger_sequences" => [[1, 2, 3]], "reference_index" => 5)],
             ),
         )
-        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg3)
+        @test_throws Exception EegFun.condition_parse_epoch(bad_cfg3)
 
         # timing_pairs provided but min/max missing → throws
         bad_cfg4 = Dict(
@@ -61,7 +61,7 @@ using Random
                     [Dict("name" => "bad4", "trigger_sequences" => [[1, 2, 3]], "timing_pairs" => [[1, 3]])],
             ),
         )
-        @test_throws Exception eegfun.condition_parse_epoch(bad_cfg4)
+        @test_throws Exception EegFun.condition_parse_epoch(bad_cfg4)
 
         # min_interval ≥ max_interval → throws
         bad_cfg5 = Dict(
@@ -77,36 +77,36 @@ using Random
                 ],
             ),
         )
-        @test_throws ErrorException eegfun.condition_parse_epoch(bad_cfg5)
+        @test_throws ErrorException EegFun.condition_parse_epoch(bad_cfg5)
 
         # Additional edge cases
         # Empty conditions array
         empty_cfg = Dict("epochs" => Dict("conditions" => []))
-        @test eegfun.condition_parse_epoch(empty_cfg) == []
+        @test EegFun.condition_parse_epoch(empty_cfg) == []
 
         # Missing epochs key
         no_epochs_cfg = Dict()
-        @test eegfun.condition_parse_epoch(no_epochs_cfg) == []
+        @test EegFun.condition_parse_epoch(no_epochs_cfg) == []
 
         # Invalid trigger sequence format
         invalid_seq_cfg = Dict(
             "epochs" =>
                 Dict("conditions" => [Dict("name" => "invalid", "trigger_sequences" => ["invalid_string"])]),
         )
-        @test_throws Exception eegfun.condition_parse_epoch(invalid_seq_cfg)
+        @test_throws Exception EegFun.condition_parse_epoch(invalid_seq_cfg)
     end
 
     @testset "search helpers" begin
         arr = [0, 1, 2, 3, 0, 1, 9, 3]
         to_seq(v) = Vector{Union{Int,Symbol,UnitRange{Int}}}(v)
-        idxs = eegfun.search_sequence(arr, [to_seq([1, 2, 3])])
+        idxs = EegFun.search_sequence(arr, [to_seq([1, 2, 3])])
         @test idxs == [2]
-        idxs2 = eegfun.search_sequence(arr, [to_seq([1, :any, 3])])
+        idxs2 = EegFun.search_sequence(arr, [to_seq([1, :any, 3])])
         @test Set(idxs2) == Set([2, 6])  # [1,2,3] and [1,9,3]
-        idxr = eegfun.search_sequence(arr, [1:2])
+        idxr = EegFun.search_sequence(arr, [1:2])
         @test Set(idxr) == Set([2, 3, 6])
         # onset detection for single value
-        idxsingle = eegfun.search_sequence([0, 1, 1, 0, 2, 2], 1)
+        idxsingle = EegFun.search_sequence([0, 1, 1, 0, 2, 2], 1)
         @test idxsingle == [2]
     end
 
@@ -115,9 +115,9 @@ using Random
         win = (-0.01, 0.02)  # 10 ms pre, 20 ms post
 
         # Single sequence [1,2,3], reference=2
-        ec1 = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
-        ep1 = eegfun.extract_epochs(dat, 1, ec1, win[1], win[2])
-        @test eegfun.n_epochs(ep1) == 3  # three [1,2,3] sequences present
+        ec1 = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        ep1 = EegFun.extract_epochs(dat, 1, ec1, win[1], win[2])
+        @test EegFun.n_epochs(ep1) == 3  # three [1,2,3] sequences present
         # Integrity preserved
         @test ep1.sample_rate == dat.sample_rate
         @test ep1.layout === dat.layout
@@ -129,28 +129,28 @@ using Random
         @test :epoch in propertynames(ep1.data[1])
 
         # Wildcard sequence [1,:any,3]
-        ec2 = eegfun.EpochCondition(name = "wild", trigger_sequences = [[1, :any, 3]], reference_index = 2)
-        ep2 = eegfun.extract_epochs(dat, 2, ec2, win[1], win[2])
-        @test eegfun.n_epochs(ep2) >= 3  # matches [1,2,3], [1,7,3], and [1,2,3] after 9
+        ec2 = EegFun.EpochCondition(name = "wild", trigger_sequences = [[1, :any, 3]], reference_index = 2)
+        ep2 = EegFun.extract_epochs(dat, 2, ec2, win[1], win[2])
+        @test EegFun.n_epochs(ep2) >= 3  # matches [1,2,3], [1,7,3], and [1,2,3] after 9
 
         # Single range [1:3]
-        ec3 = eegfun.EpochCondition(name = "range", trigger_sequences = [[1:3]], reference_index = 1)
-        ep3 = eegfun.extract_epochs(dat, 3, ec3, win[1], win[2])
-        @test eegfun.n_epochs(ep3) >= 1
+        ec3 = EegFun.EpochCondition(name = "range", trigger_sequences = [[1:3]], reference_index = 1)
+        ep3 = EegFun.extract_epochs(dat, 3, ec3, win[1], win[2])
+        @test EegFun.n_epochs(ep3) >= 1
 
         # Position constraints: after 9, before 8
         ec_after =
-            eegfun.EpochCondition(name = "after9", trigger_sequences = [[1, 2, 3]], reference_index = 2, after = 9)
-        ep_after = eegfun.extract_epochs(dat, 4, ec_after, win[1], win[2])
-        @test eegfun.n_epochs(ep_after) >= 1
+            EegFun.EpochCondition(name = "after9", trigger_sequences = [[1, 2, 3]], reference_index = 2, after = 9)
+        ep_after = EegFun.extract_epochs(dat, 4, ec_after, win[1], win[2])
+        @test EegFun.n_epochs(ep_after) >= 1
 
         ec_before =
-            eegfun.EpochCondition(name = "before8", trigger_sequences = [[1, 2, 3]], reference_index = 2, before = 8)
-        ep_before = eegfun.extract_epochs(dat, 5, ec_before, win[1], win[2])
-        @test eegfun.n_epochs(ep_before) >= 1
+            EegFun.EpochCondition(name = "before8", trigger_sequences = [[1, 2, 3]], reference_index = 2, before = 8)
+        ep_before = EegFun.extract_epochs(dat, 5, ec_before, win[1], win[2])
+        @test EegFun.n_epochs(ep_before) >= 1
 
         # Timing constraint across (1,3) should be ~2 ms with fs=1000
-        ec_time = eegfun.EpochCondition(
+        ec_time = EegFun.EpochCondition(
             name = "timing",
             trigger_sequences = [[1, 2, 3]],
             reference_index = 2,
@@ -158,15 +158,15 @@ using Random
             min_interval = 0.001,
             max_interval = 0.005,
         )
-        ep_time = eegfun.extract_epochs(dat, 6, ec_time, win[1], win[2])
-        @test eegfun.n_epochs(ep_time) >= 1
+        ep_time = EegFun.extract_epochs(dat, 6, ec_time, win[1], win[2])
+        @test EegFun.n_epochs(ep_time) >= 1
 
         # No match → throws
-        ec_nomatch = eegfun.EpochCondition(name = "none", trigger_sequences = [[7, 7, 7]], reference_index = 2)
-        @test_throws ErrorException eegfun.extract_epochs(dat, 9, ec_nomatch, win[1], win[2])
+        ec_nomatch = EegFun.EpochCondition(name = "none", trigger_sequences = [[7, 7, 7]], reference_index = 2)
+        @test_throws ErrorException EegFun.extract_epochs(dat, 9, ec_nomatch, win[1], win[2])
 
         # Constraints eliminate all → throws
-        ec_strict = eegfun.EpochCondition(
+        ec_strict = EegFun.EpochCondition(
             name = "strict",
             trigger_sequences = [[1, 2, 3]],
             reference_index = 2,
@@ -174,33 +174,33 @@ using Random
             min_interval = 0.1,
             max_interval = 0.2,
         )
-        @test_throws ErrorException eegfun.extract_epochs(dat, 10, ec_strict, win[1], win[2])
+        @test_throws ErrorException EegFun.extract_epochs(dat, 10, ec_strict, win[1], win[2])
 
         # Boundary windows (too wide) → warnings, returns empty or partial epochs
-        ep11 = eegfun.extract_epochs(dat, 11, ec1, -1.0, 0.02)
-        @test eegfun.n_epochs(ep11) == 0  # All epochs out of bounds, returns empty
+        ep11 = EegFun.extract_epochs(dat, 11, ec1, -1.0, 0.02)
+        @test EegFun.n_epochs(ep11) == 0  # All epochs out of bounds, returns empty
 
-        ep12 = eegfun.extract_epochs(dat, 12, ec1, -0.01, 2.0)
-        @test eegfun.n_epochs(ep12) == 0  # All epochs out of bounds, returns empty
+        ep12 = EegFun.extract_epochs(dat, 12, ec1, -0.01, 2.0)
+        @test EegFun.n_epochs(ep12) == 0  # All epochs out of bounds, returns empty
     end
 
     @testset "average_epochs" begin
         dat = create_test_continuous_data_with_triggers()
         win = (-0.01, 0.02)
-        ec = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
-        eps = eegfun.extract_epochs(dat, 10, ec, win[1], win[2])
-        @test eegfun.n_epochs(eps) == 3
-        erp = eegfun.average_epochs(eps)
-        @test erp isa eegfun.ErpData
+        ec = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        eps = EegFun.extract_epochs(dat, 10, ec, win[1], win[2])
+        @test EegFun.n_epochs(eps) == 3
+        erp = EegFun.average_epochs(eps)
+        @test erp isa EegFun.ErpData
         @test erp.n_epochs == 3
         # Check that averaged channel values at t=0 equal mean of contributing epochs
         zero_rows = findall(erp.data.time .== 0.0)
         @test !isempty(zero_rows)
 
         # Multiple conditions
-        ec_other = eegfun.EpochCondition(name = "seq123b", trigger_sequences = [[1, 2, 3]], reference_index = 2)
-        eps2 = eegfun.extract_epochs(dat, 11, ec_other, win[1], win[2])
-        mixed = eegfun.EpochData(
+        ec_other = EegFun.EpochCondition(name = "seq123b", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        eps2 = EegFun.extract_epochs(dat, 11, ec_other, win[1], win[2])
+        mixed = EegFun.EpochData(
             eps.file,
             eps.condition,
             eps.condition_name,
@@ -209,9 +209,9 @@ using Random
             eps.sample_rate,
             eps.analysis_info,
         )
-        erp_mixed = eegfun.average_epochs(mixed)
+        erp_mixed = EegFun.average_epochs(mixed)
         # Mixed epochs from different conditions, but averaged into single ERP
-        @test erp_mixed isa eegfun.ErpData
+        @test erp_mixed isa EegFun.ErpData
 
         # No EEG channels with layout mismatch → expect error (current implementation)
         only_meta = [
@@ -223,7 +223,7 @@ using Random
                 epoch = [1, 1],
             ),
         ]
-        em = eegfun.EpochData(
+        em = EegFun.EpochData(
             eps.file,
             eps.condition,
             eps.condition_name,
@@ -232,22 +232,22 @@ using Random
             eps.sample_rate,
             eps.analysis_info,
         )
-        @test_throws Any eegfun.average_epochs(em)
+        @test_throws Any EegFun.average_epochs(em)
     end
 
     @testset "reject_epochs" begin
         dat = create_test_continuous_data_with_triggers()
         win = (-0.01, 0.02)
-        ec = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
-        eps = eegfun.extract_epochs(dat, 20, ec, win[1], win[2])
-        @test eegfun.n_epochs(eps) == 3
+        ec = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        eps = EegFun.extract_epochs(dat, 20, ec, win[1], win[2])
+        @test EegFun.n_epochs(eps) == 3
         # Mark second epoch as bad
         eps.data[1][!, :is_bad] = falses(nrow(eps.data[1]))
         eps.data[2][!, :is_bad] = falses(nrow(eps.data[2]))
         eps.data[3][!, :is_bad] = falses(nrow(eps.data[3]))
         eps.data[2].is_bad[1] = true
-        cleaned = eegfun.reject_epochs(eps, :is_bad)
-        @test eegfun.n_epochs(cleaned) == 2
+        cleaned = EegFun.reject_epochs(eps, :is_bad)
+        @test EegFun.n_epochs(cleaned) == 2
 
         # Multi-column filtering
         eps2 = deepcopy(eps)
@@ -259,14 +259,14 @@ using Random
         eps2.data[3][!, :is_bad2] = falses(nrow(eps2.data[3]))
         eps2.data[1].is_bad1[5] = true
         eps2.data[2].is_bad2[10] = true
-        cleaned2 = eegfun.reject_epochs(eps2, [:is_bad1, :is_bad2])
-        @test eegfun.n_epochs(cleaned2) == 1
+        cleaned2 = EegFun.reject_epochs(eps2, [:is_bad1, :is_bad2])
+        @test EegFun.n_epochs(cleaned2) == 1
 
         # Missing column → throws
-        @test_throws ErrorException eegfun.reject_epochs(eps, :does_not_exist)
+        @test_throws ErrorException EegFun.reject_epochs(eps, :does_not_exist)
 
         # Empty EpochData → error (current implementation validates first epoch)
-        empty_ep = eegfun.EpochData(
+        empty_ep = EegFun.EpochData(
             eps.file,
             eps.condition,
             eps.condition_name,
@@ -275,14 +275,14 @@ using Random
             eps.sample_rate,
             eps.analysis_info,
         )
-        @test_throws Any eegfun.reject_epochs(empty_ep, :is_bad)
+        @test_throws Any EegFun.reject_epochs(empty_ep, :is_bad)
     end
 
     @testset "mark_epoch_windows! (simple triggers)" begin
         dat = create_test_continuous_data_with_triggers()
 
         # Basic functionality - mark windows around trigger 1
-        eegfun.mark_epoch_windows!(dat, [1], [-0.005, 0.005])
+        EegFun.mark_epoch_windows!(dat, [1], [-0.005, 0.005])
         @test :epoch_window in propertynames(dat.data)
         @test any(dat.data.epoch_window)  # Should mark some samples
 
@@ -299,93 +299,93 @@ using Random
 
         # Custom column name
         dat2 = create_test_continuous_data_with_triggers()
-        eegfun.mark_epoch_windows!(dat2, [1], [-0.005, 0.005], channel_out = :custom_window)
+        EegFun.mark_epoch_windows!(dat2, [1], [-0.005, 0.005], channel_out = :custom_window)
         @test :custom_window in propertynames(dat2.data)
         @test any(dat2.data.custom_window)
 
         # Multiple triggers
         dat3 = create_test_continuous_data_with_triggers()
-        eegfun.mark_epoch_windows!(dat3, [1, 2], [-0.005, 0.005])
+        EegFun.mark_epoch_windows!(dat3, [1, 2], [-0.005, 0.005])
         @test any(dat3.data.epoch_window)
 
         # Non-existent trigger should give warning but not error
         dat4 = create_test_continuous_data_with_triggers()
-        eegfun.mark_epoch_windows!(dat4, [999], [-0.005, 0.005])
+        EegFun.mark_epoch_windows!(dat4, [999], [-0.005, 0.005])
         @test !any(dat4.data.epoch_window)  # Should be all false
 
         # Test input validation
         dat5 = create_test_continuous_data_with_triggers()
-        @test_throws AssertionError eegfun.mark_epoch_windows!(dat5, [1], [-0.005])  # Wrong window length
-        @test_throws AssertionError eegfun.mark_epoch_windows!(dat5, [1], [0.005, -0.005])  # Wrong order
+        @test_throws AssertionError EegFun.mark_epoch_windows!(dat5, [1], [-0.005])  # Wrong window length
+        @test_throws AssertionError EegFun.mark_epoch_windows!(dat5, [1], [0.005, -0.005])  # Wrong order
     end
 
     @testset "mark_epoch_windows! (epoch conditions)" begin
         dat = create_test_continuous_data_with_triggers()
 
         # Create epoch condition for sequence [1,2,3]
-        ec = eegfun.EpochCondition(name = "test_condition", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        ec = EegFun.EpochCondition(name = "test_condition", trigger_sequences = [[1, 2, 3]], reference_index = 2)
 
         # Basic functionality
-        eegfun.mark_epoch_windows!(dat, [ec], [-0.005, 0.005])
+        EegFun.mark_epoch_windows!(dat, [ec], [-0.005, 0.005])
         @test :epoch_window in propertynames(dat.data)
         @test any(dat.data.epoch_window)
 
         # Wildcard condition
         dat2 = create_test_continuous_data_with_triggers()
-        ec_wild = eegfun.EpochCondition(name = "wildcard", trigger_sequences = [[1, :any, 3]], reference_index = 2)
-        eegfun.mark_epoch_windows!(dat2, [ec_wild], [-0.005, 0.005])
+        ec_wild = EegFun.EpochCondition(name = "wildcard", trigger_sequences = [[1, :any, 3]], reference_index = 2)
+        EegFun.mark_epoch_windows!(dat2, [ec_wild], [-0.005, 0.005])
         @test any(dat2.data.epoch_window)
 
         # Multiple conditions
         dat3 = create_test_continuous_data_with_triggers()
-        ec1 = eegfun.EpochCondition(name = "c1", trigger_sequences = [[1, 2, 3]], reference_index = 2)
-        ec2 = eegfun.EpochCondition(name = "c2", trigger_sequences = [[1, :any, 3]], reference_index = 1)
-        eegfun.mark_epoch_windows!(dat3, [ec1, ec2], [-0.005, 0.005])
+        ec1 = EegFun.EpochCondition(name = "c1", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        ec2 = EegFun.EpochCondition(name = "c2", trigger_sequences = [[1, :any, 3]], reference_index = 1)
+        EegFun.mark_epoch_windows!(dat3, [ec1, ec2], [-0.005, 0.005])
         @test any(dat3.data.epoch_window)
 
         # Condition with constraints
         dat4 = create_test_continuous_data_with_triggers()
         ec_constrained =
-            eegfun.EpochCondition(name = "constrained", trigger_sequences = [[1, 2, 3]], reference_index = 2, after = 9)
-        eegfun.mark_epoch_windows!(dat4, [ec_constrained], [-0.005, 0.005])
+            EegFun.EpochCondition(name = "constrained", trigger_sequences = [[1, 2, 3]], reference_index = 2, after = 9)
+        EegFun.mark_epoch_windows!(dat4, [ec_constrained], [-0.005, 0.005])
         @test any(dat4.data.epoch_window)  # Should find constrained sequences
 
         # Non-matching condition
         dat5 = create_test_continuous_data_with_triggers()
-        ec_nomatch = eegfun.EpochCondition(name = "nomatch", trigger_sequences = [[7, 7, 7]], reference_index = 1)
-        eegfun.mark_epoch_windows!(dat5, [ec_nomatch], [-0.005, 0.005])
+        ec_nomatch = EegFun.EpochCondition(name = "nomatch", trigger_sequences = [[7, 7, 7]], reference_index = 1)
+        EegFun.mark_epoch_windows!(dat5, [ec_nomatch], [-0.005, 0.005])
         @test !any(dat5.data.epoch_window)  # Should be all false
     end
 
     @testset "get_selected_epochs" begin
         dat = create_test_continuous_data_with_triggers()
         win = (-0.01, 0.02)
-        ec = eegfun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
-        eps = eegfun.extract_epochs(dat, 1, ec, win[1], win[2])
+        ec = EegFun.EpochCondition(name = "seq123", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        eps = EegFun.extract_epochs(dat, 1, ec, win[1], win[2])
 
         # Test with simple function that selects all epochs
         all_selector = x -> trues(length(x))
-        selected_all = eegfun.get_selected_epochs(eps, all_selector)
+        selected_all = EegFun.get_selected_epochs(eps, all_selector)
         @test selected_all == [1, 2, 3]  # Should have 2 epochs
 
         # Test with function that selects first epoch only
         first_only = x -> [true, false, false]
-        selected_first = eegfun.get_selected_epochs(eps, first_only)
+        selected_first = EegFun.get_selected_epochs(eps, first_only)
         @test selected_first == [1]
 
         # Test with function that selects no epochs
         none_selector = x -> falses(length(x))
-        selected_none = eegfun.get_selected_epochs(eps, none_selector)
+        selected_none = EegFun.get_selected_epochs(eps, none_selector)
         @test isempty(selected_none)
 
         # Test with function that selects specific epochs by index
         specific_selector = x -> [i in [1] for i in x]
-        selected_specific = eegfun.get_selected_epochs(eps, specific_selector)
+        selected_specific = EegFun.get_selected_epochs(eps, specific_selector)
         @test selected_specific == [1]
 
         # Test with realistic selector (odd epochs)
         odd_selector = x -> isodd.(x)
-        selected_odd = eegfun.get_selected_epochs(eps, odd_selector)
+        selected_odd = EegFun.get_selected_epochs(eps, odd_selector)
         @test selected_odd == [1, 3]  # Only epoch 1 is odd
     end
 
@@ -393,59 +393,59 @@ using Random
         dat = create_test_continuous_data_with_triggers()
 
         # Valid parameters should not throw
-        @test eegfun._validate_epoch_window_params(dat, [-0.1, 0.1]) === nothing
+        @test EegFun._validate_epoch_window_params(dat, [-0.1, 0.1]) === nothing
 
         # Invalid time window length
-        @test_throws AssertionError eegfun._validate_epoch_window_params(dat, [-0.1])
-        @test_throws AssertionError eegfun._validate_epoch_window_params(dat, [-0.1, 0.0, 0.1])
+        @test_throws AssertionError EegFun._validate_epoch_window_params(dat, [-0.1])
+        @test_throws AssertionError EegFun._validate_epoch_window_params(dat, [-0.1, 0.0, 0.1])
 
         # Invalid time window order
-        @test_throws AssertionError eegfun._validate_epoch_window_params(dat, [0.1, -0.1])
+        @test_throws AssertionError EegFun._validate_epoch_window_params(dat, [0.1, -0.1])
 
         # Missing required columns
         df_no_triggers = DataFrame(time = [0.0, 0.1], A = [1.0, 2.0])
-        layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
-        dat_no_triggers = eegfun.ContinuousData("test_data", df_no_triggers, layout, 1000, eegfun.AnalysisInfo())
-        @test_throws AssertionError eegfun._validate_epoch_window_params(dat_no_triggers, [-0.1, 0.1])
+        layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+        dat_no_triggers = EegFun.ContinuousData("test_data", df_no_triggers, layout, 1000, EegFun.AnalysisInfo())
+        @test_throws AssertionError EegFun._validate_epoch_window_params(dat_no_triggers, [-0.1, 0.1])
 
         df_no_time = DataFrame(triggers = [0, 1], A = [1.0, 2.0])
-        dat_no_time = eegfun.ContinuousData("test_data", df_no_time, layout, 1000, eegfun.AnalysisInfo())
-        @test_throws AssertionError eegfun._validate_epoch_window_params(dat_no_time, [-0.1, 0.1])
+        dat_no_time = EegFun.ContinuousData("test_data", df_no_time, layout, 1000, EegFun.AnalysisInfo())
+        @test_throws AssertionError EegFun._validate_epoch_window_params(dat_no_time, [-0.1, 0.1])
     end
 
     @testset "edge cases and robustness" begin
         # Empty EpochData for get_selected_epochs
-        layout = eegfun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
-        empty_epochs = eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 1000, eegfun.AnalysisInfo())
+        layout = EegFun.Layout(DataFrame(label = [:A], inc = [0.0], azi = [0.0]), nothing, nothing)
+        empty_epochs = EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 1000, EegFun.AnalysisInfo())
         empty_selector = x -> trues(length(x))
-        selected_empty = eegfun.get_selected_epochs(empty_epochs, empty_selector)
+        selected_empty = EegFun.get_selected_epochs(empty_epochs, empty_selector)
         @test isempty(selected_empty)
 
         # Very short time windows for mark_epoch_windows!
         dat = create_test_continuous_data_with_triggers()
-        eegfun.mark_epoch_windows!(dat, [1], [-0.001, 0.001])  # 2ms window
+        EegFun.mark_epoch_windows!(dat, [1], [-0.001, 0.001])  # 2ms window
         @test any(dat.data.epoch_window)
 
         # Zero-width window
         dat2 = create_test_continuous_data_with_triggers()
-        eegfun.mark_epoch_windows!(dat2, [1], [0.0, 0.0])
+        EegFun.mark_epoch_windows!(dat2, [1], [0.0, 0.0])
         @test any(dat2.data.epoch_window)  # Should still mark the exact sample
 
         # Large time windows (should not cause issues if within data bounds)
         dat3 = create_test_continuous_data_with_triggers(n = 10000)  # Longer data
-        eegfun.mark_epoch_windows!(dat3, [1], [-0.05, 0.05])  # 100ms window
+        EegFun.mark_epoch_windows!(dat3, [1], [-0.05, 0.05])  # 100ms window
         @test any(dat3.data.epoch_window)
     end
 
     @testset "additional edge cases and stress tests" begin
         # Test very large epochs (performance)
         dat_large = create_test_continuous_data_with_triggers(n = 50000)  # 50s at 1kHz
-        ec = eegfun.EpochCondition(name = "large", trigger_sequences = [[1, 2, 3]], reference_index = 2)
-        large_epochs = eegfun.extract_epochs(dat_large, 1, ec, -0.1, 0.1)
-        @test eegfun.n_epochs(large_epochs) >= 1
+        ec = EegFun.EpochCondition(name = "large", trigger_sequences = [[1, 2, 3]], reference_index = 2)
+        large_epochs = EegFun.extract_epochs(dat_large, 1, ec, -0.1, 0.1)
+        @test EegFun.n_epochs(large_epochs) >= 1
 
         # Test averaging with single epoch
-        single_epoch = eegfun.EpochData(
+        single_epoch = EegFun.EpochData(
             large_epochs.file,
             large_epochs.condition,
             large_epochs.condition_name,
@@ -454,24 +454,24 @@ using Random
             large_epochs.sample_rate,
             large_epochs.analysis_info,
         )
-        erp_single = eegfun.average_epochs(single_epoch)
-        @test erp_single isa eegfun.ErpData
+        erp_single = EegFun.average_epochs(single_epoch)
+        @test erp_single isa EegFun.ErpData
         @test erp_single.n_epochs == 1
 
         # Test epoch extraction with very short windows
         dat_short = create_test_continuous_data_with_triggers()
-        short_epochs = eegfun.extract_epochs(dat_short, 1, ec, -0.001, 0.001)  # 2ms window
-        @test eegfun.n_epochs(short_epochs) >= 1
+        short_epochs = EegFun.extract_epochs(dat_short, 1, ec, -0.001, 0.001)  # 2ms window
+        @test EegFun.n_epochs(short_epochs) >= 1
         @test all(epoch -> nrow(epoch) >= 1, short_epochs.data)  # At least one sample per epoch
 
         # Test with unsorted time vector (should fail validation)
         dat_unsorted = create_test_continuous_data_with_triggers()
         dat_unsorted.data.time = reverse(dat_unsorted.data.time)
-        @test_throws AssertionError eegfun.mark_epoch_windows!(dat_unsorted, [1], [-0.01, 0.01])
+        @test_throws AssertionError EegFun.mark_epoch_windows!(dat_unsorted, [1], [-0.01, 0.01])
 
         # Test reject_epochs with non-boolean columns (should work but warn)
         dat_nonbool = create_test_continuous_data_with_triggers()
-        eps_nonbool = eegfun.extract_epochs(dat_nonbool, 1, ec, -0.01, 0.02)
+        eps_nonbool = EegFun.extract_epochs(dat_nonbool, 1, ec, -0.01, 0.02)
         # Add boolean columns (since any() requires boolean context)
         n_samples_1 = nrow(eps_nonbool.data[1])
         n_samples_2 = nrow(eps_nonbool.data[2])
@@ -479,31 +479,31 @@ using Random
         eps_nonbool.data[1][!, :bool_bad] = vcat([true], falses(n_samples_1 - 1))  # Boolean, one bad sample
         eps_nonbool.data[2][!, :bool_bad] = falses(n_samples_2)  # All good samples
         eps_nonbool.data[3][!, :bool_bad] = falses(n_samples_3)  # All good samples
-        cleaned_nonbool = eegfun.reject_epochs(eps_nonbool, :bool_bad)
-        @test eegfun.n_epochs(cleaned_nonbool) == 2  # One epoch should be removed
+        cleaned_nonbool = EegFun.reject_epochs(eps_nonbool, :bool_bad)
+        @test EegFun.n_epochs(cleaned_nonbool) == 2  # One epoch should be removed
 
         # Test overlapping epoch windows
         dat_overlap = create_test_continuous_data_with_triggers()
-        eegfun.mark_epoch_windows!(dat_overlap, [1], [-0.01, 0.01], channel_out = :window1)
-        eegfun.mark_epoch_windows!(dat_overlap, [2], [-0.01, 0.01], channel_out = :window2)
+        EegFun.mark_epoch_windows!(dat_overlap, [1], [-0.01, 0.01], channel_out = :window1)
+        EegFun.mark_epoch_windows!(dat_overlap, [2], [-0.01, 0.01], channel_out = :window2)
         @test :window1 in propertynames(dat_overlap.data)
         @test :window2 in propertynames(dat_overlap.data)
 
         # Test get_selected_epochs with edge cases
         dat_edge = create_test_continuous_data_with_triggers()
-        eps_edge = eegfun.extract_epochs(dat_edge, 1, ec, -0.01, 0.02)
+        eps_edge = EegFun.extract_epochs(dat_edge, 1, ec, -0.01, 0.02)
 
         # Function that tries to access beyond the input range (should error)
         bad_selector = x -> x[end+1] > 0  # Tries to access beyond range
-        @test_throws BoundsError eegfun.get_selected_epochs(eps_edge, bad_selector)
+        @test_throws BoundsError EegFun.get_selected_epochs(eps_edge, bad_selector)
 
         # Test extract_epochs with reference_index at sequence boundary
-        ec_boundary = eegfun.EpochCondition(name = "boundary", trigger_sequences = [[1, 2, 3]], reference_index = 3)  # Last element
-        boundary_epochs = eegfun.extract_epochs(dat_edge, 1, ec_boundary, -0.01, 0.01)
-        @test eegfun.n_epochs(boundary_epochs) >= 1
+        ec_boundary = EegFun.EpochCondition(name = "boundary", trigger_sequences = [[1, 2, 3]], reference_index = 3)  # Last element
+        boundary_epochs = EegFun.extract_epochs(dat_edge, 1, ec_boundary, -0.01, 0.01)
+        @test EegFun.n_epochs(boundary_epochs) >= 1
 
         # Test timing constraints with very tight windows
-        ec_tight = eegfun.EpochCondition(
+        ec_tight = EegFun.EpochCondition(
             name = "tight",
             trigger_sequences = [[1, 2, 3]],
             reference_index = 2,
@@ -511,8 +511,8 @@ using Random
             min_interval = 0.0019,  # Very tight: exactly 2ms at 1kHz
             max_interval = 0.0021,
         )
-        tight_epochs = eegfun.extract_epochs(dat_edge, 1, ec_tight, -0.01, 0.01)
-        @test eegfun.n_epochs(tight_epochs) >= 1
+        tight_epochs = EegFun.extract_epochs(dat_edge, 1, ec_tight, -0.01, 0.01)
+        @test EegFun.n_epochs(tight_epochs) >= 1
     end
 
 end
@@ -526,7 +526,7 @@ end
     try
         # Helper to create test EpochData using test_utils.jl function
         function create_batch_test_epoch_data(n_conditions::Int = 2, n_epochs_per_condition::Int = 5)
-            epochs = eegfun.EpochData[]
+            epochs = EegFun.EpochData[]
             fs = 256  # Int64
             n_samples = 513
             t = range(-1.0, 1.0, length = n_samples)
@@ -552,12 +552,12 @@ end
                 end
 
                 layout =
-                    eegfun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+                    EegFun.Layout(DataFrame(label = [:Fz, :Cz], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
                 # EpochData constructor: (file, condition, condition_name, data, layout, sample_rate, analysis_info)
                 push!(
                     epochs,
-                    eegfun.EpochData("test_data", cond, "condition_$cond", dfs, layout, fs, eegfun.AnalysisInfo()),
+                    EegFun.EpochData("test_data", cond, "condition_$cond", dfs, layout, fs, EegFun.AnalysisInfo()),
                 )
             end
 
@@ -578,7 +578,7 @@ end
             output_dir = joinpath(test_dir, "averaged_output")
 
             # Test averaging epochs
-            result = eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             @test result !== nothing
             @test result.success == 2
@@ -592,7 +592,7 @@ end
             # Load and verify averaged data
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test length(erps) == 2  # 2 conditions
-            @test erps[1] isa eegfun.ErpData
+            @test erps[1] isa EegFun.ErpData
             @test hasproperty(erps[1].data, :Fz)
             @test hasproperty(erps[1].data, :Cz)
             # Verify n_epochs (now in struct, not DataFrame)
@@ -602,11 +602,11 @@ end
         @testset "Average specific participants" begin
             output_dir = joinpath(test_dir, "averaged_participant")
 
-            result = eegfun.average_epochs(
+            result = EegFun.average_epochs(
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
+                participant_selection = EegFun.participants(1),
             )
 
             @test result.success == 1
@@ -618,11 +618,11 @@ end
         @testset "Average multiple participants" begin
             output_dir = joinpath(test_dir, "averaged_multi_participants")
 
-            result = eegfun.average_epochs(
+            result = EegFun.average_epochs(
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants([1, 2]),
+                participant_selection = EegFun.participants([1, 2]),
             )
 
             @test result.success == 2
@@ -634,11 +634,11 @@ end
         @testset "Average specific conditions" begin
             output_dir = joinpath(test_dir, "averaged_condition")
 
-            result = eegfun.average_epochs(
+            result = EegFun.average_epochs(
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(1),
+                condition_selection = EegFun.conditions(1),
             )
 
             @test result.success == 2
@@ -652,11 +652,11 @@ end
         @testset "Average multiple conditions" begin
             output_dir = joinpath(test_dir, "averaged_multi_conditions")
 
-            result = eegfun.average_epochs(
+            result = EegFun.average_epochs(
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions([1, 2]),
+                condition_selection = EegFun.conditions([1, 2]),
             )
 
             @test result.success == 2
@@ -670,10 +670,10 @@ end
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception eegfun.average_epochs("epochs_cleaned", input_dir = "/nonexistent/path")
+            @test_throws Exception EegFun.average_epochs("epochs_cleaned", input_dir = "/nonexistent/path")
 
             # Invalid pattern (doesn't contain 'epochs')
-            @test_throws Exception eegfun.average_epochs("erps_cleaned", input_dir = test_dir)
+            @test_throws Exception EegFun.average_epochs("erps_cleaned", input_dir = test_dir)
         end
 
         @testset "No matching files" begin
@@ -681,7 +681,7 @@ end
             mkpath(empty_dir)
 
             # Directory exists but has no JLD2 files matching pattern
-            result = eegfun.average_epochs("epochs_cleaned", input_dir = empty_dir)
+            result = EegFun.average_epochs("epochs_cleaned", input_dir = empty_dir)
 
             @test result === nothing  # No files to process
         end
@@ -689,7 +689,7 @@ end
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "averaged_with_log")
 
-            result = eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             # Check log file exists
             log_file = joinpath(output_dir, "average_epochs.log")
@@ -711,7 +711,7 @@ end
             @test isfile(joinpath(output_dir, "dummy.txt"))
 
             # Run average_epochs - should work fine with existing directory
-            result = eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             @test result.success == 2
             @test isfile(joinpath(output_dir, "dummy.txt"))  # Original file preserved
@@ -730,7 +730,7 @@ end
             jldsave(joinpath(partial_dir, "2_epochs_cleaned.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "averaged_partial")
-            result = eegfun.average_epochs("epochs_cleaned", input_dir = partial_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_cleaned", input_dir = partial_dir, output_dir = output_dir)
 
             @test result.success == 1
             @test result.errors == 1
@@ -743,11 +743,11 @@ end
 
             # Request condition 5 when only 2 exist
             # With predicate-based selection, this results in empty selection but successful processing
-            result = eegfun.average_epochs(
+            result = EegFun.average_epochs(
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(5),
+                condition_selection = EegFun.conditions(5),
             )
 
             # Files are processed successfully but with empty condition selection
@@ -758,7 +758,7 @@ end
         @testset "Return value structure" begin
             output_dir = joinpath(test_dir, "averaged_return_check")
 
-            result = eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             # Check result structure
             @test hasfield(typeof(result), :success)
@@ -780,7 +780,7 @@ end
             epoch_variance = var(first_epoch_values)
 
             # Average epochs
-            eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             # Load averaged data
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
@@ -802,12 +802,12 @@ end
             output_dir = joinpath(test_dir, "averaged_combined")
 
             # Average specific participant AND condition
-            result = eegfun.average_epochs(
+            result = EegFun.average_epochs(
                 "epochs_cleaned",
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
-                condition_selection = eegfun.conditions(1),
+                participant_selection = EegFun.participants(1),
+                condition_selection = EegFun.conditions(1),
             )
 
             @test result.success == 1
@@ -821,7 +821,7 @@ end
 
         @testset "Different epoch counts per condition" begin
             # Create data with different number of epochs per condition
-            epochs_var = eegfun.EpochData[]
+            epochs_var = EegFun.EpochData[]
             fs = 256
             n_samples = 513
             t = range(-1.0, 1.0, length = n_samples)
@@ -854,10 +854,10 @@ end
                 push!(dfs2, df)
             end
 
-            layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            push!(epochs_var, eegfun.EpochData("test_data", 1, "condition_1", dfs1, layout, fs, eegfun.AnalysisInfo()))
-            push!(epochs_var, eegfun.EpochData("test_data", 2, "condition_2", dfs2, layout, fs, eegfun.AnalysisInfo()))
+            push!(epochs_var, EegFun.EpochData("test_data", 1, "condition_1", dfs1, layout, fs, EegFun.AnalysisInfo()))
+            push!(epochs_var, EegFun.EpochData("test_data", 2, "condition_2", dfs2, layout, fs, EegFun.AnalysisInfo()))
 
             # Save and process
             var_dir = joinpath(test_dir, "var_epochs")
@@ -865,7 +865,7 @@ end
             jldsave(joinpath(var_dir, "1_epochs_var.jld2"); data = epochs_var)
 
             output_dir = joinpath(test_dir, "averaged_var")
-            result = eegfun.average_epochs("epochs_var", input_dir = var_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_var", input_dir = var_dir, output_dir = output_dir)
 
             @test result.success == 1
 
@@ -884,14 +884,14 @@ end
 
             # This should trigger an error when trying to average
             # We'll test this by creating a minimal epochs structure
-            layout = eegfun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:Fz], inc = [0.0], azi = [0.0]), nothing, nothing)
 
             empty_epoch =
-                eegfun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 256, eegfun.AnalysisInfo())
+                EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], layout, 256, EegFun.AnalysisInfo())
             jldsave(joinpath(empty_epochs_dir, "1_epochs_empty.jld2"); data = [empty_epoch])
 
             output_dir = joinpath(test_dir, "averaged_empty")
-            result = eegfun.average_epochs("epochs_empty", input_dir = empty_epochs_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_empty", input_dir = empty_epochs_dir, output_dir = output_dir)
 
             # Should fail because cannot average empty epochs
             @test result.success == 0
@@ -910,19 +910,19 @@ end
 
             # Test pattern matching "epochs_original"
             output_dir1 = joinpath(test_dir, "averaged_original")
-            result1 = eegfun.average_epochs("epochs_original", input_dir = pattern_dir, output_dir = output_dir1)
+            result1 = EegFun.average_epochs("epochs_original", input_dir = pattern_dir, output_dir = output_dir1)
             @test result1.success == 1
             @test isfile(joinpath(output_dir1, "1_erps_original.jld2"))
 
             # Test pattern matching "epochs_cleaned"
             output_dir2 = joinpath(test_dir, "averaged_cleaned_pattern")
-            result2 = eegfun.average_epochs("epochs_cleaned", input_dir = pattern_dir, output_dir = output_dir2)
+            result2 = EegFun.average_epochs("epochs_cleaned", input_dir = pattern_dir, output_dir = output_dir2)
             @test result2.success == 1
             @test isfile(joinpath(output_dir2, "2_erps_cleaned.jld2"))
 
             # Test pattern matching "epochs" (should match all)
             output_dir3 = joinpath(test_dir, "averaged_all_epochs")
-            result3 = eegfun.average_epochs("epochs", input_dir = pattern_dir, output_dir = output_dir3)
+            result3 = EegFun.average_epochs("epochs", input_dir = pattern_dir, output_dir = output_dir3)
             @test result3.success == 3
         end
 
@@ -955,14 +955,14 @@ end
                 push!(dfs, df)
             end
 
-            layout = eegfun.Layout(DataFrame(label = [:Ch1], inc = [0.0], azi = [0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:Ch1], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            epoch_data = eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, eegfun.AnalysisInfo())
+            epoch_data = EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, EegFun.AnalysisInfo())
             jldsave(joinpath(math_dir, "1_epochs_math.jld2"); data = [epoch_data])
 
             # Average
             output_dir = joinpath(test_dir, "averaged_math")
-            eegfun.average_epochs("epochs_math", input_dir = math_dir, output_dir = output_dir)
+            EegFun.average_epochs("epochs_math", input_dir = math_dir, output_dir = output_dir)
 
             # Load and verify
             erps = load(joinpath(output_dir, "1_erps_math.jld2"), "data")
@@ -976,7 +976,7 @@ end
         @testset "Metadata preservation" begin
             output_dir = joinpath(test_dir, "averaged_metadata")
 
-            eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
@@ -1000,14 +1000,14 @@ end
             original_layout = original_epochs[1].layout
             original_fs = original_epochs[1].sample_rate
 
-            eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
+            EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = output_dir)
 
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
 
             # Verify layout preservation
             @test erps[1].layout.data == original_layout.data
             @test erps[1].sample_rate == original_fs
-            @test erps[1] isa eegfun.ErpData
+            @test erps[1] isa EegFun.ErpData
         end
 
         @testset "Single epoch per condition" begin
@@ -1030,14 +1030,14 @@ end
             )
             push!(dfs, df)
 
-            layout = eegfun.Layout(DataFrame(label = [:Cz], inc = [0.0], azi = [0.0]), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = [:Cz], inc = [0.0], azi = [0.0]), nothing, nothing)
 
-            epoch_data = eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, eegfun.AnalysisInfo())
+            epoch_data = EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, EegFun.AnalysisInfo())
             jldsave(joinpath(single_dir, "1_epochs_single.jld2"); data = [epoch_data])
 
             # Average single epoch
             output_dir = joinpath(test_dir, "averaged_single")
-            result = eegfun.average_epochs("epochs_single", input_dir = single_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_single", input_dir = single_dir, output_dir = output_dir)
 
             @test result.success == 1
 
@@ -1052,7 +1052,7 @@ end
             overwrite_dir = joinpath(test_dir, "averaged_overwrite")
 
             # First run
-            result1 = eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+            result1 = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
             @test result1.success == 2
 
             # Get original file modification time (filename transformed from "epochs" to "erps")
@@ -1063,7 +1063,7 @@ end
             sleep(0.1)
 
             # Second run (should overwrite)
-            result2 = eegfun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
+            result2 = EegFun.average_epochs("epochs_cleaned", input_dir = test_dir, output_dir = overwrite_dir)
             @test result2.success == 2
 
             # Verify file was overwritten (different mtime)
@@ -1103,14 +1103,14 @@ end
             end
 
             layout_df = DataFrame(label = channel_names, inc = zeros(10), azi = zeros(10))
-            layout = eegfun.Layout(layout_df, nothing, nothing)
+            layout = EegFun.Layout(layout_df, nothing, nothing)
 
-            epoch_data = eegfun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, eegfun.AnalysisInfo())
+            epoch_data = EegFun.EpochData("test_data", 1, "condition_1", dfs, layout, fs, EegFun.AnalysisInfo())
             jldsave(joinpath(many_ch_dir, "1_epochs_many.jld2"); data = [epoch_data])
 
             # Average
             output_dir = joinpath(test_dir, "averaged_many_ch")
-            result = eegfun.average_epochs("epochs_many", input_dir = many_ch_dir, output_dir = output_dir)
+            result = EegFun.average_epochs("epochs_many", input_dir = many_ch_dir, output_dir = output_dir)
 
             @test result.success == 1
 
@@ -1140,8 +1140,8 @@ end
         original_n_epochs = length(epoch_data.data)
 
         # Apply detection and rejection
-        rejection_info = eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = 2.0)
-        clean_data = eegfun.reject_epochs(epoch_data, rejection_info)
+        rejection_info = EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = 2.0)
+        clean_data = EegFun.reject_epochs(epoch_data, rejection_info)
 
         # Check that original data is unchanged
         @test length(epoch_data.data) == original_n_epochs
@@ -1158,8 +1158,8 @@ end
         original_n_epochs = length(epoch_data.data)
 
         # Apply detection and rejection in-place
-        rejection_info = eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = 2.0)
-        eegfun.reject_epochs!(epoch_data, rejection_info)
+        rejection_info = EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = 2.0)
+        EegFun.reject_epochs!(epoch_data, rejection_info)
 
         # Check that data was modified
         @test length(epoch_data.data) < original_n_epochs
@@ -1171,8 +1171,8 @@ end
         epoch_data, bad_indices = create_test_epochs_with_artifacts(1, 1, 3, 100, 3, n_bad_epochs = 3)
 
         # Test different criteria
-        rejection_info_aggressive = eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = 1.5)
-        rejection_info_conservative = eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = 3.0)
+        rejection_info_aggressive = EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = 1.5)
+        rejection_info_conservative = EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = 3.0)
 
         # More aggressive should reject more epochs
         @test length(rejection_info_aggressive.rejected) >= length(rejection_info_conservative.rejected)
@@ -1180,10 +1180,10 @@ end
 
     @testset "EpochRejectionInfo structure" begin
         epoch_data, bad_indices = create_test_epochs_with_artifacts(1, 20, 100, 3, 3, n_bad_epochs = 3)
-        rejection_info = eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = 2.0)
+        rejection_info = EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = 2.0)
 
         # Check structure
-        @test rejection_info isa eegfun.EpochRejectionInfo
+        @test rejection_info isa EegFun.EpochRejectionInfo
         @test rejection_info.info.n == length(epoch_data.data)
         # n_artifacts now counts total artifacts (all channel/epoch combinations), rejected contains unique rejections
         unique_rejected = length(unique([r.epoch for r in rejection_info.rejected]))
@@ -1193,19 +1193,19 @@ end
 
     @testset "Error handling" begin
         # Test with empty data
-        empty_epochs = eegfun.EpochData(
+        empty_epochs = EegFun.EpochData(
             "test_data",
             1,
             "condition_1",
             DataFrame[],
-            eegfun.Layout(DataFrame(label = [:ch1], x = [0], y = [0], z = [0]), nothing, nothing),
+            EegFun.Layout(DataFrame(label = [:ch1], x = [0], y = [0], z = [0]), nothing, nothing),
             1000,
-            eegfun.AnalysisInfo(),
+            EegFun.AnalysisInfo(),
         )
-        @test_throws Exception eegfun.detect_bad_epochs_automatic(empty_epochs, z_criterion = 2.0)
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(empty_epochs, z_criterion = 2.0)
 
         # Test with invalid z-criterion
         epoch_data, _ = create_test_epochs_with_artifacts(1, 1, 5, 50, 2)
-        @test_throws Exception eegfun.detect_bad_epochs_automatic(epoch_data, z_criterion = -1.0)
+        @test_throws Exception EegFun.detect_bad_epochs_automatic(epoch_data, z_criterion = -1.0)
     end
 end

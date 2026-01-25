@@ -1,7 +1,7 @@
 using Test
 using DataFrames
 using Statistics
-using eegfun
+using EegFun
 
 @testset "channel_repair" begin
 
@@ -15,13 +15,13 @@ using eegfun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        eegfun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
 
         # Repair channel Ch2
-        eegfun.repair_channels!(dat, [:Ch2], method = :neighbor_interpolation)
+        EegFun.repair_channels!(dat, [:Ch2], method = :neighbor_interpolation)
 
         # Check that Ch2 data changed
         @test !isapprox(dat.data.Ch2, original_data.Ch2, rtol = 1e-10)
@@ -45,7 +45,7 @@ using eegfun
         original_data = copy(dat.data)
 
         # Repair channel Ch2
-        eegfun.repair_channels!(dat, [:Ch2], method = :spherical_spline)
+        EegFun.repair_channels!(dat, [:Ch2], method = :spherical_spline)
 
         # Check that Ch2 data changed
         @test !isapprox(dat.data.Ch2, original_data.Ch2, rtol = 1e-10)
@@ -66,13 +66,13 @@ using eegfun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        eegfun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
 
         # Use non-mutating version
-        repaired_dat = eegfun.repair_channels(dat, [:Ch2], method = :neighbor_interpolation)
+        repaired_dat = EegFun.repair_channels(dat, [:Ch2], method = :neighbor_interpolation)
 
         # Check that original data is unchanged
         @test isapprox(dat.data.Ch2, original_data.Ch2, rtol = 1e-10)
@@ -96,13 +96,13 @@ using eegfun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        eegfun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = [copy(epoch) for epoch in dat.data]
 
         # Repair channel Ch2 in all epochs
-        eegfun.repair_channels!(dat, [:Ch2], method = :neighbor_interpolation)
+        EegFun.repair_channels!(dat, [:Ch2], method = :neighbor_interpolation)
 
         # Check that Ch2 data changed in all epochs
         for i = 1:3
@@ -130,7 +130,7 @@ using eegfun
         original_data = [copy(epoch) for epoch in dat.data]
 
         # Repair channel Ch2 in all epochs
-        eegfun.repair_channels!(dat, [:Ch2], method = :spherical_spline)
+        EegFun.repair_channels!(dat, [:Ch2], method = :spherical_spline)
 
         # Check that Ch2 data changed in all epochs
         for i = 1:3
@@ -155,13 +155,13 @@ using eegfun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        eegfun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
 
         # Repair multiple channels
-        eegfun.repair_channels!(dat, [:Ch2, :Ch3], method = :neighbor_interpolation)
+        EegFun.repair_channels!(dat, [:Ch2, :Ch3], method = :neighbor_interpolation)
 
         # Check that repaired channels changed
         @test !isapprox(dat.data.Ch2, original_data.Ch2, rtol = 1e-10)
@@ -177,7 +177,7 @@ using eegfun
         dat = create_test_data(n = 100, n_channels = 4)
 
         # Test unknown method
-        @test_throws ArgumentError eegfun.repair_channels!(dat, [:Ch2], method = :unknown_method)
+        @test_throws ArgumentError EegFun.repair_channels!(dat, [:Ch2], method = :unknown_method)
     end
 
     # Test 8: Custom parameters for spherical spline
@@ -193,7 +193,7 @@ using eegfun
         original_data = copy(dat.data)
 
         # Repair with custom parameters
-        eegfun.repair_channels!(dat, [:Ch2], method = :spherical_spline, m = 6, lambda = 1e-6)
+        EegFun.repair_channels!(dat, [:Ch2], method = :spherical_spline, m = 6, lambda = 1e-6)
 
         # Check that data changed
         @test !isapprox(dat.data.Ch2, original_data.Ch2, rtol = 1e-10)
@@ -209,13 +209,13 @@ using eegfun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        eegfun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = [copy(epoch) for epoch in dat.data]
 
         # Repair only first epoch
-        eegfun.repair_channels!(dat, [:Ch2], method = :neighbor_interpolation, epoch_selection = eegfun.epochs(1))
+        EegFun.repair_channels!(dat, [:Ch2], method = :neighbor_interpolation, epoch_selection = EegFun.epochs(1))
 
         # Check that Ch2 data changed only in first epoch
         @test !isapprox(dat.data[1].Ch2, original_data[1].Ch2, rtol = 1e-10)

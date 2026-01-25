@@ -27,7 +27,7 @@ using DataFrames
         output_dir = joinpath(test_dir, "grand_average")
 
         # Test basic grand averaging
-        result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
         # Verify output file was created
         @test isdir(output_dir)
@@ -55,10 +55,10 @@ using DataFrames
         output_dir = joinpath(test_dir, "grand_average_filtered")
 
         # Test with specific participants
-        result = eegfun.grand_average(
+        result = EegFun.grand_average(
             "erps_cleaned",
             input_dir = test_dir,
-            participant_selection = eegfun.participants([1, 2, 3]),
+            participant_selection = EegFun.participants([1, 2, 3]),
             output_dir = output_dir,
         )
 
@@ -76,10 +76,10 @@ using DataFrames
         output_dir = joinpath(test_dir, "grand_average_conditions")
 
         # Test with specific conditions
-        result = eegfun.grand_average(
+        result = EegFun.grand_average(
             "erps_cleaned",
             input_dir = test_dir,
-            condition_selection = eegfun.conditions([1, 2]),
+            condition_selection = EegFun.conditions([1, 2]),
             output_dir = output_dir,
         )
 
@@ -96,11 +96,11 @@ using DataFrames
     @testset "Grand average calculation verification" begin
         output_dir = joinpath(test_dir, "grand_average_verification")
 
-        result = eegfun.grand_average(
+        result = EegFun.grand_average(
             "erps_cleaned",
             input_dir = test_dir,
-            participant_selection = eegfun.participants([1, 2]),
-            condition_selection = eegfun.conditions([1]),
+            participant_selection = EegFun.participants([1, 2]),
+            condition_selection = EegFun.conditions([1]),
             output_dir = output_dir,
         )
 
@@ -133,15 +133,15 @@ using DataFrames
 
     @testset "Error handling" begin
         @testset "Invalid input directory" begin
-            @test_throws Exception eegfun.grand_average("erps_cleaned", input_dir = "/nonexistent/dir")
+            @test_throws Exception EegFun.grand_average("erps_cleaned", input_dir = "/nonexistent/dir")
         end
 
         @testset "Non-ERP pattern" begin
-            @test_throws Exception eegfun.grand_average("epochs_cleaned", input_dir = test_dir)
+            @test_throws Exception EegFun.grand_average("epochs_cleaned", input_dir = test_dir)
         end
 
         @testset "No matching files" begin
-            @test_throws Exception eegfun.grand_average("nonexistent_pattern", input_dir = test_dir)
+            @test_throws Exception EegFun.grand_average("nonexistent_pattern", input_dir = test_dir)
         end
 
         @testset "Files with no ERP data" begin
@@ -151,10 +151,10 @@ using DataFrames
 
             output_dir = joinpath(test_dir, "grand_average_no_erps")
 
-            result = eegfun.grand_average(
+            result = EegFun.grand_average(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participant_selection = eegfun.participants(999),  # Non-existent participant
+                participant_selection = EegFun.participants(999),  # Non-existent participant
                 output_dir = output_dir,
             )
 
@@ -166,10 +166,10 @@ using DataFrames
         @testset "Single participant (should skip grand average)" begin
             output_dir = joinpath(test_dir, "grand_average_single")
 
-            result = eegfun.grand_average(
+            result = EegFun.grand_average(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participant_selection = eegfun.participants([1]),
+                participant_selection = EegFun.participants([1]),
                 output_dir = output_dir,
             )
 
@@ -189,10 +189,10 @@ using DataFrames
 
             output_dir = joinpath(test_dir, "grand_average_insufficient")
 
-            result = eegfun.grand_average(
+            result = EegFun.grand_average(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participant_selection = eegfun.participants([1, 2, 5]),
+                participant_selection = EegFun.participants([1, 2, 5]),
                 output_dir = output_dir,
             )
 
@@ -205,14 +205,14 @@ using DataFrames
         @testset "Empty ERP data" begin
             # Create file with empty ERP list
             empty_file = joinpath(test_dir, "empty_erps_cleaned.jld2")
-            jldsave(empty_file; data = eegfun.ErpData[])
+            jldsave(empty_file; data = EegFun.ErpData[])
 
             output_dir = joinpath(test_dir, "grand_average_empty")
 
-            result = eegfun.grand_average(
+            result = EegFun.grand_average(
                 "erps_cleaned",
                 input_dir = test_dir,
-                participant_selection = eegfun.participants(999),  # Non-existent participant
+                participant_selection = EegFun.participants(999),  # Non-existent participant
                 output_dir = output_dir,
             )
 
@@ -223,11 +223,11 @@ using DataFrames
     @testset "Data structure validation" begin
         output_dir = joinpath(test_dir, "grand_average_structure")
 
-        result = eegfun.grand_average(
+        result = EegFun.grand_average(
             "erps_cleaned",
             input_dir = test_dir,
-            participant_selection = eegfun.participants([1, 2]),
-            condition_selection = eegfun.conditions([1]),
+            participant_selection = EegFun.participants([1, 2]),
+            condition_selection = EegFun.conditions([1]),
             output_dir = output_dir,
         )
 
@@ -235,10 +235,10 @@ using DataFrames
         grand_avg = grand_averages[1]
 
         # Verify ErpData structure
-        @test grand_avg isa eegfun.ErpData
+        @test grand_avg isa EegFun.ErpData
         @test grand_avg.sample_rate == 1000.0
-        @test grand_avg.layout isa eegfun.Layout
-        @test grand_avg.analysis_info isa eegfun.AnalysisInfo
+        @test grand_avg.layout isa EegFun.Layout
+        @test grand_avg.analysis_info isa EegFun.AnalysisInfo
 
         # Verify DataFrame structure
         @test grand_avg.data isa DataFrame
@@ -262,14 +262,14 @@ using DataFrames
         @testset "Custom output directory" begin
             custom_dir = joinpath(test_dir, "custom_grand_average")
 
-            result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = custom_dir)
+            result = EegFun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = custom_dir)
 
             @test isdir(custom_dir)
             @test "grand_average_erps_cleaned.jld2" in readdir(custom_dir)
         end
 
         @testset "Auto-generated output directory" begin
-            result = eegfun.grand_average("erps_cleaned", input_dir = test_dir)
+            result = EegFun.grand_average("erps_cleaned", input_dir = test_dir)
 
             # Should create directory with pattern-based name
             expected_dir = joinpath(test_dir, "grand_average_erps_cleaned")
@@ -280,7 +280,7 @@ using DataFrames
     @testset "Logging and return values" begin
         output_dir = joinpath(test_dir, "grand_average_logging")
 
-        result = eegfun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.grand_average("erps_cleaned", input_dir = test_dir, output_dir = output_dir)
 
         # Check that log file was created
         log_file = joinpath(output_dir, "grand_average.log")
@@ -318,7 +318,7 @@ using DataFrames
 
         output_dir = joinpath(separate_test_dir, "grand_average_different_counts")
 
-        result = eegfun.grand_average("erps_cleaned", input_dir = separate_test_dir, output_dir = output_dir)
+        result = EegFun.grand_average("erps_cleaned", input_dir = separate_test_dir, output_dir = output_dir)
 
         @test isdir(output_dir)
         grand_averages = load(joinpath(output_dir, "grand_average_erps_cleaned.jld2"), "data")

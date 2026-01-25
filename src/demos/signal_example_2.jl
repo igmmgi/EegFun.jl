@@ -13,8 +13,8 @@ This function creates a GUI with:
 
 # Examples
 ```julia
-using eegfun
-eegfun.signal_example_2()
+using EegFun
+EegFun.signal_example_2()
 ```
 """
 function signal_example_2()

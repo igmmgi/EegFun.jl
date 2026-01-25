@@ -1,4 +1,4 @@
-using eegfun
+using EegFun
 using BenchmarkTools
 using Profile
 using ProfileView
@@ -7,33 +7,33 @@ using Statistics
 
 # Get some basic data
 data_file = joinpath(@__DIR__, "..", "..", "..", "AttentionExp", "recoded", "Flank_C_3.bdf")
-layout_file = eegfun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-eegfun.polar_to_cartesian_xy!(layout_file)
-dat = eegfun.read_bdf(data_file);
-dat = eegfun.create_eeg_dataframe(dat, layout_file);
-eegfun.rereference!(dat, :avg)
-eegfun.filter_data!(dat, "hp", 1)
+layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
+EegFun.polar_to_cartesian_xy!(layout_file)
+dat = EegFun.read_bdf(data_file);
+dat = EegFun.create_eeg_dataframe(dat, layout_file);
+EegFun.rereference!(dat, :avg)
+EegFun.filter_data!(dat, "hp", 1)
 
 # Prepare data for direct function call
-dat_subset = eegfun.subset(dat, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168)
+dat_subset = EegFun.subset(dat, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168)
 channel_data = vec(mean(Matrix(dat_subset.data[:, Not(:time)]), dims = 1))
 layout = dat_subset.layout
 gridscale = 67
 
 println("=== Profiling spherical spline interpolation ===")
 println("\nBaseline benchmark:")
-@btime eegfun._data_interpolation_topo_spherical_spline($channel_data, $layout, $gridscale)
+@btime EegFun._data_interpolation_topo_spherical_spline($channel_data, $layout, $gridscale)
 
 println("\n\nDetailed profiling (run for 10 seconds):")
 # Warm up
 for i = 1:5
-    eegfun._data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
+    EegFun._data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
 end
 
 # Profile
 Profile.clear()
 @profile for i = 1:100
-    eegfun._data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
+    EegFun._data_interpolation_topo_spherical_spline(channel_data, layout, gridscale)
 end
 
 # Show results
@@ -44,7 +44,7 @@ println("\n\n=== Breaking down individual components ===")
 # Test 1: Coordinate extraction and normalization
 println("\n1. Coordinate extraction and normalization:")
 @btime begin
-    eegfun._ensure_coordinates_3d!($layout)
+    EegFun._ensure_coordinates_3d!($layout)
     n_channels = length($channel_data)
     x3_col = $layout.data.x3::Vector{Float64}
     y3_col = $layout.data.y3::Vector{Float64}
@@ -78,13 +78,13 @@ end
 
 @btime begin
     cosang = $coords_unit * $coords_unit'
-    G = eegfun._calc_g_matrix(cosang)
+    G = EegFun._calc_g_matrix(cosang)
 end
 
 # Test 3: System solve
 println("\n3. System solve:")
 cosang = coords_unit * coords_unit'
-G = eegfun._calc_g_matrix(cosang)
+G = EegFun._calc_g_matrix(cosang)
 @inbounds for i = 1:n_channels
     G[i, i] += 1e-5
 end
@@ -170,9 +170,9 @@ end
 @btime begin
     # New optimized interpolation path
     cosang_grid = $grid_points_unit * $coords_unit'
-    factors = eegfun._get_g_factors(15)
+    factors = EegFun._get_g_factors(15)
     @inbounds for i in eachindex(cosang_grid)
-        cosang_grid[i] = eegfun._legendre_val(clamp(cosang_grid[i], -1.0, 1.0), factors)
+        cosang_grid[i] = EegFun._legendre_val(clamp(cosang_grid[i], -1.0, 1.0), factors)
     end
     w_channels = @view weights[1:n_channels]
     interpolated_valid = cosang_grid * w_channels

@@ -661,7 +661,7 @@ function grand_average(rsa_data_list::Vector{RsaData}; compute_noise_ceiling::Bo
     # Compute noise ceiling if requested
     noise_ceiling = nothing
     if compute_noise_ceiling && length(rsa_data_list) >= 2
-        noise_ceiling = eegfun.compute_noise_ceiling(rsa_data_list)
+        noise_ceiling = EegFun.compute_noise_ceiling(rsa_data_list)
     end
 
     # Create grand-averaged RsaData

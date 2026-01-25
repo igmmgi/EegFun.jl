@@ -56,7 +56,7 @@ $(generate_kwargs_doc(PLOT_GFP_KWARGS))
 
 # Examples
 ```julia
-using eegfun, JLD2
+using EegFun, JLD2
 
 # Load and plot GFP
 erp_data = load("participant_1_erps.jld2", "erps")[1]

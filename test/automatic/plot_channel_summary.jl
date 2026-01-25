@@ -2,7 +2,7 @@ using Test
 using DataFrames
 using Statistics
 using GLMakie
-using eegfun
+using EegFun
 
 
 @testset "plot_channel_summary" begin
@@ -19,7 +19,7 @@ using eegfun
         ax = Axis(fig[1, 1])
 
         # Should not throw an error
-        @test eegfun.plot_channel_summary!(fig, ax, df, :std) === nothing
+        @test EegFun.plot_channel_summary!(fig, ax, df, :std) === nothing
 
         # Test that the axis has been modified
         @test ax.title[] == ""  # Default title
@@ -34,7 +34,7 @@ using eegfun
         ax = Axis(fig[1, 1])
 
         # Test with custom parameters
-        @test eegfun.plot_channel_summary!(
+        @test EegFun.plot_channel_summary!(
             fig,
             ax,
             df,
@@ -57,7 +57,7 @@ using eegfun
         ax = Axis(fig[1, 1])
 
         # Test with averaging over epochs
-        @test eegfun.plot_channel_summary!(
+        @test EegFun.plot_channel_summary!(
             fig,
             ax,
             df,
@@ -79,20 +79,20 @@ using eegfun
 
         # Test missing channel column - should log error but not throw
         df_no_channel = select(df, Not(:channel))
-        @test eegfun.plot_channel_summary!(fig, ax, df_no_channel, :std) === nothing
+        @test EegFun.plot_channel_summary!(fig, ax, df_no_channel, :std) === nothing
 
         # Test missing data column - should log error but not throw
-        @test eegfun.plot_channel_summary!(fig, ax, df, :nonexistent) === nothing
+        @test EegFun.plot_channel_summary!(fig, ax, df, :nonexistent) === nothing
 
         # Test invalid averaging column - should log error but not throw
-        @test eegfun.plot_channel_summary!(fig, ax, df, :std, average_over = :nonexistent) === nothing
+        @test EegFun.plot_channel_summary!(fig, ax, df, :std, average_over = :nonexistent) === nothing
     end
 
     @testset "plot_channel_summary basic functionality" begin
         df = create_test_summary_data()
 
         # Test basic plotting (non-mutating version)
-        fig, ax = eegfun.plot_channel_summary(df, :std, display_plot = false)
+        fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = false)
 
         @test fig isa Figure
         @test ax isa Axis
@@ -103,7 +103,7 @@ using eegfun
         df = create_test_summary_data()
 
         # Test with custom parameters
-        fig, ax = eegfun.plot_channel_summary(
+        fig, ax = EegFun.plot_channel_summary(
             df,
             :range,
             title = "Test Title",
@@ -122,7 +122,7 @@ using eegfun
         df = create_test_summary_data_with_epochs()
 
         # Test with averaging
-        fig, ax = eegfun.plot_channel_summary(df, :var, average_over = :epoch, error_color = :red, display_plot = false)
+        fig, ax = EegFun.plot_channel_summary(df, :var, average_over = :epoch, error_color = :red, display_plot = false)
 
         @test fig isa Figure
         @test ax isa Axis
@@ -133,13 +133,13 @@ using eegfun
         df = create_test_summary_data()
 
         # Test sorting by values
-        fig, ax = eegfun.plot_channel_summary(df, :std, sort_values = true, display_plot = false)
+        fig, ax = EegFun.plot_channel_summary(df, :std, sort_values = true, display_plot = false)
 
         @test fig isa Figure
         @test ax isa Axis
 
         # Test without sorting
-        fig2, ax2 = eegfun.plot_channel_summary(df, :std, sort_values = false, display_plot = false)
+        fig2, ax2 = EegFun.plot_channel_summary(df, :std, sort_values = false, display_plot = false)
 
         @test fig2 isa Figure
         @test ax2 isa Axis
@@ -149,12 +149,12 @@ using eegfun
         df = create_test_summary_data()
 
         # Test with display_plot = false
-        fig, ax = eegfun.plot_channel_summary(df, :std, display_plot = false)
+        fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = false)
         @test fig isa Figure
         @test ax isa Axis
 
         # Test with display_plot = true (should work since GLMakie is available)
-        fig, ax = eegfun.plot_channel_summary(df, :std, display_plot = true)
+        fig, ax = EegFun.plot_channel_summary(df, :std, display_plot = true)
         @test fig isa Figure
         @test ax isa Axis
     end
@@ -166,7 +166,7 @@ using eegfun
         columns_to_test = [:min, :max, :std, :var, :range, :zvar]
 
         for col in columns_to_test
-            fig, ax = eegfun.plot_channel_summary(df, col, display_plot = false)
+            fig, ax = EegFun.plot_channel_summary(df, col, display_plot = false)
             @test fig isa Figure
             @test ax isa Axis
             @test ax.ylabel[] == string(col)
@@ -185,7 +185,7 @@ using eegfun
             zvar = [0.0],
         )
 
-        fig, ax = eegfun.plot_channel_summary(df_single, :std, display_plot = false)
+        fig, ax = EegFun.plot_channel_summary(df_single, :std, display_plot = false)
         @test fig isa Figure
         @test ax isa Axis
         @test ax.ylabel[] == "std"
@@ -201,7 +201,7 @@ using eegfun
             zvar = [0.0, -0.5],
         )
 
-        fig, ax = eegfun.plot_channel_summary(df_two, :var, display_plot = false)
+        fig, ax = EegFun.plot_channel_summary(df_two, :var, display_plot = false)
         @test fig isa Figure
         @test ax isa Axis
     end
@@ -210,11 +210,11 @@ using eegfun
         df = create_test_summary_data()
 
         # Test that both versions produce the same visual result
-        fig1, ax1 = eegfun.plot_channel_summary(df, :std, display_plot = false)
+        fig1, ax1 = EegFun.plot_channel_summary(df, :std, display_plot = false)
 
         fig2 = Figure()
         ax2 = Axis(fig2[1, 1])
-        eegfun.plot_channel_summary!(fig2, ax2, df, :std)
+        EegFun.plot_channel_summary!(fig2, ax2, df, :std)
 
         # Both should have the same ylabel
         @test ax1.ylabel[] == ax2.ylabel[]
@@ -224,22 +224,22 @@ using eegfun
 
     @testset "DEFAULT_CHANNEL_SUMMARY_KWARGS" begin
         # Test that the default kwargs are properly defined
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :sort_values)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :average_over)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :display_plot)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_color)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :title)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :xlabel)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_width)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_alpha)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :error_color)
-        @test haskey(eegfun.PLOT_CHANNEL_SUMMARY_KWARGS, :error_linewidth)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :sort_values)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :average_over)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :display_plot)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_color)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :title)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :xlabel)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_width)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :bar_alpha)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :error_color)
+        @test haskey(EegFun.PLOT_CHANNEL_SUMMARY_KWARGS, :error_linewidth)
 
         # Test that defaults are reasonable
-        @test eegfun.PLOT_CHANNEL_SUMMARY_KWARGS[:sort_values][1] == false
-        @test eegfun.PLOT_CHANNEL_SUMMARY_KWARGS[:display_plot][1] == true
-        @test eegfun.PLOT_CHANNEL_SUMMARY_KWARGS[:bar_color][1] == :steelblue
-        @test eegfun.PLOT_CHANNEL_SUMMARY_KWARGS[:xlabel][1] == "Electrode"
+        @test EegFun.PLOT_CHANNEL_SUMMARY_KWARGS[:sort_values][1] == false
+        @test EegFun.PLOT_CHANNEL_SUMMARY_KWARGS[:display_plot][1] == true
+        @test EegFun.PLOT_CHANNEL_SUMMARY_KWARGS[:bar_color][1] == :steelblue
+        @test EegFun.PLOT_CHANNEL_SUMMARY_KWARGS[:xlabel][1] == "Electrode"
     end
 
 end # plot_channel_summary testset

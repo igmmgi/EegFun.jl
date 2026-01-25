@@ -1,6 +1,6 @@
 using Test
 using DataFrames
-using eegfun
+using EegFun
 using JLD2
 using Statistics
 
@@ -9,14 +9,14 @@ using Statistics
     dat = create_test_data(n = 500)
 
     # 1) Append averaged columns only (Symbols input)
-    eegfun.channel_average!(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])])
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
 
     @test :Ch1_Ch2 ∈ propertynames(dat.data)
     @test all(dat.data.Ch1_Ch2 .== (dat.data.Ch1 .+ dat.data.Ch2) ./ 2)
 
     # 2) Reduce to only averages and create averaged layout
     dat = create_test_data(n = 500)
-    dat = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])]; reduce = true)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     @test all(propertynames(dat.data) .== [:time, :sample, :triggers, :Ch1_Ch2])
     @test size(dat.layout.data, 1) == 1
     @test :inc ∈ propertynames(dat.layout.data)
@@ -24,50 +24,50 @@ using Statistics
 
     # 3) Append averaged channels to layout
     dat = create_test_data(n = 500)
-    dat = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Ch2, :Ch3])])
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     @test :Ch2_Ch3 ∈ propertynames(dat.data)
     @test any(dat.layout.data.label .== :Ch2_Ch3)
 
     # 4) Mixed Symbol input
     dat = create_test_data(n = 500)
-    eegfun.channel_average!(dat, channel_selections = [eegfun.channels([:Ch1, :Ch3])])
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch3])])
     @test :Ch1_Ch3 ∈ propertynames(dat.data)
     @test :Ch1_Ch2 ∉ propertynames(dat.data)
 
     # 5) Auto-label :avg for all channels
     dat = create_test_data(n = 500)
-    dat = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2, :Ch3])]; reduce = true)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2, :Ch3])]; reduce = true)
     @test :avg ∈ propertynames(dat.data)
 
     # 6) Custom output_labels applied and length mismatch errors
     dat = create_test_data(n = 500)
-    eegfun.channel_average!(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])]; output_labels = [:output_label])
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; output_labels = [:output_label])
     @test :output_label ∈ propertynames(dat.data)
-    @test_throws Any eegfun.channel_average!(
+    @test_throws Any EegFun.channel_average!(
         dat,
-        channel_selections = [eegfun.channels([:A, :B]), eegfun.channels([:A, :C])];
+        channel_selections = [EegFun.channels([:A, :B]), EegFun.channels([:A, :C])];
         output_labels = [:x],
     )
 
     # 7) Duplicate labels in layout (should accumulate)
     # First add B_C, then add again to verify rows accumulate
     dat = create_test_data(n = 500)
-    eegfun.channel_average!(dat, channel_selections = [eegfun.channels([:Ch2, :Ch3])])
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     n1 = sum(dat.layout.data.label .== :Ch2_Ch3)
-    eegfun.channel_average!(dat, channel_selections = [eegfun.channels([:Ch2, :Ch3])])
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch2, :Ch3])])
     n2 = sum(dat.layout.data.label .== :Ch2_Ch3)
     @test n1 == 1 && n2 == 2
 
     # 9) EpochData append and reduce
     # Create simple EpochData (2 epochs) from dat
     dat = create_test_epoch_data(n = 500)
-    dat = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])])
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])])
 
     @test :Ch1_Ch2 ∈ propertynames(dat.data[1]) && :Ch1_Ch2 ∈ propertynames(dat.data[2])
     @test :Ch1_Ch2 ∈ propertynames(dat.data[3]) && :Ch1_Ch2 ∈ propertynames(dat.data[4])
 
     dat = create_test_epoch_data(n = 500)
-    dat = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])]; reduce = true)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
 
     # Expect meta columns (leading) + A_B only
     cols = propertynames(dat.data[1])
@@ -76,7 +76,7 @@ using Statistics
 
     # 10) ErpData reduce path
     dat = create_test_epoch_data(n = 500)
-    dat = eegfun.channel_average(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])]; reduce = true)
+    dat = EegFun.channel_average(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])]; reduce = true)
     # condition and condition_name are now in struct, not DataFrame
     @test all(propertynames(dat.data[1]) .== [:time, :sample, :epoch, :Ch1_Ch2])
     @test all(propertynames(dat.data[end]) .== [:time, :sample, :epoch, :Ch1_Ch2])
@@ -85,14 +85,14 @@ using Statistics
 
     # 11) Test default behavior (average all channels)
     dat = create_test_epoch_data(n = 500)
-    eegfun.channel_average!(dat)  # Should use default channels() from second function
+    EegFun.channel_average!(dat)  # Should use default channels() from second function
     @test :avg ∈ propertynames(dat.data[1])
     @test all(dat.data[1].avg .== (dat.data[1].Ch1 .+ dat.data[1].Ch2 .+ dat.data[1].Ch3) ./ 3)
     @test all(dat.data[end].avg .== (dat.data[end].Ch1 .+ dat.data[end].Ch2 .+ dat.data[end].Ch3) ./ 3)
 
     # 12) Test single channel selection with custom label
     dat = create_test_epoch_data(n = 500)
-    eegfun.channel_average!(dat, channel_selections = [eegfun.channels([:Ch1, :Ch2])], output_labels = [:custom])
+    EegFun.channel_average!(dat, channel_selections = [EegFun.channels([:Ch1, :Ch2])], output_labels = [:custom])
     @test :custom ∈ propertynames(dat.data[1])
     @test :custom ∈ propertynames(dat.data[end])
     @test all(dat.data[1].custom .== (dat.data[1].Ch1 .+ dat.data[1].Ch2) ./ 2)
@@ -121,9 +121,9 @@ end
             output_dir = joinpath(test_dir, "combined_output")
 
             # Average two channel groups
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -140,7 +140,7 @@ end
             # Load and verify averaged data
             erps = load(joinpath(output_dir, "1_erps_cleaned.jld2"), "data")
             @test length(erps) == 2  # 2 conditions
-            @test erps[1] isa eegfun.ErpData
+            @test erps[1] isa EegFun.ErpData
 
             # Should have original channels + 2 averaged channels
             @test hasproperty(erps[1].data, :Ch1)
@@ -157,9 +157,9 @@ end
         @testset "Custom output labels" begin
             output_dir = joinpath(test_dir, "combined_custom_labels")
 
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -177,9 +177,9 @@ end
             output_dir = joinpath(test_dir, "combined_reduce")
 
             # With reduce=true, only averaged channels should remain
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -206,12 +206,12 @@ end
         @testset "Average specific participants" begin
             output_dir = joinpath(test_dir, "combined_participant")
 
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
+                participant_selection = EegFun.participants(1),
             )
 
             @test result.success == 1
@@ -223,12 +223,12 @@ end
         @testset "Average multiple participants" begin
             output_dir = joinpath(test_dir, "combined_multi_participants")
 
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants([1, 2]),
+                participant_selection = EegFun.participants([1, 2]),
             )
 
             @test result.success == 2
@@ -240,12 +240,12 @@ end
         @testset "Average specific conditions" begin
             output_dir = joinpath(test_dir, "combined_condition")
 
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(1),
+                condition_selection = EegFun.conditions(1),
             )
 
             @test result.success == 2
@@ -259,12 +259,12 @@ end
         @testset "Average multiple conditions" begin
             output_dir = joinpath(test_dir, "combined_multi_conditions")
 
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions([1, 2]),
+                condition_selection = EegFun.conditions([1, 2]),
             )
 
             @test result.success == 2
@@ -275,16 +275,16 @@ end
 
         @testset "Error handling" begin
             # Non-existent directory
-            @test_throws Exception eegfun.channel_average(
+            @test_throws Exception EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = "/nonexistent/path",
             )
 
             # Mismatched output labels
-            @test_throws Exception eegfun.channel_average(
+            @test_throws Exception EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1],  # Only 1 label for 2 groups
                 input_dir = test_dir,
             )
@@ -294,7 +294,7 @@ end
             empty_dir = joinpath(test_dir, "empty_match")
             mkpath(empty_dir)
 
-            result = eegfun.channel_average("erps_cleaned", [eegfun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
+            result = EegFun.channel_average("erps_cleaned", [EegFun.channels([:Ch1, :Ch2])], input_dir = empty_dir)
 
             @test result === nothing
         end
@@ -302,9 +302,9 @@ end
         @testset "Logging" begin
             output_dir = joinpath(test_dir, "combined_with_log")
 
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -324,9 +324,9 @@ end
             touch(joinpath(output_dir, "dummy.txt"))
             @test isfile(joinpath(output_dir, "dummy.txt"))
 
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -347,9 +347,9 @@ end
             jldsave(joinpath(partial_dir, "2_erps_cleaned.jld2"); data = "invalid_data")
 
             output_dir = joinpath(test_dir, "combined_partial")
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = partial_dir,
                 output_dir = output_dir,
             )
@@ -363,9 +363,9 @@ end
         @testset "Return value structure" begin
             output_dir = joinpath(test_dir, "combined_return_check")
 
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -401,16 +401,16 @@ end
             )
 
             layout =
-                eegfun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
+                EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
 
-            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(math_dir, "1_erps_math.jld2"); data = erps)
 
             # Average
             output_dir = joinpath(test_dir, "combined_math")
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_math",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 output_labels = [:avg],
                 input_dir = math_dir,
                 output_dir = output_dir,
@@ -431,9 +431,9 @@ end
             original_n_channels = nrow(original_erps[1].layout.data)
 
             # Average without reduce (should append to layout)
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
@@ -452,9 +452,9 @@ end
             output_dir = joinpath(test_dir, "combined_layout_reduce")
 
             # Average with reduce (layout should only have averaged channels)
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4])],
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -474,9 +474,9 @@ end
             output_dir = joinpath(test_dir, "combined_multiple_groups")
 
             # Average 3 different groups
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2]), eegfun.channels([:Ch3, :Ch4]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
+                [EegFun.channels([:Ch1, :Ch2]), EegFun.channels([:Ch3, :Ch4]), EegFun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:Group1, :Group2, :Group3],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -497,9 +497,9 @@ end
             output_dir = joinpath(test_dir, "combined_single_group")
 
             # Average just one group
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -515,13 +515,13 @@ end
             output_dir = joinpath(test_dir, "combined_filters")
 
             # Average with participant AND condition filters
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                participant_selection = eegfun.participants(1),
-                condition_selection = eegfun.conditions(1),
+                participant_selection = EegFun.participants(1),
+                condition_selection = EegFun.conditions(1),
             )
 
             @test result.success == 1
@@ -542,9 +542,9 @@ end
 
             # Test pattern matching "erps_original"
             output_dir1 = joinpath(test_dir, "combined_original")
-            result1 = eegfun.channel_average(
+            result1 = EegFun.channel_average(
                 "erps_original",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
                 output_dir = output_dir1,
             )
@@ -552,9 +552,9 @@ end
 
             # Test pattern matching "erps" (should match all)
             output_dir2 = joinpath(test_dir, "combined_all_erps")
-            result2 = eegfun.channel_average(
+            result2 = EegFun.channel_average(
                 "erps",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = pattern_dir,
                 output_dir = output_dir2,
             )
@@ -565,9 +565,9 @@ end
             overwrite_dir = joinpath(test_dir, "combined_overwrite")
 
             # First run
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = overwrite_dir,
             )
@@ -578,9 +578,9 @@ end
             sleep(0.1)
 
             # Second run (should overwrite)
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = overwrite_dir,
             )
@@ -593,9 +593,9 @@ end
             output_dir = joinpath(test_dir, "combined_exclusion")
 
             # Average all channels except Ch5
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels_not([:Ch5])],
+                [EegFun.channels_not([:Ch5])],
                 output_labels = [:not_Ch5],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -620,9 +620,9 @@ end
 
             # Average channels in epoch data
             output_dir = joinpath(test_dir, "combined_epochs")
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "epochs",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
                 input_dir = epochs_dir,
                 output_dir = output_dir,
@@ -631,7 +631,7 @@ end
             @test result.success == 1
 
             epochs_combined = load(joinpath(output_dir, "1_epochs.jld2"), "data")
-            @test epochs_combined[1] isa eegfun.EpochData
+            @test epochs_combined[1] isa EegFun.EpochData
             @test hasproperty(epochs_combined[1].data[1], :Group1)
             @test hasproperty(epochs_combined[1].data[1], :Ch1)  # Original channels preserved
         end
@@ -647,9 +647,9 @@ end
             output_dir = joinpath(test_dir, "combined_invalid")
 
             # This should fail because channels don't exist
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps",
-                [eegfun.channels([:NonExistent1, :NonExistent2])],
+                [EegFun.channels([:NonExistent1, :NonExistent2])],
                 input_dir = invalid_dir,
                 output_dir = output_dir,
             )
@@ -663,9 +663,9 @@ end
             output_dir = joinpath(test_dir, "combined_single_channel")
 
             # Average just one channel (edge case)
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch5])],
+                [EegFun.channels([:Ch5])],
                 output_labels = [:Ch5_avg],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -684,9 +684,9 @@ end
             output_dir = joinpath(test_dir, "combined_all_channels")
 
             # Average ALL channels
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels()],  # All channels
+                [EegFun.channels()],  # All channels
                 output_labels = [:global_avg],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -720,9 +720,9 @@ end
             output_dir = joinpath(test_dir, "combined_overlapping")
 
             # Same channel in multiple groups
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2, :Ch5]), eegfun.channels([:Ch5, :Ch6, :Ch7])],
+                [EegFun.channels([:Ch1, :Ch2, :Ch5]), EegFun.channels([:Ch5, :Ch6, :Ch7])],
                 output_labels = [:Group1, :Group2],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -748,9 +748,9 @@ end
             original_erps = load(joinpath(test_dir, "1_erps_cleaned.jld2"), "data")
             original_fs = original_erps[1].sample_rate
 
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
             )
@@ -761,7 +761,7 @@ end
             @test erps[1].sample_rate == original_fs
 
             # Verify it's still ErpData
-            @test erps[1] isa eegfun.ErpData
+            @test erps[1] isa EegFun.ErpData
         end
 
         @testset "Condition out of range" begin
@@ -769,12 +769,12 @@ end
 
             # Request condition 5 when only 2 exist
             # With predicate-based selection, this results in empty selection but successful processing
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
-                condition_selection = eegfun.conditions(5),
+                condition_selection = EegFun.conditions(5),
             )
 
             # Files are processed successfully but with empty condition selection
@@ -799,20 +799,20 @@ end
                 df[!, ch] = randn(n_samples)
             end
 
-            layout = eegfun.Layout(DataFrame(label = channel_names, inc = zeros(20), azi = zeros(20)), nothing, nothing)
+            layout = EegFun.Layout(DataFrame(label = channel_names, inc = zeros(20), azi = zeros(20)), nothing, nothing)
 
-            erps = [eegfun.ErpData("test_data", 1, "condition_1", df, layout, fs, eegfun.AnalysisInfo(), 1)]
+            erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(many_ch_dir, "1_erps_many.jld2"); data = erps)
 
             # Average into 4 groups
             output_dir = joinpath(test_dir, "combined_many_ch")
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps_many",
                 [
-                    eegfun.channels(channel_names[1:5]),
-                    eegfun.channels(channel_names[6:10]),
-                    eegfun.channels(channel_names[11:15]),
-                    eegfun.channels(channel_names[16:20]),
+                    EegFun.channels(channel_names[1:5]),
+                    EegFun.channels(channel_names[6:10]),
+                    EegFun.channels(channel_names[11:15]),
+                    EegFun.channels(channel_names[16:20]),
                 ],
                 output_labels = [:Group1, :Group2, :Group3, :Group4],
                 input_dir = many_ch_dir,
@@ -831,9 +831,9 @@ end
         @testset "Metadata columns preserved" begin
             output_dir = joinpath(test_dir, "combined_metadata_cols")
 
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 input_dir = test_dir,
                 output_dir = output_dir,
                 reduce = false,
@@ -851,9 +851,9 @@ end
         @testset "Metadata columns in reduce mode" begin
             output_dir = joinpath(test_dir, "combined_metadata_reduce")
 
-            eegfun.channel_average(
+            EegFun.channel_average(
                 "erps_cleaned",
-                [eegfun.channels([:Ch1, :Ch2])],
+                [EegFun.channels([:Ch1, :Ch2])],
                 output_labels = [:Group1],
                 input_dir = test_dir,
                 output_dir = output_dir,
@@ -882,7 +882,7 @@ end
 
             # Use a predicate that selects nothing
             output_dir = joinpath(test_dir, "combined_empty")
-            result = eegfun.channel_average(
+            result = EegFun.channel_average(
                 "erps",
                 [ch -> Symbol[]],  # Returns empty
                 input_dir = empty_dir,
