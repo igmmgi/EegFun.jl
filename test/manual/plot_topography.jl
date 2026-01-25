@@ -9,22 +9,12 @@ EegFun.polar_to_cartesian_xy!(layout_file, normalization_radius = 1.0)
 dat = EegFun.read_bdf(data_file);
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
 EegFun.rereference!(dat, :avg)
-EegFun.filter_data!(dat, "hp", 1)
+EegFun.highpass_filter!(dat, 1)
 
 
-EegFun.plot_topography(
-    dat,
-    method = :spherical_spline,
-    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    gridscale = 100,
-)
+EegFun.plot_topography(dat, method = :spherical_spline, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168, gridscale = 100)
 
-EegFun.plot_topography(
-    dat,
-    sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168,
-    ylim = (-30, 30),
-    gridscale = 100,
-)
+EegFun.plot_topography(dat, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168, ylim = (-30, 30), gridscale = 100)
 
 EegFun.plot_databrowser(dat)
 
@@ -101,12 +91,7 @@ EegFun.plot_topography(
     dims = (1, 4),
 )
 
-EegFun.plot_topography(
-    erps,
-    sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6,
-    ylim = (-2, 2),
-    colorbar_plot = false,
-)
+EegFun.plot_topography(erps, sample_selection = x -> x.time .>= 0.4 .&& x.time .<= 0.6, ylim = (-2, 2), colorbar_plot = false)
 
 EegFun.plot_topography(
     erps,

@@ -9,15 +9,14 @@ EegFun.polar_to_cartesian_xyz!(layout_file)
 dat = EegFun.read_bdf(data_file)
 dat = EegFun.create_eeg_dataframe(dat, layout_file)
 EegFun.rereference!(dat, :avg)
-EegFun.filter_data!(dat, "hp", 0.1)
+EegFun.highpass_filter!(dat, 0.1)
 
 # extreme value bool column
 EegFun.is_extreme_value!(dat, 100)
 
 # channel joint probability
 channel_joint_probability = EegFun.channel_joint_probability(dat)
-channel_joint_probability =
-    EegFun.channel_joint_probability(dat, sample_selection = EegFun.samples_not(:is_extreme_value_100))
+channel_joint_probability = EegFun.channel_joint_probability(dat, sample_selection = EegFun.samples_not(:is_extreme_value_100))
 
 
 # Calculate EOG signals

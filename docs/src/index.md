@@ -31,7 +31,7 @@ layout = EegFun.read_layout("biosemi64.csv")
 dat = EegFun.create_eeg_dataframe(dat, layout)
 
 # Basic preprocessing
-EegFun.filter_data!(dat, "hp", 1)      # High-pass filter at 1 Hz
+EegFun.highpass_filter!(dat, 1)      # High-pass filter at 1 Hz
 EegFun.rereference!(dat, :avg)         # Average reference
 EegFun.is_extreme_value!(dat, 100)     # Mark extreme values
 

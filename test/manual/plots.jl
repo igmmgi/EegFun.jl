@@ -7,18 +7,18 @@ using GLMakie
 function get_data()
 
     # read **.bdf file 
-    dat = EegFun.read_bdf("../Flank_C_3.bdf");
-    layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
-    dat = EegFun.create_eeg_dataframe(dat, layout);
+    dat = EegFun.read_bdf("../Flank_C_3.bdf")
+    layout = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv")
+    dat = EegFun.create_eeg_dataframe(dat, layout)
 
     # neighbours
-    EegFun.polar_to_cartesian_xy!(layout);
-    EegFun.get_layout_neighbours_xy!(layout, 40);
-    EegFun.polar_to_cartesian_xyz!(layout);
-    EegFun.get_layout_neighbours_xyz!(layout, 40);
+    EegFun.polar_to_cartesian_xy!(layout)
+    EegFun.get_layout_neighbours_xy!(layout, 40)
+    EegFun.polar_to_cartesian_xyz!(layout)
+    EegFun.get_layout_neighbours_xyz!(layout, 40)
 
     # basic preprocessing
-    EegFun.filter_data!(dat, "hp", 1)
+    EegFun.highpass_filter!(dat, 1)
     EegFun.rereference!(dat, :avg)
 
     # epoching
@@ -73,18 +73,8 @@ function test_correlation_heatmap()
     fig, ax = EegFun.plot_correlation_heatmap(cm, title = "Full Correlation Matrix")
 
     cm = EegFun.correlation_matrix(dat, channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4, :C3, :C4]))
-    fig, ax = EegFun.plot_correlation_heatmap(
-        cm,
-        title = "Frontal-Central Correlations",
-        colorrange = (0, 1),
-        colormap = :viridis,
-    )
-    fig, ax = EegFun.plot_correlation_heatmap(
-        cm,
-        title = "Masked Correlations (0.3-0.7)",
-        mask_range = (0.3, 0.7),
-        colorrange = (-1, 1),
-    )
+    fig, ax = EegFun.plot_correlation_heatmap(cm, title = "Frontal-Central Correlations", colorrange = (0, 1), colormap = :viridis)
+    fig, ax = EegFun.plot_correlation_heatmap(cm, title = "Masked Correlations (0.3-0.7)", mask_range = (0.3, 0.7), colorrange = (-1, 1))
 
     println("✓ Correlation heatmap plots completed")
 end
@@ -103,12 +93,7 @@ function test_joint_probability()
 
     # Plots 
     fig, ax = EegFun.plot_joint_probability(jp, title = "Channel Joint Probability")
-    fig, ax = EegFun.plot_joint_probability(
-        jp,
-        title = "Joint Probability - Custom Style",
-        bar_color = :red,
-        sort_values = true,
-    )
+    fig, ax = EegFun.plot_joint_probability(jp, title = "Joint Probability - Custom Style", bar_color = :red, sort_values = true)
 
     println("✓ Joint probability plots completed")
 end
@@ -146,13 +131,7 @@ function test_topography_plots()
 
     # Plots
     fig, ax = EegFun.plot_topography(dat)
-    fig, ax = EegFun.plot_topography(
-        dat,
-        title = "Custom Topography",
-        colormap = :jet,
-        gridscale = 100,
-        method = :spherical_spline,
-    )
+    fig, ax = EegFun.plot_topography(dat, title = "Custom Topography", colormap = :jet, gridscale = 100, method = :spherical_spline)
     fig, ax = EegFun.plot_topography(dat, title = "Test Title", title_fontsize = 20, show_title = true)
     fig, ax = EegFun.plot_topography(dat, show_title = false)
     fig, ax = EegFun.plot_topography(
@@ -201,31 +180,16 @@ function test_plot_filter()
     # Create highpass IIR filter using create_filter
     filter_info2 = EegFun.create_filter("hp", "iir", 1.0, 256.0)
 
-    fig, ax = EegFun.plot_filter_response(
-        filter_info2,
-        title = "High-pass Filter",
-        actual_color = :green,
-        display_plot = false,
-    )
+    fig, ax = EegFun.plot_filter_response(filter_info2, title = "High-pass Filter", actual_color = :green, display_plot = false)
 
     # Create FIR filter using create_filter
     filter_info3 = EegFun.create_filter("lp", "fir", 40.0, 256.0)
 
-    fig, ax = EegFun.plot_filter_response(
-        filter_info3,
-        title = "FIR Lowpass Filter",
-        actual_color = :purple,
-        display_plot = false,
-    )
+    fig, ax = EegFun.plot_filter_response(filter_info3, title = "FIR Lowpass Filter", actual_color = :purple, display_plot = false)
 
     # Test additional filter with separate plotting
     filter_info4 = EegFun.create_filter("hp", "iir", 0.5, 256.0)
-    fig, ax = EegFun.plot_filter_response(
-        filter_info4,
-        title = "High-pass Filter with Plot",
-        actual_color = :orange,
-        display_plot = false,
-    )
+    fig, ax = EegFun.plot_filter_response(filter_info4, title = "High-pass Filter with Plot", actual_color = :orange, display_plot = false)
 
     println("✓ Filter plots completed")
 end
@@ -239,8 +203,7 @@ function test_plot_power_spectrum()
     dat, epochs, erps, layout = get_data()
 
     # Plots
-    fig, ax =
-        EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1]), title = "Fp1 Power Spectrum")
+    fig, ax = EegFun.plot_channel_spectrum(dat, channel_selection = EegFun.channels([:Fp1]), title = "Fp1 Power Spectrum")
     fig, ax = EegFun.plot_channel_spectrum(
         dat,
         channel_selection = EegFun.channels([:Fp1, :Fp2, :F3, :F4]),

@@ -12,7 +12,7 @@ dat = EegFun.create_eeg_dataframe(dat, layout_file);
 EegFun.plot_layout_2d(layout_file)
 
 EegFun.rereference!(dat, :avg)
-EegFun.filter_data!(dat, "hp", 1)
+EegFun.highpass_filter!(dat, 1)
 EegFun.is_extreme_value!(dat, 500);
 EegFun.mark_epoch_windows!(dat, [1, 2, 3, 4], [-0.5, 2.0]) # simple epoch marking with trigger 1 and 3
 

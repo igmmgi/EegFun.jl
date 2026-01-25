@@ -57,6 +57,7 @@ include("types/rsa.jl")
 include("utils/error.jl")
 include("utils/batch.jl")
 include("utils/data.jl")
+include("utils/read_data.jl")
 include("utils/files.jl")
 include("utils/logging.jl")
 include("utils/misc.jl")
@@ -137,7 +138,6 @@ include("plots/utils/layout_system.jl")
 # Shared interactivity (must be included before plot_erp and plot_epochs)
 include("plots/utils/shared_interactivity.jl")
 
-
 include("plots/processing/plot_artifacts.jl")
 include("plots/processing/plot_channel_summary.jl")
 include("plots/processing/plot_correlation_heatmap.jl")
@@ -165,8 +165,6 @@ include("plots/decoding/plot_decoding.jl")
 include("plots/rsa/plot_rsa.jl")
 
 include("plots/plot_gui.jl")
-
-# Plot utilities
 include("plots/utils/help_system.jl")
 
 # Demos

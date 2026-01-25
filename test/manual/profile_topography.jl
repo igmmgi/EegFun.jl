@@ -12,7 +12,7 @@ EegFun.polar_to_cartesian_xy!(layout_file)
 dat = EegFun.read_bdf(data_file);
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
 EegFun.rereference!(dat, :avg)
-EegFun.filter_data!(dat, "hp", 1)
+EegFun.highpass_filter!(dat, 1)
 
 # Prepare data for direct function call
 dat_subset = EegFun.subset(dat, sample_selection = x -> x.time .>= 7.984 .&& x.time .<= 8.168)
