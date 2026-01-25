@@ -9,23 +9,21 @@ layout_file = EegFun.read_layout("./data/layouts/biosemi/biosemi72.csv");
 EegFun.polar_to_cartesian_xy!(layout_file)
 dat = EegFun.read_bdf(data_file);
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
-EegFun.filter_data!(dat, "hp", 1)
+EegFun.highpass_filter!(dat, 1)
 EegFun.rereference!(dat, :avg)
 
 EegFun.plot_databrowser(dat);
 # fig, ax = EegFun.plot_databrowser!(dat)
-
 
 # return some analysis settings
 fig, ax, analysis_settings = EegFun.plot_databrowser(dat)
 dat_new = EegFun.apply_analysis_settings(dat, analysis_settings)
 EegFun.plot_databrowser(dat_new)
 
-
-EegFun.filter_data!(dat, "hp", 1)
+EegFun.highpass_filter!(dat, 1)
 fig, ax = EegFun.plot_databrowser(dat)
 
-EegFun.filter_data!(dat, "lp", 20)
+EegFun.lowpass_filter!(dat, 20)
 EegFun.plot_databrowser(dat)
 
 EegFun.is_extreme_value!(dat, 500);
@@ -42,7 +40,7 @@ EegFun.polar_to_cartesian_xy!(layout_file)
 dat = EegFun.read_bdf(data_file);
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
 EegFun.rereference!(dat, :avg)
-EegFun.filter_data!(dat, "hp", 1)
+EegFun.highpass_filter!(dat, 1)
 EegFun.is_extreme_value!(dat, 100);
 
 ica_result = EegFun.run_ica(dat; sample_selection = EegFun.samples_not(:is_extreme_value_100), percentage_of_data = 25)
@@ -58,20 +56,12 @@ end
 EegFun.plot_databrowser(epochs[1])
 EegFun.plot_databrowser(epochs[1], ica_result)
 
-
-
 # plot_databrowser epochs from file
-jldsave( "dat.jld2", data = dat)
-jldsave( "epochs.jld2", data = epochs)
-jldsave( "ica.jld2", data = ica_result)
-
+jldsave("dat.jld2", data = dat)
+jldsave("epochs.jld2", data = epochs)
+jldsave("ica.jld2", data = ica_result)
 
 EegFun.plot_databrowser("dat.jld2")
 EegFun.plot_databrowser("epochs.jld2")
 EegFun.plot_databrowser("dat.jld2", "ica.jld2")
 EegFun.plot_databrowser("epochs.jld2", "ica.jld2")
-
-
-
-
-

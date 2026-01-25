@@ -45,15 +45,7 @@ function create_participant_condition_epochs(
     base_freq::Float64,
 )
     # Create layout
-    layout = EegFun.Layout(
-        DataFrame(
-            label = channels,
-            inc = [90.0, 0.0, -90.0, -90.0],
-            azi = [0.0, 0.0, 0.0, 0.0],
-        ),
-        nothing,
-        nothing,
-    )
+    layout = EegFun.Layout(DataFrame(label = channels, inc = [90.0, 0.0, -90.0, -90.0], azi = [0.0, 0.0, 0.0, 0.0]), nothing, nothing)
 
     # Create epochs with condition-specific patterns
     epochs = Vector{DataFrame}()
@@ -61,27 +53,27 @@ function create_participant_condition_epochs(
     time_window = (-0.2, 0.8)
     times = collect(time_window[1]:(1/sample_rate):time_window[2])
 
-    for epoch_idx in 1:n_epochs
+    for epoch_idx = 1:n_epochs
         epoch_data = DataFrame(time = times)
 
         # Add condition-specific signal patterns
         for (ch_idx, ch_name) in enumerate(channels)
             # Base signal with condition-specific frequency
             signal = sin.(2π * base_freq * times)
-            
+
             # Add condition-specific phase shift
             phase_shift = condition_id * π / 4
             signal = sin.(2π * base_freq * times .+ phase_shift)
-            
+
             # Add channel-specific amplitude
             amplitude = 1.0 + 0.3 * ch_idx
-            
+
             # Add noise
             noise = 0.2 * randn(length(times))
-            
+
             # Add participant-specific offset
             participant_offset = 0.1 * participant_id
-            
+
             epoch_data[!, ch_name] = amplitude .* signal .+ noise .+ participant_offset
         end
 
@@ -105,7 +97,7 @@ end
 # Create epochs for all participants and conditions
 all_participant_epochs = Vector{Vector{EegFun.EpochData}}()
 
-for p in 1:n_participants
+for p = 1:n_participants
     participant_epochs = [
         create_participant_condition_epochs(p, 1, "Face", n_epochs_per_condition, 2.0),
         create_participant_condition_epochs(p, 2, "Object", n_epochs_per_condition, 1.8),
@@ -168,15 +160,15 @@ else
         # Create example model RDMs
         # Model 1: Face and Object are similar, Scene is different
         model1_rdm = [
-            0.0 0.3 0.8;
-            0.3 0.0 0.7;
+            0.0 0.3 0.8
+            0.3 0.0 0.7
             0.8 0.7 0.0
         ]
 
         # Model 2: All conditions equally dissimilar
         model2_rdm = [
-            0.0 0.5 0.5;
-            0.5 0.0 0.5;
+            0.0 0.5 0.5
+            0.5 0.0 0.5
             0.5 0.5 0.0
         ]
 
@@ -193,11 +185,7 @@ else
         println("    Models compared: $(join(grand_avg_with_models.model_names, ", "))")
 
         # Plot model correlations
-        fig3 = EegFun.plot_model_correlations(
-            grand_avg_with_models,
-            title = "Model Correlations Over Time",
-            colors = [:red, :blue],
-        )
+        fig3 = EegFun.plot_model_correlations(grand_avg_with_models, title = "Model Correlations Over Time", colors = [:red, :blue])
         println("  ✓ Model correlation plot created")
 
     catch e
@@ -216,7 +204,7 @@ println("\n[6/7] Test 3: Different dissimilarity measures...")
 participant_epochs = all_participant_epochs[1]
 
 dissimilarity_measures = [:correlation, :spearman, :euclidean]
-rsa_results_different_measures = Dict{Symbol, EegFun.RsaData}()
+rsa_results_different_measures = Dict{Symbol,EegFun.RsaData}()
 
 for measure in dissimilarity_measures
     rsa_result = EegFun.rsa(
@@ -228,13 +216,9 @@ for measure in dissimilarity_measures
     )
     rsa_results_different_measures[measure] = rsa_result
     println("  ✓ RSA with $measure dissimilarity complete")
-    
+
     # Plot RDM at a specific time point for comparison
-    fig = EegFun.plot_rdm(
-        rsa_result,
-        time_point = 0.3,
-        title = "RDM at 0.3s using $measure dissimilarity"
-    )
+    fig = EegFun.plot_rdm(rsa_result, time_point = 0.3, title = "RDM at 0.3s using $measure dissimilarity")
 end
 
 println("  ✓ Compared different dissimilarity measures")
@@ -256,10 +240,7 @@ word_embeddings = [
     [0.2, 0.3, 0.4, 0.5],  # Object embedding
     [0.5, 0.6, 0.7, 0.8],  # Scene embedding
 ]
-model_rdm_vectors = EegFun.create_rdm_from_vectors(
-    word_embeddings,
-    dissimilarity_measure = :euclidean
-)
+model_rdm_vectors = EegFun.create_rdm_from_vectors(word_embeddings, dissimilarity_measure = :euclidean)
 println("    ✓ Created RDM from word embeddings")
 
 # 4b. Create RDM from reaction times
@@ -272,14 +253,11 @@ println("      RTs: Face=$(rts[1])s, Object=$(rts[2])s, Scene=$(rts[3])s")
 # 4c. Create RDM from similarity ratings
 println("\n  4c. Creating RDM from similarity ratings...")
 similarity_matrix = [
-    1.0  2.0  5.0;  # Face-Object=2, Face-Scene=5 (1=very similar, 7=very different)
-    2.0  1.0  4.0;  # Object-Face=2, Object-Scene=4
+    1.0  2.0  5.0  # Face-Object=2, Face-Scene=5 (1=very similar, 7=very different)
+    2.0  1.0  4.0  # Object-Face=2, Object-Scene=4
     5.0  4.0  1.0   # Scene-Face=5, Scene-Object=4
 ]
-model_rdm_similarity = EegFun.create_rdm_from_similarity_ratings(
-    similarity_matrix,
-    convert_to_dissimilarity = true
-)
+model_rdm_similarity = EegFun.create_rdm_from_similarity_ratings(similarity_matrix, convert_to_dissimilarity = true)
 println("    ✓ Created RDM from similarity ratings")
 
 # 4d. Create RDM from categorical labels
@@ -292,32 +270,17 @@ println("      Categories: Face=1, Object=1, Scene=2")
 # 4e. Create RDM from data matrix
 println("\n  4e. Creating RDM from data matrix...")
 data_matrix = [
-    0.1  0.2  0.3  0.4;  # Face features
-    0.2  0.3  0.4  0.5;  # Object features
+    0.1  0.2  0.3  0.4  # Face features
+    0.2  0.3  0.4  0.5  # Object features
     0.5  0.6  0.7  0.8   # Scene features
 ]
-model_rdm_matrix = EegFun.create_rdm_from_matrix(
-    data_matrix,
-    dissimilarity_measure = :correlation
-)
+model_rdm_matrix = EegFun.create_rdm_from_matrix(data_matrix, dissimilarity_measure = :correlation)
 println("    ✓ Created RDM from data matrix")
 
 # Compare neural RDM to all these models
 println("\n  Comparing neural RDM to all model types...")
-all_model_rdms = [
-    model_rdm_vectors,
-    model_rdm_rts,
-    model_rdm_similarity,
-    model_rdm_categorical,
-    model_rdm_matrix,
-]
-model_names = [
-    "Word Embeddings",
-    "Reaction Times",
-    "Similarity Ratings",
-    "Categorical",
-    "Feature Matrix",
-]
+all_model_rdms = [model_rdm_vectors, model_rdm_rts, model_rdm_similarity, model_rdm_categorical, model_rdm_matrix]
+model_names = ["Word Embeddings", "Reaction Times", "Similarity Ratings", "Categorical", "Feature Matrix"]
 
 rsa_with_all_models = EegFun.compare_models(
     neural_rsa,
@@ -353,8 +316,8 @@ n_timepoints = length(neural_rsa.times)
 temporal_model_data = zeros(Float64, n_conditions, n_features, n_timepoints)
 temporal_times = neural_rsa.times
 
-for cond_idx in 1:n_conditions
-    for feat_idx in 1:n_features
+for cond_idx = 1:n_conditions
+    for feat_idx = 1:n_features
         # Create condition-specific temporal pattern
         base_freq = 1.0 + 0.2 * cond_idx
         signal = sin.(2π * base_freq * temporal_times)
@@ -366,11 +329,7 @@ println("  Created temporal model data (simulated eye tracking)")
 println("    Shape: [conditions × features × time] = [$n_conditions × $n_features × $n_timepoints]")
 
 # Create temporal RDMs
-temporal_rdms = EegFun.create_temporal_rdm(
-    temporal_model_data,
-    temporal_times;
-    dissimilarity_measure = :correlation,
-)
+temporal_rdms = EegFun.create_temporal_rdm(temporal_model_data, temporal_times; dissimilarity_measure = :correlation)
 
 println("  ✓ Created temporal RDMs")
 println("    Shape: [time × condition × condition] = [$(size(temporal_rdms, 1)) × $(size(temporal_rdms, 2)) × $(size(temporal_rdms, 3))]")
@@ -387,11 +346,7 @@ rsa_with_temporal = EegFun.compare_models(
 println("  ✓ Compared neural RDM to temporal model")
 
 # Plot temporal model correlations
-fig_temporal = EegFun.plot_model_correlations(
-    rsa_with_temporal,
-    title = "Neural RDM vs Temporal Model (Eye Tracking)",
-    colors = [:blue],
-)
+fig_temporal = EegFun.plot_model_correlations(rsa_with_temporal, title = "Neural RDM vs Temporal Model (Eye Tracking)", colors = [:blue])
 println("  ✓ Temporal model correlation plot created")
 
 # ============================================================================
@@ -406,12 +361,7 @@ println("  Plotting RDMs at multiple time points: $time_points_to_plot")
 
 for t in time_points_to_plot
     if t >= grand_avg_rsa.times[1] && t <= grand_avg_rsa.times[end]
-        fig = EegFun.plot_rdm(
-            grand_avg_rsa,
-            time_point = t,
-            title = "RDM at $(round(t, digits=2))s",
-            colormap = :viridis,
-        )
+        fig = EegFun.plot_rdm(grand_avg_rsa, time_point = t, title = "RDM at $(round(t, digits=2))s", colormap = :viridis)
     end
 end
 
@@ -420,11 +370,7 @@ colormaps = [:viridis, :plasma, :inferno, :magma]
 println("  Plotting average RDM with different colormaps...")
 
 for cmap in colormaps
-    fig = EegFun.plot_rdm(
-        grand_avg_rsa,
-        title = "Average RDM (colormap: $cmap)",
-        colormap = cmap,
-    )
+    fig = EegFun.plot_rdm(grand_avg_rsa, title = "Average RDM (colormap: $cmap)", colormap = cmap)
 end
 
 println("  ✓ RDM visualization examples complete")
@@ -468,47 +414,43 @@ if isempty(bdf_files)
     println("  3. Update epoch_cfg with your trigger sequences")
 else
     println("\n[1/4] Found $(length(bdf_files)) BDF file(s) to process")
-    
+
     # Store RSA results for each participant
     all_rsa_results = EegFun.RsaData[]
-    
+
     # Process each file
     for (file_idx, data_file) in enumerate(bdf_files)
         participant_id = basename(data_file)
         println("\n[$(file_idx)/$(length(bdf_files))] Processing: $participant_id")
-        
+
         try
             # Preprocessing (same for all files)
             println("  Loading and preprocessing...")
             dat = EegFun.read_bdf(data_file)
             dat = EegFun.create_eeg_dataframe(dat, layout_file)
             EegFun.rereference!(dat, :avg)
-            EegFun.filter_data!(dat, "hp", 1)
-            
+            EegFun.highpass_filter!(dat, 1)
+
             # Extract epochs
             println("  Extracting epochs...")
             epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.5, 2.0)
-            
+
             # Check we have enough conditions for RSA
             if length(epochs) < 2
                 println("  ⚠ Skipping: Only $(length(epochs)) condition(s) found (need at least 2)")
                 continue
             end
-            
+
             # Perform RSA
             println("  Computing RSA...")
-            rsa_result = EegFun.rsa(
-                epochs;
-                dissimilarity_measure = :correlation,
-                average_trials = true,
-            )
-            
+            rsa_result = EegFun.rsa(epochs; dissimilarity_measure = :correlation, average_trials = true)
+
             push!(all_rsa_results, rsa_result)
             println("  ✓ RSA complete")
             println("    Conditions: $(join(rsa_result.condition_names, ", "))")
             println("    Time range: $(round(rsa_result.times[1], digits=2)) to $(round(rsa_result.times[end], digits=2)) s")
             println("    Channels: $(length(rsa_result.channels))")
-            
+
         catch e
             println("  ✗ Error processing $participant_id: $e")
             if isa(e, InterruptException)
@@ -518,7 +460,7 @@ else
             continue
         end
     end
-    
+
     # Create grand average
     if isempty(all_rsa_results)
         println("\n⚠ No participants successfully processed!")
@@ -529,23 +471,19 @@ else
     else
         println("\n[2/4] Creating grand average RSA...")
         grand_avg_rsa_real = EegFun.grand_average(all_rsa_results)
-        
+
         println("  ✓ Grand average created")
         println("    Participants: $(length(all_rsa_results))")
         println("    Conditions: $(join(grand_avg_rsa_real.condition_names, ", "))")
         println("    Time range: $(round(grand_avg_rsa_real.times[1], digits=2)) to $(round(grand_avg_rsa_real.times[end], digits=2)) s")
-        
+
         # Plot grand average RDM at key time points
         println("\n[3/4] Plotting grand average RDMs...")
-        
+
         # Plot average RDM across all time
-        fig1 = EegFun.plot_rdm(
-            grand_avg_rsa_real,
-            title = "Grand Average RDM (Real Data, Averaged Across Time)",
-            colormap = :viridis,
-        )
+        fig1 = EegFun.plot_rdm(grand_avg_rsa_real, title = "Grand Average RDM (Real Data, Averaged Across Time)", colormap = :viridis)
         println("  ✓ Average RDM plot created")
-        
+
         # Plot RDM at stimulus onset (0.0s)
         if 0.0 >= grand_avg_rsa_real.times[1] && 0.0 <= grand_avg_rsa_real.times[end]
             fig2 = EegFun.plot_rdm(
@@ -556,31 +494,26 @@ else
             )
             println("  ✓ RDM at 0.0s plot created")
         end
-        
+
         # Plot RDM at a later time point (e.g., 0.3s)
         if 0.3 >= grand_avg_rsa_real.times[1] && 0.3 <= grand_avg_rsa_real.times[end]
-            fig3 = EegFun.plot_rdm(
-                grand_avg_rsa_real,
-                time_point = 0.3,
-                title = "Grand Average RDM at 0.3s",
-                colormap = :viridis,
-            )
+            fig3 = EegFun.plot_rdm(grand_avg_rsa_real, time_point = 0.3, title = "Grand Average RDM at 0.3s", colormap = :viridis)
             println("  ✓ RDM at 0.3s plot created")
         end
-        
+
         # Model comparison example (if you have model data)
         println("\n[4/4] Model comparison example...")
-        
+
         # Example: Create a simple model RDM based on condition similarity
         # In real analysis, you would use actual behavioral/computational models
         if length(grand_avg_rsa_real.condition_names) >= 2
             # Example model: Assume conditions 1 and 2 are more similar
             n_conds = length(grand_avg_rsa_real.condition_names)
             example_model_rdm = zeros(Float64, n_conds, n_conds)
-            
+
             # Create a simple model where first two conditions are similar
-            for i in 1:n_conds
-                for j in 1:n_conds
+            for i = 1:n_conds
+                for j = 1:n_conds
                     if i == j
                         example_model_rdm[i, j] = 0.0
                     elseif (i == 1 && j == 2) || (i == 2 && j == 1)
@@ -590,7 +523,7 @@ else
                     end
                 end
             end
-            
+
             # Compare to model
             rsa_with_model = EegFun.compare_models(
                 grand_avg_rsa_real,
@@ -599,24 +532,20 @@ else
                 correlation_type = :spearman,
                 n_permutations = 100,  # Reduced for testing
             )
-            
+
             println("  ✓ Model comparison complete")
-            
+
             # Plot model correlations
-            fig4 = EegFun.plot_model_correlations(
-                rsa_with_model,
-                title = "Neural RDM vs Example Model (Real Data)",
-                colors = [:blue],
-            )
+            fig4 = EegFun.plot_model_correlations(rsa_with_model, title = "Neural RDM vs Example Model (Real Data)", colors = [:blue])
             println("  ✓ Model correlation plot created")
-            
+
             # Find time point with maximum correlation
             max_corr_idx = argmax(rsa_with_model.model_correlations[:, 1])
             max_corr_time = rsa_with_model.times[max_corr_idx]
             max_corr_val = rsa_with_model.model_correlations[max_corr_idx, 1]
             println("    Max correlation: $(round(max_corr_val, digits=3)) at $(round(max_corr_time, digits=3)) s")
         end
-        
+
         println("\n" * "="^70)
         println("Real Data RSA Analysis Complete!")
         println("="^70)

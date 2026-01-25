@@ -36,7 +36,7 @@ const PLOT_DATABROWSER_KWARGS = Dict{Symbol,Tuple{Any,String}}(
     # Scale indicator
     :show_scale_indicator => (true, "Show scale indicator bar"),
     :scale_indicator_value => (100.0, "Scale indicator value in μV"),
-    :scale_indicator_position => ((0.96, 0.99), "Scale indicator position as (x, y) in axis coordinates (0-1)"),
+    :scale_indicator_position => ((0.92, 0.96), "Scale indicator position as (x, y) in axis coordinates (0-1)"),
     :scale_indicator_color => (:black, "Color for scale indicator"),
     :scale_indicator_linewidth => (1, "Line width for scale indicator"),
 )
@@ -71,11 +71,8 @@ mutable struct FilterState
     active::Observable{NamedTuple{(:hp, :lp),Tuple{Bool,Bool}}}
     hp_freq::Observable{Float64}
     lp_freq::Observable{Float64}
-    FilterState(plot_kwargs) = new(
-        Observable((hp = false, lp = false)),
-        Observable(plot_kwargs[:default_hp_freq]),
-        Observable(plot_kwargs[:default_lp_freq]),
-    )
+    FilterState(plot_kwargs) =
+        new(Observable((hp = false, lp = false)), Observable(plot_kwargs[:default_hp_freq]), Observable(plot_kwargs[:default_lp_freq]))
 end
 
 struct ToggleConfig
@@ -94,17 +91,9 @@ mutable struct ViewState
         offset_scale = plot_kwargs[:channel_offset_scale]
         offset_margin = plot_kwargs[:channel_offset_margin]
         offset =
-            n_channels > 1 ?
-            LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)] :
+            n_channels > 1 ? LinRange(offset_scale * offset_margin, -offset_scale * offset_margin, n_channels + 2)[2:(end-1)] :
             zeros(n_channels)
-        new(
-            Observable(1:n_samples),
-            Observable(-1500:1500),
-            offset,
-            Observable(0.0),
-            Observable(false),
-            Observable(1.0),
-        )
+        new(Observable(1:n_samples), Observable(-1500:1500), offset, Observable(0.0), Observable(false), Observable(1.0))
     end
 end
 
@@ -368,13 +357,7 @@ function create_toggles(fig, ax, state)
         if has_column(state.data, marker_symbol)
             marker_index = findfirst(m -> m.name == marker_symbol, state.markers)
             if !isnothing(marker_index)
-                push!(
-                    configs,
-                    ToggleConfig(
-                        toggle_label,
-                        (active) -> plot_vertical_lines!(ax, state.markers[marker_index], active),
-                    ),
-                )
+                push!(configs, ToggleConfig(toggle_label, (active) -> plot_vertical_lines!(ax, state.markers[marker_index], active)))
             end
         end
     end
@@ -403,16 +386,7 @@ function create_toggles(fig, ax, state)
 end
 
 function create_menu(fig, options, default, label; kwargs...)
-    menu = Menu(
-        fig,
-        options = options,
-        default = default,
-        direction = :down,
-        fontsize = 18,
-        width = Auto(),
-        tellwidth = false,
-        kwargs...,
-    )
+    menu = Menu(fig, options = options, default = default, direction = :down, fontsize = 18, width = Auto(), tellwidth = false, kwargs...)
     return hcat(menu, Label(fig, label, fontsize = 22, halign = :left, tellwidth = false))
 end
 
@@ -610,8 +584,7 @@ function create_ica_menu(fig, ax, state, ica)
 end
 
 function create_epoch_menu(fig, ax, state)
-    slider_epoch =
-        Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
+    slider_epoch = Slider(fig[2, 1], range = 1:n_epochs(state.data.original), startvalue = state.data.current_epoch[], snap = true)
     label = Label(
         fig,
         @lift("Epoch: $($(slider_epoch.value))/$(n_epochs(state.data.original))"),
@@ -741,10 +714,8 @@ function _channel_repair_menu(state, selected_channels, ax)
 
     # Add action buttons
     action_area = menu_fig[5, 1] = GridLayout()
-    action_buttons = [
-        Button(action_area[1, 1], label = "Apply Repair", width = 200),
-        Button(action_area[1, 2], label = "Undo Last Repair", width = 200),
-    ]
+    action_buttons =
+        [Button(action_area[1, 1], label = "Apply Repair", width = 200), Button(action_area[1, 2], label = "Undo Last Repair", width = 200)]
 
     # Method selection (radio button behavior)
     selected_method = Observable(:neighbor_interpolation)
@@ -888,8 +859,7 @@ function create_common_sliders(fig, state, dat)
     push!(sliders, hcat(slider_extreme, Label(fig, @lift("Extreme: $($(slider_extreme.value)) μV"), fontsize = 22)))
 
     # Define filter slider configurations
-    filter_configs =
-        [(:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"), (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")]
+    filter_configs = [(:hp_filter, :hp_freq, 0.1:0.1:2, 0.5, "HP-Filter"), (:lp_filter, :lp_freq, 5:5:60, 20, "LP-Filter")]
 
     # Create filter sliders based on configuration
     for (filter_field, freq_field, range, startval, label) in filter_configs
@@ -938,8 +908,7 @@ function create_sliders(fig, state::EpochedDataBrowserState, dat)
 end
 
 function create_extra_channel_menu(fig, ax, state, dat)
-    menu =
-        Menu(fig, options = [:none; extra_labels(dat)], default = "none", direction = :down, fontsize = 18, width = 200)
+    menu = Menu(fig, options = [:none; extra_labels(dat)], default = "none", direction = :down, fontsize = 18, width = 200)
 
     on(menu.selection) do s
         state.extra_channel.channel = s == :none ? nothing : s
@@ -995,8 +964,7 @@ get_epoch_menu(fig, ax, state::EpochedDataBrowserState) = create_epoch_menu(fig,
 ############
 # Navigation
 ############
-const KEYBOARD_ACTIONS =
-    Dict(Keyboard.left => :left, Keyboard.right => :right, Keyboard.up => :up, Keyboard.down => :down)
+const KEYBOARD_ACTIONS = Dict(Keyboard.left => :left, Keyboard.right => :right, Keyboard.up => :up, Keyboard.down => :down)
 
 function handle_navigation!(ax, state::DataBrowserState{<:AbstractDataState}, action::Symbol)
     if action == :up
@@ -1019,21 +987,13 @@ _handle_right_navigation(ax, state, data::EpochedDataState) = step_epoch_forward
 function xback!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] - 200 < 1 && return
     state.view.xrange[] = state.view.xrange.val .- 200
-    xlims!(
-        ax,
-        state.data.current[].data.time[state.view.xrange.val[1]],
-        state.data.current[].data.time[state.view.xrange.val[end]],
-    )
+    xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
 end
 
 function xforward!(ax, state::ContinuousDataBrowserState)
     state.view.xrange.val[1] + 200 > nrow(state.data.current[].data) && return
     state.view.xrange[] = state.view.xrange.val .+ 200
-    xlims!(
-        ax,
-        state.data.current[].data.time[state.view.xrange.val[1]],
-        state.data.current[].data.time[state.view.xrange.val[end]],
-    )
+    xlims!(ax, state.data.current[].data.time[state.view.xrange.val[1]], state.data.current[].data.time[state.view.xrange.val[end]])
 end
 
 step_epoch_backward(ax, state::EpochedDataBrowserState) = step_epoch!(ax, state, -1)
@@ -1071,8 +1031,7 @@ end
 
 function is_mouse_in_axis(ax, pos)
     bbox = ax.layoutobservables.computedbbox[]
-    return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) &&
-           bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
+    return bbox.origin[1] <= pos[1] <= (bbox.origin[1] + bbox.widths[1]) && bbox.origin[2] <= pos[2] <= (bbox.origin[2] + bbox.widths[2])
 end
 
 function find_clicked_region(state, mouse_x)
@@ -1614,11 +1573,7 @@ function set_axes!(ax, state::DataBrowserState{<:AbstractDataState})
 end
 
 function set_x_limits!(ax, state, data::ContinuousDataState)
-    @lift xlims!(
-        ax,
-        $(data.current).data.time[$(state.view.xrange)[1]],
-        $(data.current).data.time[$(state.view.xrange)[end]],
-    )
+    @lift xlims!(ax, $(data.current).data.time[$(state.view.xrange)[1]], $(data.current).data.time[$(state.view.xrange)[end]])
 end
 
 function set_x_limits!(ax, state, data::EpochedDataState)
@@ -1677,8 +1632,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
 
             # Channel data (compute once)
             channel_data_obs = @lift(get_data($(state.data.current), $(state.view.xrange), $col))
-            channel_data_with_offset =
-                @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
+            channel_data_with_offset = @lift($(channel_data_obs) .* $(state.view.amplitude_scale) .+ state.view.offset[idx])
 
             # Check if channel is repaired
             is_repaired = false
@@ -1698,8 +1652,7 @@ function draw(ax, state::DataBrowserState{<:AbstractDataState})
             else
                 # Normal channels
                 line_color = @lift(abs.($(channel_data_obs)) .>= $(state.view.crit_val))
-                line_colormap =
-                    [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
+                line_colormap = [state.plot_kwargs[:unselected_channel_color], state.plot_kwargs[:unselected_channel_color], :red]
                 line_width = state.plot_kwargs[:channel_line_width]
             end
 
@@ -1750,15 +1703,8 @@ function create_line!(data_lines, col, ax, x_obs, y_obs, color, colormap, linewi
 end
 
 function create_label!(data_labels, col, ax, x_obs, y_obs, is_selected)
-    data_labels[col] = text!(
-        ax,
-        x_obs,
-        y_obs,
-        text = String(col),
-        align = (:left, :center),
-        fontsize = 18,
-        color = is_selected ? :red : :black,
-    )
+    data_labels[col] =
+        text!(ax, x_obs, y_obs, text = String(col), align = (:left, :center), fontsize = 18, color = is_selected ? :red : :black)
 end
 
 function hide_channel_label!(data_labels, col)
@@ -1862,16 +1808,9 @@ function _add_scale_indicator!(ax, state, plot_kwargs)
     tick_left = @lift($x_pos - $tick_length)
     tick_right = @lift($x_pos + $tick_length)
 
-    bottom_tick = lines!(
-        ax,
-        @lift([$tick_left, $tick_right]),
-        @lift([$y_bottom, $y_bottom]),
-        color = color,
-        linewidth = linewidth,
-    )
+    bottom_tick = lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_bottom, $y_bottom]), color = color, linewidth = linewidth)
 
-    top_tick =
-        lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_top, $y_top]), color = color, linewidth = linewidth)
+    top_tick = lines!(ax, @lift([$tick_left, $tick_right]), @lift([$y_top, $y_top]), color = color, linewidth = linewidth)
 
     # Add label
     label_x = @lift($x_pos + ($xlims_obs[2] - $xlims_obs[1]) * 0.01)

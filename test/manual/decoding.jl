@@ -25,15 +25,11 @@ sample_rate = 1000
 channels = [:Fz, :Cz, :Pz, :POz]  # 4 channels for MVPA
 
 # Create layout (must match channel names exactly)
-layout = EegFun.Layout(
-    DataFrame(
-        label = channels,  # [:Fz, :Cz, :Pz, :POz]
-        inc = [90.0, 0.0, -90.0, -90.0],  # Rough positions
-        azi = [0.0, 0.0, 0.0, 0.0],
-    ),
-    nothing,
-    nothing,
-)
+layout = EegFun.Layout(DataFrame(
+    label = channels,  # [:Fz, :Cz, :Pz, :POz]
+    inc = [90.0, 0.0, -90.0, -90.0],  # Rough positions
+    azi = [0.0, 0.0, 0.0, 0.0],
+), nothing, nothing)
 
 analysis_info = EegFun.AnalysisInfo(:none, 0.0, 0.0)
 
@@ -78,15 +74,7 @@ function create_participant_condition_epochs(
         push!(epochs, df)
     end
 
-    return EegFun.EpochData(
-        "participant_$(participant_id)",
-        condition_id,
-        condition_name,
-        epochs,
-        layout,
-        sample_rate,
-        analysis_info,
-    )
+    return EegFun.EpochData("participant_$(participant_id)", condition_id, condition_name, epochs, layout, sample_rate, analysis_info)
 end
 
 # Create epochs for all participants
@@ -144,12 +132,8 @@ stats_synthetic = EegFun.test_against_chance(
 println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
 
 # Plot with significance
-fig_stats_synthetic = EegFun.plot_decoding(
-    grand_avg_decoded,
-    stats_synthetic,
-    title = "Synthetic Data with Significance",
-    show_significance = true,
-)
+fig_stats_synthetic =
+    EegFun.plot_decoding(grand_avg_decoded, stats_synthetic, title = "Synthetic Data with Significance", show_significance = true)
 
 
 println("\n[Quick Test] Statistical testing on synthetic data...")
@@ -157,12 +141,8 @@ stats_synthetic = EegFun.test_against_chance_cluster(all_decoded, alpha = 0.2)
 println("  ✓ Found $(sum(stats_synthetic.significant_mask)) significant time points")
 
 # Plot with significance
-fig_stats_synthetic = EegFun.plot_decoding(
-    grand_avg_decoded,
-    stats_synthetic,
-    title = "Synthetic Data with Significance",
-    show_significance = true,
-)
+fig_stats_synthetic =
+    EegFun.plot_decoding(grand_avg_decoded, stats_synthetic, title = "Synthetic Data with Significance", show_significance = true)
 
 
 
@@ -195,7 +175,7 @@ for (file_idx, data_file) in enumerate(bdf_files)
         dat = EegFun.read_bdf(data_file)
         dat = EegFun.create_eeg_dataframe(dat, layout_file)
         EegFun.rereference!(dat, :avg)
-        EegFun.filter_data!(dat, "hp", 1)
+        EegFun.highpass_filter!(dat, 1)
 
         # Extract epochs
         epochs = EegFun.extract_epochs(dat, epoch_cfg, -0.2, 2.5)
@@ -221,9 +201,7 @@ end
 grand_avg_decoded = EegFun.grand_average(all_decoded)
 println("  ✓ Grand average created")
 println("    Max accuracy: $(round(maximum(grand_avg_decoded.average_score), digits=3))")
-println(
-    "    Time range: $(round(grand_avg_decoded.times[1], digits=2)) to $(round(grand_avg_decoded.times[end], digits=2)) s",
-)
+println("    Time range: $(round(grand_avg_decoded.times[1], digits=2)) to $(round(grand_avg_decoded.times[end], digits=2)) s")
 
 # Plot grand average
 fig = EegFun.plot_decoding(grand_avg_decoded, title = "Grand Average: Test Decoding")
@@ -248,9 +226,7 @@ stats_bonferroni = EegFun.test_against_chance(
     # correction_method = :bonferroni,
 )
 println("  ✓ T-test complete")
-println(
-    "    Significant time points: $(sum(stats_bonferroni.significant_mask)) / $(length(stats_bonferroni.significant_mask))",
-)
+println("    Significant time points: $(sum(stats_bonferroni.significant_mask)) / $(length(stats_bonferroni.significant_mask))")
 println("    Min p-value: $(round(minimum(stats_bonferroni.p_values), digits=4))")
 println("    Max t-value: $(round(maximum(stats_bonferroni.t_statistics), digits=3))")
 
@@ -290,9 +266,7 @@ if !isnothing(stats_cluster.clusters) && !isempty(stats_cluster.clusters)
 else
     println("    No clusters found")
 end
-println(
-    "    Significant time points: $(sum(stats_cluster.significant_mask)) / $(length(stats_cluster.significant_mask))",
-)
+println("    Significant time points: $(sum(stats_cluster.significant_mask)) / $(length(stats_cluster.significant_mask))")
 
 # Plot with cluster-based significance markers
 fig_stats_cluster = EegFun.plot_decoding(

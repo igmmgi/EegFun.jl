@@ -9,7 +9,7 @@ dat = EegFun.read_bdf(data_file);
 dat = EegFun.create_eeg_dataframe(dat, layout_file);
 
 EegFun.rereference!(dat, :avg)
-EegFun.filter_data!(dat, "hp", 1)
+EegFun.highpass_filter!(dat, 1)
 # EPOCHS -> ERPs
 epoch_cfg = [
     EegFun.EpochCondition(name = "ExampleEpoch1", trigger_sequences = [[1]]),
@@ -77,12 +77,7 @@ fig, ax = EegFun.plot_erp(erps[1], average_channels = false, colormap = :viridis
 fig, ax = EegFun.plot_erp(erps, average_channels = true)
 fig, ax = EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Cz, :PO7, :PO8]), average_channels = true)
 fig, ax = EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Cz, :PO7, :PO8]), average_channels = false)
-fig, ax = EegFun.plot_erp(
-    erps,
-    channel_selection = EegFun.channels([:Cz, :PO7, :PO8]),
-    average_channels = false,
-    legend_nbanks = 3,
-)
+fig, ax = EegFun.plot_erp(erps, channel_selection = EegFun.channels([:Cz, :PO7, :PO8]), average_channels = false, legend_nbanks = 3)
 fig, ax = EegFun.plot_erp([erps[1], erps[1]], channel_selection = EegFun.channels([:PO8]))
 
 # ERP Plots (:grid)

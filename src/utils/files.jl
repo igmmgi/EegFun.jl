@@ -84,6 +84,9 @@ function find_file(filename::String, search_dir::String; recursive::Bool = true,
     return nothing
 end
 
+"""
+    get_file_extension(filename::String) -> String
 
-
-
+Get the lowercase file extension including the dot (e.g., ".bdf", ".vhdr").
+"""
+get_file_extension(filename::String) = lowercase(splitext(filename)[2])
