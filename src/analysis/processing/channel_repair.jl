@@ -65,7 +65,7 @@ function _repair_channels_neighbor!(
         if hasfield(typeof(data), :layout)
             layout = data.layout
             if isnothing(layout.neighbours)
-                get_layout_neighbours_xyz!(layout, 0.5)
+                get_neighbours_xyz!(layout, 0.5)
             end
             neighbours_dict = layout.neighbours
         else

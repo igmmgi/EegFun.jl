@@ -41,7 +41,7 @@ function _build_connectivity_matrix(electrodes::Vector{Symbol}, layout::Layout, 
     if cluster_type in (:spatial, :spatiotemporal)
         if isnothing(layout.neighbours)
             @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.25)."
-            get_layout_neighbours_xy!(layout, 0.25)
+            get_neighbours_xy!(layout, 0.25)
         end
 
         # Build adjacency matrix

@@ -18,7 +18,7 @@ available_channels = dat.layout.data.label
 channels_to_repair = filter(ch -> ch in available_channels, test_channels)
 
 # Calculate neighbors first
-EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+EegFun.get_neighbours_xyz!(dat.layout, 0.5)
 
 # Store original data for comparison
 original_data = copy(dat.data)

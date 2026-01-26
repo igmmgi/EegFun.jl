@@ -46,11 +46,11 @@ EegFun.add_topo_rois!(
 )
 
 # Plots with neighbours
-EegFun.get_layout_neighbours_xy!(layout, 0.5);
+EegFun.get_neighbours_xy!(layout, 0.5);
 EegFun.plot_layout_2d(layout, neighbours = true)
 
 # Plots with neighbours
-EegFun.get_layout_neighbours_xyz!(layout, 0.5);
+EegFun.get_neighbours_xyz!(layout, 0.5);
 EegFun.plot_layout_3d(layout, neighbours = true)
 
 # how to print neighbours to a file

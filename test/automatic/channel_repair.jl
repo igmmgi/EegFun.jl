@@ -15,7 +15,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
@@ -66,7 +66,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
@@ -96,7 +96,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = [copy(epoch) for epoch in dat.data]
@@ -155,7 +155,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = copy(dat.data)
@@ -209,7 +209,7 @@ using EegFun
         dat.layout.data.z3 = [0.0, 0.0, 0.0, 0.0]
 
         # Calculate neighbors
-        EegFun.get_layout_neighbours_xyz!(dat.layout, 0.5)
+        EegFun.get_neighbours_xyz!(dat.layout, 0.5)
 
         # Store original data
         original_data = [copy(epoch) for epoch in dat.data]

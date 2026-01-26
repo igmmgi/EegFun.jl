@@ -93,27 +93,6 @@ function validate_layout(layout::Layout)
     return layout
 end
 
-
-
-# Accessor methods
-"""
-    get_labels(layout::Layout) -> Vector{Symbol}
-
-Get all electrode labels from the layout.
-
-# Arguments
-- `layout::Layout`: The layout object
-
-# Returns
-- `Vector{Symbol}`: Vector of electrode labels
-
-# Examples
-```julia
-labels = get_labels(layout)
-```
-"""
-get_labels(layout::Layout) = layout.data.label
-
 """
     has_2d_coords(layout::Layout) -> Bool
 
@@ -124,13 +103,6 @@ Check if the layout has 2D Cartesian coordinates.
 
 # Returns
 - `Bool`: True if x2 and y2 columns exist
-
-# Examples
-```julia
-if has_2d_coords(layout)
-    # Use 2D coordinates
-end
-```
 """
 has_2d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x2, :y2])
 
@@ -144,13 +116,6 @@ Check if the layout has 3D Cartesian coordinates.
 
 # Returns
 - `Bool`: True if x3, y3, and z3 columns exist
-
-# Examples
-```julia
-if has_3d_coords(layout)
-    # Use 3D coordinates
-end
-```
 """
 has_3d_coords(layout::Layout) = all(col -> col in propertynames(layout.data), [:x3, :y3, :z3])
 
@@ -246,52 +211,47 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 - Nothing. The function modifies the `layout` directly.
 """
 function polar_to_cartesian_xy!(layout::Layout; normalization_radius::Float64 = 1.0)
-    # Get the DataFrame from Layout
     df = layout.data
 
-    # Check for required columns
-    if !all([col in propertynames(df) for col in [:inc, :azi]])
+    # Check for required columns and numeric types
+    if !all(col -> col in propertynames(df), [:inc, :azi])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
-
-    # Validate data types
     if !(eltype(df.inc) <: Number && eltype(df.azi) <: Number)
         throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
-    # Convert degrees to radians
-    inc = df[!, :inc] .* (pi / 180)
-    azi = df[!, :azi] .* (pi / 180)
+    # Vectorized conversion (degrees to radians + polar to cartesian)
+    rad_factor = pi / 180
+    inc = df.inc .* rad_factor
+    azi = df.azi .* rad_factor
 
-    # Convert to Cartesian coordinates
-    df[!, :x2] = inc .* cos.(azi)
-    df[!, :y2] = inc .* sin.(azi)
+    x2 = inc .* cos.(azi)
+    y2 = inc .* sin.(azi)
 
-    # Normalize to ensure all points are within unit circle
-    # First, center the coordinates
-    center_x = (maximum(df.x2) + minimum(df.x2)) / 2
-    center_y = (maximum(df.y2) + minimum(df.y2)) / 2
+    # Center and normalize in fewer passes
+    min_x, max_x = extrema(x2)
+    min_y, max_y = extrema(y2)
 
-    df.x2 = df.x2 .- center_x
-    df.y2 = df.y2 .- center_y
+    center_x = (max_x + min_x) / 2
+    center_y = (max_y + min_y) / 2
 
-    # Find maximum distance from center
-    max_radius = 0.0
-    @inbounds for i = 1:nrow(df)
-        radius = sqrt(df.x2[i]^2 + df.y2[i]^2)
-        max_radius = max(max_radius, radius)
+    x2 .-= center_x
+    y2 .-= center_y
+
+    # Calculate max radius using vectorized operations
+    max_r = maximum(sqrt.(x2 .^ 2 .+ y2 .^ 2))
+
+    if max_r > 0
+        scale = normalization_radius / max_r
+        df[!, :x2] = x2 .* scale
+        df[!, :y2] = y2 .* scale
+    else
+        df[!, :x2] = x2
+        df[!, :y2] = y2
     end
 
-    # Scale by maximum radius to ensure all points are within the specified normalization radius
-    if max_radius > 0
-        scale_factor = normalization_radius / max_radius
-        df.x2 = df.x2 .* scale_factor
-        df.y2 = df.y2 .* scale_factor
-    end
-
-    # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)
-
     return nothing
 end
 
@@ -311,46 +271,42 @@ Converts polar coordinates (incidence and azimuth angles) from a layout into Car
 - Nothing. The function modifies the `layout` directly.
 """
 function polar_to_cartesian_xyz!(layout::Layout)
-    # Get the DataFrame from Layout
     df = layout.data
 
-    # Check for required columns
-    if !all([col in propertynames(df) for col in [:inc, :azi]])
+    if !all(col -> col in propertynames(df), [:inc, :azi])
         throw(ArgumentError("Layout must contain :inc and :azi columns"))
     end
-
-    # Validate data types
     if !(eltype(df.inc) <: Number && eltype(df.azi) <: Number)
         throw(ArgumentError(":inc and :azi columns must contain numeric values"))
     end
 
-    # Convert degrees to radians
-    inc = df[!, :inc] .* (pi / 180)
-    azi = df[!, :azi] .* (pi / 180)
+    rad_factor = pi / 180
+    inc = df.inc .* rad_factor
+    azi = df.azi .* rad_factor
 
-    # Store existing metadata before adding columns
-    existing_metadata = copy(DataFrames.metadata(df))
+    x3 = sin.(inc) .* cos.(azi)
+    y3 = sin.(inc) .* sin.(azi)
+    z3 = cos.(inc)
 
-    # Standard spherical to Cartesian conversion
-    df[!, :x3] = sin.(inc) .* cos.(azi)
-    df[!, :y3] = sin.(inc) .* sin.(azi)
-    df[!, :z3] = cos.(inc)
+    # Optimize range and centering
+    min_x, max_x = extrema(x3)
+    min_y, max_y = extrema(y3)
+    min_z, max_z = extrema(z3)
 
-    # Normalize to [-1, 1] range
-    x_range = maximum(df.x3) - minimum(df.x3)
-    y_range = maximum(df.y3) - minimum(df.y3)
-    z_range = maximum(df.z3) - minimum(df.z3)
-    max_range = max(x_range, y_range, z_range)
+    max_range = max(max_x - min_x, max_y - min_y, max_z - min_z)
 
     if max_range > 0
-        df.x3 = (df.x3 .- (maximum(df.x3) + minimum(df.x3)) / 2) ./ (max_range / 2)
-        df.y3 = (df.y3 .- (maximum(df.y3) + minimum(df.y3)) / 2) ./ (max_range / 2)
-        df.z3 = (df.z3 .- (maximum(df.z3) + minimum(df.z3)) / 2) ./ (max_range / 2)
+        half_range = max_range / 2
+        df[!, :x3] = (x3 .- (max_x + min_x) / 2) ./ half_range
+        df[!, :y3] = (y3 .- (max_y + min_y) / 2) ./ half_range
+        df[!, :z3] = (z3 .- (max_z + min_z) / 2) ./ half_range
+    else
+        df[!, :x3] = x3
+        df[!, :y3] = y3
+        df[!, :z3] = z3
     end
 
-    # Clear neighbours since coordinates have changed
     clear_neighbours!(layout)
-
     return nothing
 end
 
@@ -417,145 +373,74 @@ end
 
 # === NEIGHBOR CALCULATIONS ===
 """
-    get_electrode_neighbours_xy!(layout::Layout, distance_criterion::Real)
+    get_neighbours_xy!(layout::Layout, distance_criterion::Real)
 
-Identifies the neighbours of each electrode based on their normalized Cartesian coordinates.
-
-# Arguments
-- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, normalized Cartesian coordinates (`x2`, `y2`) in range [-1, 1].
-- `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours in normalized coordinates (e.g., 0.5 = 25% of head diameter).
-
-# Returns
-- `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
-
-# Throws
-- `ArgumentError`: If the layout does not contain the required columns.
-"""
-function get_layout_neighbours_xy!(layout::Layout, distance_criterion::Real)
-
-    if distance_criterion <= 0
-        @minimal_error "Distance criterion must be positive"
-    end
-    _ensure_coordinates_2d!(layout)
-
-    @info "Calculating neighbours with distance criterion $distance_criterion (normalized coordinates)"
-    # Precompute coordinates
-    coords = Matrix{Float64}(undef, size(layout.data, 1), 2)
-    coords[:, 1] = layout.data.x2
-    coords[:, 2] = layout.data.y2
-
-    neighbour_dict = OrderedDict{Symbol,Neighbours}()
-
-    for (idx1, label1) in enumerate(layout.data.label)
-
-        neighbour_dict[Symbol(label1)] = Neighbours([], [], [])
-
-        for (idx2, label2) in enumerate(layout.data.label)
-            if idx1 == idx2
-                continue
-            end
-
-            # Compute squared distance
-            distance_sq = squared_distance_xy(coords[idx1, 1], coords[idx1, 2], coords[idx2, 1], coords[idx2, 2])
-
-            if distance_sq <= distance_criterion^2
-                distance = sqrt(distance_sq)
-                push!(neighbour_dict[Symbol(label1)].channels, label2)
-                push!(neighbour_dict[Symbol(label1)].distances, distance)
-            end
-        end
-
-        # Compute weights (inverse distance weighting)
-        distances = neighbour_dict[Symbol(label1)].distances
-        inv_distances = 1 ./ distances  # Inverse of distances
-        total_inv_distance = sum(inv_distances)
-        for idx in eachindex(neighbour_dict[Symbol(label1)].channels)
-            push!(neighbour_dict[Symbol(label1)].weights, inv_distances[idx] / total_inv_distance)
-        end
-
-    end
-
-    layout.neighbours = neighbour_dict
-    layout.criterion = distance_criterion
-
-    return nothing
-
-end
-
-"""
-    get_electrode_neighbours_xyz!(layout::Layout, distance_criterion::Real)
-
-Identifies the neighbours of each electrode based on their normalized Cartesian coordinates.
+Identifies the neighbours of each electrode based on their normalized 2D Cartesian coordinates.
 
 # Arguments
-- `layout::Layout`: A Layout containing the layout information with columns for electrode labels, normalized Cartesian coordinates (`x3`, `y3`, `z3`) in range [-1, 1].
-- `distance_criterion::Real`: The maximum distance to consider two electrodes as neighbours in normalized coordinates (e.g., 0.5 = 25% of head diameter).
+- `layout::Layout`: A Layout containing the layout information.
+- `distance_criterion::Real`: The maximum distance in normalized units to consider two electrodes as neighbours.
 
-# Returns
-- `OrderedDict{Symbol,Neighbours}`: A dictionary where each key is an electrode label, and the value is a Neighbours struct containing neighbour information.
-
-# Throws
-- `ArgumentError`: If the layout does not contain the required columns.
+# Modifies
+- The input `layout` is modified in place to update its `neighbours` field and `criterion`.
 """
-function get_layout_neighbours_xyz!(layout::Layout, distance_criterion::Real)
 
-    if distance_criterion <= 0
-        @minimal_error "Distance criterion must be positive"
+"""
+    _find_neighbours(labels, coords, distance_criterion) -> OrderedDict
+
+Internal helper to identify neighbours utilizing distance symmetry.
+"""
+function _find_neighbours(labels, coords, distance_criterion)
+    n = length(labels)
+    crit_sq = distance_criterion^2
+
+    # Initialize adjacency-like structure
+    # electrode_index => (neighbour_indices, distances)
+    adj = [(Int[], Float64[]) for _ = 1:n]
+
+    # Nested loop exploiting symmetry
+    for i = 1:n
+        p1 = coords[i]
+        for j = (i+1):n
+            p2 = coords[j]
+            # dist_sq using GeometryBasics points is fast
+            d_sq = sum((p1 .- p2) .^ 2)
+
+            if d_sq <= crit_sq
+                d = sqrt(d_sq)
+                # Store for both i and j
+                push!(adj[i][1], j)
+                push!(adj[i][2], d)
+                push!(adj[j][1], i)
+                push!(adj[j][2], d)
+            end
+        end
     end
-    _ensure_coordinates_3d!(layout)
 
-    @info "Calculating neighbours with distance criterion $distance_criterion (normalized coordinates)"
-    # Precompute coordinates
-    coords = Matrix{Float64}(undef, size(layout.data, 1), 3)
-    coords[:, 1] = layout.data.x3
-    coords[:, 2] = layout.data.y3
-    coords[:, 3] = layout.data.z3
-
+    # Transform to OrderedDict with weights
     neighbour_dict = OrderedDict{Symbol,Neighbours}()
 
-    for (idx1, label1) in enumerate(layout.data.label)
+    for i = 1:n
+        label = Symbol(labels[i])
+        nb_indices, dists = adj[i]
 
-        neighbour_dict[Symbol(label1)] = Neighbours([], [], [])
-
-        for (idx2, label2) in enumerate(layout.data.label)
-
-            if idx1 == idx2
-                continue
-            end
-
-            # Compute squared distance
-            distance_sq = squared_distance_xyz(
-                coords[idx1, 1],
-                coords[idx1, 2],
-                coords[idx1, 3],
-                coords[idx2, 1],
-                coords[idx2, 2],
-                coords[idx2, 3],
-            )
-
-            if distance_sq <= distance_criterion^2
-                distance = sqrt(distance_sq)
-                push!(neighbour_dict[Symbol(label1)].channels, label2)
-                push!(neighbour_dict[Symbol(label1)].distances, distance)
-            end
-
+        if isempty(nb_indices)
+            neighbour_dict[label] = Neighbours([], [], [])
+            continue
         end
 
-        # Compute weights (inverse distance weighting)
-        distances = neighbour_dict[Symbol(label1)].distances
-        inv_distances = 1 ./ distances  # Inverse of distances
-        total_inv_distance = sum(inv_distances)
-        for idx in eachindex(neighbour_dict[Symbol(label1)].channels)
-            push!(neighbour_dict[Symbol(label1)].weights, inv_distances[idx] / total_inv_distance)
-        end
+        nb_labels = [Symbol(labels[idx]) for idx in nb_indices]
 
+        # Calculate inverse distance weights
+        # Handle potential zero distances to avoid Inf
+        inv_d = 1.0 ./ max.(dists, 1e-6)
+        total_inv = sum(inv_d)
+        weights = inv_d ./ total_inv
+
+        neighbour_dict[label] = Neighbours(nb_labels, dists, weights)
     end
 
-    layout.neighbours = neighbour_dict
-    layout.criterion = distance_criterion
-
-    return nothing
-
+    return neighbour_dict
 end
 
 # === NEIGHBOR UTILITIES ===
@@ -609,7 +494,7 @@ The electrode order from the original OrderedDict is preserved.
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-neighbours = get_layout_neighbours_xy!(layout, 40)
+neighbours = get_neighbours_xy!(layout, 40)
 
 # Write to TOML file
 print_neighbours_dict(neighbours, "neighbours.toml")
@@ -645,7 +530,7 @@ Calculate the average number of neighbours per electrode from a neighbours dicti
 # Example
 ```julia
 layout = read_layout("./layouts/biosemi64.csv")
-neighbours, _ = get_layout_neighbours_xy!(layout, 40)
+neighbours, _ = get_neighbours_xy!(layout, 40)
 avg_neighbours = average_neighbours_per_electrode(neighbours)
 ```
 """
@@ -800,8 +685,18 @@ get_neighbours_xy!(layout, 40.0)
 """
 function get_neighbours_xy!(layout::Layout, distance_criterion::Real)
     if !has_neighbours(layout) || layout.criterion != distance_criterion
-        layout.neighbours = get_layout_neighbours_xy!(layout, distance_criterion)
-        layout.criterion = distance_criterion
+        if distance_criterion <= 0
+            @minimal_error "Distance criterion must be positive"
+        end
+        _ensure_coordinates_2d!(layout)
+
+        @info "Calculating 2D neighbours with distance criterion $distance_criterion"
+
+        # Precompute coordinates as Point2f for efficiency
+        coords = [Point2f(x, y) for (x, y) in zip(layout.data.x2, layout.data.y2)]
+
+        layout.neighbours = _find_neighbours(layout.data.label, coords, distance_criterion)
+        layout.criterion = Float64(distance_criterion)
     end
     return nothing
 end
@@ -817,19 +712,21 @@ if the distance criterion has changed. It caches the results for efficiency.
 # Arguments
 - `layout::Layout`: The layout object
 - `distance_criterion::Real`: The distance criterion for neighbors in mm
-
-# Modifies
-- `layout`: Updates neighbor information and criterion
-
-# Examples
-```julia
-get_neighbours_xyz!(layout, 40.0)
-```
 """
 function get_neighbours_xyz!(layout::Layout, distance_criterion::Real)
     if !has_neighbours(layout) || layout.criterion != distance_criterion
-        layout.neighbours = get_layout_neighbours_xyz!(layout, distance_criterion)
-        layout.criterion = distance_criterion
+        if distance_criterion <= 0
+            @minimal_error "Distance criterion must be positive"
+        end
+        _ensure_coordinates_3d!(layout)
+
+        @info "Calculating 3D neighbours with distance criterion $distance_criterion"
+
+        # Precompute coordinates as Point3f for efficiency
+        coords = [Point3f(x, y, z) for (x, y, z) in zip(layout.data.x3, layout.data.y3, layout.data.z3)]
+
+        layout.neighbours = _find_neighbours(layout.data.label, coords, distance_criterion)
+        layout.criterion = Float64(distance_criterion)
     end
     return nothing
 end
