@@ -127,7 +127,7 @@ function _generate_setup_section()
         print_config(cfg, joinpath(output_directory, "config.toml"))
         
         # Layout coordinates and calculation of channel neighbours (2D)
-        get_layout_neighbours_xy!(layout, cfg["preprocess"]["layout"]["neighbour_criterion"])
+        get_neighbours_xy!(layout, cfg["preprocess"]["layout"]["neighbour_criterion"])
         print_layout_neighbours(layout, joinpath(output_directory, "neighbours_xy.toml"))
         
         # ============================================================================

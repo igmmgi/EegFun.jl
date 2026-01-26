@@ -184,11 +184,11 @@ function _validate_permutation_inputs(
         if isnothing(prepared.data[1].layout.neighbours)
             @minimal_warning "Layout.neighbours is not set. Computing with default distance criterion (0.25)."
             # Compute neighbours if missing (using default criterion)
-            get_layout_neighbours_xy!(prepared.data[1].layout, 0.25)
+            get_neighbours_xy!(prepared.data[1].layout, 0.25)
             # Also update the other condition's layout if it's a different layout object
             if length(prepared.data) > 1 && prepared.data[2].layout !== prepared.data[1].layout
                 # Different layout object, update it too
-                get_layout_neighbours_xy!(prepared.data[2].layout, 0.25)
+                get_neighbours_xy!(prepared.data[2].layout, 0.25)
             end
         end
     end

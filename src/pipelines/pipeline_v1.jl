@@ -103,7 +103,7 @@ function preprocess_v1(config::String; base_dir::Union{String,Nothing} = nothing
         # Layout coordinates and calculation of channel neighbours (2D/3D)
         polar_to_cartesian_xy!(layout)
         polar_to_cartesian_xyz!(layout)
-        get_layout_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
+        get_neighbours_xy!(layout, preprocess_cfg.neighbour_criterion)
         print_layout_neighbours(layout, joinpath(output_directory, "neighbours.toml"))
 
         # Actual start of preprocessing pipeline!

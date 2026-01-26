@@ -79,7 +79,7 @@ using EegFun
         # Test 2D neighbours
         layout_xy = copy(test_layout)
         EegFun.polar_to_cartesian_xy!(layout_xy)
-        EegFun.get_layout_neighbours_xy!(layout_xy, 50.0)
+        EegFun.get_neighbours_xy!(layout_xy, 50.0)
 
         @test !isnothing(layout_xy.neighbours)
         @test haskey(layout_xy.neighbours, :Fp1)
@@ -96,7 +96,7 @@ using EegFun
         # Test 3D neighbours
         layout_xyz = copy(test_layout)
         EegFun.polar_to_cartesian_xyz!(layout_xyz)
-        EegFun.get_layout_neighbours_xyz!(layout_xyz, 50.0)
+        EegFun.get_neighbours_xyz!(layout_xyz, 50.0)
 
         @test !isnothing(layout_xyz.neighbours)
         @test haskey(layout_xyz.neighbours, :Fp1)
@@ -107,7 +107,7 @@ using EegFun
         @test isapprox(sum(layout_xyz.neighbours[:Fp1].weights), 1.0, atol = 1e-10)
 
         # Test error handling
-        result = EegFun.get_layout_neighbours_xy!(test_layout, -1.0) # Negative distance
+        result = EegFun.get_neighbours_xy!(test_layout, -1.0) # Negative distance
         @test result === nothing
     end
 
@@ -118,11 +118,8 @@ using EegFun
         @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
         # Test invalid data types
-        invalid_types = EegFun.Layout(
-            DataFrame(label = [:Fp1, :Fp2], inc = ["invalid", "invalid"], azi = ["invalid", "invalid"]),
-            nothing,
-            nothing,
-        )
+        invalid_types =
+            EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["invalid", "invalid"], azi = ["invalid", "invalid"]), nothing, nothing)
         @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_types)
         @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_types)
     end
@@ -146,11 +143,7 @@ using EegFun
         @testset "polar_to_cartesian" begin
             # Create test layout
             layout = EegFun.Layout(
-                DataFrame(
-                    label = [:Fp1, :Fp2, :F3, :F4],
-                    inc = [90.0, 90.0, 45.0, 45.0],
-                    azi = [0.0, 180.0, 45.0, 135.0],
-                ),
+                DataFrame(label = [:Fp1, :Fp2, :F3, :F4], inc = [90.0, 90.0, 45.0, 45.0], azi = [0.0, 180.0, 45.0, 135.0]),
                 nothing,
                 nothing,
             )
@@ -177,8 +170,7 @@ using EegFun
             @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
 
             # Test error handling for non-numeric values
-            invalid_layout =
-                EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["90", "90"], azi = ["0", "180"]), nothing, nothing)
+            invalid_layout = EegFun.Layout(DataFrame(label = [:Fp1, :Fp2], inc = ["90", "90"], azi = ["0", "180"]), nothing, nothing)
             @test_throws ArgumentError EegFun.polar_to_cartesian_xy!(invalid_layout)
             @test_throws ArgumentError EegFun.polar_to_cartesian_xyz!(invalid_layout)
         end
@@ -204,33 +196,29 @@ using EegFun
         @testset "electrode_neighbours" begin
             # Create test layout
             layout = EegFun.Layout(
-                DataFrame(
-                    label = [:Fp1, :Fp2, :F3, :F4],
-                    inc = [90.0, 90.0, 45.0, 45.0],
-                    azi = [0.0, 180.0, 45.0, 135.0],
-                ),
+                DataFrame(label = [:Fp1, :Fp2, :F3, :F4], inc = [90.0, 90.0, 45.0, 45.0], azi = [0.0, 180.0, 45.0, 135.0]),
                 nothing,
                 nothing,
             )
             EegFun.polar_to_cartesian_xy!(layout)
 
             # Test xy neighbours
-            EegFun.get_layout_neighbours_xy!(layout, 100.0)
+            EegFun.get_neighbours_xy!(layout, 100.0)
             @test !isnothing(layout.neighbours)
             @test length(layout.neighbours) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            result = EegFun.get_layout_neighbours_xy!(layout, -1.0)
+            result = EegFun.get_neighbours_xy!(layout, -1.0)
             @test result === nothing
 
             # Test xyz neighbours
             EegFun.polar_to_cartesian_xyz!(layout)
-            EegFun.get_layout_neighbours_xyz!(layout, 100.0)
+            EegFun.get_neighbours_xyz!(layout, 100.0)
             @test !isnothing(layout.neighbours)
             @test length(layout.neighbours) == size(layout.data, 1)
 
             # Test error handling for invalid distance criterion
-            result = EegFun.get_layout_neighbours_xyz!(layout, -1.0)
+            result = EegFun.get_neighbours_xyz!(layout, -1.0)
             @test result === nothing
         end
     end
@@ -238,11 +226,7 @@ using EegFun
     @testset "Channel Renaming" begin
         # Create a simple test layout
         test_layout = EegFun.Layout(
-            DataFrame(
-                label = [:Fp1, :Fp2, :F3, :F4, :Cz],
-                inc = [90.0, 90.0, 45.0, 45.0, 0.0],
-                azi = [0.0, 180.0, 45.0, 135.0, 0.0],
-            ),
+            DataFrame(label = [:Fp1, :Fp2, :F3, :F4, :Cz], inc = [90.0, 90.0, 45.0, 45.0, 0.0], azi = [0.0, 180.0, 45.0, 135.0, 0.0]),
             nothing,
             nothing,
         )
@@ -343,7 +327,7 @@ using EegFun
 
             # Add some neighbours first
             EegFun.polar_to_cartesian_xy!(layout)
-            EegFun.get_layout_neighbours_xy!(layout, 100.0)
+            EegFun.get_neighbours_xy!(layout, 100.0)
 
             # Verify neighbours exist
             @test !isnothing(layout.neighbours)

@@ -13,9 +13,9 @@ function get_data()
 
     # neighbours
     EegFun.polar_to_cartesian_xy!(layout)
-    EegFun.get_layout_neighbours_xy!(layout, 40)
+    EegFun.get_neighbours_xy!(layout, 40)
     EegFun.polar_to_cartesian_xyz!(layout)
-    EegFun.get_layout_neighbours_xyz!(layout, 40)
+    EegFun.get_neighbours_xyz!(layout, 40)
 
     # basic preprocessing
     EegFun.highpass_filter!(dat, 1)
