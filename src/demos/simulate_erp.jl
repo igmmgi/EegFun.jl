@@ -1,5 +1,3 @@
-# Interactive ERP Simulation Demo
-# Core simulation functions - everything needed for the demo
 function _peak_vec(
     trials::Int,
     samples::Int,
@@ -10,91 +8,81 @@ function _peak_vec(
     jitter_amp::Float64,
     jitter_latency::Float64,
 )
-
-    signal = zeros(trials, samples)
-    rand_lat = round.(randn(trials) .* jitter_latency)
+    # Vectorized trials handling
+    rand_lat = randn(trials) .* jitter_latency
     pos = peak_latency .+ rand_lat
 
-    for trial = 1:trials
-        phase = ((1:samples) .- pos[trial]) ./ sample_rate .* 2π .* peak_freq
-        mask = (phase .< π/2) .& (phase .> -π/2)
-        signal[trial, mask] = cos.(phase[mask])
-    end
+    # Create time matrix (trials x samples)
+    t = (1:samples)'
+    # Calculate phase for all trials and samples at once
+    phase = (t .- pos) ./ sample_rate .* 2π .* peak_freq
 
-    rand_amp = round.(randn(trials) .* jitter_amp)
-    signal = signal .* reshape(peak_amp .+ rand_amp, :, 1)
+    # Apply cosine and mask
+    signal = cos.(phase)
+    # Mask values outside [-pi/2, pi/2] phase range
+    signal[abs.(phase).>π/2] .= 0
+
+    # Apply amplitude with jitter
+    rand_amp = randn(trials) .* jitter_amp
+    signal .*= (peak_amp .+ rand_amp)
 
     return signal
 end
 
 function _noise_vec(trials::Int, samples::Int, sample_rate::Int, noise_amp::Float64)
+
+    noise_amp == 0 && return zeros(trials, samples)
+
     # Mean power spectrum of human EEG (hardcoded as in original MATLAB)
     meanpower = [
-        0.0015;
-        0.0008;
-        0.0006;
-        0.0005;
-        fill(0.0004, 3);
-        fill(0.0003, 2);
-        fill(0.0004, 2);
-        fill(0.0003, 3);
-        fill(0.0002, 42);
-        fill(0.0001, 88)
+        0.0015,
+        0.0008,
+        0.0006,
+        0.0005,
+        fill(0.0004, 3)...,
+        fill(0.0003, 2)...,
+        fill(0.0004, 2)...,
+        fill(0.0003, 3)...,
+        fill(0.0002, 42)...,
+        fill(0.0001, 88)...,
     ]
 
-    sumsig = 50  # number of sinusoids from which each simulated signal is composed
-
+    sumsig = 50  # number of sinusoids
     signal = zeros(trials, samples)
-    for trial = 1:trials
-        freq = cumsum(rand(sumsig) .* 4)
-        freqamp = meanpower[min.(ceil.(Int, freq), 125)] ./ meanpower[1]
-        phase = rand(sumsig) .* 2π
+    t_vec = (1:samples) ./ sample_rate .* 2π
 
-        for (i, (f, a, p)) in enumerate(zip(freq, freqamp, phase))
-            signal[trial, :] .+= sin.((1:samples) ./ sample_rate .* 2π .* f .+ p) .* a
+    for trial = 1:trials
+        freqs = cumsum(rand(sumsig) .* 4)
+        indices = min.(ceil.(Int, freqs), length(meanpower))
+        amps = meanpower[indices] ./ meanpower[1]
+        phases = rand(sumsig) .* 2π
+        for (f, a, p) in zip(freqs, amps, phases)
+            signal[trial, :] .+= sin.(t_vec .* f .+ p) .* a
         end
     end
 
     return signal .* noise_amp
 end
 
-function _simulate_my_erp(
-    trials::Int,
-    comps::Matrix{Float64};
-    samp_freq::Int = 1000,
-    sig_length::Float64 = 1.0,
-    base_length::Float64 = 0.2,
-    plot_fig::Bool = false,
-)
+function _simulate_my_erp(trials::Int, comps::Matrix{Float64}; samp_freq::Int = 1000, sig_length::Float64 = 1.0, base_length::Float64 = 0.2)
+    n_samples = Int(samp_freq * (sig_length + base_length))
+    my_signal = _noise_vec(trials, n_samples, samp_freq, comps[end, 6])
 
-    # Create time vector
-    time = collect(1:(samp_freq*(sig_length+base_length))) .- (samp_freq*base_length)
-
-    # Initialize component array
     n_components = size(comps, 1)
-    my_comp = zeros(trials, length(time), n_components)
-
-    # Generate each component
     for comp = 1:n_components
-        my_comp[:, :, comp] = _peak_vec(
+        my_signal .+= _peak_vec(
             trials,
-            length(time),
+            n_samples,
             samp_freq,
             comps[comp, 1],  # peakFreq
             comps[comp, 2],  # peakAmp
             comps[comp, 3] + (base_length * samp_freq),  # peakLatency
             comps[comp, 4],  # jitterAmp
-            comps[comp, 5],
-        )  # jitterLatency
+            comps[comp, 5],  # jitterLatency
+        )
     end
 
-    # Sum signal across individual components + add noise
-    my_signal = sum(my_comp, dims = 3)[:, :, 1] .+ _noise_vec(trials, length(time), samp_freq, comps[end, 6])
-
-    # Calculate ERP (average across trials)
-    erp = vec(mean(my_signal, dims = 1))
-
-    return erp, my_signal
+    return vec(mean(my_signal, dims = 1)), my_signal
 end
 
 # Component parameters structure
@@ -116,7 +104,7 @@ function simulate_erp()
     gl = fig[1:2, 1:3] = GridLayout()
 
     # Create the main plot axis
-    ax = Axis(gl[1, 1:2], xlabel = "Time (ms)", ylabel = "Amplitude (μV)", title = "Interactive ERP Simulation Demo")
+    ax = Axis(gl[1, 1:2], xlabel = "Time (ms)", ylabel = "Amplitude (μV)", title = "ERP Simulation Demo")
 
     # Component controls layout (right side)
     comp_layout = gl[1:2, 3] = GridLayout()
@@ -130,8 +118,6 @@ function simulate_erp()
 
     # Create observables for the plot data
     time = Observable(collect(1:n_samples) .- (samp_freq * base_length))
-    signals = Observable(zeros(200, n_samples))
-    erp = Observable(zeros(n_samples))
 
     # Trials control at the top
     trials = Observable(1)
@@ -164,7 +150,6 @@ function simulate_erp()
 
         # Active toggle - start INACTIVE
         tb = Toggle(parent[row, 1])
-        # Force both to inactive state
         tb.active[] = false
         active[] = false
         connect!(active, tb.active)
@@ -212,7 +197,7 @@ function simulate_erp()
 
     # Add initial components - all start INACTIVE
     for i = 1:5
-        comp = create_component(comp_layout, i+2)
+        comp = create_component(comp_layout, i + 2)
         push!(components, comp)
     end
 
@@ -221,59 +206,61 @@ function simulate_erp()
         # Count active components
         n_active = count(c -> c.active[], components)
 
-        if n_active == 0
-            # No active components - set everything to zero
-            zero_signals = zeros(trials[], n_samples)
-            zero_erp = zeros(n_samples)
-            signals[] = zero_signals
-            erp[] = zero_erp
-            update_plot(zero_signals, zero_erp)
-        else
-            # Collect parameters from active components only
-            active_comps = Matrix{Float64}(undef, 0, 6)
-            for c in components
-                if c.active[]
-                    comp_row = [c.freq[] c.amp[] c.latency[] c.jitter_amp[] c.jitter_lat[] 0.0]
-                    active_comps = vcat(active_comps, reshape(comp_row, 1, 6))
-                end
+        if n_active == 0 # No active components - set everything to zero
+            update_plot(zeros(0, n_samples), zeros(n_samples))
+        else # Collect parameters from active components only
+            active_comps_list = [[c.freq[] c.amp[] c.latency[] c.jitter_amp[] c.jitter_lat[] 0.0] for c in components if c.active[]]
+
+            if isempty(active_comps_list)
+                update_plot(zeros(trials[], n_samples), zeros(n_samples))
+                return
             end
 
-            # Set noise parameter on the last row (as expected by simulate_my_erp)
-            if size(active_comps, 1) > 0
-                active_comps[end, 6] = noise_amp[]
-            end
+            active_comps = vcat(active_comps_list...)
+            active_comps[end, 6] = noise_amp[]
 
-            new_erp, new_signals = _simulate_my_erp(
-                trials[],
-                active_comps,
-                samp_freq = samp_freq,
-                sig_length = sig_length,
-                base_length = base_length,
-            )
-            # Update both signals and erp, then trigger plot update manually
-            signals[] = new_signals
-            erp[] = new_erp
+            new_erp, new_signals =
+                _simulate_my_erp(trials[], active_comps, samp_freq = samp_freq, sig_length = sig_length, base_length = base_length)
+
+            # Update plot directly without clearing axis
             update_plot(new_signals, new_erp)
         end
     end
 
+    # Create plot objects
+    trial_plot_data = Observable(Point2f[])
+    erp_plot_data = Observable(Point2f[])
+
+    lines!(ax, trial_plot_data, color = (:gray, 0.2))
+    lines!(ax, erp_plot_data, color = :blue, linewidth = 3)
+
     # Plot update function
-    function update_plot(new_signals = nothing, new_erp = nothing)
-        empty!(ax)
+    function update_plot(new_signals, new_erp)
+        t = time[]
+        n_trials, n_samples = size(new_signals)
 
-        # Only plot if there are any active components
-        if any(c -> c.active[], components)
-            current_signals = new_signals !== nothing ? new_signals : signals[]
-            current_erp = new_erp !== nothing ? new_erp : erp[]
-
-            # Plot ALL individual trials
-            for i = 1:size(current_signals, 1)
-                lines!(ax, time[], current_signals[i, :], color = (:gray, 0.3))
-            end
-
-            # Plot averaged ERP
-            lines!(ax, time[], current_erp, color = :blue, linewidth = 3)
+        if n_trials == 0
+            trial_plot_data[] = Point2f[]
+            erp_plot_data[] = Point2f[]
+            return
         end
+
+        # Efficiently prepare trial data with NaN separators
+        # We transform the matrix into a single vector of points
+        points = Vector{Point2f}(undef, n_trials * (n_samples + 1))
+        for trial = 1:n_trials
+            offset = (trial - 1) * (n_samples + 1)
+            for s = 1:n_samples
+                points[offset+s] = Point2f(t[s], new_signals[trial, s])
+            end
+            points[offset+n_samples+1] = Point2f(NaN32, NaN32)
+        end
+        trial_plot_data[] = points
+
+        # Prepare ERP data
+        erp_plot_data[] = [Point2f(t[s], new_erp[s]) for s = 1:n_samples]
+
+        autolimits!(ax)
     end
 
     # Connect parameter changes to simulation update
@@ -304,8 +291,9 @@ function simulate_erp()
     end
 
     # Initialize with empty plot
-    update_plot()
+    update_plot(zeros(0, n_samples), zeros(n_samples))
 
     display(fig)
-    return fig
+    return fig, ax
+
 end
