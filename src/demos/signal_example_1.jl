@@ -5,7 +5,7 @@ Interactive Signal Generator
 
 A Julia/Makie version of the MATLAB signalExample1.m GUI.
 Creates an interactive plot with sliders to control:
-- Signal duration (0.2 to 5 seconds)
+- Signal duration (1.0 to 10.0 seconds)
 - Frequency (1 to 100 Hz)
 - Phase angle (-π to π)
 - Sample rate (0 to 500 Hz)
@@ -20,9 +20,10 @@ EegFun.signal_example_1()
 
 # Returns
 - `fig::Figure`: The Makie figure object containing the interactive GUI
+- `ax::Axis`: The axis object containing the plots
 """
 function signal_example_1()
-    fig = Figure(size = (1000, 400), title = "Signal Example 1", backgroundcolor = :white)
+    fig = Figure(size = (1000, 800), title = "Signal Example 1")
 
     # Set up adaptive font and UI sizing
     function setup_adaptive_sizing(fig)
@@ -36,7 +37,7 @@ function signal_example_1()
 
         # Update fonts and UI elements when figure is resized
         on(fig.scene.viewport) do area
-            scale_factor = area.widths[1] / 4000  # Base on 1000px width
+            scale_factor = area.widths[1] / 4000
             title_font[] = max(16, round(Int, 24 * scale_factor))
             label_font[] = max(14, round(Int, 22 * scale_factor))
             tick_font[] = max(12, round(Int, 18 * scale_factor))
@@ -78,7 +79,7 @@ function signal_example_1()
     # Function to update the signal data
     function update_signal()
         # Generate time vectors
-        base_t = 0:0.00001:sig_dur[]  # 100,000 Hz sampling for "continuous" signal
+        base_t = 0:0.0001:sig_dur[]
         samp_t = 0:(1/samp_rate[]):sig_dur[]
 
         # Update observables
@@ -103,36 +104,24 @@ function signal_example_1()
     update_signal()
 
     # Plot the signals
-    continuous_line = lines!(ax, base_time, my_sin1, color = :blue, linewidth = 2, label = "Signal")
-    sampled_line =
-        lines!(ax, samp_time, my_sin2, color = :red, linewidth = 2, label = "Sampled Signal", visible = false)
-    sample_points =
-        scatter!(ax, samp_time, my_sin2, color = :red, markersize = 16, label = "Sample Points", visible = false)
+    lines!(ax, base_time, my_sin1, color = :blue, linewidth = 2, label = "Signal")
+    sampled_line = lines!(ax, samp_time, my_sin2, color = :red, linewidth = 2, label = "Sampled Signal", visible = false)
+    sample_points = scatter!(ax, samp_time, my_sin2, color = :red, markersize = 16, label = "Sample Points", visible = false)
 
     # Control visibility of sampled signal
     on(show_sampled) do val
-        if val
-            sampled_line.visible = true
-            sample_points.visible = true
-            sampled_line.color = :red
-            sample_points.color = :red
-            sampled_line.alpha = 1.0
-            sample_points.alpha = 1.0
-        else
-            sampled_line.visible = false
-            sample_points.visible = false
-        end
+        sampled_line.visible = val
+        sample_points.visible = val
     end
 
     # Set initial state (sampled signal should be hidden initially)
     show_sampled[] = false
 
     # Add static legend
-    legend = axislegend(ax, position = :rt)
+    axislegend(ax, position = :rt)
 
     # Create sliders and labels in a separate layout
-    slider_layout =
-        GridLayout(fig[2, 1:6], tellheight = false, valign = :top, padding = (1, 5, 1, 5), rowgap = 1, colgap = 5)
+    slider_layout = GridLayout(fig[2, 1:6], tellheight = false, valign = :top, padding = (1, 5, 1, 5), rowgap = 1, colgap = 5)
 
     # Define slider parameters
     slider_configs = [
@@ -159,7 +148,7 @@ function signal_example_1()
         ),
         (
             name = "Sample Rate",
-            range = 1.0:1.0:500.0,
+            range = 1.0:1.0:300.0,
             startvalue = 100.0,
             label_text = "Sample Rate: 100 Hz",
             format_func = x -> "Sample Rate: $(round(Int, x)) Hz",
@@ -171,26 +160,16 @@ function signal_example_1()
     labels = []
 
     for (i, config) in enumerate(slider_configs)
-        slider = Slider(
-            slider_layout[1, i],
-            range = config.range,
-            startvalue = config.startvalue,
-            width = slider_width,
-            height = slider_height,
-        )
+        slider =
+            Slider(slider_layout[1, i], range = config.range, startvalue = config.startvalue, width = slider_width, height = slider_height)
         label = Label(slider_layout[2, i], text = config.label_text, width = slider_width, fontsize = slider_font)
         push!(sliders, slider)
         push!(labels, label)
     end
 
-    # Extract individual sliders and labels for easier reference
-    duration_slider, freq_slider, phase_slider, samp_slider = sliders
-    duration_label, freq_label, phase_label, samp_label = labels
-
     # Checkbox for showing sampled signal
     show_sampled_checkbox = Checkbox(slider_layout[1, 5], checked = false, width = slider_width, height = slider_height)
-    show_sampled_label =
-        Label(slider_layout[2, 5], text = "Show Sampled Signal", width = slider_width, fontsize = slider_font)
+    Label(slider_layout[2, 5], text = "Show Sampled Signal", width = slider_width, fontsize = slider_font)
 
     # Connect sliders to observables and labels
     observables = [sig_dur, freq, phase, samp_rate]
@@ -214,5 +193,6 @@ function signal_example_1()
     # Display the figure
     display(fig)
 
-    return fig
+    return fig, ax
+
 end
