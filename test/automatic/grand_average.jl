@@ -15,9 +15,9 @@ using DataFrames
         # Create test ERP files for multiple participants
         for participant = 1:4
             erps = [
-                create_test_erp_data(participant, 1),
-                create_test_erp_data(participant, 2),
-                create_test_erp_data(participant, 3),
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+                create_test_erp_data(participant = participant, condition = 3),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -119,9 +119,7 @@ using DataFrames
 
         # Verify grand average is actually the mean of the two ERPs
         for ch in [:Ch1, :Ch2, :Ch3]
-            if hasproperty(erp1_cond1.data, ch) &&
-               hasproperty(erp2_cond1.data, ch) &&
-               hasproperty(grand_avg_cond1.data, ch)
+            if hasproperty(erp1_cond1.data, ch) && hasproperty(erp2_cond1.data, ch) && hasproperty(grand_avg_cond1.data, ch)
                 expected_grand_avg = (erp1_cond1.data[!, ch] .+ erp2_cond1.data[!, ch]) ./ 2
                 @test all(abs.(grand_avg_cond1.data[!, ch] .- expected_grand_avg) .< 1e-10)
             end
@@ -179,8 +177,8 @@ using DataFrames
         @testset "Insufficient participants for some conditions" begin
             # Create file with only some conditions for one participant
             erps = [
-                create_test_erp_data(5, 1),
-                create_test_erp_data(5, 2),
+                create_test_erp_data(participant = 5, condition = 1),
+                create_test_erp_data(participant = 5, condition = 2),
                 # Missing condition 3
             ]
 
@@ -301,14 +299,14 @@ using DataFrames
         # Create scenario where some conditions have more participants than others
         # 3 participants have condition 1
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1)]
+            erps = [create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(separate_test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
         end
 
         # Only 2 participants have condition 2 (append to existing files)
         for participant = 1:2
-            erp2 = create_test_erp_data(participant, 2)
+            erp2 = create_test_erp_data(participant = participant, condition = 2)
             file_path = joinpath(separate_test_dir, "$(participant)_erps_cleaned.jld2")
             # Load existing data and append condition 2
             existing_data = load(file_path, "data")

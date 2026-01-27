@@ -166,7 +166,7 @@ end
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_batch_test_erp_data(2)
+                erps = create_batch_test_erp_data(n_conditions = 2)
                 # Use filename format consistent with codebase (numeric participant ID)
                 filename = joinpath(test_dir, "$(participant)_erps.jld2")
                 jldsave(filename; data = erps)
@@ -333,7 +333,7 @@ end
             # create_test_epoch_data(participant, condition, n_timepoints, n_channels)
 
             # Save epoch data - create a vector of EpochData for batch processing
-            epochs = [create_test_epoch_data(conditions = 1), create_test_epoch_data(conditions = 1)]
+            epochs = [create_test_epoch_data(condition = 1), create_test_epoch_data(condition = 1)]
             jldsave(joinpath(epochs_dir, "1_epochs.jld2"); data = epochs)
 
             # Filter epoch data
@@ -371,7 +371,7 @@ end
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_batch_test_erp_data(2)
+            erps = create_batch_test_erp_data(n_conditions = 2)
             jldsave(joinpath(partial_dir, "1_erps.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})

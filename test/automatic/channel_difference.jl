@@ -61,11 +61,7 @@ using EegFun
 
     # 6) EpochData: append to each epoch
     dat = create_test_epoch_data(n = 500)
-    EegFun.channel_difference!(
-        dat;
-        channel_selection1 = EegFun.channels([:Ch1]),
-        channel_selection2 = EegFun.channels([:Ch2]),
-    )
+    EegFun.channel_difference!(dat; channel_selection1 = EegFun.channels([:Ch1]), channel_selection2 = EegFun.channels([:Ch2]))
     @test :diff ∈ propertynames(dat.data[1]) && :diff ∈ propertynames(dat.data[2])
     @test all(dat.data[1].diff .== (dat.data[1].Ch1 .- dat.data[1].Ch2))
     @test all(dat.data[2].diff .== (dat.data[2].Ch1 .- dat.data[2].Ch2))
@@ -110,7 +106,7 @@ using EegFun
     @test all(isapprox.(dat.data.diff, 0.0; atol = 1e-6))
 
     # 12) Test with ErpData
-    erp = create_test_erp_data(1, 1, n_channels = 3)
+    erp = create_test_erp_data(participant = 1, condition = 1, n_channels = 3)
     EegFun.channel_difference!(
         erp;
         channel_selection1 = EegFun.channels([:Ch1]),
@@ -175,8 +171,7 @@ using EegFun
     dat2.data[!, :F9] = dat2.data.Ch2 .+ 0.3
     dat2.data[!, :F10] = dat2.data.Ch3 .+ 0.3
 
-    layout_df2 =
-        DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2, :F9, :F10], inc = zeros(9), azi = zeros(9))
+    layout_df2 = DataFrame(label = [:Ch1, :Ch2, :Ch3, :Fp1, :Fp2, :IO1, :IO2, :F9, :F10], inc = zeros(9), azi = zeros(9))
     dat2.layout = EegFun.Layout(layout_df2, nothing, nothing)
 
     eog_cfg_dict = Dict(
@@ -321,12 +316,9 @@ using EegFun
     @test :diff_result ∉ propertynames(epochs2.data[1])  # Original unchanged
 
     # 22) Test non-mutating version with ErpData
-    erp2 = create_test_erp_data(1, 1, n_channels = 3)
-    erp2_result = EegFun.channel_difference(
-        erp2;
-        channel_selection1 = EegFun.channels([:Ch1]),
-        channel_selection2 = EegFun.channels([:Ch2]),
-    )
+    erp2 = create_test_erp_data(participant = 1, condition = 1, n_channels = 3)
+    erp2_result =
+        EegFun.channel_difference(erp2; channel_selection1 = EegFun.channels([:Ch1]), channel_selection2 = EegFun.channels([:Ch2]))
     @test erp2_result !== erp2
     @test :diff ∈ propertynames(erp2_result.data)
     @test :diff ∉ propertynames(erp2.data)  # Original unchanged

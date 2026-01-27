@@ -93,7 +93,7 @@ using EegFun
 
     @testset "apply_analysis_settings! - ErpData" begin
         # Create test ERP data
-        erp = create_test_erp_data(1, 1, fs = 1000, n_channels = 3)
+        erp = create_test_erp_data(participant = 1, condition = 1, fs = 1000, n_channels = 3)
         original_data = copy(erp.data)
 
         # Test with high-pass filter
@@ -102,13 +102,13 @@ using EegFun
         @test erp.analysis_info.hp_filter == 0.1
 
         # Test with rereference
-        erp = create_test_erp_data(1, 1, fs = 1000, n_channels = 3)
+        erp = create_test_erp_data(participant = 1, condition = 1, fs = 1000, n_channels = 3)
         settings = EegFun.AnalysisSettings(0.0, 0.0, :avg, Symbol[], :none, Tuple{Float64,Float64}[], Int[])
         EegFun.apply_analysis_settings!(erp, settings)
         @test erp.analysis_info.reference == :avg
 
         # Test with selected regions
-        erp = create_test_erp_data(1, 1, fs = 1000, n_channels = 3)
+        erp = create_test_erp_data(participant = 1, condition = 1, fs = 1000, n_channels = 3)
         settings = EegFun.AnalysisSettings(0.0, 0.0, :none, Symbol[], :none, [(-0.1, 0.1)], Int[])
         EegFun.apply_analysis_settings!(erp, settings)
         @test hasproperty(erp.data, :selected_region)

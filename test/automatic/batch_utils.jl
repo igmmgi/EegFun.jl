@@ -59,14 +59,14 @@ using Logging
     @testset "_find_batch_files" begin
         # Create test files
         for participant = 1:5
-            erps = [create_test_erp_data(participant, 1)]
+            erps = [create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
         end
 
         # Create some non-matching files
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1)]
+            erps = [create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             jldsave(file_path; data = erps)
         end
@@ -106,7 +106,7 @@ using Logging
 
     @testset "_condition_select" begin
         # Create test data
-        data = [create_test_erp_data(1, i) for i = 1:5]
+        data = [create_test_erp_data(participant = 1, condition = i) for i = 1:5]
 
         # Test with nothing (should return original)
         result = EegFun._condition_select(data, nothing)
@@ -267,7 +267,7 @@ using Logging
     @testset "_run_batch_operation" begin
         # Create test files
         for i = 1:3
-            erps = [create_test_erp_data(i, 1)]
+            erps = [create_test_erp_data(participant = i, condition = 1)]
             file_path = joinpath(test_dir, "test_$i.jld2")
             jldsave(file_path; data = erps)
         end
@@ -275,14 +275,13 @@ using Logging
         # Test successful processing
         files = ["test_1.jld2", "test_2.jld2", "test_3.jld2"]
 
-        process_fn =
-            (input_path, output_path) -> begin
-                if basename(input_path) == "test_2.jld2"
-                    return EegFun.BatchResult(false, basename(input_path), "Simulated error")
-                else
-                    return EegFun.BatchResult(true, basename(input_path), "Success")
-                end
+        process_fn = (input_path, output_path) -> begin
+            if basename(input_path) == "test_2.jld2"
+                return EegFun.BatchResult(false, basename(input_path), "Simulated error")
+            else
+                return EegFun.BatchResult(true, basename(input_path), "Success")
             end
+        end
 
         output_dir = joinpath(test_dir, "batch_output")
         mkpath(output_dir)
@@ -312,13 +311,7 @@ using Logging
         @test isempty(results_empty)
 
         # Test with custom operation name
-        results_custom = EegFun._run_batch_operation(
-            process_fn,
-            files[1:1],
-            test_dir,
-            output_dir;
-            operation_name = "Custom Operation",
-        )
+        results_custom = EegFun._run_batch_operation(process_fn, files[1:1], test_dir, output_dir; operation_name = "Custom Operation")
         @test length(results_custom) == 1
     end
 
@@ -479,26 +472,21 @@ using Logging
             @test isempty(results)
 
             # Test with very long filenames
-            long_filename = "a" ^ 200 * ".jld2"
-            erps = [create_test_erp_data(1, 1)]
+            long_filename = "a"^200 * ".jld2"
+            erps = [create_test_erp_data(participant = 1, condition = 1)]
             long_file_path = joinpath(test_dir, long_filename)
             jldsave(long_file_path; data = erps)
 
             files_long = [long_filename]
             results_long = with_logger(NullLogger()) do
-                EegFun._run_batch_operation(
-                    (x, y) -> EegFun.BatchResult(true, basename(x), "Success"),
-                    files_long,
-                    test_dir,
-                    test_dir,
-                )
+                EegFun._run_batch_operation((x, y) -> EegFun.BatchResult(true, basename(x), "Success"), files_long, test_dir, test_dir)
             end
             @test length(results_long) == 1
             @test results_long[1].success == true
         end
 
         @testset "Condition selection edge cases" begin
-            data = [create_test_erp_data(1, i) for i = 1:5]
+            data = [create_test_erp_data(participant = 1, condition = i) for i = 1:5]
 
             # Test with out-of-bounds indices (throws BoundsError for indices > length)
             @test_throws BoundsError EegFun._condition_select(data, [10])
@@ -515,7 +503,7 @@ using Logging
         @testset "Full batch workflow simulation" begin
             # Create test files
             for participant = 1:3
-                erps = [create_test_erp_data(participant, 1)]
+                erps = [create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_test_erps.jld2")
                 jldsave(file_path; data = erps)
             end
@@ -529,14 +517,13 @@ using Logging
             @test validation === nothing
 
             # Process files
-            process_fn =
-                (input_path, output_path) -> begin
-                    data_result = EegFun.load_data(input_path)
-                    if isnothing(data_result)
-                        return EegFun.BatchResult(false, basename(input_path), "No data")
-                    end
-                    return EegFun.BatchResult(true, basename(input_path), "Processed")
+            process_fn = (input_path, output_path) -> begin
+                data_result = EegFun.load_data(input_path)
+                if isnothing(data_result)
+                    return EegFun.BatchResult(false, basename(input_path), "No data")
                 end
+                return EegFun.BatchResult(true, basename(input_path), "Processed")
+            end
 
             output_dir = joinpath(test_dir, "integration_output")
             mkpath(output_dir)
@@ -561,10 +548,10 @@ using Logging
     # Helper to safely execute cleanup operations
     safe_cleanup(f) =
         try
-            ;
-            f();
+
+            f()
         catch
-            ;
+
         end
 
     # Close any open global logging and restore initial logger

@@ -98,16 +98,14 @@ using DataFrames
 
         # Test single layout
         layout = EegFun.create_layout(:single, channels, test_layout)
-        axes, assignments =
-            EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
+        axes, assignments = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
         @test length(axes) == 1
         @test length(assignments) == 1
         @test assignments[1] == channels[1]  # First channel
 
         # Test grid layout
         layout = EegFun.create_layout(:grid, channels, test_layout; grid_dims = (2, 2))
-        axes, assignments =
-            EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
+        axes, assignments = EegFun._apply_layout!(fig, layout; xgrid = true, ygrid = true, xminorgrid = false, yminorgrid = false)
         @test length(axes) == 4
         @test length(assignments) == 4
         @test all(ax -> ax isa Axis, axes)
@@ -122,13 +120,7 @@ using DataFrames
     @testset "Axis Property Functions" begin
         fig = Figure()
         # Create axis with the grid properties we want to test
-        ax = Axis(
-            fig[1, 1],
-            xgridvisible = true,
-            ygridvisible = false,
-            xminorgridvisible = true,
-            yminorgridvisible = false,
-        )
+        ax = Axis(fig[1, 1], xgridvisible = true, ygridvisible = false, xminorgridvisible = true, yminorgridvisible = false)
 
         # Test _apply_axis_properties!
         kwargs = Dict(
@@ -233,7 +225,7 @@ using DataFrames
 
     @testset "Integration with plot_erp" begin
         # Test that the layout system works with actual plotting
-        erp_data = create_test_erp_data(1, 1)
+        erp_data = create_test_erp_data(participant = 1, condition = 1)
 
         # Test single layout
         fig, axes = EegFun.plot_erp(erp_data, layout = :single)

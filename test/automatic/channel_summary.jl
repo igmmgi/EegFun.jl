@@ -139,7 +139,7 @@ using CSV
             @test all(result_subset.channel .== :Ch1)
 
             # Test that statistics vary across epochs (should be different)
-            epochs_Ch1 = result[result.channel .== :Ch1, :]
+            epochs_Ch1 = result[result.channel.==:Ch1, :]
             if nrow(epochs_Ch1) > 1
                 # Should have some variation across epochs (unless data is identical)
                 @test length(unique(epochs_Ch1.var)) > 1 || all(epochs_Ch1.var .== 0)
@@ -148,10 +148,8 @@ using CSV
 
         @testset "channel_summary MultiDataFrameEeg input validation" begin
             # Test empty epoch data
-            empty_layout =
-                EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
-            empty_epochs =
-                EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, EegFun.AnalysisInfo())
+            empty_layout = EegFun.Layout(DataFrame(label = Symbol[], inc = Float64[], azi = Float64[]), nothing, nothing)
+            empty_epochs = EegFun.EpochData("test_data", 1, "condition_1", DataFrame[], empty_layout, 100, EegFun.AnalysisInfo())
             @test_throws Exception EegFun.channel_summary(empty_epochs)
         end
 
@@ -161,14 +159,14 @@ using CSV
             result = EegFun.channel_summary(dat)
 
             # Test that constant channel has zero variance
-            constant_row = result[result.channel .== :Ch4, :]
+            constant_row = result[result.channel.==:Ch4, :]
             @test nrow(constant_row) == 1
-            @test constant_row.var[1] ≈ 0.0 atol=1e-10
-            @test constant_row.std[1] ≈ 0.0 atol=1e-10
-            @test constant_row.range[1] ≈ 0.0 atol=1e-10
+            @test constant_row.var[1] ≈ 0.0 atol = 1e-10
+            @test constant_row.std[1] ≈ 0.0 atol = 1e-10
+            @test constant_row.range[1] ≈ 0.0 atol = 1e-10
 
             # Test that varying channels have non-zero variance
-            varying_rows = result[result.channel .!= :Ch4, :]
+            varying_rows = result[result.channel.!=:Ch4, :]
             @test all(varying_rows.var .> 0)
             @test all(varying_rows.std .> 0)
             @test all(varying_rows.range .> 0)
@@ -233,7 +231,7 @@ end # EegFun testset
         # Create test data files
         @testset "Setup test files" begin
             for participant in [1, 2]
-                erps = create_batch_test_erp_data(2)
+                erps = create_batch_test_erp_data(n_conditions = 2)
                 filename = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
                 jldsave(filename; data = erps)
                 @test isfile(filename)
@@ -393,12 +391,7 @@ end # EegFun testset
         @testset "Custom output filename" begin
             output_dir = joinpath(test_dir, "summary_custom_name")
 
-            EegFun.channel_summary(
-                "erps_cleaned",
-                input_dir = test_dir,
-                output_dir = output_dir,
-                output_file = "my_custom_summary",
-            )
+            EegFun.channel_summary("erps_cleaned", input_dir = test_dir, output_dir = output_dir, output_file = "my_custom_summary")
 
             # Check custom filename
             csv_file = joinpath(output_dir, "my_custom_summary.csv")
@@ -460,7 +453,7 @@ end # EegFun testset
             mkpath(partial_dir)
 
             # Create one valid file
-            erps = create_batch_test_erp_data(2)
+            erps = create_batch_test_erp_data(n_conditions = 2)
             jldsave(joinpath(partial_dir, "1_erps_cleaned.jld2"); data = erps)
 
             # Create one malformed file (invalid data type - String instead of Vector{ErpData})
@@ -517,11 +510,7 @@ end # EegFun testset
                 Ch3 = zeros(n_samples),
             )
 
-            layout = EegFun.Layout(
-                DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]),
-                nothing,
-                nothing,
-            )
+            layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2, :Ch3], inc = [0.0, 0.0, 0.0], azi = [0.0, 0.0, 0.0]), nothing, nothing)
 
             erps = [EegFun.ErpData("test_data", 1, "condition_1", df, layout, fs, EegFun.AnalysisInfo(), 1)]
             jldsave(joinpath(stats_dir, "1_erps_stats.jld2"); data = erps)
@@ -533,15 +522,15 @@ end # EegFun testset
             results = CSV.read(joinpath(output_dir, "channel_summary.csv"), DataFrame)
 
             # Verify statistics for Ch1 (constant = 5.0)
-            ch1 = results[results.channel .== "Ch1", :]
+            ch1 = results[results.channel.=="Ch1", :]
             @test ch1.min[1] ≈ 5.0
             @test ch1.max[1] ≈ 5.0
-            @test ch1.std[1] ≈ 0.0 atol=1e-10
-            @test ch1.range[1] ≈ 0.0 atol=1e-10
-            @test ch1.var[1] ≈ 0.0 atol=1e-10
+            @test ch1.std[1] ≈ 0.0 atol = 1e-10
+            @test ch1.range[1] ≈ 0.0 atol = 1e-10
+            @test ch1.var[1] ≈ 0.0 atol = 1e-10
 
             # Verify statistics for Ch2 (1 to 100)
-            ch2 = results[results.channel .== "Ch2", :]
+            ch2 = results[results.channel.=="Ch2", :]
             @test ch2.min[1] ≈ 1.0
             @test ch2.max[1] ≈ 100.0
             @test ch2.range[1] ≈ 99.0
@@ -549,10 +538,10 @@ end # EegFun testset
             @test ch2.var[1] ≈ var(1.0:100.0)
 
             # Verify statistics for Ch3 (all zeros)
-            ch3 = results[results.channel .== "Ch3", :]
+            ch3 = results[results.channel.=="Ch3", :]
             @test ch3.min[1] ≈ 0.0
             @test ch3.max[1] ≈ 0.0
-            @test ch3.std[1] ≈ 0.0 atol=1e-10
+            @test ch3.std[1] ≈ 0.0 atol = 1e-10
         end
 
         @testset "Combined filters" begin
@@ -582,7 +571,7 @@ end # EegFun testset
             pattern_dir = joinpath(test_dir, "pattern_test")
             mkpath(pattern_dir)
 
-            erps = create_batch_test_erp_data(2)
+            erps = create_batch_test_erp_data(n_conditions = 2)
             jldsave(joinpath(pattern_dir, "1_erps_original.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "2_erps_cleaned.jld2"); data = erps)
             jldsave(joinpath(pattern_dir, "3_custom_erps.jld2"); data = erps)
@@ -620,7 +609,7 @@ end # EegFun testset
             # Verify each file-condition combination has all channels
             for file in unique(results.file)
                 for cond in unique(results.condition)
-                    subset = results[(results.file .== file) .& (results.condition .== cond), :]
+                    subset = results[(results.file.==file).&(results.condition.==cond), :]
                     @test nrow(subset) == 3  # 3 channels
                 end
             end
@@ -692,15 +681,15 @@ end # EegFun testset
             # For each file-condition combination, zvar should have mean ≈ 0 and std ≈ 1
             for file in unique(results.file)
                 for cond in unique(results.condition)
-                    subset = results[(results.file .== file) .& (results.condition .== cond), :]
+                    subset = results[(results.file.==file).&(results.condition.==cond), :]
 
                     # Mean of z-scores should be close to 0
-                    @test mean(subset.zvar) ≈ 0.0 atol=1e-10
+                    @test mean(subset.zvar) ≈ 0.0 atol = 1e-10
 
                     # Std of z-scores should be close to 1 (if more than 1 channel)
                     # Note: With small sample size (3 channels), there's some variability
                     if nrow(subset) > 1
-                        @test std(subset.zvar, corrected = false) ≈ 1.0 atol=0.2
+                        @test std(subset.zvar, corrected = false) ≈ 1.0 atol = 0.2
                     end
                 end
             end

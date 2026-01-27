@@ -1,9 +1,6 @@
-#!/usr/bin/env julia
-
 """
 Test Runner and Coverage Analysis Tool for EegFun
 
-This is a pure Julia equivalent of test.sh that provides:
 - Running tests with coverage
 - Coverage analysis and reporting
 - HTML report generation
@@ -28,14 +25,12 @@ If no command is provided, shows interactive menu.
 """
 
 using Printf
-
-# Load coverage packages from extras
 using Pkg
+# activate temp env and add packages needed for coverage
 Pkg.activate(; temp = true)
 Pkg.add(["Coverage", "CoverageTools"])
 using Coverage
 using CoverageTools
-
 
 # Colors for output
 const RED = "\033[0;31m"
@@ -44,16 +39,12 @@ const YELLOW = "\033[1;33m"
 const BLUE = "\033[0;34m"
 const NC = "\033[0m" # No Color
 
-function print_colored(color::String, message::String)
-    println("$color$message$NC")
-end
+print_colored(color::String, message::String) = println("$color$message$NC")
 
 function print_header()
     print_colored(BLUE, "=== EegFun Test Runner and Coverage Analysis ===")
     println()
 end
-
-
 
 function show_coverage_summary()
     print_colored(YELLOW, "Step 2: Coverage Summary")
@@ -66,18 +57,15 @@ function show_coverage_summary()
 
         total_covered = 0
         total_uncovered = 0
-
         for c in coverage
             if c.coverage !== nothing
                 covered = count(x -> x !== nothing && x > 0, c.coverage)
                 uncovered = count(x -> x !== nothing && x == 0, c.coverage)
                 total = covered + uncovered
-
                 if total > 0
                     percentage = round(covered / total * 100, digits = 2)
                     filename = replace(c.filename, "src/" => "")
                     println("$filename: $percentage% ($covered/$total lines)")
-
                     total_covered += covered
                     total_uncovered += uncovered
                 end
@@ -86,9 +74,7 @@ function show_coverage_summary()
 
         if total_covered + total_uncovered > 0
             overall_percentage = round(total_covered / (total_covered + total_uncovered) * 100, digits = 2)
-            println(
-                "\nOverall Coverage: $overall_percentage% ($total_covered/$(total_covered + total_uncovered) lines)",
-            )
+            println("\nOverall Coverage: $overall_percentage% ($total_covered/$(total_covered + total_uncovered) lines)")
         end
 
     catch e
@@ -333,13 +319,8 @@ function clean_coverage_files()
 end
 
 
-
-
-
-
 function show_interactive_menu()
     print_header()
-
     while true
         println("\nChoose an option:")
         println("1. Run tests with coverage")
