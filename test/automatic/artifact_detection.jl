@@ -4,26 +4,6 @@ using OrderedCollections
 using EegFun
 
 # Helper function for artifact detection testing
-function create_test_continuous_data_with_artifacts(; n::Int = 1000, fs::Int = 1000)
-
-    t = collect(0:(n-1)) ./ fs
-
-    # Create clean signal with some artifacts
-    clean_signal = sin.(2π .* 10 .* t) .* 20
-    # Add some extreme values (artifacts)
-    artifact_signal = copy(clean_signal)
-    artifact_signal[100:110] .= 200.0  # Large positive artifact
-    artifact_signal[500:505] .= -200.0  # Large negative artifact
-    artifact_signal[800:802] .= 100.0  # Smaller positive artifact
-
-    df = DataFrame(:time => t, :triggers => zeros(Int, n), :Ch1 => clean_signal, :Ch2 => artifact_signal)
-    layout = EegFun.Layout(DataFrame(label = [:Ch1, :Ch2], inc = [0.0, 0.0], azi = [0.0, 0.0]), nothing, nothing)
-
-    dat = EegFun.ContinuousData("test_data", df, layout, fs, EegFun.AnalysisInfo())
-
-    return dat
-
-end
 
 
 @testset "artifact_detection" begin
