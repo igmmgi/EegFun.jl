@@ -8,7 +8,7 @@ Test Runner and Coverage Analysis Tool for EegFun
 - Interactive menu system
 
 Usage:
-    julia --project=. test/run_tests.jl [command] [options]
+    julia --project=. test/test_manager.jl [command] [options]
 
 Commands:
     test                    - Run tests with coverage
@@ -18,10 +18,13 @@ Commands:
     missed FILENAME         - Show missed code branches
     html                    - Generate HTML report
     clean                   - Remove all .cov files
+    all                     - Run complete workflow (test + summary + html)
     interactive             - Show interactive menu
-    all                     - Run complete workflow
+    help                    - Show this help message
 
 If no command is provided, shows interactive menu.
+
+Run from root directory with: julia --project=. test/test_manager.jl
 """
 
 using Printf
@@ -46,9 +49,20 @@ function print_header()
     println()
 end
 
+function run_tests_with_coverage()
+    print_colored(YELLOW, "Step 1: Running tests with coverage...")
+    try
+        # Run tests with coverage=true
+        run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
+        print_colored(GREEN, "✓ Tests completed successfully")
+    catch e
+        print_colored(RED, "✗ Error running tests: $e")
+    end
+    println()
+end
+
 function show_coverage_summary()
     print_colored(YELLOW, "Step 2: Coverage Summary")
-
     try
         coverage = process_folder("src")
 
@@ -85,7 +99,6 @@ end
 
 function show_detailed_analysis()
     print_colored(YELLOW, "Step 3: Detailed Analysis")
-
     try
         coverage = process_folder("src")
 
@@ -136,7 +149,6 @@ end
 
 function analyze_specific_file(target_file::String)
     print_colored(YELLOW, "Analyzing: $target_file")
-
     try
         coverage = process_folder("src")
         data_coverage = filter(c -> occursin(target_file, c.filename), coverage)
@@ -192,15 +204,12 @@ function show_missed_branches(target_file::String)
     try
         coverage = process_folder("src")
         data_coverage = filter(c -> occursin(target_file, c.filename), coverage)
-
         if isempty(data_coverage)
             println("No coverage data found for $target_file")
             return
         end
 
         c = data_coverage[1]
-
-        # Read source file
         if isfile(c.filename)
             lines = readlines(c.filename)
 
@@ -256,9 +265,10 @@ function generate_html_report()
             print_colored(GREEN, "✓ genhtml found, generating HTML report...")
             run(`genhtml test/coverage.lcov -o test/coverage_html`)
             print_colored(GREEN, "✓ HTML report generated: test/coverage_html/index.html")
-            println("Open with: open test/coverage_html/index.html")
+            open_cmd = Sys.isapple() ? "open" : (Sys.islinux() ? "xdg-open" : "start")
+            println("Open with: $open_cmd test/coverage_html/index.html")
         catch
-            print_colored(YELLOW, "⚠ genhtml not found. Install with: brew install lcov")
+            print_colored(YELLOW, "⚠ genhtml not found. Install lcov")
             println("Then run: genhtml test/coverage.lcov -o test/coverage_html")
         end
 
@@ -274,22 +284,11 @@ function clean_coverage_files()
     # Find .cov files in current directory and test subdirectory
     cov_files = String[]
 
-    # Search current directory
+    # Search current directory recursively
     for (root, dirs, files) in walkdir(".")
         for file in files
             if endswith(file, ".cov")
                 push!(cov_files, joinpath(root, file))
-            end
-        end
-    end
-
-    # Search test directory if it exists
-    if isdir("test")
-        for (root, dirs, files) in walkdir("test")
-            for file in files
-                if endswith(file, ".cov")
-                    push!(cov_files, joinpath(root, file))
-                end
             end
         end
     end
@@ -313,6 +312,13 @@ function clean_coverage_files()
     println()
 end
 
+function run_all_analyses()
+    print_colored(BLUE, "=== Running Complete Workflow ===")
+    run_tests_with_coverage()
+    show_coverage_summary()
+    generate_html_report()
+    print_colored(GREEN, "✓ Complete workflow finished")
+end
 
 function show_interactive_menu()
     print_header()
@@ -331,14 +337,7 @@ function show_interactive_menu()
         choice = readline()
 
         if choice == "1"
-            print_colored(YELLOW, "Running tests with coverage...")
-            try
-                run(`julia --project=. -e "using Pkg; Pkg.test(coverage=true)"`)
-                print_colored(GREEN, "✓ Tests completed successfully")
-            catch e
-                print_colored(RED, "✗ Error running tests: $e")
-            end
-            println()
+            run_tests_with_coverage()
         elseif choice == "2"
             show_coverage_summary()
         elseif choice == "3"
@@ -369,17 +368,8 @@ end
 
 
 function main()
-    # Simple command line argument parsing
-    if length(ARGS) == 0
-        command = "interactive"
-        filename = ""
-    elseif length(ARGS) == 1
-        command = ARGS[1]
-        filename = ""
-    else
-        command = ARGS[1]
-        filename = ARGS[2]
-    end
+    command = isempty(ARGS) ? "interactive" : ARGS[1]
+    filename = length(ARGS) >= 2 ? ARGS[2] : ""
 
     if command == "test"
         run_tests_with_coverage()
@@ -390,14 +380,14 @@ function main()
     elseif command == "file"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/run_tests.jl file utils/data.jl")
+            println("Usage: julia --project=. test/test_manager.jl file utils/data.jl")
         else
             analyze_specific_file(filename)
         end
     elseif command == "missed"
         if isempty(filename)
             print_colored(RED, "Error: Please specify a filename")
-            println("Usage: julia --project=. test/run_tests.jl missed utils/data.jl")
+            println("Usage: julia --project=. test/test_manager.jl missed utils/data.jl")
         else
             show_missed_branches(filename)
         end
@@ -409,9 +399,9 @@ function main()
         run_all_analyses()
     elseif command == "interactive"
         show_interactive_menu()
-    else
+    elseif command == "help" || command == "-h" || command == "--help"
         print_header()
-        println("Usage: julia --project=. test/run_tests.jl [command] [options]")
+        println("Usage: julia --project=. test/test_manager.jl [command] [options]")
         println()
         println("Commands:")
         println("  test                    - Run tests with coverage")
@@ -421,18 +411,22 @@ function main()
         println("  missed FILENAME         - Show missed code branches")
         println("  html                    - Generate HTML report")
         println("  clean                   - Remove all .cov files")
+        println("  all                     - Run complete workflow (test + summary + html)")
         println("  interactive             - Show interactive menu")
-        println("  all                     - Run complete workflow")
+        println("  help                    - Show this help message")
         println()
         println("Output files are saved in the test/ directory:")
         println("  - test/coverage.lcov     - LCOV coverage data")
         println("  - test/coverage_html/    - HTML coverage report")
         println()
         println("Examples:")
-        println("  julia --project=. test/test_manager.jl all")
+        println("  julia --project=. test/test_manager.jl")
+        println("  julia --project=. test/test_manager.jl summary")
         println("  julia --project=. test/test_manager.jl file utils/data.jl")
-        println("  julia --project=. test/test_manager.jl missed utils/data.jl")
         println("  julia --project=. test/test_manager.jl clean")
+    else
+        print_colored(RED, "Unknown command: $command")
+        println("Use 'help' to see available commands.")
     end
 end
 
