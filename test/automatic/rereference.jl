@@ -26,7 +26,7 @@ using Statistics
     @test EegFun.reference(dat_ref.analysis_info) == :Ch1
 
     # 4) EpochData: per-epoch reference computed independently
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     EegFun.rereference!(dat, :avg)
     # After average reference, the mean of all channels should be approximately zero for each epoch
     for epoch in dat.data
@@ -35,19 +35,19 @@ using Statistics
     end
 
     # 5) Non-mutating version returns a new object; original unchanged
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     dat_ref = EegFun.rereference(dat, :Ch1)
     @test :Ch1 ∈ propertynames(dat_ref.data[1]) && :Ch1 ∈ propertynames(dat.data[1])
     @test !all(dat_ref.data[1].Ch1 .== dat.data[1].Ch1)
 
 
     # 7) Channel included in both reference and selection becomes zero
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     EegFun.rereference!(dat, [:Ch1], EegFun.channels([:Ch1]))
     @test all(dat.data[1].Ch1 .== 0.0)
 
     # 9) Missing reference channel should throw
-    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, conditions = 1)
+    dat = create_test_epoch_data(n_epochs = 2, n_channels = 2, condition = 1)
     @test_throws Any EegFun.rereference!(copy(dat), [:Z], EegFun.channels([:A]))
 
 end
@@ -61,7 +61,10 @@ end
     @testset "Basic rereferencing" begin
         # Create test ERP files
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
@@ -70,12 +73,7 @@ end
         output_dir = joinpath(test_dir, "rereferenced")
 
         # Test average reference
-        result = EegFun.rereference(
-            "erps_cleaned",
-            input_dir = test_dir,
-            reference_selection = :avg,
-            output_dir = output_dir,
-        )
+        result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
         # Verify output files were created
         @test isdir(output_dir)
@@ -105,12 +103,7 @@ end
         @testset "Average reference" begin
             output_dir = joinpath(test_dir, "rereferenced_avg")
 
-            result = EegFun.rereference(
-                "erps_cleaned",
-                input_dir = test_dir,
-                reference_selection = :avg,
-                output_dir = output_dir,
-            )
+            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
             @test isdir(output_dir)
             @test length(readdir(output_dir)) == 4
@@ -119,12 +112,7 @@ end
         @testset "Mastoid reference" begin
             output_dir = joinpath(test_dir, "rereferenced_mastoid")
 
-            result = EegFun.rereference(
-                "erps_cleaned",
-                input_dir = test_dir,
-                reference_selection = :Ch2,
-                output_dir = output_dir,
-            )
+            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :Ch2, output_dir = output_dir)
 
             # Ch2 reference should work
             @test result !== nothing
@@ -135,12 +123,7 @@ end
         @testset "Single channel reference" begin
             output_dir = joinpath(test_dir, "rereferenced_cz")
 
-            result = EegFun.rereference(
-                "erps_cleaned",
-                input_dir = test_dir,
-                reference_selection = [:Ch1],
-                output_dir = output_dir,
-            )
+            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = [:Ch1], output_dir = output_dir)
 
             @test isdir(output_dir)
             @test length(readdir(output_dir)) == 4
@@ -149,12 +132,7 @@ end
         @testset "Multiple channel reference" begin
             output_dir = joinpath(test_dir, "rereferenced_multiple")
 
-            result = EegFun.rereference(
-                "erps_cleaned",
-                input_dir = test_dir,
-                reference_selection = [:Ch1, :Ch2],
-                output_dir = output_dir,
-            )
+            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = [:Ch1, :Ch2], output_dir = output_dir)
 
             @test isdir(output_dir)
             @test length(readdir(output_dir)) == 4
@@ -164,7 +142,7 @@ end
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = create_test_epoch_data(conditions = 2, n_channels = 3)  # This returns Vector{EpochData}
+            epochs = create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             jldsave(file_path; data = epochs)
@@ -172,12 +150,7 @@ end
 
         output_dir = joinpath(test_dir, "rereferenced_epochs")
 
-        result = EegFun.rereference(
-            "epochs_cleaned",
-            input_dir = test_dir,
-            reference_selection = :avg,
-            output_dir = output_dir,
-        )
+        result = EegFun.rereference("epochs_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
         @test isdir(output_dir)
         output_files = readdir(output_dir)
@@ -299,12 +272,8 @@ end
             output_dir = joinpath(test_dir, "rereferenced_invalid")
 
             # This should handle invalid channels gracefully in batch processing
-            result = EegFun.rereference(
-                "erps_cleaned",
-                input_dir = test_dir,
-                reference_selection = [:InvalidChannel],
-                output_dir = output_dir,
-            )
+            result =
+                EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = [:InvalidChannel], output_dir = output_dir)
 
             # Should have errors due to invalid channels
             @test result !== nothing
@@ -357,12 +326,7 @@ end
         @testset "Custom output directory" begin
             custom_dir = joinpath(test_dir, "custom_rereferenced")
 
-            result = EegFun.rereference(
-                "erps_cleaned",
-                input_dir = test_dir,
-                reference_selection = :avg,
-                output_dir = custom_dir,
-            )
+            result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = custom_dir)
 
             @test isdir(custom_dir)
             # Should have 3 output files (participants 1-3) + 1 log file = 4 files
@@ -382,12 +346,7 @@ end
     @testset "Logging and return values" begin
         output_dir = joinpath(test_dir, "rereferenced_logging")
 
-        result = EegFun.rereference(
-            "erps_cleaned",
-            input_dir = test_dir,
-            reference_selection = :avg,
-            output_dir = output_dir,
-        )
+        result = EegFun.rereference("erps_cleaned", input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
         # Check that log file was created
         log_file = joinpath(output_dir, "rereference.log")
@@ -428,8 +387,7 @@ end
         for ch in [:Ch1, :Ch2, :Ch3]
             if hasproperty(rereferenced_erp.data, ch)
                 # The mean across all channels at each time point should be approximately zero
-                all_channels =
-                    [rereferenced_erp.data[!, :Ch1], rereferenced_erp.data[!, :Ch2], rereferenced_erp.data[!, :Ch3]]
+                all_channels = [rereferenced_erp.data[!, :Ch1], rereferenced_erp.data[!, :Ch2], rereferenced_erp.data[!, :Ch3]]
                 mean_across_channels = mean.(zip(all_channels...))
                 @test all(abs.(mean_across_channels) .< 1e-10)
             end
@@ -441,8 +399,7 @@ end
         for pattern in ["erps_cleaned", "nonexistent", "original"]
             output_dir = joinpath(test_dir, "rereferenced_$pattern")
 
-            result =
-                EegFun.rereference(pattern, input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
+            result = EegFun.rereference(pattern, input_dir = test_dir, reference_selection = :avg, output_dir = output_dir)
 
             if pattern in ["erps_cleaned"]
                 @test isdir(output_dir)

@@ -123,8 +123,7 @@ using EegFun
     original_ch1_2 = copy(dat2.data.Ch1)
     baseline_mean_ch1_2 = mean(original_ch1_2[1:5])
 
-    dat2_baselined =
-        EegFun.baseline(dat2, EegFun.IntervalIndex(start = 1, stop = 5), channel_selection = EegFun.channels([:Ch1]))
+    dat2_baselined = EegFun.baseline(dat2, EegFun.IntervalIndex(start = 1, stop = 5), channel_selection = EegFun.channels([:Ch1]))
 
     @test isapprox(mean(dat2_baselined.data.Ch1[1:5]), 0.0; atol = 1e-9)
     @test isapprox(dat2_baselined.data.Ch1, original_ch1_2 .- baseline_mean_ch1_2; atol = 1e-9)
@@ -150,7 +149,7 @@ using EegFun
     @test isapprox(epochs.data[1].Ch1, original_epoch1_ch1 .- baseline_mean_epoch1; atol = 1e-9)
 
     # Test with ErpData
-    erp = create_test_erp_data(1, 1, n_channels = 3)
+    erp = create_test_erp_data(participant = 1, condition = 1, n_channels = 3)
     original_erp_ch1 = copy(erp.data.Ch1)
     baseline_mean_erp = mean(original_erp_ch1[1:10])
 
@@ -160,7 +159,7 @@ using EegFun
     @test isapprox(erp.data.Ch1, original_erp_ch1 .- baseline_mean_erp; atol = 1e-9)
 
     # Test with ErpData and channel selection
-    erp2 = create_test_erp_data(1, 1, n_channels = 3)
+    erp2 = create_test_erp_data(participant = 1, condition = 1, n_channels = 3)
     original_erp2_ch1 = copy(erp2.data.Ch1)
     original_erp2_ch2 = copy(erp2.data.Ch2)
     baseline_mean_erp2 = mean(original_erp2_ch1[1:10])

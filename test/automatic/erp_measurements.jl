@@ -14,7 +14,10 @@ using CSV
     @testset "Basic ERP measurements" begin
         # Create test ERP files
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
@@ -52,7 +55,10 @@ using CSV
     @testset "Different analysis types" begin
         # Create test ERP files
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
@@ -105,7 +111,10 @@ using CSV
     @testset "Area and integral measurements" begin
         # Create test ERP files
         for participant = 1:2
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
             file_path = joinpath(test_dir, "$(participant)_erps_area.jld2")
             jldsave(file_path; data = erps)
         end
@@ -145,7 +154,10 @@ using CSV
     @testset "Fractional latency measurements" begin
         # Create test ERP files
         for participant = 1:2
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
             file_path = joinpath(test_dir, "$(participant)_erps_fractional.jld2")
             jldsave(file_path; data = erps)
         end
@@ -178,7 +190,7 @@ using CSV
     @testset "Measurement kwargs" begin
         # Create test ERP files
         for participant = 1:2
-            erps = [create_test_erp_data(participant, 1)]
+            erps = [create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_erps_kwargs.jld2")
             jldsave(file_path; data = erps)
         end
@@ -223,7 +235,7 @@ using CSV
     @testset "Kwargs validation" begin
         # Create test ERP files
         for participant = 1:2
-            erps = [create_test_erp_data(participant, 1)]
+            erps = [create_test_erp_data(participant = participant, condition = 1)]
             file_path = joinpath(test_dir, "$(participant)_erps_validate.jld2")
             jldsave(file_path; data = erps)
         end
@@ -274,7 +286,7 @@ using CSV
     @testset "Epoch data processing" begin
         # Create test epoch files
         for participant = 1:2
-            epochs = create_test_epoch_data(conditions = 2, n_channels = 3)  # This returns Vector{EpochData}
+            epochs = create_test_epoch_data_vector(conditions = 1:2, n_channels = 3)  # This returns Vector{EpochData}
 
             file_path = joinpath(test_dir, "$(participant)_epochs_cleaned.jld2")
             jldsave(file_path; data = epochs)
@@ -300,7 +312,10 @@ using CSV
     @testset "Participant and condition filtering" begin
         # Create test ERP files
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
@@ -340,7 +355,10 @@ using CSV
     @testset "Channel selection" begin
         # Create test ERP files
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
@@ -368,7 +386,10 @@ using CSV
     @testset "Baseline correction" begin
         # Create test ERP files
         for participant = 1:3
-            erps = [create_test_erp_data(participant, 1), create_test_erp_data(participant, 2)]
+            erps = [
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+            ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
             jldsave(file_path; data = erps)
@@ -505,7 +526,7 @@ using CSV
         @testset "Empty baseline window" begin
             # Create test ERP files
             for participant = 1:2
-                erps = [create_test_erp_data(participant, 1)]
+                erps = [create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps_baseline_edge.jld2")
                 jldsave(file_path; data = erps)
             end
@@ -529,7 +550,7 @@ using CSV
         @testset "Single sample analysis window" begin
             # Create test ERP files
             for participant = 1:2
-                erps = [create_test_erp_data(participant, 1)]
+                erps = [create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps_single.jld2")
                 jldsave(file_path; data = erps)
             end
@@ -554,7 +575,7 @@ using CSV
         @testset "Empty channel selection" begin
             # Create test ERP files
             for participant = 1:2
-                erps = [create_test_erp_data(participant, 1)]
+                erps = [create_test_erp_data(participant = participant, condition = 1)]
                 file_path = joinpath(test_dir, "$(participant)_erps_nochannels.jld2")
                 jldsave(file_path; data = erps)
             end
@@ -1023,13 +1044,7 @@ using CSV
             peak_time = 0.5
             peak_value = 1.0
 
-            erp = create_known_signal_erp(
-                1,
-                1,
-                t -> -2*(t - peak_time)^2 + peak_value + 0.1*sin(20π*t),
-                t_start = 0.0,
-                t_end = 1.0,
-            )
+            erp = create_known_signal_erp(1, 1, t -> -2 * (t - peak_time)^2 + peak_value + 0.1 * sin(20π * t), t_start = 0.0, t_end = 1.0)
 
             file_path = joinpath(known_test_dir, "1_robust_peak_test.jld2")
             jldsave(file_path; data = [erp])
@@ -1123,9 +1138,7 @@ using CSV
             erp = create_known_signal_erp(
                 1,
                 1,
-                t ->
-                    t < peak_time ? (peak_value / peak_time) * t :
-                    peak_value - (peak_value / (1.0 - peak_time)) * (t - peak_time),
+                t -> t < peak_time ? (peak_value / peak_time) * t : peak_value - (peak_value / (1.0 - peak_time)) * (t - peak_time),
                 t_start = 0.0,
                 t_end = 1.0,
             )
@@ -1222,9 +1235,7 @@ using CSV
             erp = create_known_signal_erp(
                 1,
                 1,
-                t ->
-                    t < peak_time ? (peak_value / peak_time) * t :
-                    peak_value - (peak_value / (1.0 - peak_time)) * (t - peak_time),
+                t -> t < peak_time ? (peak_value / peak_time) * t : peak_value - (peak_value / (1.0 - peak_time)) * (t - peak_time),
                 t_start = 0.0,
                 t_end = 1.0,
             )

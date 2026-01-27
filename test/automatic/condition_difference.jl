@@ -15,10 +15,10 @@ using CSV
         # Create test ERP files
         for participant = 1:3
             erps = [
-                create_test_erp_data(participant, 1),
-                create_test_erp_data(participant, 2),
-                create_test_erp_data(participant, 3),
-                create_test_erp_data(participant, 4),
+                create_test_erp_data(participant = participant, condition = 1),
+                create_test_erp_data(participant = participant, condition = 2),
+                create_test_erp_data(participant = participant, condition = 3),
+                create_test_erp_data(participant = participant, condition = 4),
             ]
 
             file_path = joinpath(test_dir, "$(participant)_erps_cleaned.jld2")
@@ -28,8 +28,7 @@ using CSV
         output_dir = joinpath(test_dir, "differences")
 
         # Test basic difference creation
-        result =
-            EegFun.condition_difference("erps_cleaned", [(1, 2), (3, 4)], input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.condition_difference("erps_cleaned", [(1, 2), (3, 4)], input_dir = test_dir, output_dir = output_dir)
 
         # Verify output files were created
         @test isdir(output_dir)
@@ -78,8 +77,7 @@ using CSV
     @testset "Vector condition pairs" begin
         output_dir = joinpath(test_dir, "differences_vector")
 
-        result =
-            EegFun.condition_difference("erps_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
+        result = EegFun.condition_difference("erps_cleaned", [[1, 2], [3, 4]], input_dir = test_dir, output_dir = output_dir)
 
         @test isdir(output_dir)
         output_files = readdir(output_dir)
@@ -90,8 +88,8 @@ using CSV
     @testset "Missing conditions handling" begin
         # Create file with only some conditions
         erps = [
-            create_test_erp_data(99, 1),
-            create_test_erp_data(99, 2),
+            create_test_erp_data(participant = 99, condition = 1),
+            create_test_erp_data(participant = 99, condition = 2),
             # Missing conditions 3 and 4
         ]
 
@@ -247,8 +245,7 @@ using CSV
         @testset "Custom output directory" begin
             custom_dir = joinpath(test_dir, "custom_output")
 
-            result =
-                EegFun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = custom_dir)
+            result = EegFun.condition_difference("erps_cleaned", [(1, 2)], input_dir = test_dir, output_dir = custom_dir)
 
             @test isdir(custom_dir)
             # Expect 5 files: 1, 2, 3, 99, and empty (but empty will have 0 differences)
